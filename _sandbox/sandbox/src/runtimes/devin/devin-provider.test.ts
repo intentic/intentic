@@ -46,6 +46,7 @@ const harness = (accounts: StoredDevinAccount[], replies: AgentEvent[] = [{ kind
         dependencies: unstubbed("dependencies", {}),
         agents: unstubbed("agents", { entry: () => undefined }),
         logger: createLogger(testConfig),
+        devinSessionsDir: "/agent-auth/devin/sessions",
         devinStore: unstubbed("devinStore", {
             credentials: async () => accounts,
             read: async (id: string) => accounts.find((entry) => entry.id === id),
@@ -112,13 +113,17 @@ test("with nothing connected the turn is refused with the connect fix", async ()
     expect(plan).toEqual(expect.objectContaining({ ok: false, code: "subscription-required" }));
 });
 
-test("the first connected account serves, signed in over the protocol, on the model the turn names", async () => {
+test("the first connected account serves, signed in over the protocol, on the model the turn names, its sessions kept in the auth root", async () => {
     const { services, ran } = harness([account("a"), account("b")]);
     await run(services, turn({ model: "opus" }));
     expect(ran).toEqual([
         {
             id: "devin:a",
-            launch: { argv: ["/opt/devin/bin/devin", "acp"], env: {}, authenticate: { meta: { api_key: "key-a" } } },
+            launch: {
+                argv: ["/opt/devin/bin/devin", "acp"],
+                env: { DEVIN_SESSIONS_DIR: "/agent-auth/devin/sessions" },
+                authenticate: { meta: { api_key: "key-a" } },
+            },
             options: { model: "opus" },
         },
     ]);

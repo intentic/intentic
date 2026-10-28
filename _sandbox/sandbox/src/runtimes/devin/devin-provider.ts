@@ -40,6 +40,8 @@ export interface DevinSlice {
     readonly devinStore: DevinStore;
     // The first account's models, as its sessions offer them.
     readonly devinModels: DevinCatalog;
+    // Where Devin's CLI keeps its sessions database (devinLaunch): the persistent auth root, not the container's disk.
+    readonly devinSessionsDir: string;
 }
 
 export const createDevinSlice = (input: {
@@ -48,11 +50,14 @@ export const createDevinSlice = (input: {
     readonly acpConnections: () => AcpConnections;
 }): DevinSlice => {
     const devinStore = fileDevinStore(join(input.authRoot, "devin"), input.logger);
+    const devinSessionsDir = join(input.authRoot, "devin", "sessions");
     return {
         devinStore,
+        devinSessionsDir,
         devinModels: createDevinCatalog({
             store: devinStore,
             connections: input.acpConnections,
+            sessionsDir: devinSessionsDir,
             persistPath: join(input.authRoot, "devin", "models.json"),
             probeDir: join(tmpdir(), "intentic-devin-probe"),
         }),
@@ -96,7 +101,7 @@ async function* refusedSignIn(store: DevinStore, accountId: string, events: Asyn
 // MCP tools and browser stack are mounted from.
 export type DevinPlanDeps = TurnToolsDeps &
     DaemonServersDeps &
-    Pick<Services, "acpAgent" | "capabilities" | "config" | "devinModels" | "devinStore" | "files" | "workspace" | "sandboxSettings">;
+    Pick<Services, "acpAgent" | "capabilities" | "config" | "devinModels" | "devinSessionsDir" | "devinStore" | "files" | "workspace" | "sandboxSettings">;
 
 export const planDevinTurn = async (
     services: DevinPlanDeps,
@@ -117,7 +122,7 @@ export const planDevinTurn = async (
     // Keeps the pinned model while offered, else the account's own default; the floor is no choice at all.
     const catalog = await services.devinModels.models();
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
-    const launch = devinLaunch(readiness.binary, account.apiKey);
+    const launch = devinLaunch(readiness.binary, account.apiKey, services.devinSessionsDir);
     const options = model === DEVIN_OWN_PICK ? {} : { model };
     // A sealed request reads nothing past its prompt, so nothing is mounted for it: the account and the model are all
     // this arm decides, and the ACP loop refuses every call the agent asks about (acp-agent.ts).

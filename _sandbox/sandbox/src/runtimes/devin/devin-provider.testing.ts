@@ -16,4 +16,5 @@ export const devinSliceFake = () =>
             logger: createLogger(testConfig),
         },
         devinModels: { models: async () => ({ models: [{ id: "default", label: "Devin's default" }], default: "default" }), forget: () => {} },
+        devinSessionsDir: "/nowhere/devin-sessions",
     }) satisfies DevinSlice;

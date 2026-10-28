@@ -51,10 +51,12 @@ export const ensureDevinCli = async (install: DevinCliInstall = installEngine): 
 export const devinAgentId = (accountId: string): string => `devin:${accountId}`;
 
 // `devin acp`, signed in over the protocol (the key rides `authenticate`'s `_meta.api_key`, which Devin's CLI reads),
-// never through WINDSURF_API_KEY: every command the agent runs would inherit an env var. The CLI keeps its sessions in
-// its own data directory, so a conversation resumes on any process of this sandbox.
-export const devinLaunch = (binary: string, apiKey: string): AcpLaunch => ({
+// never through WINDSURF_API_KEY: every command the agent runs would inherit an env var. Its sessions database goes to
+// `sessionsDir` (DEVIN_SESSIONS_DIR), beside the accounts in the auth root: the CLI's default, ~/.local/share/devin/cli,
+// is the container's own disk, which a rebuild wipes, and every chat's session/load then fails. One directory for every
+// account's process, so a conversation resumes on any process of this sandbox.
+export const devinLaunch = (binary: string, apiKey: string, sessionsDir: string): AcpLaunch => ({
     argv: [binary, "acp"],
-    env: {},
+    env: { DEVIN_SESSIONS_DIR: sessionsDir },
     authenticate: { meta: { api_key: apiKey } },
 });

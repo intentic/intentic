@@ -40,6 +40,7 @@ import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
 import { answerElicitation } from "./acp-elicitation.js";
+import { sessionMissing } from "./acp-session-missing.js";
 import { acpMcpProxyFile, stdioProxyServer } from "./acp-mcp-proxy.js";
 import { sessionUpdateEvent } from "./acp-events.js";
 import { recordOptions, thoughtFor } from "./acp-model.js";
@@ -154,7 +155,7 @@ async function* sessionFor(
                     return false;
                 },
                 (error: unknown) => {
-                    if (error instanceof RequestError && error.code === RequestError.resourceNotFound().code) {
+                    if (error instanceof RequestError && sessionMissing(error)) {
                         return true;
                     }
                     throw error;

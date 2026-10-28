@@ -172,6 +172,15 @@ test("an agent that answers session/load with resource-not-found self-heals via 
     expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "session-not-found" }));
 });
 
+// Devin's CLI names a session its store lacks by its own code, tagged in data rather than with resource_not_found.
+test("Devin's own session_not_found on session/load self-heals via session-not-found", async () => {
+    const data = { "cognition.ai/errorKind": "session_not_found", "cognition.ai/retryable": false };
+    const connection = fakeAcpConnection(fakeAcpAgentApp({ failure: { method: "load", code: -32016, message: "Session not found", data } }), { loadSession: true });
+    const events = await collect(createAcpAgent(connectionsOf(connection), TIMEOUTS), request("hello", { spec: { sessionId: "daily-justice" } }));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "session-not-found" }));
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
 // session-not-found makes the client drop the id for good; a dropped connection has said nothing about the session.
 test("a connection that drops during session/load fails the turn without discarding the session", async () => {
     const base = fakeAcpConnection(fakeAcpAgentApp(), { loadSession: true });

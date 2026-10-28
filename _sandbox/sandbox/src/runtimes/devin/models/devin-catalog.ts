@@ -79,6 +79,8 @@ export interface DevinCatalogDeps {
     readonly persistPath: string;
     // An empty directory the probe session stands in, so Devin reads nothing of the workspace to answer a list.
     readonly probeDir: string;
+    // Devin's sessions database, the same one the account's turns launch with, so the probe shares their warm process.
+    readonly sessionsDir: string;
 }
 
 export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
@@ -90,7 +92,7 @@ export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
         try {
             await mkdir(deps.probeDir, { recursive: true });
             // The account's own warm process, the one its turns use, so the list costs no second sign-in.
-            const connection = await deps.connections().acquire(devinAgentId(account.id), devinLaunch(binary, account.apiKey), deps.probeDir);
+            const connection = await deps.connections().acquire(devinAgentId(account.id), devinLaunch(binary, account.apiKey, deps.sessionsDir), deps.probeDir);
             const created = await connection.agent.request(methods.agent.session.new, { cwd: deps.probeDir, mcpServers: [] });
             if (connection.capabilities.sessionCapabilities?.delete != null) {
                 // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.

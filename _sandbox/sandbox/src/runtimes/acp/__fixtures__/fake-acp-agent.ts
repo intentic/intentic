@@ -93,7 +93,7 @@ const postureBehaviour = async (
 export const fakeAcpAgentApp = (
     options: {
         readonly answered?: (outcome: string) => void;
-        readonly failure?: { readonly method: "load" | "new" | "prompt"; readonly code: number; readonly message: string };
+        readonly failure?: { readonly method: "load" | "new" | "prompt"; readonly code: number; readonly message: string; readonly data?: unknown };
         // A model option on every session, as Devin's CLI offers one: these values, the first current. Absent: none.
         readonly models?: readonly string[];
         // A reasoning-depth option (`thought_level`) on every session: these values, the first current. Absent: none.
@@ -151,7 +151,7 @@ export const fakeAcpAgentApp = (
     const stalled = new Map<string, () => void>();
     const fail = (method: "load" | "new" | "prompt"): void => {
         if (options.failure?.method === method) {
-            throw new RequestError(options.failure.code, options.failure.message);
+            throw new RequestError(options.failure.code, options.failure.message, options.failure.data);
         }
     };
     return agent({ name: "fake-acp" })
