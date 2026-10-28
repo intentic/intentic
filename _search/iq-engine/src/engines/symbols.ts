@@ -40,8 +40,17 @@ export const defOf = (db: SqliteDb, name: string, allowed: ReadonlySet<string>):
 // `iq sym <pattern>`, fuzzy (or glob) match over symbol names, optionally narrowed by kind.
 export const symSearch = (db: SqliteDb, pattern: string, kind: SymbolRow["kind"] | undefined, allowed: ReadonlySet<string>): EngineHit[] => {
     const glob = /[*?[]/.test(pattern) ? globToRegExp(pattern) : undefined;
+    if (allowed.size === 0) {
+        return [];
+    }
     const scored: { symbol: StoredSymbol; score: number }[] = [];
-    for (const symbol of symbolRows(db, kind !== undefined ? "WHERE s.kind = ?" : "", ...(kind !== undefined ? [kind] : []))) {
+    // JSON uses one parameter regardless of scope size. Broad scopes keep the sequential scan; membership is
+    // still checked below because allowed can include paths not indexed yet.
+    const scoped = allowed.size < Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
+    const clauses = [...(scoped ? ["f.path IN (SELECT value FROM json_each(?))"] : []), ...(kind !== undefined ? ["s.kind = ?"] : [])];
+    const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
+    const params = [...(scoped ? [JSON.stringify([...allowed])] : []), ...(kind !== undefined ? [kind] : [])];
+    for (const symbol of symbolRows(db, where, ...params)) {
         if (!allowed.has(symbol.path)) {
             continue;
         }
@@ -90,7 +99,12 @@ export interface RefsResult {
 }
 
 // `iq refs X`, live word-boundary ripgrep, each hit classified by lexical context; definition lines dropped.
-export const refsOf = async (db: SqliteDb, name: string, kindFilter: RefKind | undefined, rgBase: Omit<RgOptions, "pattern">): Promise<RefsResult> => {
+export const refsOf = async (
+    db: SqliteDb,
+    name: string,
+    kindFilter: RefKind | undefined,
+    rgBase: Omit<RgOptions, "pattern">,
+): Promise<RefsResult> => {
     const escaped = escapeRegExp(name);
     const { hits: raw } = await rgSearch({ ...rgBase, pattern: escaped, word: true });
     const defLines = new Set(symbolRows(db, "WHERE s.name = ?", name).map((symbol) => `${symbol.path}:${symbol.line}`));
