@@ -1,5 +1,5 @@
 import { type WebExtCookie, webextSessionUrl } from "@intentic/sandbox-contract/webext";
-import { askConfirm } from "../../page/overlay.js";
+import { askPerson } from "../asking.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { targetTab } from "./tab-access.js";
@@ -32,18 +32,14 @@ export const connectSite = async (account: string, tabId?: number): Promise<stri
     const host = new URL(tab.url).hostname;
     const domain = cookieDomain(host);
 
-    const [confirmation] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: askConfirm,
-        args: [
-            `Hand your ${domain} sign-in to the sandbox account "${account}"? It will then be able to use ${domain} as you, without this browser open.`,
-            120_000,
-        ],
-    });
-    if (confirmation?.result !== true) {
-        throw new RefusedError(
-            `They did not agree to hand over the ${domain} session. Leave it: the work can be done here, in their browser, while they watch.`,
-        );
+    const agreed = await askPerson(
+        tab,
+        `Hand your ${domain} sign-in to the sandbox account "${account}"? It will then be able to use ${domain} as you, without this browser open.`,
+        120_000,
+        // allow(silent-catch): a page that went away before it could ask is no agreement, and is refused as one
+    ).catch(() => false);
+    if (!agreed) {
+        throw new RefusedError(`They did not agree to hand over the ${domain} session. Leave it: the work can be done here, in their browser.`);
     }
 
     const jar = await chrome.cookies.getAll({ domain });

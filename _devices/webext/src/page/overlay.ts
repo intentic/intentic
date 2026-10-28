@@ -45,33 +45,15 @@ export const flashBanner = (message: string): void => {
 // on. Every event aimed at the panel is stopped at the window, ahead of the page's own listeners on the document and
 // below, and pressing a button does not move focus. The shadow root is closed and only a trusted click answers: a
 // snapshot cannot list these buttons, and neither the agent's own click nor the page's script can say yes for the
-// person. Resolves false on timeout: an unanswered question is a no.
-export const askConfirm = async (question: string, timeoutMs: number): Promise<boolean> => {
+// person. Resolves false on timeout: an unanswered question is a no. `id` marks the panel so the extension can take it
+// down once the person answered from the popup instead (dismissConfirm); the page can take it down too, which only
+// ever answers no.
+export const askConfirm = async (question: string, timeoutMs: number, id = ""): Promise<boolean> => {
     // Everything a pointer, a finger or a key sends; listening on the window in the capture phase runs ahead of every
     // listener the page put on its document or elements (only one it put on the window earlier still sees these).
-    const EVENTS = [
-        "pointerdown",
-        "pointerup",
-        "pointerover",
-        "pointerout",
-        "pointermove",
-        "mousedown",
-        "mouseup",
-        "mouseover",
-        "mouseout",
-        "mousemove",
-        "click",
-        "dblclick",
-        "auxclick",
-        "contextmenu",
-        "touchstart",
-        "touchend",
-        "focusin",
-        "focusout",
-        "keydown",
-        "keyup",
-        "keypress",
-    ];
+    const POINTER = ["pointerdown", "pointerup", "pointerover", "pointerout", "pointermove", "touchstart", "touchend"];
+    const MOUSE = ["mousedown", "mouseup", "mouseover", "mouseout", "mousemove", "click", "dblclick", "auxclick", "contextmenu"];
+    const EVENTS = [...POINTER, ...MOUSE, "focusin", "focusout", "keydown", "keyup", "keypress"];
     return await new Promise<boolean>((resolve) => {
         const host = document.createElement("div");
         const root = host.attachShadow({ mode: "closed" });
@@ -154,10 +136,23 @@ export const askConfirm = async (question: string, timeoutMs: number): Promise<b
         for (const type of EVENTS) {
             window.addEventListener(type, swallow, true);
         }
+        host.setAttribute("data-intentic-ask", id);
+        host.addEventListener("intentic-dismiss", () => finish(false));
         row.append(no, yes);
         panel.append(text, row);
         root.append(panel);
         document.documentElement.append(host);
         const timer = setTimeout(() => finish(false), timeoutMs);
     });
+};
+
+// Takes down the question `id` once it was answered elsewhere (background/asking.ts): the person said yes or no in the
+// popup, and a panel still asking on the page would be a second answer to a question already closed.
+export const dismissConfirm = (id: string): boolean => {
+    for (const host of document.querySelectorAll("[data-intentic-ask]")) {
+        if (host.getAttribute("data-intentic-ask") === id) {
+            host.dispatchEvent(new Event("intentic-dismiss"));
+        }
+    }
+    return true;
 };

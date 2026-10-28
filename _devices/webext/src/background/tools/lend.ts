@@ -1,5 +1,6 @@
 import { type WebExtCookie, webextLendUrl } from "@intentic/sandbox-contract/webext";
-import { askConfirm } from "../../page/overlay.js";
+import { isAgentWindow, showTab } from "../agent-window.js";
+import { askPerson } from "../asking.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { targetTab } from "./tab-access.js";
@@ -54,15 +55,13 @@ export const lendSite = async (account: string, tabId?: number): Promise<string>
     }
     const domain = cookieDomain(new URL(tab.url).hostname);
 
-    const [confirmation] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: askConfirm,
-        args: [
-            `Sign this browser in to ${domain} as the sandbox account "${account}"? It will replace your current ${domain} sign-in here until you sign out.`,
-            120_000,
-        ],
-    });
-    if (confirmation?.result !== true) {
+    const agreed = await askPerson(
+        tab,
+        `Sign this browser in to ${domain} as the sandbox account "${account}"? It will replace your current ${domain} sign-in here until you sign out.`,
+        120_000,
+        // allow(silent-catch): a page that went away before it could ask is no agreement, and is refused as one
+    ).catch(() => false);
+    if (!agreed) {
         throw new RefusedError(`They did not agree to borrow the ${domain} session. Leave it: work the site from the sandbox's own browser instead.`);
     }
 
@@ -86,7 +85,13 @@ export const lendSite = async (account: string, tabId?: number): Promise<string>
     // Reloaded, since an already-open page still shows the old session; without this, the person sees a stale page
     // while being told it worked.
     await chrome.tabs.reload(tab.id).catch(() => undefined);
+    // The step left is the person's own, on this page: in the agent's window behind theirs, it comes to them, on the
+    // strength of the yes they just gave for exactly this.
+    // allow(silent-catch): a tab the person closed meanwhile is simply not brought forward
+    const reloaded = await chrome.tabs.get(tab.id).catch(() => undefined);
+    const brought = (await isAgentWindow(reloaded?.windowId)) && (await showTab(tab.id));
     const refused = answer.cookies.length - written;
     const partial = refused === 0 ? "" : ` Chrome refused ${refused} of its ${answer.cookies.length} cookies, so if the page does not show the account signed in, that is why.`;
-    return `${siteOf(domain)} is now signed in here as "${account}".${partial} Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
+    const where = brought ? ` The page is now in front of them, in your window.` : ``;
+    return `${siteOf(domain)} is now signed in here as "${account}".${partial}${where} Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
 };

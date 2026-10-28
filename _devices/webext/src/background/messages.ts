@@ -1,6 +1,6 @@
 import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
 import type { PasswordsUiStatus } from "./passwords.js";
-import type { ActivityEntry, PairedSandbox, PendingAccess, Settings } from "./store.js";
+import type { ActivityEntry, Asking, PairedSandbox, PendingAccess, Settings } from "./store.js";
 
 // What the popup and service worker say to each other, typed on both sides since `chrome.runtime.sendMessage` is
 // an `any` pipe that silently drops a renamed button's message. Anything needing a user gesture
@@ -33,7 +33,11 @@ export type PopupCommand =
     | { readonly type: "offer"; readonly code: string }
     // The person turned a parked pairing down, which is also what clears the badge it lit.
     | { readonly type: "dismiss-offer" }
-    | { readonly type: "passwords-enable" };
+    | { readonly type: "passwords-enable" }
+    // The person's Allow or No to the question the agent is waiting on (background/asking.ts), given in the popup.
+    | { readonly type: "answer"; readonly id: string; readonly allow: boolean }
+    // Brings the agent's window in front, at `tabId` when the question is about that tab.
+    | { readonly type: "show"; readonly tabId?: number };
 
 export interface PopupState {
     readonly sandbox: PairedSandbox | undefined;
@@ -47,4 +51,8 @@ export interface PopupState {
     readonly log: readonly ActivityEntry[];
     readonly settings: Settings;
     readonly passwords: PasswordsUiStatus;
+    // What the agent is asking the person right now, on a page that may be out of their sight.
+    readonly asking: Asking | undefined;
+    // Whether the agent's own window is open, for the popup's "Show its window".
+    readonly agentWindowOpen: boolean;
 }

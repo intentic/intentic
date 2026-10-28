@@ -38,27 +38,47 @@ const answerFor = (name: string) => {
     }
 };
 
+const area = (storage: Map<string, unknown>) => ({
+    get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
+    set: async (items: Record<string, unknown>) => {
+        for (const [key, value] of Object.entries(items)) {
+            storage.set(key, value);
+        }
+    },
+    remove: async (keys: string[]) => {
+        for (const key of keys) {
+            storage.delete(key);
+        }
+    },
+});
+
 const install = (tabs: { id: number; url: string }[]): void => {
     const storage = new Map<string, unknown>();
+    // Window 1 is the agent's own (agent-window.ts), so a click given no tab lands on its tab in front, tab 7.
+    const session = new Map<string, unknown>([["agentWindow", 1]]);
     const fake = {
         storage: {
-            local: {
-                get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
-                set: async (items: Record<string, unknown>) => {
-                    for (const [key, value] of Object.entries(items)) {
-                        storage.set(key, value);
-                    }
-                },
-                remove: async (keys: string[]) => {
-                    for (const key of keys) {
-                        storage.delete(key);
-                    }
-                },
-            },
+            local: area(storage),
+            session: area(session),
         },
         tabs: {
             query: async () => tabs.slice(0, 1).map((tab) => ({ ...tab, active: true, windowId: 1 })),
             get: async (id: number) => tabs.map((tab) => ({ ...tab, active: false, windowId: 1 })).find((tab) => tab.id === id),
+        },
+        windows: {
+            get: async (id: number) => ({
+                id,
+                focused: false,
+                state: "normal",
+                tabs: tabs.map((tab, at) => ({ ...tab, active: at === 0, windowId: 1 })),
+            }),
+            update: async (id: number) => ({ id, focused: false }),
+        },
+        action: {
+            setBadgeText: async () => undefined,
+            setBadgeBackgroundColor: async () => undefined,
+            setTitle: async () => undefined,
+            openPopup: async () => undefined,
         },
         permissions: { contains: async () => true },
         scripting: {

@@ -48,6 +48,20 @@ const answerFor = (name: string) => {
 
 const realFetch = globalThis.fetch;
 
+const area = (storage: Map<string, unknown>) => ({
+    get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
+    set: async (items: Record<string, unknown>) => {
+        for (const [key, value] of Object.entries(items)) {
+            storage.set(key, value);
+        }
+    },
+    remove: async (keys: string[]) => {
+        for (const key of keys) {
+            storage.delete(key);
+        }
+    },
+});
+
 beforeEach(async () => {
     injected = [];
     focused = { ok: true, field: "password", message: "" };
@@ -56,26 +70,27 @@ beforeEach(async () => {
     door = { status: 200, body: { ok: true, value: VALUE } };
     posted = [];
     const storage = new Map<string, unknown>();
+    // Window 1 is the agent's own (agent-window.ts): the field in focus is looked for in its tab in front, tab 7.
+    const session = new Map<string, unknown>([["agentWindow", 1]]);
     Object.assign(globalThis, {
         chrome: {
             storage: {
-                local: {
-                    get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
-                    set: async (items: Record<string, unknown>) => {
-                        for (const [key, value] of Object.entries(items)) {
-                            storage.set(key, value);
-                        }
-                    },
-                    remove: async (keys: string[]) => {
-                        for (const key of keys) {
-                            storage.delete(key);
-                        }
-                    },
-                },
+                local: area(storage),
+                session: area(session),
             },
             tabs: {
                 query: async () => [{ id: 7, windowId: 1, active: true, url: PAGE }],
                 get: async (id: number) => ({ id, windowId: 1, active: true, url: urlLater }),
+            },
+            windows: {
+                get: async (id: number) => ({ id, focused: true, state: "normal", tabs: [{ id: 7, windowId: 1, active: true, url: PAGE }] }),
+                update: async (id: number) => ({ id, focused: true }),
+            },
+            action: {
+                setBadgeText: async () => undefined,
+                setBadgeBackgroundColor: async () => undefined,
+                setTitle: async () => undefined,
+                openPopup: async () => undefined,
             },
             permissions: { contains: async () => true },
             scripting: {
@@ -90,7 +105,11 @@ beforeEach(async () => {
     });
     globalThis.fetch = Object.assign(
         async (url: string | URL | Request, init?: RequestInit) => {
-            posted.push({ url: String(url), headers: Object.fromEntries(new Headers(init?.headers).entries()), body: JSON.parse(String(init?.body)) });
+            posted.push({
+                url: String(url),
+                headers: Object.fromEntries(new Headers(init?.headers).entries()),
+                body: JSON.parse(String(init?.body)),
+            });
             return new Response(JSON.stringify(door.body), { status: door.status, headers: { "content-type": "application/json" } });
         },
         { preconnect: realFetch.preconnect },
@@ -105,7 +124,10 @@ afterEach(() => {
 });
 
 const typeTicket = async (args: Record<string, unknown> = { ticket: "tkt_one" }) => {
-    const answer = await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "type_ticket", arguments: args } }, undefined);
+    const answer = await handleMcpMessage(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "type_ticket", arguments: args } },
+        undefined,
+    );
     // SAFETY: a tools/call is always answered with a result envelope (peer-mcp-server.ts), a failure as isError.
     const result = (answer as { result: { content: { text: string }[]; isError: boolean; structuredContent?: unknown } }).result;
     return { answer, text: result.content[0]?.text ?? "", isError: result.isError, structured: result.structuredContent };
@@ -178,7 +200,9 @@ test("a person whose switches ask before every action is asked first, and a no r
     const typed = await typeTicket();
     expect(typed.isError).toBe(true);
     expect(typed.text).toContain("said no (or did not answer) to typing a secret into this password field");
-    expect(ran("ask").map((call) => call.args)).toEqual([["Your agent wants to type a stored secret into this password field. Allow it?", 45_000]]);
+    expect(ran("ask").map((call) => call.args.slice(0, 2))).toEqual([["Your agent wants to type a stored secret into this password field. Allow it?", 45_000]]);
+    // The question carries its id, which the popup answers it by (asking.ts).
+    expect(String(ran("ask")[0]?.args[2]).length).toBeGreaterThan(8);
     expect(posted).toEqual([]);
 
     // Their yes lets it through.

@@ -1,5 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
+import { agentWindow, forgetClosedWindow, rememberBounds, showTab } from "./agent-window.js";
+import { answerAsking, clearStaleAsking } from "./asking.js";
 import { redeemPairing } from "./enroll.js";
 import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
@@ -33,6 +35,7 @@ const wake = (): void => {
     void ensureLink();
     void refreshBadge();
     void passwordsStartup();
+    void clearStaleAsking();
 };
 
 chrome.runtime.onInstalled.addListener(wake);
@@ -57,6 +60,11 @@ chrome.permissions.onRemoved.addListener((removed) => {
     }
 });
 
+// The agent's own window (agent-window.ts): wherever the person moves it is where the next one opens, and once they
+// close it the next `open` makes another.
+chrome.windows.onBoundsChanged.addListener((window) => void rememberBounds(window));
+chrome.windows.onRemoved.addListener((windowId) => void forgetClosedWindow(windowId));
+
 // A site Chrome just granted, from its own dialog (the popup that asked is closed by then) or its own site-access menu:
 // filed with the mode the person picked, or as read only when it answers the agent's request (site-grants.ts). Once
 // filed, the paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
@@ -65,7 +73,7 @@ chrome.permissions.onAdded.addListener((added) => {
 });
 
 const readState = async (): Promise<PopupState> => {
-    const [sandbox, scopes, grants, pending, offered, paused, log, settings, passwords] = await Promise.all([
+    const [sandbox, scopes, grants, pending, offered, paused, log, settings, passwords, asking, window] = await Promise.all([
         store.sandbox(),
         store.scopes(),
         currentGrants(),
@@ -75,8 +83,23 @@ const readState = async (): Promise<PopupState> => {
         store.log(),
         store.settings(),
         passwordsUiStatus(),
+        store.asking(),
+        agentWindow(),
     ]);
-    return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log, settings, passwords };
+    return {
+        sandbox,
+        link: linkState(),
+        scopes,
+        grants,
+        pending,
+        offered,
+        paused,
+        log,
+        settings,
+        passwords,
+        asking,
+        agentWindowOpen: window !== undefined,
+    };
 };
 
 // Redeems a pairing and dials; the popup already obtained the host permission, since only a click-backed page
@@ -150,9 +173,16 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             return { ok: true };
         case "decline":
             return await decline();
-        case "settings":
+        case "settings": {
+            const before = await store.settings();
             await store.setSettings(command.settings);
+            if (before.workIn !== command.settings.workIn) {
+                await owner(
+                    command.settings.workIn === "own-window" ? "Had the agent work in its own window" : "Had the agent work in the tab in front of you",
+                );
+            }
             return { ok: true };
+        }
         case "pause":
             await store.setPaused(command.value);
             await owner(command.value ? "Paused the agent" : "Resumed the agent");
@@ -165,6 +195,10 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             return { ok: true };
         case "passwords-enable":
             return await enablePasswords();
+        case "answer":
+            return { ok: await answerAsking(command.id, command.allow) };
+        case "show":
+            return { ok: await showTab(command.tabId) };
         case "dismiss-offer":
             await store.setInbox(undefined);
             await refreshBadge();

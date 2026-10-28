@@ -1,5 +1,5 @@
 import { handleMcpMessage } from "./mcp.js";
-import { store } from "./store.js";
+import { DEFAULT_SETTINGS, store } from "./store.js";
 
 // Tests the checkpoint every page tool goes through: a call for an unsanctioned site must come back as a readable
 // refusal naming the site and what to do about it, not an exception, crossing mcp → tab-access → policy → audit.
@@ -16,29 +16,33 @@ interface FakeTab {
 // How many times the extension opened its own popup, across the current install.
 let popupsOpened = 0;
 
+const area = (storage: Map<string, unknown>) => ({
+    get: async (keys: string[] | null) =>
+        Object.fromEntries((keys ?? [...storage.keys()]).filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
+    set: async (items: Record<string, unknown>) => {
+        for (const [key, value] of Object.entries(items)) {
+            storage.set(key, value);
+        }
+    },
+    remove: async (keys: string[]) => {
+        for (const key of keys) {
+            storage.delete(key);
+        }
+    },
+});
+
+// Window 1 is the agent's own (agent-window.ts), so a tool given no tab works on its tab in front: the default since
+// 2026-10-28. agent-window.test.ts covers the window itself; these are about what is allowed once a tab is chosen.
 const fakeChrome = (options: { tabs: FakeTab[]; origins: string[] }) => {
-    const storage = new Map<string, unknown>();
     popupsOpened = 0;
     return {
-        storage: {
-            local: {
-                get: async (keys: string[] | null) =>
-                    Object.fromEntries((keys ?? [...storage.keys()]).filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
-                set: async (items: Record<string, unknown>) => {
-                    for (const [key, value] of Object.entries(items)) {
-                        storage.set(key, value);
-                    }
-                },
-                remove: async (keys: string[]) => {
-                    for (const key of keys) {
-                        storage.delete(key);
-                    }
-                },
-            },
-        },
+        storage: { local: area(new Map()), session: area(new Map<string, unknown>([["agentWindow", 1]])) },
         tabs: {
             query: async () => options.tabs,
             get: async (id: number) => options.tabs.find((tab) => tab.id === id),
+        },
+        windows: {
+            get: async (id: number) => ({ id, focused: false, state: "normal", tabs: options.tabs.filter((tab) => tab.windowId === id) }),
         },
         permissions: {
             getAll: async () => ({ origins: options.origins }),
@@ -147,7 +151,7 @@ test("asking for a site opens the popup once per new request, unless the person 
     expect(popupsOpened).toBe(1);
     expect((await store.pending())?.origin).toBe("https://github.com/*");
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: [] });
-    await store.setSettings({ openOnAsk: false });
+    await store.setSettings({ ...DEFAULT_SETTINGS, openOnAsk: false });
     await call("ask_access", { origin: "gitlab.com", reason: "To read the pipeline." });
     expect(popupsOpened).toBe(0);
     expect((await store.pending())?.origin).toBe("https://gitlab.com/*");

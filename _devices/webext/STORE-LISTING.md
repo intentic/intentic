@@ -16,7 +16,7 @@ Intentic — your agent, in your browser
 ## Summary (132 characters max, shown in search results)
 
 ```
-Let your intentic sandbox work in this browser, on the sites you allow, while you watch every click.
+Let your intentic sandbox work in this browser, on the sites you allow, in a window of its own behind yours.
 ```
 
 ## Category
@@ -40,13 +40,15 @@ device check, the sites that refuse a datacentre address. This borrows your brow
 profile or sign-ins. Page content from sites you allow still goes to your sandbox and the AI model you chose;
 the sign-in itself moves only when you use the separate hand-over action and confirm it.
 
-You are there while it works. Every action draws a line in the corner of the tab it happened in, and anything
-that looks like paying, deleting or submitting a password asks you first, on the page.
+It works in a window of its own, behind yours, so the tab you are using is never taken over; move that window to a
+spare screen to watch it, or let it work in your tab instead. Every action draws a line in the corner of the tab it
+happened in, and anything that looks like paying, deleting or submitting a password asks you first, on the page and
+from the toolbar icon, so you can answer without leaving what you are doing.
 
 WHAT IT CAN DO
 • Read a page the way an agent needs to: every link, button and field, named
 • Click, type, choose from dropdowns, scroll, wait for something to appear
-• Work in a tab that is not the one in front, so you keep using the browser
+• Work in a window of its own, behind yours, so you keep using the browser
 • Take a screenshot of a tab, for the canvas apps and PDF viewers a page's structure says nothing about
 • Hand one site's sign-in to your sandbox, with your confirmation, so a long job carries on after you close
   the laptop

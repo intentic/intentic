@@ -79,7 +79,8 @@ const namedBrowsers = ({ browsers }: OwnBrowserReach): string =>
 // is "the way to do anything that has to be THEM".
 export const ownBrowserFull = (facts: Facts, reach: OwnBrowserReach): string =>
     `The owner's OWN browser is connected to this turn: ${namedBrowsers(reach)}, ${behind(facts, reach.browsers[0]?.id ?? "browser")}. ` +
-    `It runs on their computer with their sessions in it, and they are watching the tab as you work. It is the way to ` +
+    `It runs on their computer with their sessions in it, and they are using it while you work: your pages open in a ` +
+    `window of your own, behind theirs. It is the way to ` +
     `do what has to be THEM and no sandbox account covers — a site behind their login, a passkey, a page a datacentre ` +
     `IP cannot load — and its skill holds the rules for acting in one. It is NOT for a site the sandbox holds its own ` +
     `signed-in account on (${toolName(facts, "accounts", "roster")} lists them): that site goes through the \`browser\` ` +

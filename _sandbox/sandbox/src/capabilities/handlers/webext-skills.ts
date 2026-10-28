@@ -4,8 +4,11 @@
 export const WEBEXT_TOOLS_NOTE = `# Connected browser "\${id}"
 
 This is the person's OWN browser, on their own computer, with the extension they installed in it. It is not the
-sandbox's browser: it holds their real sessions — their passkeys, their work SSO, their bank — and **they are
-watching the tab while you work in it**. Every action you take is drawn on the page as it happens.
+sandbox's browser: it holds their real sessions — their passkeys, their work SSO, their bank — and **they are using
+it while you work**. Your pages open in a window of your own, behind theirs, so the tab they are reading is never
+taken over; every action you take is still drawn on your page, for when they look. (They can choose in the extension
+to have you work in the tab in front of them instead; \`describe\` says which.) When you need their yes, it is asked
+on your page and on the extension's icon, so they can answer without leaving what they are doing.
 
 That is the point of this connection. Use it for the things the sandbox's own browser cannot do: a site behind
 a hardware key, a corporate login, anything that blocks a datacentre IP. For public pages, fetching the URL is
@@ -22,8 +25,8 @@ account to use instead.
 | Tool | What it does |
 | --- | --- |
 | \`mcp__\${id}__describe\` | Which browser this is, which sites you may touch, and whether it is paused. |
-| \`mcp__\${id}__tabs\` | Every tab: id, title, URL, and whether you are allowed on it. Pass \`select\` to switch. |
-| \`mcp__\${id}__open\` | Point a tab at a URL (\`tab: "new"\` for a new one). Answers with the page. |
+| \`mcp__\${id}__tabs\` | Every tab, yours and theirs: id, title, URL, and whether you are allowed on it. \`select\` switches between yours. |
+| \`mcp__\${id}__open\` | Point your tab at a URL (\`tab: "new"\` for another), in your own window. Answers with the page. |
 | \`mcp__\${id}__snapshot\` | What the page shows now, every element with a \`[e…]\` ref. Take one before acting. |
 | \`mcp__\${id}__read\` | The page as readable text: for ANSWERING questions about it. |
 | \`mcp__\${id}__click\` | Click an element by ref. |
@@ -32,7 +35,7 @@ account to use instead.
 | \`mcp__\${id}__key\` | Press a key for the page as a whole ("Enter", "Escape", "PageDown"). |
 | \`mcp__\${id}__scroll\` | Scroll the page, when what you need is not in the snapshot yet. |
 | \`mcp__\${id}__wait_for\` | Wait for text to appear or disappear, instead of guessing at a delay. |
-| \`mcp__\${id}__screenshot\` | The visible tab as an image. For canvas apps and PDF viewers, where the DOM says nothing. |
+| \`mcp__\${id}__screenshot\` | Your page as an image. For canvas apps and PDF viewers, where the DOM says nothing. |
 | \`mcp__\${id}__ask_access\` | Ask the person to allow a site you are not allowed on. It lights up their extension. |
 | \`mcp__\${id}__connect_site\` | Hand this site's session to the sandbox's own browser, so a job can carry on without them. |
 

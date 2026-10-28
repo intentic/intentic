@@ -402,6 +402,16 @@
             .note.info svg {
                 color: var(--subtle);
             }
+/* Where the agent works: a two-way choice, with what it means said under it. */
+            .work-row {
+                min-height: 36px;
+            }
+            .work-hint {
+                margin: 0;
+                padding: 0 12px 11px;
+                font-size: 11.5px;
+            }
+
             #site-notes > .note {
                 margin-bottom: 12px;
             }
@@ -889,6 +899,15 @@
                         <div id="add-error" class="error" hidden></div>
                     </div>
                 </section>
+                <section id="workspace" hidden>
+                    <h2 class="label">Where it works</h2>
+                    <div class="card">
+                        <div class="row work-row">
+                            <span id="work-in" class="seg" role="radiogroup" aria-label="Where your agent works"></span>
+                        </div>
+                        <p class="work-hint muted"><span id="work-hint"></span> <button id="show-agent" class="link" type="button" hidden>Show its window</button></p>
+                    </div>
+                </section>
                 <section id="activity" hidden>
                     <h2 class="label">Activity</h2>
                     <ul id="log" class="log"></ul>
@@ -896,7 +915,7 @@
                 </section>
             </main>
             <footer id="footer">
-                <label class="switch" title="Opens this popup by itself when your agent asks for a site, instead of only marking the icon.">
+                <label class="switch" title="Opens this popup by itself when your agent asks for a site, or asks you something on a page you cannot see, instead of only marking the icon.">
                     <input id="open-on-ask" type="checkbox" />
                     <span>Pop up when my agent asks</span>
                 </label>

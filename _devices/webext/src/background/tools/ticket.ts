@@ -1,6 +1,6 @@
 import { WEBEXT_TICKET_TTL_MS, WebExtSecretAnswerSchema, webextSecretUrl } from "@intentic/sandbox-contract/webext";
 import { pinFocusedField, typeSecretInto } from "../../page/driver.js";
-import { askConfirm } from "../../page/overlay.js";
+import { askPerson } from "../asking.js";
 import { needsConfirm, RefusedError } from "../policy.js";
 import { store } from "../store.js";
 import { announce, inject } from "./page.js";
@@ -57,7 +57,7 @@ export const typeTicket = async (ticket: string): Promise<TicketTyped> => {
     }
     if (needsConfirm(await store.scopes(), false)) {
         const what = focused.field === "password" ? "this password field" : "this field";
-        if (!(await inject(tab.id, askConfirm, [`Your agent wants to type a stored secret into ${what}. Allow it?`, CONFIRM_TIMEOUT_MS]))) {
+        if (!(await askPerson(tab, `Your agent wants to type a stored secret into ${what}. Allow it?`, CONFIRM_TIMEOUT_MS))) {
             throw new RefusedError(`The person said no (or did not answer) to typing a secret into ${what}. Do not try another way round it; ask them what they would prefer.`);
         }
     }

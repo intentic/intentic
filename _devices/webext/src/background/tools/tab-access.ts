@@ -1,10 +1,30 @@
 import type { WebExtGrant } from "@intentic/sandbox-contract/webext";
+import { agentTab, ownWindow } from "../agent-window.js";
 import { decide, originPattern, RefusedError, sandboxOwnOrigin } from "../policy.js";
 import { DECLINE_HOLD_MS, store } from "../store.js";
 
 // Single checkpoint every page tool passes through before touching a tab: which tab, is this extension allowed on
-// it at all (Chrome), and may it do this here (ours). Defaults to the active tab in the current window; an
-// explicit id targets one that isn't in front.
+// it at all (Chrome), and may it do this here (ours). Defaults to the agent's own tab, the one in front in its window
+// (agent-window.ts), or to the tab in front of the person when they chose to have it work there; an explicit id
+// targets any tab, theirs included, without bringing it forward.
+
+// The tab a tool given no id works on, or the sentence why there is none.
+const defaultTab = async (): Promise<chrome.tabs.Tab> => {
+    if (await ownWindow()) {
+        const tab = await agentTab();
+        if (tab === undefined) {
+            throw new RefusedError(
+                `You have no page open yet. \`open\` one: it opens in a window of your own, behind the person's, so their tab is never taken over. To work on a page they already have open, find it with \`tabs\` and pass its id as \`tab\`.`,
+            );
+        }
+        return tab;
+    }
+    const [front] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (front === undefined) {
+        throw new RefusedError(`This browser has no active tab right now.`);
+    }
+    return front;
+};
 
 export interface TargetTab {
     readonly id: number;
@@ -15,14 +35,9 @@ export interface TargetTab {
 // Resolves and permits a tab, or throws a RefusedError with the message the agent reads. `need` distinguishes a
 // read tool from an acting one.
 export const targetTab = async (need: "read" | "act", tabId?: number): Promise<TargetTab> => {
-    const tab =
-        tabId === undefined
-            ? (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
-            : await chrome.tabs.get(tabId).catch(() => undefined);
+    const tab = tabId === undefined ? await defaultTab() : await chrome.tabs.get(tabId).catch(() => undefined);
     if (tab?.id === undefined) {
-        throw new RefusedError(
-            tabId === undefined ? `This browser has no active tab right now.` : `There is no tab ${tabId} in this browser any more.`,
-        );
+        throw new RefusedError(tabId === undefined ? `This browser has no active tab right now.` : `There is no tab ${tabId} in this browser any more.`);
     }
     const [scopes, paused, modes, sandbox, declined] = await Promise.all([
         store.scopes(),

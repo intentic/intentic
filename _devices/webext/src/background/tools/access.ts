@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WebExtFacts } from "@intentic/sandbox-contract/webext";
+import { ownWindow } from "../agent-window.js";
 import { loopbackFeatures } from "../loopback-catch.js";
 import { declinedMessage, originPattern, RefusedError, siteOf } from "../policy.js";
 import { DECLINE_HOLD_MS, store } from "../store.js";
@@ -10,21 +11,24 @@ import { currentGrants } from "./tab-access.js";
 // popup and lights the badge. One pending request at a time, since a queue of prompts is one nobody reads.
 
 // The badge says exactly two things: something's waiting for the person, or the agent is stopped. Red on white text
-// for waiting, because the icon itself is ember and an ember badge disappears into it.
+// for waiting, because the icon itself is ember and an ember badge disappears into it. Waiting covers a question the
+// agent is asking on a page, which may be in its own window behind theirs (asking.ts).
 export const refreshBadge = async (): Promise<void> => {
-    const [pending, offered, paused] = await Promise.all([store.pending(), store.inbox(), store.paused()]);
-    const waiting = pending !== undefined || offered !== undefined;
+    const [pending, offered, paused, asking] = await Promise.all([store.pending(), store.inbox(), store.paused(), store.asking()]);
+    const waiting = pending !== undefined || offered !== undefined || asking !== undefined;
     await chrome.action.setBadgeText({ text: paused ? `❚❚` : waiting ? `!` : `` });
     await chrome.action.setBadgeBackgroundColor({ color: paused ? `#6f6353` : `#d93a2b` });
     await chrome.action.setBadgeTextColor?.({ color: `#ffffff` });
     await chrome.action.setTitle({
         title: paused
             ? `Intentic — paused`
-            : pending !== undefined
-              ? `Intentic — your agent is asking for ${siteOf(pending.origin)}`
-              : offered !== undefined
-                ? `Intentic — a sandbox is offering to connect`
-                : `Intentic`,
+            : asking !== undefined
+              ? `Intentic — your agent is asking you something on ${siteOf(asking.origin)}`
+              : pending !== undefined
+                ? `Intentic — your agent is asking for ${siteOf(pending.origin)}`
+                : offered !== undefined
+                  ? `Intentic — a sandbox is offering to connect`
+                  : `Intentic`,
     });
 };
 
@@ -105,11 +109,14 @@ const browserName = async (): Promise<string> => {
 // What the agent is told when it asks what it may touch; reads as a list of sites, not match patterns, since a
 // model echoing this should echo something recognisable.
 export const describeAccess = async (): Promise<string> => {
-    const facts = await browserFacts();
+    const [facts, own] = await Promise.all([browserFacts(), ownWindow()]);
     const lines = facts.grants.map((grant) => `  ${siteOf(grant.origin)} — ${grant.mode === "act" ? "read and act" : "read only"}`);
     return [
         `${facts.browser}, ${facts.tabs} tab${facts.tabs === 1 ? "" : "s"} open.`,
         facts.paused ? `PAUSED: its owner has stopped the agent in the extension. Every tool refuses until they resume it.` : ``,
+        own
+            ? `You work in a window of your own, behind theirs, so they keep using their browser undisturbed: \`open\` loads pages there, and tools given no \`tab\` act on your tab in it. A page they already have open is in \`tabs\`; pass its id as \`tab\` to work on it where it is. When you need their yes, they are asked from the extension's icon.`
+            : `They chose to have you work in the tab in front of them, where they watch: \`open\` points that tab somewhere else, and tools given no \`tab\` act on it.`,
         ``,
         facts.grants.length === 0 ? `You are not allowed on any site yet. Use ask_access to ask for one.` : `Sites you may work on:`,
         ...lines,

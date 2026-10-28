@@ -17,9 +17,10 @@ import { typeTicket } from "./tools/ticket.js";
 
 const NO_ARGS = object({});
 const required = string().min(1);
-// Which tab to work in. Absent = the one in front, which is what a person means by "the page". An id comes
-// from `tabs`, and naming one is how the agent works somewhere that is not in front.
-const tab = number().int().optional().describe("Which tab, from `tabs`. Omit for the tab in front.");
+// Which tab to work in. Absent = the agent's own tab, in front in its window (agent-window.ts), or the tab in front of
+// the person when they chose to have it work there. An id comes from `tabs`, and naming one of the person's tabs is how
+// the agent works on a page they already have open, where it is, without bringing it forward.
+const tab = number().int().optional().describe("Which tab, from `tabs`. Omit for your own tab, the one `open` loaded.");
 
 const TOOLS: readonly McpTool<undefined>[] = [
     tool({
@@ -33,7 +34,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "tabs",
         description:
-            "Every tab open in this browser, with the one in front marked. Sites you have not been allowed on are listed without their address, which is the person's privacy rather than a fault. Pass `select` to bring a tab to the front.",
+            "Every tab open in this browser: yours, in your own window, and the person's, with the one in front of each window marked. Sites you have not been allowed on are listed without their address, which is the person's privacy rather than a fault. Pass `select` to switch between your own tabs; one of the person's is never brought forward, so name it with `tab` instead.",
         // Listing reads, but `select` brings a tab to the front.
         effect: "write",
         input: object({ select: number().int().optional().describe("A tab id to switch to. Omit to just list them.") }),
@@ -42,11 +43,11 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "open",
         description:
-            "Point a tab at a URL and answer with the page once it has loaded (read as it stands after 10s if it is still loading). Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
+            "Point your tab at a URL and answer with the page once it has loaded (read as it stands after 10s if it is still loading). Pages open in a window of your own, behind the person's, so what they are doing is never taken over (unless they chose to have you work in their tab). Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
         effect: "write",
         input: object({
             url: required.describe("The page to open. A bare host like example.com is fine."),
-            tab: zEnum(["current", "new"]).default("current").describe("Reuse the tab in front, or open a new one."),
+            tab: zEnum(["current", "new"]).default("current").describe("Reuse your tab, or open another beside it."),
         }),
         run: async ({ url, tab: where }) => textResult(await openUrl(url, where)),
     }),
@@ -136,11 +137,11 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "screenshot",
         description:
-            "The visible tab as an image. For canvas apps, maps and PDF viewers, where the page's own structure says nothing. Needs its own switch on this browser's card, which is off unless the owner turned it on.",
+            "The page as an image: your own tab, or `tab` when that tab is the one showing in its window (a screenshot is of what a window shows). For canvas apps, maps and PDF viewers, where the page's own structure says nothing. Needs its own switch on this browser's card, which is off unless the owner turned it on.",
         effect: "read",
-        input: NO_ARGS,
-        run: async () => {
-            const shot = await screenshot();
+        input: object({ tab }),
+        run: async ({ tab: id }) => {
+            const shot = await screenshot(id);
             return { content: [{ type: "image", data: shot.data, mimeType: shot.mimeType }], isError: false };
         },
     }),
@@ -181,7 +182,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: WEBEXT_TICKET_TOOL,
         description:
-            "Type a stored secret the sandbox holds into the field in focus in the tab in front, for a ticket only the sandbox issues: the sandbox's own type_secret calls this, and an agent's mount of this browser never lists it. Answers where it typed, never the value.",
+            "Type a stored secret the sandbox holds into the field in focus in your tab, for a ticket only the sandbox issues: the sandbox's own type_secret calls this, and an agent's mount of this browser never lists it. Answers where it typed, never the value.",
         // A typed secret reaches the page, and nothing takes it back.
         effect: "destructive",
         // The ticket and nothing else: the arguments are what the activity list records.

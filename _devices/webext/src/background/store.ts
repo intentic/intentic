@@ -2,10 +2,15 @@ import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intent
 // Named imports, as in mcp.ts: the `z` namespace would keep zod's locales in the bundle.
 import { enum as zEnum, number, object, string } from "zod";
 import { approvalCovers, type KeptApproval } from "./policy.js";
+import { DEFAULT_SETTINGS, type Settings } from "./settings.js";
+
+export { DEFAULT_SETTINGS, type Settings } from "./settings.js";
 
 // Everything this extension remembers, in chrome.storage.local: the sandbox's url+token (the only secret), cached
-// scopes, per-site read/act modes, paused (must survive the worker's death), the activity log, recent declines and
-// the person's own settings. Not here:
+// scopes, per-site read/act modes, paused (must survive the worker's death), the activity log, recent declines, the
+// person's own settings and where they put the agent's window. In chrome.storage.session, which the browser clears
+// when it quits: the agent window's id (ids start over in the next run, so a kept one could name a window of theirs)
+// and the question the agent is waiting on. Not here:
 // which sites are allowed — that's Chrome's live permission store, never mirrored, so a browser revoke is honored
 // immediately.
 
@@ -23,9 +28,15 @@ const KEY_PROMPTED = "prompted";
 const KEY_APPROVAL = "approval";
 const KEY_PASSWORDS = "passwordsOn";
 const KEY_NEVER_SAVE = "passwordsNeverHosts";
+const KEY_AGENT_WINDOW = "agentWindow";
+const KEY_AGENT_BOUNDS = "agentWindowBounds";
+const KEY_ASKING = "asking";
 
 const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
 const SiteChoiceSchema = object({ origin: string(), mode: zEnum(["read", "act"]), at: number() });
+const WindowIdSchema = number().int();
+const BoundsSchema = object({ left: number(), top: number(), width: number(), height: number() });
+const AskingSchema = object({ id: string(), tabId: number(), origin: string(), question: string(), at: number() });
 
 export interface PairedSandbox {
     readonly url: string;
@@ -43,13 +54,25 @@ export interface ActivityEntry {
     readonly note?: string;
 }
 
-// The person's own preferences for this extension, as opposed to anything a sandbox decides.
-export interface Settings {
-    // Open the popup by itself when the agent asks for a site, instead of leaving only a badge.
-    readonly openOnAsk: boolean;
+
+// Where the person last put the agent's window, so the next one opens there (agent-window.ts).
+export interface WindowBounds {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
 }
 
-const DEFAULT_SETTINGS: Settings = { openOnAsk: true };
+// The question the agent is waiting on the person for (asking.ts): shown in the popup, which can answer it, while the
+// page it is about may be in a window they cannot see.
+export interface Asking {
+    readonly id: string;
+    readonly tabId: number;
+    // The page's site as a match pattern (policy.ts originPattern), what the popup names and shows the icon of.
+    readonly origin: string;
+    readonly question: string;
+    readonly at: number;
+}
 
 // How long a "no" holds: long enough that an agent can't re-ask in a loop, short enough that a new task on the same
 // site is not refused by a decision about an old one.
@@ -194,6 +217,27 @@ export const store = {
             return typeof value === "object" && value !== null ? { ...DEFAULT_SETTINGS, ...value } : undefined;
         }),
     setSettings: async (settings: Settings): Promise<void> => await chrome.storage.local.set({ [KEY_SETTINGS]: settings }),
+
+    agentWindowId: async (): Promise<number | undefined> => {
+        const parsed = WindowIdSchema.safeParse((await chrome.storage.session.get([KEY_AGENT_WINDOW]))[KEY_AGENT_WINDOW]);
+        return parsed.success ? parsed.data : undefined;
+    },
+    setAgentWindowId: async (id: number | undefined): Promise<void> =>
+        id === undefined ? await chrome.storage.session.remove([KEY_AGENT_WINDOW]) : await chrome.storage.session.set({ [KEY_AGENT_WINDOW]: id }),
+    agentWindowBounds: async (): Promise<WindowBounds | undefined> =>
+        await read<WindowBounds | undefined>(KEY_AGENT_BOUNDS, undefined, (raw) => {
+            const parsed = BoundsSchema.safeParse(raw);
+            return parsed.success ? parsed.data : undefined;
+        }),
+    setAgentWindowBounds: async (bounds: WindowBounds | undefined): Promise<void> =>
+        bounds === undefined ? await chrome.storage.local.remove([KEY_AGENT_BOUNDS]) : await chrome.storage.local.set({ [KEY_AGENT_BOUNDS]: bounds }),
+
+    asking: async (): Promise<Asking | undefined> => {
+        const parsed = AskingSchema.safeParse((await chrome.storage.session.get([KEY_ASKING]))[KEY_ASKING]);
+        return parsed.success ? parsed.data : undefined;
+    },
+    setAsking: async (asking: Asking | undefined): Promise<void> =>
+        asking === undefined ? await chrome.storage.session.remove([KEY_ASKING]) : await chrome.storage.session.set({ [KEY_ASKING]: asking }),
 
     // When the popup last opened itself; kept in storage because the worker that opened it may not live to the next ask.
     promptedAt: async (): Promise<number> => await read(KEY_PROMPTED, 0, (raw) => (typeof raw === "number" ? raw : undefined)),

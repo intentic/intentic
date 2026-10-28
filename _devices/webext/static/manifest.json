@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Intentic — your agent, in your browser",
     "version": "0.0.0.1",
-    "description": "Let your intentic sandbox work in this browser, on the sites you allow, while you watch it happen.",
+    "description": "Let your intentic sandbox work in this browser, on the sites you allow, in a window of its own behind yours.",
     "minimum_chrome_version": "116",
     "homepage_url": "https://intentic.dev/docs/your-browser",
     "permissions": ["storage", "scripting", "alarms", "cookies", "activeTab", "favicon"],

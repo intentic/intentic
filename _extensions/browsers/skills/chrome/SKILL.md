@@ -18,8 +18,11 @@ This sandbox usually has two, and picking the wrong one wastes a turn:
 
 ## Chromium specifics worth knowing
 
-- **A pinned tab, a background tab and the tab in front are all the same to these tools.** Pass a `tab` id from
-  `tabs` to work somewhere that is not in front — the person keeps using the tab they are looking at.
+- **Your pages open in a window of your own, behind theirs.** Tools given no `tab` work on your tab there. A page
+  they already have open (pinned, in the background, or in front of them) is the same to these tools: pass its `tab`
+  id from `tabs` and it is worked on where it is, never brought forward. Behind their window your page is throttled
+  (no animation frames, timers about once a second): if a list never loads more as you scroll, say so and ask them to
+  move your window to a spare screen, where it runs in full.
 - **Profiles are separate browsers.** If they run a work profile and a personal one, only the profile with the
   extension in it is connected, and a site signed in on the other profile is not signed in here.
 - **A page you cannot see may still be loading.** `snapshot` says when the document is still loading; prefer

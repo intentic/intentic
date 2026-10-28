@@ -10,7 +10,8 @@ const here = import.meta.dirname;
 const dist = join(here, "..", "dist");
 
 // The state a listing screenshot should show: connected, working, and something waiting for the person, all
-// visible at once. The other states are for design work: preview.html#paused, #offline, #quiet, #offered, #welcome.
+// visible at once. The other states are for design work: preview.html#asking, #paused, #offline, #quiet, #front,
+// #offered, #welcome.
 const now = Date.now();
 const working = {
     sandbox: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "" },
@@ -24,8 +25,10 @@ const working = {
     pending: { origin: "https://mail.google.com/*", reason: "To read the invoice thread you asked me to summarise.", at: now - 24_000 },
     offered: undefined,
     paused: false,
-    settings: { openOnAsk: true },
+    settings: { openOnAsk: true, workIn: "own-window" },
     passwords: { kind: "on", version: "0.0.0.1" },
+    asking: undefined,
+    agentWindowOpen: true,
     log: [
         { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true },
         { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true },
@@ -47,6 +50,19 @@ const working = {
 const STATES = {
     working,
     quiet: { ...working, pending: undefined },
+    // A question on a page in the agent's own window, behind the person's: answered from here.
+    asking: {
+        ...working,
+        pending: undefined,
+        asking: {
+            id: "a1",
+            tabId: 31,
+            origin: "https://github.com/*",
+            question: 'Your agent wants to click "Merge pull request". Allow it?',
+            at: now - 6_000,
+        },
+    },
+    front: { ...working, pending: undefined, settings: { openOnAsk: true, workIn: "front-tab" } },
     paused: { ...working, pending: undefined, paused: true },
     offline: { ...working, pending: undefined, link: "closed", scopes: { ...working.scopes, act: "off" } },
     offered: {
@@ -112,7 +128,7 @@ const shot = `<!doctype html>
             <img class="mark" src="icons/icon-128.png" alt="" />
             <h1>Your agent,<br /><span class="accent">in your browser.</span></h1>
             <p>It works on the sites <b>you allow</b> — one at a time, granted here, revoked in Chrome.</p>
-            <p>You watch it happen: every action is drawn on the page, and anything that spends money or deletes something asks you first.</p>
+            <p>It works in <b>a window of its own</b>, behind yours: every action is drawn on its page, and anything that spends money or deletes something asks you first.</p>
             <p>Pause it in one click.</p>
         </div>
         <iframe src="preview.html" title="The extension's popup"></iframe>

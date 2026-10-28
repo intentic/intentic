@@ -2,9 +2,11 @@ import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webex
 import { describeCall } from "../background/activity.js";
 import type { PopupState } from "../background/messages.js";
 import { originPattern, sandboxOwnOrigin, siteOf } from "../background/policy.js";
-import type { ActivityEntry, PendingAccess } from "../background/store.js";
+import { DEFAULT_SETTINGS } from "../background/settings.js";
+import type { ActivityEntry, Asking, PendingAccess } from "../background/store.js";
 import { button, byId, h, icon, type IconName, say, send, show } from "./dom.js";
 import { renderPasswords } from "./passwords-section.js";
+import { renderWorkspace, saveSettings, wireWorkspace } from "./workspace-section.js";
 
 // Answers, in order: is the agent waiting on me, is it connected, what can it touch, what has it done, how do I stop
 // it. Every permission widening happens here, not in the worker: chrome.permissions.request needs a user gesture,
@@ -155,6 +157,26 @@ const askCard = (pending: PendingAccess, scopes: WebExtScopes): HTMLElement => {
     );
 };
 
+// A question the agent is waiting on, asked on a page that may be in its own window behind theirs: answered here, the
+// panel on the page is taken down (background/asking.ts); "Show me" brings that page in front instead.
+const askingCard = (asking: Asking): HTMLElement =>
+    h(
+        "div",
+        { class: "card ask" },
+        h("div", { class: "eyebrow" }, h("span", { text: "Your agent is asking" }), when(asking.at, false)),
+        h("div", { class: "title" }, favicon(asking.origin), h("span", { text: siteOf(asking.origin), title: asking.origin })),
+        h("p", { class: "reason", text: asking.question }),
+        h(
+            "div",
+            { class: "actions" },
+            button("No", "quiet", () => void send({ type: "answer", id: asking.id, allow: false }).then(refresh)),
+            h("span", { class: "spacer" }),
+            button("Show me", "plain", () => void send({ type: "show", tabId: asking.tabId })),
+            button("Allow", "primary", () => void send({ type: "answer", id: asking.id, allow: true }).then(refresh)),
+        ),
+        h("p", { class: "hint", text: "It is asked on the page too: answer whichever is nearer." }),
+    );
+
 const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => {
     const error = h("div", { class: "error" });
     show(error, false);
@@ -194,6 +216,9 @@ const renderAlerts = (state: PopupState): void => {
     const items: HTMLElement[] = [];
     if (state.sandbox === undefined && state.offered !== undefined) {
         items.push(offerCard(state.offered));
+    }
+    if (state.sandbox !== undefined && state.asking !== undefined) {
+        items.push(askingCard(state.asking));
     }
     if (state.sandbox !== undefined && state.pending !== undefined) {
         items.push(askCard(state.pending, state.scopes));
@@ -420,6 +445,7 @@ const draw = async (): Promise<void> => {
         renderWelcome(state);
         renderPasswords(state, refresh);
         renderSites(state, here);
+        renderWorkspace(state, refresh);
         renderActivity(state);
         renderFooter(state);
     }
@@ -517,8 +543,7 @@ const wire = (): void => {
     });
 
     byId<HTMLInputElement>("open-on-ask").addEventListener("change", (event) => {
-        const openOnAsk = (event.target as HTMLInputElement).checked;
-        void send({ type: "settings", settings: { ...(current?.settings ?? { openOnAsk }), openOnAsk } }).then(refresh);
+        void saveSettings(current?.settings ?? DEFAULT_SETTINGS, { openOnAsk: (event.target as HTMLInputElement).checked }, refresh);
     });
 
     // Two clicks, since disconnecting means pairing again from the sandbox: the first arms, the second does it.
@@ -553,4 +578,5 @@ const wire = (): void => {
 };
 
 wire();
+wireWorkspace();
 void refresh().then(() => byId("root").focus({ preventScroll: true }));

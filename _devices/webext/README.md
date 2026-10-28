@@ -13,6 +13,16 @@ flowchart LR
 
 - Runs in the user's Chromium browser as a Manifest V3 extension. Unlike [browser](../browser), which drives a
   separate profile, the agent here works inside the user's real sessions.
+- The agent works in a window of its own ([`agent-window.ts`](src/background/agent-window.ts)), opened unfocused:
+  Brave and Chrome put it behind the person's window, so the tab they are using is never taken over. Tools given no
+  tab act on the agent's tab there, and one of the person's tabs is worked on by id without being brought forward.
+  Covered, its page is throttled (no animation frames, timers about once a second) while clicks, typing and navigation
+  still work; on a spare monitor it runs in full, and where the person puts it is where the next one opens. It is
+  never created minimized: Brave ignores that and opens a focused window on top. The popup's "Where it works" switches
+  back to the tab in front of them.
+- A question the agent waits on ([`asking.ts`](src/background/asking.ts)) is asked on its page and on the icon at once:
+  the badge lights, the popup opens by itself (unless turned off) and can answer it, and the agent's window flashes in
+  the taskbar without taking focus. Whichever answers first wins, and the panel on the page is taken down.
 - Pairing: the sandbox page posts a code, `pair-bridge.js` (the only content script, on intentic.dev pages) hands it
   to the worker, and the person finishes it with a click in the popup, which redeems it at `/system/webext/enroll`.
   The token it gets back is the only secret the extension stores.
@@ -49,6 +59,8 @@ flowchart LR
 - [src/background/main.ts](src/background/main.ts) — the service worker: keepalive alarm, pairing, popup messages.
 - [src/background/policy.ts](src/background/policy.ts) — every allow or refuse decision, with its message.
 - [src/background/mcp.ts](src/background/mcp.ts) — the tool surface the sandbox calls.
+- [src/background/agent-window.ts](src/background/agent-window.ts) — the agent's own window: opened, reused, remembered.
+- [src/background/asking.ts](src/background/asking.ts) — the person's yes, from the page or the popup.
 - [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill.
 - [src/page/overlay.ts](src/page/overlay.ts) — what a tab shows the person: the action banner and the in-page Allow/No question.
 - [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.

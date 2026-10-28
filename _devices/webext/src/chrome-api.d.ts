@@ -38,6 +38,7 @@ declare namespace chrome {
             remove(keys: string[]): Promise<void>;
         }
         const local: Area;
+        // Cleared when the browser quits: where a window id is kept, since ids start over in the next run.
         const session: Area;
         // Lets an open popup follow what the worker writes (a new request, the agent's next call) without polling.
         const onChanged: { addListener: (callback: (changes: Record<string, unknown>, area: string) => void) => void };
@@ -74,7 +75,7 @@ declare namespace chrome {
         function query(query: { active?: boolean; currentWindow?: boolean; windowId?: number }): Promise<Tab[]>;
         function get(tabId: number): Promise<Tab>;
         function update(tabId: number, properties: { url?: string; active?: boolean }): Promise<Tab>;
-        function create(properties: { url?: string; active?: boolean }): Promise<Tab>;
+        function create(properties: { url?: string; active?: boolean; windowId?: number }): Promise<Tab>;
         function captureVisibleTab(windowId: number, options: { format: "png" | "jpeg"; quality?: number }): Promise<string>;
         // Needed after a session is written into this browser's cookie store: a page already open is still
         // showing the old one, and nothing about setting a cookie tells it otherwise (tools/lend.ts).
@@ -86,6 +87,33 @@ declare namespace chrome {
             addListener: (callback: (tabId: number, change: { url?: string; status?: string }, tab: Tab) => void) => void;
             removeListener: (callback: (tabId: number, change: { url?: string; status?: string }, tab: Tab) => void) => void;
         };
+    }
+
+    // The agent's own window (background/agent-window.ts). No permission: the windows API needs none.
+    namespace windows {
+        type State = "normal" | "minimized" | "maximized" | "fullscreen" | "locked-fullscreen";
+        interface Window {
+            id?: number;
+            focused: boolean;
+            state?: State;
+            left?: number;
+            top?: number;
+            width?: number;
+            height?: number;
+            // Present when asked for with `populate`, and on a window `create` answers with.
+            tabs?: tabs.Tab[];
+        }
+        // `focused: false` is honoured; `state: "minimized"` is not by Brave, which opens a normal, focused window
+        // instead (measured 2026-10-28), so it is not offered here.
+        function create(data: { url?: string; focused?: boolean; left?: number; top?: number; width?: number; height?: number }): Promise<Window>;
+        function get(windowId: number, options?: { populate?: boolean }): Promise<Window>;
+        // `drawAttention` flashes the window's taskbar button without moving focus.
+        function update(
+            windowId: number,
+            info: { focused?: boolean; drawAttention?: boolean; state?: "normal" | "minimized" | "maximized" },
+        ): Promise<Window>;
+        const onRemoved: { addListener: (callback: (windowId: number) => void) => void };
+        const onBoundsChanged: { addListener: (callback: (window: Window) => void) => void };
     }
 
     namespace scripting {

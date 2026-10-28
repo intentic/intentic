@@ -13,24 +13,28 @@ const GITHUB = "https://github.com/*";
 // What Chrome holds right now; a test adds to it the way the dialog's Allow does.
 let held: string[] = [];
 
+const area = (storage: Map<string, unknown>) => ({
+    get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
+    set: async (items: Record<string, unknown>) => {
+        for (const [key, value] of Object.entries(items)) {
+            storage.set(key, value);
+        }
+    },
+    remove: async (keys: string[]) => {
+        for (const key of keys) {
+            storage.delete(key);
+        }
+    },
+});
+
 const install = (origins: string[] = []): void => {
     held = origins;
     const storage = new Map<string, unknown>();
+    const session = new Map<string, unknown>();
     const fake = {
         storage: {
-            local: {
-                get: async (keys: string[]) => Object.fromEntries(keys.filter((key) => storage.has(key)).map((key) => [key, storage.get(key)])),
-                set: async (items: Record<string, unknown>) => {
-                    for (const [key, value] of Object.entries(items)) {
-                        storage.set(key, value);
-                    }
-                },
-                remove: async (keys: string[]) => {
-                    for (const key of keys) {
-                        storage.delete(key);
-                    }
-                },
-            },
+            local: area(storage),
+            session: area(session),
         },
         tabs: { query: async () => [] },
         permissions: {
