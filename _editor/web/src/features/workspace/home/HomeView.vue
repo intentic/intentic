@@ -22,8 +22,8 @@ import { withProvisionalEntries } from "../../../models/workspace/files/provisio
 import { workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
-import { bandOfIndex, homeLayout, type HomeProbed } from "./homeLayout";
-import { useHomeGallery } from "./useHomeGallery";
+import { BAND_LOOK, bandColumns, bandOfIndex, homeLayout, type HomeProbed, UNPROBED } from "./homeLayout";
+import { useHomeGallery } from "./gallery/useHomeGallery";
 import { dateLine } from "./homeDates";
 import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { HOME_DIR_ACTIONS, useHome } from "../../../models/workspace/home/useHome";
@@ -31,8 +31,9 @@ import { useHomeActions } from "./useHomeActions";
 import { useHomeQuery } from "./useHomeQuery";
 import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
-import HomeGallerySwitch from "./HomeGallerySwitch.vue";
-import HomeGalleryTile from "./HomeGalleryTile.vue";
+import HomeGallerySwitch from "./gallery/HomeGallerySwitch.vue";
+import HomeGalleryTile from "./gallery/HomeGalleryTile.vue";
+import GalleryFolderChip from "./gallery/GalleryFolderChip.vue";
 import HomeProbe from "./HomeProbe.vue";
 import HomeQuickLook from "./look/HomeQuickLook.vue";
 import HomeLightbox from "./look/HomeLightbox.vue";
@@ -112,7 +113,7 @@ const arrangeOptions = computed(() => [
 const home = ref<HTMLElement>();
 const scroller = ref<HTMLElement>();
 // What the home measures off its probe (HomeProbe.vue), so the column count and band heights stay the stylesheet's.
-const probed = ref<HomeProbed>({ columns: 1, tileHeight: 1, labelHeight: 0, width: 0, galleryPad: 0, galleryGap: 0, galleryCaption: 0 });
+const probed = ref<HomeProbed>(UNPROBED);
 
 // A folder of pictures drawn as the pictures, in justified rows, where it is on (useHomeGallery.ts).
 const {
@@ -127,6 +128,8 @@ const {
     () => probed.value,
 );
 const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value, gallery.value));
+// The tile a band draws, by what it holds; its box is homeLayout's (`BAND_LOOK`, `bandColumns`).
+const BAND_TILE = { gallery: HomeGalleryTile, chips: GalleryFolderChip, tiles: HomeTile } as const;
 // A band is a whole row of tiles, so the list default of eight would keep two screens of hidden tiles mounted.
 const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights), { overscan: 2 });
 // What to draw, each band carrying where it sits: they are placed, not stacked, so the ones left out cost no height.
@@ -607,20 +610,16 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                     role="group"
                                     :aria-label="groups.find((group) => band.key.startsWith(`${group.key}#`))?.label"
                                     class="absolute inset-x-0"
-                                    :class="band.kind === 'gallery' ? 'flex gap-1' : 'grid gap-0.5'"
-                                    :style="
-                                        band.kind === 'gallery'
-                                            ? { top: `${top}px` }
-                                            : { top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }
-                                    "
+                                    :class="BAND_LOOK[band.kind]"
+                                    :style="{ top: `${top}px`, ...bandColumns(band, gridLayout.columns) }"
                                 >
                                     <component
-                                        :is="band.kind === 'gallery' ? HomeGalleryTile : HomeTile"
+                                        :is="BAND_TILE[band.kind]"
                                         v-for="(entry, column) in band.entries"
                                         :key="entry.path"
                                         v-model:draft="draft"
                                         :entry="entry"
-                                        v-bind="band.kind === 'gallery' ? { width: band.widths[column] ?? 0, height: band.height } : {}"
+                                        v-bind="band.kind === 'gallery' ? { width: band.widths[column] ?? 0, height: band.height, shared: band.shared } : {}"
                                         :where="lineOf(entry)"
                                         :aria-setsize="gridLayout.count"
                                         :aria-posinset="band.start + column + 1"

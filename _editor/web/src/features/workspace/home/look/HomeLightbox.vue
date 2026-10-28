@@ -9,7 +9,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue
 import { mediaBox, requestBoxes } from "../../../../models/workspace/home/mediaBoxes";
 import { kindLabel } from "../../../../models/workspace/home/quickLookContent";
 import { edgeFor, screenScale, tileArt } from "../../../../models/workspace/home/thumbnails";
-import { edgeNeeded, galleryArtOf } from "../homeGallery";
+import { edgeNeeded, galleryArtOf } from "../gallery/homeGallery";
 import { mediaCard, type Size } from "./quickLookFrame";
 import { useLookPicture } from "./useLookPicture";
 

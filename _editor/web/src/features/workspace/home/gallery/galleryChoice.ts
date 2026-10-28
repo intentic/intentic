@@ -1,7 +1,7 @@
 import { computed } from "vue";
 import { z } from "zod";
 import { definePreference, numberPreference } from "@intentic/ui/preference";
-import { activeSandboxId } from "../../../app/storage/activeSandbox";
+import { activeSandboxId } from "../../../../app/storage/activeSandbox";
 
 // What the reader chose of the home's gallery: how tall its rows stand, one size for every folder, and which folders
 // they turned it on or off for against what the folder's contents suggest (homeGallery.ts `readsAsGallery`). Per

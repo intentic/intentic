@@ -1,6 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { computed, ref } from "vue";
-import { galleryArtOf } from "../homeGallery";
+import { galleryArtOf } from "../gallery/homeGallery";
 
 // The home's full-window view of its pictures and videos (HomeLightbox.vue). Opened on purpose, never by a hover: Space
 // on the selected one, as Finder's Quick Look opens, or the expand button a gallery tile shows under the pointer. A

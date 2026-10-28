@@ -3,17 +3,21 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { formatDuration } from "@intentic/ui/format";
-import { computed, ref } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
-import { mediaBox } from "../../../models/workspace/home/mediaBoxes";
-import { edgeFor, screenScale, thumbnailKind } from "../../../models/workspace/home/thumbnails";
+import { mediaBox } from "../../../../models/workspace/home/mediaBoxes";
+import { edgeFor, screenScale, thumbnailKind } from "../../../../models/workspace/home/thumbnails";
 import { useT } from "@intentic/ui/i18n";
-import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
-import { provisionalTooltip } from "../explorer/tree/treeRows";
+import { provisionalAt } from "../../../../models/workspace/files/provisionalEntries";
+import { provisionalTooltip } from "../../explorer/tree/treeRows";
 import { clampAspect, edgeNeeded, tooSmallFor } from "./homeGallery";
-import { useTileArt } from "./useTileArt";
+import { useTileArt } from "../useTileArt";
+import { textWidth } from "./textWidth";
 
 const t = useT();
+
+// The caption's `px-1`, both sides.
+const CAPTION_PAD = 8;
 
 const {
     entry,
@@ -29,6 +33,7 @@ const {
     dragging = false,
     dropDir,
     where,
+    shared = ``,
 } = defineProps<{
     entry: WorkspaceTreeEntry;
     // The picture's box as its row laid it out, in pixels; the name sits under it, as wide.
@@ -36,6 +41,8 @@ const {
     height: number;
     // A result's folder, or a file's time while grouped by date: said after the name, quieter.
     where?: string;
+    // The start every name in the group shares (homeGallery.ts `sharedStart`), which the caption gives up first.
+    shared?: string;
     selected?: boolean;
     locked?: boolean;
     pending?: boolean;
@@ -94,16 +101,64 @@ const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onErro
     art,
 );
 
-// The name cut in its middle when it does not fit, the way Finder cuts one: the start gives way and the end stays,
-// since a folder of "Screenshot 2026-10-19 at 14.03.…" differs only at its end, and the extension tells a .png from
-// a .gif. A short name is never split.
+// The name whole where it fits. Where it does not, the start every name in the group shares goes first, whole, since it
+// is the part that tells no two pictures apart ("intentic-" before "day100-9x16"); only then is the rest cut in its
+// middle the way Finder cuts one, keeping the end, since a folder of "Screenshot 2026-10-19 at 14.03.…" differs only at
+// its end, and the extension tells a .png from a .gif. A video's extension is left unsaid: its play badge says what it is.
+// Measured in the caption's own font rather than left to CSS, which can neither give one part up strictly before the
+// next (two parts cut at once read "i…rec…t-9x16") nor cut a name in its middle without a gap after the ellipsis.
 const KEPT_END = 6;
-const nameParts = computed(() => {
+const caption = useTemplateRef<HTMLElement>(`caption`);
+const said = computed(() => {
     const dot = entry.name.lastIndexOf(`.`);
-    const at = dot <= 0 || dot === entry.name.length - 1 ? entry.name.length : dot;
-    const end = at > KEPT_END * 2 ? at - KEPT_END : at;
-    return { head: entry.name.slice(0, end), tail: entry.name.slice(end, at), extension: entry.name.slice(at) };
+    return kind.value === `video` && dot > 0 ? entry.name.slice(0, dot) : entry.name;
 });
+const font = computed(() => {
+    const el = caption.value;
+    if (el === null) {
+        return undefined;
+    }
+    const style = getComputedStyle(el);
+    return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+});
+const nameParts = computed(() => {
+    const whole = said.value;
+    const dot = whole.lastIndexOf(`.`);
+    const at = dot <= 0 || dot === whole.length - 1 ? whole.length : dot;
+    const extension = whole.slice(at);
+    const measured = font.value;
+    // The caption's padding either side, and the share a line after the name takes (WHERE_MIN_WIDTH).
+    const room = (width - CAPTION_PAD) * (whereShown.value === undefined ? 1 : 0.55);
+    const fits = (text: string): boolean => measured === undefined || (textWidth(text, measured) ?? 0) <= room;
+    const parts = (head: string, tail = ``) => ({ head, tail, extension, cut: head + tail + extension !== entry.name });
+    if (fits(whole)) {
+        return parts(whole.slice(0, at));
+    }
+    const stem = shared !== `` && whole.startsWith(shared) ? whole.slice(shared.length, at) : whole.slice(0, at);
+    if (fits(stem + extension) || stem.length <= KEPT_END * 2) {
+        return parts(stem);
+    }
+    // The longest start of the rest that fits before an ellipsis and the kept end; at least one letter of it.
+    const tail = stem.slice(-KEPT_END);
+    const lead = stem.slice(0, -KEPT_END);
+    let low = 1;
+    let high = lead.length - 1;
+    while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (fits(`${lead.slice(0, mid)}…${tail}${extension}`)) {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    return parts(`${lead.slice(0, low).trimEnd()}…`, tail);
+});
+// The whole name on hover wherever a part of it gave way, or where the caption's own edge still clipped it.
+const cut = ref(false);
+const measureCut = (): void => {
+    const head = caption.value?.firstElementChild;
+    cut.value = nameParts.value.cut || (head !== null && head !== undefined && head.scrollWidth > head.clientWidth);
+};
 
 // How the picture fills its box: all of it, the box having its shape. Cropped where its shape was past what a row
 // carries (homeGallery.ts `clampAspect`): the top of a tall one, which is where a page or a phone screen starts, the
@@ -137,9 +192,9 @@ const duration = computed(() => {
         :data-home-tile="entry.path"
         :data-drop-dir="dropDir"
         :tabindex="tabindex"
-        class="ui-row-select group flex shrink-0 flex-col rounded-lg p-1 select-none"
+        class="group flex shrink-0 cursor-pointer flex-col rounded-lg p-1 outline-none select-none"
         v-tooltip.bottom="pending ? provisionalTooltip(provisionalAt(entry.path)) : undefined"
-        :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
+        :class="{ 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
         @click="emit('select', $event)"
         @dblclick="emit('open')"
         @contextmenu="emit('contextmenu', $event)"
@@ -152,8 +207,20 @@ const duration = computed(() => {
         @drop="emit('drop', $event)"
     >
         <!-- The box is the row's, set before anything loads, so a picture arriving never moves its neighbours. The faint
-             fill behind it is what a transparent or letterboxed picture sits on. -->
-        <span ref="art" class="relative block overflow-hidden rounded-md bg-content/[0.045]" :style="{ width: `${width}px`, height: `${height}px` }">
+             fill behind it is what a transparent or letterboxed picture sits on. Selection is a ring round the picture
+             itself, the way a photo library marks one, never a card round picture and name: a picture has an edge of its
+             own, and a second one a few pixels out reads as a box in a box. The card's padding is the ring's room. A
+             hover and a keyboard's focus draw the same ring, quieter. -->
+        <span
+            ref="art"
+            class="relative block overflow-hidden rounded-md bg-content/[0.045] outline-offset-2"
+            :class="
+                selected
+                    ? 'outline-2 outline-(--color-selection-edge)'
+                    : 'group-hover:outline-2 group-hover:outline-content/25 group-focus-visible:outline-2 group-focus-visible:outline-content/50'
+            "
+            :style="{ width: `${width}px`, height: `${height}px` }"
+        >
             <img
                 v-if="as === 'picture' && src !== undefined && !failed"
                 :src="src"
@@ -218,7 +285,7 @@ const duration = computed(() => {
                 <Icon name="expand" class="text-[0.8rem]" aria-hidden="true" />
             </button>
             <!-- Over the picture, not behind it, where an inset ring would be painted under it: a hairline that keeps a dark
-                 picture's edge off a dark page. Selection is the card's own, the one every row and tile wears. -->
+                 picture's edge off a dark page. -->
             <span class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-line/50 ring-inset" aria-hidden="true"></span>
         </span>
         <input
@@ -226,7 +293,7 @@ const duration = computed(() => {
             v-model="draft"
             type="text"
             :aria-label="t(`workspace.homeTile.newName`)"
-            class="ui-field-box ui-field-inline mt-1 h-5 w-full min-w-0 px-1 text-xs"
+            class="ui-field-box ui-field-inline mt-2 h-5 w-full min-w-0 px-1 text-xs"
             @click.stop
             @dblclick.stop
             @keydown.stop
@@ -235,13 +302,20 @@ const duration = computed(() => {
             @blur="emit('commit')"
             @vue:mounted="focusInput"
         />
-        <!-- One line, one height for every picture, so the home can place its rows by arithmetic. Centred under the
-             picture, as a grid tile's name is, and clear of the edge a selected card wears in Sanctum. -->
-        <span v-else class="mt-1 flex h-5 min-w-0 items-center justify-center gap-2 px-1 text-xs" :style="{ width: `${width}px` }">
-            <span class="flex min-w-0" :class="quiet ? 'text-subtle' : 'text-content/90'">
-                <span class="truncate" v-tooltip.bottom.overflow="entry.name">{{ nameParts.head }}</span>
+        <!-- One line, one height for every picture, so the home can place its rows by arithmetic (HomeProbe.vue measures
+             it). Centred under the picture, as a grid tile's name is, clear of the selection ring, and in its colour while
+             selected. Each part keeps its spaces, which a flex item would otherwise trim off its ends. -->
+        <span v-else class="mt-2 flex h-5 min-w-0 items-center justify-center gap-2 px-1 text-xs" :style="{ width: `${width}px` }">
+            <span
+                ref="caption"
+                class="flex min-w-0"
+                :class="selected ? 'text-(--color-selection-edge)' : quiet ? 'text-subtle' : 'text-content/90'"
+                v-tooltip.bottom="cut ? entry.name : undefined"
+                @pointerenter="measureCut"
+            >
+                <span class="min-w-0 overflow-hidden text-ellipsis whitespace-pre">{{ nameParts.head }}</span>
                 <span class="shrink-0 whitespace-pre">{{ nameParts.tail }}</span>
-                <span class="shrink-0 text-muted">{{ nameParts.extension }}</span>
+                <span class="shrink-0" :class="selected ? '' : 'text-muted'">{{ nameParts.extension }}</span>
             </span>
             <span v-if="whereShown !== undefined" class="max-w-[45%] shrink-0 truncate text-2xs text-subtle" v-tooltip.bottom.overflow="whereShown">{{
                 whereShown

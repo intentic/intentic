@@ -14,6 +14,8 @@ const tile = ref<HTMLElement>();
 const label = ref<HTMLElement>();
 const galleryRow = ref<HTMLElement>();
 const galleryCard = ref<HTMLElement>();
+const chipGrid = ref<HTMLElement>();
+const chip = ref<HTMLElement>();
 
 const px = (value: string): number => Number.parseFloat(value) || 0;
 
@@ -25,6 +27,8 @@ const MEASURED = [
     `galleryPad`,
     `galleryGap`,
     `galleryCaption`,
+    `chipColumns`,
+    `chipHeight`,
 ] as const satisfies readonly (keyof HomeProbed)[];
 
 const measure = (): void => {
@@ -32,6 +36,7 @@ const measure = (): void => {
         return;
     }
     const style = getComputedStyle(grid.value);
+    const chips = chipGrid.value === undefined ? undefined : getComputedStyle(chipGrid.value);
     // The gap rides in the band height: bands are placed at an offset, so nothing else would space them apart. A gallery
     // card's frame is its padding either side, the gap between cards, and what it adds under its picture (the name and
     // the padding), this card's picture being zero tall.
@@ -43,6 +48,8 @@ const measure = (): void => {
         galleryPad: galleryCard.value === undefined ? 0 : px(getComputedStyle(galleryCard.value).paddingLeft),
         galleryGap: galleryRow.value === undefined ? 0 : px(getComputedStyle(galleryRow.value).columnGap),
         galleryCaption: galleryCard.value?.offsetHeight ?? 0,
+        chipColumns: chips === undefined ? 1 : chips.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
+        chipHeight: chips === undefined ? 1 : (chip.value?.offsetHeight ?? 0) + px(chips.rowGap),
     };
     // A pane drag fires this every frame, and a new object would re-lay the whole folder out even when nothing moved.
     const was = probed.value;
@@ -75,8 +82,12 @@ onBeforeUnmount(() => observer?.disconnect());
         <div ref="galleryRow" class="flex gap-1">
             <div ref="galleryCard" class="flex flex-col p-1">
                 <span class="block h-0"></span>
-                <span class="mt-1 flex h-5 text-xs">&nbsp;</span>
+                <span class="mt-2 flex h-5 text-xs">&nbsp;</span>
             </div>
+        </div>
+        <!-- The folder chips above a gallery, as GalleryFolderChip.vue and the home's chip band draw them. -->
+        <div ref="chipGrid" class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-1.5">
+            <div ref="chip" class="flex h-9 items-center text-xs">&nbsp;</div>
         </div>
     </div>
 </template>

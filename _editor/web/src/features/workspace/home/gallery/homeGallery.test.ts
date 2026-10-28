@@ -1,8 +1,19 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { aspectFor, clampAspect, edgeNeeded, justifyRows, MAX_ASPECT, MIN_ASPECT, readsAsGallery, tooSmallFor, typicalAspect } from "./homeGallery";
-import { moveInGrid } from "./homeGrid";
-import { homeLayout } from "./homeLayout";
-import type { HomeGroup } from "./homeOrder";
+import {
+    aspectFor,
+    clampAspect,
+    edgeNeeded,
+    justifyRows,
+    MAX_ASPECT,
+    MIN_ASPECT,
+    readsAsGallery,
+    sharedStart,
+    tooSmallFor,
+    typicalAspect,
+} from "./homeGallery";
+import { moveInGrid } from "../homeGrid";
+import { homeLayout } from "../homeLayout";
+import type { HomeGroup } from "../homeOrder";
 
 const METRICS = { width: 1000, targetHeight: 200, gap: 8 };
 
@@ -174,6 +185,60 @@ describe(`a gallery inside the home's bands`, () => {
         const landed = moveInGrid(layout, lastOfFirst, `ArrowDown`);
         // The rightmost picture of a row lands on the rightmost of the next, whatever their counts.
         expect(landed).toBe(second!.start + second!.count - 1);
+    });
+});
+
+describe(`folders above a gallery`, () => {
+    const folders: HomeGroup = { key: `folders`, label: `Folders`, entries: [dir(`raw`), dir(`edits`), dir(`picks`)] };
+    const pictures: HomeGroup = { key: `pictures`, label: `Pictures`, entries: [file(`0.png`), file(`1.png`), file(`2.png`)] };
+    const gallery = {
+        ...METRICS,
+        drawn: (group: HomeGroup) => group.key === `pictures`,
+        aspectOf: () => 1,
+        captionHeight: 24,
+        rowGap: 12,
+        chips: { columns: 2, height: 42 },
+    };
+    const layout = homeLayout([folders, pictures], true, { columns: 4, tileHeight: 100, labelHeight: 30 }, gallery);
+
+    it(`stand as rows of chips, at the chips' own columns and height`, () => {
+        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `chips`, `chips`, `label`, `gallery`]);
+        expect(layout.heights.slice(1, 3)).toEqual([42, 42]);
+        expect(layout.rows.slice(0, 2).map((row) => row.count)).toEqual([2, 1]);
+        expect(layout.count).toBe(6);
+    });
+
+    it(`stay tiles where the gallery says nothing of chips`, () => {
+        const { chips: _chips, ...plain } = gallery;
+        expect(homeLayout([folders, pictures], true, { columns: 4, tileHeight: 100, labelHeight: 30 }, plain).bands[1]!.kind).toBe(`tiles`);
+    });
+
+    it(`move Down from a chip onto the picture nearest under it, not the first one`, () => {
+        // Two chips across 1000px over three 200px squares: the left chip's middle (250) is over the second picture,
+        // the right one's (750) past the third, which is the nearest.
+        const two = homeLayout([{ ...folders, entries: folders.entries.slice(0, 2) }, pictures], false, { columns: 4, tileHeight: 100, labelHeight: 30 }, gallery);
+        expect(moveInGrid(two, 0, `ArrowDown`)).toBe(3);
+        expect(moveInGrid(two, 1, `ArrowDown`)).toBe(4);
+        expect(moveInGrid(two, 4, `ArrowUp`)).toBe(1);
+    });
+});
+
+describe(`the start a gallery's names share`, () => {
+    it(`is given up to the last separator the names have in common`, () => {
+        expect(sharedStart([`intentic-day100-16x9.mp4`, `intentic-day100-9x16.mp4`, `intentic-drifted-9x16.mp4`])).toBe(`intentic-`);
+        expect(sharedStart([`IMG_0001.jpg`, `IMG_0002.jpg`])).toBe(`IMG_`);
+    });
+
+    it(`keeps a time's dots, cutting at the word before it`, () => {
+        expect(sharedStart([`Screenshot 2026-10-19 at 14.03.12.png`, `Screenshot 2026-10-19 at 14.05.01.png`])).toBe(`Screenshot 2026-10-19 at `);
+    });
+
+    it(`is nothing where giving it up would save nothing or leave nothing`, () => {
+        expect(sharedStart([`photo1.jpg`, `photo2.jpg`])).toBe(``);
+        expect(sharedStart([`a-1.png`, `a-2.png`])).toBe(``);
+        expect(sharedStart([`clip-.mp4`, `clip-a.mp4`])).toBe(``);
+        expect(sharedStart([`intentic-day100.mp4`])).toBe(``);
+        expect(sharedStart([])).toBe(``);
     });
 });
 

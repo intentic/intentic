@@ -178,3 +178,37 @@ export const aspectFor = (entry: Pick<WorkspaceTreeEntry, "name" | "type">, know
     }
     return known ?? typical ?? (art === `video` ? DEFAULT_VIDEO : DEFAULT_PICTURE);
 };
+
+// --- Names under the pictures -----------------------------------------------------------------------------------------
+
+// Where a shared start may end: after a word's separator, never inside a word or a number ("14.03" keeps its dot).
+const SEPARATORS = new Set([`-`, `_`, ` `]);
+// Shorter than this, giving it up for an ellipsis saves nothing.
+const MIN_SHARED = 4;
+
+/**
+ * The start every name in a gallery group shares, up to its last separator: "intentic-" for "intentic-day100-9x16.mp4"
+ * beside "intentic-drifted-9x16.mp4". A caption too narrow for the whole name gives this up first, since it is the
+ * part that tells no two pictures apart; the Finder's cut in the middle would keep it and lose the part that does.
+ * Empty where there is nothing worth giving up: one name, no shared word, or a name that is nothing but the start.
+ */
+export const sharedStart = (names: readonly string[]): string => {
+    if (names.length < 2) {
+        return ``;
+    }
+    const stems = names.map((name) => {
+        const dot = name.lastIndexOf(`.`);
+        return dot <= 0 ? name : name.slice(0, dot);
+    });
+    let length = 0;
+    const first = stems[0]!;
+    while (length < first.length && stems.every((stem) => stem[length] === first[length])) {
+        length += 1;
+    }
+    let end = length;
+    while (end > 0 && !SEPARATORS.has(first[end - 1]!)) {
+        end -= 1;
+    }
+    const shared = first.slice(0, end);
+    return shared.length >= MIN_SHARED && stems.every((stem) => stem.length > shared.length) ? shared : ``;
+};

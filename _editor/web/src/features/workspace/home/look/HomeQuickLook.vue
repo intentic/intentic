@@ -20,7 +20,7 @@ import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickL
 import { edgeFor, screenScale } from "../../../../models/workspace/home/thumbnails";
 import { mediaBox, requestBoxes } from "../../../../models/workspace/home/mediaBoxes";
 import { useT } from "@intentic/ui/i18n";
-import { edgeNeeded } from "../homeGallery";
+import { edgeNeeded } from "../gallery/homeGallery";
 import { type AnchorRect, lookFrame, mediaCard, type MediaLimits, type Size } from "./quickLookFrame";
 import { useLookPicture } from "./useLookPicture";
 
