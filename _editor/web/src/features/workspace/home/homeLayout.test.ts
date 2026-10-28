@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { moveInGrid } from "./homeGrid";
 import { bandOfIndex, homeLayout, rowIndexOf } from "./homeLayout";
 import type { HomeGroup } from "./homeOrder";
 
@@ -6,9 +7,9 @@ const entriesOf = (prefix: string, count: number): WorkspaceTreeEntry[] =>
     Array.from({ length: count }, (_, index) => ({ name: `${prefix}${index}`, path: `${prefix}${index}`, type: `file` as const }));
 
 const groupsOf = (...sizes: number[]): HomeGroup[] =>
-    sizes.map((size, at) => ({ key: at === 0 ? `folders` : `documents`, label: `g${at}`, entries: entriesOf(`${at}-`, size) }));
+    sizes.map((size, at) => ({ key: at === 0 ? `code` : `documents`, label: `g${at}`, entries: entriesOf(`${at}-`, size) }));
 
-const METRICS = { columns: 3, tileHeight: 100, labelHeight: 30 };
+const METRICS = { columns: 3, tileHeight: 100, labelHeight: 30, chipColumns: 2, chipHeight: 40 };
 
 describe(`homeLayout`, () => {
     it(`wraps each group's entries at the column count`, () => {
@@ -56,6 +57,25 @@ describe(`homeLayout`, () => {
         const layout = homeLayout(groupsOf(3), false, { ...METRICS, columns: 0 });
         expect(layout.columns).toBe(1);
         expect(layout.rows).toHaveLength(3);
+    });
+});
+
+describe(`folders`, () => {
+    const folders = { key: `folders` as const, label: `Folders`, entries: entriesOf(`dir-`, 3) };
+    const layout = homeLayout([folders, ...groupsOf(3)], true, METRICS);
+
+    it(`stand as rows of chips at the chips' own columns and height, over the files' tiles`, () => {
+        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `chips`, `chips`, `label`, `tiles`]);
+        expect(layout.heights).toEqual([30, 40, 40, 30, 100]);
+        expect(layout.rows.map((row) => row.count)).toEqual([2, 1, 3]);
+    });
+
+    it(`hand Up and Down between the chips' columns and the tiles' by where each stands`, () => {
+        // The lone chip of the second row spans the left half; the tile under its middle is the first.
+        expect(moveInGrid(layout, 2, `ArrowDown`)).toBe(3);
+        // The third tile stands under the right half, where the second row has no chip: the nearest is the lone one.
+        expect(moveInGrid(layout, 5, `ArrowUp`)).toBe(2);
+        expect(moveInGrid(layout, 1, `ArrowDown`)).toBe(2);
     });
 });
 

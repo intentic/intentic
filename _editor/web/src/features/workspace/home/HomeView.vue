@@ -14,7 +14,6 @@ import { useLayout } from "../../../workbench/window/useLayout";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { consumeSuppressedClick, useEntryDrag } from "../explorer/transfer/useEntryDrag";
 import { deadLink } from "../explorer/tree/treeRows";
-import { focusInput } from "@intentic/ui/inline-rename";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
@@ -22,7 +21,7 @@ import { withProvisionalEntries } from "../../../models/workspace/files/provisio
 import { workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
-import { BAND_LOOK, bandColumns, bandOfIndex, homeLayout, type HomeProbed, UNPROBED } from "./homeLayout";
+import { BAND_LOOK, bandColumns, bandOfIndex, type HomeBand, homeLayout, type HomeProbed, UNPROBED } from "./homeLayout";
 import { useHomeGallery } from "./gallery/useHomeGallery";
 import { dateLine } from "./homeDates";
 import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
@@ -33,7 +32,9 @@ import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeGallerySwitch from "./gallery/HomeGallerySwitch.vue";
 import HomeGalleryTile from "./gallery/HomeGalleryTile.vue";
-import GalleryFolderChip from "./gallery/GalleryFolderChip.vue";
+import HomeFolderChip from "./HomeFolderChip.vue";
+import HomeDraft from "./HomeDraft.vue";
+import type { RowAction } from "../explorer/rowActions";
 import HomeProbe from "./HomeProbe.vue";
 import HomeQuickLook from "./look/HomeQuickLook.vue";
 import HomeLightbox from "./look/HomeLightbox.vue";
@@ -129,7 +130,18 @@ const {
 );
 const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value, gallery.value));
 // The tile a band draws, by what it holds; its box is homeLayout's (`BAND_LOOK`, `bandColumns`).
-const BAND_TILE = { gallery: HomeGalleryTile, chips: GalleryFolderChip, tiles: HomeTile } as const;
+const BAND_TILE = { gallery: HomeGalleryTile, chips: HomeFolderChip, tiles: HomeTile } as const;
+// What a tile takes beyond what every tile does: a picture its box, a folder the icons its tree row carries.
+const tileProps = (
+    band: HomeBand,
+    column: number,
+    entry: WorkspaceTreeEntry,
+): { width?: number; height?: number; shared?: string; actions?: readonly RowAction[] } =>
+    band.kind === `gallery`
+        ? { width: band.widths[column] ?? 0, height: band.height, shared: band.shared }
+        : band.kind === `chips`
+          ? { actions: dirActions(entry.path) }
+          : {};
 // A band is a whole row of tiles, so the list default of eight would keep two screens of hidden tiles mounted.
 const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights), { overscan: 2 });
 // What to draw, each band carrying where it sits: they are placed, not stacked, so the ones left out cost no height.
@@ -559,28 +571,16 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     :aria-label="t(`workspace.homeView.contents`, { here })"
                 >
                     <Await :of="loaded" :imprint="homeImprint">
-                        <!-- The entry being named, drawn first in the open folder before it exists; the field owns its keys. -->
-                        <div v-if="edit.kind === 'creating'" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5 pt-3">
-                            <div class="flex flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2">
-                                <span class="flex h-14 items-center justify-center">
-                                    <Icon :name="edit.type === 'dir' ? 'folder' : 'file'" class="text-[2.125rem] text-muted" />
-                                </span>
-                                <input
-                                    v-model="draft"
-                                    type="text"
-                                    :aria-label="edit.type === 'dir' ? t(`workspace.words.newFolderName`) : t(`workspace.words.newFileName`)"
-                                    class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
-                                    :class="createError !== undefined ? 'ui-field-error-box' : ''"
-                                    @click.stop
-                                    @keydown.stop
-                                    @keydown.enter.prevent="endEdit('commit')"
-                                    @keydown.esc.prevent="endEdit('cancel')"
-                                    @blur="endEdit('blur')"
-                                    @vue:mounted="focusInput"
-                                />
-                                <p v-if="createError !== undefined" class="text-center text-2xs text-danger">{{ createError }}</p>
-                            </div>
-                        </div>
+                        <!-- The entry being named, drawn first in the open folder before it exists, as a chip or a tile. -->
+                        <HomeDraft
+                            v-if="edit.kind === 'creating'"
+                            v-model="draft"
+                            :type="edit.type"
+                            :error="createError"
+                            @commit="endEdit('commit')"
+                            @cancel="endEdit('cancel')"
+                            @blur="endEdit('blur')"
+                        />
                         <p
                             v-if="order.length === 0 && !searching && edit.kind !== 'creating'"
                             class="py-12 text-center text-xs text-subtle"
@@ -619,7 +619,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                         :key="entry.path"
                                         v-model:draft="draft"
                                         :entry="entry"
-                                        v-bind="band.kind === 'gallery' ? { width: band.widths[column] ?? 0, height: band.height, shared: band.shared } : {}"
+                                        v-bind="tileProps(band, column, entry)"
                                         :where="lineOf(entry)"
                                         :aria-setsize="gridLayout.count"
                                         :aria-posinset="band.start + column + 1"

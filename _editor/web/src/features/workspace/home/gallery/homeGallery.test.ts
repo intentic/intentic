@@ -16,6 +16,8 @@ import { homeLayout } from "../homeLayout";
 import type { HomeGroup } from "../homeOrder";
 
 const METRICS = { width: 1000, targetHeight: 200, gap: 8 };
+// The home's own grid around a gallery: tiles four across, folder chips four across.
+const HOME = { columns: 4, tileHeight: 100, labelHeight: 30, chipColumns: 4, chipHeight: 42 };
 
 // What a row occupies across the pane, gaps included.
 const rowWidth = (widths: readonly number[], gap = METRICS.gap): number => widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
@@ -137,10 +139,10 @@ describe(`a gallery inside the home's bands`, () => {
         captionHeight: 24,
         rowGap: 12,
     };
-    const layout = homeLayout([folders, pictures], true, { columns: 4, tileHeight: 100, labelHeight: 30 }, gallery);
+    const layout = homeLayout([folders, pictures], true, HOME, gallery);
 
-    it(`keeps folders as tiles and lays pictures out as rows, each band its own height`, () => {
-        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `tiles`, `label`, ...layout.bands.slice(3).map(() => `gallery` as const)]);
+    it(`draws folders as chips and lays pictures out as rows, each band its own height`, () => {
+        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `chips`, `label`, ...layout.bands.slice(3).map(() => `gallery` as const)]);
         layout.bands.forEach((band, at) => {
             if (band.kind === `gallery`) {
                 expect(layout.heights[at]).toBe(band.height + 24 + 12);
@@ -166,7 +168,7 @@ describe(`a gallery inside the home's bands`, () => {
                 },
             ],
             false,
-            { columns: 4, tileHeight: 100, labelHeight: 30 },
+            HOME,
             { ...gallery, width: 1000, targetHeight: 200, aspectOf: (entry) => [2, 2.5, 0.5, 2.5, 2.5][Number.parseInt(entry.name, 10)]! },
         );
         const [top, bottom] = wide.rows;
@@ -197,9 +199,9 @@ describe(`folders above a gallery`, () => {
         aspectOf: () => 1,
         captionHeight: 24,
         rowGap: 12,
-        chips: { columns: 2, height: 42 },
     };
-    const layout = homeLayout([folders, pictures], true, { columns: 4, tileHeight: 100, labelHeight: 30 }, gallery);
+    const home = { ...HOME, chipColumns: 2 };
+    const layout = homeLayout([folders, pictures], true, home, gallery);
 
     it(`stand as rows of chips, at the chips' own columns and height`, () => {
         expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `chips`, `chips`, `label`, `gallery`]);
@@ -208,15 +210,10 @@ describe(`folders above a gallery`, () => {
         expect(layout.count).toBe(6);
     });
 
-    it(`stay tiles where the gallery says nothing of chips`, () => {
-        const { chips: _chips, ...plain } = gallery;
-        expect(homeLayout([folders, pictures], true, { columns: 4, tileHeight: 100, labelHeight: 30 }, plain).bands[1]!.kind).toBe(`tiles`);
-    });
-
     it(`move Down from a chip onto the picture nearest under it, not the first one`, () => {
         // Two chips across 1000px over three 200px squares: the left chip's middle (250) is over the second picture,
         // the right one's (750) past the third, which is the nearest.
-        const two = homeLayout([{ ...folders, entries: folders.entries.slice(0, 2) }, pictures], false, { columns: 4, tileHeight: 100, labelHeight: 30 }, gallery);
+        const two = homeLayout([{ ...folders, entries: folders.entries.slice(0, 2) }, pictures], false, home, gallery);
         expect(moveInGrid(two, 0, `ArrowDown`)).toBe(3);
         expect(moveInGrid(two, 1, `ArrowDown`)).toBe(4);
         expect(moveInGrid(two, 4, `ArrowUp`)).toBe(1);

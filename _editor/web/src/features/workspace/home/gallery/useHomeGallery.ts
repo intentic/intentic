@@ -46,7 +46,7 @@ export const useHomeGallery = (dir: () => string, listed: () => readonly Workspa
         if (!on.value) {
             return undefined;
         }
-        const { width, galleryPad: pad, galleryGap: gap, galleryCaption, chipColumns, chipHeight } = probed();
+        const { width, galleryPad: pad, galleryGap: gap, galleryCaption } = probed();
         const known = typical.value;
         return {
             width: width - 2 * pad,
@@ -56,8 +56,6 @@ export const useHomeGallery = (dir: () => string, listed: () => readonly Workspa
             rowGap: gap,
             drawn: (group) => group.entries.some((entry) => galleryArtOf(entry) !== undefined),
             aspectOf: (entry) => aspectFor(entry, aspectOfBox(entry), known),
-            // The folders above the pictures as one-line chips: places to go, which need their names, not the screen.
-            chips: { columns: chipColumns, height: chipHeight },
         };
     });
     return { offered, on, toggle, resize, gallery };

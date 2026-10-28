@@ -85,7 +85,7 @@ onBeforeUnmount(() => observer?.disconnect());
                 <span class="mt-2 flex h-5 text-xs">&nbsp;</span>
             </div>
         </div>
-        <!-- The folder chips above a gallery, as GalleryFolderChip.vue and the home's chip band draw them. -->
+        <!-- The folder chips, as HomeFolderChip.vue and the home's chip band draw them. -->
         <div ref="chipGrid" class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-1.5">
             <div ref="chip" class="flex h-9 items-center text-xs">&nbsp;</div>
         </div>

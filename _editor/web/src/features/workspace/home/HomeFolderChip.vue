@@ -5,8 +5,9 @@ import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { useT } from "@intentic/ui/i18n";
-import { provisionalAt } from "../../../../models/workspace/files/provisionalEntries";
-import { provisionalTooltip } from "../../explorer/tree/treeRows";
+import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
+import { provisionalTooltip } from "../explorer/tree/treeRows";
+import type { RowAction } from "../explorer/rowActions";
 
 const t = useT();
 
@@ -23,6 +24,7 @@ const {
     dragging = false,
     dropDir,
     where,
+    actions = [],
 } = defineProps<{
     entry: WorkspaceTreeEntry;
     where?: string;
@@ -35,6 +37,8 @@ const {
     dropTarget?: boolean;
     dragging?: boolean;
     dropDir?: string;
+    // What its tree row offers beside its name (rowActions.ts): its checks, its runs, its documents, its panel.
+    actions?: readonly RowAction[];
 }>();
 
 const draft = defineModel<string>("draft", { default: `` });
@@ -59,6 +63,19 @@ const quiet = computed(() => dimmed || locked || pending);
 // A chip stands on a faint fill of its own at rest, so a strip of them reads as places to go rather than loose words.
 // The selected tint and a drop's fill are the row's own (`ui-row-select-*`), which a fill set here would paint over.
 const resting = computed(() => !selected && !dropTarget);
+// The tree's rule for its row icons: an icon that is evidence (a repository with checks, one that runs) stands, faint;
+// one that is only something to do (its panel) shows on hover, on focus, and on the selected chip.
+const actionClass = (action: RowAction): string =>
+    selected
+        ? `opacity-100`
+        : action.standing
+          ? `opacity-50 group-hover:opacity-100`
+          : `pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:opacity-100`;
+// Selects the chip as it runs, as the tree selects the row, so the highlight follows what was just opened.
+const run = (action: RowAction, event: MouseEvent): void => {
+    emit(`select`, event);
+    action.run();
+};
 </script>
 
 <template>
@@ -72,7 +89,7 @@ const resting = computed(() => !selected && !dropTarget);
         :data-home-tile="entry.path"
         :data-drop-dir="dropDir"
         :tabindex="tabindex"
-        class="ui-row-select ui-row-select-horizontal flex h-9 min-w-0 items-center gap-2 rounded-lg px-2.5 text-xs select-none"
+        class="ui-row-select ui-row-select-horizontal group flex h-9 min-w-0 items-center gap-2 rounded-lg px-2.5 text-xs select-none"
         v-tooltip.bottom="pending ? provisionalTooltip(provisionalAt(entry.path)) : undefined"
         :class="{
             'ui-row-select-on': selected,
@@ -116,5 +133,20 @@ const resting = computed(() => !selected && !dropTarget);
         >
         <Icon v-if="entry.link !== undefined" name="link" class="shrink-0 text-[0.65rem] text-subtle" :aria-label="t(`workspace.words.symlink`)" />
         <span v-if="where" class="max-w-[45%] shrink-0 truncate text-2xs text-subtle" v-tooltip.bottom.overflow="where">{{ where }}</span>
+        <!-- Its own presses: they neither open the folder nor start a drag from it. -->
+        <button
+            v-for="action in renaming ? [] : actions"
+            :key="action.id"
+            type="button"
+            class="-mx-0.5 flex size-5 shrink-0 items-center justify-center rounded text-2xs text-subtle transition hover:text-content"
+            :class="actionClass(action)"
+            :aria-label="action.tooltip"
+            v-tooltip.bottom="action.tip ?? action.tooltip"
+            @click.stop="run(action, $event)"
+            @dblclick.stop
+            @pointerdown.stop
+        >
+            <Icon :name="action.icon" aria-hidden="true" />
+        </button>
     </div>
 </template>

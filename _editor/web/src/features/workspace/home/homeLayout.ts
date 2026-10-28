@@ -66,6 +66,9 @@ export interface HomeMetrics {
     // A tile row's full height, gap included: bands are placed by offset, so the gap has to live in the height.
     readonly tileHeight: number;
     readonly labelHeight: number;
+    // The folders' chip grid: its column count at this width, and a row's height, gap included.
+    readonly chipColumns: number;
+    readonly chipHeight: number;
 }
 
 /** What the home measures off its probe (HomeProbe.vue): the grid's metrics, and a gallery card's frame. */
@@ -76,9 +79,6 @@ export interface HomeProbed extends HomeMetrics {
     readonly galleryPad: number;
     readonly galleryGap: number;
     readonly galleryCaption: number;
-    // The folder chips' grid above a gallery: its column count at this width, and a row's height, gap included.
-    readonly chipColumns: number;
-    readonly chipHeight: number;
 }
 
 /** What the home lays out by before its probe has measured anything: one column, nothing tall. */
@@ -96,18 +96,17 @@ export const UNPROBED: HomeProbed = {
 
 /** How a gallery lays its groups out; absent, every group is tiles. */
 export interface HomeGallery extends GalleryMetrics {
-    // Which groups are drawn as pictures; the rest (folders, a group of documents) stay tiles.
+    // Which groups are drawn as pictures; the rest (a group of documents) stay tiles, and folders are always chips.
     readonly drawn: (group: HomeGroup) => boolean;
     // Each entry's width over its height, as it is to be laid out.
     readonly aspectOf: (entry: WorkspaceTreeEntry) => number;
     // Height a row adds under its pictures (the name) and below that (the gap to the next row).
     readonly captionHeight: number;
     readonly rowGap: number;
-    // The folders as chips (the "folders" group); absent, they stay tiles.
-    readonly chips?: { readonly columns: number; readonly height: number };
 }
 
-// Where each of a row's even columns stands across the pane, for Up and Down out of a chip row into a gallery row.
+// Where each of a row's even columns stands across the pane, for Up and Down between a chip row and a row of another
+// grid or a gallery row.
 const evenSpans = (count: number, columns: number): readonly (readonly [number, number])[] =>
     Array.from({ length: count }, (_, column) => [column / columns, (column + 1) / columns] as const);
 
@@ -141,13 +140,15 @@ export const homeLayout = (groups: readonly HomeGroup[], showLabels: boolean, me
             bands.push({ kind: `label`, key: `${group.key}#label`, label: group.label });
             heights.push(metrics.labelHeight);
         }
-        if (gallery?.chips !== undefined && group.key === `folders`) {
-            const across = Math.max(1, Math.floor(gallery.chips.columns));
+        // Folders are places to go, not things to look at: a strip of one-line chips over the files, however they are
+        // drawn, rather than a row of large glyphs that are all the same glyph.
+        if (group.key === `folders`) {
+            const across = Math.max(1, Math.floor(metrics.chipColumns));
             for (let at = 0; at < group.entries.length; at += across) {
                 const entries = group.entries.slice(at, at + across);
                 rows.push({ band: bands.length, start: start + at, count: entries.length, spans: evenSpans(entries.length, across) });
                 bands.push({ kind: `chips`, key: `${group.key}#${at}`, entries, start: start + at, columns: across });
-                heights.push(gallery.chips.height);
+                heights.push(metrics.chipHeight);
             }
             start += group.entries.length;
             continue;
