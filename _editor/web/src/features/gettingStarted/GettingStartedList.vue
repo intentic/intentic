@@ -46,7 +46,9 @@ const hide = (): void => {
 </script>
 
 <template>
-    <div class="flex max-w-full flex-col gap-2 p-2" :class="fill ? 'w-full' : 'w-80'">
+    <!-- The selected row's wash bleeds 10px past its text on each side (ROW_WASH_BLEED_FULL). An inset under that pushed it
+         out of the popover's scroller, clipping its accent edge and raising a sideways scrollbar; 14px keeps it 4px clear. -->
+    <div class="flex max-w-full flex-col gap-2 p-3.5" :class="fill ? 'w-full' : 'w-80'">
         <div class="flex items-center gap-2.5 px-2 pt-1.5">
             <SegmentRing
                 :segments="tour.progress.value.total"
