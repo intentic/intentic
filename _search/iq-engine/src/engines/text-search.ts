@@ -88,7 +88,13 @@ const ignoresAboveRoot = async (root: string): Promise<boolean> => {
     }
 };
 
-const normalized = (path: string): string => path.replace(/^\.\//, "").replace(/\/+$/, "");
+const normalized = (path: string): string => {
+    let end = path.length;
+    while (path.charAt(end - 1) === "/") {
+        end -= 1;
+    }
+    return path.slice(path.startsWith("./") ? 2 : 0, end);
+};
 
 // Where rg is pointed: the subtrees themselves when that is exact, else the root with parents off. Narrowed paths that
 // do not exist are dropped, since rg exits 2 on one, which would read as a failed search.

@@ -25,7 +25,7 @@ export interface GraphSource {
 }
 
 // The scripts of a single-file component, where its imports are: `<script>` and `<script setup>` alike.
-const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/giu;
+const SCRIPT_BLOCK = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script(?:\s[^>]*)?>/giu;
 const scriptBlocksOf = (text: string): string[] => [...text.matchAll(SCRIPT_BLOCK)].map((match) => match[1] ?? "");
 
 // What a specifier may resolve to, in the order a bundler resolver tries them.
@@ -60,7 +60,16 @@ const aliasBases = (specifier: string, paths: Readonly<Record<string, readonly s
             best = { prefixLength: prefix.length, targets, star: specifier.slice(prefix.length, specifier.length - suffix.length) };
         }
     }
-    return best === undefined ? [] : best.targets.map((target) => resolve(pathsBase, target.replace("*", best.star)));
+    if (best === undefined) {
+        return [];
+    }
+    const { targets, star } = best;
+    return targets.map((target) => {
+        // TypeScript paths have at most one wildcard. Splice its value literally: replace's string argument would
+        // reinterpret `$&`, `$$` and similar sequences in an import specifier as replacement syntax.
+        const at = target.indexOf("*");
+        return resolve(pathsBase, at < 0 ? target : `${target.slice(0, at)}${star}${target.slice(at + 1)}`);
+    });
 };
 
 interface CachedFile {
@@ -69,7 +78,7 @@ interface CachedFile {
     readonly specifiers: readonly string[];
 }
 interface GraphCache {
-    readonly version: 1;
+    readonly version: 2;
     readonly files: Record<string, CachedFile>;
 }
 
@@ -80,7 +89,7 @@ const readCache = (path: string | undefined): GraphCache["files"] => {
     try {
         // SAFETY: written by writeCache below; a cache of another version or shape is ignored whole.
         const cache = JSON.parse(readFileSync(path, "utf8")) as GraphCache;
-        return cache.version === 1 ? (cache.files ?? {}) : {};
+        return cache.version === 2 ? (cache.files ?? {}) : {};
     } catch {
         // allow(silent-catch): no cache yet, or one cut short, is a cold build: every file is read again
         return {};
@@ -91,7 +100,7 @@ const readCache = (path: string | undefined): GraphCache["files"] => {
 const writeCache = (path: string, files: GraphCache["files"]): void => {
     try {
         mkdirSync(dirname(path), { recursive: true });
-        writeFileAtomicSync(path, JSON.stringify({ version: 1, files } satisfies GraphCache));
+        writeFileAtomicSync(path, JSON.stringify({ version: 2, files } satisfies GraphCache));
     } catch {
         // allow(silent-catch): a cache that cannot be written costs the next ask a full read, nothing more
     }

@@ -46,12 +46,17 @@ const stopPath = (dir, conversation, label) => join(dir, `${recordName(conversat
 const endedPath = (dir, conversation, label) => join(dir, `${recordName(conversation, label)}${ENDED_SUFFIX}`);
 
 // A conversation id as one DNS label, for its preview's hostname: `<label>.demo.localhost`.
-export const hostLabel = (conversation) =>
-    conversation
+export const hostLabel = (conversation) => {
+    const label = conversation
         .toLowerCase()
         .replaceAll(/[^a-z0-9-]+/gu, "-")
-        .replaceAll(/^-+|-+$/gu, "")
-        .slice(0, 63) || "preview";
+        .replace(/^-+/u, "");
+    let end = label.length;
+    while (label.charAt(end - 1) === "-") {
+        end -= 1;
+    }
+    return label.slice(0, Math.min(end, 63)) || "preview";
+};
 
 // Field 22 of /proc/<pid>/stat, the process's start time in clock ticks since boot. The command name (field 2) can
 // hold spaces and parentheses, so fields are counted after its closing parenthesis.

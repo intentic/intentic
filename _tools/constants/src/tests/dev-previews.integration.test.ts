@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,6 +78,26 @@ describe("a preview record", () => {
         expect(hostLabel("brave-maple-ilnz")).toBe("brave-maple-ilnz");
         expect(hostLabel("Sub_Spry:falcon")).toBe("sub-spry-falcon");
         expect(hostLabel("___")).toBe("preview");
+        expect(hostLabel("---Sub__Spry:falcon---")).toBe("sub-spry-falcon");
+        expect(hostLabel("a--b")).toBe("a--b");
+        expect(hostLabel("a".repeat(70))).toBe("a".repeat(63));
+        expect(hostLabel("")).toBe("preview");
+    });
+
+    test("trims long hyphen runs without freezing the caller", () => {
+        // A child deadline catches a backtracking regression without blocking this worker.
+        const module = new URL("../dev-previews.mjs", import.meta.url).href;
+        const result = execFileSync(
+            process.execPath,
+            [
+                "--eval",
+                `import { hostLabel } from ${JSON.stringify(module)};
+                 const labels = ["a" + "-".repeat(200_000) + "b", "-".repeat(200_000), "---a" + "-".repeat(200_000)];
+                 console.log(JSON.stringify(labels.map(hostLabel)));`,
+            ],
+            { encoding: "utf8", timeout: 5_000 },
+        );
+        expect(JSON.parse(result)).toEqual([`a${"-".repeat(62)}`, "preview", "a"]);
     });
 });
 

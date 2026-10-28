@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { requires } from "@intentic/testing/requires";
@@ -69,6 +69,38 @@ describe("the import graph", () => {
         expect(importersAtAnyDepth(graph, at("src/card.ts"))).toBe(3);
         expect(importersAtAnyDepth(graph, at("src/main.ts"))).toBe(0);
         expect([...loadedBy(graph, [at("src/App.vue")])].toSorted()).toEqual([at("src/App.vue"), at("src/card.ts")]);
+    });
+
+    test.each(["</script >", '</script ignored="yes">', "</SCRIPT\t>"])("a script ending in %s cannot consume imports from the template", (closing) => {
+        const root = tree();
+        write(root, {
+            "src/App.vue": `<script setup lang="ts">import { card } from "@/card";${closing}
+                <template>import { lazy } from "@/lazy";</template>
+                <SCRIPT>import routes from "./routes";</SCRIPT>
+                <scripture>import { missing } from "@/uses-lib";</scripture>`,
+        });
+        const graph = buildImportGraph(sourceOf(root));
+        expect([...(graph.imports.get(join(root, "src/App.vue")) ?? [])].toSorted()).toEqual([join(root, "src/card.ts"), join(root, "src/routes/index.ts")]);
+    });
+
+    test.each(["cash$&name", "cash$$name", "cash$`name"])("substitutes a wildcard import's name literally: %s", (name) => {
+        const root = tree();
+        write(root, {
+            "src/main.ts": `import { value } from "@/${name}";`,
+            [`src/${name}.ts`]: "export const value = 1;",
+        });
+        const graph = buildImportGraph(sourceOf(root));
+        expect([...(graph.imports.get(join(root, "src/main.ts")) ?? [])]).toEqual([join(root, `src/${name}.ts`)]);
+    });
+
+    test("a cache from before the script parser fix is rebuilt even when the source files did not change", () => {
+        const root = tree();
+        const cache = join(root, "imports.json");
+        const app = join(root, "src/App.vue");
+        const stat = statSync(app);
+        writeFileSync(cache, JSON.stringify({ version: 1, files: { [app]: { mtimeMs: stat.mtimeMs, size: stat.size, specifiers: [] } } }));
+        const graph = buildImportGraph(sourceOf(root, cache));
+        expect([...(graph.imports.get(app) ?? [])]).toEqual([join(root, "src/card.ts")]);
     });
 
     test("a second build reads only the files whose mtime or size moved", () => {

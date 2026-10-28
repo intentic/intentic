@@ -33,7 +33,7 @@ export const httpsProxy = async (root: string, hostname: string, destination: st
             response.writeHead(upstream.status, Object.fromEntries(upstream.headers));
             response.end(Buffer.from(await upstream.arrayBuffer()));
         })().catch((error: Error) => {
-            response.writeHead(502);
+            response.writeHead(502, { "content-type": "text/plain; charset=utf-8", "x-content-type-options": "nosniff" });
             response.end(error.message);
         });
     });

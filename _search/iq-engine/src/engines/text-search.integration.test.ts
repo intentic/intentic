@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -52,8 +53,26 @@ test("ignored widens into everything a .gitignore or the junk list names, and th
 test("a subtree narrows the walk and keeps the ignore files above it; a missing one finds nothing", async () => {
     expect(await paths({ paths: ["app"] })).toEqual(["app/src/widget.test.ts", "app/src/widget.ts"]);
     expect(await paths({ paths: ["./app/src/"] })).toEqual(["app/src/widget.test.ts", "app/src/widget.ts"]);
+    expect(await paths({ paths: ["./app/src////"] })).toEqual(["app/src/widget.test.ts", "app/src/widget.ts"]);
+    expect(await paths({ paths: [`app/src${"/".repeat(100_000)}`] })).toEqual(["app/src/widget.test.ts", "app/src/widget.ts"]);
     expect(await paths({ paths: ["nowhere"] })).toEqual([]);
     expect(await paths({ paths: [] })).toEqual([]);
+});
+
+test("a long slash run followed by another path character cannot freeze scope normalization", () => {
+    const module = new URL("./text-search.ts", import.meta.url).href;
+    const result = execFileSync(
+        process.execPath,
+        [
+            "--conditions=@intentic/src",
+            "--eval",
+            `import { scanText } from ${JSON.stringify(module)};
+             const scan = await scanText({ root: ${JSON.stringify(root)}, pattern: "needle", paths: ["app" + "/".repeat(200_000) + "absent"] });
+             console.log(JSON.stringify(scan.groups));`,
+        ],
+        { encoding: "utf8", timeout: 5_000 },
+    );
+    expect(JSON.parse(result)).toEqual([]);
 });
 
 test("with a .gitignore above the root, a subtree is still narrowed and the rules above the root never apply", async () => {
