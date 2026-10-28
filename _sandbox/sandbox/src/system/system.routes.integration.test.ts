@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { stubEnv, waitFor } from "@intentic/testing/bun";
+import { SETTLES, stubEnv, waitFor } from "@intentic/testing/bun";
 
 import { daemonVersionOfBuild } from "@intentic/sandbox-contract/state/daemon-floor";
 import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
@@ -818,9 +818,10 @@ test("events: a connection asking for roster changes is sent only the moved card
         // The next tick follows on from the last one sent, past the window that holds a burst together.
         tick("c1", "Read");
         await waitFor(() => expect(lastRoster(changes)).toEqual({ kind: "agentsChanged", rev: svc.agents.revision(), ids: ["c1"], since: first }));
-        // And the beat vouches for that change frame's revision, as it does for a whole roster's.
+        // And the beat vouches for that change frame's revision, as it does for a whole roster's. Other runtime
+        // events restart the idle wait, so this is an eventual heartbeat, not a three-second latency contract.
         const moved = svc.agents.revision();
-        await waitFor(() => expect(changes.at(-1)).toEqual({ kind: "heartbeat", rev: moved }), { timeout: 3_000 });
+        await waitFor(() => expect(changes.at(-1)).toEqual({ kind: "heartbeat", rev: moved }), SETTLES);
 
         // A change someone made reaches both whole.
         await svc.agents.setArchived([], Date.now());

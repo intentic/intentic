@@ -3,11 +3,10 @@ import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import { type OpenCodeEvents, type OpenCodeListener, openEventStream } from "./opencode-events.js";
+import { eventSubscription } from "./testing/opencode-events.testing.js";
 
 // The server's one event stream, read once and fanned out. The server is a fake whose `event.subscribe` is a stream
 // this test feeds by hand: what it sends, when it ends, and how it fails.
-
-type Subscribe = OpenCodeClient["event"]["subscribe"];
 
 const CONNECTED: OpenCodeEvent = { id: "evt_connected", type: "server.connected", data: {} };
 // Two events as OpenCode 2.0.26 publishes them; which kind does not matter to the fan-out, only that they pass whole.
@@ -54,10 +53,10 @@ const fakeServer = () => {
             yield next.event;
         }
     }
-    const subscribe: Subscribe = (options) => {
+    const subscribe = eventSubscription((options) => {
         signals.push(options?.signal);
         return stream(options?.signal);
-    };
+    });
     return {
         client: unstubbed<OpenCodeClient>("client", { event: unstubbed<OpenCodeClient["event"]>("event", { subscribe }) }),
         signals,

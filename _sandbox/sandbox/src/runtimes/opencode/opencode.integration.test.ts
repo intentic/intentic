@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { CredentialEntry, OpenCodeClient, OpenCodeEvent } from "@opencode/client";
+import { eventSubscription } from "./testing/opencode-events.testing.js";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { unstubbed } from "@intentic/testing";
 import { createOpenCodeService, type OpenCodeService } from "./opencode.js";
@@ -394,7 +395,7 @@ describe("signing out", () => {
             });
         }
         const client = unstubbed<OpenCodeClient>("client", {
-            event: unstubbed<OpenCodeClient["event"]>("event", { subscribe }),
+            event: unstubbed<OpenCodeClient["event"]>("event", { subscribe: eventSubscription(subscribe) }),
             credential: unstubbed<OpenCodeClient["credential"]>("credential", { list, remove }),
         });
         const served: ServedServer = { url: "http://127.0.0.1:4096", headers: {}, process: undefined, close: () => {}, onExit: () => {} };

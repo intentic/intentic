@@ -10,6 +10,7 @@ import { createOpenCodeService, type OpenCodeGeminiConfig, type OpenCodeService 
 import type { OpenCodeConfig } from "./opencode-config.js";
 import { processAlive, type ServedServer, type ServeRequest } from "./opencode-serve.js";
 import { opt } from "../../opt.js";
+import { eventSubscription } from "./testing/opencode-events.testing.js";
 
 // The service's lifecycle against real processes: a child stands in for `opencode serve`, stamped as the real spawn
 // stamps it, so the service's exit wait, its grace kill and its exit listener all meet a real pid. The client is a fake
@@ -58,14 +59,14 @@ const CONNECTED: OpenCodeEvent = { id: "evt_connected", type: "server.connected"
 const connectedClient = (): OpenCodeClient =>
     unstubbed<OpenCodeClient>("opencode client", {
         event: unstubbed<OpenCodeClient["event"]>("opencode client.event", {
-            subscribe: (options) =>
+            subscribe: eventSubscription((options) =>
                 (async function* () {
                     yield CONNECTED;
                     const signal = options?.signal;
                     if (signal !== undefined && !signal.aborted) {
                         await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
                     }
-                })(),
+                })()),
         }),
     });
 

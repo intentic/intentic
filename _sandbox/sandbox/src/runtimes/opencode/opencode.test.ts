@@ -30,6 +30,7 @@ import type { ServeRequest, SpawnServer } from "./opencode-serve.js";
 import type { OpenCodeRouteEntry } from "./hosted/opencode-routes.js";
 import { SEED_XAI_MODELS } from "./xai-models.js";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { eventSubscription } from "./testing/opencode-events.testing.js";
 
 // The service's lifecycle against a stand-in `opencode serve`: the spawn, the client and the process table are fakes, so
 // nothing here starts a process or reaches a socket. A real child under the service is opencode-reboot.integration.test.ts.
@@ -64,7 +65,7 @@ const fakeStream = (connects: boolean, opened: () => void): FakeStream => {
         wake = undefined;
     };
     return {
-        subscribe: (options) => {
+        subscribe: eventSubscription((options) => {
             signal = options?.signal;
             signal?.addEventListener("abort", poke);
             opened();
@@ -89,7 +90,7 @@ const fakeStream = (connects: boolean, opened: () => void): FakeStream => {
                     });
                 }
             })();
-        },
+        }),
         connect: () => {
             queue.push(CONNECTED);
             poke();

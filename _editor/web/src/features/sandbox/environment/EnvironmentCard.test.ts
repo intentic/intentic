@@ -396,7 +396,13 @@ it(`says a refusal beside the button that drew it`, async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
     expect(refusal()?.compareDocumentPosition(runtime())).toBe(Node.DOCUMENT_POSITION_PRECEDING);
-    expect(sandboxJson).toHaveBeenCalledTimes(2);
+    // Other mounted queries in the worker can finish or retry through the shared HTTP module. Pin both decisions,
+    // including their bodies, without counting those unrelated reads as another press on this card.
+    const decisions = sandboxJson.mock.calls.filter(([path]) => path === `/environment/approve` || path === `/environment/runtime-install`);
+    expect(decisions).toEqual([
+        [`/environment/approve`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ hash: `proposed` }) })],
+        [`/environment/runtime-install`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ tool: `chromium-headless-shell`, decision: `dismiss` }) })],
+    ]);
 });
 
 it(`stands down once the only runtime installs left are ones you dismissed`, () => {
