@@ -78,11 +78,10 @@ test("the limit is three per-test timeouts when that is longer than ten minutes"
     assert.equal(decide(progress, { now: T0 + 15 * MIN, timeoutMs: 5 * MIN, idle: true })?.status, 1);
 });
 
-test("CPU ticks are read off /proc for this process and nothing for one that does not exist", () => {
+test("CPU ticks are zero for a process that no longer exists", () => {
     if (process.platform !== "linux") {
         return;
     }
-    assert.ok(cpuTicks([process.pid]) >= 0);
     assert.equal(cpuTicks([2 ** 30]), 0);
 });
 
@@ -130,7 +129,7 @@ test("an error thrown outside any test is read with its file, message and place,
             "",
             "# Unhandled error between tests",
             "-------------------------------",
-            "2 | throw new Error(\"module load boom\");",
+            '2 | throw new Error("module load boom");',
             "error: module load boom",
             "      at /w/toplevel.test.ts:2:11",
             "-------------------------------",
@@ -161,13 +160,30 @@ test("a signal, a crash before the summary, and a failing test each explain them
 test("an (unnamed) failure that is a hook timing out is named with its file's beforeAll/afterAll lines", () => {
     const progress = fed(
         ["hooks.test.ts"],
-        ["##[group]hooks.test.ts:", "killed 1 dangling process", "(fail) (unnamed) [120004.24ms]", "  ^ a beforeEach/afterEach hook timed out for this test."],
+        [
+            "##[group]hooks.test.ts:",
+            "killed 1 dangling process",
+            "(fail) (unnamed) [120004.24ms]",
+            "  ^ a beforeEach/afterEach hook timed out for this test.",
+        ],
     );
     assert.deepEqual(progress.unnamedHooks, ["hooks.test.ts"]);
-    const source = ["import { afterAll, beforeAll, test } from \"bun:test\";", "beforeAll(async () => {});", "test(\"x\", () => {});", "afterAll(() => {});"].join("\n");
+    const source = [
+        'import { afterAll, beforeAll, test } from "bun:test";',
+        "beforeAll(async () => {});",
+        'test("x", () => {});',
+        "afterAll(() => {});",
+    ].join("\n");
     assert.deepEqual(
         explainExit({ code: 1, signal: null, progress }, (file) => hookLines(file, () => source)),
-        ['suites: the "(unnamed)" failure in hooks.test.ts is one of its beforeAll/afterAll hooks timing out, which bun names no line for: hooks.test.ts:2, hooks.test.ts:4'],
+        [
+            'suites: the "(unnamed)" failure in hooks.test.ts is one of its beforeAll/afterAll hooks timing out, which bun names no line for: hooks.test.ts:2, hooks.test.ts:4',
+        ],
     );
-    assert.deepEqual(hookLines("gone.test.ts", () => { throw new Error("ENOENT"); }), []);
+    assert.deepEqual(
+        hookLines("gone.test.ts", () => {
+            throw new Error("ENOENT");
+        }),
+        [],
+    );
 });

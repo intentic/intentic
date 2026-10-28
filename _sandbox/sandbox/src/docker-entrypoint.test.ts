@@ -19,13 +19,6 @@ describe(`hosted VM entrypoint`, () => {
     });
 });
 
-/* Reachability used to be an entrypoint-managed zrok agent whose bind/reclaim loop this file pinned. */
-describe(`entrypoint reachability`, () => {
-    it(`carries no tunnel agent machinery — the daemon dials the ingress itself`, () => {
-        expect(entrypoint).not.toMatch(/zrok2|ZROK_|share public|zrok\.log/);
-    });
-});
-
 /* The daemon's compiled code is kept on /history for its next start, a wake from sleep included (2026-10-19). */
 describe(`entrypoint compile cache`, () => {
     it(`hands the daemon a folder on /history under the variable the daemon takes back off its children`, () => {

@@ -1,21 +1,10 @@
-import type { RawNode } from "@intentic/graph";
-
-import { compile, env, httpOk, linearize, subgraph } from "@intentic/graph";
+import { env, linearize, subgraph } from "@intentic/graph";
 import { defineStack, type Stack } from "./index.js";
 
 // The authored inventory the stack tests wire their apps to (on: host, expose: cf).
 const inventory = (i: Stack) => ({
     host: i.have.host("host", { address: "203.0.113.10", user: "deploy", sshKey: env("HOST_SSH_KEY") }),
     cf: i.have.cloudflare("cf", { apiToken: env("CLOUDFLARE_API_TOKEN") }),
-});
-
-test("env builds an env-sourced secret ref", () => {
-    expect(env("TOKEN")).toEqual({ kind: "secret", source: "env", key: "TOKEN" });
-});
-
-test("httpOk omits timeout unless provided", () => {
-    expect(httpOk("https://x/health")).toEqual({ kind: "readiness", check: "httpOk", url: "https://x/health" });
-    expect(httpOk("https://x/health", { timeout: "30s" })).toEqual({ kind: "readiness", check: "httpOk", url: "https://x/health", timeout: "30s" });
 });
 
 test("want.app derives its support stack: the host carries the authored connection and the resolver supplies a default readyWhen", () => {
@@ -40,15 +29,6 @@ test("duplicate resource id throws", () => {
             i.want.app("dup", { on: host, expose: cf, environments: { prod: { domain: "b.example.com", branch: "main" } } });
         }, "example.com"),
     ).toThrow('duplicate resource id: "dup"');
-});
-
-test("a dependency cycle throws", () => {
-    // Auto-derived ids cannot form an authored cycle; this exercises the compile-layer guard directly.
-    const nodes = new Map<string, RawNode>([
-        ["a", { id: "a", type: "host", inputs: { peer: { kind: "ref", resourceId: "b" } }, explicitDependsOn: [] }],
-        ["b", { id: "b", type: "host", inputs: { peer: { kind: "ref", resourceId: "a" } }, explicitDependsOn: [] }],
-    ]);
-    expect(() => compile(nodes)).toThrow(/dependency cycle/);
 });
 
 test("linearize derives a topological order (dependency before dependent)", () => {

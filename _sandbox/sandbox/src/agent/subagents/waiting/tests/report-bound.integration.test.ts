@@ -15,8 +15,7 @@ afterEach(async () => {
 
 const report = (length: number): string => Array.from({ length }, (_, at) => String.fromCodePoint(97 + (at % 26))).join("");
 
-test("an ordinary parent gets a report up to 12k whole, and the head and tail of a longer one", () => {
-    expect(boundChildReport(report(12_000), { logsDir })).toBe(report(12_000));
+test("an ordinary parent sees the omission and cut count for a long report", () => {
     const bounded = boundChildReport(report(20_000), { logsDir }) ?? "";
     expect(bounded).toContain("… report middle omitted …");
     expect(bounded).toContain("9000 chars cut");

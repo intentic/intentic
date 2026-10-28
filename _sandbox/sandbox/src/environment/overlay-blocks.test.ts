@@ -1,7 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { blockCommands, blockProse, blockTools, detailOf, purposeOf, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
+import {
+    blockCommands,
+    blockProse,
+    blockTools,
+    detailOf,
+    purposeOf,
+    renderBlocks,
+    splitBlocks,
+    uniqueBlocks,
+    withoutRepeats,
+} from "./overlay-blocks.js";
 import { parseVersion } from "./version-probe.js";
 
 const CURSOR = readFileSync(join(repoRoot(import.meta.url), "_sandbox/sandbox/image-packs/cursor.Dockerfile"), "utf8");
@@ -159,8 +169,6 @@ test("finds the commands a block verifies itself with, across line continuations
 test("counts every package the block installs, so what is not a command can be summarised", () => {
     const { packages } = blockTools(splitBlocks(RUST)[0] ?? { name: ``, body: `` });
     expect(packages).toEqual([`build-essential`, `pkg-config`, `libssl-dev`, `patchelf`, `clang`]);
-    // The cleanup half of the same RUN contributes nothing.
-    expect(packages).not.toContain(`rm`);
 });
 
 test("a single-package block is named by its own package", () => {

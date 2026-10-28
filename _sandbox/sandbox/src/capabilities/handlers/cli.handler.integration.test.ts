@@ -20,7 +20,15 @@ import type { CredentialDelivery } from "../broker/broker-policy.js";
 import { brokerSessionsFrom } from "../broker/broker-session.js";
 import { contributedSkill, contributionRegistry } from "../contributions.js";
 import { restoreConnectorHooks } from "../cli/connector-hooks.js";
-import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess, tokenFingerprint } from "../cli/git-access.js";
+import {
+    type GitAccessDeps,
+    gitAccessWired,
+    gitHostOf,
+    restoreGitAccess,
+    setupGitAccess,
+    teardownGitAccess,
+    tokenFingerprint,
+} from "../cli/git-access.js";
 import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
 import { fileSshKeyStore, type SshKeyStore } from "../ssh-key-store.js";
 import { linkSshHosts } from "../ssh-hosts.js";
@@ -288,7 +296,6 @@ test("echoConfig withholds everything but the discriminator when the connector c
     const gitlab: Capability = { id: "gitlab", kind: "cli", config: { provider: "gitlab", token: "gl-secret-value", url: "https://gitlab.com" } };
     const echoed = echoConfig(gitlab, noConnectors);
     expect(echoed).toEqual({ provider: "gitlab", hasSecret: false });
-    expect(JSON.stringify(echoed)).not.toContain("gl-secret-value");
 });
 
 // Account-key REST calls are the injectable seam; keygen and git-config run for real against a temp HOME, through

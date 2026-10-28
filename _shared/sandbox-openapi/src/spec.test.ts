@@ -151,25 +151,6 @@ describe("request and response shapes", () => {
         expect(banners).toEqual([]);
     });
 
-    it("documents a two-way schema in the direction each side uses", async () => {
-        // Found by shape: operations using z.stringbool() show a string in requests, a boolean in responses.
-        const spec = await sandboxSpec();
-        const requestStrings: string[] = [];
-        const responseBooleans: string[] = [];
-        for (const entry of operations(spec)) {
-            const request = JSON.stringify(entry.operation.requestBody ?? {});
-            const response = JSON.stringify(entry.operation.responses ?? {});
-            if (request.includes(`"stringbool"`)) {
-                requestStrings.push(`${entry.method} ${entry.path}`);
-            }
-            if (response.includes(`"stringbool"`)) {
-                responseBooleans.push(`${entry.method} ${entry.path}`);
-            }
-        }
-        // Agreement comes from one converter call; this only confirms the lists built without throwing.
-        expect(requestStrings.length + responseBooleans.length).toBeGreaterThanOrEqual(0);
-    });
-
     it("carries the path parameters its paths declare", async () => {
         const spec = await sandboxSpec();
         const wrong: string[] = [];

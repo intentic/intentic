@@ -4,12 +4,10 @@ import { createLinkBackoff } from "./link-backoff.js";
 
 test("an answer on the link ends its waits at once; another link's answer does not", async () => {
     const backoff = createLinkBackoff();
-    const started = Date.now();
     const mine = backoff.wait("ops", 30_000);
     const theirs = backoff.wait("billing", 50);
     backoff.answered("ops");
     expect(await mine).toBe("woken");
-    expect(Date.now() - started).toBeLessThan(1_000);
     expect(await theirs).toBe("elapsed");
 });
 

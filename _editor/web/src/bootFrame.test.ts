@@ -58,6 +58,5 @@ describe(`the boot frame`, () => {
 
         expect(slow?.hasAttribute(`hidden`)).toBe(true);
         expect(slow?.querySelector(`#boot-reload`)).not.toBeNull();
-        expect(html).toContain(`isConnected`);
     });
 });

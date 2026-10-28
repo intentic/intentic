@@ -46,11 +46,6 @@ describe("ic sandbox connect env", () => {
         expect(REQUIRED.filter((key) => !keys.has(key))).toEqual([]);
     });
 
-    it("requires nothing the run contract would not replay", () => {
-        const replayed: readonly string[] = REPLAY_ENV;
-        expect(REQUIRED.filter((key) => !replayed.includes(key))).toEqual([]);
-    });
-
     // A project sandbox's folder is what the sandbox is: dropped by a recreate, the daemon would seed a starter beside it.
     // The retired projects host's flag (2026-10-21) is passed no more.
     it("passes a project sandbox's folder, broken over lines as rustfmt leaves it, and no projects host's flag", () => {

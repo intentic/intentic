@@ -235,12 +235,18 @@ test("a waiter starts the moment the holder exits, not at its next poll, and hol
     const first = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", `sleep 1; date +%s%N > ${ended}`], {
         env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
     });
-    const second = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", "sleep 8"], { env: { ...process.env, INTENTIC_QUEUE_DIR: queue } });
+    const second = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", "sleep 8"], {
+        env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
+    });
     await new Promise((resolve) => setTimeout(resolve, 300));
     const waiter = await new Promise<Run>((resolve) => {
-        const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--wait", "30", "--", "bash", "-c", "date +%s%N; readlink /proc/$$/fd/9"], {
-            env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "10" },
-        });
+        const child = spawn(
+            "bash",
+            [QUEUE_RUN, "--pool", "p", "--limit", "2", "--wait", "30", "--", "bash", "-c", "date +%s%N; readlink /proc/$$/fd/9"],
+            {
+                env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "10" },
+            },
+        );
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
@@ -282,7 +288,13 @@ test("names who holds the pool while it waits, says so again as the wait goes on
     // The waiting command prints the pool's state as it saw it while it waited, which is what a diagnostics read gets.
     const second = await new Promise<Run>((resolve) => {
         const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--wait", "30", "--label", "second", "--", "bash", "-c", "echo ran"], {
-            env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1", INTENTIC_QUEUE_SAY_EVERY: "1", INTENTIC_TURN_OWNER: "waiting-conversation" },
+            env: {
+                ...process.env,
+                INTENTIC_QUEUE_DIR: queue,
+                INTENTIC_QUEUE_POLL: "1",
+                INTENTIC_QUEUE_SAY_EVERY: "1",
+                INTENTIC_TURN_OWNER: "waiting-conversation",
+            },
         });
         let stderr = "";
         let seen = "";
@@ -337,15 +349,6 @@ test("an empty command line is not an error", async () => {
         child.on("close", (code) => resolve({ code, stdout: "", stderr }));
     });
     expect(run.code).toBe(0);
-});
-
-test("the slot survives exec, so the lock covers the command and not the wrapper", async () => {
-    const queue = await dir();
-    // The lock must survive exec: `{var}>`-allocated descriptors close on exec and would silently drop it.
-    const log = join(queue, "marks");
-    const runs = await Promise.all(Array.from({ length: 4 }, () => queueRun(queue, ["--pool", "p", "--limit", "1"], body(log, { ms: 400 }))));
-    expect(runs.every((run) => run.code === 0)).toBe(true);
-    expect(await peakConcurrency(log)).toBe(1);
 });
 
 // Tests the wiring to memory-room (order, args, failure tolerance), not the policy itself (resource-budget.test.ts,

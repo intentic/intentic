@@ -45,9 +45,7 @@ const entries: readonly SettingEntry[] = [...sandbox, ...settings];
 
 describe(`template marks`, () => {
     it(`distinguishes card marks from other data attributes`, () => {
-        expect(settingMarks(`<span data-setting-change data-settings="other" data-setting="theme">`)).toEqual([
-            { bound: false, id: `theme` },
-        ]);
+        expect(settingMarks(`<span data-setting-change data-settings="other" data-setting="theme">`)).toEqual([{ bound: false, id: `theme` }]);
     });
 
     it(`still reports bare and bound card marks`, () => {
@@ -91,31 +89,6 @@ describe(`the index and the cards`, () => {
         expect(Object.keys(sandboxPageTerms()).filter((slug) => !sandboxSlugs.has(slug))).toEqual([]);
         const settingsPageSlugs = new Set(settingsPages(settingsSections(true, false, false)).map((page) => page.slug));
         expect(Object.keys(settingsPageTerms()).filter((slug) => !settingsPageSlugs.has(slug))).toEqual([]);
-    });
-
-    // A category is read off the page's own address by the page itself, so an answer naming one the page does not know
-    // lands on its default category, where the card is not.
-    it(`names only categories the page reads, under the key it reads them from`, () => {
-        const reads = new Map([
-            [`agent`, { file: `features/sandbox/overview/SandboxAgent.vue`, key: `section` }],
-            [`access`, { file: `features/sandbox/access/SandboxAccess.vue`, key: `section` }],
-            [`data-protection`, { file: `features/sandbox/data-protection/SandboxDataProtection.vue`, key: `step` }],
-        ]);
-        const wrong = entries.flatMap((entry) => {
-            if (entry.part === undefined) {
-                return [];
-            }
-            const page = reads.get(entry.slug);
-            if (page === undefined) {
-                return [`${entry.id}: add ${entry.slug}'s page to this test`];
-            }
-            const source = readFileSync(join(SRC, page.file), `utf8`);
-            const key = entry.partKey ?? `section`;
-            return key === page.key && source.includes(`\`${entry.part}\``) && source.includes(`query[\`${key}\`]`)
-                ? []
-                : [`${entry.id}: ${key}=${entry.part}`];
-        });
-        expect(wrong).toEqual([]);
     });
 });
 

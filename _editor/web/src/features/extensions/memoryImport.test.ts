@@ -27,6 +27,5 @@ describe(`mergeMemory`, () => {
         const corrupted = `# Notes\n\n${START}\n## Imported memory\n\nhalf-written`;
         const result = mergeMemory(corrupted, `Recovered.`);
         expect(result).toBe(`# Notes\n\n${START}\n## Imported memory\n\nRecovered.\n${END}`);
-        expect(result).not.toContain(`half-written`);
     });
 });

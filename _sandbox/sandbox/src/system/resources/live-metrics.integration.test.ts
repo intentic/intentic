@@ -30,7 +30,6 @@ test.skipIf(process.platform !== "linux")("a process stamped with a conversation
         expect(second.at).toBe(at);
         expect(second.windowMs).toBe(1_500);
         expect(second.windowMs).toBe(second.at - first.at);
-        expect(second.windowMs).toBeGreaterThan(0);
         expect(second.sessions[owner]?.cpuPercent).toBeGreaterThan(0);
         expect(second.sessions[owner]?.rssBytes).toBeGreaterThan(0);
         expect(second.sandbox.processes).toBeGreaterThan(1);

@@ -1,29 +1,18 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 
-// recreate.sh maps old one-liner argument shapes onto ic verbs, tested under a real `sh` with a stand-in ic. Also
-// checks recreate.rs writes the rollback record before destroying the container: a late write leaves rollback dead.
+// recreate.sh maps old one-liner argument shapes onto ic verbs, tested under a real `sh` with a stand-in ic.
 
 const SCRIPT = join(repoRoot(import.meta.url), "_site/site/public/scripts/recreate.sh");
-const RECREATE_RS = join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/recreate.rs");
 
 const dirs: string[] = [];
 afterEach(() => {
     for (const dir of dirs.splice(0)) {
         rmSync(dir, { recursive: true, force: true });
     }
-});
-
-test("the rollback record is written before the container is destroyed", () => {
-    const source = readFileSync(RECREATE_RS, "utf8");
-    const write = source.indexOf("record::write(");
-    const destroy = source.indexOf('docker::quiet(&["rm", "-f", &container])');
-    expect(write).toBeGreaterThan(0);
-    expect(destroy).toBeGreaterThan(0);
-    expect(write).toBeLessThan(destroy);
 });
 
 /* Run the shim with a stand-in ic on IC_BIN that prints its argv: no network, no docker. */

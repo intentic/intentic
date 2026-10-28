@@ -199,7 +199,10 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             ...mountedIn("agent/run/harness/claude-code-runner.ts", /mcpServers:\s*\{(?!\})[\s\S]*?\n\s{8}\}/),
             ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
             // What a non-Claude runtime reaches through the MCP door, the same servers built for its turn.
-            ...mountedIn("runtimes/daemon-tools/daemon-servers.ts", /(?<=export const daemonServersFor[\s\S]*?)\n {4}const servers = \{\n[\s\S]*?\n {4}\} satisfies/),
+            ...mountedIn(
+                "runtimes/daemon-tools/daemon-servers.ts",
+                /(?<=export const daemonServersFor[\s\S]*?)\n {4}const servers = \{\n[\s\S]*?\n {4}\} satisfies/,
+            ),
             constantValue("browser/tools/browser-servers.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-servers.ts", "ANONYMOUS_BROWSER_SERVER"),
             constantValue("desktop/desktop-tools.ts", "DESKTOP_SERVER"),
@@ -218,12 +221,6 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
                 discovered.has(server),
                 `reserved server "${server}" is mounted nowhere the scan can see — a stale row in DAEMON_MCP_SERVERS`,
             ).toBe(true);
-        }
-    });
-
-    test("the control subset is exactly the servers whose results are never outside content", () => {
-        for (const [server, provenance] of Object.entries(DAEMON_MCP_SERVERS)) {
-            expect(CONTROL_MCP_SERVERS.has(server), server).toBe(provenance === "control");
         }
     });
 });

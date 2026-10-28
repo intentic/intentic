@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { markPages } from "@intentic/base/shadow-text";
 import { captureCli } from "@intentic/agent-cli/testing";
 import { app } from "./app.js";
-import { documentExtensions, ripgrepConfigLines } from "./lib/formats.js";
+import { ripgrepConfigLines } from "./lib/formats.js";
 import { DERIVED_DIR, sidecarBody } from "./lib/sidecar.js";
 import { pdfPagesBytes } from "./testing.js";
 
@@ -31,7 +31,10 @@ beforeAll(() => {
     chmodSync(join(bin, "fileq"), 0o755);
     process.env["WORKSPACE_ROOT"] = root;
     mkdirSync(join(root, "docs"), { recursive: true });
-    writeFileSync(join(root, "docs/terms.pdf"), pdfPagesBytes([page("Introduction to the terms of service here"), page("Each wniosek must be filed in writing today")]));
+    writeFileSync(
+        join(root, "docs/terms.pdf"),
+        pdfPagesBytes([page("Introduction to the terms of service here"), page("Each wniosek must be filed in writing today")]),
+    );
 });
 afterAll(() => {
     delete process.env["WORKSPACE_ROOT"];
@@ -41,7 +44,11 @@ afterAll(() => {
 
 const pre = (file: string, cwd = root) => {
     rmSync(calls, { force: true });
-    const result = spawnSync("sh", [PRE, file], { cwd, encoding: "utf8", env: { PATH: `${bin}:${process.env["PATH"] ?? ""}`, WORKSPACE_ROOT: root } });
+    const result = spawnSync("sh", [PRE, file], {
+        cwd,
+        encoding: "utf8",
+        env: { PATH: `${bin}:${process.env["PATH"] ?? ""}`, WORKSPACE_ROOT: root },
+    });
     expect(result.status).toBe(0);
     return { out: result.stdout, slow: existsSync(calls) };
 };
@@ -102,14 +109,6 @@ test("a file that is not a document passes through untouched", () => {
     const { out, slow } = pre("notes.ts");
     expect(out).toBe("export const wniosek = 1;\n");
     expect(slow).toBe(false);
-});
-
-test("the script's extension list is fileq's document list", () => {
-    const script = readFileSync(PRE, "utf8");
-    for (const extension of documentExtensions()) {
-        const bracketed = Array.from(extension.slice(1), (char) => `[${char}${char.toUpperCase()}]`).join("");
-        expect(script, extension).toContain(`*.${bracketed}`);
-    }
 });
 
 describe.skipIf(!hasRg)("plain rg under the generated config", () => {

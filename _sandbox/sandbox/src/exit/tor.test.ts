@@ -36,7 +36,6 @@ test("two exits cannot share a tor data directory or a port", () => {
     // Two tors sharing one control port take each other's commands: one asked for Japan, the other quietly moved.
     const berlin = torrc("berlin", "DE");
     const osaka = torrc("osaka", "JP");
-    expect(berlin).not.toBe(osaka);
     const dataDir = (conf: string) => /DataDirectory (\S+)/.exec(conf)?.[1];
     expect(dataDir(berlin)).not.toBe(dataDir(osaka));
     expect(exitControlPort("berlin")).not.toBe(exitControlPort("osaka"));

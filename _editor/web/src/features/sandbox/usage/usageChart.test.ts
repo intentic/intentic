@@ -64,7 +64,6 @@ describe(`day arithmetic`, () => {
 describe(`windows`, () => {
     it(`makes a preset span exactly its many days, today included`, () => {
         expect(windowFor(`7d`, `2026-07-26`)).toEqual({ from: `2026-07-20`, to: `2026-07-26` });
-        expect(daySpan(`2026-07-20`, `2026-07-26`)).toBe(7);
         expect(windowFor(`30d`, `2026-07-26`).from).toBe(`2026-06-27`);
     });
 
@@ -412,7 +411,5 @@ describe(`csv export`, () => {
     it(`quotes a field containing a comma or a quote, so a model id can't shift every later column`, () => {
         const [, line] = usageCsv([row({ model: `weird,"name"` })]).split(`\n`);
         expect(line).toContain(`"weird,""name"""`);
-        // 13 columns still, the quoted comma doesn't split them.
-        expect(line?.split(`","`)).toHaveLength(1);
     });
 });

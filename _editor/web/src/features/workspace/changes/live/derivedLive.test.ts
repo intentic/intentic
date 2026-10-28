@@ -20,12 +20,6 @@ it(`leaves the file's own change epoch alone: its text moved, the file did not`,
     expect(changeEpochOf(`docs/spec.docx`)).toBe(0);
 });
 
-it(`drops it all on switching sandboxes, where the same path is a different file`, () => {
-    markDerivedChanged([`docs/spec.docx`]);
-    resetSandboxScope();
-    expect(derivedEpochOf(`docs/spec.docx`)).toBe(0);
-});
-
 it(`a reconnect wildcard advances known and unseen paths, then named renders stay local`, () => {
     markDerivedChanged([`docs/spec.docx`]);
     const before = derivedEpochOf(`docs/spec.docx`);

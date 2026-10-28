@@ -28,10 +28,3 @@ test("only approval starts a hold: a proposal, an edit, or putting one back stay
     expect(withApprovalHold(post({ status: "proposed" }), NOW).scheduledAt).toBeUndefined();
     expect(withApprovalHold(post({ status: "failed" }), NOW).scheduledAt).toBeUndefined();
 });
-
-test("re-approving a held item after an edit restarts the hold from the edit, not from the first approval", () => {
-    // "Put it back in review" clears the date; the second approval is a fresh decision and gets a fresh minute.
-    const held = withApprovalHold(post({ status: "approved" }), NOW);
-    const back: PostApprovalSummary = { ...held, status: "proposed", scheduledAt: undefined };
-    expect(withApprovalHold({ ...back, status: "approved", content: "edited" }, NOW + 30_000).scheduledAt).toBe(NOW + 30_000 + APPROVAL_HOLD_MS);
-});

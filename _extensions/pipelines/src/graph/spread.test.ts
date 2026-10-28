@@ -1,4 +1,4 @@
-import { GUTTER_PX, LEGIBLE_FIT, RANK_SEP_MAX, RANK_SEP_MIN, READABLE_ZOOM, spreadColumns } from "./spread";
+import { GUTTER_PX, RANK_SEP_MAX, RANK_SEP_MIN, READABLE_ZOOM, spreadColumns } from "./spread";
 
 // Pins that the frame's width goes to gutters rather than margins: a long run keeps its gutters readable on screen and
 // is otherwise as large as fits, a short one spreads out up to a bound, and a run too long to read whole is cropped.
@@ -32,6 +32,5 @@ describe(`spreadColumns`, () => {
     test(`a run too long to read whole is shown cropped at the readable zoom`, () => {
         const spread = spreadColumns({ ...frame, cardsWidth: 6000, columns: 40, contentHeight: 300 });
         expect(spread).toEqual({ zoom: READABLE_ZOOM, rankSep: Math.ceil(GUTTER_PX / READABLE_ZOOM), cropped: true });
-        expect(LEGIBLE_FIT).toBeLessThan(READABLE_ZOOM);
     });
 });

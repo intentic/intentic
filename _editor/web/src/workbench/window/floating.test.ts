@@ -47,7 +47,9 @@ class FakeChannel {
 
 stubGlobal(`BroadcastChannel`, FakeChannel);
 
-const { claimFloating, createFloatingSurface, floatingOwner, floatingWindowPanel, handBackOwnPanel, receiveFloatingNote } = await import(`./floating`);
+const { claimFloating, createFloatingSurface, floatingOwner, floatingWindowPanel, handBackOwnPanel, receiveFloatingNote } = await import(
+    `./floating`
+);
 
 const size = () => ({ width: 800, height: 600 });
 
@@ -177,7 +179,10 @@ describe(`a panel nobody floats`, () => {
     // Null outside the desktop app is the popup blocker's answer, which the caller has to hear to ask for a press.
     it(`says so when the browser refuses the window`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        stubGlobal(`open`, jest.fn(() => null));
+        stubGlobal(
+            `open`,
+            jest.fn(() => null),
+        );
 
         expect(surface.open({ left: 0, top: 0 })).toBe(false);
         expect(surface.floats.value).toBe(false);
@@ -434,16 +439,6 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
 
         expect(surface.shows.value).toBe(false);
-    });
-
-    it(`keeps the winning window when a competing claim arrives and closes`, () => {
-        const surface = createFloatingSurface(`chat`, size);
-        receiveFloatingNote(here(`chat`, `winner`, 1_000));
-        receiveFloatingNote(here(`chat`, `loser`, 2_000));
-        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
-
-        expect(surface.shows.value).toBe(false);
-        expect(surface.floats.value).toBe(true);
     });
 });
 

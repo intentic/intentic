@@ -24,6 +24,5 @@ describe(`idFromName`, () => {
     it(`stays inside the contract's 60 characters with room for the number`, () => {
         const id = idFromName(`a`.repeat(80), [`a`.repeat(56)], `profile`);
         expect(id).toBe(`${`a`.repeat(56)}-2`);
-        expect(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u.test(id)).toBe(true);
     });
 });

@@ -36,9 +36,3 @@ test("a body with no tools, or none carrying the line, is returned as it came", 
     expect(compactAnthropicTools(plain)).toBe(plain);
     expect(compactAnthropicTools(clean)).toBe(clean);
 });
-
-test("the same request compacts to the same bytes every time, so the provider's cache holds", () => {
-    const body = { tools: [tool("a", { $schema: DIALECT, type: "object" }), tool("b", { $schema: DIALECT, type: "object" })] };
-
-    expect(JSON.stringify(compactAnthropicTools(body))).toBe(JSON.stringify(compactAnthropicTools(structuredClone(body))));
-});

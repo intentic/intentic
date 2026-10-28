@@ -36,6 +36,5 @@ describe(`usePlatformCatalog`, () => {
         const catalog = usePlatformCatalog();
         expect([...catalog.value]).toEqual([[`x`, { name: `X`, logo: `x` }]]);
         expect(specs[0]?.queryKey).toEqual([`extensions.list`, `sbx-1`]);
-        expect(Object.keys(specs[0] ?? {}).toSorted()).toEqual([`queryFn`, `queryKey`]);
     });
 });

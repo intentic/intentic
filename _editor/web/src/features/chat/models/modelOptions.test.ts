@@ -17,15 +17,3 @@ it(`names colliding rows by the id that distinguishes them`, () => {
 
     expect(modelOptionsFor(`cursor`).map((option) => option.label)).toEqual([`Auto (auto)`, `Auto (auto-smart)`, `Composer 2.5`]);
 });
-
-it(`leaves a catalog whose labels already differ exactly as its vendor wrote it`, () => {
-    providerModels.value = {
-        ...providerModels.value,
-        claude: [
-            { label: `Claude Opus 5`, value: `claude-opus-5` },
-            { label: `Claude Sonnet 5`, value: `claude-sonnet-5` },
-        ],
-    };
-
-    expect(modelOptionsFor(`claude`).map((option) => option.label)).toEqual([`Claude Opus 5`, `Claude Sonnet 5`]);
-});

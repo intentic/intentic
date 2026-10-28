@@ -144,7 +144,6 @@ test("the per-machine cap grants the machine minus the host reserve, floored whe
 // A real /proc/meminfo reading from a 20GB .wslconfig guest: reservations eat some of the round number.
 test("the WSL guest that prompted the cap: measured, not the round number its config asks for", () => {
     expect(localSandboxMemory(20479632 * 1024)).toBe("16g");
-    expect(19.53 - 16).toBeGreaterThan(3);
 });
 
 test("an unmeasurable machine gets the fallback, never a cap derived from zero", () => {
@@ -375,7 +374,7 @@ test("the base's digest rides as container env when the runner read one, and onl
     const digest = `sha256:${"ab".repeat(32)}`;
     expect(baseDigestOf(` ${digest}\n`)).toBe(digest);
     expect(baseDigestOf("sha256:abc")).toBeUndefined();
-    expect(baseDigestOf(`ghcr.io/intentic/sandbox@sha256:${  "ab".repeat(32)}`)).toBeUndefined();
+    expect(baseDigestOf(`ghcr.io/intentic/sandbox@sha256:${"ab".repeat(32)}`)).toBeUndefined();
     expect(baseDigestOf(undefined)).toBeUndefined();
 
     const bare = sandboxRunArgv({ names, image: "img", baseImage: "img" });

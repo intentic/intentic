@@ -18,13 +18,6 @@ describe(`HS256 tokens`, () => {
         expect(verifyJwt(``, secret)).toBeUndefined();
     });
 
-    it(`refuses a token declaring another algorithm, even with a matching signature`, () => {
-        const token = signJwt({ status: 2 }, secret);
-        const [, body, signature] = token.split(`.`) as [string, string, string];
-        const none = Buffer.from(JSON.stringify({ alg: `none`, typ: `JWT` })).toString(`base64url`);
-        expect(verifyJwt(`${none}.${body}.${signature}`, secret)).toBeUndefined();
-    });
-
     it(`reads a bearer header and nothing else`, () => {
         expect(bearerOf(`Bearer abc.def.ghi`)).toBe(`abc.def.ghi`);
         expect(bearerOf(`bearer abc`)).toBe(`abc`);

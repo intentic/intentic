@@ -11,7 +11,6 @@ afterEach(() => {
 
 describe(`the panel's height`, () => {
     it(`starts at the default until one is remembered`, () => {
-        expect([DEFAULT_HEIGHT, MIN_HEIGHT]).toEqual([240, 96]);
         expect(usePanelHeight(`dock`).height.value).toBe(DEFAULT_HEIGHT);
     });
 

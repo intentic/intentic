@@ -9,7 +9,7 @@ export const RANK_SEP_MIN = 48;
 export const RANK_SEP_MAX = 112;
 // Below LEGIBLE_FIT the whole run is not worth showing at once: it is shown at READABLE_ZOOM from its start instead,
 // cropped, to be panned or opened full screen.
-export const LEGIBLE_FIT = 0.45;
+const LEGIBLE_FIT = 0.45;
 export const READABLE_ZOOM = 0.8;
 // Gutters move in steps, so a window resized a pixel at a time does not lay the graph out again at every pixel.
 const STEP = 4;

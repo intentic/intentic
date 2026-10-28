@@ -30,7 +30,6 @@ it(`tells the brandless apart by kind rather than by a shared box`, () => {
         (entry) => environmentVisual(entry).icon,
     );
     expect(glyphs).toEqual([`search`, `code`, `key`, `arrows-h`, `wrench`]);
-    expect(new Set(glyphs).size).toBe(glyphs.length);
 });
 
 it(`never lends GNU make the automation platform's mark`, () => {
