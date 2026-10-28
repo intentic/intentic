@@ -342,9 +342,13 @@ describe(`what a fork and a restore write`, () => {
         });
     });
 
-    it(`writes picks outright with no rule and nothing asked of the world`, () => {
+    it(`writes picks outright with no rule, asking only that the divider follow where the next turn runs`, () => {
         expect(reduceSelection(SEEDED, { kind: `set`, picks: { actsAs: `maya`, account: `second` } }, LIVE)).toEqual({
             selection: { ...SEEDED, actsAs: `maya`, account: `second` },
+            effects: { divider: `refresh` },
+        });
+        expect(reduceSelection(SEEDED, { kind: `set`, picks: { actsAs: `maya`, modePick: `plan` } }, LIVE)).toEqual({
+            selection: { ...SEEDED, actsAs: `maya`, modePick: `plan` },
             effects: {},
         });
     });

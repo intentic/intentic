@@ -84,7 +84,13 @@ const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => 
 // daemon's page carries it (fitPageRow: tool outputs to their start, a delegation's calls counted): a row this window
 // streamed holds every byte its calls printed, all of it cloned on the main thread at each write, and a reopen painted
 // it from the mirror only for the daemon's page to hand it back fitted, a different row, drawn again.
-const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => messages.slice(-KEPT_MESSAGES).map(fitPageRow);
+// A row about one window's next send (ChatMessage.upcoming) is left out: every window paints from this mirror, and a
+// divider one window drew for its own picks read, in another, as a switch that never happened (2026-10-28).
+export const persistable = (messages: readonly ChatMessage[]): ChatMessage[] =>
+    messages
+        .filter((message) => message.upcoming !== true)
+        .slice(-KEPT_MESSAGES)
+        .map(fitPageRow);
 
 // How many rows each mirror entry held when this window last wrote or read it. An unconfirmed write only has to know
 // whether the mirror is longer than what it would write, and reading the entry back to learn that cloned the whole

@@ -179,6 +179,9 @@ export const UNPICKED: Selection = {
 
 const unchanged = (selection: Selection): PickOutcome => ({ selection, effects: {} });
 
+// The picks a "switched" divider is measured by (ComposerSelection.switchPoint): where the next turn runs, and on what.
+const ROUTING_PICKS = [`provider`, `account`, `harness`, `model`] as const satisfies readonly (keyof Picks)[];
+
 // Points the selection at `next`, re-scoping what belonged to the provider being left; undefined when refused (a live
 // turn, or already there). The owed model and the swap baseline were the old provider's, so neither survives.
 const pointAt = (selection: Selection, next: AgentProvider, world: PickWorld): Selection | undefined => {
@@ -406,7 +409,12 @@ const REDUCERS: Reducers = {
         effects: { session: { id: sessionId, provider: `claude`, account: undefined, harness: `native` } },
     }),
     // An account written outright (a restored tab, the fleet's record of the run, a route's answer) is nobody's hand pick.
-    set: (selection, { picks }) => ({ selection: { ...selection, ...picks, ...(`account` in picks ? { accountPicked: false } : {}) }, effects: {} }),
+    // Picks that decide where the next turn runs still move the divider with them: one drawn under the picks being
+    // replaced would otherwise stand over a send that no longer makes that switch.
+    set: (selection, { picks }) => ({
+        selection: { ...selection, ...picks, ...(`account` in picks ? { accountPicked: false } : {}) },
+        effects: ROUTING_PICKS.some((pick) => pick in picks) ? { divider: `refresh` } : {},
+    }),
     // The divider, if any, is frozen into the record by the segment cut, and this turn is what a swap is measured by.
     sent: (selection) => ({ selection: { ...selection, sentModel: selection.model }, effects: { divider: `freeze` } }),
     rerun: (selection) => ({ selection, effects: { divider: `freeze` } }),

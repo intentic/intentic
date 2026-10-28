@@ -230,6 +230,9 @@ export class ComposerSelection {
 
     // The one way the selection changes: the reducer decides, and what the pick asks of the world beyond it happens here.
     apply(action: PickAction): void {
+        // What the send going out now actually does, read before `sent` moves the swap baseline onto it: the divider it
+        // freezes must say this, however the picks got where they are.
+        const sending = action.kind === `sent` ? { text: switchNoticeText(this.switchPoint()) } : undefined;
         const { selection, effects } = reduceSelection(this.state.value, action, this.world());
         this.state.value = selection;
         // Restored per-chat picks still answer a re-run after a reload; constructor defaults alone do not.
@@ -258,7 +261,7 @@ export class ComposerSelection {
             this.routingPicked.value = true;
             void followPick(this.host, this.followRouting.value);
         }
-        this.divide(effects.divider);
+        this.divide(effects.divider, sending);
     }
 
     // Turn settings a message sends under: this selection as it stands at delivery, not at typing time, which spends the
@@ -326,12 +329,12 @@ export class ComposerSelection {
         }
     }
 
-    // What a pick does to the pending divider.
-    private divide(divider: PickEffects["divider"]): void {
+    // What a pick does to the pending divider. `sending` is what a send's freeze actually does (apply).
+    private divide(divider: PickEffects["divider"], sending: { readonly text: string | undefined } | undefined): void {
         if (divider === `refresh`) {
             this.refreshSwitchNotice();
         } else if (divider === `freeze`) {
-            this.pendingSwitchNoticeId = undefined;
+            this.sealSwitchNotice(sending);
         } else if (divider !== undefined) {
             this.noticeMidTurnSwitch(divider.settle);
         }
@@ -341,8 +344,33 @@ export class ComposerSelection {
     private noticeMidTurnSwitch(segmentSwitched: boolean): void {
         const text = midTurnSwitchText(this.switchPoint(), segmentSwitched);
         if (text !== undefined && this.pendingSwitchNoticeId === undefined) {
-            this.pendingSwitchNoticeId = this.host.transcript.notice(text);
+            this.pendingSwitchNoticeId = this.host.transcript.notice(text, { upcoming: true });
         }
+    }
+
+    // A turn went out: the pending divider becomes history, said as what that turn did. A person's send measures it again
+    // (`sending`), since the divider was drawn whenever the picks last moved and may say a switch this send does not make
+    // (picks written back by a path that draws nothing); a re-run the daemon routes keeps the words it was drawn with.
+    private sealSwitchNotice(sending: { readonly text: string | undefined } | undefined): void {
+        const noticeId = this.pendingSwitchNoticeId;
+        if (noticeId === undefined) {
+            return;
+        }
+        if (sending !== undefined && sending.text === undefined) {
+            this.dropSwitchNotice();
+            return;
+        }
+        this.pendingSwitchNoticeId = undefined;
+        this.host.transcript.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => {
+                if (message.id !== noticeId) {
+                    return message;
+                }
+                const { upcoming: _sent, ...sealed } = message;
+                return sending?.text === undefined ? sealed : { ...sealed, text: sending.text };
+            }),
+        }));
     }
 
     // Where the selection stands against what the chat has done, for the divider's words.
@@ -426,6 +454,6 @@ export class ComposerSelection {
             this.host.transcript.rewordNotice(noticeId, text);
             return;
         }
-        this.pendingSwitchNoticeId = this.host.transcript.notice(text);
+        this.pendingSwitchNoticeId = this.host.transcript.notice(text, { upcoming: true });
     }
 }

@@ -20,6 +20,10 @@ export interface ChatMessage extends TranscriptRow {
     // Words this window could not hand to the sandbox yet, waiting in its outbox (sendOutbox.ts) under `messageId`: drawn
     // where they were sent, sent again until the sandbox answers, and never counted as the record's.
     readonly unsent?: true;
+    // Says what THIS window's next send will do, not what happened: the "switched" divider while its pick is unsent
+    // (ComposerSelection). Every other window, and this one after a reload, has a next send of its own, so the row is
+    // never mirrored (transcriptCache.ts persistable); the send that makes it true takes the mark off, and it is history.
+    readonly upcoming?: true;
 }
 
 /* Older retries recorded the restored checklist even when the provider refused before doing any work. */

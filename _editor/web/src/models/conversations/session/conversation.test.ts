@@ -13,7 +13,7 @@ import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
-import { mirrorKey, mirrorKeyOf } from "../transcript/transcriptCache";
+import { mirrorKey, mirrorKeyOf, persistable } from "../transcript/transcriptCache";
 import { snapshotTab } from "../tabs/tabSnapshot";
 import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
@@ -610,6 +610,65 @@ describe(`Conversation`, () => {
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`account`]).toBe(`with-room`);
         expect(`sessionId` in secondBody).toBe(false);
+    });
+
+    // 2026-10-28 (stout-raven-owob): a window not drawing the chat still held a copy of it, with the picks it was summoned
+    // with (Codex, the new chat's seed), while the window drawing it was put on Claude and sent there. The copy read the
+    // record's Claude session against its own Codex pick and drew "Switched to Codex"; the shared mirror carried that row
+    // to the chat's own window, which showed it above a message that went out on Claude, under a composer that never left it.
+    it(`keeps a divider about this window's next send out of the mirror every window paints from`, async () => {
+        const copy = new Conversation(`c1`);
+        copy.selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-5` } });
+        copy.selection.apply({ kind: `bindSession`, session: { id: `s-1`, provider: `claude`, harness: `native`, account: undefined } });
+        copy.transcript.restoreMessages([
+            { role: `user`, text: `first`, rowId: `a` },
+            { role: `assistant`, text: `answered`, rowId: `b` },
+        ]);
+
+        // This copy's own next send would go to Codex, so it says so here...
+        await waitFor(() => expect(lastNotice(copy)).toStartWith(`Switched to Codex`));
+        // ...and nowhere else: the mirror holds what happened, not what one window would do next.
+        expect(persistable(copy.transcript.messages.value).map((message) => message.text)).toEqual([`first`, `answered`]);
+    });
+
+    it(`takes a divider back when the picks return without a switch, whichever way they came back`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
+
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        expect(lastNotice(conversation)).toStartWith(`Switched to`);
+        // Written back outright (a restored tab's picks, the fleet's record of the run), not picked: the divider goes too.
+        conversation.selection.apply({ kind: `set`, picks: { provider: `claude`, model: `opus`, harness: `native` } });
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice`)).toBe(false);
+    });
+
+    it(`freezes a divider only when the send below it makes the switch it names`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
+
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        // Back on Claude by a path that redraws no divider (a fork's picks): the send continues the session.
+        conversation.selection.apply({ kind: `adopt`, from: { ...conversation.selection.state.value, provider: `claude`, model: `opus`, harness: `native` } });
+        await conversation.turn.send(`second`, conversation.selection.turnSettings());
+
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice`)).toBe(false);
+        expect(turnBodies()[1]![`agent`]).toBe(`claude`);
+    });
+
+    it(`keeps a divider the send makes true as history, mirrored like any row`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
+
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `g-1` }]));
+        await conversation.turn.send(`second`, conversation.selection.turnSettings());
+
+        const divider = conversation.transcript.messages.value.find((message) => message.role === `notice`);
+        expect(divider?.text).toStartWith(`Switched to`);
+        expect(persistable(conversation.transcript.messages.value).map((message) => message.text)).toContain(divider!.text);
     });
 
     it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {

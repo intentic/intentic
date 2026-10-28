@@ -169,7 +169,7 @@ export class TranscriptClock {
     }
 
     // Muted line written on the user's clock; local, since a fork must exclude only rows this window drew.
-    notice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): number {
+    notice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "upcoming">): number {
         return this.append({ role: `notice`, text, local: true, ...extra });
     }
 
