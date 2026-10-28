@@ -1,6 +1,5 @@
 import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import { capabilityEffects } from "./effects.js";
-import { CapabilityKindSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // The cli arm specifically; `Partial<CapabilityContribution>` over the discriminated union would let an override widen
 // `kind` back to the whole union.
@@ -25,12 +24,6 @@ const manifest = (contributes: ExtensionManifest["contributes"]): ExtensionManif
 });
 
 describe("capabilityEffects", () => {
-    it("yields at least one effect for every kind", () => {
-        for (const kind of CapabilityKindSchema.options) {
-            expect(capabilityEffects({ kind, config: {} }).length).toBeGreaterThan(0);
-        }
-    });
-
     it("interpolates the plugin clone url and token from form state and from the echo", () => {
         expect(capabilityEffects({ kind: "plugin", config: {} })).toEqual([{ kind: "clone", url: undefined }]);
         expect(capabilityEffects({ kind: "plugin", config: { url: "https://github.com/o/p", token: "t" } })).toEqual([

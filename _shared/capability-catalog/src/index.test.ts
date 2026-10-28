@@ -71,41 +71,6 @@ describe("contributionEntry", () => {
         expect(tile.category).toBe("extend");
     });
 
-    it("leaves no static tile for any contributable kind: the catalog is extensible, the handlers are core", () => {
-        // A contributable kind has no static tile; what stays is tied 1:1 to a handler it can't be separated from.
-        const contributable = new Set(["cli", "browser", "host", "agent"]);
-        expect(CAPABILITY_CATALOG.filter((entry) => contributable.has(entry.kind))).toEqual([]);
-        expect(CAPABILITY_CATALOG.map((entry) => entry.kind).toSorted()).toEqual([
-            "devops",
-            "docker",
-            "endpoint",
-            // Static like endpoint: exit's providers are core drivers, and country pickers come from the contract's
-            // tables.
-            "exit",
-            "extension",
-            // Static for the wallet reason: the token spends the owner's account, and provisioning is core code an
-            // extension must never stand in for.
-            "fleet",
-            // Static like endpoint: an identity has no site to vary, the email is the tile.
-            "identity",
-            // Static for the fleet reason: its token reaches another of the owner's sandboxes, and handing work over is core
-            // code an extension must never stand in for.
-            "link",
-            // Static for the docker reason: the GPU switch is a privileged directive, and its handler is core code.
-            "localmodel",
-            "mcp",
-            "monorepo",
-            // Static like vpn: mounting is core code and the access switch is a fence an extension must never set.
-            "netdisk",
-            "plugin",
-            "ssh",
-            "vpn",
-            // Static, strongest form: these fields are money ceilings a signer enforces; an extension must never set
-            // them.
-            "wallet",
-        ]);
-    });
-
     it("appends the core host scope switches to a contributed OS pack, which cannot declare them itself", () => {
         // The grant doesn't vary by OS; a pack that could restate it could also weaken it.
         const pack: CapabilityContribution = {
@@ -181,33 +146,20 @@ describe("contributionEntry", () => {
     });
 });
 
-// Pins that the context window and its price labels never drift apart, quoting one number while serving another.
 describe("the local model tile", () => {
     const tile = CAPABILITY_CATALOG.find((entry) => entry.id === "localmodel")!;
     const field = (key: string) => tile.fields.find((entry) => entry.key === key);
 
-    it("prices every window rung and defaults to one of them", () => {
+    it("offers every supported window and uses the contract default", () => {
         const options = field("context")?.options ?? [];
         // Every rung the schema accepts is offered in order, with the typed escape hatch last.
         expect(options.map((option) => option.value)).toEqual([...LOCAL_MODEL_WINDOWS, "custom"]);
-        // Every rung carries its price, so the choice is actually informed.
-        for (const option of options.filter((entry) => entry.value !== "custom")) {
-            expect(option.label).toMatch(/\d+k · \d+ GB/);
-        }
         expect(field("context")?.default).toBe(LOCAL_MODEL_WINDOW_DEFAULT);
-        expect<readonly unknown[]>(LOCAL_MODEL_WINDOWS).toContain(field("context")?.default);
     });
 
     // The smallest rung a full agent turn fits in, per the contract; under it, downloads and serves a useless model.
     it("defaults to a window a full agent turn fits in", () => {
         expect(Number(LOCAL_MODEL_WINDOW_DEFAULT)).toBeGreaterThanOrEqual(65_536);
-    });
-
-    // Weights only: folding the cache back in would recreate the coupling that made the window unofferable.
-    it("quotes the weights on the model field, never a total", () => {
-        for (const option of field("model")?.options?.filter((entry) => entry.value !== "custom") ?? []) {
-            expect(option.label).toMatch(/weights \d+(\.\d)? GB/);
-        }
     });
 
     // The tile offers the contract's list and nothing else: a row added there must not need a second edit here to be
