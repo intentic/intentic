@@ -164,3 +164,28 @@ test("data and markup score zero: their keywords are content, not code paths", (
     expect(fileComplexity("pnpm-lock.yaml", undefined, lock)).toBe(0);
     expect(fileComplexity("docs/guide.md", undefined, "Use `if` and `for` loops when iterating.\n")).toBe(0);
 });
+
+test.each(["ts", "js"])("%s: operator text in strings and comments, bitwise and assignment operators add no decisions", (lang) => {
+    const content = `
+const label = "if while for && || ??";
+// if (flag && other) { while (ready || next) {} }
+const bits = left & right | third;
+held &&= next;
+held ||= next;
+held ??= next;
+const choose = (flag) => flag && (first ?? second) ? 1 : 0;
+`;
+    expect(fileComplexity(`src/a.${lang}`, lang, content)).toBe(3);
+});
+
+test("TSX: decisions in JSX expressions count, markup and text do not", () => {
+    const content = `const view = enabled ? <View active={active && ready} value={selected ?? fallback}>if while</View> : null;`;
+    expect(fileComplexity("src/a.tsx", "tsx", content)).toBe(3);
+});
+
+test("Vue: both script dialects contribute and each keeps its own grammar", () => {
+    const content = `<script lang="tsx">export const view = flag ? <View /> : null;</script>
+<script setup lang="ts">const value = first ?? second;</script>
+<template><span v-if="shown">while for</span></template>`;
+    expect(fileComplexity("src/a.vue", "vue", content)).toBe(2);
+});

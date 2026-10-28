@@ -1,5 +1,5 @@
-import type { SgNode } from "@ast-grep/napi";
-import { NON_CODE, parseLang } from "./languages.js";
+import { kind, type Rule, type SgNode } from "@ast-grep/napi";
+import { LANGUAGES, NON_CODE, parseLang } from "./languages.js";
 import { scriptBlocksOf } from "./sfc.js";
 
 // Per-file branch-point count, the tangled half of `iq hotspots` (churn is the other half); computed once during
@@ -36,14 +36,37 @@ const BRANCH_KINDS = new Set([
 // Short-circuiting operators each add a path; `operator` is named consistently across every grammar loaded.
 const LOGICAL_OPERATORS = new Set(["&&", "||", "??", "and", "or"]);
 
-const walk = (node: SgNode): number => {
-    // kind() is typed per-grammar; these kinds span grammars, so it's read here as a plain string name.
-    let count = BRANCH_KINDS.has(node.kind() as string) ? 1 : 0;
-    if (LOGICAL_OPERATORS.has(node.field("operator")?.text() ?? "")) {
-        count++;
+const rules = new Map<string, Rule>();
+
+// Each grammar knows only some branch kinds. Build its rule after parseLang registers the language packs, and keep
+// the lookup rather than checking every kind for every indexed file.
+const ruleFor = (lang: string): Rule => {
+    const cached = rules.get(lang);
+    if (cached !== undefined) {
+        return cached;
     }
-    for (const child of node.children()) {
-        count += walk(child);
+    const astLang = LANGUAGES[lang]!.astLang;
+    const rule: Rule = {
+        any: [
+            ...[...BRANCH_KINDS].filter((name) => kind(astLang, name) !== 0).map((name) => ({ kind: name })),
+            { has: { field: "operator", regex: "^(?:&&|\\|\\||\\?\\?|and|or)$" } },
+        ],
+    };
+    rules.set(lang, rule);
+    return rule;
+};
+
+const walk = (node: SgNode, lang: string): number => {
+    // Traverse inside the native parser and bring back only decision nodes. Visiting every node's kind, operator
+    // and children in JS spent most of an indexing pass crossing the native boundary, even on punctuation.
+    let count = 0;
+    for (const found of node.findAll({ rule: ruleFor(lang) })) {
+        if (BRANCH_KINDS.has(found.kind() as string)) {
+            count++;
+        }
+        if (LOGICAL_OPERATORS.has(found.field("operator")?.text() ?? "")) {
+            count++;
+        }
     }
     return count;
 };
@@ -53,7 +76,7 @@ const LEXICAL_BRANCHES = /\b(?:if|elif|for|while|case|when|catch|except|rescue)\
 
 const lexicalComplexity = (content: string): number => content.match(LEXICAL_BRANCHES)?.length ?? 0;
 
-export const fileComplexity = (path: string, lang: string | undefined, content: string): number => {
+export const fileComplexity = (path: string, lang: string | undefined, content: string, parsed?: SgNode): number => {
     if (NON_CODE.test(path)) {
         return 0;
     }
@@ -61,6 +84,6 @@ export const fileComplexity = (path: string, lang: string | undefined, content: 
     if (lang === "vue") {
         return scriptBlocksOf(content).reduce((total, block) => total + fileComplexity(path, block.lang, block.content), 0);
     }
-    const root = lang === undefined ? undefined : parseLang(lang, content)?.root();
-    return root === undefined ? lexicalComplexity(content) : walk(root);
+    const root = parsed ?? (lang === undefined ? undefined : parseLang(lang, content)?.root());
+    return root === undefined ? lexicalComplexity(content) : walk(root, lang!);
 };

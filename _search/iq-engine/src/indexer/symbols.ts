@@ -107,7 +107,15 @@ const sfcSymbols = (path: string, content: string): SymbolRow[] => {
     return rows.toSorted((a, b) => a.line - b.line);
 };
 
-export const extractSymbols = (path: string, lang: string | undefined, content: string): SymbolRow[] => {
+const pythonMethods = (rows: readonly SymbolRow[]): SymbolRow[] =>
+    rows.map((item) =>
+        item.kind === "fn" && rows.some((other) => other.kind === "class" && other.line < item.line && other.endLine >= item.endLine)
+            ? { ...item, kind: "method" }
+            : item,
+    );
+
+// `parsed` lets the index pass share the same source tree with complexity scoring; standalone callers parse here.
+export const extractSymbols = (path: string, lang: string | undefined, content: string, parsed?: SgNode): SymbolRow[] => {
     if (NON_CODE.test(path)) {
         return [];
     }
@@ -118,7 +126,7 @@ export const extractSymbols = (path: string, lang: string | undefined, content: 
     if (lang === undefined || config === undefined) {
         return heuristicSymbols(path, content);
     }
-    const root = parseLang(lang, content)?.root();
+    const root = parsed ?? parseLang(lang, content)?.root();
     if (root === undefined) {
         return heuristicSymbols(path, content);
     }
@@ -135,12 +143,5 @@ export const extractSymbols = (path: string, lang: string | undefined, content: 
         rows.push(...declaratorRows(path, lang, root));
     }
     // Python methods: function_definition nested in a class becomes method.
-    if (lang === "python") {
-        for (const item of rows) {
-            if (item.kind === "fn" && rows.some((other) => other.kind === "class" && other.line < item.line && other.endLine >= item.endLine)) {
-                rows[rows.indexOf(item)] = { ...item, kind: "method" };
-            }
-        }
-    }
-    return rows.toSorted((a, b) => a.line - b.line);
+    return (lang === "python" ? pythonMethods(rows) : rows).toSorted((a, b) => a.line - b.line);
 };
