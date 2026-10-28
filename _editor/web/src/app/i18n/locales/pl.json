@@ -3139,9 +3139,13 @@
                 "peer": "Wiadomość z innej rozmowy: {from}.",
                 "peerTitled": "Wiadomość z innej rozmowy: „{title}” ({from}).",
                 "childFinished": "Podagent {from} skończył.",
-                "childFinishedTitled": "Podagent „{title}” ({from}) skończył.",
+                "childFinishedTitled": "Podagent „{title}” skończył.",
+                "childFinishedTitledOn": "Podagent „{title}” skończył na {machine}.",
+                "childFinishedOn": "Podagent {from} skończył na {machine}.",
                 "childFailed": "Podagent {from} zakończył się błędem.",
-                "childFailedTitled": "Podagent „{title}” ({from}) zakończył się błędem."
+                "childFailedTitled": "Podagent „{title}” zakończył się błędem.",
+                "childFailedTitledOn": "Podagent „{title}” zakończył się błędem na {machine}.",
+                "childFailedOn": "Podagent {from} zakończył się błędem na {machine}."
             },
             "developer": {
                 "landed": "Zmiany zostały scalone z Twoją przestrzenią roboczą: przejrzyj je w panelu Zmiany.",

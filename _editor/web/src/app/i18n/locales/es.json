@@ -3139,9 +3139,13 @@
                 "peer": "Mensaje de otra conversación: {from}.",
                 "peerTitled": "Mensaje de otra conversación: «{title}» ({from}).",
                 "childFinished": "El subagente {from} terminó.",
-                "childFinishedTitled": "El subagente «{title}» ({from}) terminó.",
+                "childFinishedTitled": "El subagente «{title}» terminó.",
+                "childFinishedTitledOn": "El subagente «{title}» terminó en {machine}.",
+                "childFinishedOn": "El subagente {from} terminó en {machine}.",
                 "childFailed": "El subagente {from} falló.",
-                "childFailedTitled": "El subagente «{title}» ({from}) falló."
+                "childFailedTitled": "El subagente «{title}» falló.",
+                "childFailedTitledOn": "El subagente «{title}» falló en {machine}.",
+                "childFailedOn": "El subagente {from} falló en {machine}."
             },
             "developer": {
                 "landed": "Cambios integrados en tu espacio de trabajo: revísalos en el panel Cambios.",

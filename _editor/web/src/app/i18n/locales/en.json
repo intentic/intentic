@@ -3139,9 +3139,13 @@
                 "peer": "Message from another conversation: {from}.",
                 "peerTitled": "Message from another conversation: \"{title}\" ({from}).",
                 "childFinished": "Subagent {from} finished.",
-                "childFinishedTitled": "Subagent \"{title}\" ({from}) finished.",
+                "childFinishedTitled": "Subagent \"{title}\" finished.",
+                "childFinishedTitledOn": "Subagent \"{title}\" finished on {machine}.",
+                "childFinishedOn": "Subagent {from} finished on {machine}.",
                 "childFailed": "Subagent {from} failed.",
-                "childFailedTitled": "Subagent \"{title}\" ({from}) failed."
+                "childFailedTitled": "Subagent \"{title}\" failed.",
+                "childFailedTitledOn": "Subagent \"{title}\" failed on {machine}.",
+                "childFailedOn": "Subagent {from} failed on {machine}."
             },
             "developer": {
                 "landed": "Changes landed in your workspace: review them in the Changes panel.",

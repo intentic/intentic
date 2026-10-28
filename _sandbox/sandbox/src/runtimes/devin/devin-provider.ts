@@ -25,7 +25,9 @@ import { turnPersona } from "../../personas/personas.js";
 import type { AcpConnections } from "../acp/acp-connection.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { type DevinAccountDeps, devinAccountDoor } from "./accounts/devin-accounts.js";
-import { type DevinStore, fileDevinStore, liveDevinAccounts, readDevinCredentials } from "./accounts/devin-credentials.js";
+import { type DevinStore, fileDevinStore, liveDevinAccounts, readDevinCredentials, type StoredDevinAccount } from "./accounts/devin-credentials.js";
+import { preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { DEVIN_CLI_MISSING, devinAgentId, devinCli, devinLaunch } from "./devin-cli.js";
 import { createDevinCatalog, DEVIN_OWN_PICK, type DevinCatalog } from "./models/devin-catalog.js";
 
@@ -101,7 +103,20 @@ async function* refusedSignIn(store: DevinStore, accountId: string, events: Asyn
 // MCP tools and browser stack are mounted from.
 export type DevinPlanDeps = TurnToolsDeps &
     DaemonServersDeps &
+    ServiceabilityDeps &
     Pick<Services, "acpAgent" | "capabilities" | "config" | "devinModels" | "devinSessionsDir" | "devinStore" | "files" | "workspace" | "sandboxSettings">;
+
+// The account a turn nobody pinned runs on: the one rule every provider's pick reads (usage/serviceability.ts), so an
+// account the records call spent is passed over for one with room. It took the first connected account, and on
+// 2026-10-28 three SWE-1.6 subagents in a row went to the one whose weekly quota was spent, with three others free.
+const unpinnedAccount = async (services: ServiceabilityDeps, accounts: readonly StoredDevinAccount[]): Promise<StoredDevinAccount | undefined> => {
+    if (accounts.length < 2) {
+        return accounts[0];
+    }
+    const ranked = (await serviceabilities(services, "devin")).filter((row) => accounts.some((account) => account.id === row.id));
+    const picked = preferredAccount(ranked)?.id;
+    return accounts.find((account) => account.id === picked) ?? accounts[0];
+};
 
 export const planDevinTurn = async (
     services: DevinPlanDeps,
@@ -113,9 +128,9 @@ export const planDevinTurn = async (
     if (!readiness.ok) {
         return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
     }
-    // A pinned account while it can still serve, else the first connected, the default where nothing else decides.
+    // A pinned account while it can still serve, else the one the sandbox's rule picks (unpinnedAccount).
     const accounts = await liveDevinAccounts(services.devinStore);
-    const account = input.account === undefined ? accounts[0] : accounts.find((entry) => entry.id === input.account);
+    const account = input.account === undefined ? await unpinnedAccount(services, accounts) : accounts.find((entry) => entry.id === input.account);
     if (account === undefined) {
         return { ok: false, message: "That Devin account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Models." };
     }

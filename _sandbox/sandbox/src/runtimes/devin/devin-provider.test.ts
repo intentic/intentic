@@ -13,6 +13,7 @@ import { rootExecution } from "../../workload/agent-execution.testing.js";
 import type { AcpTurnOptions } from "../acp/acp-agent.js";
 import type { AcpLaunch } from "../acp/acp-spawn.js";
 import type { StoredDevinAccount } from "./accounts/devin-credentials.js";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/refusals";
 import * as devinCliOriginal from "./devin-cli.js";
 
 /* How a Devin turn is planned: which account serves, which model the session is put on, and what a dead key says. */
@@ -31,7 +32,7 @@ interface Ran {
     readonly options: AcpTurnOptions | undefined;
 }
 
-const harness = (accounts: StoredDevinAccount[], replies: AgentEvent[] = [{ kind: "done" }]) => {
+const harness = (accounts: StoredDevinAccount[], replies: AgentEvent[] = [{ kind: "done" }], refusals: readonly ProviderRefusal[] = []) => {
     const ran: Ran[] = [];
     const written: StoredDevinAccount[] = [];
     const services = {
@@ -47,6 +48,11 @@ const harness = (accounts: StoredDevinAccount[], replies: AgentEvent[] = [{ kind
         agents: unstubbed("agents", { entry: () => undefined }),
         logger: createLogger(testConfig),
         devinSessionsDir: "/agent-auth/devin/sessions",
+        // What the account pick reads (usage/serviceability.ts): the accounts as Devin's door lists them, and the refusals on file.
+        providerAccounts: async () => accounts.map((entry) => ({ id: entry.id, label: entry.id })),
+        providerRefusals: unstubbed("providerRefusals", { onFile: async () => ({ devin: refusals }), flapping: async () => new Set<string>() }),
+        cliProxy: unstubbed("cliProxy", {}),
+        accountUsage: unstubbed("accountUsage", { read: async () => ({}) }),
         devinStore: unstubbed("devinStore", {
             credentials: async () => accounts,
             read: async (id: string) => accounts.find((entry) => entry.id === id),
@@ -127,6 +133,14 @@ test("the first connected account serves, signed in over the protocol, on the mo
             options: { model: "opus" },
         },
     ]);
+});
+
+// 2026-10-28: three SWE-1.6 subagents in a row went to the first account, whose weekly quota the records called spent.
+test("a turn nobody pinned passes over an account the records call spent for one with room", async () => {
+    const spent: ProviderRefusal = { at: Date.now(), kind: "limit", message: "Your weekly usage quota has been exhausted.", account: "a" };
+    const { services, ran } = harness([account("a"), account("b")], [{ kind: "done" }], [spent]);
+    await run(services, turn());
+    expect(ran[0]).toEqual(expect.objectContaining({ id: "devin:b" }));
 });
 
 test("a pinned account serves, and a model the account no longer offers falls back to its default", async () => {

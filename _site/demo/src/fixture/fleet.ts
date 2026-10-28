@@ -107,6 +107,7 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         provider: `codex`,
         harness: `native`,
         model: `gpt-5.2-codex`,
+        runner: `omen`,
         activity: { tool: `Bash`, target: `pnpm -C api test src/webhooks`, todo: `Cover the signature check` },
         startedAt: now - minutes(2),
         updatedAt: now - 1_200,

@@ -544,7 +544,7 @@ const messages: TranscriptRow[] = [
     {
         role: `notice`,
         text: `brisk-otter reported back: 4 tests written, all passing.`,
-        agentWords: { kind: `child`, from: `sub-brisk-otter-4k2m`, title: `Webhook tests`, sent: `Report from brisk-otter: 4 tests written, all passing.` },
+        agentWords: { kind: `child`, from: `sub-brisk-otter-4k2m`, title: `Webhook tests`, machine: `omen`, sent: `Report from brisk-otter: 4 tests written, all passing.` },
     },
     {
         role: `assistant`,

@@ -9,6 +9,7 @@ import { childLook } from "../../models/fleet/board/childLook";
 import { formatElapsed, toneWash } from "@intentic/ui";
 import RunFacts from "./RunFacts.vue";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../app/useAudience";
 
 // One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
 // glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
@@ -33,11 +34,14 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
 const t = useT();
+const { maker } = useAudience();
 const look = computed(() => childLook(props.child, props.provider));
 // Ticks each second only while it works; settled dates below follow their own minute-rate leaf.
 const now = useNow(() => look.value.working);
 // The second line, only for a child whose model is recorded; its kind rides the title row.
 const facts = computed(() => look.value.run !== undefined);
+// Where it runs, when that is another machine: the board card's own fact, hidden from a maker as there.
+const runner = computed(() => (maker.value ? undefined : look.value.runner));
 const titleRuns = computed(() => markSegments(look.value.title, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase));
 // A conversation's own presses; an in-process subagent's row leaves the browser's menu alone, having none of its own.
 const review = (): void => {
@@ -93,6 +97,14 @@ const menu = (event: MouseEvent): void => {
             <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">
                 <RunFacts :run="look.run" columns />
             </span>
+            <span
+                v-if="runner !== undefined"
+                class="hidden w-16 shrink-0 items-center gap-1 text-2xs text-subtle @md:flex"
+                v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
+            >
+                <Icon name="desktop" class="shrink-0" />
+                <span class="min-w-0 truncate">{{ runner }}</span>
+            </span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
             <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{
                 look.ask
@@ -107,6 +119,14 @@ const menu = (event: MouseEvent): void => {
         <!-- Under the title on a narrow row, where the title keeps the first line. -->
         <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle @md:hidden">
             <RunFacts :run="look.run" />
+            <span
+                v-if="runner !== undefined"
+                class="flex min-w-0 items-center gap-1"
+                v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
+            >
+                <Icon name="desktop" class="shrink-0" />
+                <span class="truncate">{{ runner }}</span>
+            </span>
         </span>
     </button>
 </template>

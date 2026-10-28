@@ -3139,9 +3139,13 @@
                 "peer": "Message d'une autre conversation : {from}.",
                 "peerTitled": "Message d'une autre conversation : « {title} » ({from}).",
                 "childFinished": "Le sous-agent {from} a terminé.",
-                "childFinishedTitled": "Le sous-agent « {title} » ({from}) a terminé.",
+                "childFinishedTitled": "Le sous-agent « {title} » a terminé.",
+                "childFinishedTitledOn": "Le sous-agent « {title} » a terminé sur {machine}.",
+                "childFinishedOn": "Le sous-agent {from} a terminé sur {machine}.",
                 "childFailed": "Le sous-agent {from} a échoué.",
-                "childFailedTitled": "Le sous-agent « {title} » ({from}) a échoué."
+                "childFailedTitled": "Le sous-agent « {title} » a échoué.",
+                "childFailedTitledOn": "Le sous-agent « {title} » a échoué sur {machine}.",
+                "childFailedOn": "Le sous-agent {from} a échoué sur {machine}."
             },
             "developer": {
                 "landed": "Modifications intégrées dans votre espace de travail : relisez-les dans le panneau Changements.",

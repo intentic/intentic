@@ -50,6 +50,9 @@ export interface ChildReportFields {
     readonly landing?: string | undefined;
     // For a child spawned with a result schema: the value it handed back, written out as JSON, or why it handed none.
     readonly result?: { readonly json: string } | { readonly missing: string } | undefined;
+    // The runner its turn ran on, said so the parent never has to infer the machine from a hostname. Undefined for a
+    // child that ran in this sandbox.
+    readonly machine?: string | undefined;
 }
 
 // The result a child spawned with a schema handed back, in words; nothing for a child spawned without one.
@@ -85,6 +88,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
     const verification = verificationLine(fields.verification);
     return [
         `${CHILD_OPENING}${senderOf(fields.child, fields.title)} ${fields.failed ? "failed" : fields.stopped === true ? "was stopped" : "finished"}.`,
+        ...(fields.machine === undefined ? [] : [`${MACHINE_OPENING}\`${fields.machine}\`, not this sandbox.`]),
         ...(verification === undefined ? [] : [verification]),
         "",
         fields.report.trim() === "" ? "(It ended without a closing report.)" : fields.report.trim(),
@@ -94,6 +98,10 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
             "a result: check what matters before you build on it, and follow up with the subagents tools as you would mid-turn.",
     ].join("\n");
 };
+
+// The report's second line for a child that ran on a runner; read back by the parser, so it stays unchanged too.
+const MACHINE_OPENING = "It ran on the runner ";
+const MACHINE_LINE = /^It ran on the runner `([^`]+)`/u;
 
 const PEER_LINE = /^Message from another conversation in this workspace: `([^`]+)`(?: \("(.*)"\))?\.$/u;
 const CHILD_LINE = /^Report from a (?:subagent|child agent) you started: `([^`]+)`(?: \("(.*)"\))? (finished|failed|was stopped)\.$/u;
@@ -110,13 +118,18 @@ const childOf = (first: string, prompt: string): TranscriptAgentWords | undefine
     if (from === undefined) {
         return undefined;
     }
-    return {
+    const words: TranscriptAgentWords = {
         kind: "child",
         from,
         ...(match?.[2] === undefined ? {} : { title: match[2] }),
         ...(match?.[3] === "failed" ? { failed: true } : {}),
         sent: prompt,
     };
+    const machine = MACHINE_LINE.exec(prompt.split("\n", 2)[1] ?? "")?.[1];
+    if (machine !== undefined) {
+        words.machine = machine;
+    }
+    return words;
 };
 
 /** Which other agent's words a stored prompt is; undefined for every other prompt. */

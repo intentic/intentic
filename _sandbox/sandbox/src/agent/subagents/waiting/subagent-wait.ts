@@ -310,6 +310,7 @@ const waitOnMany = async (
         pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
         report: (childId) => reportOf(deps, childId),
         landing: (childId) => deps.children?.landing(childId),
+        machine: (childId) => deps.children?.machine?.(childId),
         result: (childId) => deps.children?.result(childId),
     });
     return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
@@ -570,6 +571,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                             pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
                             report: (childId) => reportOf(deps, childId),
                             landing: (childId) => deps.children?.landing(childId),
+        machine: (childId) => deps.children?.machine?.(childId),
                             result: (childId) => deps.children?.result(childId),
                         }),
                     });

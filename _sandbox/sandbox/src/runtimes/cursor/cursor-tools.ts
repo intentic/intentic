@@ -317,6 +317,7 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
                 pendingQuestion: (childId) => children.pendingQuestion(childId),
                 report: (childId) => children.report(childId),
                 landing: (childId) => children.landing(childId),
+                machine: (childId) => children.machine?.(childId),
                 result: (childId) => children.result(childId),
             }),
         );

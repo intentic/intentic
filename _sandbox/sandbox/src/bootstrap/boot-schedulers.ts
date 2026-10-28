@@ -13,7 +13,7 @@ import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { followProjectArrival } from "../git/remote/project-arrival.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
-import { conversationProfile } from "../conversations/registry/agents-store.js";
+import { conversationProfile, worktreeOf } from "../conversations/registry/agents-store.js";
 import { childActor, supervisorOf } from "../auth/principal.js";
 import { opt } from "../opt.js";
 import { passwordWakeOf } from "../needs/password-wake.js";
@@ -54,6 +54,7 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     },
     killNote: (childId, failure) => childKillNote(services, childId, failure),
     landingOf: (childId) => childLandingWords(services.agents, childId),
+    machineOf: (childId) => worktreeOf(services.agents.entry(childId))?.runner,
     movingOn: (childId) => childMovingOn(services.conversations, childId),
     resultOf: (childId, closing) => resultWords(childTurnResult(services.conversations, childId, closing)),
     worker: (childId) => isWorker(services.conversations, childId),

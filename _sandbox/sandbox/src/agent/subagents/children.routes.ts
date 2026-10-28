@@ -15,6 +15,7 @@ import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/spent-by-hand.js";
 import { opt } from "../../opt.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { worktreeOf } from "../../conversations/registry/agents-store.js";
 import { parseJsonOr } from "@intentic/base/json";
 
 // The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
@@ -117,6 +118,7 @@ const childLookupsOf = (services: Services): ChildLookups => ({
     report: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.report(childId) : childReportOf(services.conversations, childId)),
     landing: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.landing(childId) : childLandingWords(services.agents, childId)),
     result: (childId) => (services.linkedChildren.owns(childId) ? undefined : childResultOf(services.conversations, childId)),
+    machine: (childId) => (services.linkedChildren.owns(childId) ? undefined : worktreeOf(services.agents.entry(childId))?.runner),
 });
 
 // The two doors on a child's work held off this conversation's checkout (child-held.ts): `merge` brings it in with

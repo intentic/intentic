@@ -212,7 +212,13 @@ export const waitForChildren = async (
 
 /** One child as a wait on several hands it over: its row, its whole report and where its work went, once it ended, and
  *  its result where it was spawned with a schema. */
-export type WaitedChild = SubagentSession & { readonly report?: string; readonly landing?: string; readonly result?: ResultValue; readonly resultError?: string };
+export type WaitedChild = SubagentSession & {
+    readonly report?: string;
+    readonly landing?: string;
+    readonly machine?: string;
+    readonly result?: ResultValue;
+    readonly resultError?: string;
+};
 
 /** What a wait on several answers. */
 export interface ChildrenWaitAnswer {
@@ -230,6 +236,7 @@ const waitedChild = (agent: SubagentSession, lookups: ChildLookups): WaitedChild
         ...agent,
         ...opt("report", ended ? lookups.report(agent.id) : undefined),
         ...opt("landing", ended ? lookups.landing(agent.id) : undefined),
+        ...opt("machine", lookups.machine?.(agent.id)),
         ...resultFields(lookups, agent),
     };
 };
@@ -300,6 +307,8 @@ export interface ChildLookups {
     readonly report: (childId: string) => string | undefined;
     // Where its work went: into the waiter's own checkout, or held off it by a clash (child-lands.ts childLandingWords).
     readonly landing: (childId: string) => string | undefined;
+    // The runner it runs on, undefined for this sandbox: said so a parent never infers the machine from a hostname.
+    readonly machine?: (childId: string) => string | undefined;
     // What its last turn handed back against the schema it was spawned with (child-result.ts); undefined without one.
     readonly result?: (childId: string) => { readonly value: ResultValue } | { readonly error: string } | undefined;
 }
@@ -354,6 +363,7 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),
         ...opt("landing", landing),
+        ...opt("machine", agent === undefined ? undefined : lookups.machine?.(agent.id)),
         ...opt("note", answerNote(result)),
     };
 };

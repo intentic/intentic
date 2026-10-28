@@ -1392,9 +1392,20 @@ describe(`another agent's words`, () => {
 
     it(`weights a subagent that failed like a watch that gave up`, () => {
         const element = mount(rowOf(REPORT));
-        expect(element.textContent).toContain(`Subagent "Port the parser" (sub-x7) failed.`);
+        expect(element.textContent).toContain(`Subagent "Port the parser" failed.`);
         expect(element.querySelector(`.text-danger`)).not.toBeNull();
         expect(mount(rowOf(PEER)).querySelector(`.text-danger`)).toBeNull();
+    });
+
+    it(`names the machine a child ran on, and its id only when it has no title`, () => {
+        const report = (fields: { title?: string; failed: boolean; machine?: string }): string =>
+            mount(rowOf(childReportPrompt({ child: `sub-x7`, title: fields.title, failed: fields.failed, machine: fields.machine, report: `done`, verification: undefined })))
+                .textContent ?? ``;
+        expect(report({ title: `Port the parser`, failed: false, machine: `omen` })).toContain(`Subagent "Port the parser" finished on omen.`);
+        expect(report({ title: `Port the parser`, failed: true, machine: `omen` })).toContain(`Subagent "Port the parser" failed on omen.`);
+        expect(report({ title: `Port the parser`, failed: false })).toContain(`Subagent "Port the parser" finished.`);
+        expect(report({ failed: false })).toContain(`Subagent sub-x7 finished.`);
+        expect(report({ failed: true, machine: `omen` })).toContain(`Subagent sub-x7 failed on omen.`);
     });
 });
 

@@ -48,8 +48,8 @@ import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { opt } from "../../opt.js";
-import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
-import { freshRunnerSummaries } from "../../runners/runner-peer.js";
+import { dispatchOf, placementOf } from "../../runners/child-placement.js";
+import { childPlacement } from "./child-placement.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
@@ -905,32 +905,11 @@ const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: s
     message: quoted(message),
 });
 
-// Whether the privacy shield keeps a child on this provider here: it would refuse it on a runner, as it refuses its
-// parent there (stream-agent.ts). A fresh child has no conversation of its own a grant could name.
-const shieldHoldsHere = async (services: Pick<Services, "privacyShield">, provider: AgentProvider): Promise<boolean> =>
-    (await services.privacyShield.refusal({ provider, route: "runner" })) !== undefined;
-
-// The runner a child goes to, undefined for here. No preference: the scheduler places it. A named machine gets it, or
-// here if that machine is unusable.
-const childPlacement = async (
-    services: Services,
-    spec: ChildSpawnSpec,
-    provider: AgentProvider,
-    harness: AgentHarness,
-): Promise<string | undefined> =>
-    // A runner calls its provider from its own machine, past this sandbox's privacy shield, so a child the shield would
-    // refuse there stays here, wherever it was asked to go.
-    spec.on === "here" || (await shieldHoldsHere(services, provider))
-        ? undefined
-        : placeFanOut(
-              await freshRunnerSummaries(services),
-              { inFlight: services.conversations.inFlightByRunner() },
-              {
-                  ...(spec.on !== undefined ? { asked: spec.on } : {}),
-                  // A credential that cannot travel keeps the child here unless a machine is named explicitly.
-                  travels: credentialsTravel(provider, harness),
-              },
-          ).runner;
+// A started child's answer: where it runs first, then whatever else its start has to say.
+const startedWith = (id: string, parts: readonly (string | undefined)[]): ChildSpawnResult => {
+    const note = parts.filter((part) => part !== undefined);
+    return note.length === 0 ? { ok: true, id } : { ok: true, id, note: note.join(" ") };
+};
 
 // A start the gate let through, or held until the owner answers: what was asked, how deep it goes, and the id it runs as.
 interface ChildStart {
@@ -1081,7 +1060,10 @@ const startChild = async (
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, capabilitiesOf(provider, harness));
-        const placement = await childPlacement(services, governed.spec, provider, harness);
+        const placed = await childPlacement(services, governed.spec);
+        if (placed.kind === "refused") {
+            return { ok: false, message: placed.message };
+        }
         // A held start its parent cancelled while this was placing it: the fresh record below would wipe the cancel.
         if (start.seat !== undefined && services.conversations.holdings(CHILDREN).get(id)?.cancelled === true) {
             return { ok: false, message: NOT_STARTED.cancelled };
@@ -1094,22 +1076,17 @@ const startChild = async (
             ...childOpening(governed.spec, admitted.limitPolicy),
             // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
             ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
-            ...opt("placement", placement === undefined ? undefined : { kind: "runner" as const, id: placement }),
+            ...opt("placement", placementOf(placed)),
             ...record.profile,
         };
         services.conversations.holdings(CHILDREN).hold(parent.conversationId, id, record, id);
         // Files under the parent's conversation, what `wait` matches; a held start's waiting row gives way to this one.
         openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(id, governed.spec, depth), true);
         record.turns = (services.conversations.holdings(CHILDREN).get(id)?.turns ?? 0) + 1;
-        runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
+        runChildTurn(services, id, parent.conversationId, turn, dispatchOf(placed));
         handedOff = true;
         keepChild(services, id);
-        const note = [
-            repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed),
-            governed.note,
-            siblingNewsWords(FAN_OUT.news(provider)),
-        ].filter((part) => part !== undefined);
-        return note.length === 0 ? { ok: true, id } : { ok: true, id, note: note.join(" ") };
+        return startedWith(id, [placed.note, repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed), governed.note, siblingNewsWords(FAN_OUT.news(provider))]);
     } finally {
         if (!handedOff) {
             admitted.release();
@@ -1234,6 +1211,11 @@ export const spawnChild = async (services: Services, parent: ChildParent, ask: C
     const verdict = await admit("spawn", { services, parent: parent.conversationId, spec: asked, depth: { at: depth, most: settings.subagentDepth } });
     if (verdict.kind === "refuse") {
         return { ok: false, message: verdict.message };
+    }
+    // A machine it cannot run on is said now, before a seat or an owner's card, not as a failure after it started.
+    const placed = await childPlacement(services, asked);
+    if (placed.kind === "refused") {
+        return { ok: false, message: placed.message };
     }
     const start: ChildStart = { asked, depth, id: `sub-${newConversationId()}` };
     if (verdict.kind === "proceed") {
@@ -1689,6 +1671,8 @@ export interface ChildSupervisor {
     readonly result: (childId: string) => ChildRecord["result"];
     // Where its work went: into the parent's own checkout, or held off it by a clash (child-lands.ts).
     readonly landing: (childId: string) => string | undefined;
+    // The runner its turn runs on, undefined for this sandbox.
+    readonly machine?: (childId: string) => string | undefined;
     // Brings a child's work held off the parent's checkout by a clash into it with conflict markers to resolve.
     readonly merge: (childId: string) => Promise<ChildActionResult>;
     // Records a held child's work as one the parent brought in some other way (child-held.ts), and which it still holds.
@@ -1738,6 +1722,7 @@ export const childSupervisor = (services: Services, parent: ChildParent): ChildS
             }
             return ownChild(childId) ? childLandingWords(services.agents, childId) : undefined;
         },
+        machine: (childId) => (ownChild(childId) ? worktreeOf(services.agents.entry(childId))?.runner : undefined),
         merge: (childId) => (linked.owns(childId) ? Promise.resolve(LINKED_MERGE) : mergeChild(services, parent, childId)),
         settle: (childId) => (linked.owns(childId) ? Promise.resolve(LINKED_MERGE) : settleHeldChild(services, parent, childId)),
         held: () => heldChildrenOf(services, parent.conversationId),

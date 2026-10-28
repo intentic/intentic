@@ -44,6 +44,8 @@ export interface ChildLook {
     // What it runs on, in words on the row and the bar alike, never behind a hover: the one fact a reader cannot guess
     // from the parent, since a child may run on any model at any tier. Only what was recorded; absent says nothing.
     readonly run: RunLook | undefined;
+    // The runner machine it runs on, as the board card names it; absent for a child in this sandbox (and an in-process one).
+    readonly runner: string | undefined;
     // What a fresh session on the parent's work was opened for (freshSession.ts), and what its review found: the word that
     // tells it apart from a child the parent's agent spawned, which it otherwise hangs beside. Absent for every other child.
     readonly fresh: FreshLook | undefined;
@@ -156,6 +158,7 @@ const inProcessLook = (child: SubagentSession, provider: AgentProvider, account:
         at: child.endedAt ?? child.activityAt,
         // Its parent's provider and account: an in-process subagent runs inside the parent's own runtime.
         run: runLook(provider, child.model, child.effort, undefined, account),
+        runner: undefined,
         fresh: undefined,
     };
 };
@@ -204,6 +207,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider, account?: s
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
         run: runLook(child.provider, child.model, child.effort, child.thinking, child.account),
+        runner: child.runner,
         fresh: freshLook(child),
     };
 };

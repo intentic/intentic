@@ -30,6 +30,8 @@ export interface ChildReportDeps {
     readonly killNote: (childId: string, failure: string) => Promise<string | undefined>;
     // Where the child's work went, in the parent's words (child-lands.ts childLandingWords).
     readonly landingOf: (childId: string) => string | undefined;
+    // The runner the child's turn ran on, undefined for this sandbox (agents-store.ts worktreeOf).
+    readonly machineOf?: (childId: string) => string | undefined;
     // Whether the child is moving itself onto a fallback (children.ts childMovingOn): the move says its own words.
     readonly movingOn?: (childId: string) => boolean;
     // For a child spawned with a result schema, what the turn that ended with this closing message handed back
@@ -106,6 +108,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
             landing: deps.landingOf(settled.conversationId),
+            machine: deps.machineOf?.(settled.conversationId),
             // A turn that failed or was stopped hands nothing back, which its ending already says.
             result: settled.failure === undefined && settled.stopped !== true ? deps.resultOf?.(settled.conversationId, settled.closing) : undefined,
         });

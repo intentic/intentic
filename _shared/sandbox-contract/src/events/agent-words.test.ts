@@ -33,6 +33,13 @@ describe("another agent's words", () => {
         expect(agentWordsOf(report({ failed: true }))).toMatchObject({ kind: "child", failed: true });
     });
 
+    // 2026-10-28: an orchestrator guessed from a container hostname whether its children had run on the machine it named.
+    it("says which runner a child ran on, and reads it back", () => {
+        expect(report({ machine: "omen" }).split("\n")[1]).toBe("It ran on the runner `omen`, not this sandbox.");
+        expect(agentWordsOf(report({ machine: "omen" }))).toMatchObject({ kind: "child", machine: "omen" });
+        expect(agentWordsOf(report()) ?? {}).not.toHaveProperty("machine");
+    });
+
     it("reads a sender with no title, and a title that tried to break its line", () => {
         expect(agentWordsOf(peerTitled(undefined))).toMatchObject({ kind: "peer", from: "sharp-shale-htw8" });
         expect(agentWordsOf(peerTitled(undefined)) ?? {}).not.toHaveProperty("title");

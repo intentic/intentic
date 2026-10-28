@@ -3139,9 +3139,13 @@
                 "peer": "Nachricht aus einer anderen Unterhaltung: {from}.",
                 "peerTitled": "Nachricht aus einer anderen Unterhaltung: „{title}“ ({from}).",
                 "childFinished": "Subagent {from} ist fertig.",
-                "childFinishedTitled": "Subagent „{title}“ ({from}) ist fertig.",
+                "childFinishedTitled": "Subagent „{title}“ ist fertig.",
+                "childFinishedTitledOn": "Subagent „{title}“ ist auf {machine} fertig.",
+                "childFinishedOn": "Subagent {from} ist auf {machine} fertig.",
                 "childFailed": "Subagent {from} ist fehlgeschlagen.",
-                "childFailedTitled": "Subagent „{title}“ ({from}) ist fehlgeschlagen."
+                "childFailedTitled": "Subagent „{title}“ ist fehlgeschlagen.",
+                "childFailedTitledOn": "Subagent „{title}“ ist auf {machine} fehlgeschlagen.",
+                "childFailedOn": "Subagent {from} ist auf {machine} fehlgeschlagen."
             },
             "developer": {
                 "landed": "Änderungen sind in Ihrem Workspace gelandet: Prüfen Sie sie im Bereich „Änderungen“.",

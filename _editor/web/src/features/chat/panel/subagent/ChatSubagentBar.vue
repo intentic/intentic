@@ -7,6 +7,7 @@ import { computed } from "vue";
 import { childLook } from "../../../../models/fleet/board/childLook";
 import RunFacts from "../../../../parts/fleet/RunFacts.vue";
 import { inProcess, type TrayChild } from "../../../../models/fleet/board/childFold";
+import { useAudience } from "../../../../app/useAudience";
 import { useDriveRefusal } from "../../session/driveRefusal";
 
 // WHERE THE COMPOSER STANDS WHEN THE CHAT IS A SUBAGENT'S. A subagent is its parent's to direct: the parent wrote its
@@ -41,6 +42,8 @@ const readOnly = useDriveRefusal();
 
 const look = computed(() => childLook(props.child, props.provider, props.account));
 const now = useNow(() => look.value.working);
+const { maker } = useAudience();
+const runner = computed(() => (maker.value ? undefined : look.value.runner));
 const spawned = computed(() => !inProcess(props.child));
 // The clock the pill carries: how long it has worked, else when it settled.
 const clock = computed(() =>
@@ -85,8 +88,17 @@ const clock = computed(() =>
                 </span>
             </div>
             <!-- What it runs on and who pays, drawn as the composer draws them, where its picker would name them. -->
-            <div v-if="look.run !== undefined" class="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
-                <RunFacts :run="look.run" bar />
+            <div v-if="look.run !== undefined || runner !== undefined" class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                <RunFacts v-if="look.run !== undefined" :run="look.run" bar />
+                <!-- Where it runs, when that is another machine: the board card's own fact. -->
+                <span
+                    v-if="runner !== undefined"
+                    class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle"
+                    v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
+                >
+                    <Icon name="desktop" class="shrink-0 text-2xs" />
+                    <span class="truncate">{{ runner }}</span>
+                </span>
             </div>
         </div>
         <!-- What the reader can do instead of typing: why there is no box, and the presses there are. -->

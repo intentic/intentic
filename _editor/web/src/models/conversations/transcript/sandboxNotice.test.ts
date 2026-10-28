@@ -144,7 +144,10 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(rows.map((row) => noticeLine(row, `developer`))).toEqual(
             rows.map((row) => {
                 const failure = noticeFailure(row);
-                return failure?.said === undefined ? row.text : row.text.replace(failure.said, failure.line);
+                const said = failure?.said === undefined ? row.text : row.text.replace(failure.said, failure.line);
+                // The other exception: a child's report names it by its title alone, without its id, and where it ran.
+                const words = row.agentWords;
+                return words?.kind === `child` && words.title !== undefined ? said.replace(` (${words.from})`, ``) : said;
             }),
         );
         // Nothing slipped through uncoded: every row above is worded by the chat, none falls back to its text.
@@ -226,7 +229,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Sandbox znów działa; polecenia w tle i serwery deweloperskie uruchomione w tej turze zostały zatrzymane; ta tura wróciła tam, gdzie przerwała.`,
         );
         expect(UNSPOKEN.slice(0, 1).map(line)).toEqual([`CI run 316 — obserwacja zadziałała po 43m.`]);
-        expect(line(UNSPOKEN.at(-2))).toBe(`Podagent „Port the parser” (sub-x7) skończył.`);
+        expect(line(UNSPOKEN.at(-2))).toBe(`Podagent „Port the parser” skończył.`);
         expect(noticeLine(coded(`landed`)!, `maker`)).toBe(`Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.`);
         expect(line(coded(`freshStart`))).toBe(
             `Pamięć tego czatu była pełna przy około 182k tokenów, więc kontynuował w nowej sesji, zaczynając od streszczenia rozmowy napisanego przez claude-haiku-5-5 i jej najnowszych wiadomości.`,

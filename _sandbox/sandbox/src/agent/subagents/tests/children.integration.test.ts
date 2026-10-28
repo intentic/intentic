@@ -1180,14 +1180,17 @@ describe("placing a child on the fleet", () => {
         });
     });
 
-    it("still honours a machine named for a runtime that authenticates locally: the person knows their fleet", async () => {
-        const placed = await placementOf(spawnServices({}, [{ id: "rig", online: true }], actors), {
+    // 2026-10-28: a Codex and a Devin child named onto a runner started there and failed asking to "connect" accounts that
+    // were connected; no login but Claude Code's ever reaches a runner, so the spawn says so before it takes a seat.
+    it("refuses a machine named for a runtime whose sign-in stays here, naming the spawn that would work", async () => {
+        const result = await spawnChild(drivenBy(spawnServices({}, [{ id: "rig", online: true }], actors), fakeTurn([])), parent, {
             prompt: "go",
             model: "claude-sonnet-4-6",
             provider: "cursor",
             on: "rig",
         });
-        expect(placed).toEqual({ kind: "runner", id: "rig" });
+        expect(result).toMatchObject({ ok: false });
+        expect(!result.ok && result.message).toContain(`on: "here"`);
     });
 
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {

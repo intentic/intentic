@@ -345,18 +345,26 @@ const switchedLine = (params: Switched): string =>
     `${switchedTo(params)}${params.fresh ? t(`chat.sandboxNotice.switched.fresh`) : t(`chat.sandboxNotice.switched.same`)}`;
 
 // Another agent's words, named by its title where it had one, else by its id.
-const agentWordsLine = ({ kind, from, title, failed }: NonNullable<TranscriptRow["agentWords"]>): string => {
+const agentWordsLine = ({ kind, from, title, failed, machine }: NonNullable<TranscriptRow["agentWords"]>): string => {
     if (kind === `peer`) {
         return title === undefined ? t(`chat.sandboxNotice.agentWords.peer`, { from }) : t(`chat.sandboxNotice.agentWords.peerTitled`, { from, title });
     }
+    // A child is named by its title alone (its id is noise beside one), and by the machine it ran on when that was not here.
+    const on = machine !== undefined;
     if (failed === true) {
-        return title === undefined
-            ? t(`chat.sandboxNotice.agentWords.childFailed`, { from })
-            : t(`chat.sandboxNotice.agentWords.childFailedTitled`, { from, title });
+        if (title === undefined) {
+            return on ? t(`chat.sandboxNotice.agentWords.childFailedOn`, { from, machine }) : t(`chat.sandboxNotice.agentWords.childFailed`, { from });
+        }
+        return on
+            ? t(`chat.sandboxNotice.agentWords.childFailedTitledOn`, { title, machine })
+            : t(`chat.sandboxNotice.agentWords.childFailedTitled`, { title });
     }
-    return title === undefined
-        ? t(`chat.sandboxNotice.agentWords.childFinished`, { from })
-        : t(`chat.sandboxNotice.agentWords.childFinishedTitled`, { from, title });
+    if (title === undefined) {
+        return on ? t(`chat.sandboxNotice.agentWords.childFinishedOn`, { from, machine }) : t(`chat.sandboxNotice.agentWords.childFinished`, { from });
+    }
+    return on
+        ? t(`chat.sandboxNotice.agentWords.childFinishedTitledOn`, { title, machine })
+        : t(`chat.sandboxNotice.agentWords.childFinishedTitled`, { title });
 };
 
 /** The notice's line in the reader's language and words; undefined when only its own text can say it. */
