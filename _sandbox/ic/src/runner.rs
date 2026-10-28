@@ -285,8 +285,22 @@ pub fn list() -> Result<()> {
 /// handles containers, named volumes and networks, with the confirmation this one inherits. Its work lives
 /// in the parent's git, so nothing user-owned dies with it — which is also why it skips the week of recovery
 /// a sandbox gets: there is nothing here to recover, only disk to hold.
+///
+/// A runner this device no longer has at all (no container, no volumes, nothing in the trash) is already removed, and
+/// says so with exit 0 rather than "Nothing was removed": the parent forgets a runner only once its removal succeeds,
+/// so refusing here left a runner deleted by hand listed on its parent forever, offline, with a Remove that always failed.
 pub fn remove(name: String, yes: bool) -> Result<()> {
     let slug = slug_of(&name)?;
+    let live = sandbox::live_slugs();
+    if already_gone(&slug, live.as_deref(), || {
+        sandbox::trash::list()
+            .iter()
+            .any(|entry| entry.slug == slug)
+            || docker::ok(&["volume", "inspect", &format!("intentic-workspace-{slug}")])
+    }) {
+        ui::note(&format!("Runner {name} is already gone from this device: there is nothing left of it to remove."));
+        return Ok(());
+    }
     sandbox::remove::run(sandbox::remove::Args {
         slugs: vec![slug],
         all: false,
@@ -296,9 +310,31 @@ pub fn remove(name: String, yes: bool) -> Result<()> {
     })
 }
 
+/// Whether a runner's slug names nothing on this device. `live` is None when docker could not list its containers,
+/// which is never read as "gone": the ordinary removal then says what is wrong with docker. `leftovers` (the trash,
+/// a named volume) is asked only when no container answers. Pure but for `leftovers`.
+fn already_gone(slug: &str, live: Option<&[String]>, leftovers: impl FnOnce() -> bool) -> bool {
+    match live {
+        None => false,
+        Some(live) => !live.iter().any(|s| s == slug) && !leftovers(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_runner_with_no_container_and_no_leftovers_is_already_gone() {
+        let live = vec!["runner-rog".to_string()];
+        assert!(already_gone("runner-omen", Some(&live), || false));
+        assert!(!already_gone("runner-omen", Some(&live), || true));
+        assert!(!already_gone("runner-rog", Some(&live), || panic!(
+            "not asked when a container answers"
+        )));
+        // Docker that could not answer is never read as "nothing here".
+        assert!(!already_gone("runner-omen", None, || false));
+    }
 
     const OVERLAY: &str = "FROM ghcr.io/intentic/sandbox:stable\n\nRUN apt-get install -y ffmpeg\n";
 
