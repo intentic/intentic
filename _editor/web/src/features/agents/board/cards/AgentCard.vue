@@ -812,11 +812,11 @@ const grab = (event: PointerEvent): void => {
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                     <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                     <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
-                    <!-- What the branch changed, last and pushed to the line's right edge so the counts line up down a lane; it costs no row of its own (wrapping here when the line is full). A press: the count is what the work IS, so it opens the review rather than the chat. Red and green only while the diff is a live signal. -->
+                    <!-- What the branch changed, alongside the other metadata. The count opens the review; red and green mark a live diff. -->
                     <button
                         v-if="diffShown && agent.diff !== undefined"
                         type="button"
-                        class="ml-auto shrink-0 rounded-sm font-mono tabular-nums hover:underline"
+                        class="shrink-0 rounded-sm font-mono tabular-nums hover:underline"
                         :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
                         v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
                         @click.stop="emit('changes')"
