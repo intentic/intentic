@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "../index.ts";
@@ -9,6 +9,7 @@ import {
     hostLabel,
     idleRecords,
     noteStop,
+    openPreviewLog,
     overCap,
     parseRecord,
     preferredPort,
@@ -102,6 +103,28 @@ describe("a preview record", () => {
 });
 
 describe("reading the records", () => {
+    test("writing a record ignores pre-planted staging links and replaces the final link without touching its target", () => {
+        const dir = mkdtempSync(join(tmpdir(), "previews-links-"));
+        const victim = join(dir, "victim");
+        writeFileSync(victim, "keep me");
+        const path = recordPath(dir, record().conversation, record().label);
+        const oldStaging = `${path}.${String(process.pid)}.tmp`;
+        symlinkSync(victim, oldStaging);
+        symlinkSync(victim, path);
+        writeRecord(dir, record());
+        expect(readFileSync(victim, "utf8")).toBe("keep me");
+        expect(parseRecord(readFileSync(path, "utf8"))).toEqual(record());
+        expect(readdirSync(dir).toSorted()).toEqual([path.slice(dir.length + 1), oldStaging.slice(dir.length + 1), "victim"].toSorted());
+    });
+
+    test("a failed record rename removes its private staging directory", () => {
+        const dir = mkdtempSync(join(tmpdir(), "previews-failed-write-"));
+        const path = recordPath(dir, record().conversation, record().label);
+        mkdirSync(path);
+        expect(() => writeRecord(dir, record())).toThrow();
+        expect(readdirSync(dir)).toEqual([path.slice(dir.length + 1)]);
+    });
+
     test("keeps a live one, retires a dead one with its stop reason, and leaves another namespace's alone", () => {
         const dir = mkdtempSync(join(tmpdir(), "previews-"));
         const proc = fakeProc();
@@ -136,6 +159,37 @@ describe("reading the records", () => {
         expect(touchRecord(path, 9_000)?.lastActiveAt).toBe(9_000);
         expect(touchRecord(path, 7_000)?.lastActiveAt).toBe(9_000);
         expect(touchRecord(join(dir, "gone.json"), 9_000)).toBeUndefined();
+    });
+});
+
+describe("opening a preview log", () => {
+    test.each(["symlink", "hard link"])("replaces a pre-planted %s and leaves its target intact", (kind) => {
+        const dir = mkdtempSync(join(tmpdir(), "previews-log-link-"));
+        const victim = join(dir, "victim");
+        writeFileSync(victim, "keep me");
+        const log = join(dir, "conversation--demo.log");
+        (kind === "symlink" ? symlinkSync : linkSync)(victim, log);
+        const opened = openPreviewLog(dir, "conversation", "demo");
+        try {
+            writeFileSync(opened.fd, "server output");
+        } finally {
+            closeSync(opened.fd);
+        }
+        expect(opened.path).toBe(log);
+        expect(readFileSync(victim, "utf8")).toBe("keep me");
+        expect(readFileSync(log, "utf8")).toBe("server output");
+    });
+
+    test("creates the directory on the first start and resets only the log on restart", () => {
+        const parent = mkdtempSync(join(tmpdir(), "previews-log-restart-"));
+        const dir = join(parent, "logs");
+        const first = openPreviewLog(dir, "conversation", "demo");
+        writeFileSync(first.fd, "old output");
+        closeSync(first.fd);
+        const second = openPreviewLog(dir, "conversation", "demo");
+        closeSync(second.fd);
+        expect(second.path).toBe(first.path);
+        expect(readFileSync(second.path, "utf8")).toBe("");
     });
 });
 

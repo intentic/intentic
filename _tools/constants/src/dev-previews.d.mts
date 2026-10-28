@@ -31,6 +31,7 @@ export const TOUCH_EVERY_MS: number;
 export function previewsDir(env?: Readonly<Record<string, string | undefined>>): string;
 export function recordName(conversation: string, label: string): string;
 export function recordPath(dir: string, conversation: string, label: string): string;
+export function openPreviewLog(dir: string, conversation: string, label: string): { readonly path: string; readonly fd: number };
 export function hostLabel(conversation: string): string;
 export function startTicksOf(pid: number, procRoot?: string): string | undefined;
 export function ownerOf(pid: number, procRoot?: string): string | undefined;

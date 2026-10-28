@@ -20,7 +20,7 @@
 //
 // INTENTIC_PREVIEW_DIRECT=1 runs Vite in the foreground even in a turn, for the rare check that needs its console.
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
 import { join } from "node:path";
 import {
@@ -29,6 +29,7 @@ import {
     freePreviewPort,
     hostLabel,
     OWNER_ENV,
+    openPreviewLog,
     overCap,
     pidNamespaceOf,
     preferredPort,
@@ -37,7 +38,6 @@ import {
     previewsDir,
     readRecords,
     RECORD_ENV,
-    recordName,
     recordPath,
     startTicksOf,
     stopPreview,
@@ -147,11 +147,8 @@ const start = async (owner) => {
         say("demo: every preview port (47150-47199) is taken; `preview demo --list` shows what holds them.");
         return 1;
     }
-    const log = join(dir, `${recordName(owner, LABEL)}.log`);
+    const { path: log, fd: out } = openPreviewLog(dir, owner, LABEL);
     const path = recordPath(dir, owner, LABEL);
-    // The log opens before writeRecord would make the directory.
-    mkdirSync(dir, { recursive: true });
-    const out = openSync(log, "w");
     // Its own session, so the turn's terminal closing does not take it along, and its own process group, the unit the
     // keepers signal.
     const child = spawn(process.execPath, [VITE, "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {

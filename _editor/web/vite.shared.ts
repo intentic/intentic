@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { repoRoot } from "@intentic/constants/node";
+import { errnoCode } from "@intentic/base/errors";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defaultClientConditions, type Plugin, type ResolvedConfig, searchForWorkspaceRoot } from "vite";
@@ -235,31 +236,61 @@ const sharedCache = (name: string, inputs: CacheInputs) => ({
 // bound, or abandoned.
 const lockHeld = (lock: string): boolean => {
     try {
-        const age = Date.now() - statSync(lock).mtimeMs;
-        const pid = Number(readFileSync(join(lock, `owner`), `utf8`));
-        if (age > PRIMING_STALE_MS || !Number.isSafeInteger(pid) || pid <= 0) {
+        const entry = lstatSync(lock);
+        if (!entry.isDirectory() || Date.now() - entry.mtimeMs > PRIMING_STALE_MS) {
+            return false;
+        }
+        let pid: number;
+        try {
+            pid = Number(readFileSync(join(lock, `owner`), `utf8`));
+        } catch (error) {
+            // mkdir claims the lock before its owner is written. A fresh ownerless directory is still being claimed.
+            if (errnoCode(error) === "ENOENT") {
+                return true;
+            }
+            throw error;
+        }
+        if (!Number.isSafeInteger(pid) || pid <= 0) {
             return false;
         }
         process.kill(pid, 0);
         return true;
     } catch {
-        // allow(silent-catch): no lock, no owner file yet, or a dead owner: none of them is a holder to wait for.
+        // allow(silent-catch): a missing lock, unreadable owner or dead process is not a holder to wait for.
         return false;
     }
 };
 
 const takeLock = (lock: string): boolean => {
     try {
-        mkdirSync(lock);
-    } catch {
+        mkdirSync(lock, { mode: 0o755 });
+    } catch (error) {
+        if (errnoCode(error) !== "EEXIST") {
+            throw error;
+        }
         if (lockHeld(lock)) {
             return false;
         }
-        // Abandoned: taken over in place, so a third start still finds it held.
+        // Recreate an abandoned entry before writing; rm removes a symlink itself, never the directory it names.
+        rmSync(lock, { recursive: true, force: true });
+        try {
+            mkdirSync(lock, { mode: 0o755 });
+        } catch (claimError) {
+            if (errnoCode(claimError) === "EEXIST") {
+                return false;
+            }
+            throw claimError;
+        }
     }
-    writeFileSync(join(lock, `owner`), String(process.pid));
-    utimesSync(lock, new Date(), new Date());
-    return true;
+    try {
+        // Other preview processes may read the PID; only its owner may write it.
+        writeFileSync(join(lock, `owner`), String(process.pid), { flag: `wx`, mode: 0o644 });
+        utimesSync(lock, new Date(), new Date());
+        return true;
+    } catch (error) {
+        rmSync(lock, { recursive: true, force: true });
+        throw error;
+    }
 };
 
 // Keys of the same app nobody has started for CACHE_UNUSED_MS; the key in use is touched first, so it is never one.

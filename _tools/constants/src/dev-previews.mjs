@@ -10,7 +10,7 @@
 // alive, must have started at the clock tick the record says (a reused pid fails that), and must carry the
 // conversation stamp (INTENTIC_TURN_OWNER) the record claims. A record written from another pid namespace (an agent
 // domain has its own) names a pid this reader cannot see, so it is neither trusted nor removed here.
-import { chmodSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 
@@ -44,6 +44,15 @@ export const recordName = (conversation, label) => `${conversation}--${label}`.r
 export const recordPath = (dir, conversation, label) => join(dir, `${recordName(conversation, label)}${RECORD_SUFFIX}`);
 const stopPath = (dir, conversation, label) => join(dir, `${recordName(conversation, label)}${STOP_SUFFIX}`);
 const endedPath = (dir, conversation, label) => join(dir, `${recordName(conversation, label)}${ENDED_SUFFIX}`);
+
+// A restart replaces the old directory entry, then creates exclusively: a pre-planted symlink or hard link never
+// opens its target for truncation. A concurrent creator makes the open fail instead of following its entry.
+export const openPreviewLog = (dir, conversation, label) => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${recordName(conversation, label)}.log`);
+    rmSync(path, { force: true });
+    return { path, fd: openSync(path, "wx") };
+};
 
 // A conversation id as one DNS label, for its preview's hostname: `<label>.demo.localhost`.
 export const hostLabel = (conversation) => {
@@ -140,9 +149,14 @@ export const recordIsLive = (record, procRoot = "/proc") =>
 
 // Written whole and renamed into place, so a reader never sees half a file.
 const writeWhole = (path, text) => {
-    const temporary = `${path}.${String(process.pid)}.tmp`;
-    writeFileSync(temporary, text);
-    renameSync(temporary, path);
+    const staging = mkdtempSync(`${path}.`);
+    try {
+        const temporary = join(staging, "record");
+        writeFileSync(temporary, text, { flag: "wx" });
+        renameSync(temporary, path);
+    } finally {
+        rmSync(staging, { recursive: true, force: true });
+    }
 };
 
 // A dead record's stop note becomes its ended note: why it stopped, kept for the next start or listing to say.
