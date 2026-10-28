@@ -40,6 +40,13 @@ export interface RestartWork {
      * is told it has begun, and the only honest ending is the sandbox itself coming back.
      */
     readonly untilAnswered?: boolean;
+    /**
+     * Said from the press rather than from the silence, while the producer that pressed still holds it. For a restart
+     * the reader asked for right here whose machine takes a while before the sandbox actually drops (a recreate
+     * pulling and creating first): without it the reader's press answers nothing for those seconds. Never on the
+     * `untilAnswered` record that follows, so a swap that never drops the sandbox cannot leave the card standing.
+     */
+    readonly fromPress?: boolean;
     readonly startedAt: number;
 }
 

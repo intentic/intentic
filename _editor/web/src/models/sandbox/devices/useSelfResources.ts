@@ -35,6 +35,8 @@ export interface SelfResources {
     readonly canSave: ComputedRef<boolean>;
     /** True while an apply or a save is in flight, from whichever surface; both callers disable their control on it. */
     readonly applying: ComputedRef<boolean>;
+    /** Which of the two is in flight, so a surface can say it in place of its button; undefined when neither. */
+    readonly pending: ComputedRef<"apply" | "save" | undefined>;
     /** The last reshape's refusal, as the machine said it, until it is put away. */
     readonly failure: ComputedRef<NoticeModel | undefined>;
     /**
@@ -101,6 +103,9 @@ export function useSelfResources(): SelfResources {
                               sandbox,
                               id: `recreate` as const,
                               what,
+                              // The reader just pressed Apply: the swap is a fact from the press, though the machine
+                              // takes its time before the sandbox actually goes quiet.
+                              fromPress: true,
                               quiet: { title: what, detail: t(`ui.sandboxResourcesDialog.applyingRestartsSandboxOnto`) },
                           }
                         : undefined;
@@ -134,6 +139,10 @@ export function useSelfResources(): SelfResources {
         canSave,
         reshapable,
         applying: reshape.busy,
+        pending: computed(() => {
+            const run = reshape.operation.value;
+            return run?.state === `running` && (run.tag === `apply` || run.tag === `save`) ? run.tag : undefined;
+        }),
         failure: reshape.failure,
         apply,
         save,

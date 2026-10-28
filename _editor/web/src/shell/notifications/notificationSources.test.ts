@@ -58,6 +58,24 @@ describe(`the card for a sandbox that has gone quiet`, () => {
         expect(restartCard(rebuild, `live`, 0)).toBeUndefined();
     });
 
+    it(`answers a press from the moment of it, before the machine has taken the sandbox down`, () => {
+        // A recreate creates first and drops the sandbox after, often ten seconds and more: without this the reader's
+        // Apply answered nothing until the silence began.
+        const pressed: RestartWork = { ...rebuild, id: `recreate`, fromPress: true };
+        const card = restartCard(pressed, `live`, 0);
+        expect(card?.title).toBe(rebuild.quiet.title);
+        // Nothing is quiet yet, so there is no outage to time beneath it.
+        expect(card?.body).toBeUndefined();
+        // Once it is, the clock joins it.
+        expect(restartCard(pressed, `stale`, 0)?.body).toBe(OutageWait);
+    });
+
+    it(`leaves a swap that never dropped the sandbox to the silence rule once the press has settled`, () => {
+        // The record that waits for the sandbox to answer is ended only by an answer after a drop: shown over a live
+        // sandbox, it could stand forever.
+        expect(restartCard({ ...rebuild, id: `recreate`, fromPress: true, untilAnswered: true }, `live`, 0)).toBeUndefined();
+    });
+
     it(`claims nothing about a silence nobody here asked for`, () => {
         expect(restartCard(undefined, `stale`, 0)).toBeUndefined();
         expect(restartCard(undefined, `busy`, 45_000)).toBeUndefined();

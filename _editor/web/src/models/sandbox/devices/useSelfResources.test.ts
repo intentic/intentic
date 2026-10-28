@@ -73,6 +73,10 @@ it(`holds the other surface's button, and the reopened one's, while a reshape ru
     const chat = mount(() => useSelfResources());
     const applied = overview.view.apply(SHAPE);
     expect(chat.view.applying.value).toBe(true);
+    // Which act it is, so a surface can say it in place of its button rather than hold a link that looks pressable.
+    expect(chat.view.pending.value).toBe(`apply`);
+    // The restart is said from the press, before the machine has taken the sandbox down.
+    expect(restartExpected(`sbx-1`)?.fromPress).toBe(true);
 
     overview.scope.stop();
     const back = mount(() => useSelfResources());
@@ -84,6 +88,7 @@ it(`holds the other surface's button, and the reopened one's, while a reshape ru
     finish(`restarting`);
     await applied;
     expect(back.view.applying.value).toBe(false);
+    expect(back.view.pending.value).toBeUndefined();
     chat.scope.stop();
     back.scope.stop();
 });

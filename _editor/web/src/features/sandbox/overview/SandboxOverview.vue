@@ -87,6 +87,14 @@ const resizeFailed = computed(() => {
     const failure = selfResources.failure.value;
     return failure === undefined ? undefined : (failure.detail ?? failure.title);
 });
+// What the row says in place of its button while a reshape runs, from whichever surface started it.
+const resizePending = computed(() => {
+    const pending = selfResources.pending.value;
+    if (pending === undefined) {
+        return undefined;
+    }
+    return pending === `apply` ? t(`sandbox.sandboxOverview.resizeRestarting`) : t(`sandbox.sandboxOverview.resizeSaving`);
+});
 const applyResize = async (shape: ResourcesForm): Promise<void> => {
     resizing.value = false;
     await selfResources.apply(shape);
@@ -377,11 +385,20 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
                     <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
                         <span class="min-w-0 break-words text-content">{{ shareLine }}</span>
+                        <!-- In flight, the link gives way to what it set going, from the press: a disabled link
+                             that still looks pressable answered nothing for the seconds before the sandbox drops. -->
+                        <span
+                            v-if="canShip && resizePending !== undefined"
+                            role="status"
+                            data-testid="overview-resize-pending"
+                            class="inline-flex shrink-0 items-center gap-1.5 text-subtle"
+                        >
+                            <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ resizePending }}
+                        </span>
                         <button
-                            v-if="canShip"
+                            v-else-if="canShip"
                             type="button"
                             class="shrink-0 font-medium text-link hover:underline"
-                            :disabled="selfResources.applying.value"
                             @click="resizing = true"
                         >
                             {{ t(`sandbox.sandboxOverview.change`) }}

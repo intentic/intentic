@@ -165,11 +165,18 @@ const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `unrea
 // account for. This is its opposite: the workspace is being interrupted by something the reader pressed, possibly
 // minutes ago, on a screen they have since left. No action, because there is nothing to press: the swap is already
 // under way and the page reconnects itself. Past the patience window it says nothing rather than keep promising half
-// a minute, and the causes that were always here speak again.
-export const restartCard = (restart: RestartWork | undefined, availability: SandboxAvailability, outageMs: number): NotificationInput | undefined =>
-    restart !== undefined && QUIET.has(availability) && outageMs < RESTART_PATIENCE_MS
-        ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail, body: OutageWait }
-        : undefined;
+// a minute, and the causes that were always here speak again. A restart said from the press (`fromPress`) is up before
+// the silence too, without the outage clock beneath it: nothing is quiet yet, so there is no wait to time.
+export const restartCard = (restart: RestartWork | undefined, availability: SandboxAvailability, outageMs: number): NotificationInput | undefined => {
+    if (restart === undefined || outageMs >= RESTART_PATIENCE_MS) {
+        return undefined;
+    }
+    const card: NotificationInput = { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail };
+    if (QUIET.has(availability)) {
+        return { ...card, body: OutageWait };
+    }
+    return restart.fromPress === true && restart.untilAnswered !== true ? card : undefined;
+};
 
 // How long a sandbox the diagnosis saw ALIVE stays quiet in the lane: it is catching up, the switcher's dot already says
 // so, and a card over a workspace that is merely slow was the alarm readers learned to ignore.

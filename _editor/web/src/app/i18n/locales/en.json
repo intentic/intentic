@@ -8337,6 +8337,8 @@
             "removeLogo": "Remove logo",
             "renameSandbox": "Rename sandbox",
             "resources": "Resources",
+            "resizeRestarting": "Restarting with the new share…",
+            "resizeSaving": "Saving for the next restart…",
             "sandboxHostedMachine": "This sandbox runs on a machine we host for you. When it needs more than that, move it to",
             "sandboxName": "Sandbox name",
             "sandboxSmallStarterMachine": "This sandbox is a small starter machine we host for you. When it feels tight, move it to",

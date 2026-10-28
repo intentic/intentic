@@ -8337,6 +8337,8 @@
             "removeLogo": "Logo entfernen",
             "renameSandbox": "Sandbox umbenennen",
             "resources": "Ressourcen",
+            "resizeRestarting": "Neustart mit dem neuen Anteil…",
+            "resizeSaving": "Wird für den nächsten Neustart gespeichert…",
             "sandboxHostedMachine": "Diese Sandbox läuft auf einer Maschine, die wir für Sie betreiben. Wenn sie mehr braucht, verschieben Sie sie auf",
             "sandboxName": "Sandbox-Name",
             "sandboxSmallStarterMachine": "Diese Sandbox ist eine kleine Einsteigermaschine, die wir für Sie betreiben. Wenn es eng wird, verschieben Sie sie auf",

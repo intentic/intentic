@@ -20,6 +20,7 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 // This container as its machine lists it. Undefined is a sandbox whose machine is not a connected device, which draws
 // no Resources line at all; stubbed so the subject is who is offered the form, not how the row was found.
 const selfRow = ref<DeviceSandboxRow | undefined>(undefined);
+const pending = ref<`apply` | `save` | undefined>(undefined);
 jest.mock(`../../../models/sandbox/devices/useSelfResources`, () => ({
     useSelfResources: () => ({
         row: selfRow,
@@ -29,6 +30,7 @@ jest.mock(`../../../models/sandbox/devices/useSelfResources`, () => ({
         reshapable: computed(() => selfRow.value?.resources !== undefined),
         canSave: computed(() => false),
         applying: ref(false),
+        pending,
         failure: ref(undefined),
         apply: () => Promise.resolve(),
         save: () => Promise.resolve(),
@@ -334,6 +336,15 @@ it(`hands a maintainer the Resources form, not the owner alone`, async () => {
     expect(el.textContent).toContain(`12 GiB · 4 CPUs`);
     changeButton(el)?.click();
     await waitFor(() => expect(document.body.textContent).toContain(`Resources for radarsu-intentic`));
+});
+
+it(`says what a reshape in flight is doing in place of the button, rather than holding a link that looks pressable`, () => {
+    onConnectedMachine();
+    pending.value = `apply`;
+    const el = mount(sandboxRow({ role: `maintainer` }));
+    expect(changeButton(el)).toBeUndefined();
+    expect(el.querySelector(`[data-testid="overview-resize-pending"]`)?.textContent).toContain(`Restarting with the new share…`);
+    pending.value = undefined;
 });
 
 it(`gives a member below maintainer the share without the button`, () => {
