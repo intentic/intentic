@@ -18,7 +18,8 @@ export async function* jsonLinesOf(chunks: AsyncIterable<Uint8Array | string>): 
     // repeatedly copies and scans the same prefix, making large fragmented records quadratic.
     const fragments: string[] = [];
     for await (const chunk of chunks) {
-        const text = chunk instanceof Uint8Array ? decoder.decode(chunk, { stream: true }) : chunk;
+        // Bytes may come from another realm (Node buffers under a DOM host); only strings need no decoding.
+        const text = typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
         let start = 0;
         for (let newline = text.indexOf("\n"); newline !== -1; newline = text.indexOf("\n", start)) {
             let lineText = text.slice(start, newline);

@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { runInNewContext } from "node:vm";
+import { packageRoot } from "@intentic/constants/node";
 
-const page = readFileSync(new URL(`../../public/offline.html`, import.meta.url), `utf8`);
+const page = readFileSync(join(packageRoot(import.meta.url), `public/offline.html`), `utf8`);
 const script = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
 if (script === undefined) {
     throw new Error(`offline.html must contain its recovery script`);

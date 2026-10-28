@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import { runInNewContext } from "node:vm";
 import { jsonLines, jsonLinesOf, parsedJsonLines } from "./json-lines.js";
 import { webJsonLines } from "./web-stream.js";
 
@@ -15,6 +16,16 @@ async function* chunks(...parts: readonly (Uint8Array | string)[]): AsyncGenerat
 }
 
 describe("jsonLinesOf", () => {
+    it("decodes bytes from another realm even when they fail instanceof Uint8Array", async () => {
+        // DOM consumers replace the global typed-array constructors; Node's response buffers keep their own realm.
+        const foreignBytes: (bytes: number[]) => Uint8Array = runInNewContext("(bytes) => new Uint8Array(bytes)");
+        const bytes = new TextEncoder().encode('{"text":"é"}\r\n{"last":true}');
+        const cut = bytes.indexOf(0xc3) + 1;
+        const first = foreignBytes([...bytes.subarray(0, cut)]);
+        expect(first instanceof Uint8Array).toBe(false);
+        expect(await collect(jsonLinesOf(chunks(first, foreignBytes([...bytes.subarray(cut)]))))).toEqual(['{"text":"é"}', '{"last":true}']);
+    });
+
     // "ł" is two bytes and "😀" four: cut between chunks, a per-chunk decode makes replacement characters of both.
     it("keeps a character whole when a chunk boundary splits its bytes", async () => {
         const bytes = new TextEncoder().encode(`{"a":"zł😀"}\n`);
