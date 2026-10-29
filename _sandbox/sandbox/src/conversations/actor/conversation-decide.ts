@@ -15,7 +15,7 @@ import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
 import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
-import { onHandoffChosen, onHeldRepointed, onHeldRetimed, onHeldWalled } from "./held-decide.js";
+import { onHandoffChosen, onHeldRepointed, onHeldRetimed, onHeldWalled, onKeepWarmArmed, onKeepWarmEnded, onKeepWarmRefreshed } from "./held-decide.js";
 import {
     type Booking,
     edited,
@@ -179,6 +179,8 @@ export type ConversationEvent =
     | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
     // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
     | { readonly kind: "watches-shown"; readonly watches: readonly AgentWatch[] }
+    // A turn the sandbox had on its way to it (conversation-holdings.ts) went nowhere: a card at rest reads its own ending again.
+    | { readonly kind: "turn-not-coming" }
     // The card's list of what it still waits on people for, whole; empty once the last need is met or answered.
     | { readonly kind: "needs-shown"; readonly needs: readonly AgentNeed[] }
     // Where its loop stands, at each iteration boundary and once more at the end.
@@ -649,52 +651,6 @@ const onGrantTaken = (state: ConversationState, tool: string, now: number): Deci
     return unchanged({ ...state, grant: undefined }, { always: grant.always });
 };
 
-// A live hold keeps its start and its count when re-armed; an ended one starts over.
-const onKeepWarmArmed = (state: ConversationState, until: number, now: number): Decision<undefined> => {
-    const live = state.keepWarm?.ended === undefined ? state.keepWarm : undefined;
-    return {
-        state: { ...state, keepWarm: { since: live?.since ?? now, until, refreshes: live?.refreshes ?? 0, ...opt("readTokens", live?.readTokens) } },
-        effects: BROADCAST,
-        reply: undefined,
-    };
-};
-
-// A refresh or an ending that lands after a turn took the hold has nothing left to write to.
-const onKeepWarmRefreshed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "keep-warm-refreshed" }>): Decision<undefined> => {
-    const kept = state.keepWarm;
-    if (kept === undefined || kept.ended !== undefined || state.phase.kind === "running") {
-        return unchanged(state, undefined);
-    }
-    return {
-        state: {
-            ...state,
-            turn: { ...state.turn, promptCache: { at: event.at, ttlMs: event.ttlMs } },
-            keepWarm: { ...kept, refreshes: kept.refreshes + 1, readTokens: event.readTokens },
-        },
-        effects: BROADCAST,
-        reply: undefined,
-    };
-};
-
-const onKeepWarmEnded = (
-    state: ConversationState,
-    event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>,
-    now: number,
-): Decision<undefined> => {
-    const kept = state.keepWarm;
-    if (event.reason === undefined) {
-        return kept === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined };
-    }
-    if (kept === undefined || kept.ended !== undefined) {
-        return unchanged(state, undefined);
-    }
-    return {
-        state: { ...state, keepWarm: { ...kept, ended: { at: now, reason: event.reason, ...opt("detail", event.detail) } } },
-        effects: BROADCAST,
-        reply: undefined,
-    };
-};
-
 // Both halves go, the live turn's pending id and the entry's, or the next turn would resume through whichever survived.
 const onSessionCleared = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> =>
     entry === undefined
@@ -756,6 +712,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "grant-taken": (state, event, now) => onGrantTaken(state, event.tool, now),
     "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
     "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
+    "turn-not-coming": (state) => (state.phase.kind === "running" ? unchanged(state, undefined) : { state, effects: BROADCAST, reply: undefined }),
     "needs-shown": (state, event) => ({ state: { ...state, needs: event.needs }, effects: BROADCAST, reply: undefined }),
     "loop-shown": (state, event) => ({ state: { ...state, loop: event.loop }, effects: BROADCAST, reply: undefined }),
     "workflow-shown": (state, event) => ({ state: { ...state, workflow: event.workflow }, effects: BROADCAST, reply: undefined }),

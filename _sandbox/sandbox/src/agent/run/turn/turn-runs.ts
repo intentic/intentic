@@ -6,7 +6,7 @@ import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
-import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../conversations/actor/conversation-holdings.js";
+import { type AttachedRun, type AttachEntry, type AttachHead, awaitBegin, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../conversations/actor/conversation-holdings.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { DomainEvents } from "../../../seams/domain-events.js";
 import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
@@ -285,7 +285,7 @@ export interface RunOptions {
 
 // Where a run is filed and announced: its conversation's actor holds it, and its settle is told to whoever reacts.
 export interface RunDeps {
-    readonly conversations: Pick<ConversationActors, "archived" | "holdings" | "send">;
+    readonly conversations: Pick<ConversationActors, "archived" | "holdings" | "send" | "state">;
     readonly events: Pick<DomainEvents, "publish">;
     // Where the run's accepted and ended lines go; a suite with no logger writes none.
     readonly logger?: Pick<Logger, "info">;
@@ -392,6 +392,7 @@ export function startTurnRun(
     const run = continues === undefined ? newRun(opening) : new TurnRun(continues.rows, continues.startedAt, continues.id);
     run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
+    awaitBegin(deps.conversations, input.conversationId, run);
     deps.logger?.info(
         {
             conversationId: input.conversationId,

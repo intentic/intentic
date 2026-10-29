@@ -33,6 +33,7 @@ import type { BeginRefusal } from "../../../conversations/actor/conversation-dec
 import { waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
 import { sendableAt } from "../../../conversations/actor/limit-booking.js";
+import { carryingOn } from "../../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../../opt.js";
 import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./recovery/interrupted-ledger.js";
@@ -346,12 +347,17 @@ const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting
 // The hold's one dispatch, stamped before the start so it holds even if starting conflicts; a ladder rung spends a try.
 // The stamp names the record judged, and the actor refuses it unless that record is still the one held (onHeldFired),
 // so a pass that read a hold before awaiting other conversations' starts never fires a copy since superseded.
+// The stamp ends the booking the card stated (`next`), so the re-run is a turn on its way from it until it begins
+// (conversation-holdings.ts), or the card reads its old ending, in Attention, for the moment the start takes.
 const dispatch =
     (ladder: boolean): Rung["fire"] =>
     async (services, held, routing) => {
-        if (services.conversations.send(held.input.conversationId, { kind: "held-fired", ladder, judged: held }).reply) {
-            await rerun(services, held, routing);
-        }
+        const { conversationId } = held.input;
+        await carryingOn(services.conversations, conversationId, "held-rerun", async () => {
+            if (services.conversations.send(conversationId, { kind: "held-fired", ladder, judged: held }).reply) {
+                await rerun(services, held, routing);
+            }
+        });
     };
 
 // Whether the conversation still holds the very record the pass read: every change to a hold makes a new record, so a

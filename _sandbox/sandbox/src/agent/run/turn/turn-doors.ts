@@ -1,5 +1,6 @@
 import type { StopResult, StopTurn } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { expectTurn, type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { holdOf, waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";
@@ -110,4 +111,27 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
         // A person's message, one at a time per conversation.
         ...createAdmission(services, start),
     };
+};
+
+/**
+ * A turn ending is when what waited behind it goes, whoever queued it: drained on `run.settled`, which the settle's own
+ * broadcast goes out well ahead of, so words waiting in a queue nothing holds were drawn behind the ending they were
+ * about to answer (Finished, or Attention after a failure) until their turn began. They are a turn on its way from the
+ * settle (conversation-holdings.ts) until the drain has let them go or found them held.
+ */
+export const drainBehindTurns = (
+    services: Pick<Services, "conversations" | "events"> & { readonly turns: Pick<Services["turns"], "drain"> },
+): void => {
+    const behind = new Map<string, () => void>();
+    services.conversations.observe((conversationId, event, before, after) => {
+        if (event.kind === "settle" && before.phase.kind === "running" && holdOf(after.queue) === undefined && waitingOf(after.queue).length > 0) {
+            behind.get(conversationId)?.();
+            behind.set(conversationId, expectTurn(services.conversations, conversationId, "queued"));
+        }
+    });
+    services.events.subscribe("run.settled", ({ conversationId }) => {
+        const waited = behind.get(conversationId);
+        behind.delete(conversationId);
+        void services.turns.drain(conversationId).finally(() => waited?.());
+    });
 };

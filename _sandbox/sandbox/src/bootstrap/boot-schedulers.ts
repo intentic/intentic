@@ -5,7 +5,7 @@ import { onJobEnded } from "../agent/tools/jobs/job-ended.js";
 import { linkTaskDepsOf, noteLinkTurnAwaiting, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
-import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
+import { type ChildReportDeps, owedReports, reportChildTurn } from "../agent/subagents/child-report.js";
 import { reportPeerMessageOutcome } from "../conversations/recall/fleet-message-outcome.js";
 import { onAccountReopened } from "../usage/serviceability/state-log.js";
 import { watchCapacity } from "../usage/serviceability/capacity-watch.js";
@@ -169,6 +169,16 @@ const wireRoomWakes = ({ events, resources }: BootPhase["services"], shutdown: B
     }
 };
 
+// A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it; its parent
+// reads as woken from the settle itself, which shows the child's ending before the report can be said (owedReports).
+const wireChildReports = (services: BootPhase["services"], logger: BootPhase["logger"], shutdown: BootPhase["shutdown"]): ChildReportDeps => {
+    const childReports = childReportDeps(services, logger);
+    const owed = owedReports(childReports);
+    shutdown.push(services.conversations.observe(owed.observer));
+    shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn({ ...childReports, owed }, settled)));
+    return childReports;
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     startAutomations({ role, services, shutdown });
@@ -185,10 +195,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // wake stopped before it fired lets the land its close skipped run after all (wake-held-land.ts).
     shutdown.push(startWatchers(services, landWhenWakeGoes(services)));
 
-    // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
-    const childReports = childReportDeps(services, logger);
-    shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
-    // So is a turn a peer's `agents message` opened that failed or is held, to the peer that sent it, once.
+    const childReports = wireChildReports(services, logger, shutdown);
+    // A turn a peer's `agents message` opened that failed or is held is news to the peer that sent it, once.
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportPeerMessageOutcome(services, settled)));
     // An account coming back is news to a parent waiting with children failed or paused on it (capacity-reopened.ts).
     shutdown.push(

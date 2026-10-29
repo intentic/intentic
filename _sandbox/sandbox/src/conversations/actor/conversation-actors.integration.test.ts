@@ -117,6 +117,8 @@ interface Model {
     supervisor: ChildSupervisor | undefined;
     // Its detached run, as the port's `run` door started it, until a dispose or a restart takes it.
     run: RunModel;
+    // That run was claimed while it was at rest and no turn has begun since: a turn on its way (conversation-holdings.ts).
+    comes: boolean;
 }
 
 type RunModel = "live" | "finished" | undefined;
@@ -142,6 +144,7 @@ const fresh = (): Model => ({
     watches: [],
     supervisor: undefined,
     run: undefined,
+    comes: false,
 });
 
 // A card raised through parked-cards.ts, on a conversation or on none.
@@ -186,6 +189,9 @@ const expectedStatus = (model: Model): AgentStatus => {
     }
     if (model.landingShown) {
         return "landing";
+    }
+    if (model.comes) {
+        return "resuming";
     }
     if (model.entryStatus !== "idle") {
         return model.entryStatus;
@@ -361,6 +367,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             errored: false,
             resuming: false,
             landingShown: false,
+            comes: false,
         });
         model.parked = new Map();
         model.entryStatus = "interrupted";
@@ -442,6 +449,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         await until(() => runOf(fleet, id) === "finished", `run ${id} ends`);
         await drained();
         modelOf(id).run = "finished";
+        modelOf(id).comes = false;
     };
 
     const endJob = (id: Id, entry: JobModel): void => {
@@ -514,6 +522,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                 watches: model.exists && check.exitCode === 1 ? model.watches : [],
                 supervisor: undefined,
                 run: undefined,
+                comes: false,
             });
             model.parked = new Map();
             // What the boot does for a turn the journal says was parked: a placeholder begins and raises the same cards.
@@ -943,6 +952,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                     return;
                 }
                 model.run = "live";
+                model.comes = !model.running;
                 await until(() => gates.has(id), `run ${id} parks`);
             },
         },

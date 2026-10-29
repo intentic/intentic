@@ -6,6 +6,7 @@ import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { DueAt } from "../../../../workload/nudged-pass.js";
 import { breakPolicyFor } from "../break-policy.js";
 import { rebookedForReopen, spentUntil } from "./allowance-gate.js";
+import { carryingOn } from "../../../../conversations/actor/conversation-holdings.js";
 
 // What a low-memory refusal left waiting: a person's words, held in the conversation's queue (turn-admission.ts,
 // handBack), or a turn the sandbox kept whole at the door (`door`), and since when.
@@ -76,6 +77,9 @@ export const releaseRoomHolds = async (services: Services, now: number, due: Due
         return;
     }
     const ids = waitingOf(services.conversations.queued(conversationId)).map((item) => item.id);
-    services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
-    await services.turns.drain(conversationId);
+    // Releasing ends the hold the card stated (`next`), so the words are a turn on its way until it begins.
+    await carryingOn(services.conversations, conversationId, "room", async () => {
+        services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
+        await services.turns.drain(conversationId);
+    });
 };

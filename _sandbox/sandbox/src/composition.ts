@@ -105,7 +105,7 @@ import { type PlatformTunnel, startPlatformTunnel } from "./system/listeners/loc
 import { createResourceReaper, type ResourceReaper } from "./system/boot/reaper.js";
 import { inLogContext, openLogFiles } from "./logger.js";
 import { streamAgent } from "./agent/run/stream-agent.js";
-import { turnDoors } from "./agent/run/turn/turn-doors.js";
+import { drainBehindTurns, turnDoors } from "./agent/run/turn/turn-doors.js";
 import type { TurnEngine } from "./seams/turn-engine.js";
 import { askRoleModel, roleModelIsSet } from "./agent/models/role-model.js";
 import { cancelFamily, familyOf } from "./agent/subagents/children.js";
@@ -908,5 +908,5 @@ export const wireReactions = (services: Services): void => {
         services.history.snapshot("turn", label).catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed")),
     );
     // A turn ending is when what waited behind it goes, whoever queued it (turn-admission.ts).
-    services.events.subscribe("run.settled", ({ conversationId }) => void services.turns.drain(conversationId));
+    drainBehindTurns(services);
 };

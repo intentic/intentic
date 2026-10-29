@@ -1,6 +1,7 @@
 import type { Services } from "../../../composition.js";
 import type { Booked } from "../../../conversations/actor/conversation-actors.js";
 import { type Booking, bookingOfItem } from "../../../conversations/actor/conversation-queue.js";
+import { carryingOn } from "../../../conversations/actor/conversation-holdings.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
 import { rebookedForReopen } from "./holds/allowance-gate.js";
@@ -47,12 +48,15 @@ const letGo = async (services: Services, conversationId: string, due: readonly B
     if (await rebookedForReopen(services, conversationId, ids, now)) {
         return;
     }
-    services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
     services.logger.info(
         { conversationId, messages: still.length, after: [...lands] },
         lands.size === 0 ? "resume pass: a scheduled send's time came, it goes out" : "resume pass: the work a scheduled send waited for landed, it goes out",
     );
-    await services.turns.drain(conversationId);
+    // Releasing ends the booking the card stated (`next`), so the words are a turn on its way until it begins.
+    await carryingOn(services.conversations, conversationId, "booked", async () => {
+        services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
+        await services.turns.drain(conversationId);
+    });
 };
 
 // A person's scheduled sends whose time has come (turn-admission.ts, bookingFor): their bookings are let go and they go

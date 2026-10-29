@@ -1,5 +1,6 @@
 import type { AgentEvent, AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import type { ConversationActors, ConversationObserver } from "./conversation-actors.js";
 
 // What conversations hold beside their state, by kind: each conversation's share sits on its actor, every item's id is
 // indexed to its holder, and what no conversation holds waits in a bucket of its own. The actors registry lends each
@@ -290,4 +291,91 @@ export const turnRunMetrics = (actors: Pick<HoldingsIndex, "holdings">): Readonl
         rows: held.reduce((total, metrics) => total + metrics.rows, 0),
         followers: held.reduce((total, metrics) => total + metrics.followers, 0),
     };
+};
+
+/* A TURN ON ITS WAY: one the sandbox has committed to starting on a conversation by itself, from the instant it does
+   until that turn's `begin`. Every mover that carries a conversation on clears its own reason first (the watch that
+   fired, the held turn's booking, the memory hold, the child's turn that ended) and only several awaits later does the
+   turn it starts begin: the wake is journalled and admitted, the turn routed, its run's preflight passed. Each of those
+   gaps used to reach the roster as a card at rest with nothing carrying it on: a parent idle beside a child whose turn
+   had just failed or clashed read as a stop nobody supervises (sandbox-contract agent-lanes.ts callsOwner), and its
+   card flew into Attention for the ~100ms until the child's report woke it, then back (reproduced 2026-10-29). Each
+   mover now takes a mark here before it clears its reason and gives it back once the turn is under way or will not
+   come, and the card reads `resuming` while one is held (conversation-status.ts), which every surface files in Active.
+   A begin takes every mark its conversation holds: a turn under way is the answer to all of them. */
+
+interface TurnComing {
+    readonly why: string;
+}
+
+// Held by the conversation the turn is for; `about` is a second conversation the mark concerns (the child whose report
+// it is), whose dispose takes it too.
+const TURNS_COMING: Holding<TurnComing> = { name: "turns on their way" };
+
+// Each mark its own id, so giving one back never takes another's, however alike their reasons.
+let marks = 0;
+
+type Actors = Pick<ConversationActors, "holdings" | "send">;
+
+/**
+ * Marks a turn on its way to `conversationId`, `why` naming the mover for whoever lists what a conversation holds;
+ * answers what gives the mark back, which is nothing once a begin or an earlier call took it. Given back with no turn
+ * begun and no other mark left, the card at rest is told again, since a window may have drawn it `resuming` meanwhile.
+ */
+export const expectTurn = (actors: Actors, conversationId: string, why: string, about?: string): (() => void) => {
+    marks += 1;
+    const id = `${why}#${marks}`;
+    const held = actors.holdings(TURNS_COMING);
+    held.hold(conversationId, id, { why }, about);
+    return () => {
+        if (held.drop(id) && !turnComing(actors, conversationId)) {
+            actors.send(conversationId, { kind: "turn-not-coming" });
+        }
+    };
+};
+
+/** Whether the sandbox has a turn on its way to this conversation that has not begun yet. */
+export const turnComing = (actors: Pick<ConversationActors, "holdings">, conversationId: string): boolean =>
+    actors.holdings(TURNS_COMING).of(conversationId).length > 0;
+
+/** Runs `carry` under a mark of a turn on its way to `conversationId`, given back however it ends. */
+export const carryingOn = async <T>(actors: Actors, conversationId: string, why: string, carry: () => Promise<T>): Promise<T> => {
+    const arrived = expectTurn(actors, conversationId, why);
+    try {
+        return await carry();
+    } finally {
+        arrived();
+    }
+};
+
+/** The actors' own listener: a turn that begins is the turn every mark on its conversation waited for. */
+export const turnsArrive =
+    (holdings: Pick<HoldingsIndex, "holdings">): ConversationObserver =>
+    (conversationId, event, before, after) => {
+        if (event.kind !== "begin" || before.phase.kind === "running" || after.phase.kind !== "running") {
+            return;
+        }
+        const held = holdings.holdings(TURNS_COMING);
+        for (const [id] of held.entries()) {
+            if (held.holder(id) === conversationId) {
+                held.drop(id);
+            }
+        }
+    };
+
+/**
+ * A run claimed for a conversation at rest is a turn on its way until its own `begin`, which lands several awaits later
+ * (the transcript opened, the turn routed, the run's preflight passed): every wake, drain and re-run starts its turn
+ * through such a run, and gives back its own mark the moment the run is claimed. One that never begins (refused at
+ * the door, archived meanwhile) gives this back as it finishes.
+ */
+export const awaitBegin = (
+    actors: Actors & Pick<ConversationActors, "state">,
+    conversationId: string,
+    run: Pick<LiveRun, "waitUntilFinished">,
+): void => {
+    if (actors.state(conversationId)?.phase.kind === "running") {
+        return;
+    }
+    void run.waitUntilFinished().then(expectTurn(actors, conversationId, "run"));
 };

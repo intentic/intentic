@@ -4,7 +4,7 @@ import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
-import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD } from "./conversation-holdings.js";
+import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD, turnsArrive } from "./conversation-holdings.js";
 import { type Booking, bookingOfItem, holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
 import type { StoredLimitHold } from "./limit-hold.js";
@@ -279,6 +279,8 @@ export const createConversationActors = (books: ConversationBooks): Conversation
     };
 
     const observing = observersOf();
+    // Its own listener before any other's, so a turn on its way reads begun to everything told after it.
+    observing.observe(turnsArrive(holdings));
 
     const send = <E extends ConversationEvent>(id: string, event: E, now: number = Date.now()): Delivered<ReplyOf<E>> => {
         const actor = actorOf(id);

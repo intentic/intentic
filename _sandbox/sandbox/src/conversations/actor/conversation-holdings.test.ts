@@ -1,5 +1,8 @@
 import { memoryFleet } from "../registry/agents-registry.testing.js";
-import type { Holding } from "./conversation-holdings.js";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { BeginTurn } from "./conversation-decide.js";
+import { beginTurn } from "./conversation-actors.testing.js";
+import { awaitBegin, carryingOn, expectTurn, type Holding, turnComing } from "./conversation-holdings.js";
 
 // What a conversation holds beside its state, through the registry every door files into: each item is found by its
 // id alone, sits with its holder, and leaves with the holder's dispose, or with the dispose of the conversation it is
@@ -106,5 +109,89 @@ describe("disposal of what conversations hold", () => {
 
         expect(conversations.traces("c1")).toEqual([]);
         expect(conversations.traces("c2")).toEqual(["actor"]);
+    });
+});
+
+// A turn the sandbox has on its way to a conversation reads `resuming` on its card from the mover's mark to the turn's
+// begin, and a mark given back with no turn begun tells the card again.
+
+const turn = (over: Partial<BeginTurn> = {}): BeginTurn => ({
+    conversationId: "c1",
+    isolated: true,
+    prompt: "Wait for CI",
+    profile: { agent: "claude", harness: "native" },
+    ...over,
+});
+
+const atRest = async () => {
+    const fleet = memoryFleet();
+    await fleet.agents.init();
+    await beginTurn(fleet.conversations, turn(), 1_000);
+    await fleet.conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "Provider refused." } }).settled;
+    await fleet.conversations.send("c1", { kind: "settle" }, 1_100).settled;
+    const frames: AgentSummary[][] = [];
+    fleet.agents.subscribe((agents) => frames.push(agents));
+    return { fleet, frames, status: () => fleet.agents.get("c1")?.status };
+};
+
+describe("a turn on its way", () => {
+    it("reads resuming over the ending it answers, and every mark goes the moment the turn begins", async () => {
+        const { fleet, status } = await atRest();
+        expect(status()).toBe("error");
+
+        const watch = expectTurn(fleet.conversations, "c1", "watch");
+        expectTurn(fleet.conversations, "c1", "child-report", "sub-1");
+        expect(status()).toBe("resuming");
+        await beginTurn(fleet.conversations, turn(), 2_000);
+
+        expect(turnComing(fleet.conversations, "c1")).toBe(false);
+        expect(status()).toBe("running");
+        // Given back after the begin took it: nothing to tell.
+        watch();
+        expect(status()).toBe("running");
+    });
+
+    it("tells the card its ending again once the last mark goes with no turn begun, and not before", async () => {
+        const { fleet, frames, status } = await atRest();
+        const first = expectTurn(fleet.conversations, "c1", "booked");
+        const second = expectTurn(fleet.conversations, "c1", "queued");
+
+        first();
+        expect(frames.slice(1)).toEqual([]);
+        expect(status()).toBe("resuming");
+        second();
+
+        expect(frames.slice(1).map((frame) => frame.find((agent) => agent.id === "c1")?.status)).toEqual(["error"]);
+        expect(status()).toBe("error");
+    });
+
+    it("gives its mark back however the work under it ends", async () => {
+        const { fleet, status } = await atRest();
+        await expect(
+            carryingOn(fleet.conversations, "c1", "held-rerun", async () => {
+                expect(status()).toBe("resuming");
+                throw new Error("the start threw");
+            }),
+        ).rejects.toThrow("the start threw");
+        expect(status()).toBe("error");
+    });
+
+    it("holds a claimed run's conversation until the run begins, or until it ends without one", async () => {
+        const { fleet, status } = await atRest();
+        let finish: () => void = () => undefined;
+        const finished = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        awaitBegin(fleet.conversations, "c1", { waitUntilFinished: () => finished });
+        expect(status()).toBe("resuming");
+        finish();
+        await finished;
+        await Promise.resolve();
+        expect(status()).toBe("error");
+
+        // A conversation already running is in flight on its own word.
+        await beginTurn(fleet.conversations, turn(), 3_000);
+        awaitBegin(fleet.conversations, "c1", { waitUntilFinished: () => new Promise(() => undefined) });
+        expect(turnComing(fleet.conversations, "c1")).toBe(false);
     });
 });

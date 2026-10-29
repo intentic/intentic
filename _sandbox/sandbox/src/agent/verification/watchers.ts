@@ -6,7 +6,7 @@ import type { WatchOutcome } from "@intentic/sandbox-contract/events/transcript"
 import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import type { Holding } from "../../conversations/actor/conversation-holdings.js";
+import { expectTurn, type Holding } from "../../conversations/actor/conversation-holdings.js";
 import { shellEnvOf } from "../../capabilities/cli-env.js";
 import { turnCliEnv } from "../run/harness/turn-env.js";
 import type { Services } from "../../composition.js";
@@ -295,8 +295,10 @@ const entryOf = (record: WatcherRecord): JournalledWatch => ({
     turn: record.spec.profile,
 });
 
-// At least once: the entry stays journalled, marked firing, until its wake has landed.
+// At least once: the entry stays journalled, marked firing, until its wake has landed. The wake is on its way from the
+// moment the watch comes off the card (conversation-holdings.ts), or the card reads at rest with nothing armed until it lands.
 const fire = (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): void => {
+    const delivered = expectTurn(live.conversations, record.spec.conversationId, "watch");
     forget(live, record);
     void live.journal
         .record({ ...entryOf(record), firing: { outcome, check: record.last } })
@@ -304,6 +306,7 @@ const fire = (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome
             live.logger.warn({ err: error, watch: record.id }, "watch: firing could not be journalled, a restart now would lose it"),
         )
         .then(() => deliver(live, record, outcome))
+        .finally(delivered)
         .then(() => dropEntry(live, record.id))
         .catch((error: unknown) => live.logger.error({ err: error, watch: record.id }, "watch: delivery crashed"));
 };

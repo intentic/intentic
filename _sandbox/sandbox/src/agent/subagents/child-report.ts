@@ -9,7 +9,9 @@ import { familyEnded } from "./family-cancel.js";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
 import { noteQueuedReport, queuedChildReportId } from "./waiting/queued-reports.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import type { ConversationActors, ConversationObserver } from "../../conversations/actor/conversation-actors.js";
+import type { ConversationState } from "../../conversations/actor/conversation-state.js";
+import { expectTurn } from "../../conversations/actor/conversation-holdings.js";
 
 // A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake, queued
 // behind a parent busy with a turn that cannot take it.
@@ -17,8 +19,9 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 export interface ChildReportDeps {
     readonly doors: WakeDoors;
     readonly logger: Logger;
-    // Where the child's roster record, its verification ledger and a report still queued for its parent are held.
-    readonly conversations: Pick<ConversationActors, "holdings">;
+    // Where the child's roster record, its verification ledger and a report still queued for its parent are held, and
+    // where a report on its way marks its parent (owedReports).
+    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
     // A child's entry names its parent in `startedBy`; `fresh` marks a person's session on that parent's work, which
     // never reports to it.
     readonly entryOf: (
@@ -39,6 +42,8 @@ export interface ChildReportDeps {
     readonly resultOf?: (childId: string, closing: string) => ChildReportFields["result"];
     // Whether the child is a workflow run's worker (children.ts isWorker), whose endings its run reads instead.
     readonly worker?: (childId: string) => boolean;
+    // The mark each report on its way holds on its parent, given back as the report goes (owedReports).
+    readonly owed?: Pick<OwedReports, "given">;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
@@ -59,27 +64,82 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     return [...(rerun === undefined ? [] : [rerun]), answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
-// Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone; nor ever
-// for a fresh session (a review or test a person opened on the parent's work), whose findings reach the parent only when
-// that person sends them, so a re-run the sandbox fires itself wakes nobody either.
-const parentToTell = (
-    deps: ChildReportDeps,
-    settled: DomainEventMap["run.settled"],
-): { readonly parent: string; readonly profile: TurnProfile; readonly title: string | undefined } | undefined => {
-    const entry = deps.entryOf(settled.conversationId);
+// The parent a child's turn reports to, by who the child is and who asked for the turn: nobody when a person started it
+// in the child's own chat, the child moves itself onto a fallback or is a workflow's worker, or the parent is gone; nor
+// ever for a fresh session (a review or test a person opened on the parent's work), whose findings reach the parent
+// only when that person sends them, so a re-run the sandbox fires itself wakes nobody either.
+const reportsTo = (deps: ChildReportDeps, childId: string, actor: string | undefined): string | undefined => {
+    const entry = deps.entryOf(childId);
     const parent = parentOfActor(entry?.startedBy);
     if (
         parent === undefined ||
         entry?.fresh === true ||
-        (settled.actor !== undefined && parentOfActor(settled.actor) !== parent) ||
-        subagentEndingReported(deps.conversations, settled.conversationId) ||
-        deps.movingOn?.(settled.conversationId) === true ||
-        deps.worker?.(settled.conversationId) === true
+        (actor !== undefined && parentOfActor(actor) !== parent) ||
+        deps.movingOn?.(childId) === true ||
+        deps.worker?.(childId) === true
     ) {
         return undefined;
     }
+    return deps.entryOf(parent) === undefined ? undefined : parent;
+};
+
+// The same, and nobody either once a wait already took the ending.
+const parentToTell = (
+    deps: ChildReportDeps,
+    settled: DomainEventMap["run.settled"],
+): { readonly parent: string; readonly profile: TurnProfile; readonly title: string | undefined } | undefined => {
+    const parent = reportsTo(deps, settled.conversationId, settled.actor);
+    if (parent === undefined || subagentEndingReported(deps.conversations, settled.conversationId)) {
+        return undefined;
+    }
     const profile = deps.profileOf(parent);
-    return deps.entryOf(parent) === undefined || profile === undefined ? undefined : { parent, profile, title: entry?.title };
+    return profile === undefined ? undefined : { parent, profile, title: deps.entryOf(settled.conversationId)?.title };
+};
+
+const owedKey = (child: string, run: string): string => `${child}\u0000${run}`;
+
+/** A child's report on its way, marked on its parent from the child's settle until the report is said (conversation-holdings.ts). */
+export interface OwedReports {
+    readonly observer: ConversationObserver;
+    // The report about this run of this child went where it went, or nowhere.
+    readonly given: (child: string, run: string) => void;
+}
+
+/**
+ * The child's ending reaches the roster at its settle, and its report reaches the parent only once the run has written
+ * its record and `run.settled` has composed and admitted it: for that whole hand-off a parent at rest read as one
+ * nothing will wake, and a child's failure or clash beside it as the reader's (agent-lanes.ts callsOwner), its card
+ * flying into Attention and back. Told at the settle itself, before its broadcast goes out, so the parent is marked in
+ * the very roster that first shows the child's ending.
+ */
+export const owedReports = (deps: ChildReportDeps): OwedReports => {
+    // Who asked for each conversation's turn now running, as its begin was granted (BeginTurn.startedBy), and the
+    // release of each report marked on a parent.
+    const asked = new Map<string, string | undefined>();
+    const owed = new Map<string, () => void>();
+    const settled = (conversationId: string, before: ConversationState): void => {
+        const actor = asked.get(conversationId);
+        asked.delete(conversationId);
+        const run = before.journal?.run;
+        const parent = run === undefined ? undefined : reportsTo(deps, conversationId, actor);
+        if (run !== undefined && parent !== undefined && !familyEnded(deps.conversations, parent, Date.now())) {
+            owed.set(owedKey(conversationId, run), expectTurn(deps.conversations, parent, "child-report", conversationId));
+        }
+    };
+    return {
+        observer: (conversationId, event, before, after) => {
+            if (event.kind === "begin" && before.phase.kind !== "running" && after.phase.kind === "running") {
+                asked.set(conversationId, event.turn.startedBy);
+            } else if (event.kind === "settle" && before.phase.kind === "running") {
+                settled(conversationId, before);
+            }
+        },
+        given: (child, run) => {
+            const key = owedKey(child, run);
+            owed.get(key)?.();
+            owed.delete(key);
+        },
+    };
 };
 
 /** Never throws: it runs off a turn's ending. */
@@ -149,5 +209,8 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
         deps.logger.info({ child: settled.conversationId, parent: target.parent, delivered: receipt.delivered }, "child report: delivered");
     } catch (error) {
         deps.logger.warn({ err: error, child: settled.conversationId }, "child report: could not be delivered");
+    } finally {
+        // Said, queued or started (whose run holds a mark of its own until it begins), or going nowhere.
+        deps.owed?.given(settled.conversationId, settled.run);
     }
 };

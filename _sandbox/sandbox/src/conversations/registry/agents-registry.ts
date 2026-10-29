@@ -12,7 +12,7 @@ import { routingFor } from "./routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
-import { liveRunOf } from "../actor/conversation-holdings.js";
+import { liveRunOf, turnComing } from "../actor/conversation-holdings.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
 import { nextOf } from "../actor/conversation-next.js";
 import { limitHold, reportedFailure, switchedEntry } from "./limit-ending.js";
@@ -776,7 +776,12 @@ export const createFleet = (
         const state = conversations.state(entry.id);
         // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
         const parked = parkedKinds(state);
-        const status = conversationStatus(state, endingStatus(entry.ending), entry.placement.kind === "main" ? "idle" : standings.of(entry.id));
+        const status = conversationStatus(
+            state,
+            endingStatus(entry.ending),
+            entry.placement.kind === "main" ? "idle" : standings.of(entry.id),
+            turnComing(conversations, entry.id),
+        );
         return {
             id: entry.id,
             status,

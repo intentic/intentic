@@ -4,8 +4,9 @@ import type { ConversationEvent, Decision } from "./conversation-decide.js";
 import type { ConversationState, HeldRecord } from "./conversation-state.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
 
-// How a held turn's own events move it once it is held: a person's pick of an account re-points it, the resume pass
-// times one refused with no instant and reads the wall in front of it, and a person picks how it continues.
+// How a conversation's holds move by their own events. A held turn once it is held: a person's pick of an account
+// re-points it, the resume pass times one refused with no instant and reads the wall in front of it, and a person picks
+// how it continues. The hold on an idle conversation's prompt cache (cache-keepwarm.ts): armed, refreshed, ended.
 
 // Only an unfired limit hold is re-timed: every other wall is not about which account pays. A pick undoes a booked move,
 // since the person has just said where it goes.
@@ -52,4 +53,53 @@ export const onHandoffChosen = (state: ConversationState, event: Extract<Convers
         return unchanged(state, false);
     }
     return { state: withResume(state, { held: { ...held, handoff: { ...held.handoff, chosen: event.handoff } } }), effects: BROADCAST, reply: true };
+};
+
+// A live hold keeps its start and its count when re-armed; an ended one starts over.
+export const onKeepWarmArmed = (state: ConversationState, until: number, now: number): Decision<undefined> => {
+    const live = state.keepWarm?.ended === undefined ? state.keepWarm : undefined;
+    return {
+        state: { ...state, keepWarm: { since: live?.since ?? now, until, refreshes: live?.refreshes ?? 0, ...opt("readTokens", live?.readTokens) } },
+        effects: BROADCAST,
+        reply: undefined,
+    };
+};
+
+// A refresh or an ending that lands after a turn took the hold has nothing left to write to.
+export const onKeepWarmRefreshed = (
+    state: ConversationState,
+    event: Extract<ConversationEvent, { kind: "keep-warm-refreshed" }>,
+): Decision<undefined> => {
+    const kept = state.keepWarm;
+    if (kept === undefined || kept.ended !== undefined || state.phase.kind === "running") {
+        return unchanged(state, undefined);
+    }
+    return {
+        state: {
+            ...state,
+            turn: { ...state.turn, promptCache: { at: event.at, ttlMs: event.ttlMs } },
+            keepWarm: { ...kept, refreshes: kept.refreshes + 1, readTokens: event.readTokens },
+        },
+        effects: BROADCAST,
+        reply: undefined,
+    };
+};
+
+export const onKeepWarmEnded = (
+    state: ConversationState,
+    event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>,
+    now: number,
+): Decision<undefined> => {
+    const kept = state.keepWarm;
+    if (event.reason === undefined) {
+        return kept === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined };
+    }
+    if (kept === undefined || kept.ended !== undefined) {
+        return unchanged(state, undefined);
+    }
+    return {
+        state: { ...state, keepWarm: { ...kept, ended: { at: now, reason: event.reason, ...opt("detail", event.detail) } } },
+        effects: BROADCAST,
+        reply: undefined,
+    };
 };

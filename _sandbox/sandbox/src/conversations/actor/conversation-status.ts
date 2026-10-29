@@ -13,12 +13,15 @@ const liveStatus = (stopping: StopEnding | undefined, parked: readonly unknown[]
     return parked.length > 0 ? "awaiting" : "running";
 };
 
-// Precedence: live turn, armed resume, shown land lease (a turn's own land stays `running`), ending, land standing. Only
-// `idle` yields to the standing, and its `ready` (finished work awaiting a land) is `idle` while the conversation wakes.
+// Precedence: live turn, armed resume, shown land lease (a turn's own land stays `running`), a turn on its way, ending,
+// land standing. Only `idle` yields to the standing, and its `ready` (finished work awaiting a land) is `idle` while the
+// conversation wakes. `coming`: the sandbox has a turn on its way to it that has not begun (conversation-holdings.ts), which reads
+// as a resume does, since it is the sandbox carrying the conversation on by itself, and outranks the ending it answers.
 export const conversationStatus = (
     state: ConversationState | undefined,
     entryStatus: EndingStatus,
     standing: LandStanding,
+    coming = false,
 ): AgentStatus => {
     if (state?.phase.kind === "running") {
         return liveStatus(state.phase.stopping, state.phase.parked);
@@ -28,6 +31,9 @@ export const conversationStatus = (
     }
     if (state?.turn.landing === true) {
         return "landing";
+    }
+    if (coming) {
+        return "resuming";
     }
     if (entryStatus !== "idle") {
         return entryStatus;

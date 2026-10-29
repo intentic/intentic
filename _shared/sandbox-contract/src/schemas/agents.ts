@@ -26,8 +26,10 @@ export { AgentReactionSchema, ReactorSchema, SessionOwnerSchema, type AgentReact
 // nothing is left half-done
 // `stopped` is its own value, never `error` (a deliberate stop is not a failure) or `interrupted` (which allows an
 // automatic re-run)
-// resuming: the turn was killed by something the daemon is already undoing (a credential re-mint, an outage backoff);
-// never persisted, since a daemon restart forgets the resume and the turn's own last-written ending becomes true again
+// resuming: the turn was killed by something the daemon is already undoing (a credential re-mint, an outage backoff),
+// or the sandbox has a turn of its own on its way to the conversation that has not begun yet (a child's report, a watch
+// that fired, a held turn's re-run, words let go behind a turn that ended); never persisted, since a daemon restart
+// forgets the resume and the turn's own last-written ending becomes true again
 export const AgentStatusSchema = z.enum([
     "idle",
     "running",
