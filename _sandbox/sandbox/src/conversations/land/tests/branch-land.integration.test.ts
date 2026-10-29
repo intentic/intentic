@@ -23,8 +23,8 @@ import { syncConversation } from "../sync.js";
 
 // A CONVERSATION STARTED FROM A BRANCH (branch-repos.ts, branch-land.ts): its copy of that repo cut from the branch's tip,
 // synced onto the branch as it moves, and its land committed onto the branch, while the shared checkout never leaves its
-// main line and every other repo of the conversation works as any conversation's does. Real git, the real registry and
-// the real opening compose, since what is under test is where every commit ends up.
+// main line. Changes in any other repo refuse the commit before anything lands. Real git, the real registry and the
+// real opening compose, since what is under test is where every commit ends up.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -52,8 +52,8 @@ const repoAt = async (dir: string, files: Record<string, string>): Promise<strin
     return sh(dir, "rev-parse", "HEAD");
 };
 
-// A workspace on `main` whose `feature` branch adds feature.ts, with a nested repo `libs/ui` that only has its main line.
-const setup = async () => {
+// A workspace on `main` whose `feature` adds feature.ts; nested `libs/ui` also has a `feature` branch.
+const setup = async (repo = "root") => {
     const base = await mkdtemp(join(tmpdir(), "intentic-branch-land-"));
     tempDirs.push(base);
     const work = join(base, "work");
@@ -67,6 +67,7 @@ const setup = async () => {
     await sh(work, "checkout", "-q", "main");
     const ui = join(work, "libs", "ui");
     const uiTip = await repoAt(ui, { "button.ts": "button\n" });
+    await sh(ui, "branch", "feature");
     const workspace = workspacePaths(work);
     const worktrees = createAgentWorktrees({
         workspace,
@@ -88,7 +89,7 @@ const setup = async () => {
         workspace,
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
     });
-    const opening: AgentTurn = { prompt: TITLE, conversationId: ID, isolated: true, fromBranch: { repo: "root", branch: "feature" } };
+    const opening: AgentTurn = { prompt: TITLE, conversationId: ID, isolated: true, fromBranch: { repo, branch: "feature" } };
     const open = async () => ensureComposedWorktree(services, opening, ID, undefined, false);
     const entry = (): IsolatedAgent => {
         const found = agents.entry(ID);
@@ -97,7 +98,7 @@ const setup = async () => {
         }
         return found;
     };
-    const land = async (mode: "check" | "merge" = "check") => {
+    const land = async (mode: "check" | "merge" | "measure" = "check") => {
         const current = entry();
         const outcome = await landAgent(worktrees, current, mode, "outstanding", undefined, await branchLinesOf(services, current.placement));
         await agents.recordLanded(ID, outcome);
@@ -136,11 +137,10 @@ test("opening from a branch cuts that repo's copy from the branch's tip, every o
     expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
 });
 
-test("a land commits the branch repo's work onto the branch, and the other repo's into the shared tree as any land does", async () => {
-    const { work, ui, mainTip, featureTip, worktrees, branchCheckouts, open, land } = await setup();
+test("a land commits the branch repo's work onto the branch and leaves every shared repository untouched", async () => {
+    const { work, ui, mainTip, featureTip, branchCheckouts, open, land } = await setup();
     const worktree = await open();
     await writeFile(join(worktree.cwd, "agent.ts"), "the agent's work\n");
-    await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "button, fixed\n");
     const outcome = await land();
     expect(outcome.landed).toBe(true);
     expect(outcome.conflicts ?? []).toEqual([]);
@@ -157,9 +157,48 @@ test("a land commits the branch repo's work onto the branch, and the other repo'
     expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
     await expect(readFile(join(work, "agent.ts"), "utf8")).rejects.toThrow();
     expect(await sh(work, "status", "--porcelain")).toBe("");
-    // The nested repo, on the main line, landed as every land does: uncommitted in the shared tree.
-    expect(await readFile(join(ui, "button.ts"), "utf8")).toBe("button, fixed\n");
-    expect(await sh(ui, "status", "--porcelain")).toBe("M button.ts");
+    expect(await readFile(join(ui, "button.ts"), "utf8")).toBe("button\n");
+    expect(await sh(ui, "status", "--porcelain")).toBe("");
+});
+
+test.each(["check", "merge", "measure"] as const)("%s refuses a nested branch session's root edits before any repository is written", async (mode) => {
+    const { work, ui, mainTip, uiTip, worktrees, open, land } = await setup("libs/ui");
+    const worktree = await open();
+    await writeFile(join(worktree.cwd, "app.ts"), "root edit\n");
+    await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "branch edit\n");
+    await expect(land(mode)).rejects.toThrow("Changes in root have no branch destination. Nothing was landed");
+    expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
+    expect(await sh(ui, "rev-parse", "feature")).toBe(uiTip);
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    expect(await sh(ui, "status", "--porcelain")).toBe("");
+    expect(await readFile(join(worktree.cwd, "app.ts"), "utf8")).toBe("root edit\n");
+    expect(await readFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "utf8")).toBe("branch edit\n");
+});
+
+test("a root-only edit in a nested branch session is refused, and the branch can be committed after the root edit is undone", async () => {
+    const { work, ui, uiTip, worktrees, open, land } = await setup("libs/ui");
+    const worktree = await open();
+    const original = await readFile(join(worktree.cwd, "app.ts"), "utf8");
+    await writeFile(join(worktree.cwd, "app.ts"), "test edit outside the selected repo\n");
+    await expect(land()).rejects.toThrow("Changes in root have no branch destination");
+    await writeFile(join(worktree.cwd, "app.ts"), original);
+    await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "branch edit\n");
+    expect((await land()).landed).toBe(true);
+    expect(await sh(ui, "rev-parse", "feature~1")).toBe(uiTip);
+    expect(await sh(ui, "show", "feature:button.ts")).toBe("branch edit");
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    expect(await sh(ui, "status", "--porcelain")).toBe("");
+});
+
+test("a root branch session refuses changes in another repository without committing its own work", async () => {
+    const { work, ui, featureTip, worktrees, open, land } = await setup();
+    const worktree = await open();
+    await writeFile(join(worktree.cwd, "agent.ts"), "branch edit\n");
+    await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "other repo edit\n");
+    await expect(land()).rejects.toThrow("Changes in libs/ui have no branch destination");
+    expect(await sh(work, "rev-parse", "feature")).toBe(featureTip);
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    expect(await sh(ui, "status", "--porcelain")).toBe("");
 });
 
 test("a branch that moved on is synced onto, and the next land commits on top of it", async () => {

@@ -698,6 +698,9 @@ flowchart LR
   first-parent history, excluding commits already reachable from the main line. Each landing opens the existing
   commit-diff routes, so its before and after remain fixed after later lands or session cleanup. The read keeps the
   caller's repository fence and paginates by commit, rejecting a cursor no longer on the branch after a rewrite.
+- A conversation started from a branch defaults to that repository's folder. Its commit refuses changes in any
+  repository without a branch destination before writing anything; those changes stay in its worktree. Other
+  repositories are available for context, and branch sessions never land or version work in the shared checkout.
 - Review Git evidence is reused for matching checkout generations and placement/landing metadata, for at most ten
   seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh. Chore
   evidence has the same ten-second generation bound, and each fresh pass shares one workspace-manifest reading.

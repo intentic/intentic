@@ -106,7 +106,10 @@ export const ensureComposedWorktree = async (
     const fence = conversationFence(await services.areas.list(), entry?.identity);
     const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence);
     if (opening || !sameRepos(recorded, worktree.repos)) {
-        const branches = cut?.branches?.filter(({ repo }) => worktree.repos.some((composed) => composed.repo === repo));
+        const branches = cut?.branches;
+        if (branches?.some(({ repo }) => !worktree.repos.some((composed) => composed.repo === repo)) === true) {
+            throw new Error("The selected branch's repository is outside this conversation's checkout. Choose a persona and area that include it before starting from that branch.");
+        }
         await services.agents.recordWorktree(conversationId, worktree.repos, composition, cut?.parent, branches);
     }
     return worktree;

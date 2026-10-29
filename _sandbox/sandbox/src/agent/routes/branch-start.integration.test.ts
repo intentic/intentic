@@ -1,12 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../../app.js";
 import { clientFor, errorCode } from "../../harness/route-client.testing.js";
-import { services } from "../../harness/route-services.testing.js";
+import { recordingTurnStores, services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { workspacePaths } from "../../workspace/workspace.js";
+import { createAgentWorktrees } from "../../conversations/worktrees/worktrees.js";
+import { noIsolation } from "../../conversations/worktrees/isolation.testing.js";
+import { createLogger } from "../../logger.js";
+import { createPerfTracker } from "../../system/resources/perf.js";
 
 // The door a conversation started from a branch opens through (branch-start.ts): what may not be started from is refused
 // before the turn exists, in plain words, and what may is checked out beside the shared tree and latched by the opening.
@@ -69,4 +73,32 @@ test("a branch that may be started from opens the conversation on it, and the ca
     // Started; asking an open conversation to start somewhere else is refused, the same start again is not.
     expect(await refusal(client, { repo: "root", branch: "other" })).toBe("BAD_REQUEST");
     expect(git(workspace.root, "symbolic-ref", "--short", "HEAD")).toBe("main");
+});
+
+test("starting from a nested repository's branch starts the agent in that repository", async () => {
+    const workspace = shared();
+    writeFileSync(join(workspace.root, ".gitignore"), "app/\n");
+    git(workspace.root, "add", ".gitignore");
+    git(workspace.root, "commit", "-qm", "ignore nested repository");
+    const nested = join(workspace.root, "app");
+    mkdirSync(nested);
+    git(nested, "init", "-q", "-b", "main");
+    git(nested, "config", "user.email", "t@example.com");
+    git(nested, "config", "user.name", "t");
+    writeFileSync(join(nested, "a.txt"), "nested\n");
+    git(nested, "add", "a.txt");
+    git(nested, "commit", "-qm", "baseline");
+    git(nested, "branch", "feature");
+    const historyRoot = mkdtempSync(join(tmpdir(), "nested-branch-history-"));
+    roots.push(historyRoot);
+    const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+    const agentWorktrees = createAgentWorktrees({ workspace, historyRoot, worktreesRoot: join(historyRoot, "worktrees"), isolation: noIsolation(workspace.root, historyRoot), logger, perf: createPerfTracker(logger) });
+    const daemon = services({ ...recordingTurnStores().overrides, workspace, agentWorktrees });
+    const client = clientFor(createApp(daemon));
+    const turn = await runAgentTurn(client, { prompt: "work on it", conversationId: "nested-branch", isolated: true, fromBranch: { repo: "app", branch: "feature" } });
+    expect(turn.facts.filter((fact) => fact.kind === "error")).toEqual([]);
+    expect(daemon.agents.get("nested-branch")?.startIn).toBe("app");
+    expect(daemon.agents.get("nested-branch")?.branches).toEqual([{ repo: "app", branch: "feature" }]);
+    expect(git(workspace.root, "symbolic-ref", "--short", "HEAD")).toBe("main");
+    expect(git(nested, "symbolic-ref", "--short", "HEAD")).toBe("main");
 });

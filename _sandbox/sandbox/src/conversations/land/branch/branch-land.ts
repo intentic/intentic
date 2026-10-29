@@ -53,6 +53,15 @@ export interface BranchOnto {
 export const branchOnto = (line: BranchLine | undefined, entry: Pick<IsolatedAgent, "id" | "social">): BranchOnto | undefined =>
     line === undefined ? undefined : { branch: line.branch, message: withConversationTrailer(`Agent: ${entry.social.title?.text ?? entry.id}`, entry.id) };
 
+/** A branch commit never falls back to writing a repository's shared checkout. Called before any planned write. */
+export const assertBranchDestination = (placement: Pick<WorktreePlacement, "branches">, onto: BranchOnto | undefined, repo: string): void => {
+    const started = placement.branches ?? [];
+    if (started.length > 0 && onto === undefined) {
+        const destinations = started.map((branch) => `${branch.repo} · ${branch.branch}`).join(", ");
+        throw new Error(`This conversation commits to ${destinations}. Changes in ${repo} have no branch destination. Nothing was landed; move or undo those changes before committing to the branch.`);
+    }
+};
+
 // Back to the branch's tip with nothing else in it, the state every reader of the checkout expects.
 const putBack = async (dir: string, git: GitRunner): Promise<void> => {
     await git(dir, ["reset", "-q", "--hard", "HEAD"]);

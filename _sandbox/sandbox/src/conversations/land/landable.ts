@@ -21,7 +21,7 @@ export const assertLandable = async (
     git: GitRunner = defaultGit,
 ): Promise<void> => {
     await assertLinked(worktrees, entry.id, entry.placement.repos);
-    if (into !== undefined) {
+    if (into !== undefined || (entry.placement.branches?.length ?? 0) > 0) {
         return;
     }
     for (const { repo } of entry.placement.repos) {

@@ -25,7 +25,7 @@ import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-reque
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
-import { refuseFromBranch } from "./branch-start.js";
+import { refuseFromBranch, withBranchFolder } from "./branch-start.js";
 import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
 import { type HomeOpening, homeOpening, refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 
@@ -127,7 +127,7 @@ export const createAgentRoutes = (services: Services) => {
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
             // so a request naming one would pass its sender's words off as the sandbox's. The opening answer to whether
             // work lands by itself is a maintainer's alone, as `agents.autoLand` is: a collaborator's work waits for a land.
-            const { errand, continues, conversationAutoLand: _opening, draft, ...asked } = input;
+            const { errand, continues, conversationAutoLand: _opening, draft, ...asked } = withBranchFolder(input);
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
                 const started = await carryOnTurn(services, {

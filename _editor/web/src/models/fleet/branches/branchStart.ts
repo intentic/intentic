@@ -25,6 +25,7 @@ export const startOnBranch = (conversation: Conversation, from: RepoBranch): voi
     conversation.pendingForkOf.value = undefined;
     conversation.pendingFreshOf.value = undefined;
     conversation.pendingFromBranch.value = { repo: from.repo, branch: from.branch };
+    conversation.selection.apply({ kind: `set`, picks: { startIn: from.repo === `root` ? `` : from.repo } });
 };
 
 /** Starts this draft from another agent's copy, as its reader's own ask (freshSession.ts): its work lands back there. */

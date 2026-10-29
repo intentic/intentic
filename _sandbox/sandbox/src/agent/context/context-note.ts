@@ -54,6 +54,7 @@ export const withBranchNote = (note: TurnNote | undefined, started: readonly { r
         ({ repo, branch }) =>
             `${repo === "root" ? "The workspace repository" : `\`${repo}\``} was started from branch \`${branch}\`; your finished work is committed onto \`${branch}\`, not the main line.`,
     );
+    said.push("Only work in those repositories can be committed by this conversation. Changes in any other repository, including the workspace root when it is not named above, prevent the commit; nothing lands in the shared workspace.");
     return note === undefined ? { title: BRANCH_NOTE_TITLE, text: [`## ${BRANCH_NOTE_TITLE}`, "", ...said].join("\n") } : { ...note, text: [note.text, "", ...said].join("\n") };
 };
 

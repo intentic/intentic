@@ -21,15 +21,24 @@ describe(`a draft's start`, () => {
     it(`takes a branch as a start of its own, dropping a fork or a fresh session it held`, () => {
         const chat = new Conversation(`c1`);
         chat.isolated.value = false;
+        chat.selection.apply({ kind: `set`, picks: { startIn: `another/repo` } });
         chat.pendingFreshOf.value = { conversationId: `origin`, kind: `review` };
         startOnBranch(chat, BRANCH);
         expect(chat.isolated.value).toBe(true);
         expect(chat.pendingFreshOf.value).toBeUndefined();
         expect(chat.pendingFromBranch.value).toEqual(BRANCH);
+        expect(chat.selection.startIn.value).toBe(`apps/web`);
         expect(startScopeOf(chat)).toEqual(BRANCH);
         expect(startFromFacts(chat)).toEqual({ startOffered: true, startSet: true });
         unlinkBranch(chat);
         expect(chat.pendingFromBranch.value).toBeUndefined();
+    });
+
+    it(`starts a workspace-root branch at the root, clearing a stale folder`, () => {
+        const chat = new Conversation(`c1`);
+        startOnBranch(chat, BRANCH);
+        startOnBranch(chat, { repo: `root`, branch: `release` });
+        expect(chat.selection.startIn.value).toBe(``);
     });
 
     it(`takes another agent's copy as the reader's own ask, and goes back to the main line from either`, () => {

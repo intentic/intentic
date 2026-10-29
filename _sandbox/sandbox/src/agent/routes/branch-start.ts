@@ -3,6 +3,10 @@ import { ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import { worktreeOf } from "../../conversations/registry/agents-store.js";
 
+/** Start in the selected branch's repository unless the caller chose a folder explicitly. */
+export const withBranchFolder = <T extends { readonly startIn?: string | undefined; readonly fromBranch?: RepoBranch | undefined }>(input: T): T =>
+    input.startIn !== undefined || input.fromBranch === undefined ? input : { ...input, startIn: input.fromBranch.repo === "root" ? "" : input.fromBranch.repo };
+
 // A conversation started from a branch (`fromBranch`, conversations/land/branch-repos.ts), refused at the door before
 // the turn exists, so the words stay in the composer and a scheduled opening is refused now rather than when nobody is
 // watching. What the branch checkout refuses (a repository that is not there, a branch neither here nor on origin, the

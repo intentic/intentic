@@ -11,7 +11,7 @@ export const landsOnto = (branches: readonly RepoBranch[] | undefined): string |
     if (branches === undefined || branches.length === 0) {
         return undefined;
     }
-    return branches.length === 1 && branches[0] !== undefined ? branches[0].branch : branches.map(branchLabel).join(`, `);
+    return branches.map(branchLabel).join(`, `);
 };
 
 /** The land press's words: the vocabulary's own on the main line, "Commit to <branch>" for a branch start. */

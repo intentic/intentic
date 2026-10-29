@@ -21,7 +21,7 @@ import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { assertLandable } from "./landable.js";
-import { type BranchLines, type BranchOnto, branchOnto, lineDirOf, NO_BRANCH_LINES, settleOnBranch } from "./branch/branch-land.js";
+import { type BranchLines, type BranchOnto, assertBranchDestination, branchOnto, lineDirOf, NO_BRANCH_LINES, settleOnBranch } from "./branch/branch-land.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
@@ -511,6 +511,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
         // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
         return { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff };
     }
+    assertBranchDestination(run.entry.placement, target.onto, repo);
     const judged = run.mode === "measure" ? await measureRepo(run, composed, target, patchPath) : await judgeRepo(run, composed, target, patchPath);
     return { ...judged, changed: true, diff };
 };
