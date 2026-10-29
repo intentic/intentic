@@ -369,6 +369,20 @@ describe(`the other holds, drawn the same way`, () => {
         expect(buttons(element).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
     });
 
+    // The daemon says a short disk once per conversation, so the press goes past it rather than asking the same again.
+    it(`offers to send past a short disk`, async () => {
+        const refusal: ChatMessage = { id: 3, role: `notice`, text: `The sandbox's disk has 7.2 GB free.` };
+        const element = mount(chatHolding({ items: [held()], paused: `refused` }, [...SENT, refusal]), {}, {
+            failureCode: `sandbox-disk-low`,
+            failure: refusal.text,
+        });
+        await nextTick();
+
+        expect(statusLine(element)).toBe(`Not sent · Refused before it ran`);
+        expect(pressNamed(element, `Send anyway`)).toHaveLength(1);
+        expect(pressNamed(element, `Send again`)).toHaveLength(0);
+    });
+
     it(`draws nothing while what waits will go by itself, or nothing waits`, async () => {
         const going = mount(chatHolding({ items: [held()] }));
         await nextTick();

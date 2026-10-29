@@ -68,6 +68,7 @@ export const reserveCompositionSpace = async (
                 historyRoot,
                 known.reduce((total, cost) => total + cost, 0),
                 historySpace,
+                id,
             );
         } catch (error) {
             if (error instanceof CheckoutSpaceRefused) {

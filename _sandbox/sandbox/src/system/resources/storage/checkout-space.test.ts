@@ -18,6 +18,6 @@ test("a checkout may leave exactly the floor, but not one byte less", () => {
 
 test("the refusal says the measured free space, checkout estimate and recovery", () => {
     expect(checkoutRefusal(3_100_000_000, 13_000_000_000)).toBe(
-        "The sandbox's disk has 3.1 GB free, too little to give this conversation its own copy of the workspace (about 13 GB). Free space in Settings → Storage, then send again.",
+        "The sandbox's disk has 3.1 GB free, too little to give this conversation its own copy of the workspace (about 13 GB). Free space in Settings → Storage, or send again to check it out anyway.",
     );
 });

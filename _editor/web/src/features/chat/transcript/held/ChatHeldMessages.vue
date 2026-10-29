@@ -38,7 +38,7 @@ watch(held, (isHeld) => {
     }
 });
 
-// The one press, worded for what it overrides: a warning it goes past, a refusal it tries again, a stop it undoes. All
+// The one press, worded for what it overrides: a warning it goes past (memory, a short disk), a refusal it tries again, a stop it undoes. All
 // three let the hold go (TurnClient.resume), and none touches a booked message: a low-memory hold warns a person once a
 // spell, so the next try runs. Only the warning's press has a hover: the risk it runs.
 interface HeldPress {
@@ -69,7 +69,11 @@ const press = computed((): HeldPress => {
         case `stopped`:
             return { label: t(`chat.chatQueue.sendNow`), hint: spentHint.value };
         default:
-            return { label: t(`agents.words.sendAgain`), hint: spentHint.value };
+            // A short disk is said once per conversation, so the next try goes past it (checkout-admission.ts).
+            return {
+                label: lastFailure.value?.code === `sandbox-disk-low` ? t(`chat.chatHeld.sendAnyway`) : t(`agents.words.sendAgain`),
+                hint: spentHint.value,
+            };
     }
 });
 </script>

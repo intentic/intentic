@@ -913,8 +913,10 @@ are measured on opening prompt size and failed calls. The cache clock includes k
 leave sessions whole. [The cache and hand-off rules](../../docs/architecture/sandbox.md) describe the boundaries.
 
 New conversation checkouts reserve room on the history filesystem before any repository is written. The free-space
-floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Existing checkouts
-and workspace conversations keep running. Storage reports current history space and each live repository's tracked
+floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Free space is what
+the daemon's own writes can take, so a root daemon counts the filesystem's reserved blocks. The floor is said once per
+conversation: its next try checks out past it (Send anyway), though never past a checkout the disk cannot hold at all,
+and a reading with room again resets the warning. Existing checkouts and workspace conversations keep running. Storage reports current history space and each live repository's tracked
 blob sizes at HEAD, cached per repository and commit, so a large repository's cost is visible before another copy.
 
 ## Commands

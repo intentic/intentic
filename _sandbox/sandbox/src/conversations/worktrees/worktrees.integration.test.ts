@@ -900,22 +900,35 @@ test("disk admission guards fresh, joined and retired checkouts but lets standin
         return { freeBytes, totalBytes: 200 * 1024 ** 3 };
     });
     const first = await worktrees.ensure("c1", [], undefined, undefined, []);
-    expect(reads).toBe(1);
+    const other = await worktrees.ensure("c3", [], undefined, undefined, []);
+    expect(reads).toBe(2);
     freeBytes = 3_100_000_000;
     const standing = await worktrees.ensure("c1", first.repos, undefined, undefined, []);
     expect(standing.repos).toEqual(first.repos);
-    expect(reads).toBe(1);
+    expect(reads).toBe(2);
     await expect(worktrees.ensure("c2", [])).rejects.toThrow("The sandbox's disk has 3.1 GB free");
     expect(existsSync(worktrees.conversationDir("c2"))).toBe(false);
-    await expect(worktrees.ensure("c1", first.repos, undefined, undefined, ["intent"])).rejects.toThrow(
+    // Each conversation is told once (the next test), so the joined and retired cases are two conversations.
+    await expect(worktrees.ensure("c3", other.repos, undefined, undefined, ["intent"])).rejects.toThrow(
         "too little to give this conversation its own copy",
     );
-    expect(existsSync(worktrees.worktreeDir("c1", "intent"))).toBe(false);
+    expect(existsSync(worktrees.worktreeDir("c3", "intent"))).toBe(false);
     await worktrees.retire("c1", first.repos, undefined);
-    await expect(worktrees.ensure("c1", first.repos, undefined, undefined, [])).rejects.toThrow("Free space in Settings → Storage, then send again.");
+    await expect(worktrees.ensure("c1", first.repos, undefined, undefined, [])).rejects.toThrow(
+        "Free space in Settings → Storage, or send again to check it out anyway.",
+    );
     expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
     freeBytes = 100 * 1024 ** 3;
     expect((await worktrees.ensure("c1", first.repos, undefined, undefined, [])).repos).toEqual(first.repos);
+});
+
+test("a conversation told of the floor checks out past it on its next try, while another is still told", async () => {
+    const { worktrees } = await setup(async () => ({ freeBytes: 3_100_000_000, totalBytes: 200 * 1024 ** 3 }));
+    await expect(worktrees.ensure("c1", [], undefined, undefined, [])).rejects.toThrow("The sandbox's disk has 3.1 GB free");
+    expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
+    expect((await worktrees.ensure("c1", [], undefined, undefined, [])).cwd).toBe(worktrees.conversationDir("c1"));
+    expect(existsSync(worktrees.conversationDir("c1"))).toBe(true);
+    await expect(worktrees.ensure("c2", [], undefined, undefined, [])).rejects.toThrow("The sandbox's disk has 3.1 GB free");
 });
 
 test("the predicted checkout cost refuses a write even above the free-space floor", async () => {
