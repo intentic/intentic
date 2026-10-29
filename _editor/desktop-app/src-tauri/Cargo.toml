@@ -31,7 +31,9 @@ tauri-plugin-process = "2.4.0"
 # how the app stays on the version that was released (src/update.rs), and gating it would make the whole
 # module — its state, its commands and the tray row that reads them — conditional on a `cfg` for a platform
 # this app does not build for anyway.
-tauri-plugin-updater = "2.14.0"
+# Updates are signed .exe and .AppImage files (build-desktop.sh), so archive extraction is unused.
+# Keep TLS and proxy support without the optional zip dependency flagged by GHSA-m665-v7pm-7grj.
+tauri-plugin-updater = { version = "2.14.0", default-features = false, features = ["rustls-tls", "system-proxy"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # PostHog takes an RFC3339 timestamp: a queued crash must keep its own time across launches.
 time = { version = "0.3.55", features = ["formatting"] }
