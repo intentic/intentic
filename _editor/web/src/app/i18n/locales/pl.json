@@ -8782,6 +8782,10 @@
                     "label": "Udostępnione strony",
                     "where": "rozmowy opublikowane jako strony tylko do odczytu"
                 },
+                "sharing": {
+                    "label": "Współdzielone konta modeli",
+                    "where": "konta modeli z innego sandboxa"
+                },
                 "skills": {
                     "label": "Umiejętności",
                     "where": "co agent umie i co jest włączone"

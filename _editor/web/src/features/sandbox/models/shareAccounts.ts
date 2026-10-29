@@ -73,7 +73,7 @@ export const accountsCardFor = (cards: readonly CapabilitySummary[], sourceId: s
  * left out since 2026-10-29 (links.ts InboundLinkTermsUpdateSchema), but a source on an older build would fill it with
  * its default (`tasks` true among them) and turn an accounts link into one taking tasks.
  */
-export const accountsTerms = (link: InboundLinkSummary, accounts: readonly SharedAccountRef[]): InboundLinkTermsUpdate => ({
+const accountsTerms = (link: InboundLinkSummary, accounts: readonly SharedAccountRef[]): InboundLinkTermsUpdate => ({
     approve: link.terms.approve,
     turnsPerHour: link.terms.turnsPerHour,
     tasks: link.terms.tasks,

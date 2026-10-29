@@ -42,6 +42,7 @@ import { servicesSamples } from "./services.samples.ts";
 import { sessionsSamples } from "./sessions.samples.ts";
 import { settingsSamples } from "./settings.samples.ts";
 import { shareSamples } from "./share.samples.ts";
+import { sharingSamples } from "./sharing.samples.ts";
 import { skillsSamples } from "./skills.samples.ts";
 import { systemSamples } from "./system.samples.ts";
 import { translatorSamples } from "./translator.samples.ts";
@@ -63,6 +64,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         git: gitSamples(context),
         diff: diffSamples(context),
         accounts: accountsSamples(context),
+        sharing: sharingSamples(context),
         translator: translatorSamples(context),
         providers: providersSamples(context),
         endpoints: endpointsSamples(context),

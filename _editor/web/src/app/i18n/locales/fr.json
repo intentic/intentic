@@ -9379,6 +9379,10 @@
                     "label": "Pages partagées",
                     "where": "les conversations publiées comme pages en lecture seule"
                 },
+                "sharing": {
+                    "label": "Comptes de modèles partagés",
+                    "where": "les comptes de modèles provenant d'un autre sandbox"
+                },
                 "skills": {
                     "label": "Skills",
                     "where": "ce que sait l'agent et ce qui est activé"

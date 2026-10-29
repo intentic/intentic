@@ -9379,6 +9379,10 @@
                     "label": "Geteilte Seiten",
                     "where": "als schreibgeschützte Seiten veröffentlichte Unterhaltungen"
                 },
+                "sharing": {
+                    "label": "Geteilte Modellkonten",
+                    "where": "Modellkonten aus einer anderen Sandbox"
+                },
                 "skills": {
                     "label": "Skills",
                     "where": "was der Agent weiß und was eingeschaltet ist"

@@ -9379,6 +9379,10 @@
                     "label": "Shared pages",
                     "where": "conversations published as read-only pages"
                 },
+                "sharing": {
+                    "label": "Shared model accounts",
+                    "where": "model accounts brought in from another sandbox"
+                },
                 "skills": {
                     "label": "Skills",
                     "where": "what the agent knows and what is switched on"
