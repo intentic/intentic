@@ -1,4 +1,6 @@
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
 import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
@@ -197,8 +199,10 @@ test("ports.forward on a loopback sandbox (no zone/token) still maps the slot bu
 // Preview offers a server an agent left running for the person by its job's own name, and stops it through the job.
 test("ports.list names the conversation's job on a port an agent's turn left running for the person", async () => {
     const conversations = memoryFleet().conversations;
+    // A tmp of its own: a restart's sweep in another file ends every job dir it finds that never ran.
+    const tmp = mkdtempSync(join(tmpdir(), "ports-routes-test-"));
     const job = openBackgroundJob(
-        { conversationId: "conv-served", profile: {}, conversations },
+        { conversationId: "conv-served", profile: {}, conversations, tmp },
         { command: "pnpm dev --port 4173", session: "agent-conv-served", description: "Start the app's dev server" },
     );
     if (job === undefined) {
@@ -222,7 +226,7 @@ test("ports.list names the conversation's job on a port an agent's turn left run
         expect(listed.find((port) => port.port === 4173)?.job).toEqual({ conversationId: "conv-served", jobId: job.id, label: "Start the app's dev server" });
         expect(listed.find((port) => port.port === 3000)?.job).toBeUndefined();
     } finally {
-        rmSync(job.dir, { recursive: true, force: true });
+        rmSync(tmp, { recursive: true, force: true });
     }
 });
 
