@@ -764,16 +764,8 @@ const grab = (event: PointerEvent): void => {
             <!-- THE CORNER SHARES SPARE SPACE: with the land presses when present, otherwise the model line. Other blocks and stats (`data-stat`) keep a row of their own. In `dense` the body already is one wrapping line. -->
             <div :class="dense ? 'contents' : 'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 [&>:not([data-shares])]:w-full'">
                 <div
-                    v-if="
-                        box !== undefined ||
-                        provenance !== undefined ||
-                        model !== undefined ||
-                        agent.branch !== undefined ||
-                        diffShown ||
-                        (account !== undefined && !mobile)
-                    "
                     :data-shares="landPresses ? undefined : ''"
-                    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
+                    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle empty:hidden"
                 >
                     <!-- NO DOT BEFORE A FACT THAT LEADS WITH ITS OWN GLYPH (the runner's desktop, the branch's code mark, the
                          account's person): the glyph already parts it from the one before, and a dot written ahead of it was
@@ -824,6 +816,8 @@ const grab = (event: PointerEvent): void => {
                         <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                         <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                     </button>
+                    <!-- After the model and branch facts, before the time, as in the chat rail. ChildCount draws nothing for a card with no children. -->
+                    <ChildCount :agent="agent" />
                 </div>
 
                 <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
@@ -919,8 +913,6 @@ const grab = (event: PointerEvent): void => {
 
                     <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                     <SessionMetrics v-if="localOnly" data-stat :card="agent.id" />
-                    <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->
-                    <ChildCount data-stat :agent="agent" />
                     <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
                     <AgentReactions
                         v-if="reactable"

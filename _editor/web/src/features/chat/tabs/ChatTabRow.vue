@@ -133,7 +133,7 @@ const closeRow = (event: Event): void => {
                 <CardStamps v-if="props.view.stamps.length > 0" :stamps="props.view.stamps" :agent="props.agent" :max="3" />
             </span>
         </template>
-        <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
+        <!-- One line: where it came from, the model, its children, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
         <template v-if="props.view.meta || twinFact !== undefined" #meta>
             <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
             <Icon
@@ -172,11 +172,11 @@ const closeRow = (event: Event): void => {
             <span v-if="isArchived(props.conversation)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                 <Icon name="box" class="text-2xs text-subtle" />
             </span>
-            <!-- The agents it started, counted, as its board card counts them: the list opens under this card only while it is on screen (ChildRows). -->
-            <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
             <span v-if="props.view.model !== undefined && modelShown" class="max-w-24 truncate">{{ props.view.model }}</span>
             <span v-else-if="twinFact !== undefined && modelShown" class="max-w-24 truncate">{{ twinFact }}</span>
+            <!-- After the model and before the time, as on its board card. The list opens under this card only while it is on screen (ChildRows). -->
+            <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
             <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
                 timeAgo(props.agent.updatedAt, { days: true })
