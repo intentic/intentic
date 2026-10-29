@@ -8,10 +8,14 @@ import { preferredAccount, roomiestAccount } from "@intentic/sandbox-contract/mo
 // hands in the provider's rows in the provider's own order, which is the order the daemon's picks break ties by.
 
 // Runtimes that place a turn naming no account by what each account has left: Claude by the serviceability rule itself
-// (harness-credentials.ts, preferredAccount), Cursor by its ledger of refusals (cursor-usage.ts), which a row reads as a
-// spent pool. Cursor, alone, differs when every account is spent for the model: it takes the one refused longest ago.
-// Every other runtime runs such a turn on its first connected account.
-const PICKS_BY_ALLOWANCE: ReadonlySet<AgentProvider> = new Set<AgentProvider>([`claude`, `cursor`]);
+// (harness-credentials.ts, preferredAccount), Devin by the same rule (devin-provider.ts unpinnedAccount), Cursor by its
+// ledger of refusals (cursor-usage.ts), which a row reads as a spent pool. Cursor, alone, differs when every account is
+// spent for the model: it takes the one refused longest ago. Every other runtime runs such a turn on its first connected
+// account.
+// Devin was missing here after the daemon stopped taking its first account (2026-10-28): the composer read the spent
+// first account as where the turn ran, called the send blocked, and a press past that reading named the spent account
+// (composerSend.ts nameBlockedAccount), so the turn was refused there with two unspent accounts beside it (2026-10-29).
+const PICKS_BY_ALLOWANCE: ReadonlySet<AgentProvider> = new Set<AgentProvider>([`claude`, `cursor`, `devin`]);
 
 /** The row a turn naming no account runs on, by its runtime's own rule. */
 export const autoAccount = <T extends { readonly state: AccountState }>(provider: AgentProvider, rows: readonly T[]): T | undefined =>

@@ -36,6 +36,12 @@ describe(`a turn naming no account`, () => {
         expect(autoAccount(`cursor`, [row(`first`, UNREAD), row(`second`, UNREAD)])?.id).toBe(`first`);
     });
 
+    it(`skips a Devin account whose weekly quota was refused, as the daemon's unpinned pick does`, () => {
+        const accounts = [row(`first`, SPENT), row(`second`, UNREAD), row(`third`, UNREAD)];
+        expect(autoAccount(`devin`, accounts)?.id).toBe(`second`);
+        expect(servingAccount(`devin`, accounts, { account: undefined, named: false })).toEqual({ id: `second`, byAllowance: true });
+    });
+
     it(`skips a Cursor account spent on the model, as its ledger of refusals does`, () => {
         expect(autoAccount(`cursor`, [row(`refused`, SPENT), row(`clear`, UNREAD)])?.id).toBe(`clear`);
     });
