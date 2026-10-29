@@ -33,7 +33,7 @@ export const settingsContract = {
         .output(AgentDomainPolicySchema),
     setAgentDomain: procedure
         .route({ method: "POST", path: "/settings/agent-domain", summary: "Choose the agent execution domain" })
-        .meta({ floor: "owner", panel: false, control: "never" })
+        .meta({ floor: "maintainer", panel: false, control: "never" })
         .input(AgentDomainPolicySchema)
         .output(OkSchema),
     aiLiteracy: procedure.route({ method: "GET", path: "/settings/ai-literacy/{locale}", summary: "Read the AI literacy notice and your confirmation" })

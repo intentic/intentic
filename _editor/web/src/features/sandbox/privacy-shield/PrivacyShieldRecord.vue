@@ -19,7 +19,7 @@ const { loaded } = usePrivacyLog();
 
 const policy = computed<PrivacyShieldPolicy | undefined>(() => status.value?.policy);
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
-const notice = computed(() => shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)));
+const notice = computed(() => shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.othersChange`), t(`sandbox.agentPrivacyShield.couldntSave`)));
 
 // Added to what is saved, unless the shield already reads it as listed.
 const neverMask = (value: string): void => {

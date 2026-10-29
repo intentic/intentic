@@ -9,8 +9,8 @@ import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useOperation } from "../../../workbench/operations/operations";
 
-// The passkeys registered with the active sandbox, as the Access tab manages them: one's own (everyone's, for the
-// owner), the owner's require switch, and the recovery codes that switch hands out. Adding one rides the ordinary
+// The passkeys registered with the active sandbox, as the Access tab manages them: one's own (members' too, for whoever
+// runs people and access), the owner's require switch, and the recovery codes that switch hands out. Adding one rides the ordinary
 // authenticated client; the daemon binds the passkey to whoever the bearer is.
 
 const EMPTY: PasskeysList = { passkeys: [], required: false };

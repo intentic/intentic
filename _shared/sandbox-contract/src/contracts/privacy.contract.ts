@@ -16,9 +16,10 @@ import {
 } from "../schemas/privacy.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// The privacy shield's policy, its log, and the datasets taught to it. The policy is the owner's alone: it is stored
-// off the workspace (an agent could otherwise turn off the shield it is held to), and only the owner may change it.
-// Teaching values only ever masks more, so the agent's CLI may do it; forgetting them is the owner's.
+// The privacy shield's policy, its log, and the datasets taught to it. The policy is stored off the workspace (an agent
+// could otherwise turn off the shield it is held to), and only a person changes it: the owner, Full access, or someone
+// given the Privacy shield (members.ts `ManageRightSchema`), who also read masked values back. Teaching values only ever
+// masks more, so the agent's CLI may do it; forgetting them is a person's call too.
 export const privacyContract = {
     status: procedure
         .route({
@@ -38,7 +39,7 @@ export const privacyContract = {
             description:
                 "Replaces the policy whole. Turning the shield on puts every turn that starts from then on, whose runtime can be shielded, behind the gateway, and refuses the turns that cannot be shielded on an untrusted provider; a turn already running keeps the route it started with. A change to what is masked or trusted holds from the next model request.",
         })
-        .meta({ floor: "owner", control: "never", panel: false })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
         .input(PrivacyShieldPolicySchema)
         .output(OkSchema),
     log: procedure
@@ -58,7 +59,7 @@ export const privacyContract = {
             description:
                 "The value each token stands for, from the vault, so the owner can check what the shield masked and spot a value it should have left alone. Only the owner may ask; a token the vault never gave out is left out.",
         })
-        .meta({ floor: "owner", control: "never", panel: false })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
         .input(PrivacyRevealSchema)
         .output(z.record(z.string(), z.string())),
     image: procedure
@@ -69,7 +70,7 @@ export const privacyContract = {
             description:
                 "The picture as it was and as the shield painted it before it left, for a log entry's image replacement. The picture before holds the personal data, so only the owner may ask. Only the most recent images are kept; an older one answers not found.",
         })
-        .meta({ floor: "owner", control: "never", panel: false })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
         .input(z.object({ id: z.string().regex(PRIVACY_IMAGE_ID) }))
         .output(PrivacyImagePairSchema),
     dictionary: procedure
@@ -91,6 +92,7 @@ export const privacyContract = {
             description:
                 "What the shield would mask in the text with the policy as saved (every detector, the name lists, the owner's own rules, the values the vault knows) and what found each. Nothing is given a token or kept, whatever the switch says.",
         })
+        .meta({ right: "privacy" })
         .input(z.object({ text: z.string().max(PRIVACY_PREVIEW_MAX) }))
         .output(PrivacyPreviewSchema),
     sources: procedure
@@ -110,7 +112,7 @@ export const privacyContract = {
             description:
                 "Each value is masked wherever it appears from now on, in every form it is written, whether or not the detectors would have found it. Teaching only ever masks more, so the agent may do it.",
         })
-        .meta({ agent: true })
+        .meta({ agent: true, right: "privacy" })
         .input(
             z.object({
                 source: z.string().min(1).max(200).describe("Where the values came from: a file and its column, a table."),
@@ -126,7 +128,7 @@ export const privacyContract = {
             description:
                 "Stops matching the values taught from one source. Tokens already given to them still resolve, so earlier conversations keep reading right.",
         })
-        .meta({ floor: "owner", control: "never", panel: false })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
         .input(z.object({ source: z.string().min(1).max(200) }))
         .output(z.object({ forgotten: z.number().int() })),
 };

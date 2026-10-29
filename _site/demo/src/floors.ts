@@ -1,7 +1,7 @@
 import type { MemberSelf } from "@intentic/sandbox-contract/schemas/members";
-import { memberAccess } from "@intentic/sandbox-contract/schemas/members";
+import { MANAGE_RIGHTS, memberAccess } from "@intentic/sandbox-contract/schemas/members";
 import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
-import { demoAiAccounts, demoTier } from "./mode";
+import { demoAiAccounts, demoManages, demoTier } from "./mode";
 import { accessRequestOf } from "./fixture/access";
 import { DEMO_USER } from "./platform";
 import type { DemoHandler } from "./transport";
@@ -14,11 +14,16 @@ import type { DemoHandler } from "./transport";
 
 /** What the daemon tells the person about themselves, for the tier the demo is read as. */
 export const demoSelf = (): MemberSelf => {
+    // The owner and Full access run every part of the sandbox, as the daemon answers them.
     if (demoTier === `owner`) {
-        return { role: `owner`, agents: `run`, edit: `all` };
+        return { role: `owner`, agents: `run`, edit: `all`, manages: [...MANAGE_RIGHTS] };
     }
-    const access = memberAccess({ role: demoTier });
+    const access = memberAccess({ role: demoTier, manages: demoTier === `maintainer` ? undefined : demoManages });
     const self: MemberSelf = { role: demoTier, agents: access.agents, edit: access.edit === `all` || access.edit === `none` ? access.edit : [...access.edit] };
+    const manages = demoTier === `maintainer` ? MANAGE_RIGHTS : (access.manages ?? []);
+    if (manages.length > 0) {
+        self.manages = [...manages];
+    }
     if (access.see !== undefined) {
         self.areas = [...access.see];
     }
@@ -40,7 +45,12 @@ export const withFloors =
             return daemon(request, url);
         }
         const self = demoSelf();
-        const refusal = memberRefusal({ role: self.role, agents: self.agents, areas: self.areas }, request.method, url.pathname, url.searchParams.get(`path`) ?? undefined);
+        const refusal = memberRefusal(
+            { role: self.role, agents: self.agents, areas: self.areas, manages: self.manages },
+            request.method,
+            url.pathname,
+            url.searchParams.get(`path`) ?? undefined,
+        );
         if (refusal === undefined) {
             return daemon(request, url);
         }

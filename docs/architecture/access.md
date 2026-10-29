@@ -34,7 +34,7 @@ The conversation latches who it acts for as its turns begin ([`identity-latch.ts
 
 | Limit | Comes from |
 | --- | --- |
-| A person | their roster row: the owner every answer, anyone on the roster what their row says (a maintainer runs every tool but may be held to some AI accounts, connections and secrets), someone no longer on the roster nothing |
+| A person | their roster row: the owner every answer, anyone on the roster what their row says (a maintainer runs every tool but may be held to some AI accounts, connections and secrets), someone no longer on the roster nothing. An AI account a person connected themselves is always in their list |
 | A service | its steward, as a person above, intersected with its profile. A service, steward or profile that no longer exists reaches nothing |
 | The organisation | the ceiling a bound sandbox's policy carries, on tools and AI accounts |
 
@@ -55,7 +55,24 @@ A service always acts for its steward, so the oldest rule here still holds for u
 
 ## Profiles on a person
 
-A member's row holds either answers of its own or `profile: <id>`. A row holding a profile carries that profile's answers written out on it, so every reader of the row (the route floors, the authorizer, the platform's copy of the tier, the presence list) reads one shape. Saving a profile rewrites the rows of everyone who holds it and closes their open sockets, as a re-grade does, and answers with each holder's tier so the editor can bring the platform's copy along. A profile cannot make a maintainer: that tier holds the owner's operating authority and is granted to a person, never through something shared.
+A member's row holds either answers of its own or `profile: <id>`. A row holding a profile carries that profile's answers written out on it, so every reader of the row (the route floors, the authorizer, the platform's copy of the tier, the presence list) reads one shape. Saving a profile rewrites the rows of everyone who holds it and closes their open sockets, as a re-grade does, and answers with each holder's tier so the editor can bring the platform's copy along. A profile cannot make a maintainer: that tier holds the owner's operating authority and is granted to a person, never through something shared. Rights (below) are not in a profile either, for the same reason: they ride beside it on the person's row.
+
+## Who runs which part
+
+Full access (the maintainer tier) runs the sandbox as the owner does, people and access included, their own row too. Someone with access of their own may be given parts of it one at a time, as `manages` on their row ([`members.ts`](../../_shared/sandbox-contract/src/schemas/members.ts) `ManageRightSchema`):
+
+| Right | What it opens |
+| --- | --- |
+| `people` (People & access) | the roster and the platform's invite records, requests for access, areas, access profiles, who opens previews, another member's passkeys |
+| `secrets` (Secrets) | the Secrets page whole: values, approvers, host and program guards, how a command-line tool's credential reaches the agent |
+| `privacy` (Privacy shield) | what the shield masks, reading masked values back, teaching and forgetting datasets |
+| `ownAccounts` (their own AI accounts) | connecting AI accounts; the ones they connected are theirs to run on whatever their AI accounts list says, and theirs alone to rename or disconnect |
+
+A route that runs one of these parts names it (`right` in its RouteMeta), and `memberRefusal` admits whoever holds it below the route's floor, so the editor and the daemon still answer from one check. People & access below Full access is bounded by `peopleChangeRefusal`, on the daemon and on the platform alike: it never grants Full access, never changes a Full access person's access or its holder's own, and hands out only the rights its holder has. An area its holder is fenced to, and the profile their own access comes from, are changed by the owner or Full access.
+
+What stays the owner's alone is what is theirs personally: the platform's record of the sandbox (name, logo, plan, deleting it), adopting it again on the platform, the require-a-passkey switch and its recovery codes, the owner's own passkeys, the owner's computers (typing a secret there, pairing their keyrings, connecting a device) and loosening the network fence, which the machine checks against the owner's passkey.
+
+Who connected each AI account is recorded beside the roster ([`account-connectors.ts`](../../_sandbox/sandbox/src/auth/members/account-connectors.ts)) and shown on every list of accounts, so whoever narrows a person's AI accounts sees whose account each one is.
 
 ## Where a person's access ends
 
@@ -63,8 +80,8 @@ A person below the owner opens the same editor, so every place, press and read h
 is drawn. One check answers that on both sides: the daemon refuses with it ([`member-reach.ts`](../../_shared/sandbox-contract/src/protocol/member-reach.ts)
 `memberRefusal`: each route's floor, a guest's list, running agents off), and the editor asks the same function over the
 same facts (their tier and `GET /members/self`) through [`useAccess`](../../_editor/web/src/client/sandbox/access/useAccess.ts).
-A route whose handler holds a stricter tier declares it as its floor too (`GET /members` is the owner's), so the
-declaration tells the truth.
+A route whose handler holds a stricter tier declares it as its floor too (`POST /system/passkeys/policy` is the owner's),
+so the declaration tells the truth.
 
 - **Nothing is sent that would be refused.** The fetch layer asks the check before every request to the active
   sandbox ([`forecast.ts`](../../_editor/web/src/client/sandbox/access/forecast.ts)) and answers a refusal itself, in the
@@ -81,8 +98,9 @@ declaration tells the truth.
   card saying whom it waits on); every other press they cannot make is not drawn. A tone is never `danger`: being
   read-only is how the place is for them, not something that broke.
 - **They can ask.** The gate and the line carry "Ask for access" (`POST /members/requests`), which records what stood
-  in the way and where they were ([`access-requests.ts`](../../_sandbox/sandbox/src/auth/members/access-requests.ts)). The
-  owner sees the requests above the roster on Access ▸ People and counted on the sandbox's attention; granting the
+  in the way and where they were ([`access-requests.ts`](../../_sandbox/sandbox/src/auth/members/access-requests.ts)).
+  Whoever runs people and access sees the requests above the roster on Access ▸ People, and the owner sees them counted
+  on the sandbox's attention; granting the
   person anything answers theirs, and the asker's own answer says they asked. An organisation's lock and the owner's
   own tier offer no ask: no grant could change them.
 - **Checked by walking it.** The demo's daemon holds `?as=<tier>` to the same floors ([`floors.ts`](../../_site/demo/src/floors.ts)),
@@ -118,6 +136,16 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
   maintainer's row now carries both lists like anyone's and every turn worked for them keeps to them; the terminal and
   revealing a secret still reach past them, which the panel says, so the limit is a rule for people trusted to operate
   the box. A tool ceiling and a profile stay refused on a maintainer.
+- **Full access means full, and the parts are grantable one by one** (2026-10-29). Membership used to be the owner's
+  alone, on the grounds that a revokable grant must not change who holds grants, and the owner kept secret gates, guards,
+  credential delivery, the privacy shield, previews, the agent domain and server codes too. The Access panel offered
+  "Full access" to people who could then change neither who gets in nor most of what decides it, and an owner who
+  wanted a co-admin had no way to make one. Full access now holds all of it, its own row included; what stays the
+  owner's is what is theirs personally. The alternative of a single extra "admin" tier would have kept the
+  all-or-nothing the owner asked to be rid of, so the parts are rights a custom access may hold one at a time, and the
+  one that hands out access (People & access) is bounded so it cannot be used to mint Full access. Limits set on a
+  Full access person are still a rule for people trusted to operate the box, as before: they can now lift them through
+  the Access page as well as through a terminal.
 - **The sandbox cannot open its own network fence** (2026-10-27). A sandbox's outbound traffic to private networks is
   fenced by `ic` on the host ([`egress.ts`](../../_shared/sandbox-contract/src/schemas/egress.ts)), off by default.
   Tightening it is any maintainer's device op. Loosening it from the editor needs the owner's passkey over the exact

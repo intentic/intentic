@@ -5,15 +5,15 @@ import { computed } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
-import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { useOperation } from "../../../../workbench/operations/operations";
 
 // Who may open this sandbox's previews from outside (sandbox-contract schemas/ports.ts): anyone with the address, or
 // only its members, for app previews alone or forwarded ports too. Every member reads it, so a maintainer sharing a
-// preview's address knows whether it will open for the person they send it to; the owner alone changes it, as with the
-// passkey rule. A daemon older than the guard serves every preview openly and has no switch to show.
+// preview's address knows whether it will open for the person they send it to; whoever runs people and access changes it,
+// since who may open a preview is who gets in. A daemon older than the guard serves every preview openly and has no switch to show.
 
 // The three choices in a person's words, in the order they close: built when read, so a language switch reaches them.
 export const previewGuardChoices = (): readonly PickerOption<PreviewGuardScope>[] => [
@@ -23,9 +23,9 @@ export const previewGuardChoices = (): readonly PickerOption<PreviewGuardScope>[
 ];
 
 export function usePreviewGuard() {
-    const { active } = useSandbox();
+    const { holds } = useAccess();
     const served = computed(() => supportsRoute(`ports.previewGuard`));
-    const isOwner = computed(() => active.value?.role === `owner`);
+    const mayChange = computed(() => holds(`people`));
     const read = rpcQuery(`ports.previewGuard`);
     const { query, error, locked } = useSandboxQuery({ ...read, enabled: served });
     // The sandbox's, in the operations ledger: the section opened again mid-write holds its picker.
@@ -51,7 +51,7 @@ export function usePreviewGuard() {
 
     return {
         served,
-        isOwner,
+        mayChange,
         scope,
         // A read the person's access refuses (a guest's) is no failure: the section is simply not theirs.
         locked: computed(() => locked.value !== undefined),

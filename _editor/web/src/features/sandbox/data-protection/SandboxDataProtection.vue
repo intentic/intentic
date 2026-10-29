@@ -21,7 +21,7 @@ import { useComplianceReport, usePreset } from "./useCompliance";
 // Every word on it is a short line; what a newcomer needs once and a regular never again (why the order, what a step's
 // list means in law) sits behind an (i) beside the line it explains, so the page reads as its controls and counts.
 //
-// Maintainer and up see it; only the owner applies.
+// Maintainer and up see it and apply the preset.
 
 const t = useT();
 const { report, error: reportError } = useComplianceReport();

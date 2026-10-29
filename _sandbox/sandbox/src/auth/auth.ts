@@ -1,4 +1,4 @@
-import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import type { AgentAccess, CredentialReach, EditScope, ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import { type ToolCeiling, ToolCeilingSchema } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { entryId } from "@intentic/sandbox-contract/schemas/internal";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas/shared";
@@ -9,6 +9,7 @@ import {
     AiAccountKeySchema,
     CredentialReachSchema,
     EditScopeSchema,
+    ManageRightSchema,
     memberAccess,
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
@@ -161,6 +162,9 @@ export interface Member {
     // The access profile the answers above were written from (docs/architecture/access.md); saving that profile writes
     // them again. Absent is answers of the row's own.
     readonly profile?: string;
+    // The parts of the sandbox they run besides their own work (sandbox-contract `ManageRightSchema`). Absent is none;
+    // never on a maintainer, who runs every part, nor on a guest.
+    readonly manages?: readonly ManageRight[];
 }
 
 // What a grant decides, in the shape both the store and the route pass it around in. `emailSignIn` and `credentials`
@@ -179,6 +183,8 @@ export interface MemberGrant {
     readonly assistants?: readonly string[] | "all" | undefined;
     // The profile these answers were written from; absent unlinks the row (sandbox-contract MemberGrantSchema).
     readonly profile?: string | undefined;
+    // The rights to write; absent keeps the row's (sandbox-contract MemberGrantSchema).
+    readonly manages?: readonly ManageRight[] | undefined;
 }
 
 export interface MembersStore {
@@ -215,6 +221,8 @@ const MemberSchema = z
         tools: ToolCeilingSchema.optional(),
         assistants: z.array(entryId).optional(),
         profile: entryId.optional(),
+        // Added 2026-10-29, optional: a row written before it runs no part of the sandbox beyond its own work.
+        manages: z.array(ManageRightSchema).optional(),
     })
     .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.role, {
         message: "a row's access must be one a grant could write, and its role the tier that access makes",
@@ -331,6 +339,8 @@ export interface Caller extends VerifiedIdentity {
     readonly areas?: readonly string[];
     // A chatting guest's assistants by persona id, inside what their areas hold; absent is every one they hold.
     readonly assistants?: readonly string[];
+    // The parts of the sandbox they were given (sandbox-contract `holdsRight`); the owner and a maintainer run every one.
+    readonly manages?: readonly ManageRight[];
 }
 
 // What authorize() hands the middleware: the caller and the proof behind them, so a session renewal keeps its methods
@@ -531,7 +541,8 @@ export const createAuthorizer = (deps: {
         const access = memberAccess(member);
         const areas = access.see === undefined ? {} : { areas: access.see };
         const assistants = member.assistants === undefined ? {} : { assistants: member.assistants };
-        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants };
+        const manages = access.manages === undefined ? {} : { manages: access.manages };
+        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants, ...manages };
         return access.lands === true ? { ...caller, lands: true } : caller;
     };
     // The require-passkey policy, read per request like the roster (proof-methods.ts says which proofs pass it).

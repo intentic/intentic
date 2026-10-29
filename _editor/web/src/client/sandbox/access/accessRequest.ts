@@ -70,8 +70,9 @@ export const useAccessRequest = (): AccessRequest => {
     return { asked: computed(() => self.value?.askedAt !== undefined), asking, failure, ask };
 };
 
-// THE OWNER'S SIDE: every open request, read beside the roster (Access ▸ People) and counted on the sandbox's attention.
-// Only the owner reads them, so `enabled` is the reader's ownership; granting the person anything answers theirs on the
+// THE SIDE THAT ANSWERS: every open request, read beside the roster (Access ▸ People) by whoever runs people and access,
+// and counted on the owner's attention for the sandbox. `enabled` is whether this reader may read them; granting the
+// person anything answers theirs on the
 // daemon, whose push refreshes this read, and dismissing one answers it without a grant. A daemon from before requests
 // has none to read: asked anyway, every page the owner opened logged a failed read (the compat tier, run 40433162504).
 export const useAccessRequests = (enabled: MaybeRefOrGetter<boolean>) => {

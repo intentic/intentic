@@ -24,8 +24,9 @@ export const areasContract = {
             path: "/areas",
             summary: "Create or edit an area",
             description:
-                "Writes the whole area; sending an id that exists edits it. Editing the folders of an area people already hold changes what those people see on their next request, which is why this is the sandbox owner's to do and why the file it writes is tracked and reviewable.",
+                "Writes the whole area; sending an id that exists edits it. Editing the folders of an area people already hold changes what those people see on their next request, which is why this is for whoever runs people and access, and why the file it writes is tracked and reviewable.",
         })
+        .meta({ right: "people" })
         .input(AreaSchema)
         .output(OkSchema),
     // Refused while anyone still holds it: a member row pointing at an area that no longer exists would either fail
@@ -38,6 +39,7 @@ export const areasContract = {
             description:
                 "Removes the name and the folders behind it. Refused while a member still points at it, since nobody chose what such a row should then mean; move them onto another area first, or off areas entirely.",
         })
+        .meta({ right: "people" })
         .input(AreaIdParamSchema)
         .output(OkSchema),
 };

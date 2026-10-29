@@ -3,7 +3,9 @@ import { useMembers } from "../../client/sandbox/useMembers";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 
-// Whether /sandbox/access names more than one person; the agents board's Everyone/Mine row is meaningless alone.
+// Whether /sandbox/access names more than one person; the agents board's Everyone/Mine row is meaningless alone. Only
+// the owner has to read the roster to know: anyone else is on it, beside the owner, which already makes two, whatever
+// they may manage.
 export function useSandboxSharedAccess() {
     const { active } = useSandbox();
     const isOwner = computed(() => active.value?.role === `owner`);

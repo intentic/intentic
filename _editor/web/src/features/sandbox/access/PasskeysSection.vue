@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import type { PasskeySummary } from "@intentic/sandbox-contract/schemas/system";
+import { peopleChangeRefusal } from "@intentic/sandbox-contract/schemas/members";
 import { Button, Code, Notice, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import { selfMember, useMembers } from "../../../client/sandbox/useMembers";
 import { usePasskeys } from "./usePasskeys";
 import { useT } from "@intentic/ui/i18n";
 
 // Passkeys on the Access tab: the sandbox is the relying party, so a passkey here opens THIS sandbox and no other.
-// Everyone manages their own; the owner also sees members' (to reset one who is locked out) and holds the rule that
-// a passkey is the only proof that opens the sandbox, with the recovery codes that keep that rule from locking the
-// owner out. Codes are shown once; the daemon keeps only their hashes.
+// Everyone manages their own; whoever runs people and access also sees members' (to reset one who is locked out), the
+// owner's aside, which are the owner's alone. The owner holds the rule that a passkey is the only proof that opens the
+// sandbox, with the recovery codes that keep that rule from locking the owner out. Codes are shown once; the daemon keeps
+// only their hashes.
 
 const t = useT();
 
@@ -23,6 +27,19 @@ const isOwner = computed(() => active.value?.role === `owner`);
 const label = ref(``);
 
 const mine = (passkey: PasskeySummary): boolean => passkey.email.toLowerCase() === (user.value?.email ?? ``).toLowerCase();
+// Below Full access, another member's passkey is reset only where their access could be changed (sandbox-contract
+// `peopleChangeRefusal`): never a Full access person's. The list already leaves out what the reader may not see.
+const { holds, role } = useAccess();
+const self = selfMember();
+const { members } = useMembers({ enabled: computed(() => holds(`people`) && !isOwner.value) });
+const removable = (passkey: PasskeySummary): boolean => {
+    const tier = role.value;
+    if (mine(passkey) || isOwner.value || tier === undefined) {
+        return true;
+    }
+    const before = members.value.find((member) => member.email.toLowerCase() === passkey.email.toLowerCase());
+    return peopleChangeRefusal({ email: user.value?.email ?? ``, role: tier, manages: self.value?.manages }, { email: passkey.email, before }) === undefined;
+};
 const ownCount = computed(() => list.value.passkeys.filter(mine).length);
 
 const now = ref(Date.now());
@@ -103,12 +120,12 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
 
         <Row v-for="passkey in list.passkeys" :key="passkey.id" icon="key" :title="passkey.label" :description="describe(passkey)">
             <template #meta>
-                <!-- Another member's passkey, in the owner's list: named so a reset removes the right one. -->
+                <!-- Another member's passkey, in the list of whoever runs people: named so a reset removes the right one. -->
                 <StatusBadge v-if="!mine(passkey)" variant="neutral" :label="passkey.email" size="xs" />
                 <StatusBadge v-if="passkey.backedUp" variant="info" :label="t(`sandbox.passkeysSection.synced`)" size="xs" />
             </template>
             <template #control>
-                <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="remove(passkey.id)" />
+                <Button v-if="removable(passkey)" :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="remove(passkey.id)" />
             </template>
         </Row>
 

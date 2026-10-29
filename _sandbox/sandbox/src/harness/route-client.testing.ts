@@ -79,8 +79,13 @@ export const collect = async <T>(stream: AsyncIterable<T>): Promise<T[]> => {
 };
 
 // Client for one feature's routes and its own deps, not the whole daemon's Services, which would break every unrelated
-// suite as it grows. App middleware (auth, CORS, boot gate) is tested separately.
-export const routesClient = <TContract extends AnyContractRouter>(contract: TContract, router: AnyRouter): ContractRouterClient<TContract> => {
+// suite as it grows. App middleware (auth, CORS, boot gate) is tested separately. `identity` is the caller the bearer
+// middleware would have proven, for a route that reads `context.identity`; absent is the owner's own tools.
+export const routesClient = <TContract extends AnyContractRouter>(
+    contract: TContract,
+    router: AnyRouter,
+    identity?: ProvenCaller,
+): ContractRouterClient<TContract> => {
     const handler = new OpenAPIHandler(router);
     return createORPCClient(
         new OpenAPILink(contract, {
@@ -88,6 +93,9 @@ export const routesClient = <TContract extends AnyContractRouter>(contract: TCon
             fetch: async (request) => {
                 const url = new URL(request.url);
                 const context: OrpcContext = { headers: request.headers, method: request.method, url: url.pathname + url.search };
+                if (identity !== undefined) {
+                    context.identity = identity;
+                }
                 const { response } = await handler.handle(request, { context });
                 return response ?? new Response("no matching procedure", { status: 404 });
             },

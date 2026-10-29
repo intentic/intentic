@@ -4,7 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRole } from "../../../client/sandbox/useRole";
-import { ACCESS_PARTS, type AccessPart, LINKED_SANDBOXES_ANCHOR, MEMBER_ACCESS_PARTS } from "../../../models/sandbox/sandboxNav";
+import { ACCESS_PARTS, type AccessPart, LINKED_SANDBOXES_ANCHOR, MEMBER_ACCESS_PARTS, PEOPLE_ACCESS_PARTS } from "../../../models/sandbox/sandboxNav";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import AccessProfiles from "./parts/AccessProfiles.vue";
 import OrgHeldSection from "../../organisations/OrgHeldSection.vue";
@@ -26,7 +27,8 @@ import { useStandingGrants } from "./useStandingGrants";
 //
 // The part lives in the query, so a link lands on it (sandboxNav.ts `accessPath`, a search answer's `?section=`); People,
 // the first, writes no param. A member below maintainer is drawn their own card and their own passkeys, the two parts the
-// daemon answers them. Each part mounts only while it is open, so the door counts are read only by whoever asks for them.
+// daemon answers them; one given People & access is drawn the profiles and areas that access is built from as well.
+// Each part mounts only while it is open, so the door counts are read only by whoever asks for them.
 
 const { open = undefined } = defineProps<{
     // A person a link names (`?open=<email>`), handed down by the hub so a reload lands on them.
@@ -37,18 +39,19 @@ const t = useT();
 const route = useRoute();
 const router = useRouter();
 const { canShip } = useRole();
+const { holds } = useAccess();
 // Areas is an organisation section of its own (sandbox-contract schemas/organisation.ts), from when it was a hub row: a
 // hidden one leaves the tabs, a locked one is drawn read-only under its own notice, as Activity's parts held by another
 // section are.
 const { modeOf } = useOrgPolicy();
 
-const parts = computed<readonly AccessPart[]>(() =>
-    canShip.value
-        ? ACCESS_PARTS.filter(
-              (part) => (part !== `profiles` || supportsRoute(`accessProfiles.list`)) && (part !== `areas` || modeOf(`areas`) !== `hidden`),
-          )
-        : MEMBER_ACCESS_PARTS,
-);
+const offered = (part: AccessPart): boolean => (part !== `profiles` || supportsRoute(`accessProfiles.list`)) && (part !== `areas` || modeOf(`areas`) !== `hidden`);
+const parts = computed<readonly AccessPart[]>(() => {
+    if (canShip.value) {
+        return ACCESS_PARTS.filter(offered);
+    }
+    return holds(`people`) ? PEOPLE_ACCESS_PARTS.filter(offered) : MEMBER_ACCESS_PARTS;
+});
 const first = computed<AccessPart>(() => parts.value[0] ?? `people`);
 
 // Two parts carry a count, so what waits on them is seen from whichever part the reader came for: Programs the tasks a

@@ -1,7 +1,8 @@
+import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
-import { errorCode, rejectForbidden } from "../../harness/route-client.testing.js";
+import { errorCode, proven } from "../../harness/route-client.testing.js";
 import { fakeDevices, fakeKeyring, pointerOf } from "../device/keyring.testing.js";
 import type { ProgramWidenRequest, ProgramWidenVerdict } from "../gates/program-guard-gate.js";
 import { createSecretProgramRoutes, type SecretProgramRoutesDeps } from "./secret-programs.routes.js";
@@ -9,7 +10,8 @@ import { secretsSliceFake } from "../secrets-slice.testing.js";
 
 // Who may change a secret's program guard turns on the change, as for the host guard: taking a program off or turning
 // any-field off is open to every caller the route admits; adding a program or an app, or turning any-field on, is the
-// owner's, asked on a card when the agent's CLI wants it. A secret a computer's keyring holds keeps its list there.
+// owner's, Full access's or a member's given Secrets, asked of the owner on a card when the agent's CLI wants it. A secret a
+// computer's keyring holds keeps its list there.
 
 interface Setup {
     readonly routes: ReturnType<typeof createSecretProgramRoutes>;
@@ -17,14 +19,15 @@ interface Setup {
     readonly widened: ProgramWidenRequest[];
 }
 
-const setup = async (options: { readonly owner: boolean; readonly widen?: ProgramWidenVerdict }): Promise<Setup> => {
+// `manages`: what the signed-in person who is not the owner was given; Secrets lets them widen as the owner does.
+const setup = async (options: { readonly owner: boolean; readonly widen?: ProgramWidenVerdict; readonly manages?: readonly ManageRight[] }): Promise<Setup> => {
     const rog = fakeKeyring([pointerOf("VPN_PASSWORD", { programs: ["FortiClient.exe"] })]);
     const slice = secretsSliceFake(fakeDevices({ rog }));
     await slice.keyringLink.refresh();
     await slice.sandboxSecrets.set("RDP_PASSWORD", "rdp-password-value");
     const widened: ProgramWidenRequest[] = [];
     const deps: SecretProgramRoutesDeps = {
-        auth: options.owner ? undefined : unstubbed<NonNullable<SecretProgramRoutesDeps["auth"]>>("auth", { authorizeOwner: rejectForbidden }),
+        auth: options.owner ? undefined : unstubbed<NonNullable<SecretProgramRoutesDeps["auth"]>>("auth", { authorize: async () => ({ ...proven("cy@example.com", "collaborator"), manages: options.manages ?? [] }) }),
         secretRegistry: slice.secretRegistry,
         secretProgramGuards: slice.secretProgramGuards,
         deviceSecrets: slice.deviceSecrets,
@@ -54,7 +57,7 @@ test("anybody the route admits may take programs off and turn any-field off, ask
     expect(widened).toEqual([]);
 });
 
-test("adding a program or turning any-field on is refused to a signed-in person who is not the owner, and nothing changes", async () => {
+test("adding a program or turning any-field on is refused to a signed-in person who does not run secrets, and nothing changes", async () => {
     const { routes, slice } = await setup({ owner: false });
     expect(await errorCode(call(routes.setPrograms, MSTSC, { context: signedIn }))).toBe("FORBIDDEN");
     await slice.secretProgramGuards.set("RDP_PASSWORD", { programs: ["mstsc.exe"], packages: [], anyField: false });
@@ -94,4 +97,10 @@ test("a secret a computer's keyring holds is changed on that computer, and a nam
         "VPN_PASSWORD is kept in the keyring on rog, which keeps its program list: change it on rog: intentic-machine keyring edit VPN_PASSWORD",
     );
     expect(await errorCode(call(routes.setPrograms, { subject: "NOPE", programs: [], packages: [], anyField: false }, { context: signedIn }))).toBe("NOT_FOUND");
+});
+
+test("a member given Secrets widens a program guard as the owner does, asking nobody", async () => {
+    const { routes, widened } = await setup({ owner: false, manages: ["secrets"] });
+    expect(await call(routes.setPrograms, MSTSC, { context: signedIn })).toEqual({ programs: ["mstsc.exe"], packages: [], anyField: false });
+    expect(widened).toEqual([]);
 });

@@ -13,15 +13,18 @@ import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../lib/queryKeys";
+import type { MembersRoster } from "@intentic/sandbox-contract/schemas/members";
+import { useAccess } from "../../client/sandbox/access/useAccess";
 import { useMembers } from "../../client/sandbox/useMembers";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { useSandboxSession } from "../../client/session/sandboxSession";
 
 // User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
-// surface only observes the server state it reads (an observer mount refetches its query). `reveal` is the owner's and
-// the maintainers', and deliberately not a query, so a value never enters the cache.
+// surface only observes the server state it reads (an observer mount refetches its query). `reveal` is for whoever runs
+// secrets, and deliberately not a query, so a value never enters the cache.
 
-// Owner and maintainers; anyone below gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
+// The owner, Full access, or someone given Secrets, and of a gated secret only its approvers; anyone else gets the
+// daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
 export const reveal = async (key: string): Promise<string> => (await sandboxRpc.secrets.reveal({ key })).value;
 
 export function useSecretKeys() {
@@ -78,15 +81,41 @@ export function useMissingSecretCount() {
     };
 }
 
+// Who may be offered as an approver, first to last: the owner (the answer people reach for most), then the roster, then
+// the reader, then everybody a gate already names. Without the roster, which only whoever runs people and access reads,
+// the reader and the names already on a gate are all there is: enough to name oneself, and to take somebody off. Compared
+// lowercased, since the roster normalizes on write but a Google claim may preserve case; the first spelling stays.
+export const approverChoicesOf = (roster: MembersRoster | undefined, reader: string | undefined, gates: readonly CredentialGate[]): string[] => {
+    const named = [
+        ...(roster?.owner === undefined ? [] : [roster.owner]),
+        ...(roster?.members ?? []).map((member) => member.email),
+        ...(reader === undefined ? [] : [reader]),
+        ...gates.flatMap((gate) => gate.approvers),
+    ];
+    const seen = new Set<string>();
+    return named.filter((email) => {
+        const key = email.toLowerCase();
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+};
+
 // Who may release what, and who could be named: the approval editor needs both, so one hook covers policy
-// (`/secrets/gates`) and roster (`/members`). Only the owner may write (enforced by the daemon); `isOwner` just
-// renders the editor read-only instead of offering controls that would 403.
+// (`/secrets/gates`) and roster (`/members`). Whoever runs secrets writes them (the owner, Full access, or someone given
+// Secrets; the daemon enforces it); `runsSecrets` just renders the editors read-only for anyone else, instead of offering
+// controls that would be refused.
 export function useCredentialGates() {
     const queryClient = useQueryClient();
     // An unwritten policy answers an empty list; anything else is a real error, surfaced rather than drawing a sandbox
     // with no gates.
     const { query: gatesQuery } = useSandboxQuery(rpcQuery(`secrets.gates`));
-    const { roster } = useMembers();
+    const { holds } = useAccess();
+    // The roster is read only by whoever runs people and access; anyone else would be refused, so is not asked.
+    const namesEveryone = computed(() => holds(`people`));
+    const { roster } = useMembers({ enabled: namesEveryone });
     const { presentedEmail } = useSandboxSession();
     // The inventory too: a closed row says who must release it from the gate the inventory carries.
     const invalidate = (): void => {
@@ -101,29 +130,23 @@ export function useCredentialGates() {
         mutationFn: (subject: string) => sandboxRpc.secrets.removeGate({ subject }),
         onSuccess: invalidate,
     });
-    const owner = computed<string | undefined>(() => roster.value?.owner);
+    const gates = computed<CredentialGate[]>(() => gatesQuery.data.value?.gates ?? []);
     return {
-        gates: computed<CredentialGate[]>(() => gatesQuery.data.value?.gates ?? []),
-        gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value?.gates ?? []).find((gate) => gate.subject === subject),
-        // Owner first (the answer people reach for most), then the roster alphabetically; deduplicated since an owner
-        // also
-        // on the members file must not appear twice.
-        approverChoices: computed<string[]>(() => {
-            const listed = roster.value;
-            return [...new Set([...(listed?.owner === undefined ? [] : [listed.owner]), ...(listed?.members ?? []).map((member) => member.email)])];
-        }),
-        // Compared lowercased: the roster normalizes on write, but a Google claim may preserve case.
-        isOwner: computed<boolean>(() => {
-            const me = presentedEmail.value?.toLowerCase();
-            return me !== undefined && owner.value?.toLowerCase() === me;
-        }),
+        gates,
+        gateFor: (subject: string): CredentialGate | undefined => gates.value.find((gate) => gate.subject === subject),
+        approverChoices: computed<string[]>(() =>
+            approverChoicesOf(namesEveryone.value ? roster.value : undefined, presentedEmail.value?.toLowerCase(), gates.value),
+        ),
+        // Whether the choices hold everybody who could be named, or only the reader and the names already on a gate.
+        namesEveryone,
+        runsSecrets: computed<boolean>(() => holds(`secrets`)),
         setGate,
         removeGate,
     };
 }
 
 // Each secret's host guard. The row reads it off the inventory, so an edit writes and refreshes that; the daemon decides
-// whether the caller may make it (the owner loosens, anybody tightens).
+// whether the caller may make it (whoever runs secrets loosens, anybody tightens).
 export function useSecretHosts() {
     const queryClient = useQueryClient();
     const setHosts = useMutation({
@@ -154,8 +177,8 @@ export function useSecretPrograms() {
     };
 }
 
-// How a connection's credential reaches the agent, and the rules the credential gateway enforces on it. The owner's alone
-// to change; the row reads it off the inventory, so an edit writes and refreshes that.
+// How a connection's credential reaches the agent, and the rules the credential gateway enforces on it. Changed by whoever
+// runs secrets; the row reads it off the inventory, so an edit writes and refreshes that.
 export function useCredentialPolicy() {
     const queryClient = useQueryClient();
     const setPolicy = useMutation({

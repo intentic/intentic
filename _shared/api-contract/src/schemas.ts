@@ -1,6 +1,7 @@
 import type { ResourceType } from "@intentic/resources";
 import { GrantedRoleSchema, MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { PushNotificationSchema } from "@intentic/sandbox-contract/schemas/push";
+import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
 import { WalletNetworkSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { BootReportSchema, HostReportSchema, SetupReportSchema } from "./ingress/ingress-schemas.js";
@@ -405,10 +406,10 @@ export const DaemonUrlSchema = z
 
 // ---- invites: sharing a sandbox with teammates by email ----
 
-// A row in the owner's access roster: an email plus its derived state.
+// A row in the sandbox's access roster: an email plus its derived state.
 //   pending invited, link not yet accepted
 //   accepted an active member
-//   expired the link lapsed unaccepted (owner can resend)
+//   expired the link lapsed unaccepted (whoever manages the roster can resend)
 // `expiresAt` is absent once accepted, or when there is none.
 export const InviteStatusSchema = z.enum(["pending", "accepted", "expired"]);
 export type InviteStatus = z.infer<typeof InviteStatusSchema>;
@@ -416,6 +417,8 @@ export const InviteRecordSchema = z.object({
     email: z.string(),
     // The trust tier granted (never owner); the daemon's list is the enforced copy, this is what re-grades from.
     role: GrantedRoleSchema,
+    // The parts of the sandbox the person runs besides their own work; absent is none.
+    manages: z.array(ManageRightSchema).optional(),
     status: InviteStatusSchema,
     invitedAt: z.string(),
     expiresAt: z.string().optional(),

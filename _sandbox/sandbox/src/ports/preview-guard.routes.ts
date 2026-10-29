@@ -1,13 +1,13 @@
 import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
-import { bearerFrom } from "../auth/auth.js";
-import { listenerIn } from "../auth/proofs/listener.js";
+import { holdsRightBearer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import { PREVIEW_PASS_PATH } from "../auth/previews/preview-guard.js";
 
-// The owner's guard on previews (auth/previews/preview-guard.ts), beside the forwards it covers: reading it, choosing it, and
-// the pass a member's browser opens a guarded preview with.
+// The guard on previews (auth/previews/preview-guard.ts), beside the forwards it covers: reading it, choosing it, and
+// the pass a member's browser opens a guarded preview with. Choosing it is part of who has access, so it is for whoever
+// runs people and access: the owner, Full access, or a member given People & access.
 
 const NOT_OURS = "That is not one of this sandbox's preview addresses.";
 
@@ -15,18 +15,11 @@ export const createPreviewGuardRoutes = (services: Pick<Services, "auth" | "prev
     const i = implement(portsContract).$context<OrpcContext>();
     return {
         previewGuard: i.previewGuard.handler(async () => ({ scope: await services.previewGuards.scope() })),
-        // The owner's bearer only, as for the passkey policy: no token, and no unauthenticated loopback, changes who may
-        // open previews. netd is told at once (bootstrap/netd-door.ts hears the change).
+        // A person's bearer only: no token, and no unauthenticated loopback, changes who may open previews. netd is told
+        // at once (bootstrap/netd-door.ts hears the change).
         setPreviewGuard: i.setPreviewGuard.handler(async ({ input, context }) => {
-            const refusal = "Only the signed-in owner may change who opens this sandbox's previews.";
-            if (services.auth === undefined) {
-                throw new ORPCError("FORBIDDEN", { message: refusal });
-            }
-            try {
-                await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined), listenerIn(context.headers));
-            } catch {
-                // allow(silent-catch): every way the owner check fails is the same refusal to this caller.
-                throw new ORPCError("FORBIDDEN", { message: refusal });
+            if (services.auth === undefined || !(await holdsRightBearer(services, context.headers, "people"))) {
+                throw new ORPCError("FORBIDDEN", { message: "Only someone signed in who runs people and access may change who opens this sandbox's previews." });
             }
             return { scope: await services.previewGuards.set(input.scope) };
         }),

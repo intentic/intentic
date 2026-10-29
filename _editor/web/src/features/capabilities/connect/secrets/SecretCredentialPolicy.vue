@@ -15,18 +15,18 @@ import { EDITABLE_VALUE, FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLoo
 
 // Held by the sandbox's credential gateway (the default wherever the connector declares routes), an SSH key held by its
 // ssh agent, or handed over as it is; and the method and path rules the gateway enforces on every request it attaches the
-// credential to. Only the owner changes either. The rules editor is the plain JSON the daemon stores, since a rule is
+// credential to. Whoever runs secrets changes either. The rules editor is the plain JSON the daemon stores, since a rule is
 // three short fields and a form for it would hide the order that decides which rule wins.
 
 const t = useT();
 
 const { row } = defineProps<{ row: SecretRow }>();
 
-const { isOwner } = useCredentialGates();
+const { runsSecrets } = useCredentialGates();
 const { setPolicy } = useCredentialPolicy();
 
 const policy = computed(() => row.entry.credential);
-// The gateway's rules and its switch: for a credential it carries, or one the owner set to raw that it could carry again.
+// The gateway's rules and its switch: for a credential it carries, or one set to raw by hand that it could carry again.
 const gatewayCard = computed(() => policy.value?.delivery === `gateway` || policy.value?.delivery === `raw`);
 
 // What the agent gets, in the words of its answer, and what that means under it.
@@ -140,7 +140,7 @@ const useConnectorRules = async (): Promise<void> => {
     <template v-if="policy !== undefined && delivery !== undefined">
         <SecretFact :label="t(`capabilities.secretCredentialPolicy.deliveryLabel`)">
             <button
-                v-if="isOwner && gatewayCard"
+                v-if="runsSecrets && gatewayCard"
                 ref="deliveryAnchor"
                 type="button"
                 :class="EDITABLE_VALUE"
@@ -183,12 +183,12 @@ const useConnectorRules = async (): Promise<void> => {
 
         <SecretFact v-if="gatewayCard" :label="t(`capabilities.secretCredentialPolicy.rulesLabel`)">
             <component
-                :is="isOwner ? `button` : `span`"
+                :is="runsSecrets ? `button` : `span`"
                 ref="rulesAnchor"
-                :type="isOwner ? `button` : undefined"
-                :class="isOwner ? EDITABLE_VALUE : FIXED_VALUE"
-                :aria-label="isOwner ? t(`capabilities.secretCredentialPolicy.changeRules`) : undefined"
-                @click="isOwner ? beginRules() : undefined"
+                :type="runsSecrets ? `button` : undefined"
+                :class="runsSecrets ? EDITABLE_VALUE : FIXED_VALUE"
+                :aria-label="runsSecrets ? t(`capabilities.secretCredentialPolicy.changeRules`) : undefined"
+                @click="runsSecrets ? beginRules() : undefined"
             >
                 <ul v-if="policy.rules.length > 0" class="flex flex-col">
                     <li v-for="(rule, index) of policy.rules" :key="index" :class="VALUE_TEXT">

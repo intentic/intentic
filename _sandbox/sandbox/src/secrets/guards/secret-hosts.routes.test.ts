@@ -1,9 +1,10 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
-import { errorCode, rejectForbidden } from "../../harness/route-client.testing.js";
+import { errorCode, proven } from "../../harness/route-client.testing.js";
 import type { WidenRequest, WidenVerdict } from "../gates/host-guard-gate.js";
 import { effectiveHostGuards } from "./host-guards.js";
 import { createSecretHostRoutes, type SecretHostRoutesDeps } from "./secret-hosts.routes.js";
@@ -25,6 +26,8 @@ interface Setup {
 // `owner`: whether the caller holds the owner's bearer. `defaults`: a connector's own hosts per capability id.
 const setup = (options: {
     readonly owner: boolean;
+    // What the signed-in person who is not the owner was given: Secrets lets them loosen as the owner does.
+    readonly manages?: readonly ManageRight[];
     readonly defaults?: ReadonlyMap<string, readonly string[]>;
     readonly widen?: WidenVerdict;
     readonly keyrings?: Readonly<Record<string, FakeKeyring>>;
@@ -32,7 +35,7 @@ const setup = (options: {
     const slice = secretsSliceFake(fakeDevices(options.keyrings ?? {}));
     const widened: WidenRequest[] = [];
     const deps: SecretHostRoutesDeps = {
-        auth: options.owner ? undefined : unstubbed<NonNullable<SecretHostRoutesDeps["auth"]>>("auth", { authorizeOwner: rejectForbidden }),
+        auth: options.owner ? undefined : unstubbed<NonNullable<SecretHostRoutesDeps["auth"]>>("auth", { authorize: async () => ({ ...proven("cy@example.com", "collaborator"), manages: options.manages ?? [] }) }),
         capabilities: memoryCapabilitiesStore([github]),
         secretRegistry: async () => [{ name: "GITHUB_TOKEN", value: "ghp_value", source: "sandbox" }],
         secretHostGuards: slice.secretHostGuards,
@@ -70,7 +73,7 @@ test("anybody the route admits may turn a guard on, and take hosts off it down t
     expect(widened).toEqual([]);
 });
 
-test("turning a guard off or adding a host, from a signed-in person who is not the owner, is refused, and the guard stays", async () => {
+test("turning a guard off or adding a host, from a signed-in person who does not run secrets, is refused, and the guard stays", async () => {
     const { routes, slice, widened } = setup({ owner: false });
     await slice.secretHostGuards.set(GITHUB_ON);
     expect(
@@ -171,4 +174,11 @@ test("a name only a computer's keyring holds keeps its hosts there, and is refus
         "VPN_PASSWORD is kept in the keyring on rog, which keeps its host list: change it on rog: intentic-machine keyring edit VPN_PASSWORD",
     );
     expect(await slice.secretHostGuards.list()).toEqual([]);
+});
+
+test("a member given Secrets loosens a host guard as the owner does, asking nobody", async () => {
+    const { routes, slice, widened } = setup({ owner: false, manages: ["secrets"] });
+    await slice.secretHostGuards.set(GITHUB_ON);
+    expect(await call(routes.setHosts, { subject: "GITHUB_TOKEN", guard: false, hosts: [] }, { context: signedIn })).toEqual({ guard: false, hosts: [] });
+    expect(widened).toEqual([]);
 });

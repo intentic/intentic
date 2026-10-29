@@ -230,6 +230,7 @@ test("GET /members/self answers the caller's own access", async () => {
         agents: "run",
         edit: "all",
         lands: true,
+        manages: ["people", "secrets", "privacy", "ownAccounts"],
     });
     const members = fileMembersStore(join(await mkdtemp(join(tmpdir(), "members-")), "members.json"));
     const app = createApp(
@@ -264,4 +265,28 @@ test("GET /members/self answers the caller's own access", async () => {
         edit: "none",
         lands: true,
     });
+});
+
+// People & access below Full access: anyone else's access but never Full access, never a Full access person's, never
+// the holder's own, and only the rights the holder has. Full access changes anyone's, their own included.
+test("someone given People & access manages the roster within its bounds, and Full access without them", async () => {
+    const members = fileMembersStore(join(await mkdtemp(join(tmpdir(), "members-")), "members.json"));
+    await members.add("lee@example.com", { role: "collaborator", agents: "run", manages: ["people"] });
+    await members.add("max@example.com", { role: "maintainer" });
+    const as = (caller: ReturnType<typeof proven>) =>
+        createApp(services({ auth: { authorize: async () => caller, authorizeOwner: async () => undefined }, ownerEmail: async () => `ada@example.com`, members }));
+    const lead = as({ ...proven(`lee@example.com`, `collaborator`), manages: [`people`] });
+    expect((await lead.request("/members", { headers: { authorization: "Bearer lee" } })).status).toBe(200);
+    expect((await postJson(lead, "/members", { email: "new@example.com", role: "viewer", agents: "off" })).status).toBe(200);
+    expect((await postJson(lead, "/members", { email: "new@example.com", role: "maintainer" })).status).toBe(403);
+    expect((await postJson(lead, "/members", { email: "max@example.com", role: "viewer", agents: "off" })).status).toBe(403);
+    expect((await postJson(lead, "/members", { email: "lee@example.com", role: "writer", agents: "run", edit: "all" })).status).toBe(403);
+    expect((await postJson(lead, "/members", { email: "new@example.com", role: "viewer", agents: "off", manages: ["secrets"] })).status).toBe(403);
+    expect((await postJson(lead, "/members", { email: "new@example.com", role: "viewer", agents: "off", manages: ["people"] })).status).toBe(200);
+    const plain = as(proven(`cy@example.com`, `collaborator`));
+    expect((await plain.request("/members", { headers: { authorization: "Bearer cy" } })).status).toBe(403);
+    const full = as(proven(`max@example.com`, `maintainer`));
+    expect((await postJson(full, "/members", { email: "max@example.com", role: "collaborator", agents: "run", manages: ["secrets"] })).status).toBe(200);
+    expect((await members.list()).find((member) => member.email === "max@example.com")).toMatchObject({ role: "collaborator", manages: ["secrets"] });
+    expect((await members.list()).find((member) => member.email === "new@example.com")).toMatchObject({ role: "viewer", manages: ["people"] });
 });

@@ -20,6 +20,8 @@ export const demoClaudeAccount = (): OauthAccount => seatOff({
     email: `ada@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 30 * 24 * 3_600_000,
+    // Who on this sandbox signed it in: the demo's own reader, so the Models page says "Connected by you".
+    connectedBy: `ada@acme.dev`,
     // A plan's pools as the tree the Usage tab and chat rail draw: the session and the Opus slice inside the week.
     usage: {
         measuredAt: STARTED_AT - 4 * 60_000,
@@ -37,6 +39,8 @@ export const demoClaudeAccountSecond = (): OauthAccount => seatOff({
     email: `work@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 12 * 24 * 3_600_000,
+    // Signed in by a colleague, so a reader with AI accounts of their own (`?manages=ownAccounts`) sees it but cannot change it.
+    connectedBy: `jo@acme.dev`,
     // A spent week with a fresh session inside it: the session's room is drawn, faded, as waiting on the week.
     usage: {
         measuredAt: STARTED_AT - 4 * 60_000,

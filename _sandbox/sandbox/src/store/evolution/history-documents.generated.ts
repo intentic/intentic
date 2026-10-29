@@ -30,6 +30,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "host-setup-seeded.json", portability: "carry" },
     { path: "identity/access-profiles.json", portability: "identity", note: "Write the access profiles again on the target's Access page; services and roster rows pointing at them reach nothing until then." },
     { path: "identity/access-requests.json", portability: "identity", note: "People ask for access again from where they were refused." },
+    { path: "identity/account-connectors.json", portability: "identity", note: "People connect their own AI accounts again on the target, which records them as theirs." },
     { path: "identity/borrowed-accounts.json", portability: "identity", note: "Bring the accounts in again from the sandbox that lends them: Sandbox ▸ Models ▸ Use accounts from another sandbox." },
     { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
     { path: "identity/links.json", portability: "identity", note: "Pair the sandboxes that hand this one tasks again from its Access tab: their links name the source sandbox." },

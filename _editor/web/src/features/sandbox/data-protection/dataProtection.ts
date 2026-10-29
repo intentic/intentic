@@ -187,7 +187,7 @@ const RETENTION = tab(`retention`);
 // box-wide ones are this page's siblings under Privacy & safety now, and a measure about one thing (a member, an area,
 // a secret, a model) still goes to that thing. Every setting of the audit trail is Retention's: its period always was,
 // and whether reads are recorded and where a copy goes were the audit log's own "How it is kept" until 2026-10-17. Running the agent without administrator rights has no control in the
-// editor (only its owner-only route), so it has no link: it went to Agent, which says nothing about it.
+// editor (only its route, Full access's), so it has no link: it went to Agent, which says nothing about it.
 export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`privacy-shield`, SHIELD],
     [`privacy-images`, SHIELD],

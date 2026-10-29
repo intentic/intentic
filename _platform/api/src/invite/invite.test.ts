@@ -49,7 +49,11 @@ const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
         (thrown: unknown) => thrown,
     );
     expect(error).toBeInstanceOf(ORPCError);
-    expect((error as ORPCError<string, unknown>).code).toBe(code);
+    if (!(error instanceof ORPCError)) {
+        throw new Error(`expected an ORPCError`);
+    }
+    expect(error.code).toBe(code);
+    return error;
 };
 
 describe(`invite routes`, () => {
@@ -60,13 +64,14 @@ describe(`invite routes`, () => {
             {
                 email: `guest@example.com`,
                 role: `collaborator`,
+                manages: [],
                 acceptedAt: null,
                 inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
                 createdAt: new Date(`2020-01-01T00:00:00Z`),
             },
         ]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow) },
+            sandbox: { findUnique: jest.fn().mockResolvedValue(sandboxRow) },
             sandboxMember: { findUnique, upsert, findMany },
         });
 
@@ -82,10 +87,11 @@ describe(`invite routes`, () => {
                 sandboxId: `s1`,
                 email: `guest@example.com`,
                 role: `collaborator`,
+                manages: [],
                 inviteToken: expect.any(String),
                 inviteExpiresAt: expect.any(Date),
             },
-            update: { role: `collaborator`, inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
+            update: { role: `collaborator`, manages: [], inviteToken: expect.any(String), inviteExpiresAt: expect.any(Date) },
         });
         expect(result.members).toEqual([
             {
@@ -105,7 +111,7 @@ describe(`invite routes`, () => {
     it(`invite.create survives a refused email and hands back the link`, async () => {
         const findMany = jest.fn().mockResolvedValue([]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow) },
+            sandbox: { findUnique: jest.fn().mockResolvedValue(sandboxRow) },
             sandboxMember: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), findMany },
         });
         const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -130,7 +136,7 @@ describe(`invite routes`, () => {
 
     it(`invite.create doesn't email a link that only resolves on this machine`, async () => {
         const prisma = fakePrisma({
-            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow) },
+            sandbox: { findUnique: jest.fn().mockResolvedValue(sandboxRow) },
             sandboxMember: {
                 findUnique: jest.fn().mockResolvedValue(null),
                 upsert: jest.fn().mockResolvedValue({}),
@@ -268,5 +274,172 @@ describe(`invite routes`, () => {
     it(`invite.preview exposes nothing at all for a token it does not know`, async () => {
         const prisma = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(null) } });
         expect(await call(inviteRoutes.preview, { token: `nope` }, { context: context({ prisma }) })).toEqual({ status: `invalid` });
+    });
+});
+
+// A roster row as the mirror stores it; accepted unless said otherwise.
+const memberRow = (email: string, role: string, options: { manages?: string[]; accepted?: boolean } = {}) => ({
+    id: `m-${email}`,
+    sandboxId: `s1`,
+    email,
+    role,
+    manages: options.manages ?? [],
+    inviteToken: null,
+    inviteExpiresAt: null,
+    acceptedAt: options.accepted === false ? null : new Date(`2020-01-02T00:00:00Z`),
+    createdAt: new Date(`2020-01-01T00:00:00Z`),
+});
+type MemberFixture = ReturnType<typeof memberRow>;
+
+const signedIn = (email: string) => ({ id: `u9`, email, name: `Member`, image: null, emailVerified: true });
+
+// A sandbox someone else owns, whose roster serves both the guard's lookup of the caller and the route's of the target.
+const rosterOf = (rows: MemberFixture[]) => {
+    const byEmail = new Map(rows.map((row) => [row.email, row]));
+    const upsert = jest.fn().mockResolvedValue({});
+    const update = jest.fn().mockResolvedValue({});
+    const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = fakePrisma({
+        sandbox: { findUnique: jest.fn().mockResolvedValue(sandboxRow) },
+        sandboxMember: {
+            findUnique: jest.fn(
+                async ({ where }: { where: { sandboxId_email: { email: string } } }) => byEmail.get(where.sandboxId_email.email) ?? null,
+            ),
+            findMany: jest.fn().mockResolvedValue(rows),
+            upsert,
+            update,
+            deleteMany,
+        },
+    });
+    return { prisma, upsert, update, deleteMany };
+};
+
+const asCaller = (email: string, prisma: OrpcContext[`prisma`]) => ({ context: context({ prisma, user: signedIn(email) }) });
+
+describe(`invite routes for someone other than the owner`, () => {
+    const lead = `lead@example.com`;
+    const helper = `helper@example.com`;
+
+    it(`Full access runs the roster as the owner does, their own row included`, async () => {
+        const { prisma, upsert, update, deleteMany } = rosterOf([memberRow(lead, `maintainer`), memberRow(`dev@example.com`, `collaborator`)]);
+
+        await call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `maintainer` }, asCaller(lead, prisma));
+        expect(upsert).toHaveBeenCalledWith(
+            expect.objectContaining({ create: expect.objectContaining({ email: `new@example.com`, role: `maintainer`, manages: [] }) }),
+        );
+
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `dev@example.com`, role: `writer`, manages: [`secrets`] }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-dev@example.com` }, data: { role: `writer`, manages: [`secrets`] } });
+
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: lead, role: `collaborator` }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-${lead}` }, data: { role: `collaborator`, manages: [] } });
+
+        // Revoking their own row is them leaving.
+        await call(inviteRoutes.revoke, { sandboxId: `s1`, email: lead }, asCaller(lead, prisma));
+        expect(deleteMany).toHaveBeenCalledWith({ where: { sandboxId: `s1`, email: lead } });
+    });
+
+    it(`People & access invites below Full access and hands out the rights it holds`, async () => {
+        const { prisma, upsert } = rosterOf([memberRow(helper, `collaborator`, { manages: [`people`] })]);
+
+        const listed = await call(inviteRoutes.list, { sandboxId: `s1` }, asCaller(helper, prisma));
+        expect(listed.members[0]).toEqual(expect.objectContaining({ email: helper, role: `collaborator`, manages: [`people`] }));
+
+        const sent = await call(inviteRoutes.create, { sandboxId: `s1`, email: `Guest@Example.com`, role: `viewer` }, asCaller(helper, prisma));
+        expect(sent.delivery).toBe(`unconfigured`);
+        expect(upsert).toHaveBeenLastCalledWith(
+            expect.objectContaining({ create: expect.objectContaining({ email: `guest@example.com`, role: `viewer`, manages: [] }) }),
+        );
+
+        await call(
+            inviteRoutes.create,
+            { sandboxId: `s1`, email: `peer@example.com`, role: `collaborator`, manages: [`people`] },
+            asCaller(helper, prisma),
+        );
+        expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ create: expect.objectContaining({ manages: [`people`] }) }));
+    });
+
+    it(`People & access never grants or touches Full access`, async () => {
+        const { prisma, upsert, update, deleteMany } = rosterOf([
+            memberRow(helper, `collaborator`, { manages: [`people`] }),
+            memberRow(lead, `maintainer`),
+            memberRow(`invited-lead@example.com`, `maintainer`, { accepted: false }),
+        ]);
+        const as = asCaller(helper, prisma);
+
+        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `maintainer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.create, { sandboxId: `s1`, email: `invited-lead@example.com`, role: `viewer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.resend, { sandboxId: `s1`, email: `invited-lead@example.com` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.setRole, { sandboxId: `s1`, email: lead, role: `viewer` }, as), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: lead }, as), `FORBIDDEN`);
+        expect(upsert).not.toHaveBeenCalled();
+        expect(update).not.toHaveBeenCalled();
+        expect(deleteMany).not.toHaveBeenCalled();
+    });
+
+    it(`People & access never changes its holder's own row`, async () => {
+        const { prisma, update, deleteMany } = rosterOf([memberRow(helper, `collaborator`, { manages: [`people`] })]);
+
+        await expectOrpcCode(call(inviteRoutes.setRole, { sandboxId: `s1`, email: helper, role: `writer` }, asCaller(helper, prisma)), `FORBIDDEN`);
+        await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: `Helper@Example.com` }, asCaller(helper, prisma)), `FORBIDDEN`);
+        expect(update).not.toHaveBeenCalled();
+        expect(deleteMany).not.toHaveBeenCalled();
+    });
+
+    it(`People & access hands out only rights it holds, and keeps the ones a row already had`, async () => {
+        const { prisma, upsert, update } = rosterOf([
+            memberRow(helper, `collaborator`, { manages: [`people`] }),
+            memberRow(`keeper@example.com`, `collaborator`, { manages: [`secrets`] }),
+        ]);
+        const as = asCaller(helper, prisma);
+
+        const refused = await expectOrpcCode(
+            call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `viewer`, manages: [`secrets`] }, as),
+            `FORBIDDEN`,
+        );
+        expect(refused.message).toContain(`secrets`);
+        expect(upsert).not.toHaveBeenCalled();
+
+        // The row already ran its secrets; re-grading it keeps them whether the list is left out or repeated.
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer` }, as);
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `writer`, manages: [`secrets`] } });
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer`, manages: [`secrets`, `people`] }, as);
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `writer`, manages: [`secrets`, `people`] } });
+        await expectOrpcCode(
+            call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `writer`, manages: [`secrets`, `privacy`] }, as),
+            `FORBIDDEN`,
+        );
+    });
+
+    it(`anyone else reads the sandbox as not there`, async () => {
+        const { prisma, upsert } = rosterOf([
+            memberRow(`dev@example.com`, `collaborator`),
+            memberRow(`pending@example.com`, `maintainer`, { accepted: false }),
+            memberRow(`pending-helper@example.com`, `collaborator`, { manages: [`people`], accepted: false }),
+        ]);
+        for (const email of [`dev@example.com`, `pending@example.com`, `pending-helper@example.com`, `stranger@example.com`]) {
+            await expectOrpcCode(call(inviteRoutes.list, { sandboxId: `s1` }, asCaller(email, prisma)), `NOT_FOUND`);
+            await expectOrpcCode(
+                call(inviteRoutes.create, { sandboxId: `s1`, email: `new@example.com`, role: `viewer` }, asCaller(email, prisma)),
+                `NOT_FOUND`,
+            );
+            await expectOrpcCode(call(inviteRoutes.revoke, { sandboxId: `s1`, email: `dev@example.com` }, asCaller(email, prisma)), `NOT_FOUND`);
+        }
+        expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it(`a sandbox that does not exist reads the same as one the caller may not manage`, async () => {
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue(null) }, sandboxMember: { findUnique: jest.fn() } });
+        await expectOrpcCode(call(inviteRoutes.list, { sandboxId: `nope` }, { context: context({ prisma }) }), `NOT_FOUND`);
+    });
+
+    it(`rights never sit on a Full access or guest row, as the daemon writes it`, async () => {
+        const { prisma, update } = rosterOf([
+            memberRow(lead, `maintainer`),
+            memberRow(`keeper@example.com`, `collaborator`, { manages: [`people`] }),
+        ]);
+
+        await call(inviteRoutes.setRole, { sandboxId: `s1`, email: `keeper@example.com`, role: `guest` }, asCaller(lead, prisma));
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `m-keeper@example.com` }, data: { role: `guest`, manages: [] } });
     });
 });

@@ -413,6 +413,12 @@
       "since": "v1.367.0"
     }
   ],
+  "history:identity/account-connectors.json": [
+    {
+      "type": "{ connectors: Record<string, { at: number; by: string }> }",
+      "since": "unreleased"
+    }
+  ],
   "history:identity/borrowed-accounts.json": [
     {
       "type": "{ accounts: { borrowedAt: number; card: string; email?: string; from: { name: string; sandboxId?: string }; id: string; label: string; organization?: string; provider: string; remote?: string }[] }",
@@ -463,6 +469,10 @@
     {
       "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\" | \"home\"; aiAccounts?: string[]; areas?: string[]; assistants?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; lands?: true; profile?: string; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\"; tools?: { browser?: boolean; code?: boolean; delegate?: boolean; files?: \"none\" | \"read\" | \"write\"; sandbox?: boolean; shell?: boolean; web?: boolean } })[] }",
       "since": "v1.364.0"
+    },
+    {
+      "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\" | \"home\"; aiAccounts?: string[]; areas?: string[]; assistants?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; lands?: true; manages?: (\"people\" | \"secrets\" | \"privacy\" | \"ownAccounts\")[]; profile?: string; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\"; tools?: { browser?: boolean; code?: boolean; delegate?: boolean; files?: \"none\" | \"read\" | \"write\"; sandbox?: boolean; shell?: boolean; web?: boolean } })[] }",
+      "since": "unreleased"
     }
   ],
   "history:identity/owner.json": [

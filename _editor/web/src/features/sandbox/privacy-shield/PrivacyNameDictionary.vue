@@ -17,8 +17,8 @@ import { type NameTrait, nameVerdict, shownWord, sourceHost, traitsOf } from "./
 import PrivacyOwnListEditor from "./PrivacyOwnListEditor.vue";
 import { usePrivacyDictionary } from "../../../models/sandbox/usePrivacyShield";
 
-// What the shield's name dictionary holds, under "Finding names", and the owner's say over it: each built-in list with
-// how many words, how they are matched and where they come from, and a switch to stop reading it; the owner's own lists
+// What the shield's name dictionary holds, under "Finding names", and the sandbox's say over it: each built-in list with
+// how many words, how they are matched and where they come from, and a switch to stop reading it; the sandbox's own lists
 // beside them, each opened in place to edit; and a search that browses the lists by a word's first letters and says
 // whether a word or a full name would be masked. The lists are the detector's own, read by the daemon under the policy
 // as saved, so what this shows is what it does. Every change is saved as it is made, handed up as a function of the

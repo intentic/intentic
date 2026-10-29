@@ -4,7 +4,6 @@ import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "../../../../models/capabilities/useSecrets";
-import { useRole } from "../../../../client/sandbox/useRole";
 import SecretApproval from "./SecretApproval.vue";
 import SecretCredentialPolicy from "./SecretCredentialPolicy.vue";
 import SecretDevicePanel from "./SecretDevicePanel.vue";
@@ -30,8 +29,9 @@ const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
 const emit = defineEmits<{ "update:expanded": [expanded: boolean] }>();
 
 const { remove } = useSecrets();
-// Editing a rule is the owner's (the daemon's routes enforce it); everybody else reads the same answers.
-const { isOwner } = useCredentialGates();
+// Editing a rule, and reading a value, is for whoever runs secrets (the daemon's routes enforce it); everybody else reads
+// the same answers.
+const { runsSecrets } = useCredentialGates();
 
 // Held here rather than in the value's own fact, so the header's buttons on a closed row open it onto the same place.
 const revealedValue = ref<string | undefined>(undefined);
@@ -48,10 +48,10 @@ const onComputer = computed(() => row.group === `device`);
 // Type into… needs a computer with a keyring; a sandbox with none never sees the button.
 const { keyrings, online } = useKeyrings();
 const canType = computed(() => row.typeable && keyrings.value.length > 0);
-// The daemon reveals a value to the owner and maintainers (secrets.routes.ts `reveal`, ensureMaintainer).
-const { canShip } = useRole();
-// A value exists and this viewer is allowed to read it: gates both Reveal and Copy.
-const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && canShip.value && !onComputer.value);
+// A value exists and this viewer is allowed to read it: gates both Reveal and Copy. The daemon reveals one to whoever runs
+// secrets, and a gated one only to its approvers, which the inventory already says as `revealable` (secrets.routes.ts
+// `mayReveal`).
+const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && runsSecrets.value && !onComputer.value);
 // Nominal is silent: a connection that is simply working says so by carrying nothing.
 const state = computed(() => (row.state !== undefined && row.state.rank < 3 ? row.state : undefined));
 
@@ -169,11 +169,11 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                         </button>
                         <button
                             v-if="row.entry.status !== `missing` && !onComputer"
-                            v-tooltip.top="{ title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.maintainersOnly`) }"
+                            v-tooltip.top="{ title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.whoReveals`) }"
                             type="button"
                             :class="ACTION"
                             :disabled="!canReveal"
-                            :aria-label="t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)"
+                            :aria-label="t(`capabilities.secretEntryRow.revealValueWho`)"
                             v-action="toggleReveal"
                         >
                             <Icon name="eye" class="text-xs" />
@@ -293,7 +293,7 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                     <SecretProgramsEditor v-if="row.programsHere" :row="row" />
                     <SecretDevicePanel v-if="onComputer" :row="row" part="rules" />
                     <SecretCredentialPolicy :row="row" />
-                    <p v-if="!isOwner" class="pt-1 text-xs text-subtle">{{ t(`capabilities.secretFacts.ownerChanges`) }}</p>
+                    <p v-if="!runsSecrets" class="pt-1 text-xs text-subtle">{{ t(`capabilities.secretFacts.whoChanges`) }}</p>
                 </dl>
             </div>
 

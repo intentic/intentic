@@ -15,7 +15,7 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/system/presence")).toBe("viewer");
         expect(routeFloor("POST", "/workspace/media-ticket")).toBe("viewer");
         expect(routeFloor("DELETE", "/members/self")).toBe("viewer");
-        // One's own passkeys are identity, like staying signed in; the handler holds another member's to the owner.
+        // One's own passkeys are identity, like staying signed in; the handler holds another member's to whoever runs people.
         expect(routeFloor("GET", "/system/passkeys")).toBe("viewer");
         expect(routeFloor("POST", "/system/passkeys/register/options")).toBe("viewer");
         expect(routeFloor("POST", "/system/passkeys/register")).toBe("viewer");
@@ -86,9 +86,66 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/no/such/route")).toBe("maintainer");
         expect(routeFloor("POST", "/members")).toBe("maintainer");
         expect(routeFloor("POST", "/system/sessions/revoke")).toBe("maintainer");
-        // The require-passkey switch and its recovery codes keep the mutation default under their ownership gate.
-        expect(routeFloor("POST", "/system/passkeys/policy")).toBe("maintainer");
-        expect(routeFloor("POST", "/system/passkeys/recovery")).toBe("maintainer");
+        // The require-passkey switch and its recovery codes are the owner's own door, and are floored there.
+        expect(routeFloor("POST", "/system/passkeys/policy")).toBe("owner");
+        expect(routeFloor("POST", "/system/passkeys/recovery")).toBe("owner");
+        expect(routeFloor("POST", "/platform/relink")).toBe("owner");
+    });
+});
+
+describe("memberRefusal for a person given part of the sandbox", () => {
+    const collaborator = { role: "collaborator" as const, agents: "run" as const };
+
+    test("People & access opens the roster, its requests, areas, profiles and the preview guard, and nothing else", () => {
+        const people = { ...collaborator, manages: ["people" as const] };
+        for (const [method, path] of [
+            ["GET", "/members"],
+            ["POST", "/members"],
+            ["DELETE", "/members"],
+            ["GET", "/members/requests"],
+            ["DELETE", "/members/requests"],
+            ["POST", "/areas"],
+            ["DELETE", "/areas/docs"],
+            ["GET", "/access/profiles"],
+            ["POST", "/access/profiles"],
+            ["POST", "/previews/guard"],
+        ] as const) {
+            expect(memberRefusal(people, method, path)).toBeUndefined();
+            expect(memberRefusal(collaborator, method, path)).toMatchObject({ floor: "maintainer", reason: "floor" });
+        }
+        expect(memberRefusal(people, "PUT", "/secrets/gates/GITHUB_TOKEN")).toMatchObject({ floor: "maintainer" });
+        expect(memberRefusal(people, "POST", "/privacy/shield")).toMatchObject({ floor: "maintainer" });
+    });
+
+    test("Secrets opens the Secrets page whole but never the owner's own keyrings", () => {
+        const secrets = { ...collaborator, manages: ["secrets" as const] };
+        expect(memberRefusal(secrets, "GET", "/secrets/inventory")).toBeUndefined();
+        expect(memberRefusal(secrets, "PUT", "/secrets/gates/GITHUB_TOKEN")).toBeUndefined();
+        expect(memberRefusal(secrets, "PUT", "/secrets/hosts/GITHUB_TOKEN")).toBeUndefined();
+        expect(memberRefusal(secrets, "PUT", "/secrets/policy/gh")).toBeUndefined();
+        expect(memberRefusal(secrets, "POST", "/secrets/type-into")).toMatchObject({ floor: "maintainer" });
+        expect(memberRefusal(secrets, "POST", "/secrets/keyrings/pair")).toMatchObject({ floor: "maintainer" });
+    });
+
+    test("the privacy shield and AI accounts of one's own each open their own routes", () => {
+        const privacy = { ...collaborator, manages: ["privacy" as const] };
+        expect(memberRefusal(privacy, "POST", "/privacy/shield")).toBeUndefined();
+        expect(memberRefusal(privacy, "POST", "/privacy/reveal")).toBeUndefined();
+        expect(memberRefusal(privacy, "POST", "/privacy/known/forget")).toBeUndefined();
+        const own = { ...collaborator, manages: ["ownAccounts" as const] };
+        expect(memberRefusal(own, "POST", "/accounts/claude/login/start")).toBeUndefined();
+        expect(memberRefusal(own, "POST", "/accounts/claude/disconnect")).toBeUndefined();
+        expect(memberRefusal(collaborator, "POST", "/accounts/claude/login/start")).toMatchObject({ floor: "maintainer" });
+    });
+
+    test("Full access reaches what the owner ran alone before, short of the owner's own door", () => {
+        const maintainer = { role: "maintainer" as const };
+        expect(memberRefusal(maintainer, "GET", "/members")).toBeUndefined();
+        expect(memberRefusal(maintainer, "POST", "/privacy/reveal")).toBeUndefined();
+        expect(memberRefusal(maintainer, "POST", "/settings/agent-domain")).toBeUndefined();
+        expect(memberRefusal(maintainer, "POST", "/system/enroll/code")).toBeUndefined();
+        expect(memberRefusal(maintainer, "POST", "/system/passkeys/policy")).toMatchObject({ floor: "owner" });
+        expect(memberRefusal(maintainer, "POST", "/platform/relink")).toMatchObject({ floor: "owner" });
     });
 });
 

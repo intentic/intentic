@@ -1,5 +1,6 @@
 import { accessProfilesContract } from "@intentic/sandbox-contract/contracts/access-profiles.contract";
 import type { AccessProfile, AccessProfileSaved } from "@intentic/sandbox-contract/schemas/access-profiles";
+import { holdsRight } from "@intentic/sandbox-contract/schemas/members";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import { noteAudit } from "../audit/audit-http.js";
@@ -8,15 +9,26 @@ import { revokeHeld } from "../auth/members/revoke-held.js";
 import { profileGrant, profileRefusal } from "./profile-grant.js";
 
 // The access profiles (docs/architecture/access.md). A maintainer reads them, to point a service at one; writing one
-// changes what everybody holding it may do, so both writes are the owner's alone, as the roster's and the areas' are.
+// changes what everybody holding it may do, so both writes are for whoever runs people and access, as the roster's and
+// the areas' are: the owner, Full access, or a member given People & access, who never rewrites the profile they hold.
 
 export type AccessProfilesRoutesDeps = Pick<Services, "accessProfiles" | "services" | "members" | "areas" | "personas" | "auth" | "wsTickets" | "mediaTickets">;
 
 // Undefined identity is the owner's own tool (loopback, a panel), which is already inside every fence.
-const refuseUnlessOwner = (context: OrpcContext): void => {
-    const role = context.identity?.role;
-    if (role !== undefined && role !== "owner") {
-        throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner decides what an access profile lets its holders reach" });
+const refuseUnlessPeople = async (services: AccessProfilesRoutesDeps, context: OrpcContext, id: string): Promise<void> => {
+    const identity = context.identity;
+    if (identity === undefined) {
+        return;
+    }
+    if (!holdsRight(identity, "people")) {
+        throw new ORPCError("FORBIDDEN", { message: "only someone who runs people and access decides what an access profile lets its holders reach" });
+    }
+    if (identity.role === "owner" || identity.role === "maintainer") {
+        return;
+    }
+    const email = identity.email.toLowerCase();
+    if ((await services.members.list()).some((member) => member.email.toLowerCase() === email && member.profile === id)) {
+        throw new ORPCError("FORBIDDEN", { message: `"${id}" is the profile your own access comes from: the owner or someone with Full access changes it` });
     }
 };
 
@@ -49,7 +61,7 @@ export const createAccessProfilesRoutes = (services: AccessProfilesRoutesDeps) =
     return {
         list: i.list.handler(async () => ({ profiles: await services.accessProfiles.list() })),
         save: i.save.handler(async ({ input, context }) => {
-            refuseUnlessOwner(context);
+            await refuseUnlessPeople(services, context, input.id);
             await refuseOrgProfile(services, input.id);
             const refused = await profileRefusal(services, input);
             if (refused !== undefined) {
@@ -60,7 +72,7 @@ export const createAccessProfilesRoutes = (services: AccessProfilesRoutesDeps) =
             return { ok: true as const, holders: await rewriteHolders(services, input) };
         }),
         remove: i.remove.handler(async ({ input, context }) => {
-            refuseUnlessOwner(context);
+            await refuseUnlessPeople(services, context, input.id);
             await refuseOrgProfile(services, input.id);
             // Named holders, not a count: every name here is one the owner may already read on the Access page.
             const [members, held] = await Promise.all([services.members.list(), services.services.list()]);

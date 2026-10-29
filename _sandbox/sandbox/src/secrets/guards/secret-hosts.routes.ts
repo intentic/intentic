@@ -4,14 +4,15 @@ import { type HostGuardSetting, tightensHostGuard } from "@intentic/sandbox-cont
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
-import { isOwnerBearer } from "../../auth/owner-gates.js";
+import { holdsRightBearer } from "../../auth/owner-gates.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 
 // Each secret's host guard: the read every exit's check answers from, and the one edit. Who may make an edit turns on
-// what it does rather than on a role: anybody this route admits (a maintainer, the agent's CLI) may turn a guard on or
-// take hosts off it, since that only asks more often; turning one off or adding a host is the owner's, asked on a card
-// when the agent's CLI wants it and refused to everybody else.
+// what it does rather than on a role: anybody this route admits (a person who runs secrets, the agent's CLI) may turn a
+// guard on or take hosts off it, since that only asks more often; turning one off or adding a host is a person's who runs
+// secrets (the owner, Full access, or a member given Secrets), asked of the owner on a card when the agent's CLI wants
+// it and refused to everybody else.
 
 export type SecretHostRoutesDeps = Pick<Services, "auth" | "capabilities" | "deviceSecrets" | "hostGuardGate" | "hostGuards" | "secretHostGuards" | "secretRegistry">;
 
@@ -60,8 +61,8 @@ export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
             await services.secretHostGuards.set({ ...target, ...next });
         }
     };
-    // A loosening from somebody other than the owner: the agent's CLI asks the owner on a card and waits; anybody else is
-    // told it is the owner's. Answers who approved it.
+    // A loosening from somebody who does not run secrets: the agent's CLI asks the owner on a card and waits; anybody else
+    // is told it is not theirs. Answers who approved it.
     const approveLoosening = async (
         context: OrpcContext,
         change: {
@@ -74,7 +75,7 @@ export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
     ): Promise<string | undefined> => {
         if (context.headers.get("x-intentic-agent") === null) {
             throw new ORPCError("FORBIDDEN", {
-                message: `Only the owner can loosen "${change.target.subject}"'s host guard: turn it off, or add a host to it.`,
+                message: `Only someone who runs secrets can loosen "${change.target.subject}"'s host guard: turn it off, or add a host to it.`,
             });
         }
         const verdict = await services.hostGuardGate.widen({
@@ -104,7 +105,7 @@ export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
             const current = (await services.hostGuards()).find(sameSubject(target));
             const from: HostGuardSetting = { guard: current?.guard ?? false, hosts: current?.hosts ?? [] };
             const approvedBy =
-                tightensHostGuard(current, next) || (await isOwnerBearer(services, context.headers))
+                tightensHostGuard(current, next) || (await holdsRightBearer(services, context.headers, "secrets"))
                     ? undefined
                     : await approveLoosening(context, { target, from, to: next, conversationId: input.conversationId }, signal);
             await store(target, next);

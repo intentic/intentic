@@ -5,9 +5,12 @@ import {
     type AgentAccess,
     type CredentialReach,
     type EditScope,
+    type ManageRight,
     type MemberSelf,
+    MANAGE_RIGHTS,
     MemberGrantSchema,
     memberAccess,
+    peopleChangeRefusal,
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
 import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
@@ -18,7 +21,7 @@ import type { AppEnv } from "../../app-env.js";
 import { assistantsRefusal, type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
 import { profileGrant } from "../../access/profile-grant.js";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
-import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
+import { rightDenied, unavailableIfUnreadable } from "../owner-gates.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { orgAdmits } from "../../org/org-roster.js";
 import { revokeHeld } from "./revoke-held.js";
@@ -27,11 +30,11 @@ import { opt } from "../../opt.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
-// Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
-// revokable grant must not change.
+// Run by whoever runs people and access: the owner, Full access, or a member given People & access, who changes anyone's
+// below Full access but their own and hands out only the rights they hold (sandbox-contract `peopleChangeRefusal`).
 
 export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas"> &
-    Partial<Pick<Services, "orgPolicy" | "accessProfiles" | "accessRequests">>;
+    Partial<Pick<Services, "orgPolicy" | "accessProfiles" | "accessRequests" | "accountConnectors">>;
 
 // A person's request for more access was answered or withdrawn: by a grant, a removal, or the owner dismissing it. The
 // owner's list and the asker's "asked" move with it.
@@ -59,8 +62,8 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile } = body.data;
-    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile };
+    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages } = body.data;
+    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile, manages };
 };
 
 // A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, what their
@@ -78,6 +81,7 @@ interface MemberGrantRequest {
     readonly tools?: ToolCeiling | "all" | undefined;
     readonly assistants?: readonly string[] | "all" | undefined;
     readonly profile?: string | undefined;
+    readonly manages?: readonly ManageRight[] | undefined;
 }
 
 // What the audit trail keeps of a grant: the tier it made and the one it replaced, and the shape of the fence (area ids
@@ -88,6 +92,7 @@ const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefin
     areas: grant.areas ?? "all",
     ...opt("home", grant.agents === "home" ? (grant.lands === true ? "lands" : "asks") : undefined),
     ...opt("profile", grant.profile),
+    ...opt("manages", grant.manages?.join(",")),
 });
 
 // The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
@@ -163,7 +168,8 @@ const resolvedGrant = async (
     if (written.role !== grant.role) {
         return { refusal: `the role does not match the access profile "${profile.label ?? profile.id}", which makes a ${written.role}` };
     }
-    return { grant: { ...written, email: grant.email, emailSignIn: grant.emailSignIn } };
+    // Rights ride beside a profile, never in one, so the ones sent are kept.
+    return { grant: { ...written, email: grant.email, emailSignIn: grant.emailSignIn, manages: grant.manages } };
 };
 
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
@@ -187,10 +193,12 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantR
 
 
 // The roster row's answers that ride on a person's own: the AI accounts, the tool ceiling, the assistants, the profile.
+// A row listing only some AI accounts takes in the ones the person connected themselves (`connected`), which are always
+// theirs, as the turn's planning reads it (access/principal-chain.ts `personLimit`).
 type RosterRow = Awaited<ReturnType<Services["members"]["list"]>>[number];
-const withRowFacts = (self: MemberSelf, row: RosterRow | undefined): void => {
+const withRowFacts = (self: MemberSelf, row: RosterRow | undefined, connected: readonly string[]): void => {
     if (row?.aiAccounts !== undefined) {
-        self.aiAccounts = [...row.aiAccounts];
+        self.aiAccounts = [...new Set([...row.aiAccounts, ...connected])];
     }
     if (row?.tools !== undefined) {
         self.tools = { ...row.tools };
@@ -208,13 +216,18 @@ const withRowFacts = (self: MemberSelf, row: RosterRow | undefined): void => {
 // than the identity, which carries only what a route's floor reads; a roster that cannot be read leaves them out, and
 // the turn's own planning still refuses what is not theirs. Whether they have asked the owner for more rides along, so
 // the editor draws "asked" rather than offering the ask again.
-const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessRequests">, c: Context<AppEnv>): Promise<Response> => {
+const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessRequests" | "accountConnectors">, c: Context<AppEnv>): Promise<Response> => {
     const identity = c.get("identity");
     if (identity === undefined || identity.role === "owner") {
-        return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true } satisfies MemberSelf);
+        return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true, manages: [...MANAGE_RIGHTS] } satisfies MemberSelf);
     }
     const edits = identity.edits ?? "all";
     const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
+    // Full access runs every part of the sandbox, so it is said whole rather than left for the editor to infer.
+    const manages = identity.role === "maintainer" ? MANAGE_RIGHTS : identity.manages;
+    if (manages !== undefined && manages.length > 0) {
+        self.manages = [...manages];
+    }
     if (callerLands(identity)) {
         self.lands = true;
     }
@@ -223,7 +236,10 @@ const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessR
     }
     const email = identity.email.toLowerCase();
     // allow(silent-catch): the list is a picker's courtesy; planning reads the roster again and refuses on its own.
-    withRowFacts(self, (await services.members.list().catch(() => [])).find((member) => member.email.toLowerCase() === email));
+    const row = (await services.members.list().catch(() => [])).find((member) => member.email.toLowerCase() === email);
+    // allow(silent-catch): the same courtesy; an unreadable record leaves the picker at the row's own list.
+    const connected = row?.aiAccounts === undefined ? [] : ((await services.accountConnectors?.keysOf(email).catch(() => [])) ?? []);
+    withRowFacts(self, row, connected);
     // allow(silent-catch): an unreadable request file costs the person only the "asked" mark, never their access answer.
     const asked = await services.accessRequests?.of(email).catch(() => undefined);
     if (asked !== undefined) {
@@ -232,12 +248,19 @@ const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessR
     return c.json(self);
 };
 
+// Who is changing the roster, as peopleChangeRefusal reads them. A request the sandbox cannot name (loopback, a panel)
+// is the owner's own tool; the gate in front already refused every machine credential.
+const managerOf = (c: Context<AppEnv>): Parameters<typeof peopleChangeRefusal>[0] => {
+    const identity = c.get("identity");
+    return identity === undefined ? { email: "", role: "owner" } : { email: identity.email, role: identity.role, manages: identity.manages };
+};
+
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
 // over it answers 503 (`unavailableIfUnreadable`) and leaves every socket and ticket as it was.
 const createMembersRoutes = (services: MembersRoutesDeps) => ({
     /** GET /members */
     list: async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await rightDenied(services, c, "people");
         if (denied !== undefined) {
             return denied;
         }
@@ -249,7 +272,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
     },
     /** POST /members */
     add: async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await rightDenied(services, c, "people");
         if (denied !== undefined) {
             return denied;
         }
@@ -275,6 +298,10 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         return unavailableIfUnreadable(c, async () => {
             const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());
+            const bounded = peopleChangeRefusal(managerOf(c), { email: grant.email, before, after: { role: grant.role, manages: grant.manages } });
+            if (bounded !== undefined) {
+                return c.json({ error: bounded }, 403);
+            }
             await services.members.add(grant.email, grant);
             noteAudit({ target: grant.email.toLowerCase(), details: grantDetails(grant, before?.role) });
             // Granting the person anything is the owner's answer to what they asked, whatever they asked.
@@ -287,7 +314,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
     },
     /** DELETE /members */
     remove: async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await rightDenied(services, c, "people");
         if (denied !== undefined) {
             return denied;
         }
@@ -296,6 +323,11 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ error: "email required" }, 400);
         }
         return unavailableIfUnreadable(c, async () => {
+            const before = (await services.members.list()).find((member) => member.email === email);
+            const bounded = peopleChangeRefusal(managerOf(c), { email, before });
+            if (bounded !== undefined) {
+                return c.json({ error: bounded }, 403);
+            }
             await services.members.remove(email);
             noteAudit({ target: email.toLowerCase() });
             await settleRequest(services, email);
@@ -324,8 +356,8 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
     },
 });
 
-// What people on the roster ask the owner for, and the owner's list of it (members/access-requests.ts). Asking is every
-// member's own, a guest's included; reading and dismissing is ownership's, beside the roster a grant answers them on.
+// What people on the roster ask for, and the list of it (members/access-requests.ts). Asking is every member's own, a
+// guest's included; reading and dismissing is for whoever runs people and access, beside the roster a grant answers them on.
 const createRequestRoutes = (services: MembersRoutesDeps) => ({
     /** POST /members/requests */
     ask: async (c: Context<AppEnv>): Promise<Response> => {
@@ -350,7 +382,7 @@ const createRequestRoutes = (services: MembersRoutesDeps) => ({
     },
     /** GET /members/requests */
     list: async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await rightDenied(services, c, "people");
         if (denied !== undefined) {
             return denied;
         }
@@ -358,7 +390,7 @@ const createRequestRoutes = (services: MembersRoutesDeps) => ({
     },
     /** DELETE /members/requests */
     dismiss: async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await rightDenied(services, c, "people");
         if (denied !== undefined) {
             return denied;
         }
@@ -371,7 +403,7 @@ const createRequestRoutes = (services: MembersRoutesDeps) => ({
     },
 });
 
-// Shared-access roster, gated by ownership rather than the operating gate other privileged routes use.
+// Shared-access roster, gated by the People & access right (held by the owner and Full access too).
 export const membersRawRoutes = defineRawRoutes((services: MembersRoutesDeps) => {
     const members = createMembersRoutes(services);
     const requests = createRequestRoutes(services);

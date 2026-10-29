@@ -1,7 +1,7 @@
 // A secret's host guard as its open row shows it: read as its answer ("Any host", or the hosts it goes to unasked), and
-// changed in a panel hanging off that answer. Nothing is written until the owner presses Save there; a host still in the
-// box counts; turning it off keeps the hosts; a connector's own guard says whose it is; and anybody but the owner reads
-// the answer with nothing to press.
+// changed in a panel hanging off that answer. Nothing is written until someone who runs secrets presses Save there; a
+// host still in the box counts; turning it off keeps the hosts; a connector's own guard says whose it is; and anybody
+// else reads the answer with nothing to press.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h, nextTick, ref } from "vue";
@@ -13,10 +13,11 @@ import { SecretPopoverStub } from "./SecretPopover.testing";
 const setHosts = {
     mutateAsync: jest.fn(async (input: { subject: string; kind: string; guard: boolean; hosts: string[] }) => ({ guard: input.guard, hosts: input.hosts })),
 };
-const isOwner = ref(true);
+// Whether the reader runs secrets: the owner, Full access, or someone given Secrets.
+const runsSecrets = ref(true);
 
 jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
-    useCredentialGates: () => ({ isOwner }),
+    useCredentialGates: () => ({ runsSecrets }),
     useSecretHosts: () => ({ setHosts }),
 }));
 jest.mock(`./SecretPopover.vue`, () => ({ default: SecretPopoverStub }));
@@ -93,10 +94,10 @@ const mount = (row: SecretRow) => {
 
 beforeEach(() => {
     setHosts.mutateAsync.mockClear();
-    isOwner.value = true;
+    runsSecrets.value = true;
 });
 
-it("reads as any host, and limits it to the hosts typed or pasted only when the owner presses Save", async () => {
+it("reads as any host, and limits it to the hosts typed or pasted only when someone who runs secrets presses Save", async () => {
     const { el, open, choose, add, button, chips, done } = mount(rowWith());
     expect(el.textContent).toContain(`Goes to`);
     expect(el.textContent).toContain(`Any host`);
@@ -197,8 +198,8 @@ it("drops what Cancel was pressed on, and writes nothing", async () => {
     done();
 });
 
-it("shows anybody but the owner the answer as it stands, with nothing to press", () => {
-    isOwner.value = false;
+it("shows anyone who does not run secrets the answer as it stands, with nothing to press", () => {
+    runsSecrets.value = false;
     const { el, answer, done } = mount(rowWith({ hosts: { guard: true, list: [`api.github.com`], source: `owner` } }));
     expect(el.textContent).toContain(`api.github.com`);
     expect(el.textContent).toContain(`Anywhere else asks first`);

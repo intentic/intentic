@@ -59,7 +59,8 @@ const UNREADABLE =
     "The sandbox's record of who this conversation acts for (its roster, services or access profiles) could not be read, so which AI accounts it may run on is unknown, and no turn is run on a guess. Try again in a moment; if it keeps happening, tell the sandbox owner.";
 
 // What every refusal ends with: who decides, and what to do instead.
-const OWNER_DECIDES = "Only the sandbox owner can change which AI accounts a person or a service may use, on the Access page.";
+const OWNER_DECIDES =
+    "The sandbox owner, or someone who runs people and access, changes which AI accounts a person or a service may use, on the Access page; an account a person connected themselves is always theirs.";
 
 const notAllowed = (reach: Extract<AccountReach, { kind: "some" }>, label: string, what: string, allowed: readonly NamedRow[]): string =>
     `${reach.who.length > 1 ? `${reachWho(reach.who)} were` : `${reachWho(reach.who)} was`} not given ${what}, and a conversation runs only on AI accounts everyone it acts for may use. ${ 

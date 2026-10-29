@@ -58,6 +58,7 @@ import {
     sandboxKeyAllowed,
     sandboxSectionGroups,
     sandboxSectionOf,
+    sectionOpens,
 } from "../../models/sandbox/sandboxNav";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../models/extensions/useExtensions";
@@ -67,6 +68,7 @@ import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useAccess } from "../../client/sandbox/access/useAccess";
 import type { AccessReason } from "../../client/sandbox/access/accessReason";
 import { useRole } from "../../client/sandbox/useRole";
+import { selfSettled } from "../../client/sandbox/useMembers";
 import AccessGate from "../../components/access/AccessGate.vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { type ActiveExtension, activationBadge, detectActivations } from "../../workbench/views/registry";
@@ -140,12 +142,21 @@ const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
 // who it is for and the way to ask in the section's place, never the section itself (its reads would only be refused).
 // A guest's fence keeps it off every section but its own (shell/guestFence.ts), so nothing is withheld for one here.
 // Until the tier is known, a held section draws nothing rather than mounting for whoever this turns out to be.
+// A part of the sandbox given to someone below (sandboxNav.ts `right`) opens its section for them, so their tier is not
+// known until their own answer, which names those parts, has landed.
 const MAINTAINERS: AccessReason = { kind: `tier`, floor: `maintainer` };
-const { role: knownRole } = useAccess();
-const tierKnown = computed(() => knownRole.value !== undefined);
+const { role: knownRole, holds } = useAccess();
+const settled = selfSettled();
+const tierKnown = computed(() => knownRole.value !== undefined && settled.value);
 const held = (slug: string): boolean => sandboxSectionOf(slug)?.maintainer === true;
+const opens = (row: SandboxSection): boolean => sectionOpens(row, canShip.value, holds);
 const withheld = computed<readonly string[]>(() =>
-    tierKnown.value && !isGuest.value && !canShip.value ? [...builtIn.value].filter((slug) => held(slug) && !orgHidden.value.has(slug)) : [],
+    tierKnown.value && !isGuest.value && !canShip.value
+        ? [...builtIn.value].filter((slug) => {
+              const section = sandboxSectionOf(slug);
+              return section !== undefined && !opens(section) && !orgHidden.value.has(slug);
+          })
+        : [],
 );
 const placeOf = (slug: string): string => sandboxSectionOf(slug)?.label ?? slug;
 const { allPanels: panels, isLoading } = usePanels();
@@ -199,7 +210,7 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
 // One section as this reader's index draws it: a built-in with this reader's gating, the two live counts and whatever
 // is running laid over it.
 const sectionOf = (row: SandboxSection): readonly HubTab[] => {
-    if (isGuest.value ? row.slug !== GUEST_SECTION : !canShip.value && row.maintainer === true) {
+    if (isGuest.value ? row.slug !== GUEST_SECTION : !opens(row)) {
         return [];
     }
     // Below maintainer, a section that embeds a view is that view alone (Activity is a member's turns), so without it the

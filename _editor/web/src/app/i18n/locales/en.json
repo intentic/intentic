@@ -1634,20 +1634,21 @@
             "couldNotRemove": "Could not remove the secret.",
             "couldNotReveal": "Could not reveal the value.",
             "hide": "Hide",
-            "maintainersOnly": "Owner and maintainers only",
             "multiLineValueSsh": "Multi-line value (SSH key, PEM…)",
             "reveal": "Reveal",
-            "revealValueMaintainersOnly": "Reveal value (owner and maintainers only)",
             "setUpdate": "Set value",
             "setUpdateValue": "Set / update value",
             "singleLineValue": "Single-line value",
             "value": "Value",
-            "maintainersOnlySee": "Only the owner and maintainers can see it",
             "notSet": "Not set",
             "replaceValue": "Replace value",
             "setValue": "Set value",
             "show": "Show",
-            "staysOn": "Stays on {machine}, never here"
+            "staysOn": "Stays on {machine}, never here",
+            "whoReveals": "Whoever manages Secrets",
+            "revealValueWho": "Reveal value (whoever manages Secrets)",
+            "whoSees": "Only the owner, Full access, or someone given Secrets can see it",
+            "approversSee": "Only its approvers can see it"
         },
         "secretField": {
             "as": "as",
@@ -2819,7 +2820,8 @@
             "restConversation": "Rest of the conversation",
             "restConversationNote": "One click covers every use for the rest of that conversation.",
             "signedInConversation": "For the rest of the conversation: a signed-in account is loaded for a whole turn, so it cannot be released for a single use.",
-            "couldNotSave": "Could not save who has to approve this."
+            "couldNotSave": "Could not save who has to approve this.",
+            "othersUnlisted": "Only you and the people already named: the full list is for whoever manages People and access."
         },
         "secretFacts": {
             "lastUsed": "Last used",
@@ -2838,7 +2840,7 @@
             "ciLabel": "CI copy",
             "ciSynced": "Up to date",
             "ciOutOfDate": "Out of date",
-            "ownerChanges": "Only the owner can change these."
+            "whoChanges": "The owner, Full access, or someone given Secrets changes these."
         }
     },
     "chat": {
@@ -2889,12 +2891,12 @@
             "didntConnect": "{provider} didn't connect.",
             "finishSignIn": "Finish sign-in",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
-            "maintainerConnects": "A maintainer of this sandbox can connect one.",
             "noModelYet": "No model is connected in this sandbox yet.",
             "signInWaiting": "Your {provider} sign-in isn't finished yet.",
             "connectProvider": "Connect {providerName}",
             "chooseAnother": "Choose another model",
-            "notShared": "{provider} isn't shared with you in this sandbox."
+            "notShared": "{provider} isn't shared with you in this sandbox.",
+            "whoConnects": "The owner, Full access, or someone given AI accounts of their own can connect one."
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -3459,7 +3461,6 @@
             "privacyLetRead": "Let {provider} read this conversation",
             "privacyLetReadNote": "Other conversations stay shielded.",
             "privacyLetReadTitle": "Unmasked, here only",
-            "privacyOwnerOnly": "Only the sandbox's owner can let it through.",
             "privacyRefused": "The privacy shield won't send this to {provider}, and nothing you wrote is the reason: {provider}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read or mask.",
             "privacyRefusedRunner": "The privacy shield won't run this on {runner}, and nothing you wrote is the reason: {runner} would call {provider} from its own machine, where the shield can't mask what it sends. Run it here instead, or let {provider} read this conversation.",
             "privacySafety": "Privacy shield",
@@ -3482,7 +3483,8 @@
             "trialGraceLeft": "Up to {count} more step to finish | Up to {count} more steps to finish",
             "trialFreshGrace": "Free trial: {remaining} agent steps left today. A small task can use 10 or more, and one you start can run past them to finish.",
             "trialReviewChanges": "Review changes ({count} file) | Review changes ({count} files)",
-            "continueOtherModel": "Continue with another model"
+            "continueOtherModel": "Continue with another model",
+            "privacyOthersLetThrough": "The owner, Full access, or someone given the Privacy shield can let it through."
         },
         "chatPaneTurns": {
             "couldntOpen": "Couldn't open this conversation.",
@@ -5062,7 +5064,8 @@
             "couldntStopBorrowing": "Couldn't stop borrowing that account.",
             "lentTo": "Lent to {names}",
             "stopLending": "Stop lending",
-            "couldntStopLending": "Couldn't stop lending that account."
+            "couldntStopLending": "Couldn't stop lending that account.",
+            "emptyFullAccess": "Not connected yet. The owner or someone with Full access connects this one."
         },
         "providerTile": {
             "signingIn": "Signing in…"
@@ -6246,7 +6249,7 @@
         "agentPrivacyShield": {
             "activity": "Shield activity",
             "activityNote": "The log keeps tokens and the masked text around them, never the values: each value is read from the vault on this machine, for you alone.",
-            "activityNoteMember": "The log keeps tokens and the masked text around them, never the values; only the sandbox's owner sees what each token stands for.",
+            "activityNoteMember": "The log keeps tokens and the masked text around them, never the values; only the owner, Full access, or someone given the Privacy shield sees what each token stands for.",
             "allow": "Send as is",
             "allowNote": "Images are sent as they are, so any personal data in them reaches the provider.",
             "classes": {
@@ -6390,8 +6393,6 @@
             "offNote": "Nothing is routed or read: every model request goes to its provider exactly as before.",
             "on": "On",
             "onNote": "",
-            "ownerOnly": "Only the sandbox's owner can change the privacy shield.",
-            "ownerOnlyForget": "Only the sandbox's owner can forget a dataset.",
             "receives": {
                 "local": "stays here",
                 "refused": "won't run",
@@ -6527,7 +6528,9 @@
                     "learned": "a value learned from a dataset",
                     "model": "the name model"
                 }
-            }
+            },
+            "othersChange": "Only the owner, Full access, or someone given the Privacy shield can change it.",
+            "othersForget": "Only the owner, Full access, or someone given the Privacy shield can forget a dataset."
         },
         "agentProjectInstalls": {
             "ask": "Ask first",
@@ -6639,7 +6642,9 @@
             "loopSignIn": "{loop} sign-in",
             "accountViaLoop": "{managedLabel} account via {loop}",
             "offByAdmin": "Off: its organization or plan turned off {provider}",
-            "offByAdminSince": "Off: its organization or plan turned off {provider} · since {when}"
+            "offByAdminSince": "Off: its organization or plan turned off {provider} · since {when}",
+            "connectedByYou": "Connected by you",
+            "connectedBy": "Connected by {email}"
         },
         "arrivalPanel": {
             "alreadyHere": "already here",
@@ -7757,10 +7762,10 @@
             "panelsHint": "An app's preview asks for a member's sign-in. Forwarded ports stay open, so webhooks and phone apps still reach them.",
             "all": "Members only: app previews and forwarded ports",
             "allHint": "App previews and forwarded ports both ask for a member's sign-in, so a webhook or a phone app can no longer reach a forwarded port.",
-            "ownerChanges": "Only the sandbox owner can change who can open previews.",
             "changing": "Changing who can open previews",
             "couldntChange": "Couldn't change who can open previews.",
-            "couldntRead": "Couldn't read who can open this sandbox's previews."
+            "couldntRead": "Couldn't read who can open this sandbox's previews.",
+            "whoChanges": "The owner, Full access, or someone given People and access changes who can open previews."
         },
         "personaBriefingFields": {
             "sandboxPutsInFront": "The sandbox puts these in front of the message before the model reads it; the chat shows them under \"Sent ahead of your message\". Turn one off for a persona whose model has little room to spare, or whose work never needs it.",
@@ -7971,7 +7976,6 @@
             "everyBrowserSignedOut": "Every browser has been signed out. Any device still holding a pass is locked out now.",
             "idle": "idle",
             "maintainer": "Maintainer",
-            "onlySandboxOwnerInvite": "Only the sandbox owner can invite people or change roles.",
             "otherWaysIn": "Other ways in",
             "owner": "owner",
             "pairedDevicesRunners": "Paired devices and runners",
@@ -8094,11 +8098,11 @@
             "tipCustomTitle": "Pick each part",
             "tipCustomNote": "Agents, folders, accounts, connections",
             "tipFullTitle": "Manages the sandbox",
-            "tipFullNote": "Lands work, changes every setting",
+            "tipFullNote": "Everything, people and access included",
             "fullSettings": "Settings",
-            "fullSettingsValue": "Publish, change settings and connections",
+            "fullSettingsValue": "Every setting and connection, and publishing",
             "fullAgentsValue": "Run agents and land work",
-            "fullLimitNote": "Every agent they run keeps to these limits. Full access includes a terminal, which can get around them.",
+            "fullLimitNote": "Every agent they run keeps to these limits. Full access can lift them, here or from a terminal.",
             "tipOffTitle": "Watch only",
             "tipOffNote": "Can't start agents",
             "tipChatTitle": "Assistants only",
@@ -8120,7 +8124,23 @@
             "tipReachAllTitle": "Every connection",
             "tipReachAllNote": "Including ones added later",
             "tipReachSomeNote": "New ones stay off",
-            "tipAlwaysAvailable": "Always available"
+            "tipAlwaysAvailable": "Always available",
+            "rightsSection": "Can also manage",
+            "rightPeople": "People and access",
+            "rightPeopleNote": "Invite people and change their access, short of Full access",
+            "rightSecrets": "Secrets",
+            "rightSecretsNote": "See stored secrets and set who may use them",
+            "rightPrivacy": "Privacy shield",
+            "rightPrivacyNote": "Change what is masked and read masked values back",
+            "rightOwnAccounts": "Their own AI accounts",
+            "rightOwnAccountsNote": "Connect AI accounts, and always run on the ones they connect",
+            "rightsYoursOnly": "You can hand out only the parts you manage yourself.",
+            "tipFullLockedNote": "Only Full access grants this",
+            "fullRightsValue": "People and access (their own too), secrets, the privacy shield, AI accounts",
+            "lockedOwn": "Your own access is changed by the owner or someone with Full access.",
+            "lockedFull": "Full access is changed by the owner or someone else with Full access.",
+            "aiAccountsOwnAlways": "Whoever connected an account themselves can always run on it, ticked or not.",
+            "peopleManagedBy": "The owner, Full access, or someone given People and access invites people and changes access."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -8885,7 +8905,6 @@
             "deleteArea": "Delete area",
             "deleteHeader": "Delete {label}?",
             "deleteBody": "Only the name people are granted in goes; the folders stay. The sandbox refuses while somebody still holds it.",
-            "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders.",
             "explainer": {
                 "label": "What an area is",
                 "title": "An area is a named set of folders",
@@ -8899,7 +8918,9 @@
                 "sees": "Sees only its folders: in the tree, search and chats",
                 "talks": "Talks only to people and assistants in it",
                 "agents": "Agents they start stay inside it too"
-            }
+            },
+            "fencedAreasHeld": "The areas your own access is held to are changed by the owner or someone with Full access.",
+            "whoDecidesFolders": "The owner, Full access, or someone given People and access decides who sees which folders."
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
@@ -9979,7 +10000,10 @@
             "none": "No confirmations yet."
         },
         "analytics": {
-            "title": "Intentic product analytics in this sandbox"
+            "title": "Intentic product analytics in this sandbox",
+            "on": "On",
+            "off": "Off",
+            "whoChanges": "The owner or someone with Full access changes this."
         },
         "dataProtection": {
             "intro": "Three steps before this sandbox handles anyone's personal data.",
@@ -10206,7 +10230,6 @@
                     "what": "Backups of this sandbox are made outside it, so your office makes and protects them."
                 }
             },
-            "ownerApplies": "Only the owner can apply these.",
             "apply": "Apply {count} setting | Apply {count} settings",
             "nothingToChange": "Every setting is already as proposed.",
             "applied": "Applied {count} setting | Applied {count} settings",
@@ -10265,7 +10288,8 @@
                 "privacyNames": "Needs the local name model, which isn't installed in this sandbox."
             },
             "formatMarkdown": "Markdown",
-            "formatWord": "Word"
+            "formatWord": "Word",
+            "fullAccessApplies": "Only the owner or someone with Full access can apply these."
         },
         "sandboxAudit": {
             "integrityTitle": "Is the log intact?",
@@ -10795,7 +10819,7 @@
             "namePlaceholder": "e.g. Interns",
             "nameTaken": "A profile named {name} already exists.",
             "noHolders": "Nobody holds this profile",
-            "readOnly": "Read-only. Organisation profiles are managed by the organisation; sandbox profiles by the owner.",
+            "readOnly": "Read-only. Profiles are changed by the owner, Full access, or someone given People and access.",
             "org": "Managed by the organisation",
             "saveFailed": "Could not save the profile or sync its holders’ tiers. Save again to retry.",
             "removeFailed": "Could not delete the profile",
@@ -10822,7 +10846,9 @@
             "agents_run": "Run agents",
             "agents_home": "Home only",
             "posture": "Personas are posture: they only narrow what the person or service a turn acts for may reach, within the service’s profile.",
-            "view": "View"
+            "view": "View",
+            "readOnlyOrg": "Read-only. Organisation profiles are managed by the organisation.",
+            "readOnlyOwn": "Read-only. Your own access comes from this profile, so the owner or someone with Full access changes it."
         },
         "accessServices": {
             "title": "Services",
@@ -12202,7 +12228,8 @@
             "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Rides the command into your host, never to the platform.",
             "showCommand": "Show the command",
             "codeFailed": "The sandbox could not make a command ({status}).",
-            "asksCloudflareToken": "Run this on the server, which asks there for your Cloudflare API token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), so the token never leaves it."
+            "asksCloudflareToken": "Run this on the server, which asks there for your Cloudflare API token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), so the token never leaves it.",
+            "fullAccessConnectsServers": "Only the owner or someone with Full access can connect a server to this sandbox."
         },
         "coreViews": {
             "health": "Health",

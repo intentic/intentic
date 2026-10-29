@@ -60,7 +60,7 @@ export const portsContract = {
             description:
                 "Opens previews to anyone with their address, or keeps them to this sandbox's members: panel previews alone, or forwarded ports too. Takes effect on the next request; a member's browser is signed in to a preview the first time they open it from the editor.",
         })
-        .meta({ floor: "owner", panel: false, control: "never" })
+        .meta({ floor: "maintainer", right: "people", panel: false, control: "never" })
         .input(PreviewGuardSchema)
         .output(PreviewGuardSchema),
     // A browser credential, so never the panel token's nor a control token's to mint, and not a guest's: a guest reaches

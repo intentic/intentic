@@ -15,7 +15,7 @@ export const accessProfilesContract = {
             description:
                 "Every access profile this sandbox grants, its own and its organisation's: the areas, connections, secrets, AI accounts and tools each lets its holders reach.",
         })
-        .meta({ floor: "maintainer" })
+        .meta({ floor: "maintainer", right: "people" })
         .output(AccessProfilesListSchema),
     // Upsert by id, re-saving the same id edits that profile.
     save: procedure
@@ -26,6 +26,7 @@ export const accessProfilesContract = {
             description:
                 "Writes the whole profile; sending an id that exists edits it. Everybody holding it changes with it: their roster rows are rewritten and their open connections closed, as a re-grade does. Answers with each person holding it and the tier they now hold.",
         })
+        .meta({ right: "people" })
         .input(AccessProfileSchema)
         .output(AccessProfileSavedSchema),
     // Refused while anyone holds it: a row or a service pointing at a profile that no longer exists reaches nothing,
@@ -38,6 +39,7 @@ export const accessProfilesContract = {
             description:
                 "Removes the profile. Refused while a person or a service still holds it; move them onto another profile, or onto answers of their own, first.",
         })
+        .meta({ right: "people" })
         .input(AccessProfileIdParamSchema)
         .output(OkSchema),
 };

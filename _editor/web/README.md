@@ -147,9 +147,9 @@ flowchart LR
   the daemon refuses on (`reachModel.ts`): a grant's areas and edit scope, the personas its fence holds
   (`fenceHoldsPersona`), its credential reach, and for someone who only chats or a link's tasks, what their personas
   allow (`personaAllowsCapability`, shared with the daemon through the contract). A connection whose tile is not loaded
-  still appears under its own id. The roster is the owner's to read, so a maintainer's map shows tokens, links and
-  themselves, and says so. It is core rather than an extension for the same reason as the audit log: it describes the
-  security model, and a copy of those rules that drifted, or that someone switched off, would misstate it. The public site redraws it on its home page from a sample sandbox
+  still appears under its own id. The roster is read by whoever runs people and access (the owner, Full access, or
+  People & access), so anyone else's map shows tokens, links and themselves, and says so. It is core rather than an
+  extension for the same reason as the audit log: it describes the security model, and a copy of those rules that drifted, or that someone switched off, would misstate it. The public site redraws it on its home page from a sample sandbox
   (`_site/site/src/components/figures/AccessMapFigure.astro`, its sample in `_site/site-content/src/access-map.ts`), so a
   change to what the map tells apart belongs there too.
 - **Oversight: Privacy & safety, then Activity.** The hub's last group (`sandboxNav.ts`), two rows for pages few

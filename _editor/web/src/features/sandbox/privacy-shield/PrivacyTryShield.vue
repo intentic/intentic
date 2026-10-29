@@ -12,7 +12,7 @@ import { computed, ref } from "vue";
 import { rulesOf } from "./privacyOwn";
 import { usePrivacyPreview } from "../../../models/sandbox/usePrivacyShield";
 
-// The shield tried on a text the owner pastes: what it would mask with everything above as saved (the detectors, the
+// The shield tried on a text somebody pastes: what it would mask with everything above as saved (the detectors, the
 // name lists, their own lists and rules, the values the vault knows), each find lit with its kind and what found it.
 // Read on this machine and kept nowhere, so a real sample is fine to try; nothing is given a token.
 

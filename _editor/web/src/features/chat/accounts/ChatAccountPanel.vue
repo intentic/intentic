@@ -11,6 +11,7 @@ import { turnDefaults } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../client/sandbox/useRole";
 import { MODELS_PATH, modelsHref } from "../../../lib/routes/modelsPath";
 import { useT } from "@intentic/ui/i18n";
@@ -45,9 +46,12 @@ const { liveSignIn: live, cancelSignIn, signInFailure: failure, dismissSignInFai
 // names one that is not connected yet (linkArrival).
 const retryTo = computed(() => modelsHref({ provider: failure.value?.provider }));
 
-// Connecting is a maintainer's: the daemon refuses anyone else's sign-in, and the hub withholds the section that holds
-// it. Below that tier the strip says who can, rather than offering a door that opens on nothing.
+// Connecting is Full access's, and that of someone given AI accounts of their own: the daemon refuses anyone else's
+// sign-in, and the hub withholds the section that holds it. Anyone else is told who can, rather than offered a door that
+// opens on nothing.
 const { canShip } = useRole();
+const { holds } = useAccess();
+const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 
 // Whether a vendor may be named at all: only a provider the owner actually chose. With nothing stored this chat is
 // sitting on a floor the app picked (turnDefaults.ts), and naming it would tell a first-run reader that some
@@ -162,7 +166,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
         }}</span>
         <span class="flex shrink-0 items-center gap-3">
             <template v-if="others">
-                <RouterLink v-if="canShip && byName" :to="connectTo" :class="ui.textButton({ size: `xs`, tone: `subtle` })">
+                <RouterLink v-if="mayConnect && byName" :to="connectTo" :class="ui.textButton({ size: `xs`, tone: `subtle` })">
                     {{ connectLabel }}
                 </RouterLink>
                 <ChatChooseModelButton
@@ -174,7 +178,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
             </template>
             <!-- A real link, so hover shows where it goes and Ctrl/Cmd-click opens it elsewhere. On Home it opens in the chat's place (lib/routes/homeDetour.ts). -->
             <Button
-                v-else-if="canShip"
+                v-else-if="mayConnect"
                 :key="`connect-${nudge}`"
                 :as="RouterLink"
                 :to="connectTo"
@@ -184,7 +188,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
             >
                 {{ connectLabel }}
             </Button>
-            <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.maintainerConnects`) }}</span>
+            <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.whoConnects`) }}</span>
         </span>
     </div>
 </template>

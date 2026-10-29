@@ -103,9 +103,10 @@ export interface SecretsDeps {
     // The roster each member's reach is written on, and the conversation records that name who a conversation works for.
     readonly members: CredentialReachDeps["members"];
     readonly conversationEntry: CredentialReachDeps["entry"];
-    // The services a conversation's runs act as, the access profiles that bound them, and a bound organisation's
-    // ceiling (access/principal-chain.ts); absent in a composition that has none, where a service named reaches nothing.
-    readonly principals?: Pick<CredentialReachDeps, "services" | "profiles" | "org">;
+    // The services a conversation's runs act as, the access profiles that bound them, a bound organisation's ceiling,
+    // and who connected each AI account (access/principal-chain.ts); absent in a composition that has none, where a
+    // service named reaches nothing and nobody's own accounts widen their row.
+    readonly principals?: Pick<CredentialReachDeps, "services" | "profiles" | "org" | "connectors">;
     // Where a release that could not be kept is said; the release itself still holds for this process.
     readonly warn: (message: string, error: unknown) => void;
     // The owner's computers, for their keyrings: the hub is composed after this slice, so it is read at each call.
@@ -116,14 +117,15 @@ export interface SecretsDeps {
 }
 
 // Who a conversation can act for, as the auth slice keeps them: the owner, the roster, the services and the access
-// profiles, with a bound organisation's ceiling over all of them (access/principal-chain.ts).
+// profiles, with a bound organisation's ceiling over all of them and the AI accounts each person connected
+// (access/principal-chain.ts).
 export const principalsOfAuth = (
-    auth: Pick<AuthSlice, "ownerEmail" | "members" | "services" | "accessProfiles">,
+    auth: Pick<AuthSlice, "ownerEmail" | "members" | "services" | "accessProfiles" | "accountConnectors">,
     org: NonNullable<CredentialReachDeps["org"]>,
 ): Pick<SecretsDeps, "ownerEmail" | "members" | "principals"> => ({
     ownerEmail: auth.ownerEmail,
     members: auth.members,
-    principals: { services: auth.services, profiles: auth.accessProfiles, org },
+    principals: { services: auth.services, profiles: auth.accessProfiles, org, connectors: auth.accountConnectors },
 });
 
 // Builds the secrets slice.

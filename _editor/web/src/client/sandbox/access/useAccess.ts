@@ -1,6 +1,6 @@
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
-import type { MemberSelf } from "@intentic/sandbox-contract/schemas/members";
+import { holdsRight, type ManageRight, type MemberSelf } from "@intentic/sandbox-contract/schemas/members";
 import { computed, type ComputedRef, effectScope } from "vue";
 import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -45,6 +45,8 @@ interface Caller {
     readonly areas?: readonly string[] | undefined;
     readonly agents?: MemberSelf[`agents`] | undefined;
     readonly lands?: true | undefined;
+    // The parts of the sandbox they were given besides their own work, which open a route's floor to them (`right`).
+    readonly manages?: MemberSelf[`manages`] | undefined;
 }
 
 // allow(module-state): the signed-in person's access, one for the page, built once on first use
@@ -63,7 +65,7 @@ const build = (): AccessState => {
             return undefined;
         }
         const answer = self.value;
-        return { role: tier, areas: answer?.areas, agents: answer?.agents, lands: answer?.lands === true ? true : undefined };
+        return { role: tier, areas: answer?.areas, agents: answer?.agents, lands: answer?.lands === true ? true : undefined, manages: answer?.manages };
     });
     const known = computed(() => caller.value !== undefined && accessPolicy.value !== undefined && contractModule.value !== undefined);
     return { active: sandbox.active, refresh: () => void sandbox.refresh(), role, caller, known };
@@ -131,9 +133,21 @@ export interface Access {
     readonly refusal: (route: AccessRoute, params?: RouteParams) => AccessReason | undefined;
     /** Whether they may make this call: known, and nothing refuses it. */
     readonly can: (route: AccessRoute, params?: RouteParams) => boolean;
+    /**
+     * Whether they run this part of the sandbox (sandbox-contract `holdsRight`): the owner and Full access every part,
+     * anyone else the parts their row names. Read off their tier and their own answer alone, so it is known as soon as
+     * the tier is, before the contract the route check reads has loaded. Reactive inside a computed.
+     */
+    readonly holds: (right: ManageRight) => boolean;
 }
+
+// The tier and the rights their own answer names; the owner's answer is never read, and the owner holds every right.
+const holdsOf = (right: ManageRight): boolean => {
+    const facts = stateOf().caller.value;
+    return facts !== undefined && holdsRight(facts, right);
+};
 
 export const useAccess = (): Access => {
     const { known, role } = stateOf();
-    return { known, role, refusal: refusalOf, can: (route, params) => known.value && refusalOf(route, params) === undefined };
+    return { known, role, refusal: refusalOf, can: (route, params) => known.value && refusalOf(route, params) === undefined, holds: holdsOf };
 };

@@ -171,3 +171,56 @@ describe("a conversation running as a service", () => {
         expect(reach).toMatchObject({ kind: "some", who: [`the service "orphan" (for gone@example.com)`] });
     });
 });
+
+// An account a person connected is always theirs to run on, even where their row lists only some; it widens only that
+// person's own row, never a service run for them, nor anyone the roster no longer names.
+describe("the AI accounts a person connected themselves", () => {
+    const limited: Member[] = [
+        { email: "bob@example.com", role: "collaborator", aiAccounts: ["claude:a"] },
+        { email: "cy@example.com", role: "collaborator", aiAccounts: ["claude:a"] },
+    ];
+    const connectors = {
+        all: async () =>
+            new Map([
+                ["claude:b", "bob@example.com"],
+                ["claude:c", "gone@example.com"],
+            ]),
+    };
+    const deps = {
+        members: { list: async () => limited },
+        ownerEmail: async () => OWNER,
+        entry: () => undefined,
+        connectors,
+        services: { list: async () => [{ id: "bobs", steward: "bob@example.com" }] },
+    };
+
+    test("are theirs to run on beside their row's, and still held to everyone else's in the conversation", async () => {
+        const reach = await createConversationAccountReach(deps)(undefined, ["Bob@Example.com"]);
+        expect(accountReachAllows(reach, "claude", "a")).toBe(true);
+        expect(accountReachAllows(reach, "claude", "b")).toBe(true);
+        expect(accountReachAllows(reach, "claude", "c")).toBe(false);
+        const shared = await createConversationAccountReach(deps)(undefined, ["bob@example.com", "cy@example.com"]);
+        expect(accountReachAllows(shared, "claude", "a")).toBe(true);
+        expect(accountReachAllows(shared, "claude", "b")).toBe(false);
+    });
+
+    test("widen neither someone the roster no longer names nor a service run for the person", async () => {
+        const gone = await createConversationAccountReach(deps)(undefined, ["gone@example.com"]);
+        expect(accountReachAllows(gone, "claude", "c")).toBe(false);
+        const service = await createConversationAccountReach(deps)(undefined, [], ["bobs"]);
+        expect(accountReachAllows(service, "claude", "a")).toBe(true);
+        expect(accountReachAllows(service, "claude", "b")).toBe(false);
+    });
+
+    test("leave each row's own list when the record cannot be read", async () => {
+        const unreadable = {
+            all: async (): Promise<never> => {
+                throw new Error("history volume unreadable");
+            },
+        };
+        const reach = await createConversationAccountReach({ ...deps, connectors: unreadable })(undefined, ["bob@example.com"]);
+        expect(reach).toMatchObject({ kind: "some", who: ["bob@example.com"] });
+        expect(accountReachAllows(reach, "claude", "a")).toBe(true);
+        expect(accountReachAllows(reach, "claude", "b")).toBe(false);
+    });
+});

@@ -1,7 +1,7 @@
 // A sandbox-held secret's program guard as its open row shows it: read as its answer ("Asks each time", or the programs
 // and apps it is typed into unasked), and changed in a panel hanging off that answer, where programs and Android apps are
-// added as typed and saved together with "any field" only when the owner presses Save. What is not a program or a package
-// is said and not added, and anybody but the owner reads the answer with nothing to press.
+// added as typed and saved together with "any field" only when someone who runs secrets presses Save. What is not a
+// program or a package is said and not added, and anybody else reads the answer with nothing to press.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h, nextTick, ref } from "vue";
@@ -13,11 +13,12 @@ import { SecretPopoverStub } from "./SecretPopover.testing";
 const setPrograms = {
     mutateAsync: jest.fn(async (input: SecretProgramGuard) => ({ programs: input.programs, packages: input.packages, anyField: input.anyField })),
 };
-const isOwner = ref(true);
+// Whether the reader runs secrets: the owner, Full access, or someone given Secrets.
+const runsSecrets = ref(true);
 const guards = ref<SecretProgramGuard[]>([]);
 
 jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
-    useCredentialGates: () => ({ isOwner }),
+    useCredentialGates: () => ({ runsSecrets }),
     useSecretPrograms: () => ({
         programsFor: (subject: string) => guards.value.find((guard) => guard.subject === subject),
         setPrograms,
@@ -85,7 +86,7 @@ const mount = (row: SecretRow) => {
 
 beforeEach(() => {
     setPrograms.mutateAsync.mockClear();
-    isOwner.value = true;
+    runsSecrets.value = true;
     guards.value = [];
 });
 
@@ -151,8 +152,8 @@ it("closes on Save without writing when nothing changed", async () => {
     done();
 });
 
-it("shows anybody but the owner the answer as it stands, with nothing to press", () => {
-    isOwner.value = false;
+it("shows anyone who does not run secrets the answer as it stands, with nothing to press", () => {
+    runsSecrets.value = false;
     const listed = mount(rowWith({ programs: { programs: [`FortiClient.exe`], packages: [], anyField: true, source: `owner` } }));
     expect(listed.el.textContent).toContain(`FortiClient.exe`);
     expect(listed.el.textContent).toContain(`Any field · anywhere else asks`);

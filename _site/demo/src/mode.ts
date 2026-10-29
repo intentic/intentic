@@ -232,6 +232,32 @@ const resolveAiAccounts = (): readonly string[] | undefined => {
 /** The AI accounts the demo's reader may run on; undefined is every one. */
 export const demoAiAccounts = resolveAiAccounts();
 
+// WHICH PARTS OF THE SANDBOX THE READER WAS GIVEN, from `?manages=` (comma-separated rights as Access ▸ People hands them
+// out: `people`, `secrets`, `privacy`, `ownAccounts`), sticky per tab like the tier. `?manages=none` takes them back.
+// Read only below Full access, as the daemon reads a roster row: the owner and Full access run every part.
+const MANAGES_KEY = `intentic.demo.manages`;
+const RIGHTS = [`people`, `secrets`, `privacy`, `ownAccounts`] as const;
+export type DemoRight = (typeof RIGHTS)[number];
+
+const resolveManages = (): readonly DemoRight[] => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get(`manages`);
+    if (asked !== null) {
+        url.searchParams.delete(`manages`);
+        window.history.replaceState(window.history.state, ``, url);
+        if (asked === `none`) {
+            window.sessionStorage.removeItem(MANAGES_KEY);
+        } else {
+            window.sessionStorage.setItem(MANAGES_KEY, asked);
+        }
+    }
+    const held = window.sessionStorage.getItem(MANAGES_KEY)?.split(`,`).map((right) => right.trim()) ?? [];
+    return RIGHTS.filter((right) => held.includes(right));
+};
+
+/** The parts of the sandbox the demo's reader runs besides their own work, below Full access. */
+export const demoManages = resolveManages();
+
 /** Whether this page load is the desk recording: the one switch every fixture seam reads. */
 export const deskEdition = demoMode.id === `desk`;
 

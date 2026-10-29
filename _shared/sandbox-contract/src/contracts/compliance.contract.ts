@@ -44,7 +44,7 @@ export const complianceContract = {
         })
         .output(PresetPreviewSchema),
     applyPreset: procedure
-        .meta({ floor: "owner", control: "never", panel: false })
+        .meta({ floor: "maintainer", control: "never", panel: false })
         .route({
             method: "POST",
             path: "/compliance/preset",

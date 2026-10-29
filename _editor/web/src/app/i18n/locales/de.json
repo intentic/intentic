@@ -1634,20 +1634,21 @@
             "couldNotRemove": "Das Secret konnte nicht entfernt werden.",
             "couldNotReveal": "Der Wert konnte nicht angezeigt werden.",
             "hide": "Verbergen",
-            "maintainersOnly": "Nur Eigentümer und Maintainer",
             "multiLineValueSsh": "Mehrzeiliger Wert (SSH-Schlüssel, PEM…)",
             "reveal": "Anzeigen",
-            "revealValueMaintainersOnly": "Wert zeigen (nur Eigentümer und Maintainer)",
             "setUpdate": "Wert setzen",
             "setUpdateValue": "Wert setzen / aktualisieren",
             "singleLineValue": "Einzeiliger Wert",
             "value": "Wert",
-            "maintainersOnlySee": "Nur Eigentümer und Maintainer können ihn sehen",
             "notSet": "Nicht gesetzt",
             "replaceValue": "Wert ersetzen",
             "setValue": "Wert setzen",
             "show": "Zeigen",
-            "staysOn": "Bleibt auf {machine}, nie hier"
+            "staysOn": "Bleibt auf {machine}, nie hier",
+            "whoReveals": "Wer Geheimnisse verwaltet",
+            "revealValueWho": "Wert zeigen (wer Geheimnisse verwaltet)",
+            "whoSees": "Nur der Eigentümer, jemand mit vollem Zugriff oder wer Geheimnisse verwalten darf, kann ihn sehen",
+            "approversSee": "Nur wer es freigeben darf, kann ihn sehen"
         },
         "secretField": {
             "as": "als",
@@ -2819,7 +2820,8 @@
             "restConversation": "Rest der Unterhaltung",
             "restConversationNote": "Ein Klick deckt jede Nutzung für den Rest dieser Unterhaltung ab.",
             "signedInConversation": "Für den Rest der Unterhaltung: Ein angemeldetes Konto wird für einen ganzen Zug geladen, es kann also nicht für eine einzelne Nutzung freigegeben werden.",
-            "couldNotSave": "Konnte nicht speichern, wer dies freigeben muss."
+            "couldNotSave": "Konnte nicht speichern, wer dies freigeben muss.",
+            "othersUnlisted": "Nur du und die bereits Benannten: Die ganze Liste sieht, wer Personen und Zugriff verwaltet."
         },
         "secretFacts": {
             "lastUsed": "Zuletzt genutzt",
@@ -2838,7 +2840,7 @@
             "ciLabel": "CI-Kopie",
             "ciSynced": "Aktuell",
             "ciOutOfDate": "Veraltet",
-            "ownerChanges": "Nur der Eigentümer kann diese ändern."
+            "whoChanges": "Ändern können das der Eigentümer, jemand mit vollem Zugriff oder wer Geheimnisse verwalten darf."
         }
     },
     "chat": {
@@ -2889,12 +2891,12 @@
             "didntConnect": "{provider} hat sich nicht verbunden.",
             "finishSignIn": "Anmeldung abschließen",
             "isntConnectedInSandbox": "{providerName} ist in dieser Sandbox nicht verbunden.",
-            "maintainerConnects": "Ein Maintainer dieser Sandbox kann eines verbinden.",
             "noModelYet": "In dieser Sandbox ist noch kein Modell verbunden.",
             "signInWaiting": "Ihre Anmeldung bei {provider} ist noch nicht abgeschlossen.",
             "connectProvider": "{providerName} verbinden",
             "chooseAnother": "Anderes Modell wählen",
-            "notShared": "{provider} ist in dieser Sandbox nicht mit dir geteilt."
+            "notShared": "{provider} ist in dieser Sandbox nicht mit dir geteilt.",
+            "whoConnects": "Verbinden kann eines der Eigentümer, jemand mit vollem Zugriff oder jemand, dem eigene KI-Konten übertragen wurden."
         },
         "chatArea": {
             "bringBackHere": "Hierher zurückholen",
@@ -3459,7 +3461,6 @@
             "privacyLetRead": "{provider} diese Unterhaltung lesen lassen",
             "privacyLetReadNote": "Andere Unterhaltungen bleiben geschützt.",
             "privacyLetReadTitle": "Unmaskiert, nur hier",
-            "privacyOwnerOnly": "Nur der Besitzer der Sandbox kann es durchlassen.",
             "privacyRefused": "Der Datenschutzschild sendet das nicht an {provider}, und nichts, was du geschrieben hast, ist der Grund: Der Agent von {provider} liest Dateien und Befehlsausgaben selbst und schickt sie über eine Leitung an seinen Anbieter, die der Schild weder lesen noch maskieren kann.",
             "privacyRefusedRunner": "Der Datenschutzschild führt das nicht auf {runner} aus, und nichts, was du geschrieben hast, ist der Grund: {runner} würde {provider} von seinem eigenen Rechner aus aufrufen, wo der Schild nicht maskieren kann, was gesendet wird. Führe es stattdessen hier aus oder lass {provider} diese Unterhaltung lesen.",
             "privacySafety": "Datenschutzschild",
@@ -3482,7 +3483,8 @@
             "trialGraceLeft": "Bis zu {count} weiterer Schritt zum Abschließen | Bis zu {count} weitere Schritte zum Abschließen",
             "trialFreshGrace": "Kostenlose Testversion: heute noch {remaining} Agentenschritte. Eine kleine Aufgabe kann 10 oder mehr brauchen, und eine begonnene darf darüber hinaus laufen, um fertig zu werden.",
             "trialReviewChanges": "Änderungen prüfen ({count} Datei) | Änderungen prüfen ({count} Dateien)",
-            "continueOtherModel": "Mit einem anderen Modell fortsetzen"
+            "continueOtherModel": "Mit einem anderen Modell fortsetzen",
+            "privacyOthersLetThrough": "Durchlassen können es der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf."
         },
         "chatPaneTurns": {
             "couldntOpen": "Diese Unterhaltung konnte nicht geöffnet werden.",
@@ -5062,7 +5064,8 @@
             "couldntStopBorrowing": "Das Leihen dieses Kontos konnte nicht beendet werden.",
             "lentTo": "Verliehen an {names}",
             "stopLending": "Nicht mehr verleihen",
-            "couldntStopLending": "Das Verleihen dieses Kontos konnte nicht beendet werden."
+            "couldntStopLending": "Das Verleihen dieses Kontos konnte nicht beendet werden.",
+            "emptyFullAccess": "Noch nicht verbunden. Dieses verbindet der Eigentümer oder jemand mit vollem Zugriff."
         },
         "providerTile": {
             "signingIn": "Anmeldung läuft…"
@@ -6246,7 +6249,7 @@
         "agentPrivacyShield": {
             "activity": "Aktivität des Schutzschilds",
             "activityNote": "Das Protokoll speichert Tokens und den maskierten Text um sie herum, nie die Werte: Jeder Wert wird aus dem Tresor auf diesem Rechner gelesen, nur für Sie.",
-            "activityNoteMember": "Das Protokoll speichert Tokens und den maskierten Text um sie herum, nie die Werte; nur der Besitzer der Sandbox sieht, wofür jedes Token steht.",
+            "activityNoteMember": "Das Protokoll speichert Tokens und den maskierten Text um sie herum, nie die Werte; wofür jedes Token steht, sehen nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
             "allow": "Unverändert senden",
             "allowNote": "Bilder werden so gesendet, wie sie sind, daher erreichen alle personenbezogenen Daten darin den Anbieter.",
             "classes": {
@@ -6390,8 +6393,6 @@
             "offNote": "Nichts wird umgeleitet oder gelesen: Jede Modellanfrage geht genau wie bisher an ihren Anbieter.",
             "on": "An",
             "onNote": "",
-            "ownerOnly": "Nur der Besitzer der Sandbox kann den Datenschutzschild ändern.",
-            "ownerOnlyForget": "Nur der Besitzer der Sandbox kann einen Datensatz vergessen.",
             "receives": {
                 "local": "bleibt hier",
                 "refused": "läuft nicht",
@@ -6527,7 +6528,9 @@
                     "learned": "ein aus einem Datensatz gelernter Wert",
                     "model": "das Namensmodell"
                 }
-            }
+            },
+            "othersChange": "Ändern können ihn nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+            "othersForget": "Einen Datensatz vergessen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf."
         },
         "agentProjectInstalls": {
             "ask": "Erst fragen",
@@ -6639,7 +6642,9 @@
             "loopSignIn": "{loop}-Anmeldung",
             "accountViaLoop": "{managedLabel}-Konto über {loop}",
             "offByAdmin": "Aus: Organisation oder Tarif haben {provider} abgeschaltet",
-            "offByAdminSince": "Aus: Organisation oder Tarif haben {provider} abgeschaltet · seit {when}"
+            "offByAdminSince": "Aus: Organisation oder Tarif haben {provider} abgeschaltet · seit {when}",
+            "connectedByYou": "Von dir verbunden",
+            "connectedBy": "Verbunden von {email}"
         },
         "arrivalPanel": {
             "alreadyHere": "schon hier",
@@ -7757,10 +7762,10 @@
             "panelsHint": "Die Vorschau einer App verlangt die Anmeldung eines Mitglieds. Weitergeleitete Ports bleiben offen, damit Webhooks und Handy-Apps sie weiter erreichen.",
             "all": "Nur Mitglieder: App-Vorschauen und weitergeleitete Ports",
             "allHint": "App-Vorschauen und weitergeleitete Ports verlangen beide die Anmeldung eines Mitglieds, sodass ein Webhook oder eine Handy-App einen weitergeleiteten Port nicht mehr erreicht.",
-            "ownerChanges": "Nur der Eigentümer der Sandbox kann ändern, wer Vorschauen öffnen kann.",
             "changing": "Ändert, wer Vorschauen öffnen kann",
             "couldntChange": "Konnte nicht ändern, wer Vorschauen öffnen kann.",
-            "couldntRead": "Konnte nicht lesen, wer die Vorschauen dieser Sandbox öffnen kann."
+            "couldntRead": "Konnte nicht lesen, wer die Vorschauen dieser Sandbox öffnen kann.",
+            "whoChanges": "Wer Vorschauen öffnen darf, ändert der Eigentümer, jemand mit vollem Zugriff oder jemand, dem Personen und Zugriff übertragen wurden."
         },
         "personaBriefingFields": {
             "sandboxPutsInFront": "Die Sandbox stellt diese der Nachricht voran, bevor das Modell sie liest; der Chat zeigt sie unter „Vor Ihrer Nachricht gesendet“. Schalten Sie eines für eine Persona ab, deren Modell wenig Platz hat oder deren Arbeit es nie braucht.",
@@ -7971,7 +7976,6 @@
             "everyBrowserSignedOut": "Jeder Browser wurde abgemeldet. Jedes Gerät, das noch einen Pass hält, ist jetzt ausgesperrt.",
             "idle": "untätig",
             "maintainer": "Maintainer",
-            "onlySandboxOwnerInvite": "Nur der Eigentümer der Sandbox kann Leute einladen oder Rollen ändern.",
             "otherWaysIn": "Andere Wege hinein",
             "owner": "Eigentümer",
             "pairedDevicesRunners": "Gekoppelte Geräte und Runner",
@@ -8094,11 +8098,11 @@
             "tipCustomTitle": "Jeden Teil wählen",
             "tipCustomNote": "Agenten, Ordner, Konten, Verbindungen",
             "tipFullTitle": "Verwaltet die Sandbox",
-            "tipFullNote": "Landet Arbeit, ändert alle Einstellungen",
+            "tipFullNote": "Alles, auch Personen und Zugriff",
             "fullSettings": "Einstellungen",
-            "fullSettingsValue": "Veröffentlichen, Einstellungen und Verbindungen ändern",
+            "fullSettingsValue": "Alle Einstellungen und Verbindungen, auch Veröffentlichen",
             "fullAgentsValue": "Agenten starten und Arbeit landen",
-            "fullLimitNote": "Jeder Agent, den sie starten, hält sich an diese Grenzen. Voller Zugriff umfasst ein Terminal, das sie umgehen kann.",
+            "fullLimitNote": "Jeder Agent, den sie starten, hält sich an diese Grenzen. Voller Zugriff kann sie aufheben, hier oder über ein Terminal.",
             "tipOffTitle": "Nur zuschauen",
             "tipOffNote": "Kann keine Agenten starten",
             "tipChatTitle": "Nur Assistenten",
@@ -8120,7 +8124,23 @@
             "tipReachAllTitle": "Jede Verbindung",
             "tipReachAllNote": "Auch später hinzugefügte",
             "tipReachSomeNote": "Neue bleiben aus",
-            "tipAlwaysAvailable": "Immer verfügbar"
+            "tipAlwaysAvailable": "Immer verfügbar",
+            "rightsSection": "Kann auch verwalten",
+            "rightPeople": "Personen und Zugriff",
+            "rightPeopleNote": "Leute einladen und ihren Zugriff ändern, außer vollem Zugriff",
+            "rightSecrets": "Geheimnisse",
+            "rightSecretsNote": "Gespeicherte Geheimnisse sehen und festlegen, wer sie nutzen darf",
+            "rightPrivacy": "Datenschutzschild",
+            "rightPrivacyNote": "Ändern, was maskiert wird, und maskierte Werte wieder lesen",
+            "rightOwnAccounts": "Eigene KI-Konten",
+            "rightOwnAccountsNote": "KI-Konten verbinden und auf den selbst verbundenen immer arbeiten",
+            "rightsYoursOnly": "Du kannst nur weitergeben, was du selbst verwaltest.",
+            "tipFullLockedNote": "Nur voller Zugriff vergibt das",
+            "fullRightsValue": "Personen und Zugriff (auch den eigenen), Geheimnisse, Datenschutzschild, KI-Konten",
+            "lockedOwn": "Deinen eigenen Zugriff ändert der Eigentümer oder jemand mit vollem Zugriff.",
+            "lockedFull": "Vollen Zugriff ändert der Eigentümer oder jemand anderes mit vollem Zugriff.",
+            "aiAccountsOwnAlways": "Wer ein Konto selbst verbunden hat, kann immer darauf arbeiten, ob angehakt oder nicht.",
+            "peopleManagedBy": "Leute einladen und Zugriff ändern kann der Eigentümer, jemand mit vollem Zugriff oder jemand, dem Personen und Zugriff übertragen wurden."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategorie der Agenteneinstellungen",
@@ -8885,7 +8905,6 @@
             "deleteArea": "Bereich löschen",
             "deleteHeader": "{label} löschen?",
             "deleteBody": "Nur der Name, unter dem Zugang gewährt wird, verschwindet; die Ordner bleiben. Die Sandbox verweigert es, solange ihn noch jemand hält.",
-            "onlyOwnerEdits": "Nur der Sandbox-Eigentümer entscheidet, wer welche Ordner sieht.",
             "explainer": {
                 "label": "Was ein Bereich ist",
                 "title": "Ein Bereich ist eine benannte Gruppe von Ordnern",
@@ -8899,7 +8918,9 @@
                 "sees": "Sieht nur seine Ordner: im Baum, in der Suche und in Unterhaltungen",
                 "talks": "Spricht nur mit Personen und Assistenten darin",
                 "agents": "Agenten, die sie startet, bleiben ebenfalls darin"
-            }
+            },
+            "fencedAreasHeld": "Die Bereiche, auf die dein eigener Zugriff begrenzt ist, ändert der Eigentümer oder jemand mit vollem Zugriff.",
+            "whoDecidesFolders": "Wer welche Ordner sieht, entscheidet der Eigentümer, jemand mit vollem Zugriff oder jemand, dem Personen und Zugriff übertragen wurden."
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Das Protokoll kann gerade nicht gelesen werden — der Build selbst ist davon nicht betroffen. {hiccup}",
@@ -9979,7 +10000,10 @@
             "none": "Noch keine Bestätigungen."
         },
         "analytics": {
-            "title": "Intentic-Produktanalyse in dieser Sandbox"
+            "title": "Intentic-Produktanalyse in dieser Sandbox",
+            "on": "An",
+            "off": "Aus",
+            "whoChanges": "Das ändert der Eigentümer oder jemand mit vollem Zugriff."
         },
         "dataProtection": {
             "intro": "Drei Schritte, bevor diese Sandbox personenbezogene Daten verarbeitet.",
@@ -10206,7 +10230,6 @@
                     "what": "Sicherungen dieser Sandbox entstehen außerhalb von ihr, deshalb erstellt und schützt sie deine Behörde."
                 }
             },
-            "ownerApplies": "Nur der Eigentümer kann sie anwenden.",
             "apply": "{count} Einstellung anwenden | {count} Einstellungen anwenden",
             "nothingToChange": "Alle Einstellungen entsprechen bereits dem Vorschlag.",
             "applied": "{count} Einstellung angewendet | {count} Einstellungen angewendet",
@@ -10265,7 +10288,8 @@
                 "privacyNames": "Braucht das lokale Namensmodell, das in dieser Sandbox nicht installiert ist."
             },
             "formatMarkdown": "Markdown",
-            "formatWord": "Word"
+            "formatWord": "Word",
+            "fullAccessApplies": "Anwenden können sie nur der Eigentümer oder jemand mit vollem Zugriff."
         },
         "sandboxAudit": {
             "integrityTitle": "Ist das Protokoll unverändert?",
@@ -10795,7 +10819,7 @@
             "namePlaceholder": "z. B. Praktikanten",
             "nameTaken": "Ein Profil namens {name} gibt es schon.",
             "noHolders": "Niemand hat dieses Profil",
-            "readOnly": "Schreibgeschützt. Organisationsprofile verwaltet die Organisation, Sandbox-Profile der Eigentümer.",
+            "readOnly": "Nur lesbar. Profile ändert der Eigentümer, jemand mit vollem Zugriff oder jemand, dem Personen und Zugriff übertragen wurden.",
             "org": "Von der Organisation verwaltet",
             "saveFailed": "Profil oder Rollenabgleich fehlgeschlagen. Zum Wiederholen erneut speichern.",
             "removeFailed": "Profil konnte nicht gelöscht werden",
@@ -10822,7 +10846,9 @@
             "agents_run": "Agenten ausführen",
             "agents_home": "Nur Startseite",
             "posture": "Personas bestimmen die Haltung: Sie schränken nur ein, was die Person oder der Dienst eines Durchlaufs innerhalb des Dienstprofils erreichen darf.",
-            "view": "Ansehen"
+            "view": "Ansehen",
+            "readOnlyOrg": "Nur lesbar. Organisationsprofile verwaltet die Organisation.",
+            "readOnlyOwn": "Nur lesbar. Dein eigener Zugriff kommt aus diesem Profil, daher ändert es der Eigentümer oder jemand mit vollem Zugriff."
         },
         "accessServices": {
             "title": "Dienste",
@@ -12202,7 +12228,8 @@
             "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Es reitet auf dem Befehl in Ihren Host, nie zur Plattform.",
             "showCommand": "Befehl anzeigen",
             "codeFailed": "Die Sandbox konnte keinen Befehl erstellen ({status}).",
-            "asksCloudflareToken": "Führe dies auf dem Server aus; er fragt dort nach deinem Cloudflare-API-Token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), sodass das Token ihn nie verlässt."
+            "asksCloudflareToken": "Führe dies auf dem Server aus; er fragt dort nach deinem Cloudflare-API-Token (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), sodass das Token ihn nie verlässt.",
+            "fullAccessConnectsServers": "Einen Server mit dieser Sandbox verbinden können nur der Eigentümer oder jemand mit vollem Zugriff."
         },
         "coreViews": {
             "health": "Gesundheit",

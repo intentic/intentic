@@ -15,10 +15,11 @@ import { SecretPopoverStub } from "./SecretPopover.testing";
 const setGate = { mutateAsync: jest.fn(async () => undefined) };
 const removeGate = { mutateAsync: jest.fn(async () => undefined) };
 const approverChoices = ref<string[]>([]);
-const isOwner = ref(true);
+// Whether the reader runs secrets (the owner, Full access, or someone given Secrets), which is what reads a value out
+// and changes a rule; and whether they read the roster (People and access), which is what lists everybody to name.
+const runsSecrets = ref(true);
+const namesEveryone = ref(true);
 const stored = ref<CredentialGate | undefined>(undefined);
-// The reader's tier, which the daemon reads a value out to from maintainer up.
-const role = ref<`owner` | `maintainer` | `collaborator`>(`owner`);
 
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
@@ -31,7 +32,8 @@ jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
         gates: ref([]),
         gateFor: (subject: string) => (stored.value?.subject === subject ? stored.value : undefined),
         approverChoices,
-        isOwner,
+        namesEveryone,
+        runsSecrets,
         setGate,
         removeGate,
     }),
@@ -45,10 +47,6 @@ jest.mock(`./useKeyrings`, () => ({
 }));
 
 jest.mock(`./SecretPopover.vue`, () => ({ default: SecretPopoverStub }));
-
-jest.mock(`../../../../client/sandbox/useRole`, () => ({
-    useRole: () => ({ canShip: computed(() => role.value !== `collaborator`) }),
-}));
 
 const { default: SecretEntryRow } = await import("./SecretEntryRow.vue");
 
@@ -119,8 +117,8 @@ const settled = async (): Promise<void> => {
 beforeEach(() => {
     setGate.mutateAsync.mockClear();
     removeGate.mutateAsync.mockClear();
-    isOwner.value = true;
-    role.value = `owner`;
+    runsSecrets.value = true;
+    namesEveryone.value = true;
     keyrings.value = [];
 });
 
@@ -203,39 +201,75 @@ it("reads a stored gate as its approvers, and asking nobody removes it", async (
     done();
 });
 
-it("shows everybody but the owner the same answers, with nothing to press", () => {
-    isOwner.value = false;
+// Somebody given Secrets below Full access reads no roster: the people to name are themselves and whoever a gate
+// already names, so one can be taken off, and the panel says why nobody else is offered rather than sending them to
+// Access, where they could not add anyone.
+it("offers someone who runs secrets but not people themselves and the names already on a gate", async () => {
+    namesEveryone.value = false;
+    approverChoices.value = [`helper@x.com`, `owner@x.com`];
+    stored.value = { subject: `DATABASE_URL`, kind: `secret`, approvers: [`owner@x.com`], scope: `use` };
+    const { el, press, button, done } = mount();
+    await press(APPROVAL);
+    const chips = [...el.querySelectorAll<HTMLButtonElement>(`button[aria-pressed]`)].filter((chip) => chip.textContent?.includes(`@`));
+    expect(chips.map((chip) => chip.textContent?.trim())).toEqual([`helper@x.com`, `owner@x.com`]);
+    expect(el.innerHTML).toContain(`Only you and the people already named`);
+    expect(el.innerHTML).not.toContain(`Open Access`);
+    // Untoggling the owner and naming oneself saves exactly that.
+    chips[1]?.click();
+    chips[0]?.click();
+    await nextTick();
+    button(`Save`).click();
+    await settled();
+    expect(setGate.mutateAsync).toHaveBeenCalledWith({ subject: `DATABASE_URL`, kind: `secret`, approvers: [`helper@x.com`], scope: `use` });
+    done();
+});
+
+it("shows anyone who does not run secrets the same answers, with nothing to press", () => {
+    runsSecrets.value = false;
     approverChoices.value = [`owner@x.com`];
     stored.value = { subject: `DATABASE_URL`, kind: `secret`, approvers: [`owner@x.com`], scope: `conversation` };
     const { el, done } = mount();
     expect(el.querySelector(APPROVAL)).toBeNull();
     expect(el.textContent).toContain(`owner@x.com`);
     expect(el.textContent).toContain(`One release covers a conversation`);
-    expect(el.textContent).toContain(`Only the owner can change these.`);
+    expect(el.textContent).toContain(`The owner, Full access, or someone given Secrets changes these.`);
+    expect(el.querySelector(`button[aria-label^="Change where it may go"]`)).toBeNull();
+    expect(el.querySelector(`button[aria-label^="Change what it may be typed into"]`)).toBeNull();
     done();
 });
 
-// The daemon reveals a value from the maintainer tier up (secrets.routes.ts `reveal`). The button used to say "owner
-// only" to the maintainer it worked for, and stood pressable for a collaborator it refused.
+// The daemon reveals a value to whoever runs secrets (secrets.routes.ts `mayReveal`): the owner, Full access, or someone
+// given Secrets. The button used to say "owner only" to the maintainer it worked for, and stood pressable for a
+// collaborator it refused.
 const revealButton = (el: HTMLElement): HTMLButtonElement | null => el.querySelector<HTMLButtonElement>(`button[aria-label^="Reveal value"]`);
 
-it("lets a maintainer reveal a value beside it, and names who may", () => {
-    role.value = `maintainer`;
+it("lets someone who runs secrets reveal a value beside it, and names who may", () => {
     const { el, done } = mount();
     expect(revealButton(el)?.disabled).toBe(false);
-    expect(revealButton(el)?.getAttribute(`aria-label`)).toBe(`Reveal value (owner and maintainers only)`);
+    expect(revealButton(el)?.getAttribute(`aria-label`)).toBe(`Reveal value (whoever manages Secrets)`);
+    expect(el.textContent).not.toContain(`changes these`);
     done();
 });
 
-it("keeps the value shut for a collaborator, whom the daemon would refuse, and says who may see it", () => {
-    role.value = `collaborator`;
+it("keeps the value shut for someone who does not run secrets, whom the daemon would refuse, and says who may see it", () => {
+    runsSecrets.value = false;
     const open = mount();
     expect(revealButton(open.el)).toBeNull();
-    expect(open.el.textContent).toContain(`Only the owner and maintainers can see it`);
+    expect(open.el.textContent).toContain(`Only the owner, Full access, or someone given Secrets can see it`);
     open.done();
     const closed = mount(ROW, false);
     expect(revealButton(closed.el)?.disabled).toBe(true);
     closed.done();
+});
+
+// A gated value is read out to its approvers alone, whoever else runs secrets; the inventory says so as `revealable`.
+it("says a gated value is its approvers' to see, for someone who runs secrets but is not one", () => {
+    const gated = { subject: `DATABASE_URL`, kind: `secret` as const, approvers: [`owner@x.com`], scope: `use` as const };
+    stored.value = gated;
+    const { el, done } = mount({ ...ROW, entry: { ...ROW.entry, revealable: false, gate: { approvers: gated.approvers, scope: gated.scope } } });
+    expect(revealButton(el)).toBeNull();
+    expect(el.textContent).toContain(`Only its approvers can see it`);
+    done();
 });
 
 it("offers its value's shortcuts on a closed row, and opens the row onto the one pressed", async () => {

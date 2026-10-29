@@ -5,8 +5,8 @@ import { Await, Button, Icon, Notice, Row, RowGroup, RowNote, ui } from "@intent
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useMembers } from "../../../../client/sandbox/useMembers";
-import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { selfMember, useMembers } from "../../../../client/sandbox/useMembers";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { idFromName } from "../../../../lib/idFromName";
 import { draftProblem } from "../accessGrant";
@@ -15,8 +15,14 @@ import { useAccessProfiles } from "../profiles/useAccessProfiles";
 import { useServices } from "../profiles/useServices";
 import ProfileAnswers from "../profiles/ProfileAnswers.vue";
 const t = useT();
-const { active } = useSandbox();
-const owner = computed(() => active.value?.role === `owner`);
+// Whoever runs people and access writes the sandbox's profiles; below Full access, never the one their own access comes
+// from, which the daemon refuses (access-profiles.routes.ts), since that would let them widen it.
+const { holds, role } = useAccess();
+const self = selfMember();
+const runsPeople = computed(() => holds(`people`));
+const ownProfile = computed(() => (role.value === `owner` || role.value === `maintainer` ? undefined : self.value?.profile));
+const editable = (profile: AccessProfileEntry): boolean => runsPeople.value && profile.origin !== `org` && profile.id !== ownProfile.value;
+const readOnlyLine = ref(``);
 const { profiles, loaded, save, remove } = useAccessProfiles();
 const { services } = useServices();
 const { members } = useMembers();
@@ -34,7 +40,13 @@ const holders = (id: string): string =>
 const start = (profile?: AccessProfileEntry): void => {
     notice.value = undefined;
     existing.value = profile !== undefined;
-    readonly.value = !owner.value || profile?.origin === `org`;
+    readonly.value = profile === undefined ? !runsPeople.value : !editable(profile);
+    readOnlyLine.value =
+        profile?.origin === `org`
+            ? t(`sandbox.accessProfiles.readOnlyOrg`)
+            : runsPeople.value
+              ? t(`sandbox.accessProfiles.readOnlyOwn`)
+              : t(`sandbox.accessProfiles.readOnly`);
     draft.value =
         profile === undefined ? { id: ``, agents: `off`, credentials: { capabilities: [], secrets: [] } } : AccessProfileSchema.parse(profile);
 };
@@ -98,7 +110,7 @@ const destroy = async (id: string): Promise<void> => {
         <RowGroup :label="t(`sandbox.accessProfiles.title`)">
             <template #actions
                 ><Button
-                    v-if="owner && supportsRoute(`accessProfiles.save`) && !draft"
+                    v-if="runsPeople && supportsRoute(`accessProfiles.save`) && !draft"
                     :label="t(`sandbox.accessProfiles.add`)"
                     size="small"
                     tier="boring"
@@ -120,7 +132,7 @@ const destroy = async (id: string): Promise<void> => {
                             :loading="busy"
                         />
                     </div>
-                    <p v-if="readonly" class="text-sm text-muted">{{ t(`sandbox.accessProfiles.readOnly`) }}</p>
+                    <p v-if="readonly" class="text-sm text-muted">{{ readOnlyLine }}</p>
                     <label class="flex flex-col gap-1 text-sm"
                         >{{ t(`sandbox.accessProfiles.label`)
                         }}<input
@@ -152,11 +164,11 @@ const destroy = async (id: string): Promise<void> => {
             >
                 <template #control
                     ><Button
-                        :label="profile.origin === `org` || !owner ? t(`sandbox.accessProfiles.view`) : t(`ui.action.edit`)"
+                        :label="editable(profile) ? t(`ui.action.edit`) : t(`sandbox.accessProfiles.view`)"
                         size="small"
                         tier="quiet"
                         @click="start(profile)" /><Button
-                        v-if="owner && profile.origin !== `org` && supportsRoute(`accessProfiles.remove`)"
+                        v-if="editable(profile) && supportsRoute(`accessProfiles.remove`)"
                         :label="t(`ui.action.delete`)"
                         size="small"
                         tier="quiet"

@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { usePrivacyShield } from "../../../../models/sandbox/usePrivacyShield";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
@@ -13,17 +14,19 @@ import { usePaneView } from "../../../../models/conversations/panel/useChat-view
 // The privacy shield's word on this conversation, above the composer, only when a turn is known to be turned away: a
 // runtime it cannot read at all or a runner it cannot reach (said before the send rather than after it), or what it found when the last turn was
 // sent (privacyStanding.ts). With it the narrow way through (this conversation only), and once that is granted a quiet
-// line that it is, which takes it back. Granting is the owner's alone, as every change to the policy is.
+// line that it is, which takes it back. Granting is for whoever runs the shield (the owner, Full access, or someone given
+// the Privacy shield), as every change to the policy is; anybody else is told who can, with no press.
 
 const t = useT();
 const { conversation, provider, capabilities, queuePaused, lastFailure, resumeQueue, streaming } = usePaneView();
-const { reachable, active } = useSandbox();
+const { reachable } = useSandbox();
+const { holds } = useAccess();
 const { status, updatePolicy, isSaving } = usePrivacyShield();
 
 const standing = computed(() =>
     privacyStanding(status.value, provider.value, capabilities.value, conversation.value.conversationId, lastFailure.value, conversation.value.runner.value),
 );
-const owner = computed(() => active.value?.role === `owner`);
+const runsShield = computed(() => holds(`privacy`));
 const failed = ref(false);
 
 const grant = async (on: boolean): Promise<void> => {
@@ -56,11 +59,11 @@ const shield = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
         }}</template>
         <template v-else-if="standing.kind === `refused`">{{ t(`chat.chatPaneNotices.privacyRefused`, { provider: standing.label }) }}</template>
         <template v-else>{{ standing.reason ?? t(`chat.chatPaneNotices.privacyFound`, { provider: standing.label }) }}</template>
-        <template v-if="!owner">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOwnerOnly`) }}</template>
+        <template v-if="!runsShield">{{ " " }}{{ t(`chat.chatPaneNotices.privacyOthersLetThrough`) }}</template>
         <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
         <template #actions>
             <Button
-                v-if="owner"
+                v-if="runsShield"
                 size="small"
                 thumb
                 tier="quiet"
@@ -84,7 +87,7 @@ const shield = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
             <template v-if="failed">{{ " " }}{{ t(`chat.chatPaneNotices.privacyGrantFailed`) }}</template>
         </span>
         <Button
-            v-if="owner"
+            v-if="runsShield"
             size="small"
             thumb
             tier="quiet"

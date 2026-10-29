@@ -9,7 +9,8 @@ import { unstubbed } from "@intentic/testing";
 import type { ControlTokens } from "./tokens/control-tokens.js";
 import { controlScoped } from "./tokens/control-tokens.js";
 import { grantsOf } from "./grants.js";
-import { guestReach, homeLandReach, routeFloor } from "@intentic/sandbox-contract/protocol/member-reach";
+import { guestReach, homeLandReach, memberRefusal, routeFloor } from "@intentic/sandbox-contract/protocol/member-reach";
+import { MANAGE_RIGHTS } from "@intentic/sandbox-contract/schemas/members";
 
 // Every route the contract declares, and what each gate in front of it decides (app.ts, member-reach.ts, grants.ts,
 // control-tokens.ts), held to what the route's own RouteMeta says it should be. The expectation is read off the
@@ -17,7 +18,8 @@ import { guestReach, homeLandReach, routeFloor } from "@intentic/sandbox-contrac
 // without an edit, and a gate that stops honouring a field fails on every route declaring it.
 
 // One row per route, keyed `METHOD /template`: door|bearer (does the session middleware let it through untouched),
-// early|waits (does it answer before boot), stream|timed, its member floor, then guest, embedded, enrolment and every
+// early|waits (does it answer before boot), stream|timed, its member floor, the right that also clears that floor
+// (right:<part>), then guest, embedded, enrolment and every
 // machine credential that reaches it: panel, agent, sync (sync-pipe: no heartbeat), and the control rungs editor, read,
 // drive, land. An extension token reaches what its manifest declares, never what a route does, so it has no column.
 
@@ -32,6 +34,7 @@ const FIELDS = {
     beforeBoot: "reach",
     stream: "reach",
     floor: "reach",
+    right: "reach",
     guest: "reach",
     home: "reach",
     attachmentFloor: "reach",
@@ -58,7 +61,10 @@ const PINNED = {
     "POST /agents/{id}/place": "bearer waits timed maintainer panel",
     "GET /capabilities/{id}/otp": "bearer waits timed maintainer panel agent",
     "GET /listeners/{provider}/state": "bearer waits timed maintainer",
-    "GET /members": "bearer waits timed owner panel",
+    "GET /members": "bearer waits timed maintainer right:people panel",
+    "POST /privacy/shield": "bearer waits timed maintainer right:privacy",
+    "POST /accounts/{provider}/login/start": "bearer waits timed maintainer right:ownAccounts panel",
+    "POST /platform/relink": "bearer waits timed owner panel",
     "GET /sessions": "bearer waits timed viewer panel editor read drive land",
     "POST /system/passkeys/register": "bearer waits timed viewer guest enrolment panel",
     "POST /system/sync/report": "bearer waits timed maintainer panel sync",
@@ -109,6 +115,7 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
         meta.beforeBoot === true ? "early" : "waits",
         meta.stream === true ? "stream" : "timed",
         attachment ? meta.attachmentFloor : floor,
+        ...(meta.right !== undefined && !attachment && !roleAtLeast("viewer", floor) ? [`right:${meta.right}`] : []),
         ...(meta.guest === true || attachment ? ["guest"] : []),
         ...(meta.home === "land" ? ["home-land"] : []),
         ...(meta.embedded === true ? ["embedded"] : []),
@@ -120,6 +127,15 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
     ].join(" ");
 };
 
+// The rights that let a viewer who runs no agents past this request's floor, as the middleware's own check decides it.
+const rightsClearing = (method: string, path: string, target: string | undefined): string[] => {
+    const viewer = { role: "viewer" as const, agents: "off" as const };
+    if (memberRefusal(viewer, method, path, target) === undefined) {
+        return [];
+    }
+    return MANAGE_RIGHTS.filter((right) => memberRefusal({ ...viewer, manages: [right] }, method, path, target) === undefined).map((right) => `right:${right}`);
+};
+
 // The session half of a row: the meta read as app.ts reads it, then the floor and guest list the middleware applies.
 const sessionGatesOf = (method: string, path: string, target: string | undefined): string[] => {
     const meta = sandboxRouteFor(method, path)?.meta ?? {};
@@ -128,6 +144,7 @@ const sessionGatesOf = (method: string, path: string, target: string | undefined
         meta.beforeBoot === true ? "early" : "waits",
         meta.stream === true ? "stream" : "timed",
         routeFloor(method, path, target),
+        ...rightsClearing(method, path, target),
         ...(guestReach(method, path, target) ? ["guest"] : []),
         ...(homeLandReach(method, path) ? ["home-land"] : []),
         ...(meta.embedded === true ? ["embedded"] : []),

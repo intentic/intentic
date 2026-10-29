@@ -1,5 +1,5 @@
-// The Previews group on the Access tab's Sign-in part: who may open this sandbox's previews, the owner's choice of it,
-// what everyone else reads of it, and that a daemon older than the guard draws no group at all.
+// The Previews group on the Access tab's Sign-in part: who may open this sandbox's previews, the choice of whoever runs
+// people and access, what everyone else reads of it, and that a daemon older than the guard draws no group at all.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { type PreviewGuard, PreviewGuardSchema } from "@intentic/sandbox-contract/schemas/ports";
 import "@intentic/testing/dom";
@@ -113,13 +113,22 @@ it(`says in the daemon's words why a change was refused, and keeps the choice as
 });
 
 it(`shows everyone else where it stands and who can change it, with nothing to press`, async () => {
-    role.value = `maintainer`;
+    role.value = `writer`;
     guard.value = { scope: `all` };
     await mount();
 
     await waitFor(() => expect(shown()).toContain(`Members only: app previews and forwarded ports`));
-    expect(shown()).toContain(`Only the sandbox owner can change who can open previews.`);
+    expect(shown()).toContain(`The owner, Full access, or someone given People and access changes who can open previews.`);
     expect(picker()).toBeNull();
+});
+
+// Who may open a preview is who gets in, so Full access changes it as it changes everything else.
+it(`gives Full access the choices too`, async () => {
+    role.value = `maintainer`;
+    await mount();
+
+    await waitFor(() => expect(picker()?.textContent).toContain(`Anyone with the address`));
+    expect(shown()).not.toContain(`changes who can open previews`);
 });
 
 // Unread, the guard could be on or off: drawn from nothing it would read "Anyone with the address" about a sandbox that may

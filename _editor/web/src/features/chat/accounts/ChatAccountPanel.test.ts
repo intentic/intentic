@@ -312,7 +312,7 @@ it(`names who can connect a model, for a reader who cannot`, () => {
 
     expect(element.textContent).toContain(`No model is connected in this sandbox yet.`);
     expect(linkNamed(element, `Connect a model`)).toBeUndefined();
-    expect(element.textContent).toContain(`A maintainer of this sandbox can connect one.`);
+    expect(element.textContent).toContain(`The owner, Full access, or someone given AI accounts of their own can connect one.`);
 });
 
 // A spent trial is connected but out of allowance, not missing a connection, so this gate stands down

@@ -14,7 +14,7 @@ import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 // - Found: the shield reads the turn and masks, and the last turn was turned away where the next would be too: for what
 //   it found where it could not mask (a hooked runtime's own project rules), or on a route only a turn finds (Codex on
 //   the container's own key), in the daemon's own words, until a turn runs.
-// - Granted: it runs as it is because the owner let this provider read this conversation, and nowhere else.
+// - Granted: it runs as it is because somebody who runs the shield let this provider read this conversation, and nowhere else.
 
 export type PrivacyStanding =
     | { readonly kind: `refused`; readonly provider: string; readonly label: string; readonly runner?: string }
@@ -42,7 +42,7 @@ const refusalAhead = (failure: LastFailure | undefined, provider: string, privac
     return failure.route === undefined ? privacy === `hooks` : failure.route === `own-key` || failure.route === `shared-server`;
 };
 
-/** Nothing to say while the verdict is to watch, to mask with nothing refused yet, or to pass for any reason but this conversation's grant (the owner's standing choices are said on the Safety page). */
+/** Nothing to say while the verdict is to watch, to mask with nothing refused yet, or to pass for any reason but this conversation's grant (the shield's standing choices are said on its own page). */
 export const privacyStanding = (
     status: PrivacyShieldStatus | undefined,
     provider: string,

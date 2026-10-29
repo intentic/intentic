@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
-import { isOwnerBearer } from "../../auth/owner-gates.js";
+import { holdsRightBearer } from "../../auth/owner-gates.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { sandboxHeld } from "../device/device-secrets.js";
@@ -10,9 +10,9 @@ import { type ProgramGuard, widensPrograms } from "./program-guards.js";
 
 // Each sandbox-held secret's program guard (program-guards.ts): the read a typing answers from, and the one edit. Who may
 // make an edit turns on what it does, as for the host guard (secret-hosts.routes.ts): anybody this route admits (a
-// maintainer, the agent's CLI) may take programs off or turn `anyField` off, since that only asks more often; adding a
-// program or an app, or turning `anyField` on, is the owner's, asked on a card when the agent's CLI wants it and refused
-// to everybody else. A secret a keyring holds keeps its list on that computer, and is refused here with where to go.
+// person who runs secrets, the agent's CLI) may take programs off or turn `anyField` off, since that only asks more
+// often; adding a program or an app, or turning `anyField` on, is a person's who runs secrets (the owner, Full access, or
+// a member given Secrets), asked of the owner on a card when the agent's CLI wants it and refused to everybody else. A secret a keyring holds keeps its list on that computer, and is refused here with where to go.
 
 export type SecretProgramRoutesDeps = Pick<Services, "auth" | "deviceSecrets" | "programGuardGate" | "secretProgramGuards" | "secretRegistry">;
 
@@ -31,8 +31,8 @@ export const createSecretProgramRoutes = (services: SecretProgramRoutesDeps) => 
         }
         throw new ORPCError("NOT_FOUND", { message: `no stored secret named "${subject}"` });
     };
-    // A widening from somebody other than the owner: the agent's CLI asks the owner on a card and waits; anybody else is
-    // told it is the owner's. Answers who approved it.
+    // A widening from somebody who does not run secrets: the agent's CLI asks the owner on a card and waits; anybody else
+    // is told it is not theirs. Answers who approved it.
     const approveWidening = async (
         context: OrpcContext,
         change: { readonly subject: string; readonly from: ProgramGuard; readonly to: ProgramGuard; readonly conversationId?: string | undefined },
@@ -40,7 +40,7 @@ export const createSecretProgramRoutes = (services: SecretProgramRoutesDeps) => 
     ): Promise<string | undefined> => {
         if (context.headers.get("x-intentic-agent") === null) {
             throw new ORPCError("FORBIDDEN", {
-                message: `Only the owner can loosen "${change.subject}"'s program guard: add a program or an app to it, or let it go into any field.`,
+                message: `Only someone who runs secrets can loosen "${change.subject}"'s program guard: add a program or an app to it, or let it go into any field.`,
             });
         }
         const verdict = await services.programGuardGate.widen({
@@ -69,7 +69,7 @@ export const createSecretProgramRoutes = (services: SecretProgramRoutesDeps) => 
             const next: ProgramGuard = { programs: [...new Set(input.programs)], packages: [...new Set(input.packages)], anyField: input.anyField };
             const current = await services.secretProgramGuards.guardFor(input.subject);
             const approvedBy =
-                !widensPrograms(current, next) || (await isOwnerBearer(services, context.headers))
+                !widensPrograms(current, next) || (await holdsRightBearer(services, context.headers, "secrets"))
                     ? undefined
                     : await approveWidening(context, { subject: input.subject, from: current, to: next, conversationId: input.conversationId }, signal);
             await services.secretProgramGuards.set(input.subject, next);

@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { useRole } from "../../../client/sandbox/useRole";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import HintedTitle from "./HintedTitle.vue";
 import { keyOf, MEASURE_LINKS, planProtections, presetLabel, presetValue, STATUS_TONE } from "./dataProtection";
 import { useComplianceReport, usePreset } from "./useCompliance";
@@ -16,10 +16,14 @@ import { useComplianceReport, usePreset } from "./useCompliance";
 // together after a confirmation. Then what else could be switched on where it lives, then, folded away, what is in
 // place. One list where there were two: the protections under six GDPR headings and the preset below them named most
 // switches twice. What each protection does is behind the (i) beside its name: the name says enough to scan the list,
-// and three lines of explanation under every row made the list the longest thing on the page.
+// and three lines of explanation under every row made the list the longest thing on the page. Applying is Full
+// access's (the daemon's floor): anybody else reads the same list, ticked as it would be, with the ticks and Apply held.
 
 const t = useT();
-const { isOwner } = useRole();
+const access = useAccess();
+const mayApply = computed(() => access.can(`compliance.applyPreset`));
+// Said once it is known, so the owner never reads that somebody else applies these while their access loads.
+const othersApply = computed(() => access.known.value && !mayApply.value);
 const { report, isLoading: reportLoading } = useComplianceReport();
 const { items, error: presetError, isLoading: presetLoading, apply } = usePreset();
 
@@ -84,13 +88,13 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                     <Button
                         tier="accent"
                         size="small"
-                        :disabled="!isOwner || pickedItems.length === 0"
+                        :disabled="!mayApply || pickedItems.length === 0"
                         :loading="apply.isPending.value"
                         :label="t(`sandbox.dataProtection.apply`, { count: pickedItems.length }, pickedItems.length)"
                         @click="confirming = true"
                     />
                 </template>
-                <RowNote v-if="!isOwner" :label="t(`sandbox.dataProtection.ownerApplies`)" />
+                <RowNote v-if="othersApply" :label="t(`sandbox.dataProtection.fullAccessApplies`)" />
                 <Row v-for="entry in plan.recommended" :key="entry.measure.id" indent>
                     <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
                     <template #control>
@@ -103,7 +107,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                                     :model-value="picked.has(item.id)"
                                     binary
                                     size="small"
-                                    :disabled="!isOwner"
+                                    :disabled="!mayApply"
                                     :input-id="`preset-${item.id}`"
                                     @update:model-value="(on: unknown) => toggle(item, on === true)"
                                 />

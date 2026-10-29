@@ -20,8 +20,8 @@ const t = useT();
 
 const { row } = defineProps<{ row: SecretRow }>();
 
-// Only the owner turns a guard off or adds a host (the daemon's rule); everybody else reads it.
-const { isOwner } = useCredentialGates();
+// Whoever runs secrets turns a guard off or adds a host (the daemon's rule); everybody else reads it.
+const { runsSecrets } = useCredentialGates();
 const { setHosts } = useSecretHosts();
 
 const stored = computed(() => row.entry.hosts);
@@ -118,7 +118,7 @@ const save = async (): Promise<void> => {
 <template>
     <SecretFact :label="t(`capabilities.secretHosts.label`)">
         <button
-            v-if="isOwner"
+            v-if="runsSecrets"
             ref="anchor"
             type="button"
             :class="EDITABLE_VALUE"

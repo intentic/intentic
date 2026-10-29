@@ -24,13 +24,14 @@ jest.mock(`../../../models/capabilities/useSecrets`, () => ({
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
     useSecretPrograms: () => ({ programsFor: () => undefined, setPrograms: { mutateAsync: jest.fn() } }),
     useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
-    // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
-    // itself is asserted in secretRows.test.ts.
+    // Nothing gated, and a reader who does not run secrets: keeps these cases about which rows show and how they're
+    // named. Gate behavior itself is asserted in secretRows.test.ts.
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: () => undefined,
         approverChoices: ref([]),
-        isOwner: ref(false),
+        namesEveryone: ref(false),
+        runsSecrets: ref(false),
         setGate: { mutateAsync: jest.fn() },
         removeGate: { mutateAsync: jest.fn() },
     }),

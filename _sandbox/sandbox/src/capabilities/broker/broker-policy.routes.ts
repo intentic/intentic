@@ -2,7 +2,7 @@ import type { CredentialPolicy } from "@intentic/sandbox-contract/schemas/secret
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
-import { isOwnerBearer } from "../../auth/owner-gates.js";
+import { holdsRightBearer } from "../../auth/owner-gates.js";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import { loadPrivateKey } from "../credentials/ssh-keys.js";
 import type { Services } from "../../composition.js";
@@ -63,10 +63,11 @@ export const createCredentialPolicyRoutes = (services: CredentialPolicyDeps) => 
     return {
         policy: i.policy.handler(async ({ input }) => policyOf(input.subject)),
         setPolicy: i.setPolicy.handler(async ({ input, context }) => {
-            // The agent's own token never changes this, whoever's session it rides; only the owner's own request does.
-            if (context.headers.get("x-intentic-agent") !== null || !(await isOwnerBearer(services, context.headers))) {
+            // The agent's own token never changes this, whoever's session it rides; only a person's own request does: the
+            // owner's, Full access's, or a member's given Secrets.
+            if (context.headers.get("x-intentic-agent") !== null || !(await holdsRightBearer(services, context.headers, "secrets"))) {
                 throw new ORPCError("FORBIDDEN", {
-                    message: `Only the owner can change how "${input.subject}"'s credential reaches the agent, or its rules.`,
+                    message: `Only someone who runs secrets can change how "${input.subject}"'s credential reaches the agent, or its rules.`,
                 });
             }
             const current = await policyOf(input.subject);

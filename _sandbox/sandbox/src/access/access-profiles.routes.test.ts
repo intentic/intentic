@@ -1,3 +1,4 @@
+import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { call } from "@orpc/server";
@@ -17,13 +18,13 @@ import {
 import { createAccessProfilesRoutes } from "./access-profiles.routes.js";
 
 // A profile is a grant several people share: saving it writes every holder's row again and closes what they hold, and
-// answers with the tier each now has. Only the owner writes one, never an organisation's.
+// answers with the tier each now has. Whoever runs people and access writes one, never an organisation's.
 
-const contextAs = (role: MemberRole): OrpcContext => ({
+const contextAs = (role: MemberRole, manages: readonly ManageRight[] = [], email = role === "owner" ? "owner@example.com" : "max@example.com"): OrpcContext => ({
     headers: new Headers(),
     method: "POST",
     url: "/access/profiles",
-    identity: { email: role === "owner" ? "owner@example.com" : "max@example.com", role, methods: ["google"] },
+    identity: { email, role, methods: ["google"], manages },
 });
 
 const PERSONAS: Persona[] = [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }];
@@ -62,10 +63,15 @@ test("saving a profile rewrites its holders' rows, closes their connections and 
     });
 });
 
-test("only the owner writes a profile, and nobody here writes an organisation's", async () => {
+test("whoever runs people and access writes a profile, never the one they hold, and nobody here writes an organisation's", async () => {
     const { profiles } = routes();
-    await expect(call(profiles.save, { id: "readers" }, { context: contextAs("maintainer") })).rejects.toThrow(
-        "only the sandbox owner decides what an access profile lets its holders reach",
+    await expect(call(profiles.save, { id: "readers" }, { context: contextAs("collaborator") })).rejects.toThrow(
+        "only someone who runs people and access decides what an access profile lets its holders reach",
+    );
+    await expect(call(profiles.save, { id: "readers", agents: "off" }, { context: contextAs("maintainer") })).resolves.toMatchObject({ ok: true });
+    await expect(call(profiles.save, { id: "readers", agents: "off" }, { context: contextAs("collaborator", ["people"]) })).resolves.toMatchObject({ ok: true });
+    await expect(call(profiles.save, { id: "readers", agents: "off" }, { context: contextAs("viewer", ["people"], "fay@example.com") })).rejects.toThrow(
+        `"readers" is the profile your own access comes from`,
     );
     await expect(call(profiles.save, { id: "clerk" }, { context: contextAs("owner") })).rejects.toThrow(
         `"clerk" is your organisation's profile: it is changed on the organisation's console, not here`,

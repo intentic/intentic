@@ -8,6 +8,7 @@ import { computed } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useMembers } from "../../../client/sandbox/useMembers";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -36,8 +37,9 @@ import { buildReachMap, type NodeTone, type ReachCapability, type ReachInput, ty
 // costs the reads nobody made yet and nothing else; the three of its own (tokens, links, invites) are keyed apart from
 // the Access tab's lists, which that tab mints into and revokes from.
 //
-// What the reader may read is what they see: the roster and invites are the owner's, tokens and links a maintainer's, and
-// a read the reader is refused is never asked rather than drawn as empty.
+// What the reader may read is what they see: the roster and invites are for whoever runs people and access (the owner,
+// Full access, someone given People & access), tokens and links a maintainer's, and a read the reader is refused is never
+// asked rather than drawn as empty.
 
 const TONES = { success: `success`, warning: `warning`, danger: `danger`, info: `info`, neutral: `neutral`, primary: `info` } as const satisfies Record<Tone, NodeTone>;
 
@@ -104,7 +106,9 @@ const reachCapabilities = (
 // `models` comes from the hub, which already holds them for its Models row: reading them here would tie this section to
 // the Models section, and through it back to the hub.
 export function useReachMap(models: () => readonly ModelSource[]) {
-    const { isOwner, canShip, role } = useRole();
+    const { canShip, role } = useRole();
+    const { holds } = useAccess();
+    const managesPeople = computed(() => holds(`people`));
     const { user } = useAuth();
     const { activeSandboxId } = useSandbox();
 
@@ -114,7 +118,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
     const { capabilities, loaded: capabilitiesRead } = useCapabilities();
     const { enabled: enabledExtensions } = useExtensions();
     const { inventory } = useSecretInventory();
-    const { roster } = useMembers({ enabled: isOwner });
+    const { roster } = useMembers({ enabled: managesPeople });
     // The live browser windows, read as the procedure's own cache entry (the one Browsers keeps fresh by push), not through
     // the Browsers feature, which itself reads the sandbox's features: importing it here would close a loop between them.
     const windows = useSandboxQuery({ ...rpcQuery(`system.browsers`), select: (answer) => answer.sessions });
@@ -139,7 +143,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
         {
             queryKey: computed(() => SANDBOX_INVITES.of()),
             queryFn: async (): Promise<InviteRecord[]> => (await apiClient.invite.list({ sandboxId: activeSandboxId.value ?? `` })).members,
-            enabled: computed(() => isOwner.value && activeSandboxId.value !== undefined),
+            enabled: computed(() => managesPeople.value && activeSandboxId.value !== undefined),
         },
         queryClient,
     );
@@ -175,7 +179,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
                         tone: STANDING_TONES[source.standing],
                     }),
                 ),
-            roster: isOwner.value ? roster.value : undefined,
+            roster: managesPeople.value ? roster.value : undefined,
             invited: new Set(records.filter((record) => record.status === `pending`).map((record) => record.email.toLowerCase())),
             expired: new Set(records.filter((record) => record.status === `expired`).map((record) => record.email.toLowerCase())),
             tokens: canShip.value ? tokens.query.data.value : undefined,

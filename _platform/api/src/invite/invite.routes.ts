@@ -1,17 +1,18 @@
 import { randomBytes } from "node:crypto";
 import { apiContract, type InviteDelivery } from "@intentic/api-contract";
+import { peopleChangeRefusal } from "@intentic/sandbox-contract/schemas/members";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
-import { requireOwnedSandbox, requireUser } from "../guards.js";
+import { requireRosterManager, requireUser, type RosterManager } from "../guards.js";
 import { refuseWhenOrgHolds } from "../org/org-policy.js";
 import { inviteLink, sendInviteEmail } from "./email.js";
-import { INVITE_TTL_MS, inviteAcceptDecision, inviteStatus, toInviteRecord } from "./invites.js";
+import { INVITE_TTL_MS, inviteAcceptDecision, inviteStatus, rightsOnRow, storedGrant, toInviteRecord } from "./invites.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-// The owner's access roster, shaped for the wire; shared by every mutation so they all return the fresh list.
+// The sandbox's access roster, shaped for the wire; shared by every mutation so they all return the fresh list.
 const listInvites = async (context: OrpcContext, sandboxId: string) => {
     const members = await context.prisma.sandboxMember.findMany({ where: { sandboxId }, orderBy: { createdAt: `asc` } });
     const now = new Date();
@@ -36,36 +37,53 @@ const deliverInvite = async (
     }
 };
 
+// Refuses a change the manager may not make to this person's access (`peopleChangeRefusal`, the daemon's own bound), in
+// its words. Only People & access alone is ever refused; the owner and Full access change anyone's.
+const refuseChange = (manager: RosterManager, target: Parameters<typeof peopleChangeRefusal>[1]) => {
+    const refusal = peopleChangeRefusal(manager, target);
+    if (refusal !== undefined) {
+        throw new ORPCError(`FORBIDDEN`, { message: refusal });
+    }
+};
+
+// Every roster route is for whoever manages access (guards.ts `requireRosterManager`): the owner, Full access, or People
+// & access. Each change is bounded by `refuseChange`; the daemon's authorized list is pushed separately by that person's
+// browser, which the daemon bounds the same way.
 export const inviteRoutes = {
-    // The owner's roster for an owned sandbox; the daemon's authorized list is pushed separately by the browser.
+    // The sandbox's roster, for anyone who manages its access.
     list: os.invite.list.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const { sandbox } = await requireRosterManager(context, input.sandboxId);
         return listInvites(context, sandbox.id);
     }),
     // Records a pending grant and emails the link; idempotent for pending/expired, rejects an accepted invitee.
+    // `manages` absent keeps a re-invited row's rights, none for a new one.
     create: os.invite.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const { sandbox, manager } = await requireRosterManager(context, input.sandboxId);
         await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (existing?.acceptedAt) {
             throw new ORPCError(`CONFLICT`, { message: `${email} already has access to this sandbox.` });
         }
+        const before = existing ? storedGrant(existing) : undefined;
+        refuseChange(manager, { email, before, after: { role: input.role, manages: input.manages } });
+        const manages = rightsOnRow(input.role, input.manages ?? before?.manages ?? []);
         const token = randomBytes(32).toString(`base64url`);
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
         await context.prisma.sandboxMember.upsert({
             where: { sandboxId_email: { sandboxId: sandbox.id, email } },
-            create: { sandboxId: sandbox.id, email, role: input.role, inviteToken: token, inviteExpiresAt },
-            update: { role: input.role, inviteToken: token, inviteExpiresAt },
+            create: { sandboxId: sandbox.id, email, role: input.role, manages, inviteToken: token, inviteExpiresAt },
+            update: { role: input.role, manages, inviteToken: token, inviteExpiresAt },
         });
         const delivered = await deliverInvite(context, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
         return { ...(await listInvites(context, sandbox.id)), ...delivered };
     }),
-    // Mints a fresh token and expiry and emails again; only for a not-yet-accepted invitee.
+    // Mints a fresh token and expiry and emails again; only for a not-yet-accepted invitee. It changes no grant, but the
+    // invitee must still be someone the manager may change.
     resend: os.invite.resend.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const { sandbox, manager } = await requireRosterManager(context, input.sandboxId);
         await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
@@ -75,29 +93,39 @@ export const inviteRoutes = {
         if (existing.acceptedAt) {
             throw new ORPCError(`CONFLICT`, { message: `${email} has already accepted.` });
         }
+        const before = storedGrant(existing);
+        refuseChange(manager, { email, before, after: { role: before.role } });
         const token = randomBytes(32).toString(`base64url`);
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
         await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { inviteToken: token, inviteExpiresAt } });
         const delivered = await deliverInvite(context, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
         return { ...(await listInvites(context, sandbox.id)), ...delivered };
     }),
-    // Re-grades an invitee's role; mirror-only, the daemon's own grant is pushed separately by the owner's browser.
+    // Re-grades an invitee's role, and their rights when `manages` is given (absent keeps the row's); mirror-only, the
+    // daemon's own grant is pushed separately by the manager's browser.
     setRole: os.invite.setRole.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const { sandbox, manager } = await requireRosterManager(context, input.sandboxId);
         await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (!existing) {
             throw new ORPCError(`NOT_FOUND`, { message: `No invite for ${email}.` });
         }
-        await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { role: input.role } });
+        const before = storedGrant(existing);
+        refuseChange(manager, { email, before, after: { role: input.role, manages: input.manages } });
+        const manages = rightsOnRow(input.role, input.manages ?? before.manages);
+        await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { role: input.role, manages } });
         return listInvites(context, sandbox.id);
     }),
-    // Revokes access; the owner's browser then removes the email from the daemon's authorized list.
+    // Revokes access; the manager's browser then removes the email from the daemon's authorized list. Full access may
+    // revoke their own row, which is them leaving.
     revoke: os.invite.revoke.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const { sandbox, manager } = await requireRosterManager(context, input.sandboxId);
         await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
-        await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: sandbox.id, email: input.email.toLowerCase() } });
+        const email = input.email.toLowerCase();
+        const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
+        refuseChange(manager, { email, before: existing ? storedGrant(existing) : undefined });
+        await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: sandbox.id, email } });
         return listInvites(context, sandbox.id);
     }),
     // Public read for the accept page (no session); an unknown token reads as `invalid` with nothing else exposed.

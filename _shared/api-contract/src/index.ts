@@ -1,5 +1,6 @@
 import { HOSTED_TIER_IDS, PROFILE_IDS, SANDBOX_NAME_MAX } from "@intentic/constants";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
 import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { oc } from "@orpc/contract";
@@ -176,10 +177,17 @@ export const sandboxRegistryContract = {
         .output(z.object({ ok: z.boolean() })),
 };
 
-// Sharing a sandbox by email: owner routes manage the roster; invitee routes are token-facing.
-// Delivery is separate from the grant, already in place; the daemon's list is pushed by the owner's own browser.
+// Sharing a sandbox by email: roster routes are for the owner, Full access, and People & access (bounded by
+// sandbox-contract `peopleChangeRefusal`); invitee routes are token-facing.
+// Delivery is separate from the grant, already in place; the daemon's list is pushed by the manager's own browser.
+// `manages` on a grant replaces the row's rights; absent keeps what it has (none for a new invite).
 const sandboxEmailInput = z.object({ sandboxId: z.string(), email: z.email() });
-const sandboxGrantInput = z.object({ sandboxId: z.string(), email: z.email(), role: GrantedRoleSchema });
+const sandboxGrantInput = z.object({
+    sandboxId: z.string(),
+    email: z.email(),
+    role: GrantedRoleSchema,
+    manages: z.array(ManageRightSchema).max(10).optional(),
+});
 const tokenInput = z.object({ token: z.string() });
 export const inviteContract = {
     list: oc.route({ method: "POST", path: "/invite/list" }).input(sandboxIdInput).output(InviteListSchema),

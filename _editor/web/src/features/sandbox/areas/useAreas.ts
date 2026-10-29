@@ -9,7 +9,7 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Named parts of the workspace (`.intentic/config/areas.json`) via the daemon's areas routes. Readable by every
 // member — a fenced person is shown the name of the fence they are behind, and a picker cannot offer what it cannot
-// list — while the two writes are the sandbox owner's, refused in-route for anyone else.
+// list — while the two writes are for whoever runs people and access, refused in-route for anyone else.
 
 /**
  * `enabled` false holds the read, for the one tier the daemon refuses it: a guest reaches the list only while it

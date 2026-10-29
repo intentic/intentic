@@ -954,6 +954,10 @@ model SandboxMember {
     // as the member's own role. A bare string (not an enum) so re-grading vocabulary is a contract change, not
     // a database migration.
     role            String    @default("collaborator")
+    // The parts of the sandbox the person runs besides their own work (sandbox-contract ManageRightSchema), mirrored
+    // from the daemon's `manages` on the member row. It is what the platform reads to let someone other than the owner
+    // manage invites (guards.ts requireRosterManager): Full access, or `people` here. Bare strings, as `role` is.
+    manages         String[]  @default([])
     inviteToken     String?   @unique
     inviteExpiresAt DateTime?
     acceptedAt      DateTime?

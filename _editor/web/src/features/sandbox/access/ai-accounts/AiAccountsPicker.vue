@@ -7,10 +7,12 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
 import { SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { useAuth } from "../../../../client/auth/useAuth";
 import { accountsOf } from "../../../../models/conversations/accounts/useChat-accounts";
 import { accountsLoaded, translatorAccounts } from "../../../../models/providers/providerAccounts";
 import { acpProviders, endpointProviders } from "../../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
+import { connectorNote } from "../../models/accountRows";
 import type { AiAccountsDraft } from "../accessGrant";
 import { type AccountlessKind, aiAccountRows } from "./aiAccountOptions";
 import MultiPick from "../pick/MultiPick.vue";
@@ -26,6 +28,7 @@ const t = useT();
 
 const { accounts, disabled = false } = defineProps<{ accounts: AiAccountsDraft; disabled?: boolean }>();
 const emit = defineEmits<{ change: [accounts: AiAccountsDraft] }>();
+const { user } = useAuth();
 
 // The lists every account surface reads, loaded for the whole app whenever the daemon is reachable (loadAccountStatus):
 // this picker reads them and asks for nothing of its own.
@@ -54,6 +57,8 @@ const rows = computed(() =>
             agents: acpProviders.value,
         },
         (kind) => NOTES[kind](),
+        // Who connected each account, the reader as "you", as the Models page says it.
+        (connectedBy) => connectorNote(connectedBy, user.value?.email),
     ),
 );
 const sections = computed<PickSection[]>(() => (rows.value.entries.length === 0 ? [] : [{ key: `ai-accounts`, entries: rows.value.entries }]));
@@ -111,6 +116,8 @@ const picked = computed<readonly string[]>(() => (accounts === `all` ? [] : acco
                     </span>
                 </template>
             </MultiPick>
+            <!-- Said once for the whole list rather than on every row: what no tick here takes away. -->
+            <p v-if="sections.length > 0 || accountsLoaded" class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.aiAccountsOwnAlways`) }}</p>
         </template>
     </div>
 </template>

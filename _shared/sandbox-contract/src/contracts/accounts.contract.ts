@@ -19,8 +19,12 @@ import { OkSchema } from "../schemas/shared.js";
 // One route family for the accounts this sandbox holds itself, with the provider as a parameter rather than a vertical
 // slice per provider. Distinct from the translator routes (subscriptions proxied through CLIProxyAPI): these
 // credentials live in this daemon's own auth tree, and no credential ever rides in an answer.
+// Connecting is for whoever runs the sandbox, and for a person given AI accounts of their own (members.ts
+// `ManageRightSchema` `ownAccounts`), who renames and disconnects only the accounts they connected themselves.
+const ownAccountRoute = procedure.meta({ right: "ownAccounts" });
+
 export const accountsContract = {
-    start: procedure
+    start: ownAccountRoute
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/start",
@@ -30,7 +34,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginRequestSchema.shape))
         .output(LoginStartSchema),
-    complete: procedure
+    complete: ownAccountRoute
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/complete",
@@ -50,7 +54,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginStatusQuerySchema.shape))
         .output(LoginStatusSchema),
-    cancel: procedure
+    cancel: ownAccountRoute
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/cancel",
@@ -70,7 +74,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(AccountListQuerySchema.shape))
         .output(OauthAccountListSchema),
-    rename: procedure
+    rename: ownAccountRoute
         .route({
             method: "POST",
             path: "/accounts/{provider}/rename",
@@ -79,7 +83,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(AccountRenameSchema.shape))
         .output(OauthAccountSchema),
-    disconnect: procedure
+    disconnect: ownAccountRoute
         .route({
             method: "POST",
             path: "/accounts/{provider}/disconnect",

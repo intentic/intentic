@@ -53,3 +53,29 @@ describe(`aiAccountRows`, () => {
         expect(rowsOf({ providers: [{ id: `cursor`, label: `Cursor`, native: [], routed: [] }] }).entries).toEqual([]);
     });
 });
+
+describe(`who connected each account`, () => {
+    const by = (email: string) => (email === `ana@home.example` ? `Connected by you` : `Connected by ${email}`);
+    const shared = {
+        ...claude,
+        native: [
+            { id: `home`, label: `Home`, email: `ana@home.example`, connectedAt: 0, connectedBy: `ana@home.example` },
+            { id: `work`, label: `Work`, connectedAt: 1, connectedBy: `jo@acme.dev` },
+            { id: `old`, label: `Old`, connectedAt: 2 },
+        ],
+    };
+
+    it(`says it quietly after who the account signs in as, the reader as you, and nothing where nobody was recorded`, () => {
+        const family = aiAccountRows({ providers: [shared], endpoints: [], agents: [] }, (kind) => NOTES[kind], by).entries.find(isFamily);
+        expect(family?.options.map((option) => [option.value, option.detail])).toEqual([
+            [`claude:home`, `ana@home.example · Connected by you`],
+            [`claude:work`, `Connected by jo@acme.dev`],
+            [`claude:old`, undefined],
+        ]);
+    });
+
+    it(`says nothing of a connector when no words for one are handed in`, () => {
+        const family = rowsOf({ providers: [shared] }).entries.find(isFamily);
+        expect(family?.options.map((option) => option.detail)).toEqual([`ana@home.example`, undefined, undefined]);
+    });
+});

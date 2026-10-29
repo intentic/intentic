@@ -56,7 +56,7 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
     // Granting the person anything answers what they asked, as the daemon's grant does.
     settleAccess(grant.email);
     if (grant.profile !== undefined) {
-        grantProfile(grant.email, grant.profile, grant.emailSignIn);
+        grantProfile(grant.email, grant.profile, grant.emailSignIn, grant.manages);
         return json({ members: grants() });
     }
     const access = memberAccess(grant);
@@ -75,6 +75,7 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
         edit: grant.edit,
         emailSignIn: grant.emailSignIn,
         aiAccounts: grant.aiAccounts,
+        manages: grant.manages,
     });
     return json({ members: grants() });
 };

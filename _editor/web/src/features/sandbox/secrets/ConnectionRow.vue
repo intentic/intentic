@@ -93,7 +93,8 @@ const DOT_TONE: Record<string, string> = {
                 />
                 <!-- Matches the rename field's padding and transparent border. -->
                 <span v-else class="min-w-0 truncate border border-transparent px-1" v-tooltip.overflow="title">{{ title }}</span>
-                <span v-if="note" class="flex min-w-0 items-center gap-1 text-2xs font-normal text-subtle">
+                <!-- The note takes what the name leaves and is the one cut short, so a long line of facts never hides whose row it is. -->
+                <span v-if="note" class="flex min-w-0 flex-1 items-center gap-1 text-2xs font-normal text-subtle">
                     <Icon v-if="noteBusy" name="spinner" spin /><span class="truncate" v-tooltip.overflow="note">{{ note }}</span>
                 </span>
             </span>

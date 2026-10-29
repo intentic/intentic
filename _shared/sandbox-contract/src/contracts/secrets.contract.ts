@@ -30,7 +30,10 @@ import { SandboxNeedsSchema, SandboxPasswordsActivitySchema, SandboxPasswordsSch
 import { OkSchema } from "../schemas/shared.js";
 
 // Credentials are the operating tier's, reads included: maintainer is the highest revokable grant, and no token's.
-const secretRoute = procedure.meta({ floor: "maintainer", control: "never" });
+const secretRoute = procedure.meta({ floor: "maintainer", control: "never", right: "secrets" });
+// The two that act on the owner's own computers (their keyrings, the window that has focus there): Secrets given to
+// someone does not reach them, and the handlers hold them to the owner.
+const ownerKeyringRoute = procedure.meta({ floor: "maintainer", control: "never" });
 
 // User-supplied secrets, in the gitignored desired-state/.env once DevOps is active and the sandbox's own store before
 // it; `apply` reloads them, no restart. `inventory` aggregates every store (never values) and always answers. `reveal` alone
@@ -177,7 +180,7 @@ export const secretsContract = {
         .output(SecretProgramGuardSetResultSchema),
     // The owner's own Type into…, never the agent's: it types into whatever has focus, which only a person at that
     // computer can aim.
-    typeInto: secretRoute
+    typeInto: ownerKeyringRoute
         .route({
             method: "POST",
             path: "/secrets/type-into",
@@ -197,7 +200,7 @@ export const secretsContract = {
                 "Every connected computer with a keyring this sandbox can reach: whether it answers and is unlocked, how many of its entries are shared here, and whom it is paired with. Names and counts only, never values.",
         })
         .output(SandboxKeyringsSchema),
-    keyringPair: secretRoute
+    keyringPair: ownerKeyringRoute
         .route({
             method: "POST",
             path: "/secrets/keyrings/pair",

@@ -18,17 +18,19 @@ import { rpcKey, rpcPrefix } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { optimisticUpdate, restoreChanged } from "../../lib/optimistic";
 
-// The privacy shield's reads and the owner's two writes, through the daemon's privacy routes. Its own composable
-// rather than part of useSandboxSettings: the policy is stored off the workspace and only the owner may change it, so
-// it has its own route, its own refusal (403 for anyone else) and its own cache entry.
+// The privacy shield's reads and the two writes of whoever runs it, through the daemon's privacy routes. Its own
+// composable rather than part of useSandboxSettings: the policy is stored off the workspace and is changed only by the
+// owner, Full access, or someone given the Privacy shield, so it has its own route, its own refusal (403 for anyone else)
+// and its own cache entry.
 
 // A refused write, as the notice said beside the control that sent it. A 403 is the one refusal with a known cause: the
-// policy is the owner's alone. Anything else keeps the daemon's words.
-export const shieldRefusal = (cause: Error | null, ownerOnly: string, failed: string): NoticeModel | undefined => {
+// writer does not run the shield, which `notYours` says in words that name who does. Anything else keeps the daemon's
+// words.
+export const shieldRefusal = (cause: Error | null, notYours: string, failed: string): NoticeModel | undefined => {
     if (cause === null) {
         return undefined;
     }
-    return noticeFrom(cause, cause instanceof SandboxHttpError && cause.status === 403 ? ownerOnly : failed);
+    return noticeFrom(cause, cause instanceof SandboxHttpError && cause.status === 403 ? notYours : failed);
 };
 
 export function usePrivacyShield() {
@@ -38,7 +40,7 @@ export function usePrivacyShield() {
         {
             // Written into the cache before the request lands, since every switch on the panel reads the policy from it;
             // otherwise a toggle shows its old state for the whole round trip, and a second toggle builds on stale data.
-            // A refused write (a member who is not the owner gets a 403) takes back the switches this press moved, so
+            // A refused write (a member who does not run the shield gets a 403) takes back the switches this press moved, so
             // no switch claims a policy the daemon did not keep, and leaves a second press still in flight standing.
             // Re-read either way.
             mutationFn: (policy: PrivacyShieldPolicy) =>
@@ -93,8 +95,8 @@ export function usePrivacyLog() {
     return { loaded };
 }
 
-// The values behind the tokens the activity shows, read from the vault for the owner alone: anybody else is refused
-// (403) and the page shows the tokens by themselves. Memory only, so no value reaches the persisted mirror, and never
+// The values behind the tokens the activity shows, read from the vault for whoever runs the shield: anybody else is
+// refused (403) and the page shows the tokens by themselves. Memory only, so no value reaches the persisted mirror, and never
 // retried, since a refusal does not change by asking again. The previous answer stays while a new token is asked about.
 export function usePrivacyReveal(tokens: Ref<readonly string[]>) {
     const { query } = useSandboxQuery({
@@ -109,9 +111,10 @@ export function usePrivacyReveal(tokens: Ref<readonly string[]>) {
     };
 }
 
-// One image the shield painted over, as it was and as it left, for the owner peeking at a log row: asked for only once a
-// row is opened, since each answer is two whole pictures. Memory only and never retried, as the values are: the picture
-// before holds them, and a refusal (anybody but the owner) or an image no longer kept does not change by asking again.
+// One image the shield painted over, as it was and as it left, for whoever runs the shield peeking at a log row: asked
+// for only once a row is opened, since each answer is two whole pictures. Memory only and never retried, as the values
+// are: the picture before holds them, and a refusal (anybody who does not run the shield) or an image no longer kept does
+// not change by asking again.
 export function usePrivacyImage(id: Ref<string | undefined>) {
     const { query } = useSandboxQuery({
         ...rpcQuery(`privacy.image`, () => ({ id: id.value ?? `` }), { unpersisted: true }),
@@ -126,7 +129,7 @@ export function usePrivacyImage(id: Ref<string | undefined>) {
     };
 }
 
-// The datasets taught to the shield, and the owner's way to forget one. The agent teaches through its CLI, which this
+// The datasets taught to the shield, and the way for whoever runs it to forget one. The agent teaches through its CLI, which this
 // panel never does.
 export function usePrivacySources() {
     const { query, loaded } = useSandboxQuery(rpcQuery(`privacy.sources`));
@@ -183,7 +186,7 @@ export function usePrivacyDictionary(query: Ref<string>, debounceMs = DICTIONARY
 // How long typing must pause before a tried text is sent.
 const PREVIEW_DEBOUNCE_MS = 300;
 
-// What the shield as saved would mask in a text the owner tries it on, with the text the answer is about: the spans are
+// What the shield as saved would mask in a text somebody tries it on, with the text the answer is about: the spans are
 // offsets into that text, which trails what is typed. The previous answer stays while the next is fetched. Memory only,
 // since the sample may be somebody's real data, and never retried.
 export function usePrivacyPreview(text: Ref<string>, debounceMs = PREVIEW_DEBOUNCE_MS) {

@@ -76,16 +76,20 @@ describe("the preview guard's routes", () => {
         expect(await client.previewPass({ url: PANEL_URL })).toEqual({ url: PANEL_URL });
     });
 
-    test("only the signed-in owner changes it", async () => {
+    test("only someone signed in who runs people and access changes it", async () => {
         const store = memoryPreviewGuardStore();
         const previewGuards = memoryPreviewGuards({ store, sandboxId: ID, zone: "example.com" });
         expect(await errorCode(clientAs(portsDeps({ previewGuards })).setPreviewGuard({ scope: "all" }))).toBe("FORBIDDEN");
         // The fake's authorizer refuses everyone it was not told to admit.
         const refused = portsDeps({ previewGuards, auth: authSliceFake({ auth: {} }, undefined).auth });
         expect(await errorCode(clientAs(refused).setPreviewGuard({ scope: "all" }))).toBe("FORBIDDEN");
+        const as = (caller: ReturnType<typeof proven>) => portsDeps({ previewGuards, auth: authSliceFake({ auth: { authorize: async () => caller } }, undefined).auth });
+        expect(await errorCode(clientAs(as(proven("cy@example.com", "collaborator"))).setPreviewGuard({ scope: "all" }))).toBe("FORBIDDEN");
         expect(await store.scope()).toBe("off");
-        const owner = portsDeps({ previewGuards, auth: authSliceFake({ auth: { authorizeOwner: async () => undefined } }, undefined).auth });
-        expect(await clientAs(owner).setPreviewGuard({ scope: "panels" })).toEqual({ scope: "panels" });
+        expect(await clientAs(as(proven("owner@example.com", "owner"))).setPreviewGuard({ scope: "panels" })).toEqual({ scope: "panels" });
+        expect(await clientAs(as(proven("max@example.com", "maintainer"))).setPreviewGuard({ scope: "all" })).toEqual({ scope: "all" });
+        const lead = { ...proven("lee@example.com", "collaborator"), manages: ["people" as const] };
+        expect(await clientAs(as(lead)).setPreviewGuard({ scope: "panels" })).toEqual({ scope: "panels" });
         expect(await store.scope()).toBe("panels");
     });
 

@@ -12,8 +12,8 @@ import { contributionRegistry } from "../capabilities/contributions.js";
 import type { CredentialGate, CredentialPolicy, SecretInventoryEntry, SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { implement, ORPCError } from "@orpc/server";
 import type { Caller } from "../auth/auth.js";
-import { ensureMaintainer, ensureOwner } from "../auth/owner-gates.js";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { holdsRight } from "@intentic/sandbox-contract/schemas/members";
+import { ensureRight } from "../auth/owner-gates.js";
 import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -105,14 +105,14 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             throw error;
         }
     };
-    // Whether this caller may see a value in the clear: reveal is the operating tier's (ensureMaintainer), and a gated
-    // credential is held to its approvers there as at every other release, since a maintainer is exactly who a gate may
-    // be written about. A loopback daemon has one person, who answers for everything.
+    // Whether this caller may see a value in the clear: reveal is for whoever runs secrets (the owner, Full access, or a
+    // member given Secrets), and a gated credential is held to its approvers there as at every other release. A loopback
+    // daemon has one person, who answers for everything.
     const mayReveal = (identity: Caller | undefined, gate: CredentialGate | undefined): boolean => {
         if (services.auth === undefined) {
             return true;
         }
-        if (identity === undefined || !roleAtLeast(identity.role, "maintainer")) {
+        if (identity === undefined || !holdsRight(identity, "secrets")) {
             return false;
         }
         return gate === undefined || gate.approvers.some((approver) => approver.toLowerCase() === identity.email.toLowerCase());
@@ -307,7 +307,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
             noteAudit({ target: input.key });
-            await ensureMaintainer(services, context.headers);
+            await ensureRight(services, context.headers, "secrets");
             // Capability credentials first (key = capability id): they exist whether or not DevOps is active.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
@@ -350,10 +350,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 });
             }
         }),
-        // Owner-only, in-route rather than by the route's maintainer floor: a maintainer is exactly who a gate may be
-        // written about, and letting that tier edit the policy would let it lift its own constraint.
+        // A person's own request only, in-route as well as by the route's floor: the owner, Full access, or a member given
+        // Secrets. Never a machine credential, which a gate may hold back, so it could otherwise lift its own constraint.
         setGate: i.setGate.handler(async ({ input, context }) => {
-            await ensureOwner(services, context.headers);
+            await ensureRight(services, context.headers, "secrets");
             // Checked against the registry or capability manifest: a name nothing answers to never fires.
             if (input.kind === "capability") {
                 const capability = await services.capabilities.get(input.subject);
@@ -378,7 +378,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { ok: true } as const;
         }),
         removeGate: i.removeGate.handler(async ({ input, context }) => {
-            await ensureOwner(services, context.headers);
+            await ensureRight(services, context.headers, "secrets");
             await services.credentialGates.remove(input.subject);
             return { ok: true } as const;
         }),

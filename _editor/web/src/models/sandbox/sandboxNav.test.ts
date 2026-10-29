@@ -61,6 +61,18 @@ it(`lists the built-in sections a reader can open`, () => {
     expect(sandboxSections(false, true).map((section) => section.slug)).toEqual([`access`]);
 });
 
+// A part of the sandbox given to someone below maintainer opens its section for them, and only that one.
+it(`opens a section to a reader given the part it runs`, () => {
+    const given = (...rights: string[]) => (right: string) => rights.includes(right);
+    const slugs = (holds: (right: string) => boolean) => sandboxSections(false, false, new Set(), holds).map((section) => section.slug);
+    expect(slugs(given(`secrets`))).toContain(`secrets`);
+    expect(slugs(given(`secrets`))).not.toContain(`privacy-shield`);
+    expect(slugs(given(`privacy`, `ownAccounts`))).toEqual(expect.arrayContaining([`privacy-shield`, `models`]));
+    expect(slugs(given(`privacy`))).not.toContain(`data-protection`);
+    // People & access is drawn inside Access, which every member opens already.
+    expect(slugs(given(`people`))).toEqual(slugs(given()));
+});
+
 it(`leaves out what an organisation hides`, () => {
     const slugs = sandboxSections(true, false, new Set([`guardrails`, `retention`])).map((section) => section.slug);
     expect(slugs).not.toContain(`guardrails`);

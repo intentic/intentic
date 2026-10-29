@@ -12,8 +12,8 @@ import { useSandboxQuery } from "./useSandboxQuery";
 // the one cache entry below. A write answers the roster after it, which lands in that entry whole, so every reader of
 // it moves with the write whether or not the tab that made it is still up, and nothing keeps a copy of its own.
 
-// `enabled` is for a reader that is only allowed to ask at some tiers: the roster is the owner's to read, and a member
-// asking would be refused.
+// `enabled` is for a reader that is only allowed to ask at some tiers: the roster is for whoever runs people and access
+// (the owner, Full access, someone given People & access), and anyone else asking would be refused.
 export function useMembers(options: { readonly enabled?: MaybeRefOrGetter<boolean> } = {}) {
     const { query, error } = useSandboxQuery({
         queryKey: SANDBOX_MEMBERS.of(),
@@ -59,12 +59,18 @@ export const revokeMember = async (email: string): Promise<MembersList> => adopt
 // So the read is made for every tier but the owner's. One query for the whole app, made once in its own scope, since
 // `useRole` is read from plain functions as well as components and a per-call query would need a component to belong to.
 
-let self: ComputedRef<MemberSelf | undefined> | undefined;
+interface SelfRead {
+    readonly answer: ComputedRef<MemberSelf | undefined>;
+    // Whether the read has nothing more to say: answered, refused, or never asked (the owner's).
+    readonly settled: ComputedRef<boolean>;
+}
 
-const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
+let self: SelfRead | undefined;
+
+const selfRead = (): SelfRead => {
     if (self === undefined) {
         // Detached: it lives as long as the app, like the sandbox list it reads.
-        self = effectScope(true).run(() => {
+        self = effectScope(true).run((): SelfRead => {
             const { active } = useSandbox();
             const { query } = useSandboxQuery<MemberSelf>({
                 queryKey: SANDBOX_SELF_ACCESS.of(),
@@ -74,12 +80,20 @@ const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
                     return role !== undefined && role !== `owner`;
                 }),
             });
-            return computed(() => query.data.value);
+            return {
+                answer: computed(() => query.data.value),
+                settled: computed(() => active.value?.role === `owner` || query.data.value !== undefined || query.isError.value),
+            };
         });
     }
-    // SAFETY: `run` on a scope that is active answers what its callback returned, which is always a computed here.
-    return self as ComputedRef<MemberSelf | undefined>;
+    // SAFETY: `run` on a scope that is active answers what its callback returned, which is always a read here.
+    return self as SelfRead;
 };
+
+const selfAccess = (): ComputedRef<MemberSelf | undefined> => selfRead().answer;
+
+/** Whether what the signed-in person may do here is as known as it will be: their own answer landed or failed, or they are the owner. */
+export const selfSettled = (): ComputedRef<boolean> => selfRead().settled;
 
 // The whole answer, for the one reader that needs every field of it: what the person may do here (access/useAccess.ts).
 export const selfMember = (): ComputedRef<MemberSelf | undefined> => selfAccess();

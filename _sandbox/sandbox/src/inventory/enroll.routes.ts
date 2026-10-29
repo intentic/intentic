@@ -6,7 +6,7 @@ import { ManagedRegionError } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
-import { ownershipDenied } from "../auth/owner-gates.js";
+import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { ownDomainZone } from "../peers/redeem-codes.js";
@@ -74,16 +74,17 @@ export const createEnrollRoute =
 // left of those ten minutes.
 export const ENROLL_AFTER_REDEEM_MS = 60 * 60 * 1000;
 
-// POST /system/enroll/code: the owner mints a server-connect code. Behind it is a single-use enroll token (pairing TTL,
-// then ENROLL_AFTER_REDEEM_MS from the code's redemption), so the command that connects a server carries neither the
-// long-lived connect token nor any Cloudflare token: the script redeems the code at /system/redeem/<code> for this
-// sandbox's URL, that token and, when the sandbox is on a domain of the owner's own, its zone. And for the server's
+// POST /system/enroll/code: the owner, or anybody with Full access, mints a server-connect code. Behind it is a
+// single-use enroll token (pairing TTL, then ENROLL_AFTER_REDEEM_MS from the code's redemption), so the command that
+// connects a server carries neither the long-lived connect token nor any Cloudflare token: the script redeems the code
+// at /system/redeem/<code> for this sandbox's URL, that token and, when the sandbox is on a domain of the owner's own,
+// its zone. And for the server's
 // HOST_ID, digested from the long-lived token exactly as before codes (hostSshIdFromToken), so running the command
 // again finds the same tunnel, DNS record and Windows container, those of a server connected before codes included.
 export const createEnrollCodeRoute =
     (services: Services) =>
     async (c: Context<AppEnv>): Promise<Response> => {
-        const denied = await ownershipDenied(services, c);
+        const denied = await ownerDenied(services, c);
         if (denied !== undefined) {
             return denied;
         }

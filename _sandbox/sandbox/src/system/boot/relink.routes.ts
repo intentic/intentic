@@ -5,8 +5,8 @@ import { ownershipDenied } from "../../auth/owner-gates.js";
 import type { Services } from "../../composition.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 
-// POST /platform/relink, the owner's Reconnect (announce.ts). Gated by ownership rather than the operating gate, as
-// membership is: an adoption has the platform list this sandbox under the account asking, which only its owner decides.
+// POST /platform/relink, the owner's Reconnect (announce.ts). Gated by ownership rather than the operating gate Full
+// access passes: an adoption has the platform list this sandbox under the account asking, which only its owner decides.
 export const createRelinkRoute =
     (services: Pick<Services, "auth" | "announcer" | "ownerEmail">) =>
     async (c: Context<AppEnv>): Promise<Response> => {

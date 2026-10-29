@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import AccessRequests from "./AccessRequests.vue";
-import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
-import type { MemberGrant } from "@intentic/sandbox-contract/schemas/members";
+import type { InviteRecord } from "@intentic/api-contract";
 import {
     Avatar,
     Await,
     Button,
-    clipboardOf,
     Notice,
     type NoticeModel,
     Row,
@@ -17,34 +15,45 @@ import {
 } from "@intentic/ui";
 import { useLoaded } from "@intentic/extension-api";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, onMounted, ref, useId, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiClient } from "../../../../lib/useApi";
-import { grantMember, revokeMember, useMembers } from "../../../../client/sandbox/useMembers";
+import { selfMember, useMembers } from "../../../../client/sandbox/useMembers";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { identityHue } from "../../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../../workbench/presence/usePresence";
 import AiLiteracySettings from "../../ai-literacy/AiLiteracySettings.vue";
-import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, newPerson } from "../accessGrant";
-import { usePersonaReach } from "../usePersonaReach";
+import { type AccessDraft, accessWord, draftOf, newPerson } from "../accessGrant";
+import { OPEN_BOUNDS, type PanelBounds, panelBounds, type PeopleManager } from "../person/accessBounds";
 import PersonCard from "../PersonCard.vue";
 import PersonPanel from "../PersonPanel.vue";
-import { type RunOptions, useOperation } from "../../../../workbench/operations/operations";
+import { useRosterWrites } from "./useRosterWrites";
 import { useT } from "@intentic/ui/i18n";
 
-// ACCESS ▸ PEOPLE: who may use this sandbox, what they are told before they start, and who is here now. Owner invites
-// write the enforced daemon roster first, then the platform record and email, with separate errors. Failed mail returns
-// the active grant's link. Members get read-only access; presence is for everyone.
+// ACCESS ▸ PEOPLE: who may use this sandbox, what they are told before they start, and who is here now. Whoever manages
+// people (the owner, Full access, or someone given People & access) invites and changes access: each write goes to the
+// enforced daemon roster first, then the platform record and email, with separate errors (useRosterWrites.ts). Failed
+// mail returns the active grant's link. Anyone else sees their own card and who manages people; presence is for everyone.
 
 const t = useT();
 
 const { user } = useAuth();
-const sandbox = useSandbox();
+const access = useAccess();
+const self = selfMember();
 
-const isOwner = computed(() => sandbox.active.value?.role === `owner`);
-// Maintainers may operate every control except the roster (`isOwner`), and set the AI notice.
+// The owner's card says so; everyone else's says their tier.
+const isOwner = computed(() => access.role.value === `owner`);
+// Whether the reader may see and change who has access, as the daemon's floors decide it (sandbox-contract `holdsRight`).
+const managesPeople = computed(() => access.holds(`people`));
+// Who is editing, as the contract's bound reads them: below Full access, what they may change of each person is bounded
+// (person/accessBounds.ts), so the panel offers exactly what the daemon and the platform will take.
+const manager = computed((): PeopleManager | undefined => {
+    const role = access.role.value;
+    return role === undefined ? undefined : { email: user.value?.email ?? ``, role, manages: self.value?.manages };
+});
+const isMe = (email: string): boolean => email.toLowerCase() === user.value?.email?.toLowerCase();
+// Full access and the owner run every control, and set the AI notice.
 const { canShip } = useRole();
 
 // The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
@@ -64,11 +73,11 @@ const roleLabel = (role: string): string =>
         owner: t(`sandbox.sandboxAccess.owner`),
     })[role] ?? role;
 // The reader's own tier, for the tile a member sees of themselves.
-const ownRole = computed((): string => roleLabel(sandbox.active.value?.role ?? `viewer`));
+const ownRole = computed((): string => roleLabel(access.role.value ?? `viewer`));
 
-// The owner reads the daemon's roster through useMembers. Grant/revoke responses update that shared cache,
-// so the board's Everyone/Mine row and this tab agree; platform invite records carry only the tier.
-const { roster, members: grants, error: grantsError } = useMembers({ enabled: isOwner });
+// Whoever manages people reads the daemon's roster through useMembers. Grant/revoke responses update that shared cache,
+// so the board's Everyone/Mine row and this tab agree; platform invite records carry only the tier and the rights.
+const { roster, members: grants, error: grantsError } = useMembers({ enabled: managesPeople });
 // Block panels while the roster is unreadable: saving a whole grant with unknown fields could widen access.
 const grantsUnread = computed<NoticeModel | undefined>(() =>
     grantsError.value === undefined
@@ -79,8 +88,6 @@ const grantsUnread = computed<NoticeModel | undefined>(() =>
 // starts the read). No panel opens then, for the same reason.
 const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.value === undefined);
 const grantOf = (address: string) => grants.value.find((grant) => grant.email === address.toLowerCase());
-// Which assistants a fence hands over: derived from where each card works, never picked per person.
-const { namesOf } = usePersonaReach();
 
 // What a person's access is as the panel edits it: the daemon's row, or the platform's tier alone for one it never wrote.
 const accessOf = (member: InviteRecord): AccessDraft => draftOf(grantOf(member.email), member.role);
@@ -94,6 +101,11 @@ const WORDS = {
     sees: () => t(`sandbox.sandboxAccess.wordSees`),
 } as const;
 const wordOf = (member: InviteRecord): string => WORDS[accessWord(accessOf(member))]();
+// What the reader may change of this person: everything for the owner and Full access.
+const boundsOf = (member: InviteRecord): PanelBounds =>
+    manager.value === undefined ? OPEN_BOUNDS : panelBounds(manager.value, member.email, grantOf(member.email), member.role);
+// The reader's own record, when they are on the roster: their own card opens it.
+const ownRecord = computed(() => members.value.find((member) => isMe(member.email)));
 
 // One person opens beneath the tiles; adding someone opens their setup, with their address in the URL.
 const selected = ref<string>();
@@ -174,283 +186,45 @@ const lineOf = (member: InviteRecord): string => {
     return `${wordOf(member)} · ${member.status === `expired` ? t(`sandbox.sandboxAccess.inviteExpired`) : t(`sandbox.sandboxAccess.invitePending`)}`;
 };
 
-// THE ROSTER WRITES ARE THE SANDBOX'S, NOT THIS TAB'S. An invite, a resend, a re-grade and a revoke are each two writes
-// (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger: the
-// tab opened again mid-write holds its buttons, and the accept link of an invite mail could not deliver is kept until
-// the owner moves on to the next write, since it can only be read here.
-// What a write answers: the platform's roster, and for an invite or a resend, how it went out. The daemon's roster is
-// not among them: it lands in the members cache entry as the daemon answers it.
-interface RosterWrite {
-    readonly members?: InviteRecord[];
-    readonly delivery?: { readonly link: string; readonly delivery: InviteDelivery; readonly reason?: string };
-}
-// A refusal, and whether the roster on screen may no longer be true: the daemon granted, then the platform refused.
-interface RosterRefusal {
-    readonly notice: NoticeModel;
-    readonly reload: boolean;
-}
-// The daemon's refusal, the first of the two writes: nothing changed, and it carries its own sentence, with what the
-// daemon said as its cause.
-class DaemonRefused extends Error {
-    constructor(
-        readonly sentence: string,
-        options: ErrorOptions,
-    ) {
-        super(sentence, options);
-    }
-}
-// What a roster write's refusal becomes, typed by the ledger's own option so the thrown value stays the ledger's to name.
-type RosterFailed = Extract<RunOptions<RosterWrite, RosterRefusal>[`failed`], (...args: never[]) => RosterRefusal>;
-const refusedAs =
-    (recording: string): RosterFailed =>
-    (error) =>
-        error instanceof DaemonRefused
-            ? { notice: noticeFrom(error.cause, error.sentence), reload: false }
-            : { notice: noticeFrom(error, recording), reload: true };
-const writes = useOperation<RosterWrite, RosterRefusal>(`access/members/write`);
-const busy = writes.busy;
-
-// What this tab decided by itself (a roster it couldn't read, a re-grade it won't send), beside the writes' own words.
-const localNotice = ref<NoticeModel>();
-// The delivery an invite or resend reported, when mail did not carry it.
-const undelivered = computed(() => {
-    const delivered = writes.operation.value?.state === `done` ? writes.value.value?.delivery : undefined;
-    return delivered === undefined || delivered.delivery === `sent` ? undefined : delivered;
+const { busy, listing, load, notice, panelNotice, handover, clearNotice, invite, resend, savePerson, revoke } = useRosterWrites({
+    members,
+    fencesUnknown,
+    grantsUnread,
+    revoked: () => (selected.value = undefined),
 });
-const deliveryNotice = computed((): NoticeModel | undefined => {
-    const result = undelivered.value;
-    return result === undefined || result.delivery === `sent`
-        ? undefined
-        : {
-              tone: `warning`,
-              title: deliveryNote(result.delivery),
-              detail: result.reason,
-              action: {
-                  label: t(`ui.action.copyLink`),
-                  // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
-                  // allow(silent-catch): the link is printed whole beside the press, so a refused clipboard leaves it there to copy by hand.
-                  run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
-              },
-          };
-});
-// The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
-const notice = computed(() => localNotice.value ?? writes.failure.value?.notice ?? deliveryNotice.value);
-// What the open panel says: a write it made that was refused, or a roster it cannot trust. A link to carry is the page's.
-const panelNotice = computed(() => localNotice.value ?? writes.failure.value?.notice);
-// Accept link the owner carries when mail didn't; beside `notice`, not inside it, since a link is markup.
-const handover = computed(() => (notice.value !== undefined && notice.value === deliveryNotice.value ? undelivered.value?.link : undefined));
-
-// Clear the notice and its invite link together before the next write.
-const clearNotice = (): void => {
-    localNotice.value = undefined;
-    writes.dismiss();
-};
-
-// True until the mount fetch lands; every later refresh rides a write's own response, never blank again.
-const listing = ref(true);
-// The people grid's answer, owner-only: a failed read says so above the grid (`localNotice`) and leaves it empty.
+// The people grid's answer, for whoever manages people: a failed read says so above the grid and leaves it empty.
+// Their own record is their own card, first, rather than a tile among the others.
 const people = useLoaded(() => ({
-    data: listing.value ? undefined : members.value,
+    data: listing.value ? undefined : members.value.filter((member) => !isMe(member.email)),
     error: undefined,
-    fetching: listing.value && isOwner.value,
-    wanted: isOwner.value,
+    fetching: listing.value && managesPeople.value,
+    wanted: managesPeople.value,
 }));
-
-const load = async (): Promise<void> => {
-    const id = sandbox.activeSandboxId.value;
-    if (id === undefined) {
-        listing.value = false;
-        return;
-    }
-    // Only this tab's own words: an invite's link kept in the ledger outlives the tab being opened again.
-    localNotice.value = undefined;
-    try {
-        // The platform's records only: the daemon's roster, the one that says which cards a guest holds, is its own cache
-        // entry. One that isn't answering leaves the list up and says the fences are unknown (`grantsUnread`), rather
-        // than drawing every row as unfenced.
-        members.value = (await apiClient.invite.list({ sandboxId: id })).members;
-    } catch (err) {
-        localNotice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntLoadAccessList`));
-    } finally {
-        listing.value = false;
-    }
-};
-
-// A write's answer is the platform's roster as it now stands, put on screen by whichever mount of this tab is up when it
-// lands; a write refused after the daemon granted leaves the screen unsure, so the platform's roster is read again (the
-// daemon's is already the cache's).
+// The platform's records are read for whoever manages people, once they are known to (a People & access holder learns
+// it from their own answer, a moment after the page opens); anyone else never fetches, and nothing waits on a list
+// that never arrives.
 watch(
-    () => writes.operation.value,
-    (now, before) => {
-        if (before?.state !== `running` || now === undefined || now.order !== before.order || now.state === `running`) {
+    managesPeople,
+    (manages) => {
+        if (manages) {
+            void load();
             return;
         }
-        if (now.state === `failed`) {
-            if (now.failure?.reload === true) {
-                void load();
-            }
-            return;
-        }
-        if (now.value?.members !== undefined) {
-            members.value = now.value.members;
-        }
+        listing.value = false;
     },
+    { immediate: true },
 );
-
-// Invite list is owner-only (the API 403s a member); load only when the viewer owns this sandbox.
-onMounted(() => {
-    if (isOwner.value) {
-        void load();
-        return;
-    }
-    // A member never fetches; leaving `listing` true would wait for a list that never arrives.
-    listing.value = false;
-});
-
-// Not an error: already invited, just unreachable by mail; `sent` needs no entry here.
-// Built when read, so the note follows a language switch.
-const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
-    ({
-        unconfigured: t(`sandbox.sandboxAccess.deliveryUnconfigured`),
-        "local-link": t(`sandbox.sandboxAccess.deliveryLocalLink`),
-        refused: t(`sandbox.sandboxAccess.deliveryRefused`),
-    })[delivery];
-
-// Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent. Its
-// answer is the daemon's whole roster, which lands in the members cache entry (useMembers) whole.
-const grantOnDaemon = async (grant: MemberGrant, refused: string): Promise<void> => {
-    try {
-        await grantMember(grant);
-    } catch (err) {
-        throw new DaemonRefused(refused, { cause: err });
-    }
-};
-
-const invite = async (value: string, draft: AccessDraft): Promise<boolean> => {
-    const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value || draftProblem(draft, namesOf(draft.see).length) !== undefined) {
-        return false;
-    }
-    clearNotice();
-    const outcome = await writes.run({
-        what: t(`sandbox.sandboxAccess.invitingWhom`, { email: value }),
-        failed: refusedAs(t(`sandbox.sandboxAccess.recordingInviteFailed`)),
-        // The link mail could not carry is read here or nowhere.
-        keep: true,
-        task: async () => {
-            await grantOnDaemon(draftGrant(value, draft), t(`sandbox.sandboxAccess.couldntGrantAccess`));
-            const result = await apiClient.invite.create({ sandboxId: id, email: value, role: draftGrant(value, draft).role });
-            return { members: result.members, delivery: result };
-        },
-    });
-    return outcome?.state === `done`;
-};
-
-const resend = async (target: string): Promise<boolean> => {
-    const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value) {
-        return false;
-    }
-    clearNotice();
-    const outcome = await writes.run({
-        what: t(`sandbox.sandboxAccess.invitingWhom`, { email: target }),
-        // Nothing was granted first, so a refusal leaves the roster as it is.
-        failed: (error) => ({ notice: noticeFrom(error, t(`sandbox.sandboxAccess.couldntResendInvite`)), reload: false }),
-        keep: true,
-        task: async () => {
-            const result = await apiClient.invite.resend({ sandboxId: id, email: target });
-            return { members: result.members, delivery: result };
-        },
-    });
-    // Sent: a link the mail could not carry is said above the tiles, with the panel left open.
-    return outcome?.state === `done`;
-};
-
-// Changes what a person holds with the same two-write, daemon-first order as an invite: the whole grant to the daemon,
-// then the tier to the platform's record when it moved. Applies on the person's next request.
-const saveAccess = async (target: string, draft: AccessDraft): Promise<boolean> => {
-    const id = sandbox.activeSandboxId.value;
-    if (id === undefined || draftProblem(draft, namesOf(draft.see).length) !== undefined) {
-        return false;
-    }
-    clearNotice();
-    if (fencesUnknown.value) {
-        localNotice.value = grantsUnread.value;
-        return false;
-    }
-    const grant = draftGrant(target, draft);
-    const recorded = members.value.find((member) => member.email === target)?.role;
-    const outcome = await writes.run({
-        what: t(`sandbox.sandboxAccess.changingAccessOf`, { email: target }),
-        failed: refusedAs(t(`sandbox.sandboxAccess.recordingRoleFailed`)),
-        // Quiet: the panel's own Saved is the answer.
-        quiet: true,
-        task: async () => {
-            // Same split as the invite: only the first of the two writes can be a sandbox that isn't answering.
-            await grantOnDaemon(grant, t(`sandbox.sandboxAccess.couldntChangeRole`));
-            if (recorded === grant.role) {
-                return {};
-            }
-            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role: grant.role });
-            return { members: result.members };
-        },
-    });
-    return outcome?.state === `done`;
-};
-
-// The panel saves as it goes, and a write is one at a time: a change made while one is on its way waits behind it
-// rather than being dropped, and only the newest change per person is sent once its turn comes.
-let queue: Promise<unknown> = Promise.resolve();
-const latest = new Map<string, AccessDraft>();
-const savePerson = (target: string, draft: AccessDraft): void => {
-    latest.set(target, draft);
-    queue = queue.then(async () => {
-        const next = latest.get(target);
-        if (next === undefined) {
-            return;
-        }
-        latest.delete(target);
-        await saveAccess(target, next);
-    });
-};
-
-const revoke = async (target: string): Promise<void> => {
-    const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value) {
-        return;
-    }
-    clearNotice();
-    // Quiet: the row going away is the answer.
-    const outcome = await writes.run({
-        what: t(`sandbox.sandboxAccess.revokingWhom`, { email: target }),
-        failed: refusedAs(t(`sandbox.sandboxAccess.clearingRecordFailed`)),
-        quiet: true,
-        task: async () => {
-            // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
-            try {
-                await revokeMember(target);
-            } catch (err) {
-                throw new DaemonRefused(t(`sandbox.sandboxAccess.couldntRevokeAccess`), { cause: err });
-            }
-            const result = await apiClient.invite.revoke({ sandboxId: id, email: target });
-            return { members: result.members };
-        },
-    });
-    if (outcome?.state === `done`) {
-        selected.value = undefined;
-    }
-};
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
         <!-- What people have asked for, above who they are, at the page's own rhythm: Review opens the person, where a
              grant answers it. -->
-        <AccessRequests v-if="isOwner" @review="(email) => (selected = email)" />
+        <AccessRequests v-if="managesPeople" @review="(email) => (selected = email)" />
         <!-- WHO HAS ACCESS, as Personas and Models lay theirs out: a tile per person, and the open one's panel under the
              tiles. Adding asks for an address alone; everything else is decided in the panel, which saves as it goes. -->
         <div class="flex flex-col gap-2.5">
-            <Notice v-if="grantsUnread && isOwner" :of="grantsUnread" />
+            <Notice v-if="grantsUnread && managesPeople" :of="grantsUnread" />
             <!-- A link the mail could not carry rides in the slot, so a long one can wrap. -->
             <Notice v-if="notice && (selectedMember === undefined || handover !== undefined)" :of="notice">
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
@@ -458,7 +232,7 @@ const revoke = async (target: string): Promise<void> => {
             <Section data-setting="access-people" :label="t(`sandbox.sandboxAccess.people`)">
                 <!-- Adding someone is the group's own action, top right where every list in the app keeps it; offered once the
                      roster has landed, so the address card it opens lands after the people rather than ahead of them. -->
-                <template v-if="isOwner && !adding" #actions>
+                <template v-if="managesPeople && !adding" #actions>
                     <Button
                         size="small"
                         tier="boring"
@@ -473,14 +247,28 @@ const revoke = async (target: string): Promise<void> => {
                 <!-- One card per person, the signed-in one first; adding someone grows the group by one card, the address
                      field, at its end. -->
                 <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
+                    <!-- The reader on the roster opens their own panel from their own card, read-only unless they hold Full
+                         access; the owner, who is on no roster, has nothing to open. -->
                     <PersonCard
+                        v-if="ownRecord !== undefined && managesPeople"
+                        :email="ownRecord.email"
+                        :image="user?.image ?? undefined"
+                        :line="lineOf(ownRecord)"
+                        :selected="selected === ownRecord.email"
+                        :aria-controls="panelId"
+                        :disabled="fencesUnknown"
+                        pressable
+                        @press="toggle(ownRecord)"
+                    />
+                    <PersonCard
+                        v-else
                         :email="user?.email ?? ``"
                         :image="user?.image ?? undefined"
                         :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole"
                     />
                     <!-- While the roster is read, the cells after the owner's own card are drawn as they last looked (one
                          run of grid items imprinted together), else as one person-shaped card. -->
-                    <Await v-if="isOwner" :of="people" imprint="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
+                    <Await v-if="managesPeople" :of="people" imprint="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
                         <template #fallback>
                             <div role="status" aria-busy="true" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5">
                                 <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
@@ -542,17 +330,18 @@ const revoke = async (target: string): Promise<void> => {
                         </template>
                     </Await>
                 </div>
-                <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
+                <RowNote v-if="!managesPeople">{{ t(`sandbox.sandboxAccess.peopleManagedBy`) }}</RowNote>
 
                 <div :id="panelId" class="mt-4">
                     <PersonPanel
-                        v-if="isOwner && selectedMember !== undefined && !fencesUnknown"
+                        v-if="managesPeople && selectedMember !== undefined && !fencesUnknown"
                         :key="selectedMember.email"
                         :email="selectedMember.email"
                         :pending="selectedMember.status !== `accepted`"
                         :initial="accessOf(selectedMember)"
                         :busy="busy"
                         :notice="panelNotice"
+                        :bounds="boundsOf(selectedMember)"
                         @save="savePerson"
                         @remove="revoke"
                         @resend="resend"

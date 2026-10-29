@@ -5,6 +5,7 @@ import { useAudience } from "../app/useAudience";
 import { desktopNotices } from "../app/environments/desktopNotices";
 import { localFace } from "../app/environments/local";
 import { useRole } from "../client/sandbox/useRole";
+import { useAccess } from "../client/sandbox/access/useAccess";
 import { useOrgPolicy } from "../features/organisations/useOrgPolicy";
 import { SETTINGS_CARDS, settingsPages, settingsPageTerms } from "../features/settings/settingsIndex";
 import { settingsSections } from "../features/settings/settingsNav";
@@ -25,6 +26,8 @@ import type { HubSearchSources } from "../workbench/hub/useHubSearch";
 
 export function useHubSearchSources(): HubSearchSources {
     const { canShip, isGuest } = useRole();
+    // The sections a part of the sandbox given to the reader opens below maintainer (sandboxNav.ts `right`).
+    const { holds } = useAccess();
     const { hidden: orgHidden } = useOrgPolicy();
     const { offered: planOffered } = useHostedPlan();
     const { panels } = usePanels();
@@ -47,7 +50,7 @@ export function useHubSearchSources(): HubSearchSources {
                 .flatMap((group) => group.items)
                 .flatMap((row) => (isTabbedRow(row) ? row.parts.map((part) => [part.slug, row.label] as const) : [])),
         );
-        const builtIn = sandboxSections(canShip.value, isGuest.value, orgHidden.value).map((section): HubPage => ({
+        const builtIn = sandboxSections(canShip.value, isGuest.value, orgHidden.value, holds).map((section): HubPage => ({
             slug: section.slug,
             label: section.label,
             icon: section.icon,

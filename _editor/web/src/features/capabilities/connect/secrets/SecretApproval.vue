@@ -14,13 +14,13 @@ import SecretPopover from "./SecretPopover.vue";
 import { EDITABLE_VALUE, FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLook";
 
 // Approvers are an exact list, never a role floor ("only Bob"), so the owner is a choice here too rather than implied.
-// Only the owner changes it (the daemon's rule); everybody else reads the same words with nothing to press.
+// Whoever runs secrets changes it (the daemon's rule); everybody else reads the same words with nothing to press.
 
 const t = useT();
 
 const { row } = defineProps<{ row: SecretRow }>();
 
-const { gateFor, approverChoices, isOwner, setGate, removeGate } = useCredentialGates();
+const { gateFor, approverChoices, namesEveryone, runsSecrets, setGate, removeGate } = useCredentialGates();
 
 const gate = computed(() => (row.gateSubject === undefined ? undefined : gateFor(row.gateSubject)));
 // A signed-in profile or a running MCP server is mounted for a whole turn: one release covers the conversation.
@@ -46,7 +46,8 @@ const scope = ref<CredentialGateScope>(`use`);
 const saving = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
-// Opens on what is stored; asking for people pre-picks the roster's first (the owner), the answer reached for most.
+// Opens on what is stored; asking for people pre-picks the first choice (the owner where the roster is read, else the
+// reader), the answer reached for most.
 const begin = (): void => {
     named.value = gate.value !== undefined;
     approvers.value = [...(gate.value?.approvers ?? [])];
@@ -103,7 +104,7 @@ const SCOPES = computed(() => [
 <template>
     <SecretFact :label="t(`capabilities.secretApproval.label`)">
         <button
-            v-if="isOwner"
+            v-if="runsSecrets"
             ref="anchor"
             type="button"
             :class="EDITABLE_VALUE"
@@ -158,8 +159,10 @@ const SCOPES = computed(() => [
                             {{ email }}
                         </button>
                     </div>
-                    <!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. -->
-                    <p v-if="approverChoices.length <= 1" class="text-xs text-subtle">
+                    <!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. Somebody who does
+                         not read the roster is offered themselves and the names already on a gate, and told why. -->
+                    <p v-if="!namesEveryone" class="text-xs text-subtle">{{ t(`capabilities.secretApproval.othersUnlisted`) }}</p>
+                    <p v-else-if="approverChoices.length <= 1" class="text-xs text-subtle">
                         {{ approverChoices.length === 0 ? t(`capabilities.secretApproval.nobodyYet`) : t(`capabilities.secretApproval.onlyYou`) }}
                         <RouterLink to="/sandbox/access" class="text-link hover:underline">{{ t(`capabilities.secretApproval.accessTab`) }}</RouterLink>
                     </p>

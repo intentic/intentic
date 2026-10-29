@@ -9,10 +9,13 @@ import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
+import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
+import { queryClient } from "../../../lib/queryPersistence";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { useOperation } from "../../../workbench/operations/operations";
 import { defaultModelFor, endpointProviders,runnableReadFailure } from "../../../models/providers/providerCatalog";
@@ -70,6 +73,12 @@ const {
     loadUsage,
 } = useChat();
 const { reachable, active: activeSandbox } = useSandbox();
+// What the reader may do here. Full access runs the whole page; someone given AI accounts of their own (sandbox-contract
+// members.ts `ownAccounts`) reaches it too, to sign in with accounts of theirs, so every press below that would only be
+// refused them is left out rather than drawn: a translator's subscription, the found keys, the other sandboxes' accounts,
+// and Local models, where everything adds or changes a connection.
+const { canShip } = useRole();
+const { can } = useAccess();
 
 // What each tile holds, judged the way the Models row in the sandbox's menu judges it.
 const sources = useModelSources();
@@ -90,6 +99,7 @@ watch(
     (measured) => {
         if (
             !prefetchAsked &&
+            (canShip.value || can(`endpoints.localModelPrefetch`)) &&
             measured !== undefined &&
             measured.serverReady &&
             measured.instant !== undefined &&
@@ -113,6 +123,9 @@ const stopFetching = (): void => {
 // THE GRID AND WHICH TILE IS OPEN.
 // The open tile lives in the address (`?open=<tile>`), so a reload or a shared link lands on it again. A provider's tile is
 // named by the provider itself, so a chat's "Connect Claude" opens Claude's tile (opened, not signed in: `?provider=` is that).
+// Local models only for a reader who may add to them: every press under that tile writes a connection.
+const localOpen = computed(() => canShip.value || can(`capabilities.add`));
+const tiles = computed(() => MODEL_TILES.filter((tile) => tile !== LOCAL_TILE || localOpen.value));
 const tileNamed = (value: unknown): TileKey | undefined => MODEL_TILES.find((tile) => tile === value);
 const remembered = tileNamed(route.query[`open`]);
 const selected = ref<TileKey | undefined>(remembered);
@@ -204,12 +217,13 @@ const settleArrival = (): void => {
     if (remembered !== undefined) {
         return;
     }
-    selected.value = arrivalTile({
+    const tile = arrivalTile({
         live: live.value?.provider,
         failed: signInFailure.value?.provider,
         needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
         connected: sources.value.find((source) => source.kind !== `trial` && source.standing === `ready`)?.provider,
     });
+    selected.value = tiles.value.includes(tile) ? tile : tiles.value[0];
 };
 
 // THE ONE SIGN-IN.
@@ -223,10 +237,16 @@ const panel = useTemplateRef<InstanceType<typeof ProviderPanel>>(`panel`);
 // The translator holds the subscription OAuth, a stored account serves everything else, as the daemon splits them.
 const routedByDefault = (provider: NativeProvider): boolean => providerSpec(provider)?.auth.kind === `translator`;
 
+// Whether the reader may start this sign-in: a provider's own, or with Full access a translator's subscription too.
+const mayConnect = (provider: NativeProvider, via?: `native` | `routed`): boolean => {
+    const routed = via === undefined ? routedByDefault(provider) : via === `routed`;
+    return canShip.value || can(routed ? `translator.connect` : `accounts.start`, { provider });
+};
+
 // `via` picks the mechanism where a provider has two (Grok's own xAI account, or its subscription under Claude Code);
 // left out, the provider's own auth kind decides.
 const connect = async (provider: NativeProvider, { variant, via }: { variant?: string; via?: `native` | `routed` } = {}): Promise<void> => {
-    if (starting.value !== undefined) {
+    if (starting.value !== undefined || !mayConnect(provider, via)) {
         return;
     }
     // A new attempt is the thing happening now; the last one's banner is over.
@@ -307,11 +327,13 @@ const landedFor = (tile: TileKey): string | undefined =>
     landed.value === undefined || tileOf(landed.value) !== tile ? undefined : landedLine(landedLabel(landed.value), activeSandbox.value?.name);
 
 // A sign-in that connected an account while this view was open, as the store saw it land: said whether or not the
-// provider was connected before, since a second account lands without its readiness changing at all.
+// provider was connected before, since a second account lands without its readiness changing at all. An account a person
+// connects is always theirs to run on, which the sandbox's answer about them now names, so that answer is read again.
 watch(signInLanded, (now) => {
     if (now !== undefined) {
         landed.value = now.provider;
         selected.value = tileOf(now.provider) ?? selected.value;
+        void queryClient.invalidateQueries({ queryKey: SANDBOX_SELF_ACCESS.of() });
     }
 });
 
@@ -344,12 +366,11 @@ const startChatting = (): void => {
 // press that opens the provider's panel with its sign-in started, which the browser already signed in answers. What the
 // address names, else what the desktop app said on an earlier address.
 const found = computed(() => foundToOffer(route.query[`found`]));
-const foundRows = computed(() => foundSignIns(found.value, providerReady));
+const foundRows = computed(() => foundSignIns(found.value, providerReady).filter((provider) => mayConnect(provider)));
 
 // And the API keys the owner's devices hold (the daemon's GET /arrivals/keys, migrations/provider-keys.ts): copied,
 // unlike a sign-in, since a key is not bound to the install that holds it. Read once on open, and only by a tier that
 // may connect things; a device asleep, or none at all, is an empty list.
-const { canShip } = useRole();
 const keys = ref<readonly ProviderKey[]>([]);
 const addedHere = ref<ReadonlySet<string>>(new Set());
 const keyRows = computed(() => offeredKeys(keys.value, addedHere.value));
@@ -406,8 +427,10 @@ const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {
 onMounted(() => {
     // Fetched on open rather than waiting for the reachable seam, which lags a probe plus a tunnel round-trip.
     void refreshConnections();
-    // Each account's spend, for the meter's card on its row; the rows draw without it until it lands.
-    void loadUsage();
+    // Each account's spend, for the meter's card on its row; the rows draw without it until it lands. Full access's reading.
+    if (canShip.value || can(`system.usage`)) {
+        void loadUsage();
+    }
     settleArrival();
     if (canShip.value) {
         void readKeys();
@@ -494,7 +517,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         <!-- The grid: every way in, always the same tiles in the same places. -->
         <div role="group" :aria-label="t(`shared.models`)" class="flex flex-wrap gap-1">
             <ProviderTile
-                v-for="tile in MODEL_TILES"
+                v-for="tile in tiles"
                 :key="tile"
                 :tile="tile"
                 :selected="selected === tile"
@@ -509,7 +532,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
 
         <!-- The open tile's panel. Nothing until the lists land: an empty provider would claim "not connected". -->
         <div :id="panelId">
-            <template v-if="selected !== undefined && accessKnown">
+            <template v-if="selected !== undefined && accessKnown && tiles.includes(selected)">
                 <LocalModelsPanel
                     v-if="selected === LOCAL_TILE"
                     :fit="fit"

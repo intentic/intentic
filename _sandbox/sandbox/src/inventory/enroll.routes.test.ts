@@ -52,12 +52,14 @@ const enrollOnce = (
 ) => {
     const enrolled: string[] = [];
     const services = unstubbed<Services>("services", {
-        // Only the owner's bearer mints a server-connect code.
+        // Only a bearer that operates the sandbox (the owner, Full access) mints a server-connect code.
         auth: unstubbed<NonNullable<Services["auth"]>>("auth", {
-            authorizeOwner: async (bearer: string) => {
-                if (bearer !== "owner") {
-                    throw new Error("not the owner");
+            authorize: async (bearer: string) => {
+                const role = ({ owner: "owner", maintainer: "maintainer", collaborator: "collaborator" } as const)[bearer];
+                if (role === undefined) {
+                    throw new Error("not a member");
                 }
+                return { email: `${bearer}@example.com`, methods: ["google"], role };
             },
         }),
         config: {
@@ -286,10 +288,12 @@ test("POST /system/enroll/code refuses a server name deploy.config.ts could not 
     expect(minted.status).toBe(400);
 });
 
-test("POST /system/enroll/code is the owner's alone", async () => {
+test("POST /system/enroll/code is for whoever operates the sandbox: the owner and Full access", async () => {
     const { app } = enrollOnce();
     const status = async (headers: Record<string, string>): Promise<number> => (await app.request("/system/enroll/code", { method: "POST", headers })).status;
     expect(await status({})).toBe(401);
     expect(await status({ authorization: "Bearer someone" })).toBe(401);
+    expect(await status({ authorization: "Bearer collaborator" })).toBe(403);
+    expect(await status({ authorization: "Bearer maintainer" })).toBe(200);
     expect(await status({ authorization: "Bearer owner" })).toBe(200);
 });

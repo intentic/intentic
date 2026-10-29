@@ -2,6 +2,8 @@ import {
     accessRefusal,
     type AgentAccess,
     type CredentialReach,
+    MANAGE_RIGHTS,
+    type ManageRight,
     type Member,
     type MemberAccess,
     type MemberGrant,
@@ -69,16 +71,34 @@ const spendOf = (draft: AccessDraft): Pick<MemberGrant, `credentials` | `aiAccou
     aiAccounts: draft.aiAccounts === `all` ? `all` : [...draft.aiAccounts],
 });
 
+/**
+ * The parts of the sandbox a way of working can be given besides its own work: none to a person who only chats or works
+ * through their home conversation (the contract refuses them), and AI accounts of their own only to someone whose agents
+ * run, since an account nothing runs on is no answer.
+ */
+export const rightsOffered = (agents: AgentAccess): readonly ManageRight[] => {
+    if (agents === `chat` || agents === `home`) {
+        return [];
+    }
+    return drivesAgents(agents) ? MANAGE_RIGHTS : MANAGE_RIGHTS.filter((right) => right !== `ownAccounts`);
+};
+
+/** The rights a draft holds that its way of working can carry, in the contract's order; the rest are dropped with it. */
+export const rightsFor = (agents: AgentAccess, manages: readonly ManageRight[] | undefined): ManageRight[] =>
+    rightsOffered(agents).filter((right) => manages?.includes(right) === true);
+
 // The daemon's `/members` body. The role is the tier the access makes; a maintainer carries only what its conversations
-// may spend besides, since that tier is every other answer. An area list's ABSENCE is the whole workspace, so it is
-// omitted rather than sent empty. Agents and edit are always sent, so the row says what the panel decided instead of
-// what a role used to mean.
+// may spend besides, since that tier is every other answer, every right included. An area list's ABSENCE is the whole
+// workspace, so it is omitted rather than sent empty. Agents, edit and rights are always sent, so the row says what the
+// panel decided instead of what a role used to mean or what the row held before; rights ride beside a profile too, since
+// a profile never carries them.
 export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
     const role = tierOf(draft);
     const body: MemberGrant = { email, role, emailSignIn: draft.emailSignIn };
     if (draft.manage) {
         return { ...body, ...spendOf(draft) };
     }
+    body.manages = rightsFor(draft.agents, draft.manages);
     if (draft.profile !== undefined) {
         body.profile = draft.profile;
         return body;

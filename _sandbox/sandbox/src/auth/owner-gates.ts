@@ -1,18 +1,22 @@
+import { holdsRight, type ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
-import { authorizeMaintainer, bearerFrom, ForbiddenError } from "./auth.js";
+import { authorizeMaintainer, bearerFrom, type Caller, ForbiddenError } from "./auth.js";
 import { type Listener, listenerIn, listenerOf } from "./proofs/listener.js";
 
-/* The two answers a privileged route asks for before it does anything, as a plain-Hono refusal and as an oRPC one, plus
- * whether the bearer is the owner for a route that refuses nobody and only turns on the answer, and the answer a plain
+/* The answers a privileged route asks for before it does anything, as a plain-Hono refusal and as an oRPC one, plus
+ * whether the bearer holds an answer for a route that refuses nobody and only turns on it, and the answer a plain
  * route gives when the credential store it writes cannot be read. Each gate reads the bearer alone, so a request a
  * machine credential admitted (panel, agent, extension or control token) never passes.
  *
- * `ownerDenied` is the operating gate, whatever its name says: a maintainer is deliberately owner-equivalent here.
- * Ownership itself is kept separate, in `ownershipDenied`, for the one thing a revokable grant cannot control:
- * membership. */
+ * `ownerDenied` is the operating gate, whatever its name says: a maintainer (Full access) is deliberately
+ * owner-equivalent here. A part of the sandbox that can also be handed to someone below it (sandbox-contract
+ * `ManageRightSchema`: people, secrets, privacy, AI accounts of one's own) asks `rightDenied` / `ensureRight`, which admit
+ * the owner, Full access, and whoever was given that part. Ownership itself (`ownershipDenied`, `ensureOwner`) is left
+ * for what is the owner's personally: the platform's record of the sandbox, the owner's own sign-in door, and the owner's
+ * own computers. */
 
 type AuthDeps = Pick<Services, "auth">;
 type Auth = NonNullable<Services["auth"]>;
@@ -26,6 +30,16 @@ interface Check {
 }
 const maintainer: Check = { floor: "maintainer", run: authorizeMaintainer };
 const owner: Check = { floor: "owner", run: (auth, bearer, listener) => auth.authorizeOwner(bearer, listener) };
+// The owner, Full access, or a member given this part of the sandbox: floored at maintainer, as the route declares it.
+const given = (right: ManageRight): Check => ({
+    floor: "maintainer",
+    run: async (auth, bearer, listener) => {
+        const caller = await auth.authorize(bearer, undefined, { listener });
+        if (!holdsRight(caller, right)) {
+            throw new ForbiddenError(`not given ${right} on this sandbox`);
+        }
+    },
+});
 
 const bearerOf = (headers: Headers): string => bearerFrom(headers.get("authorization") ?? undefined);
 
@@ -45,6 +59,8 @@ const denied = async (services: AuthDeps, c: Context, check: Check): Promise<Res
 export const ownerDenied = (services: AuthDeps, c: Context): Promise<Response | undefined> => denied(services, c, maintainer);
 
 export const ownershipDenied = (services: AuthDeps, c: Context): Promise<Response | undefined> => denied(services, c, owner);
+
+export const rightDenied = (services: AuthDeps, c: Context, right: ManageRight): Promise<Response | undefined> => denied(services, c, given(right));
 
 // Throws the refusal an oRPC handler sends to anyone below the maintainer tier.
 export const requireMaintainer = async (services: AuthDeps, headers: Headers, refusal: string): Promise<void> => {
@@ -73,11 +89,24 @@ const refused = async (services: AuthDeps, headers: Headers, check: Check): Prom
     }
 };
 
-// Throws unless the bearer holds the operating tier (the owner or a maintainer), saying which refusal it is.
-export const ensureMaintainer = (services: AuthDeps, headers: Headers): Promise<void> => refused(services, headers, maintainer);
-
 // Throws unless the bearer is the owner, saying which refusal it is.
 export const ensureOwner = (services: AuthDeps, headers: Headers): Promise<void> => refused(services, headers, owner);
+
+// Throws unless the bearer runs this part of the sandbox: the owner, Full access, or someone given it.
+export const ensureRight = (services: AuthDeps, headers: Headers, right: ManageRight): Promise<void> => refused(services, headers, given(right));
+
+// Whether this bearer runs this part of the sandbox, refusing nobody: for a route where only some changes turn on the
+// answer (loosening a secret's guard). A loopback daemon has one person, who is the owner. A machine credential never
+// passes, whoever's session it rides.
+export const holdsRightBearer = async (services: AuthDeps, headers: Headers, right: ManageRight): Promise<boolean> => {
+    if (services.auth === undefined) {
+        return true;
+    }
+    return services.auth.authorize(bearerOf(headers), undefined, { listener: listenerIn(headers) }).then(
+        (caller: Caller) => holdsRight(caller, right),
+        () => false,
+    );
+};
 
 // Whether this bearer is the owner, refusing nobody: for a route where only some changes turn on the answer. A
 // loopback daemon has one person, who is the owner.

@@ -1,4 +1,4 @@
-<!-- What people on the roster have asked the owner for, from where they were refused, above the people themselves: Review
+<!-- What people on the roster have asked for, from where they were refused, above the people themselves: Review
      opens the person's panel, where granting them anything answers the request; Dismiss answers it without a grant. -->
 <script setup lang="ts">
 import type { AccessRequest, AccessWant } from "@intentic/sandbox-contract/schemas/members";

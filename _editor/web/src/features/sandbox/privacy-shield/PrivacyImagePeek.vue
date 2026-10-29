@@ -4,8 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref, toRef } from "vue";
 import { usePrivacyImage } from "../../../models/sandbox/usePrivacyShield";
 
-// One image the shield painted over, as it was and as the provider got it, for the owner checking what was covered:
-// one picture at a time in the same frame, so flipping between the two shows exactly what changed.
+// One image the shield painted over, as it was and as the provider got it, for whoever runs the shield checking what
+// was covered: one picture at a time in the same frame, so flipping between the two shows exactly what changed.
 
 const t = useT();
 

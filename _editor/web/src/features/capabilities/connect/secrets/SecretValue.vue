@@ -22,7 +22,7 @@ const {
     error = undefined,
 } = defineProps<{
     row: SecretRow;
-    /** A value exists and this reader may read it (the daemon reveals from the maintainer tier up). */
+    /** A value exists and this reader may read it (the daemon reveals one to whoever runs secrets, a gated one to its approvers). */
     canReveal: boolean;
     /** A computer with a keyring answers, and the value is stored under a name Type into… takes. */
     canType: boolean;
@@ -93,7 +93,7 @@ const typeAnchor = ref<HTMLElement>();
                         v-tooltip.top="revealed === undefined ? t(`capabilities.secretEntryRow.show`) : t(`capabilities.secretEntryRow.hide`)"
                         type="button"
                         :class="ICON_ACTION"
-                        :aria-label="revealed === undefined ? t(`capabilities.secretEntryRow.revealValueMaintainersOnly`) : t(`capabilities.words.hideValue`)"
+                        :aria-label="revealed === undefined ? t(`capabilities.secretEntryRow.revealValueWho`) : t(`capabilities.words.hideValue`)"
                         :aria-pressed="revealed !== undefined"
                         @click="emit(`reveal`)"
                     >
@@ -119,7 +119,10 @@ const typeAnchor = ref<HTMLElement>();
             </button>
         </div>
         <span v-if="row.entry.device !== undefined" :class="VALUE_NOTE">{{ keyringSourceNote(row.entry.device.source) }}</span>
-        <span v-else-if="!missing && !canReveal" :class="VALUE_NOTE">{{ t(`capabilities.secretEntryRow.maintainersOnlySee`) }}</span>
+        <!-- A gated value is shown to its approvers alone, whoever else runs secrets. -->
+        <span v-else-if="!missing && !canReveal" :class="VALUE_NOTE">{{
+            row.entry.gate === undefined ? t(`capabilities.secretEntryRow.whoSees`) : t(`capabilities.secretEntryRow.approversSee`)
+        }}</span>
         <Notice v-if="error" :of="error" class="mt-1" />
 
         <SecretPopover

@@ -21,6 +21,7 @@ import { auditSettingsSeenDocument } from "../audit/audit-service.js";
 import { auditCheckpointDocument } from "../audit/audit-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
 import { accessRequestsDocument } from "../auth/members/access-requests.js";
+import { accountConnectorsDocument } from "../auth/members/account-connectors.js";
 import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { previewGuardDocument } from "../auth/previews/preview-guard.js";
@@ -148,6 +149,7 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     membersDocument,
     ownerDocument,
     accessRequestsDocument,
+    accountConnectorsDocument,
     passkeysDocument,
     previewGuardDocument,
     accessProfilesDocument,
@@ -176,10 +178,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ciDocument,
     composerDraftsDocument,
     projectDeliveriesDocument,
-    conversationRecordDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -225,10 +227,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
-    credentialReleasesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,

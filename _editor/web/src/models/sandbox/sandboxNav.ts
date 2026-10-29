@@ -1,3 +1,4 @@
+import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
@@ -12,6 +13,11 @@ export interface SandboxSection {
     readonly icon: IconName;
     /** Withheld below maintainer, where the daemon refuses what the section is for. */
     readonly maintainer?: boolean;
+    /**
+     * The part of the sandbox the section runs (sandbox-contract members.ts `ManageRightSchema`): a person below
+     * maintainer who was given it opens the section too, as the daemon opens its routes to them.
+     */
+    readonly right?: ManageRight;
     /**
      * The `publisher.name` id of a first-party extension whose `sandbox` view under this same slug the section draws as one
      * of its own parts, rather than as a row of its own. Only that extension's view is taken: a stranger's view under the
@@ -72,10 +78,11 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // What the agent runs on, before how it behaves: every account, subscription, local model and endpoint this
             // box can reach, and the one place a first one is connected. Maintainer, as the daemon holds every sign-in.
             // Above Environment and Secrets: most owners connect a model first; the box plumbing can wait.
-            { slug: `models`, label: t(`shared.models`), icon: `sparkles`, maintainer: true },
+            // Someone given AI accounts of their own connects theirs here, and renames or disconnects only those.
+            { slug: `models`, label: t(`shared.models`), icon: `sparkles`, maintainer: true, right: `ownAccounts` },
             { slug: `agent`, label: t(`shared.agent`), icon: `robot`, maintainer: true },
             { slug: `environment`, label: t(`sandbox.words.environment`), icon: `box` },
-            { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
+            { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true, right: `secrets` },
             // Finding, installing, managing and disabling as one.
             { slug: `extensions`, label: t(`sandbox.sandboxNav.extensions`), icon: `sliders-h` },
         ],
@@ -125,7 +132,7 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
                 icon: `lock`,
                 parts: [
                     { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
-                    { slug: `privacy-shield`, label: t(`sandbox.sandboxNav.privacyShield`), icon: `eye-slash`, maintainer: true },
+                    { slug: `privacy-shield`, label: t(`sandbox.sandboxNav.privacyShield`), icon: `eye-slash`, maintainer: true, right: `privacy` },
                     { slug: `guardrails`, label: t(`sandbox.sandboxNav.guardrails`), icon: `approvals`, maintainer: true },
                     { slug: `retention`, label: t(`sandbox.sandboxNav.retention`), icon: `history`, maintainer: true },
                 ],
@@ -183,13 +190,23 @@ export const sandboxKeyAllowed = (key: string): boolean => !sandboxBuiltInSlugs(
 /** The one section a guest member has business in: their own card and their own passkeys (Access ▸ People, Sign-in). */
 export const GUEST_SECTION = `access`;
 
+/** Whether a reader who is not a guest opens this section: a maintainer every one, anyone else what is not held for one, or what they were given. */
+export const sectionOpens = (section: SandboxSection, canShip: boolean, holds: (right: ManageRight) => boolean): boolean =>
+    canShip || section.maintainer !== true || (section.right !== undefined && holds(section.right));
+
 /**
  * The built-in sections this reader can actually open; anything else would land on a row the hub redirects away from. A
- * guest sees one row, since the daemon refuses it every other section's reads.
+ * guest sees one row, since the daemon refuses it every other section's reads. `holds` names the parts of the sandbox a
+ * reader below maintainer was given.
  */
-export const sandboxSections = (canShip: boolean, guest = false, orgHidden: ReadonlySet<string> = new Set()): readonly SandboxSection[] =>
+export const sandboxSections = (
+    canShip: boolean,
+    guest = false,
+    orgHidden: ReadonlySet<string> = new Set(),
+    holds: (right: ManageRight) => boolean = () => false,
+): readonly SandboxSection[] =>
     builtInSections()
-        .filter((section) => (guest ? section.slug === GUEST_SECTION : canShip || section.maintainer !== true))
+        .filter((section) => (guest ? section.slug === GUEST_SECTION : sectionOpens(section, canShip, holds)))
         // What the sandbox's organisation hides (organisations/useOrgPolicy.ts) is no destination either.
         .filter((section) => !orgHidden.has(section.slug));
 
@@ -215,6 +232,9 @@ export type AccessPart = (typeof ACCESS_PARTS)[number];
 
 /** The parts drawn below maintainer: the reader's own card, the people here now, and their own passkeys. */
 export const MEMBER_ACCESS_PARTS: readonly AccessPart[] = [`people`, `sign-in`];
+
+/** The parts drawn below maintainer for someone given People & access: who has access, and the profiles and areas it is built from. */
+export const PEOPLE_ACCESS_PARTS: readonly AccessPart[] = [`people`, `profiles`, `areas`, `sign-in`];
 
 /** One part of Access by address; People, the first, writes no param. */
 export const accessPath = (part: AccessPart = `people`): string =>

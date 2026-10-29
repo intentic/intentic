@@ -1,4 +1,4 @@
-import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import type { AgentAccess, CredentialReach, EditScope, ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { Member, MemberGrant } from "../auth.js";
@@ -20,6 +20,7 @@ interface MemberRowDraft {
     tools?: ToolCeiling;
     assistants?: string[];
     profile?: string;
+    manages?: ManageRight[];
 }
 
 // The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's, whatever the
@@ -63,6 +64,17 @@ const assistantsOfRow = (grant: MemberGrant, previous: Member | undefined): stri
     return kept === undefined ? undefined : [...new Set(kept)];
 };
 
+// The rights a grant leaves on the row, by the reach's rule: a list replaces them, silence keeps the previous row's. Never
+// on a maintainer, who runs every part of the sandbox, and never on a guest, who sees none of it: rights kept from a row
+// that worked another way are dropped there rather than written onto a row the store would then refuse whole.
+const managesOfRow = (grant: MemberGrant, previous: Member | undefined): ManageRight[] | undefined => {
+    if (grant.role === "maintainer" || grant.role === "guest") {
+        return undefined;
+    }
+    const kept = [...new Set(grant.manages ?? previous?.manages ?? [])];
+    return kept.length === 0 ? undefined : kept;
+};
+
 export const memberRow = (email: string, grant: MemberGrant, previous?: Member): Member => {
     const row: MemberRowDraft = { email, role: grant.role };
     if (grant.areas !== undefined) {
@@ -101,6 +113,10 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
     // Written as the grant said it, never kept: a grant that names no profile is answers of the row's own.
     if (grant.profile !== undefined && grant.role !== "maintainer") {
         row.profile = grant.profile;
+    }
+    const manages = managesOfRow(grant, previous);
+    if (manages !== undefined) {
+        row.manages = manages;
     }
     return row;
 };

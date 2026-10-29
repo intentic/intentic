@@ -23,6 +23,8 @@ const {
     // - icon: glyph before the label, for options with a glyph vocabulary defined elsewhere; never replaces it
     // - hue: identity accent as a dot before the label, for an option that stands for a PERSON rather than a view;
     //   the caller passes the number so the hue stays one rule in the app (identityHue) rather than two
+    // - disabled: drawn and named but not pickable, for a choice this reader may not make; its title says why. Marked
+    //   `aria-disabled` rather than `disabled`, so the hover card that says why still opens on it
     // - readonly: lets a shared preset (`as const`) spread straight into `options` without copying
     options: readonly {
         label: string;
@@ -34,6 +36,7 @@ const {
         mark?: IconName;
         markSpin?: boolean;
         markTitle?: TooltipValue;
+        disabled?: boolean;
     }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
@@ -71,6 +74,9 @@ const navigate = (event: KeyboardEvent, index: number): void => {
         return;
     }
     event.preventDefault();
+    if (option.disabled === true) {
+        return;
+    }
     model.value = option.value;
     track.value?.querySelectorAll<HTMLButtonElement>(`[role="tab"]`)[target]?.focus();
 };
@@ -204,8 +210,9 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
             :tabindex="index === tabStop ? 0 : -1"
             :aria-label="nameOf(option)"
             v-tooltip.bottom="option.markTitle ?? option.title"
-            :class="optionClass(model === option.value)"
-            @click="model = option.value"
+            :aria-disabled="option.disabled === true ? `true` : undefined"
+            :class="[optionClass(model === option.value), option.disabled === true && `cursor-not-allowed opacity-50`]"
+            @click="option.disabled === true || (model = option.value)"
             @keydown="navigate($event, index)"
         >
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--

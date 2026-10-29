@@ -1,9 +1,8 @@
 import { settingsContract } from "@intentic/sandbox-contract/contracts/settings.contract";
 import { settingsDiff } from "../audit/settings-diff.js";
 import { noteAudit } from "../audit/audit-http.js";
+import { requireMaintainer } from "../auth/owner-gates.js";
 import { join } from "node:path";
-import { bearerFrom } from "../auth/auth.js";
-import { listenerIn } from "../auth/proofs/listener.js";
 import { implement, ORPCError } from "@orpc/server";
 import { forkablePrompt, intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
@@ -46,15 +45,12 @@ export const createSettingsRoutes = (services: Services) => {
     return {
         agentDomain: i.agentDomain.handler(() => services.agentDomainPolicy.get()),
         setAgentDomain: i.setAgentDomain.handler(async ({ input, context }) => {
-            // An owner bearer only: panel/agent/control tokens and unauthenticated loopback never change the boundary.
+            // A person's bearer only (the owner or Full access): panel/agent/control tokens and unauthenticated loopback
+            // never change the boundary.
             if (services.auth === undefined) {
-                throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
+                throw new ORPCError("FORBIDDEN", { message: "Only someone signed in with Full access may change the agent execution domain." });
             }
-            try {
-                await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined), listenerIn(context.headers));
-            } catch {
-                throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
-            }
+            await requireMaintainer(services, context.headers, "Only someone signed in with Full access may change the agent execution domain.");
             try { requireAgentDomainRollout(input); } catch (error) {
                 throw new ORPCError("CONFLICT", { message: errorMessage(error) });
             }

@@ -29,6 +29,7 @@ import { RouterLink } from "vue-router";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useAccessWall } from "../../../models/conversations/endings/accessWall";
 import { modelsHref } from "../../../lib/routes/modelsPath";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../client/sandbox/useRole";
 
 // One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
@@ -101,8 +102,11 @@ const wallStatus = computed(() => {
         ? t(`chat.accessWall.statusUnnamed`, { provider: wallProvider.value })
         : t(`chat.accessWall.status`, { account: standing.account, provider: wallProvider.value });
 });
-// Connecting is a maintainer's (the daemon refuses anyone else's sign-in): below that tier the card says who can.
+// Connecting is Full access's, and that of someone given AI accounts of their own (the daemon refuses anyone else's
+// sign-in): anyone else's card says who can.
 const { canShip } = useRole();
+const { holds } = useAccess();
+const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 const connectTo = computed(() => modelsHref({ open: accessWall.value?.provider }));
 const retestHint = computed((): Tip => ({ title: t(`chat.accessWall.retestTitle`), note: t(`chat.accessWall.retestNote`) }));
 // Straight to the conversation, not through the pane's Continue, which holds back a press on an account that reads blocked:
@@ -456,10 +460,10 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     <Button v-if="waiting.length === 0" size="small" thumb tier="quiet" :disabled="!reachable || continuing" :loading="continuing" v-tooltip.top="retestHint" @click="retest">
                         {{ accessWall.account === undefined ? t(`chat.accessWall.tryAgain`) : t(`chat.accessWall.tryAccountAgain`, { account: accessWall.account }) }}
                     </Button>
-                    <Button v-if="canShip" :as="RouterLink" :to="connectTo" size="small" thumb :tier="accessWall.elsewhere ? `boring` : `accent`">
+                    <Button v-if="mayConnect" :as="RouterLink" :to="connectTo" size="small" thumb :tier="accessWall.elsewhere ? `boring` : `accent`">
                         {{ t(`chat.accessWall.connect`, { provider: wallProvider }) }}
                     </Button>
-                    <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.maintainerConnects`) }}</span>
+                    <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.whoConnects`) }}</span>
                     <ChatChooseModelButton v-if="accessWall.elsewhere" tier="accent" :label="t(`chat.accessWall.chooseAnother`)" />
                 </template>
                 <!-- A flagged turn's two ways on, both a press: the same model again, or another one picked here. -->

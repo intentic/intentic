@@ -24,8 +24,8 @@ import { shieldRefusal, usePrivacyShield, usePrivacySources } from "../../../mod
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
 // gateway in front of them looks for. Off by default, so off draws the switch alone; the rest appears once the shield
 // runs, or while it still has datasets to show. What it did is Activity's (Personal data), with every other record of
-// what agents did. The policy is the owner's alone: a member's write comes back 403, and the refusal is said beside the
-// control that sent it.
+// what agents did. The policy is changed by the owner, Full access, or someone given the Privacy shield, the only people
+// the page opens to; a write anybody else sends comes back 403, and the refusal is said beside the control that sent it.
 
 const t = useT();
 
@@ -107,16 +107,16 @@ const write = (from: WriteSource, change: (current: PrivacyShieldPolicy) => Priv
 };
 
 const saveNotice = computed(() =>
-    shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)),
+    shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.othersChange`), t(`sandbox.agentPrivacyShield.couldntSave`)),
 );
 const forgetNotice = computed(() =>
-    shieldRefusal(forgetError.value, t(`sandbox.agentPrivacyShield.ownerOnlyForget`), t(`sandbox.agentPrivacyShield.couldntForget`)),
+    shieldRefusal(forgetError.value, t(`sandbox.agentPrivacyShield.othersForget`), t(`sandbox.agentPrivacyShield.couldntForget`)),
 );
 
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
 
-// Shown while the shield runs, or while it still has something to show: a dataset taught while it was off is the
-// owner's to forget whatever the switch says.
+// Shown while the shield runs, or while it still has something to show: a dataset taught while it was off is still
+// there to forget, whatever the switch says.
 const showSources = computed(() => running.value || sources.value.length > 0);
 
 // Each taught dataset with its date read once; a date the daemon wrote unreadably is left off rather than drawn wrong.

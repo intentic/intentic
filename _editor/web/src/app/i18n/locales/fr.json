@@ -1634,20 +1634,21 @@
             "couldNotRemove": "Impossible de retirer le secret.",
             "couldNotReveal": "Impossible d'afficher la valeur.",
             "hide": "Masquer",
-            "maintainersOnly": "Propriétaire et mainteneurs seulement",
             "multiLineValueSsh": "Valeur multiligne (clé SSH, PEM…)",
             "reveal": "Afficher",
-            "revealValueMaintainersOnly": "Révéler la valeur (propriétaire et mainteneurs uniquement)",
             "setUpdate": "Définir la valeur",
             "setUpdateValue": "Définir / mettre à jour la valeur",
             "singleLineValue": "Valeur sur une ligne",
             "value": "Valeur",
-            "maintainersOnlySee": "Seuls le propriétaire et les mainteneurs peuvent le voir",
             "notSet": "Non défini",
             "replaceValue": "Remplacer la valeur",
             "setValue": "Définir la valeur",
             "show": "Afficher",
-            "staysOn": "Reste sur {machine}, jamais ici"
+            "staysOn": "Reste sur {machine}, jamais ici",
+            "whoReveals": "Qui gère les Secrets",
+            "revealValueWho": "Révéler la valeur (qui gère les Secrets)",
+            "whoSees": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère les Secrets peuvent le voir",
+            "approversSee": "Seules les personnes qui peuvent le libérer peuvent le voir"
         },
         "secretField": {
             "as": "en tant que",
@@ -2819,7 +2820,8 @@
             "restConversation": "Le reste de la conversation",
             "restConversationNote": "Un clic couvre chaque usage pour le reste de cette conversation.",
             "signedInConversation": "Pour le reste de la conversation : un compte connecté est chargé pour un tour entier, il ne peut donc pas être libéré pour un seul usage.",
-            "couldNotSave": "Impossible d'enregistrer qui doit approuver ceci."
+            "couldNotSave": "Impossible d'enregistrer qui doit approuver ceci.",
+            "othersUnlisted": "Seulement vous et les personnes déjà désignées : la liste complète est pour qui gère Personnes et accès."
         },
         "secretFacts": {
             "lastUsed": "Dernier usage",
@@ -2838,7 +2840,7 @@
             "ciLabel": "Copie CI",
             "ciSynced": "À jour",
             "ciOutOfDate": "Pas à jour",
-            "ownerChanges": "Seul le propriétaire peut changer ceci."
+            "whoChanges": "Modifiable par le propriétaire, une personne ayant l’accès complet ou une personne qui gère les Secrets."
         }
     },
     "chat": {
@@ -2889,12 +2891,12 @@
             "didntConnect": "{provider} ne s'est pas connecté.",
             "finishSignIn": "Terminer la connexion",
             "isntConnectedInSandbox": "{providerName} n'est pas connecté dans ce sandbox.",
-            "maintainerConnects": "Un mainteneur de ce sandbox peut en connecter un.",
             "noModelYet": "Aucun modèle n'est encore connecté dans ce sandbox.",
             "signInWaiting": "Votre connexion à {provider} n'est pas encore terminée.",
             "connectProvider": "Connecter {providerName}",
             "chooseAnother": "Choisir un autre modèle",
-            "notShared": "{provider} n'est pas partagé avec vous dans ce sandbox."
+            "notShared": "{provider} n'est pas partagé avec vous dans ce sandbox.",
+            "whoConnects": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié ses propres comptes d’IA peut en connecter un."
         },
         "chatArea": {
             "bringBackHere": "Le ramener ici",
@@ -3459,7 +3461,6 @@
             "privacyLetRead": "Laisser {provider} lire cette conversation",
             "privacyLetReadNote": "Les autres conversations restent protégées.",
             "privacyLetReadTitle": "Sans masquage, ici seulement",
-            "privacyOwnerOnly": "Seul le propriétaire du sandbox peut le laisser passer.",
             "privacyRefused": "Le bouclier de confidentialité n'enverra pas ceci à {provider}, et rien de ce que vous avez écrit n'en est la cause : l'agent de {provider} lit lui-même des fichiers et des sorties de commandes et les envoie à son fournisseur par un canal que le bouclier ne peut ni lire ni masquer.",
             "privacyRefusedRunner": "Le bouclier de confidentialité n'exécutera pas ceci sur {runner}, et rien de ce que vous avez écrit n'en est la cause : {runner} appellerait {provider} depuis sa propre machine, où le bouclier ne peut pas masquer ce qui est envoyé. Exécutez-le ici, ou laissez {provider} lire cette conversation.",
             "privacySafety": "Bouclier de confidentialité",
@@ -3482,7 +3483,8 @@
             "trialGraceLeft": "Jusqu'à {count} étape de plus pour terminer | Jusqu'à {count} étapes de plus pour terminer",
             "trialFreshGrace": "Essai gratuit : {remaining} étapes d'agent restantes aujourd'hui. Une petite tâche peut en utiliser 10 ou plus, et une tâche commencée peut les dépasser pour se terminer.",
             "trialReviewChanges": "Relire les changements ({count} fichier) | Relire les changements ({count} fichiers)",
-            "continueOtherModel": "Continuer avec un autre modèle"
+            "continueOtherModel": "Continuer avec un autre modèle",
+            "privacyOthersLetThrough": "Le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent le laisser passer."
         },
         "chatPaneTurns": {
             "couldntOpen": "Impossible d'ouvrir cette conversation.",
@@ -5062,7 +5064,8 @@
             "couldntStopBorrowing": "Impossible d'arrêter l'emprunt de ce compte.",
             "lentTo": "Prêté à {names}",
             "stopLending": "Arrêter le prêt",
-            "couldntStopLending": "Impossible d'arrêter le prêt de ce compte."
+            "couldntStopLending": "Impossible d'arrêter le prêt de ce compte.",
+            "emptyFullAccess": "Pas encore connecté. Celui-ci est connecté par le propriétaire ou une personne ayant l’accès complet."
         },
         "providerTile": {
             "signingIn": "Connexion en cours…"
@@ -6246,7 +6249,7 @@
         "agentPrivacyShield": {
             "activity": "Activité du bouclier",
             "activityNote": "Le journal conserve les tokens et le texte masqué qui les entoure, jamais les valeurs : chaque valeur est lue depuis le coffre de cette machine, pour vous seul.",
-            "activityNoteMember": "Le journal conserve les tokens et le texte masqué qui les entoure, jamais les valeurs ; seul le propriétaire du sandbox voit ce que représente chaque token.",
+            "activityNoteMember": "Le journal conserve les tokens et le texte masqué qui les entoure, jamais les valeurs ; seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité voient ce que représente chaque token.",
             "allow": "Envoyer tel quel",
             "allowNote": "Les images sont envoyées telles quelles : toute donnée personnelle qu'elles contiennent parvient au fournisseur.",
             "classes": {
@@ -6390,8 +6393,6 @@
             "offNote": "Rien n'est redirigé ni lu : chaque requête de modèle va à son fournisseur exactement comme avant.",
             "on": "Activé",
             "onNote": "",
-            "ownerOnly": "Seul le propriétaire du sandbox peut modifier le bouclier de confidentialité.",
-            "ownerOnlyForget": "Seul le propriétaire du sandbox peut oublier un jeu de données.",
             "receives": {
                 "local": "reste ici",
                 "refused": "ne tournera pas",
@@ -6527,7 +6528,9 @@
                     "learned": "une valeur apprise d'un jeu de données",
                     "model": "le modèle de noms"
                 }
-            }
+            },
+            "othersChange": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent le modifier.",
+            "othersForget": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent oublier un jeu de données."
         },
         "agentProjectInstalls": {
             "ask": "Demander d'abord",
@@ -6639,7 +6642,9 @@
             "loopSignIn": "connexion {loop}",
             "accountViaLoop": "compte {managedLabel} via {loop}",
             "offByAdmin": "Désactivé : son organisation ou son forfait a coupé {provider}",
-            "offByAdminSince": "Désactivé : son organisation ou son forfait a coupé {provider} · depuis {when}"
+            "offByAdminSince": "Désactivé : son organisation ou son forfait a coupé {provider} · depuis {when}",
+            "connectedByYou": "Connecté par vous",
+            "connectedBy": "Connecté par {email}"
         },
         "arrivalPanel": {
             "alreadyHere": "déjà là",
@@ -7757,10 +7762,10 @@
             "panelsHint": "L'aperçu d'une app demande la connexion d'un membre. Les ports redirigés restent ouverts, pour que les webhooks et les apps mobiles les atteignent toujours.",
             "all": "Membres uniquement : aperçus d'apps et ports redirigés",
             "allHint": "Les aperçus d'apps et les ports redirigés demandent tous deux la connexion d'un membre : un webhook ou une app mobile n'atteint plus un port redirigé.",
-            "ownerChanges": "Seul le propriétaire du sandbox peut changer qui ouvre les aperçus.",
             "changing": "Changement de qui peut ouvrir les aperçus",
             "couldntChange": "Impossible de changer qui peut ouvrir les aperçus.",
-            "couldntRead": "Impossible de lire qui peut ouvrir les aperçus de ce sandbox."
+            "couldntRead": "Impossible de lire qui peut ouvrir les aperçus de ce sandbox.",
+            "whoChanges": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié Personnes et accès change qui peut ouvrir les aperçus."
         },
         "personaBriefingFields": {
             "sandboxPutsInFront": "Le sandbox place ceci devant le message avant que le modèle ne le lise ; le chat les montre sous « Envoyé avant votre message ». Désactivez-en un pour un persona dont le modèle a peu de place, ou dont le travail n'en a jamais besoin.",
@@ -7971,7 +7976,6 @@
             "everyBrowserSignedOut": "Tous les navigateurs ont été déconnectés. Tout appareil détenant encore un laissez-passer est exclu dès maintenant.",
             "idle": "inactif",
             "maintainer": "Mainteneur",
-            "onlySandboxOwnerInvite": "Seul le propriétaire du sandbox peut inviter des gens ou changer les rôles.",
             "otherWaysIn": "Autres façons d'entrer",
             "owner": "propriétaire",
             "pairedDevicesRunners": "Appareils et runners appairés",
@@ -8094,11 +8098,11 @@
             "tipCustomTitle": "Choisir chaque partie",
             "tipCustomNote": "Agents, dossiers, comptes, connexions",
             "tipFullTitle": "Gère le sandbox",
-            "tipFullNote": "Intègre, modifie chaque paramètre",
+            "tipFullNote": "Tout, personnes et accès compris",
             "fullSettings": "Paramètres",
-            "fullSettingsValue": "Publier, modifier paramètres et connexions",
+            "fullSettingsValue": "Tous les paramètres et connexions, publication comprise",
             "fullAgentsValue": "Exécuter des agents et intégrer le travail",
-            "fullLimitNote": "Chaque agent qu'ils lancent respecte ces limites. L'accès complet inclut un terminal, qui peut les contourner.",
+            "fullLimitNote": "Chaque agent qu’ils lancent respecte ces limites. L’accès complet peut les lever, ici ou depuis un terminal.",
             "tipOffTitle": "Lecture seule",
             "tipOffNote": "Ne peut pas lancer d'agents",
             "tipChatTitle": "Assistants seulement",
@@ -8120,7 +8124,23 @@
             "tipReachAllTitle": "Toutes les connexions",
             "tipReachAllNote": "Y compris celles ajoutées ensuite",
             "tipReachSomeNote": "Les nouvelles restent désactivées",
-            "tipAlwaysAvailable": "Toujours disponibles"
+            "tipAlwaysAvailable": "Toujours disponibles",
+            "rightsSection": "Peut aussi gérer",
+            "rightPeople": "Personnes et accès",
+            "rightPeopleNote": "Invite des gens et change leur accès, sauf l’accès complet",
+            "rightSecrets": "Secrets",
+            "rightSecretsNote": "Voit les secrets enregistrés et décide qui peut s’en servir",
+            "rightPrivacy": "Bouclier de confidentialité",
+            "rightPrivacyNote": "Change ce qui est masqué et relit les valeurs masquées",
+            "rightOwnAccounts": "Leurs propres comptes d’IA",
+            "rightOwnAccountsNote": "Connecte des comptes d’IA et travaille toujours sur ceux qu’il connecte",
+            "rightsYoursOnly": "Vous ne pouvez confier que ce que vous gérez vous-même.",
+            "tipFullLockedNote": "Seul l’accès complet l’accorde",
+            "fullRightsValue": "Personnes et accès (le leur aussi), secrets, bouclier de confidentialité, comptes d’IA",
+            "lockedOwn": "Votre propre accès est modifié par le propriétaire ou une personne ayant l’accès complet.",
+            "lockedFull": "L’accès complet est modifié par le propriétaire ou une autre personne ayant l’accès complet.",
+            "aiAccountsOwnAlways": "Qui a connecté un compte lui-même peut toujours travailler dessus, coché ou non.",
+            "peopleManagedBy": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié Personnes et accès invite des gens et change les accès."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Catégorie de paramètres de l'agent",
@@ -8885,7 +8905,6 @@
             "deleteArea": "Supprimer la zone",
             "deleteHeader": "Supprimer {label} ?",
             "deleteBody": "Seul le nom sous lequel l'accès est accordé disparaît ; les dossiers restent. Le sandbox refuse tant que quelqu'un le détient encore.",
-            "onlyOwnerEdits": "Seul le propriétaire de la sandbox décide qui voit quels dossiers.",
             "explainer": {
                 "label": "Ce qu’est une zone",
                 "title": "Une zone est un ensemble nommé de dossiers",
@@ -8899,7 +8918,9 @@
                 "sees": "Ne voit que ses dossiers : dans l’arborescence, la recherche et les conversations",
                 "talks": "Ne parle qu’aux personnes et assistants qui s’y trouvent",
                 "agents": "Les agents qu’elle lance y restent aussi"
-            }
+            },
+            "fencedAreasHeld": "Les zones auxquelles votre propre accès est limité sont modifiées par le propriétaire ou une personne ayant l’accès complet.",
+            "whoDecidesFolders": "Le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié Personnes et accès décide qui voit quels dossiers."
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Impossible de lire le journal pour le moment — la construction elle-même n'est pas affectée. {hiccup}",
@@ -9979,7 +10000,10 @@
             "none": "Aucune confirmation."
         },
         "analytics": {
-            "title": "Analyse produit d’Intentic dans ce sandbox"
+            "title": "Analyse produit d’Intentic dans ce sandbox",
+            "on": "Activé",
+            "off": "Désactivé",
+            "whoChanges": "Modifiable par le propriétaire ou une personne ayant l’accès complet."
         },
         "dataProtection": {
             "intro": "Trois étapes avant que ce sandbox traite des données personnelles.",
@@ -10206,7 +10230,6 @@
                     "what": "Les sauvegardes de ce sandbox se font en dehors de lui : votre administration les réalise et les protège."
                 }
             },
-            "ownerApplies": "Seul le propriétaire peut les appliquer.",
             "apply": "Appliquer {count} réglage | Appliquer {count} réglages",
             "nothingToChange": "Tous les réglages sont déjà comme proposé.",
             "applied": "{count} réglage appliqué | {count} réglages appliqués",
@@ -10265,7 +10288,8 @@
                 "privacyNames": "Nécessite le modèle local de noms, qui n'est pas installé dans ce sandbox."
             },
             "formatMarkdown": "Markdown",
-            "formatWord": "Word"
+            "formatWord": "Word",
+            "fullAccessApplies": "Seuls le propriétaire ou une personne ayant l’accès complet peuvent les appliquer."
         },
         "sandboxAudit": {
             "integrityTitle": "Le journal est-il intact ?",
@@ -10795,7 +10819,7 @@
             "namePlaceholder": "p. ex. Stagiaires",
             "nameTaken": "Un profil nommé {name} existe déjà.",
             "noHolders": "Personne ne détient ce profil",
-            "readOnly": "Lecture seule. L’organisation gère ses profils ; le propriétaire, ceux du sandbox.",
+            "readOnly": "Lecture seule. Les profils sont modifiés par le propriétaire, une personne ayant l’accès complet ou à qui l’on a confié Personnes et accès.",
             "org": "Géré par l’organisation",
             "saveFailed": "Impossible d’enregistrer le profil ou de synchroniser les rôles. Réenregistrez pour réessayer.",
             "removeFailed": "Impossible de supprimer le profil",
@@ -10822,7 +10846,9 @@
             "agents_run": "Exécuter des agents",
             "agents_home": "Accueil uniquement",
             "posture": "Les personas définissent une posture : elles ne font que restreindre l’accès de la personne ou du service pour qui agit le tour, dans les limites du profil du service.",
-            "view": "Consulter"
+            "view": "Consulter",
+            "readOnlyOrg": "Lecture seule. Les profils de l’organisation sont gérés par l’organisation.",
+            "readOnlyOwn": "Lecture seule. Votre propre accès vient de ce profil : il est modifié par le propriétaire ou une personne ayant l’accès complet."
         },
         "accessServices": {
             "title": "Services",
@@ -12202,7 +12228,8 @@
             "zoneReadDnsEdit": "Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Il accompagne la commande jusqu'à votre hôte, jamais vers la plateforme.",
             "showCommand": "Afficher la commande",
             "codeFailed": "La sandbox n'a pas pu créer de commande ({status}).",
-            "asksCloudflareToken": "Exécute ceci sur le serveur, qui y demande ton jeton d'API Cloudflare (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), si bien que le jeton ne le quitte jamais."
+            "asksCloudflareToken": "Exécute ceci sur le serveur, qui y demande ton jeton d'API Cloudflare (Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit), si bien que le jeton ne le quitte jamais.",
+            "fullAccessConnectsServers": "Seuls le propriétaire ou une personne ayant l’accès complet peuvent connecter un serveur à ce sandbox."
         },
         "coreViews": {
             "health": "Santé",

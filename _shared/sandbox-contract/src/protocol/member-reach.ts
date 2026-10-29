@@ -1,4 +1,4 @@
-import type { AgentAccess } from "../schemas/members.js";
+import type { AgentAccess, ManageRight } from "../schemas/members.js";
 import { type MemberRole, roleAtLeast } from "../schemas/shared.js";
 import { defaultFloor } from "./route-meta.js";
 import { isAttachmentPath } from "../state/workspace-state.js";
@@ -7,8 +7,9 @@ import { sandboxRouteFor } from "../index.js";
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (route-meta.ts). One
 // function for both sides: the daemon's bearer middleware refuses with it right after the caller's role resolves, and
 // the editor asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
-// A floor, not the whole answer: operating routes still keep their own in-route maintainer gates; membership stays
-// owner-only.
+// A floor, not the whole answer: operating routes still keep their own in-route gates (members.ts `holdsRight`,
+// `peopleChangeRefusal`). A route that runs one part of the sandbox names it (`right`), and a person given that part
+// clears its floor whatever their tier.
 
 // `target` is the upload's `?path=`, written by the caller: isAttachmentPath folds `..` first, so a traversal out of
 // the attachments dir never buys an attachment's floor.
@@ -34,6 +35,7 @@ export const memberRefusal = (
         readonly areas?: readonly string[] | undefined;
         readonly agents?: AgentAccess | undefined;
         readonly lands?: true | undefined;
+        readonly manages?: readonly ManageRight[] | undefined;
     },
     method: string,
     path: string,
@@ -45,12 +47,18 @@ export const memberRefusal = (
             : { error: "not open to a guest member", floor: "viewer", reason: "guest" };
     }
     const floor = routeFloor(method, path, target);
-    if (!roleAtLeast(caller.role, floor)) {
+    if (!roleAtLeast(caller.role, floor) && !givenRight(caller, method, path)) {
         return { error: `${floor} access required`, floor, reason: "floor" };
     }
     // The collaborator floor is driving agents. A person who edits files by hand without running agents holds the
     // writer tier, which clears that floor by rank: their own answer keeps them off it.
     return floor === "collaborator" && caller.agents === "off" ? { error: "running agents is not on for you here", floor, reason: "agents-off" } : undefined;
+};
+
+// Whether the caller was given the part of the sandbox this route runs (route-meta.ts `right`).
+const givenRight = (caller: { readonly manages?: readonly ManageRight[] | undefined }, method: string, path: string): boolean => {
+    const right = sandboxRouteFor(method, path)?.meta.right;
+    return right !== undefined && (caller.manages?.includes(right) ?? false);
 };
 
 // Whether a guest member may reach this request at all: a route on the guest's list, or an upload into the attachments

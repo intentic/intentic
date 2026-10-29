@@ -4,6 +4,7 @@ import type { LoginStart, LoginStatus, OauthAccount, TranslatorStatus } from "@i
 import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import type { TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { freshEdition, noModels } from "../../mode";
+import { DEMO_USER } from "../../world/account";
 import { listeners } from "../board/roster";
 import { demoClaudeAccount, demoClaudeAccountSecond, demoTranslatorAccounts, demoSignInStart } from "./accounts";
 
@@ -76,6 +77,8 @@ const land = (attempt: Attempt, now: number, label?: string): OauthAccount => {
         email,
         organization: `Acme`,
         connectedAt: now,
+        // The sandbox records whoever signed it in as its connector, and here that is always the demo's reader.
+        connectedBy: DEMO_USER.email,
         usage: freshUsage(now),
     };
     if (attempt.variant !== ``) {

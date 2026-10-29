@@ -19,7 +19,8 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import { selfMember } from "../../../client/sandbox/useMembers";
 import { usePersonaReach } from "../access/usePersonaReach";
 import AreasExplainer from "./AreasExplainer.vue";
 import { useAreas } from "./useAreas";
@@ -29,13 +30,20 @@ import { useAreas } from "./useAreas";
 // that says what that name means.
 // It is also where "who talks to whom" is decided, since an assistant belongs to the area its starting folder is in
 // and anyone holding that area may speak through it — so each row names the assistants it hands over.
-// Owner-only to write, like the roster itself, since editing an area moves everyone holding it at once.
+// Written by whoever runs people and access, like the roster itself, since editing an area moves everyone holding it at
+// once. Below Full access, never an area they are fenced to themselves, which would widen their own fence (the daemon
+// refuses it, areas.routes.ts).
 // Shaped like the personas list: the row IS the disclosure, an open one writes as it changes, and what an area is for
 // is said in the empty state, where somebody is deciding whether to make one.
 
 const t = useT();
-const sandbox = useSandbox();
-const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+const { holds, role } = useAccess();
+const self = selfMember();
+const runsPeople = computed(() => holds(`people`));
+// The areas the reader is fenced to, which only the owner or Full access move.
+const fencedTo = computed<readonly string[]>(() => (role.value === `owner` || role.value === `maintainer` ? [] : (self.value?.areas ?? [])));
+const editable = (area: Area): boolean => runsPeople.value && !fencedTo.value.includes(area.id);
+const someFenced = computed(() => runsPeople.value && areas.value.some((area) => fencedTo.value.includes(area.id)));
 
 const { areas, loaded, save, remove } = useAreas();
 
@@ -289,17 +297,17 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAreas.everyoneSeesWhole`) }}</span>
                     <span class="max-w-md text-xs text-muted">{{ t(`sandbox.sandboxAreas.whatAnAreaIs`) }}</span>
                 </div>
-                <Button tier="accent" v-if="isOwner" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" @click="startAdd">
+                <Button tier="accent" v-if="runsPeople" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
-                <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</span>
+                <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.whoDecidesFolders`) }}</span>
             </div>
 
             <RowGroup v-else :label="t(`sandbox.sandboxAreas.areas`)">
                 <!-- What the name on this page means, drawn: the empty state says it in words, this list's header shows it. -->
                 <template #info><AreasExplainer /></template>
                 <template #actions>
-                    <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
+                    <Button v-if="runsPeople && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
@@ -312,7 +320,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     body="drawer"
                     icon="folder"
                     :toggle-label="t(`sandbox.sandboxAreas.toggleArea`, { name: area.label ?? area.id })"
-                    :disabled="!isOwner"
+                    :disabled="!editable(area)"
                     :open="isOpen(area)"
                     @update:open="toggleOpen(area)"
                 >
@@ -322,7 +330,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                             <InlineRename
                                 :value="area.label ?? area.id"
                                 :write="renameOf(area)"
-                                :editable="isOwner"
+                                :editable="editable(area)"
                                 :label="t(`sandbox.sandboxAreas.areaName`)"
                                 :action="t(`sandbox.sandboxAreas.renameArea`)"
                                 :failure="t(`sandbox.sandboxAreas.couldntRename`)"
@@ -348,7 +356,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                         </StatusBadge>
                     </template>
 
-                    <template v-if="isOwner" #control>
+                    <template v-if="editable(area)" #control>
                         <!-- Only while the write is in flight: a lingering tick is one more thing to read on every row. -->
                         <Icon v-if="isOpen(area) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
                         <button
@@ -422,7 +430,8 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     </div>
                 </RowNote>
 
-                <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</RowNote>
+                <RowNote v-if="!runsPeople">{{ t(`sandbox.sandboxAreas.whoDecidesFolders`) }}</RowNote>
+                <RowNote v-else-if="someFenced">{{ t(`sandbox.sandboxAreas.fencedAreasHeld`) }}</RowNote>
             </RowGroup>
         </Await>
 

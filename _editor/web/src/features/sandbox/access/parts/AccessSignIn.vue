@@ -12,8 +12,8 @@ import PasskeysSection from "../PasskeysSection.vue";
 import PreviewGuardSection from "../previews/PreviewGuardSection.vue";
 
 // ACCESS ▸ SIGN-IN: how people prove themselves to this sandbox, whether its previews ask them to, and the browsers still
-// holding a pass. Everyone manages their own passkeys here; the previews' guard is the owner's, and signing every browser
-// out is a maintainer's.
+// holding a pass. Everyone manages their own passkeys here; the previews' guard is for whoever runs people and access,
+// and signing every browser out is a maintainer's.
 
 const t = useT();
 const { user } = useAuth();

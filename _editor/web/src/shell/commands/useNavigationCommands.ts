@@ -12,6 +12,7 @@ import { DELETED_PATH } from "../../lib/routes/home";
 import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../models/sandbox/sandboxNav";
 import { useHeldDoor } from "../../components/heldPlace";
 import { useRole } from "../../client/sandbox/useRole";
+import { useAccess } from "../../client/sandbox/access/useAccess";
 import { useOrgPolicy } from "../../features/organisations/useOrgPolicy";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
 import { settingsDestinations } from "../../features/settings/settingsNav";
@@ -101,7 +102,7 @@ export function useNavigationCommands(): void {
     // collides with a built-in section (Activity's, whose turns are the Activity extension's view drawn inside it, among
     // them) is dropped here too rather than registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
-        ...sandboxSections(canShip.value, isGuest.value, orgHidden.value).map((section) => ({
+        ...sandboxSections(canShip.value, isGuest.value, orgHidden.value, useAccess().holds).map((section) => ({
             command: `view.sandbox.${section.slug}`,
             title: section.label,
             category: SANDBOX,

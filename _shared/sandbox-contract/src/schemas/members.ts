@@ -2,8 +2,61 @@
 import { z } from "zod";
 import type { CapabilityKind } from "./capabilities.js";
 import { entryId } from "./internal.js";
-import { type GrantedRole, GrantedRoleSchema, MemberRoleSchema } from "./shared.js";
+import { type GrantedRole, GrantedRoleSchema, type MemberRole, MemberRoleSchema } from "./shared.js";
 import { ToolCeilingSchema } from "./tool-ceiling.js";
+
+// WHAT A PERSON MAY RUN BESIDES THEIR OWN WORK, one part of the sandbox at a time. Full access (the maintainer tier) holds
+// every one; a person with access of their own holds the ones named on their row, so the owner can hand over who gets in
+// without handing over the whole box (docs/architecture/access.md).
+// `people`: who has access and to what (the roster, the requests for more, areas, access profiles, who opens previews,
+// another member's passkeys). Bounded below Full access by `peopleChangeRefusal`.
+// `secrets`: the Secrets page whole: stored secrets, who must approve a use, where a secret may go, and how a command-line
+// tool's credential reaches the agent.
+// `privacy`: the privacy shield: what it masks, reading masked values back, and forgetting a taught dataset.
+// `ownAccounts`: connecting AI accounts of their own. An account a person connected is theirs to run on whatever their
+// `aiAccounts` says, and theirs to rename or disconnect (the daemon's auth/members/account-connectors.ts).
+export const ManageRightSchema = z.enum(["people", "secrets", "privacy", "ownAccounts"]);
+export type ManageRight = z.infer<typeof ManageRightSchema>;
+export const MANAGE_RIGHTS: readonly ManageRight[] = ManageRightSchema.options;
+
+/** Whether this person may run one part of the sandbox: the owner and Full access run every part, anyone else what their row names. */
+export const holdsRight = (caller: { readonly role: MemberRole; readonly manages?: readonly ManageRight[] | undefined }, right: ManageRight): boolean =>
+    caller.role === "owner" || caller.role === "maintainer" || (caller.manages?.includes(right) ?? false);
+
+/**
+ * Why someone who manages people may not make this change to one person's access; undefined when they may. The owner and
+ * Full access change anyone's, their own included. The People & access right alone changes the access of anyone below
+ * Full access but its holder: it never grants Full access, never changes a Full access person's, never its holder's own
+ * (that is how a limit set on them holds), and hands out only the rights its holder has. `after` absent is a removal;
+ * its `manages` absent keeps the row's, as a grant reads it.
+ */
+export const peopleChangeRefusal = (
+    manager: { readonly email: string; readonly role: MemberRole; readonly manages?: readonly ManageRight[] | undefined },
+    target: {
+        readonly email: string;
+        readonly before?: { readonly role: GrantedRole; readonly manages?: readonly ManageRight[] | undefined } | undefined;
+        readonly after?: { readonly role: GrantedRole; readonly manages?: readonly ManageRight[] | undefined } | undefined;
+    },
+): string | undefined => {
+    if (manager.role === "owner" || manager.role === "maintainer") {
+        return undefined;
+    }
+    if (!holdsRight(manager, "people")) {
+        return "only the owner, Full access, or someone given People & access changes who has access";
+    }
+    if (manager.email.toLowerCase() === target.email.toLowerCase()) {
+        return "your own access is changed by the owner or someone with Full access";
+    }
+    if (target.before?.role === "maintainer") {
+        return "a Full access person's access is changed by the owner or someone with Full access";
+    }
+    if (target.after?.role === "maintainer") {
+        return "Full access is granted by the owner or someone with Full access";
+    }
+    const had = new Set(target.before?.manages ?? []);
+    const handed = (target.after?.manages ?? []).filter((right) => !had.has(right) && !(manager.manages ?? []).includes(right));
+    return handed.length === 0 ? undefined : `you can hand out only the rights you hold yourself, and ${handed.join(", ")} is not one of yours`;
+};
 
 // WHAT A PERSON'S CONVERSATIONS MAY SPEND: the connected capabilities (by id) and the stored secrets (by name) an agent
 // working for them is handed. Enforced by the daemon, not told to the model: a capability outside it is never mounted
@@ -90,6 +143,9 @@ export interface MemberAccess {
     // A home-only person's answer to whether their home conversation lands what it accepts by itself, and so whether
     // they may land it (`landsHere`). Absent is no; only `agents: "home"` may carry it.
     readonly lands?: boolean | undefined;
+    // The parts of the sandbox they run besides their own work (`ManageRightSchema`). Full access holds every one, so
+    // its rows never list them; absent is none.
+    readonly manages?: readonly ManageRight[] | undefined;
 }
 
 // The fields of a row or a grant that decide a person's access.
@@ -99,6 +155,7 @@ interface AccessFields {
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
     readonly lands?: boolean | undefined;
+    readonly manages?: readonly ManageRight[] | undefined;
 }
 
 /** A row's access: what it says, and for a row written before `agents` and `edit` existed, what its role meant then. */
@@ -109,7 +166,8 @@ export const memberAccess = (row: AccessFields): MemberAccess => {
     const agents = row.agents ?? (row.role === "guest" ? "chat" : row.role === "viewer" ? "off" : "run");
     // A writer from before `edit` changes files where it sees them, which its areas always named.
     const edit = row.edit ?? (row.role === "writer" && row.areas !== undefined ? [...row.areas] : "none");
-    const access: MemberAccess = { manage: false, agents, see: row.areas, edit: agents === "chat" || agents === "home" ? "none" : edit };
+    const base: MemberAccess = { manage: false, agents, see: row.areas, edit: agents === "chat" || agents === "home" ? "none" : edit };
+    const access = row.manages !== undefined && row.manages.length > 0 ? { ...base, manages: [...row.manages] } : base;
     return row.lands === true ? { ...access, lands: true } : access;
 };
 
@@ -135,13 +193,14 @@ export const tierOf = (access: MemberAccess): GrantedRole => {
     return access.agents === "run" ? "collaborator" : "viewer";
 };
 
-/** Why an access cannot be granted on its face, before any area or assistant is looked up; undefined when it can. */
-export const accessRefusal = (access: MemberAccess): string | undefined => {
-    if (access.manage) {
-        return undefined;
-    }
+// Why a way of working cannot carry what else the access says: landing by itself, rights, areas and hand edits each
+// belong to some ways of working only.
+const workingRefusal = (access: MemberAccess): string | undefined => {
     if (access.lands === true && access.agents !== "home") {
         return "landing their own work by itself is a home-only answer; anyone else's work lands when somebody who manages the sandbox lands it";
+    }
+    if ((access.manages?.length ?? 0) > 0 && (access.agents === "chat" || access.agents === "home")) {
+        return "running part of the sandbox needs someone who sees it: a person who only chats, or works through their home conversation, holds no rights";
     }
     if (access.agents === "chat" && (access.see?.length ?? 0) === 0) {
         return "chatting with assistants needs at least one area: the assistants that work there are the ones they talk to";
@@ -149,6 +208,11 @@ export const accessRefusal = (access: MemberAccess): string | undefined => {
     if (access.agents === "home" && access.edit !== "none") {
         return "a home-only person changes nothing by hand: their home conversation does the work";
     }
+    return undefined;
+};
+
+// Why where a person edits by hand does not fit where they see.
+const editRefusal = (access: MemberAccess): string | undefined => {
     if (access.edit === "all") {
         return access.see === undefined ? undefined : "editing everything they see needs the whole workspace; name the areas to edit instead";
     }
@@ -162,6 +226,9 @@ export const accessRefusal = (access: MemberAccess): string | undefined => {
     const unseen = seen === undefined ? [] : access.edit.filter((area) => !seen.includes(area));
     return unseen.length === 0 ? undefined : `they can only edit where they can see: ${unseen.join(", ")} is not among their areas`;
 };
+
+/** Why an access cannot be granted on its face, before any area or assistant is looked up; undefined when it can. */
+export const accessRefusal = (access: MemberAccess): string | undefined => (access.manage ? undefined : (workingRefusal(access) ?? editRefusal(access)));
 
 // One person on the roster as the daemon answers it. `areas` fences what of the workspace they reach, and with it which
 // assistants they may talk to: absent is the whole workspace, empty is nothing.
@@ -208,6 +275,12 @@ export const MemberSchema = z.object({
         .describe(
             "The access profile their answers come from (docs/architecture/access.md). Its answers are written out on this row too, and saving the profile rewrites them. Absent means answers of their own.",
         ),
+    manages: z
+        .array(ManageRightSchema)
+        .optional()
+        .describe(
+            "The parts of the sandbox they run besides their own work: people and access, secrets, the privacy shield, AI accounts of their own. Never on a maintainer, who runs every part. Absent means none.",
+        ),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
@@ -237,6 +310,10 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // the row and ignores the access fields sent beside it, and the role sent must still be the tier the profile makes.
 // Absent is answers of the row's own, so a re-grade from an editor that predates profiles unlinks the row, keeping
 // the answers it carried, rather than leaving a link the grant did not mean. A maintainer is refused one.
+// `manages` reads as `credentials` does: a list sets the rights, `[]` takes them all back, absent keeps the row's, so a
+// profile written over a row and a re-grade from an editor that predates rights keep what the person runs. A maintainer
+// holds every right and stores none. Rights ride beside a profile, never in one: like Full access, running part of the
+// sandbox is handed to a person, never through something shared.
 export const MemberGrantSchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
@@ -250,6 +327,7 @@ export const MemberGrantSchema = z.object({
     tools: z.union([z.literal("all"), ToolCeilingSchema]).optional(),
     assistants: z.union([z.literal("all"), z.array(entryId).max(50)]).optional(),
     profile: entryId.optional(),
+    manages: z.array(ManageRightSchema).max(10).optional(),
 });
 export type MemberGrant = z.infer<typeof MemberGrantSchema>;
 
@@ -271,6 +349,10 @@ export const MemberSelfSchema = z.object({
     tools: ToolCeilingSchema.optional().describe("The most their conversations' tools may be. Absent means no limit."),
     assistants: z.array(entryId).optional().describe("For a guest who chats: the assistants they may talk to. Absent means every one in their areas."),
     profile: entryId.optional().describe("The access profile their access comes from. Absent means answers of their own."),
+    manages: z
+        .array(ManageRightSchema)
+        .optional()
+        .describe("The parts of the sandbox they run besides their own work: every one for the owner and Full access. Absent means none."),
     askedAt: z
         .number()
         .int()
@@ -279,10 +361,10 @@ export const MemberSelfSchema = z.object({
 });
 export type MemberSelf = z.infer<typeof MemberSelfSchema>;
 
-// ASKING THE OWNER FOR MORE ACCESS, from where the person was refused: the editor draws an "Ask for access" press on a
-// place or an action their access refuses, and the owner sees each open request beside the roster (Access ▸ People),
-// where granting the person what they asked for answers it. One open request per person: a later ask replaces theirs.
-// `want` is what stood in the way, in the terms a grant answers: a tier (`viewer` is a guest asking to see more),
+// ASKING FOR MORE ACCESS, from where the person was refused: the editor draws an "Ask for access" press on a place or an
+// action their access refuses, and whoever runs people and access sees each open request beside the roster (Access ▸
+// People), where granting the person what they asked for answers it. One open request per person: a later ask replaces
+// theirs. `want` is what stood in the way, in the terms a grant answers: a tier (`viewer` is a guest asking to see more),
 // running agents (`agents`), or a folder outside their areas (`areas`).
 // `aiAccounts`: the AI accounts their turns may run on (`aiAccounts` on their row) leave them nothing to run on that they
 // asked for, asked from a model picker with no model of theirs in it.

@@ -1,5 +1,8 @@
+import { holdsRight, MANAGE_RIGHTS, type ManageRight } from "@intentic/sandbox-contract/schemas/members";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { ORPCError } from "@orpc/server";
 import type { OrpcContext } from "./context.js";
+import { storedGrant } from "./invite/invites.js";
 import { hasGoogleAccount } from "./sign-in.js";
 
 // The session gate shared by every oRPC handler, resolves the caller or throws UNAUTHORIZED.
@@ -33,7 +36,8 @@ export const requireAdmin = async (context: OrpcContext) => {
     return user;
 };
 
-// Load a sandbox the caller owns, or 404, the gate for every owner-only route (tunnel/delete/sharing).
+// Load a sandbox the caller owns, or 404, the gate for every owner-only route (tunnel/delete); sharing is
+// `requireRosterManager`.
 export const requireOwnedSandbox = async (context: OrpcContext, sandboxId: string) => {
     const user = requireUser(context);
     const sandbox = await context.prisma.sandbox.findFirst({ where: { id: sandboxId, ownerId: user.id } });
@@ -41,4 +45,36 @@ export const requireOwnedSandbox = async (context: OrpcContext, sandboxId: strin
         throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
     }
     return sandbox;
+};
+
+// Who is changing a sandbox's access roster, as sandbox-contract `peopleChangeRefusal` reads them.
+export interface RosterManager {
+    readonly email: string;
+    readonly role: MemberRole;
+    readonly manages: readonly ManageRight[];
+}
+
+/* Load a sandbox whose access roster the caller may manage, or 404 as `requireOwnedSandbox` does, so a sandbox they may
+ * not manage reads the same as one that does not exist. That is its owner, or a person who accepted an invite to it and
+ * holds Full access (the maintainer tier) or People & access (`people` in the row's `manages`). The row is the platform's
+ * mirror of the daemon's grant. `manager` is what bounds the change each route then makes, through `peopleChangeRefusal`:
+ * People & access alone never grants or touches Full access, never changes its holder's own row, and hands out only the
+ * rights its holder has. (2026-10-29) Came with letting people besides the owner manage access. */
+export const requireRosterManager = async (context: OrpcContext, sandboxId: string) => {
+    const user = requireUser(context);
+    const email = user.email.toLowerCase();
+    const sandbox = await context.prisma.sandbox.findUnique({ where: { id: sandboxId } });
+    if (sandbox?.ownerId === user.id) {
+        return { sandbox, manager: { email, role: `owner`, manages: MANAGE_RIGHTS } satisfies RosterManager };
+    }
+    if (sandbox) {
+        const member = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
+        if (member?.acceptedAt) {
+            const manager: RosterManager = { email, ...storedGrant(member) };
+            if (holdsRight(manager, `people`)) {
+                return { sandbox, manager };
+            }
+        }
+    }
+    throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
 };

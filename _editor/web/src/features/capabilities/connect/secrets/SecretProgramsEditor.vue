@@ -21,8 +21,8 @@ const t = useT();
 
 const { row } = defineProps<{ row: SecretRow }>();
 
-// Only the owner widens a list (the daemon's rule); everybody else reads it.
-const { isOwner } = useCredentialGates();
+// Whoever runs secrets widens a list (the daemon's rule); everybody else reads it.
+const { runsSecrets } = useCredentialGates();
 const { programsFor, setPrograms } = useSecretPrograms();
 
 const subject = computed(() => row.entry.key);
@@ -141,7 +141,7 @@ const save = async (): Promise<void> => {
 <template>
     <SecretFact :label="t(`capabilities.secretPrograms.label`)">
         <button
-            v-if="isOwner"
+            v-if="runsSecrets"
             ref="anchor"
             type="button"
             :class="EDITABLE_VALUE"

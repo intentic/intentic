@@ -46,7 +46,7 @@ describe(`useAccess`, () => {
 
     it(`reads a raw route by its key and a path parameter from what it is given`, () => {
         platformRole.value = `collaborator`;
-        expect(access.refusal(`GET /members`)).toEqual({ kind: `tier`, floor: `owner` });
+        expect(access.refusal(`GET /members`)).toEqual({ kind: `tier`, floor: `maintainer` });
         expect(access.refusal(`agents.land`, { id: `abc` })).toEqual({ kind: `tier`, floor: `maintainer` });
         expect(access.can(`agents.requestLand`, { id: `abc` })).toBe(true);
     });
@@ -64,6 +64,27 @@ describe(`useAccess`, () => {
         expect(access.role.value).toBe(`writer`);
         expect(access.refusal(`agent.run`)).toEqual({ kind: `agents-off` });
         expect(access.can(`workspace.move`)).toBe(true);
+    });
+
+    // A part of the sandbox given to someone below Full access opens the routes that run it, and only those, as the
+    // daemon's floors do; what they hold is read off their own answer, so it is known before the contract is.
+    it(`opens the routes of a right the person was given, and no others`, () => {
+        platformRole.value = `collaborator`;
+        daemonSays.value = { role: `collaborator`, agents: `run`, edit: `none`, manages: [`people`] };
+        expect(access.can(`GET /members`)).toBe(true);
+        expect(access.can(`accessProfiles.list`)).toBe(true);
+        expect(access.refusal(`secrets.setGate`)).toEqual({ kind: `tier`, floor: `maintainer` });
+        expect(access.holds(`people`)).toBe(true);
+        expect(access.holds(`secrets`)).toBe(false);
+    });
+
+    it(`holds every right for the owner and Full access, and none before the tier is known`, () => {
+        expect(access.holds(`people`)).toBe(false);
+        platformRole.value = `owner`;
+        expect(access.holds(`ownAccounts`)).toBe(true);
+        platformRole.value = `maintainer`;
+        daemonSays.value = { role: `maintainer`, agents: `run`, edit: `all` };
+        expect(access.holds(`privacy`)).toBe(true);
     });
 
     it(`refuses nothing for the owner`, () => {

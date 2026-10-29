@@ -8,8 +8,9 @@ import type { PickEntry, PickOption } from "../pick/multiPick";
 // turn by (sandbox-contract `aiAccountKey`, read at planning by the daemon's agent/run/decide/account-reach.ts), and
 // every provider that holds none of its own (an API-key endpoint, an installed agent, the free trial) by its own id.
 // The accounts of one provider sit together as a family the owner can hand over whole; a local model spends nobody's
-// allowance, so it is never a row, only named as always available. Pure, so what the picker offers is read and tested
-// here rather than in its template.
+// allowance, so it is never a row, only named as always available. Beside an account, who on this sandbox connected it,
+// since an account a person connected is always theirs to run on whatever is ticked here. Pure, so what the picker
+// offers is read and tested here rather than in its template; the words for a connector are handed in.
 
 /** What a provider holding no accounts of its own is, for the note beside it. */
 export type AccountlessKind = `endpoint` | `agent`;
@@ -30,21 +31,39 @@ export interface AiAccountRows {
     readonly alwaysAvailable: readonly string[];
 }
 
-// One account's row: its own name, and who it signs in as where that says more than the name does.
-const accountOption = (provider: AgentProvider, id: string, label: string, email: string | undefined, note: string | undefined): PickOption => ({
-    value: aiAccountKey(provider, id),
-    label,
-    detail: email === undefined || email === label ? undefined : email,
-    note,
-});
+/** How the picker names whoever connected an account ("Connected by you"), given the address the sandbox recorded. */
+export type ConnectorWords = (connectedBy: string) => string | undefined;
 
-export const aiAccountRows = (sources: AiAccountSources, noteOf: (kind: AccountlessKind) => string): AiAccountRows => {
+// One account's row: its own name, then quietly who it signs in as where that says more than the name does, and who
+// connected it.
+const accountOption = (
+    provider: AgentProvider,
+    account: { readonly id: string; readonly label: string; readonly email?: string | undefined; readonly connector?: string | undefined },
+    note: string | undefined,
+): PickOption => {
+    const parts = [account.email === account.label ? undefined : account.email, account.connector].filter((part) => part !== undefined && part !== ``);
+    return { value: aiAccountKey(provider, account.id), label: account.label, detail: parts.length === 0 ? undefined : parts.join(` · `), note };
+};
+
+export const aiAccountRows = (sources: AiAccountSources, noteOf: (kind: AccountlessKind) => string, connectorOf: ConnectorWords = () => undefined): AiAccountRows => {
     const providerOf = new Map<string, AgentProvider>();
     const entries: PickEntry[] = [];
     for (const provider of sources.providers) {
         const options = [
-            ...provider.native.map((account) => accountOption(provider.id, account.id, account.label, account.email, provider.label)),
-            ...provider.routed.map((account) => accountOption(provider.id, account.name, account.label, undefined, provider.label)),
+            ...provider.native.map((account) =>
+                accountOption(
+                    provider.id,
+                    {
+                        id: account.id,
+                        label: account.label,
+                        email: account.email,
+                        connector: account.connectedBy === undefined ? undefined : connectorOf(account.connectedBy),
+                    },
+                    provider.label,
+                ),
+            ),
+            // The translator records no connector: its subscriptions are signed in by Full access alone.
+            ...provider.routed.map((account) => accountOption(provider.id, { id: account.name, label: account.label }, provider.label)),
         ];
         for (const option of options) {
             providerOf.set(option.value, provider.id);

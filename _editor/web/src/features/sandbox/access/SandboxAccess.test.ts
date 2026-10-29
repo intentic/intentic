@@ -499,9 +499,9 @@ it(`adds a person read-only with nothing to spend, and opens them`, async () => 
     await addPerson(`dee@corp.example`);
 
     expect(grantsSent()).toEqual([
-        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all` },
+        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
     ]);
-    expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, role: `viewer` });
+    expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, role: `viewer`, manages: [] });
     // Their tile says what they can do, and their panel is open for the rest.
     expect(shown()).toContain(`Can see`);
     expect(panel()?.textContent).toContain(`Invite pending`);
@@ -529,9 +529,9 @@ it(`holds a move to chatting until its areas reach an assistant, then saves it`,
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all`, aiAccounts: `all` },
+        { email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest`, manages: [] });
 });
 
 // The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
@@ -563,9 +563,9 @@ it(`lets a person edit some areas by hand, see everything, and run no agents`, a
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all`, aiAccounts: `all` },
+        { email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `writer` });
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `writer`, manages: [] });
 });
 
 // What their agents may spend is in the same panel, sent in the same grant, and enforced by the sandbox. Narrowing
@@ -590,6 +590,7 @@ it(`limits what a person's agents may use`, async () => {
             agents: `run`,
             credentials: { capabilities: [`github`], secrets: [] },
             aiAccounts: `all`,
+            manages: [],
         },
     ]);
     expect(setRole).not.toHaveBeenCalled();
@@ -619,7 +620,7 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
         await autosaved();
 
         expect(grantsSent()).toEqual([
-            { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: [`claude:work`] },
+            { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: [`claude:work`], manages: [] },
         ]);
     } finally {
         providerAccounts.value = { ...providerAccounts.value, claude: [] };
@@ -635,11 +636,12 @@ it(`gives a person full access with the first choice`, async () => {
     await settle();
     await openPerson(`guest@example.com`);
     await tab(`Full access`, part(`Access`));
-    expect(shown()).toContain(`Publish, change settings and connections`);
+    expect(shown()).toContain(`People and access (their own too), secrets, the privacy shield, AI accounts`);
+    expect(shown()).toContain(`Every setting and connection, and publishing`);
     expect(hintOf(`Chat with assistants`)).toBeUndefined();
     expect(hintOf(`All`, part(`AI accounts`))).toContain(`Every AI account`);
     expect(part(`Connections and secrets`)?.textContent).toContain(`Only these`);
-    expect(shown()).not.toContain(`which can get around them`);
+    expect(shown()).not.toContain(`can lift them`);
     await autosaved();
 
     expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: `all` }]);
@@ -665,7 +667,7 @@ it(`gives a person full access on only some AI accounts`, async () => {
         await tab(`Only these`, part(`AI accounts`));
         await tickRow(`Work`, part(`AI accounts`));
         await tab(`Full access`, part(`Access`));
-        expect(shown()).toContain(`which can get around them`);
+        expect(shown()).toContain(`can lift them`);
         await autosaved();
 
         expect(grantsSent().at(-1)).toEqual({ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: [`claude:work`] });
@@ -729,27 +731,27 @@ it(`keeps the token surfaces off the tab of a member below maintainer`, async ()
     await openPart(`Sign-in`);
     expect(shown()).toContain(`Passkeys`);
     expect(shown()).not.toContain(`Signed-in browsers`);
-    // Who may open the previews is read by every member, and changed by the owner alone.
-    await waitFor(() => expect(shown()).toContain(`Only the sandbox owner can change who can open previews.`));
+    // Who may open the previews is read by every member, and changed by whoever runs people and access.
+    await waitFor(() => expect(shown()).toContain(`The owner, Full access, or someone given People and access changes who can open previews.`));
     // An address naming a part they are not drawn opens their first.
     app?.unmount();
     document.body.innerHTML = ``;
     await mountAt(`/?section=programs`);
     expect(shown()).not.toContain(`API tokens`);
-    expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
+    expect(shown()).toContain(`The owner, Full access, or someone given People and access invites people and changes access.`);
 });
 
-// A maintainer holds the owner's operating authority, so the credential and door surfaces are theirs as well. The
-// roster is the one part of this tab that stays the owner's: never read for them, never offered, and said so.
-it(`gives a maintainer the token, sign-out and door surfaces, and keeps the roster the owner's`, async () => {
+// Full access holds the owner's operating authority whole: the credential and door surfaces, and the roster too, which
+// it reads, invites to and changes like the owner.
+it(`gives Full access the token, sign-out and door surfaces, and the roster`, async () => {
     role.value = `maintainer`;
     mount();
     await settle();
 
     expect(pageTabs()).toEqual([`People`, `Profiles`, `Areas`, `Sign-in`, `Programs`, `Allowed`]);
-    expect(list).not.toHaveBeenCalled();
-    expect(document.body.querySelector(`input[type=email]`)).toBeNull();
-    expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(buttonLabelled(`Add person`)?.disabled).toBe(false);
+    expect(shown()).not.toContain(`invites people and changes access`);
 
     await openPart(`Programs`);
     expect(shown()).toContain(`API tokens`);
@@ -876,7 +878,7 @@ it(`leaves email-code sign-in off for an address Google holds`, async () => {
     await addPerson(address);
 
     expect(grantsSent()).toEqual([
-        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all` },
+        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all`, manages: [] },
     ]);
 });
 
@@ -893,7 +895,7 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all`, aiAccounts: `all` },
+        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all`, aiAccounts: `all`, manages: [] },
     ]);
     expect(setRole).not.toHaveBeenCalled();
 });
@@ -1107,8 +1109,9 @@ it(`grants a named profile with its tier and hides editable inline answers`, asy
         await settle();
         [...document.querySelectorAll<HTMLElement>(`[role=option]`)].find((option) => option.textContent?.includes(`Engineering`))?.click();
         await autosaved();
-        expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, profile: `engineering`, emailSignIn: false }]);
-        expect(panel()?.querySelector(`fieldset`)?.disabled).toBe(true);
+        expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, profile: `engineering`, emailSignIn: false, manages: [] }]);
+        // The profile's own answers are drawn held still inside the panel's fieldset, which stays open to its owner.
+        expect([...(panel()?.querySelectorAll(`fieldset`) ?? [])].map((set) => set.disabled)).toEqual([false, true]);
     } finally {
         HTMLElement.prototype.getBoundingClientRect = realRect;
         Reflect.deleteProperty(Range.prototype, `getClientRects`);
@@ -1125,4 +1128,107 @@ it(`does not re-grade a profile holder whose platform tier already agrees`, asyn
     buttonLabelled(`Save`)?.click();
     await waitFor(() => expect(document.querySelector(`main form`)).toBeNull());
     expect(setRole).not.toHaveBeenCalled();
+});
+
+/* RIGHTS: under custom access, the parts of the sandbox a person also runs, one at a time; Full access runs every one. */
+
+// A switch row per part, sent as one list on the person's row and on the platform's record, which moves with them.
+it(`hands out the parts of the sandbox one at a time under custom access`, async () => {
+    withMember(`collaborator`);
+    setRole.mockResolvedValue({ members: [accepted(`collaborator`)] });
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    const rights = part(`Can also manage`);
+    expect(rights?.textContent).toContain(`People and access`);
+    expect(rights?.textContent).toContain(`Invite people and change their access, short of Full access`);
+    expect(rights?.textContent).toContain(`Their own AI accounts`);
+    [...(rights?.querySelectorAll<HTMLLabelElement>(`label`) ?? [])]
+        .find((label) => label.textContent?.includes(`Secrets`))
+        ?.parentElement?.querySelector<HTMLInputElement>(`input[role="switch"]`)
+        ?.click();
+    await autosaved();
+
+    expect(grantsSent()).toEqual([
+        { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: `all`, manages: [`secrets`] },
+    ]);
+    // The tier did not move, the rights did: the platform's record is brought along.
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `collaborator`, manages: [`secrets`] });
+});
+
+// Someone who only chats holds no rights at all; AI accounts of their own mean nothing while agents are off.
+it(`offers rights only where the way of working can carry them`, async () => {
+    withMember(`guest`, { agents: `chat`, areas: [`support`] });
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    expect(part(`Can also manage`)).toBeUndefined();
+    await tab(`Off`, part(`Agents`));
+    expect(part(`Can also manage`)?.textContent).toContain(`Privacy shield`);
+    expect(part(`Can also manage`)?.textContent).not.toContain(`Their own AI accounts`);
+});
+
+/* PEOPLE & ACCESS below Full access: changes anyone's access below Full access but their own, hands out only what it holds. */
+
+const PEOPLE_HOLDER = { role: `collaborator`, agents: `run`, edit: `none`, manages: [`people`] };
+const asPeopleHolder = (): void => {
+    role.value = `collaborator`;
+    const records = [
+        accepted(`collaborator`),
+        { email: `max@example.com`, role: `maintainer`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
+        { email: `owner@example.com`, role: `collaborator`, manages: [`people`], status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` },
+    ];
+    list.mockResolvedValue({ members: records });
+    daemonMembers.mockReturnValue([
+        { email: `guest@example.com`, role: `collaborator` },
+        { email: `max@example.com`, role: `maintainer` },
+        { email: `owner@example.com`, role: `collaborator`, manages: [`people`] },
+    ]);
+    sandboxJson.mockImplementation(async (path: unknown) => {
+        if (path === `/members/self`) {
+            return PEOPLE_HOLDER;
+        }
+        return path === `/members` ? { members: daemonMembers() } : quiet(path);
+    });
+};
+
+it(`lets someone given People & access invite and change access, short of Full access`, async () => {
+    asPeopleHolder();
+    mount();
+    await waitFor(() => expect(shown()).toContain(`guest@example.com`));
+    expect(pageTabs()).toEqual([`People`, `Profiles`, `Areas`, `Sign-in`]);
+    expect(buttonLabelled(`Add person`)?.disabled).toBe(false);
+    expect(shown()).not.toContain(`invites people and changes access`);
+
+    await openPerson(`guest@example.com`);
+    const full = [...(part(`Access`)?.querySelectorAll<HTMLButtonElement>(`[role=tab]`) ?? [])].find((button) => button.textContent?.trim() === `Full access`);
+    expect(full?.getAttribute(`aria-disabled`)).toBe(`true`);
+    expect(full?.getAttribute(`aria-label`)).toContain(`Only Full access grants this`);
+    full?.click();
+    await nextTick();
+    expect(part(`Can also manage`)?.textContent).toContain(`People and access`);
+    const switches = [...(part(`Can also manage`)?.querySelectorAll<HTMLInputElement>(`input[role="switch"]`) ?? [])].map((input) => input.disabled);
+    // People & access is theirs to hand out; secrets, the privacy shield and AI accounts of their own are not.
+    expect(switches).toEqual([false, true, true, true]);
+    expect(shown()).toContain(`You can hand out only the parts you manage yourself.`);
+    expect(buttonLabelled(`Remove`)?.disabled).toBe(false);
+});
+
+// Their own access and a Full access person's are drawn whole, held still, with whose they are to change.
+it(`keeps a People & access holder's own panel and a Full access person's read-only`, async () => {
+    asPeopleHolder();
+    mount();
+    await waitFor(() => expect(shown()).toContain(`max@example.com`));
+
+    await openPerson(`max@example.com`);
+    expect(panel()?.textContent).toContain(`Full access is changed by the owner or someone else with Full access.`);
+    expect(panel()?.querySelector(`fieldset`)?.disabled).toBe(true);
+    expect(buttonLabelled(`Remove`)).toBeUndefined();
+
+    await openPerson(`owner@example.com`);
+    expect(panel()?.textContent).toContain(`Your own access is changed by the owner or someone with Full access.`);
+    expect(panel()?.querySelector(`fieldset`)?.disabled).toBe(true);
+    expect(buttonLabelled(`Remove`)).toBeUndefined();
+    await autosaved();
+    expect(grantsSent()).toEqual([]);
 });

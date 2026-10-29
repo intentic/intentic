@@ -1,5 +1,5 @@
 import { profileAccess } from "@intentic/sandbox-contract/schemas/access-profiles";
-import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, emailSignInByDefault, newPerson } from "./accessGrant";
+import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, emailSignInByDefault, newPerson, rightsFor, rightsOffered } from "./accessGrant";
 
 const draft = (over: Partial<AccessDraft> = {}): AccessDraft => ({ ...newPerson(`ana@corp.example`), ...over });
 
@@ -29,6 +29,7 @@ describe(`draftGrant`, () => {
             emailSignIn: true,
             credentials: { capabilities: [], secrets: [] },
             aiAccounts: `all`,
+            manages: [],
         });
         expect(draftGrant(`ana@corp.example`, draft({ agents: `off`, see: [`web`, `support`], edit: [`support`], credentials: `all` }))).toEqual({
             email: `ana@corp.example`,
@@ -39,6 +40,7 @@ describe(`draftGrant`, () => {
             emailSignIn: true,
             credentials: `all`,
             aiAccounts: `all`,
+            manages: [],
         });
     });
 
@@ -62,6 +64,48 @@ describe(`draftGrant`, () => {
             credentials: { capabilities: [`github`], secrets: [] },
             aiAccounts: [`claude:work`],
         });
+    });
+});
+
+// The parts of the sandbox a person runs besides their own work: always said below Full access, so the row holds what
+// the panel shows, and never on Full access, which runs every part already.
+describe(`draftGrant with rights`, () => {
+    it(`sends the rights a person was given, and an empty list when none`, () => {
+        expect(draftGrant(`ana@corp.example`, draft({ agents: `run`, manages: [`secrets`, `people`] }))).toMatchObject({ role: `collaborator`, manages: [`people`, `secrets`] });
+        expect(draftGrant(`ana@corp.example`, draft({ agents: `run` })).manages).toEqual([]);
+    });
+
+    it(`sends no rights for Full access`, () => {
+        expect(draftGrant(`mai@example.com`, draft({ manage: true, manages: [`people`] }))).not.toHaveProperty(`manages`);
+    });
+
+    // A profile never carries rights, so they ride beside it on the person's row.
+    it(`sends rights beside a profile`, () => {
+        const profile = { id: `engineering`, agents: `run` as const };
+        expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id, manages: [`privacy`] }))).toEqual({
+            email: `ana@corp.example`,
+            role: `collaborator`,
+            profile: `engineering`,
+            emailSignIn: true,
+            manages: [`privacy`],
+        });
+    });
+
+    // A person who only chats or works through their home conversation holds no rights (the contract refuses them), and
+    // AI accounts of their own mean nothing to someone whose agents never run.
+    it(`drops the rights a way of working cannot carry`, () => {
+        expect(draftGrant(`h@x.example`, draft({ agents: `home`, manages: [`people`] })).manages).toEqual([]);
+        expect(draftGrant(`h@x.example`, draft({ agents: `chat`, see: [`support`], manages: [`secrets`] })).manages).toEqual([]);
+        expect(draftGrant(`h@x.example`, draft({ agents: `off`, manages: [`ownAccounts`, `privacy`] })).manages).toEqual([`privacy`]);
+        expect(rightsOffered(`run`)).toEqual([`people`, `secrets`, `privacy`, `ownAccounts`]);
+        expect(rightsOffered(`off`)).toEqual([`people`, `secrets`, `privacy`]);
+        expect(rightsOffered(`chat`)).toEqual([]);
+        expect(rightsFor(`run`, undefined)).toEqual([]);
+    });
+
+    it(`reads a row's rights back into the draft`, () => {
+        expect(draftOf({ email: `c@x.example`, role: `collaborator`, manages: [`people`] }, `collaborator`).manages).toEqual([`people`]);
+        expect(draftOf({ email: `m@x.example`, role: `maintainer` }, `maintainer`).manages).toBeUndefined();
     });
 });
 
@@ -143,12 +187,12 @@ describe(`emailSignInByDefault`, () => {
 describe(`profile grants`, () => {
     it(`sends a profile id and its derived tier without competing inline answers`, () => {
         const profile = { id: `support`, agents: `chat` as const, areas: [`support`], tools: { shell: false }, assistants: [`helper`] };
-        expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id }))).toEqual({ email: `ana@corp.example`, role: `guest`, profile: `support`, emailSignIn: true });
+        expect(draftGrant(`ana@corp.example`, draft({ ...profileAccess(profile), profile: profile.id }))).toEqual({ email: `ana@corp.example`, role: `guest`, profile: `support`, emailSignIn: true, manages: [] });
     });
     it(`keeps tools and assistants when changing an existing person's sign-in`, () => {
         const row = { email: `ana@corp.example`, role: `guest` as const, agents: `chat` as const, areas: [`support`], tools: { shell: false }, assistants: [`helper`] };
         expect(draftGrant(row.email, { ...draftOf(row, row.role), emailSignIn: true })).toMatchObject({ tools: row.tools, assistants: [`helper`], emailSignIn: true });
-        expect(draftGrant(row.email, { ...draftOf({ ...row, profile: `support` }, row.role), emailSignIn: true })).toEqual({ email: row.email, role: `guest`, profile: `support`, emailSignIn: true });
+        expect(draftGrant(row.email, { ...draftOf({ ...row, profile: `support` }, row.role), emailSignIn: true })).toEqual({ email: row.email, role: `guest`, profile: `support`, emailSignIn: true, manages: [] });
     });
     it(`never attaches a profile to a maintainer`, () => {
         expect(draftGrant(`ana@corp.example`, draft({ manage: true, profile: `support`, credentials: `all` }))).toEqual({

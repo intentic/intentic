@@ -1,4 +1,5 @@
 import { noteAudit } from "../../audit/audit-http.js";
+import { holdsRight, peopleChangeRefusal } from "@intentic/sandbox-contract/schemas/members";
 import {
     PasskeyAssertRequestSchema,
     PasskeyPolicySchema,
@@ -10,7 +11,7 @@ import type { Context } from "hono";
 import type { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, type Proof } from "../auth.js";
+import { bearerFrom, type Caller, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, type Proof } from "../auth.js";
 import { listenerOf } from "../proofs/listener.js";
 import { ownershipDenied } from "../owner-gates.js";
 import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkey-store.js";
@@ -20,7 +21,7 @@ import { defineRawRoutes } from "../../http/raw-route-server.js";
 // through, the owner's require-a-passkey switch, and the recovery codes that keep that switch from locking the owner
 // out. Plain routes before the oRPC catch-all, like the roster beside them.
 
-export type PasskeyRoutesDeps = Pick<Services, "auth" | "passkeys" | "passkeyCeremonies" | "ownerEmail" | "wsTickets" | "mediaTickets">;
+export type PasskeyRoutesDeps = Pick<Services, "auth" | "passkeys" | "passkeyCeremonies" | "ownerEmail" | "members" | "wsTickets" | "mediaTickets">;
 
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
 
@@ -47,6 +48,34 @@ const denied = (c: Context, error: unknown): Response => {
 
 const sessionOf = (minted: { readonly token: string; readonly expiresAt: number }, email: string) => ({ token: minted.token, expiresAt: minted.expiresAt, email });
 
+// Why this caller may not remove a passkey that is not their own, or undefined when they may. Resetting a locked-out
+// member is part of running people and access; the owner's own passkeys are the owner's door, which nobody else touches.
+const otherPasskeyRefusal = async (services: PasskeyRoutesDeps, caller: Caller, holder: string): Promise<string | undefined> => {
+    if (caller.role === "owner") {
+        return undefined;
+    }
+    if (!holdsRight(caller, "people")) {
+        return "only someone who runs people and access may remove another member's passkey";
+    }
+    const owner = await services.ownerEmail();
+    if (owner !== undefined && sameEmail(holder, owner)) {
+        return "only the owner may remove the owner's passkey";
+    }
+    const before = (await services.members.list()).find((member) => sameEmail(member.email, holder));
+    return peopleChangeRefusal(caller, { email: holder, before });
+};
+
+// The owner sees everyone's, and whoever runs people and access everyone's but the owner's, since resetting a locked-out
+// member is theirs to do; anyone else sees only their own.
+const visiblePasskeys = async (services: PasskeyRoutesDeps, caller: Caller, all: readonly StoredCredential[]): Promise<StoredCredential[]> => {
+    if (caller.role === "owner") {
+        return [...all];
+    }
+    const owner = await services.ownerEmail();
+    const others = holdsRight(caller, "people");
+    return all.filter((credential) => sameEmail(credential.email, caller.email) || (others && (owner === undefined || !sameEmail(credential.email, owner))));
+};
+
 const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
     // Whether removing `credential` would leave the owner with none while the policy still demands one.
     const ownersLast = async (credential: StoredCredential): Promise<boolean> => {
@@ -66,8 +95,7 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
                 return c.json({ error: "no verified identity to list passkeys for" }, 404);
             }
             const all = await services.passkeys.list();
-            // The owner sees everyone's, since resetting a locked-out member is theirs to do; a member sees only their own.
-            const visible = identity.role === "owner" ? all : all.filter((credential) => sameEmail(credential.email, identity.email));
+            const visible = await visiblePasskeys(services, identity, all);
             const required = await services.passkeys.required();
             const list: PasskeysList = {
                 passkeys: visible.map(summaryOf),
@@ -122,8 +150,9 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             if (credential === undefined) {
                 return c.json({ error: "no such passkey" }, 404);
             }
-            if (!sameEmail(credential.email, identity.email) && identity.role !== "owner") {
-                return c.json({ error: "only the owner may remove another member's passkey" }, 403);
+            const other = sameEmail(credential.email, identity.email) ? undefined : await otherPasskeyRefusal(services, identity, credential.email);
+            if (other !== undefined) {
+                return c.json({ error: other }, 403);
             }
             if (await ownersLast(credential)) {
                 return c.json({ error: "this is your last passkey; stop requiring a passkey before removing it" }, 409);

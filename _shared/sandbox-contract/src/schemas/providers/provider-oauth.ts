@@ -24,6 +24,12 @@ export const OauthAccountSchema = z.object({
         ),
     scope: z.string().optional().describe("What the credential is permitted to do, in the provider's terms."),
     connectedAt: z.number().describe("When it was connected, in milliseconds."),
+    connectedBy: z
+        .string()
+        .optional()
+        .describe(
+            "Who connected it, by the address they signed in with, where a person on this sandbox did. An account is always its connector's to run on. Absent for one connected before this was recorded, or by the owner's own tools.",
+        ),
     needsReauth: z
         .boolean()
         .optional()

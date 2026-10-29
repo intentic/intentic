@@ -5,9 +5,12 @@ import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contr
 import { loopDoors, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, timeAgo, ui } from "@intentic/ui";
+import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
+import { useAuth } from "../../../client/auth/useAuth";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import { useRole } from "../../../client/sandbox/useRole";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import { accountsOf, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
@@ -18,7 +21,6 @@ import {
     type AccountFacts,
     accountFacts,
     accountState,
-    formatReset,
     liveUsage,
     type PlanHeadroom,
     planHeadroom,
@@ -29,6 +31,16 @@ import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
 import { accountOffLine } from "./accountOff";
+import {
+    type AccountReader,
+    ambiguousLabels,
+    connectorNote,
+    connectWays,
+    identityNote,
+    mayChangeAccount,
+    rowNote,
+    waitingLine,
+} from "./accountRows";
 import { offerFor } from "./otherAccounts";
 import { lendingKey, useProviderSharing } from "./useAccountSharing";
 import { useBringOther, useOtherAccounts } from "./useOtherAccounts";
@@ -116,7 +128,8 @@ const routedAccounts = computed(() => (keyed.value === undefined ? [] : (transla
 
 // Which plan to sign in to, for a provider sold under several whose keys are not interchangeable (Z.ai, BigModel).
 const estate = ref<string | undefined>(undefined);
-const offersEstates = computed(() => (mintedVariants(provider)?.length ?? 0) > 1);
+// Asked only of a reader who may sign in to one.
+const offersEstates = computed(() => mayStart.value.native && (mintedVariants(provider)?.length ?? 0) > 1);
 // The loops this provider's own door signs in with a program of their own (Grok Build, Kimi CLI), each a separate sign-in
 // from the provider's default one; a row says which by its variant. Only those this sandbox's daemon runs: an older one
 // has no door to sign them in through.
@@ -127,6 +140,19 @@ const doorOf = (account: Pick<OauthAccount, `variant`>) => doors.value.find((doo
 const hasDefaultNative = computed(() => hasNative.value && (provider === `grok` || spec.value?.auth.kind !== `translator`));
 // Grok holds a single default account (OpenCode owns the xAI credential); its "add another" goes once it is linked.
 const canAddDefault = computed(() => provider !== `grok` || nativeAccounts.value.every((account) => doorOf(account) !== undefined));
+
+// Who is reading, as far as changing an account goes (accountRows.ts): Full access changes every row, someone given AI
+// accounts of their own only the ones they connected, and anyone else none. Below Full access the rest of the list is
+// still read, so a person sees what the sandbox runs on, with no press on a row the sandbox would refuse them.
+const { canShip } = useRole();
+const { can, holds } = useAccess();
+const { user } = useAuth();
+const reader = computed<AccountReader>(() => ({ full: canShip.value, ownAccounts: holds(`ownAccounts`), email: user.value?.email }));
+// The ways in the reader may start: a subscription the translator holds is Full access's alone.
+const mayStart = computed(() => ({
+    native: canShip.value || can(`accounts.start`, { provider }),
+    routed: canShip.value || can(`translator.connect`, { provider }),
+}));
 
 // No two rows may read the same; distinguished in order: the identity the provider reports, the name (renamable in
 // place), and failing both, when it was connected. Grok is exempt from renaming: OpenCode owns its one account.
@@ -143,29 +169,7 @@ const loopNote = (account: OauthAccount): string | undefined => {
     return t(`sandbox.aiAccountSection.viaLoop`, { loop: loopLabel(provider, door?.loop ?? loopOf(provider, `native`)) });
 };
 
-const ambiguousLabels = computed(() => {
-    const seen = new Map<string, number>();
-    for (const account of nativeAccounts.value) {
-        seen.set(account.label, (seen.get(account.label) ?? 0) + 1);
-    }
-    return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
-});
-
-// Beside the name: who the account signs in as, or (if unknown and the name is ambiguous) when it connected. Drops
-// repeated names and the provider's email-based personal organisation name.
-const identityNote = (account: OauthAccount): string | undefined => {
-    const personalOrganization =
-        account.email !== undefined && account.organization?.trim().toLowerCase() === `${account.email.trim()}'s organization`.toLowerCase();
-    const identity = [account.email, personalOrganization ? undefined : account.organization].filter(
-        (part) => part !== undefined && part !== account.label,
-    );
-    if (identity.length > 0) {
-        return identity.join(` · `);
-    }
-    return ambiguousLabels.value.has(account.label)
-        ? t(`sandbox.aiAccountSection.connectedAgo`, { ago: timeAgo(account.connectedAt, { days: true }) })
-        : undefined;
-};
+const ambiguous = computed(() => ambiguousLabels(nativeAccounts.value));
 
 // Per-account spend, shown in the meter's card rather than on the row. Always a line once usage has loaded (even a
 // zero-turn account); withheld entirely until then.
@@ -210,23 +214,6 @@ const rowsOf = <T,>(accounts: readonly T[], factsOf: (account: T) => AccountFact
         (row.exhausted ? spent : state.kind === `blocked` ? attention : active).push(row);
     }
     return [...attention, ...active, ...spent];
-};
-
-// Why a dimmed row is dimmed: a spent allowance and when it reopens, or a bench that lifts by itself and when.
-const waitingLine = (state: AccountState): string | undefined => {
-    if (state.kind === `spent`) {
-        return state.reopensAt === undefined
-            ? t(`sandbox.aiAccountSection.allowanceUsedUp`)
-            : t(`sandbox.aiAccountSection.allowanceUsedUpReopens`, { when: formatReset(state.reopensAt) });
-    }
-    if (state.kind === `blocked` && state.fix === `wait`) {
-        // The sentence's own stop is the template's to put, so a provider's full stop never doubles it.
-        const reason = state.reason.replace(/[.!\s]+$/, ``);
-        return state.until === undefined
-            ? t(`sandbox.aiAccountSection.restingFor`, { reason })
-            : t(`sandbox.aiAccountSection.restingUntil`, { reason, when: formatReset(state.until) });
-    }
-    return undefined;
 };
 
 // The status line under the name, one judgement for both mechanisms: what waiting will fix, or what a person has to do
@@ -279,25 +266,58 @@ interface AccountView {
     // The loop door a native row signs in through, which its Reconnect asks for again.
     readonly variant?: string | undefined;
     readonly busy: string;
-    readonly disconnect: () => void;
+    // Absent where the reader may not take it off: an account somebody else connected, or a loan only Full access ends.
+    readonly disconnect: (() => void) | undefined;
     // What taking it off is called: Disconnect, or for one another sandbox lends here, Stop borrowing.
     readonly removeLabel: string;
     // Ends another sandbox's loan of this one, when one borrows it.
     readonly stopLending?: (() => void) | undefined;
 }
 
-// A row of this sandbox's own, or one another of the owner's sandboxes lends here (`from`): signed in over there, so it is
-// renamed, reconnected and signed in again there, and taking it off here only stops borrowing it.
+// What a native row offers the reader. A row of this sandbox's own is renamed, signed in again and disconnected here by
+// whoever may change it (accountRows.ts `mayChangeAccount`); one another of the owner's sandboxes lends here (`from`) is
+// signed in over there, so taking it off here only stops borrowing it, which is for whoever may end loans.
+type NativePresses = Pick<AccountView, `rename` | `verify` | `reconnect` | `disconnect` | `removeLabel`>;
+const nativePresses = (account: OauthAccount, from: string | undefined, state: AccountState): NativePresses => {
+    const changes = mayChangeAccount(account, reader.value);
+    if (from !== undefined) {
+        const ends = canShip.value || can(`sharing.stop`);
+        return {
+            rename: undefined,
+            verify: changes ? verifyUrl(state) : undefined,
+            reconnect: false,
+            disconnect: ends ? () => void stopBorrowing(account.id) : undefined,
+            removeLabel: t(`connect.providerPanel.stopBorrowing`),
+        };
+    }
+    return {
+        rename: changes ? renameOf(account) : undefined,
+        verify: changes ? verifyUrl(state) : undefined,
+        reconnect: changes && needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
+        disconnect: changes ? () => void disconnect(account.id, provider) : undefined,
+        removeLabel: t(`ui.action.disconnect`),
+    };
+};
+
 const nativeView = ({ account, headroom, exhausted, state }: AccountRow<OauthAccount>): AccountView => {
     const from = borrowedFrom(account);
     const own = { provider, account: account.id };
-    const lent = from === undefined ? lentNote(own) : undefined;
-    // The loan first, since it is why this row's buttons differ from its neighbours'.
-    const note = [from === undefined ? lent : t(`connect.providerPanel.borrowedFrom`, { name: from }), loopNote(account), identityNote(account)];
+    // Loans to the owner's other sandboxes are read and ended by Full access alone.
+    const lent = from === undefined && canShip.value ? lentNote(own) : undefined;
+    // The loan first, since it is why this row's buttons differ from its neighbours'. Who connected it comes last, except
+    // for a reader who changes only their own accounts, for whom it is that reason, so it comes straight after.
+    const connector = connectorNote(account.connectedBy, reader.value.email);
+    const note = [
+        from === undefined ? lent : t(`connect.providerPanel.borrowedFrom`, { name: from }),
+        reader.value.full ? undefined : connector,
+        loopNote(account),
+        identityNote(account, ambiguous.value),
+        reader.value.full ? connector : undefined,
+    ];
     return {
         key: account.id,
         title: account.label,
-        note: note.filter((part) => part !== undefined).join(` · `) || undefined,
+        note: rowNote(note),
         // A borrowed sign-in is fixed where it is held: the daemon's own words for why, else the way to that sandbox.
         description:
             from !== undefined && needsReconnect(state)
@@ -307,18 +327,16 @@ const nativeView = ({ account, headroom, exhausted, state }: AccountRow<OauthAcc
         headroom,
         exhausted,
         activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(account.id),
-        rename: from === undefined ? renameOf(account) : undefined,
-        verify: verifyUrl(state),
-        reconnect: from === undefined && needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
+        ...nativePresses(account, from, state),
         variant: doorOf(account)?.door,
         busy: account.id,
-        disconnect: from === undefined ? () => void disconnect(account.id, provider) : () => void stopBorrowing(account.id),
-        removeLabel: from === undefined ? t(`ui.action.disconnect`) : t(`connect.providerPanel.stopBorrowing`),
         stopLending: lent === undefined ? undefined : () => void stopLending(own),
     };
 };
 const nativeViews = computed<readonly AccountView[]>(() => rowsOf(nativeAccounts.value, accountFacts).map(nativeView));
 
+// A subscription is held by the translator, which only Full access signs in to or out of.
+const routedChanges = computed(() => canShip.value || can(`translator.disconnect`, { provider }));
 // A subscription is named by whoever signs in to it (the translator's label is that email). Only a provider that can hold
 // both kinds side by side (Grok, Kimi) says which kind this is.
 const routedViews = computed<readonly AccountView[]>(() =>
@@ -332,14 +350,16 @@ const routedViews = computed<readonly AccountView[]>(() =>
         exhausted,
         activity: undefined,
         rename: undefined,
-        verify: verifyUrl(state),
+        verify: routedChanges.value ? verifyUrl(state) : undefined,
         reconnect: false,
         busy: translatorKey(provider, account.name),
-        disconnect: () => {
-            if (keyed.value !== undefined) {
-                void disconnectTranslator(keyed.value, account.name);
-            }
-        },
+        disconnect: routedChanges.value
+            ? () => {
+                  if (keyed.value !== undefined) {
+                      void disconnectTranslator(keyed.value, account.name);
+                  }
+              }
+            : undefined,
         removeLabel: t(`ui.action.disconnect`),
     })),
 );
@@ -358,9 +378,9 @@ const shownRows = computed(() => (shouldCollapse.value && !expanded.value ? rows
 
 const providerName = computed(() => spec.value?.accountLabel ?? provider);
 
-// The ways in this provider offers. One for nearly all; Grok's three (its own xAI account, Grok Build's sign-in, a
-// SuperGrok subscription under Claude Code) and Kimi's two (Kimi CLI's sign-in, the subscription) each get a button named
-// for what it connects, since "Connect" twice would ask the reader to guess.
+// What each way in is called, for the buttons that name it (accountRows.ts `connectWays`): Grok's three (its own xAI
+// account, Grok Build's sign-in, a SuperGrok subscription under Claude Code) and Kimi's two (Kimi CLI's sign-in, the
+// subscription).
 const ROUTED_NAME = computed(
     () =>
         ({
@@ -370,41 +390,35 @@ const ROUTED_NAME = computed(
             gemini: t(`sandbox.aiAccountSection.googleAccount`),
         }) satisfies Record<KeyedProvider, string>,
 );
-const ways = computed(() => {
-    const native =
-        hasDefaultNative.value && canAddDefault.value
-            ? [
-                  {
-                      via: `native` as const,
-                      variant: undefined,
-                      // Beside a loop's own sign-in, the default one says which loop it serves too (Grok's: OpenCode).
-                      name:
-                          doors.value.length === 0
-                              ? t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value })
-                              : t(`sandbox.aiAccountSection.accountViaLoop`, { managedLabel: providerName.value, loop: loopLabel(provider, loopOf(provider, `native`)) }),
-                  },
-              ]
-            : [];
-    const doorWays = hasNative.value
-        ? doors.value.map((door) => ({
-              via: `native` as const,
-              variant: door.door,
-              name: t(`sandbox.aiAccountSection.loopSignIn`, { loop: loopLabel(provider, door.loop) }),
-          }))
-        : [];
-    const routedWay = keyed.value === undefined ? [] : [{ via: `routed` as const, variant: undefined, name: ROUTED_NAME.value[keyed.value] }];
-    const all = [...native, ...doorWays, ...routedWay];
-    const several = (hasDefaultNative.value ? 1 : 0) + (hasNative.value ? doors.value.length : 0) + (keyed.value === undefined ? 0 : 1) > 1;
-    return all.map((way) => ({
-        via: way.via,
-        variant: way.variant,
-        key: `${way.via}:${way.variant ?? ``}`,
-        label: several
-            ? t(`connect.providerPanel.connectWay`, { way: way.name })
-            : rows.value.length === 0
-              ? t(`ui.action.connect`)
-              : t(`sandbox.aiAccountSection.addAnotherAccount`),
-    }));
+const ways = computed(() =>
+    connectWays({
+        native: hasDefaultNative.value
+            ? {
+                  // Beside a loop's own sign-in, the default one says which loop it serves too (Grok's: OpenCode).
+                  name:
+                      doors.value.length === 0
+                          ? t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value })
+                          : t(`sandbox.aiAccountSection.accountViaLoop`, { managedLabel: providerName.value, loop: loopLabel(provider, loopOf(provider, `native`)) }),
+                  addable: canAddDefault.value,
+              }
+            : undefined,
+        doors: hasNative.value ? doors.value.map((door) => ({ door: door.door, name: t(`sandbox.aiAccountSection.loopSignIn`, { loop: loopLabel(provider, door.loop) }) })) : [],
+        routed: keyed.value === undefined ? undefined : ROUTED_NAME.value[keyed.value],
+        may: mayStart.value,
+        empty: rows.value.length === 0,
+    }),
+);
+
+// What the empty card says: the account another sandbox already holds, that connecting this one is Full access's, or
+// what signing in takes.
+const emptyLine = computed(() => {
+    if (offer.value) {
+        return t(`connect.shareAccounts.offerHere`, { label: offer.value.account.label, name: offer.value.source.name });
+    }
+    if (ways.value.length === 0 && !canShip.value) {
+        return t(`connect.providerPanel.emptyFullAccess`);
+    }
+    return found ? t(`connect.connect.foundSignedIn`) : t(`connect.providerPanel.empty`);
 });
 
 // A loop door's way names its own variant; the default native way names the estate, where the provider sells several.
@@ -416,7 +430,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
 <template>
     <RowGroup :label="providerName">
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
-        <template v-if="rows.length > 0 && !signingInHere" #actions>
+        <template v-if="rows.length > 0 && !signingInHere && ways.length > 0" #actions>
             <Button v-for="way in ways" :key="way.key" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
@@ -479,6 +493,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                     @click="row.stopLending()"
                 />
                 <Button
+                    v-if="row.disconnect"
                     :label="row.removeLabel"
                     size="small"
                     tier="quiet"
@@ -504,18 +519,10 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         <!-- Nothing here yet: what connecting needs, and the button that does it. -->
         <RowNote v-if="rows.length === 0 && attempt === undefined" variant="block">
             <div class="flex flex-col items-start gap-3">
-                <p class="text-xs text-muted">
-                    {{
-                        offer
-                            ? t(`connect.shareAccounts.offerHere`, { label: offer.account.label, name: offer.source.name })
-                            : found
-                              ? t(`connect.connect.foundSignedIn`)
-                              : t(`connect.providerPanel.empty`)
-                    }}
-                </p>
+                <p class="text-xs text-muted">{{ emptyLine }}</p>
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
                 <EstatePicker v-if="offersEstates && !offer" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
-                <div class="flex flex-wrap gap-2">
+                <div v-if="offer || ways.length > 0" class="flex flex-wrap gap-2">
                     <!-- Already signed in over there: bringing it is the step asked for, signing in again the alternative. -->
                     <Button
                         v-if="offer"

@@ -6,6 +6,7 @@ import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../../lib/useApi";
 import { rpcKey, SANDBOX_MEMBERS } from "../../../../lib/queryKeys";
@@ -13,8 +14,10 @@ import { rpcKey, SANDBOX_MEMBERS } from "../../../../lib/queryKeys";
 export function useAccessProfiles() {
     const cache = useQueryClient();
     const { canShip } = useRole();
+    const { holds } = useAccess();
     const { activeSandboxId } = useSandbox();
-    const available = computed(() => canShip.value && supportsRoute(`accessProfiles.list`));
+    // A maintainer reads them to point a service at one; whoever runs people and access to hand them out.
+    const available = computed(() => (canShip.value || holds(`people`)) && supportsRoute(`accessProfiles.list`));
     const { query, loaded } = useSandboxQuery({ ...rpcQuery(`accessProfiles.list`), enabled: available });
     const invalidate = async (): Promise<void> => {
         await Promise.all([

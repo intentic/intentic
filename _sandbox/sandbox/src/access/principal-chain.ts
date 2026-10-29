@@ -88,9 +88,11 @@ export const principalsOf = (entryOf: (id: string) => ChainEntry | undefined, co
 
 /**
  * One person's limit off the roster: the owner nothing, anyone on it their row (a maintainer with no tool ceiling, since
- * that tier runs every tool), a stranger everything withheld.
+ * that tier runs every tool), a stranger everything withheld. `connected` is the AI accounts they connected themselves,
+ * which a row listing only some always takes in: an account a person connected is always theirs to run on. A stranger
+ * gets none of them, since their access was taken back.
  */
-export const personLimit = (email: string, roster: readonly Member[], owner: string | undefined): ChainLimit => {
+export const personLimit = (email: string, roster: readonly Member[], owner: string | undefined, connected: readonly string[] = []): ChainLimit => {
     const address = lower(email);
     if (owner !== undefined && lower(owner) === address) {
         return { who: address, ...EVERYTHING };
@@ -102,7 +104,7 @@ export const personLimit = (email: string, roster: readonly Member[], owner: str
     return {
         who: address,
         credentials: member.credentials ?? "all",
-        aiAccounts: member.aiAccounts ?? "all",
+        aiAccounts: member.aiAccounts === undefined ? "all" : [...new Set([...member.aiAccounts, ...connected])],
         tools: member.role === "maintainer" ? undefined : member.tools,
     };
 };
@@ -155,6 +157,8 @@ export interface PrincipalChainDeps {
     readonly services?: { readonly list: () => Promise<readonly Service[]> } | undefined;
     readonly profiles?: { readonly list: () => Promise<readonly AccessProfile[]> } | undefined;
     readonly org?: { readonly current: () => Promise<{ readonly orgName: string; readonly ceiling?: OrgCeiling | undefined } | undefined> } | undefined;
+    // Who connected each AI account, its key to their address (auth/members/account-connectors.ts); absent, nobody did.
+    readonly connectors?: { readonly all: () => Promise<ReadonlyMap<string, string>> } | undefined;
 }
 
 // What a turn starting now adds before the conversation has recorded it: the person asking, the service it runs as.
@@ -164,6 +168,16 @@ export interface ChainAlso {
 }
 
 export type PrincipalChainOf = (conversationId: string | undefined, also?: ChainAlso) => Promise<PrincipalChain>;
+
+// The AI accounts each of these people connected themselves, read only when one of them has a row that lists some. A
+// record that cannot be read adds none: each row's own list still holds, the narrower answer, rather than every turn of
+// a limited person being refused over a file that only ever widens it.
+const connectedOf = async (deps: PrincipalChainDeps, people: readonly string[], roster: readonly Member[]): Promise<(email: string) => string[]> => {
+    const listed = people.some((email) => roster.some((row) => lower(row.email) === email && row.aiAccounts !== undefined));
+    // allow(silent-catch): an unreadable record narrows each person to their row, as said above.
+    const connectors = listed ? await deps.connectors?.all().catch(() => undefined) : undefined;
+    return (email) => (connectors === undefined ? [] : [...connectors].filter(([, by]) => by === email).map(([key]) => key));
+};
 
 // The people and services a chain is resolved from, nobody limited (none, or the owner alone, and no service) answered
 // without reading the roster, as before services existed.
@@ -182,8 +196,10 @@ const resolveLimits = async (
         serviceIds.length === 0 ? [] : (deps.services?.list() ?? []),
         serviceIds.length === 0 ? [] : (deps.profiles?.list() ?? []),
     ]);
+    // A person's own connections widen only their own row: a service's steward stays at their row, as its profile does.
+    const connected = await connectedOf(deps, people, roster);
     return [
-        ...people.map((email) => personLimit(email, roster, owner)),
+        ...people.map((email) => personLimit(email, roster, owner, connected(email))),
         ...serviceIds.flatMap((id) => serviceLimits(id, services.find((service) => service.id === id), profiles, roster, owner)),
     ];
 };

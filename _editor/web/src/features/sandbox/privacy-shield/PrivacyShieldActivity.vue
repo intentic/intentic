@@ -26,7 +26,8 @@ import { usePrivacyReveal } from "../../../models/sandbox/usePrivacyShield";
 // What the shield did lately, kept short: one line for every request the log holds, then the newest things worth a row
 // of their own: each value replaced, as the value, the token it became and the text around it as the provider read it,
 // and each request refused or carrying images or documents. Hundreds of requests that found nothing are one count, not
-// hundreds of rows. The values are read back from the vault for the owner alone; anybody else sees the tokens.
+// hundreds of rows. The values are read back from the vault for whoever runs the shield (the owner, Full access, or
+// someone given the Privacy shield); anybody else sees the tokens.
 
 const t = useT();
 
@@ -71,8 +72,8 @@ const hidden = computed(() => Math.min(findings.value.length, MANY) - shown.valu
 
 const { values, refused: revealRefused } = usePrivacyReveal(computed(() => findingTokens(shown.value)));
 
-// The rows whose picture is open, before and after masking. Offered to the owner alone: the picture before holds the
-// values, and the read that would show them is refused to anybody else, as the values are.
+// The rows whose picture is open, before and after masking. Offered only to whoever reads the values: the picture before
+// holds them, and the read that would show it is refused to anybody else, as the values are.
 const peeking = ref(new Set<string>());
 const togglePeek = (key: string): void => {
     const next = new Set(peeking.value);
@@ -101,7 +102,7 @@ const facts = computed(() => {
     ].filter((fact) => fact !== undefined);
 });
 
-// Each finding with what its row draws worked out once: the lead, the value behind its token where the owner may read
+// Each finding with what its row draws worked out once: the lead, the value behind its token where the reader may read
 // it, the excerpt cut at its tokens, and whether its provider runs here.
 const rows = computed(() =>
     shown.value.map((finding) => ({

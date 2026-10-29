@@ -4,6 +4,7 @@
 import "@intentic/testing/dom";
 import { STATE_DIR, WORKSPACE_ROOT as root } from "@intentic/constants";
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { MemberSelf } from "@intentic/sandbox-contract/schemas/members";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { IconStub } from "@intentic/ui/testing";
 import { waitFor } from "@intentic/testing/bun";
@@ -37,7 +38,12 @@ const personas = ref([
 jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
+// Read live: the reader's access is one for the page, built once from the active sandbox, as in the app.
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ role: role.value })) }) }));
+// What the reader's own answer says they run and where they are fenced, below the owner.
+const self = ref<MemberSelf | undefined>(undefined);
+const realMembers = { ...(await import("../../../client/sandbox/useMembers")) };
+jest.mock(`../../../client/sandbox/useMembers`, () => ({ ...realMembers, selfMember: () => computed(() => self.value) }));
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
@@ -115,6 +121,7 @@ beforeEach(() => {
     save.mockClear();
     remove.mockClear();
     role.value = `owner`;
+    self.value = undefined;
     areas.value = [{ id: `support`, label: `Support desk`, folders: [`web/support`] }];
     tree.value = [
         { name: `web`, path: `web`, type: `dir`, children: [{ name: `support`, path: `web/support`, type: `dir`, children: [] }] },
@@ -245,9 +252,27 @@ it(`shows a member the areas and none of the controls`, async () => {
     const el = mount();
 
     expect(el.textContent).toContain(`Support desk`);
-    expect(el.textContent).toContain(`Only the sandbox owner decides who sees which folders.`);
+    expect(el.textContent).toContain(`The owner, Full access, or someone given People and access decides who sees which folders.`);
     expect(buttonLabelled(el, `New area`)).toBeUndefined();
     expect(el.querySelector(`[aria-label="Delete area"]`)).toBeNull();
     // Nothing to open: a member cannot edit what is behind the name.
     expect(el.querySelector(`[aria-expanded]`)).toBeNull();
+});
+
+// People & access decides who sees which folders too, but never moves the fence it is held to itself: that one stays
+// with the owner and Full access, as the daemon holds it (areas.routes.ts).
+it(`lets someone given People & access edit every area but the ones they are fenced to`, async () => {
+    role.value = `collaborator`;
+    self.value = { role: `collaborator`, agents: `run`, edit: `none`, areas: [`support`], manages: [`people`] };
+    areas.value = [
+        { id: `support`, label: `Support desk`, folders: [`web/support`] },
+        { id: `docs`, label: `Docs`, folders: [`docs`] },
+    ];
+    const el = mount();
+
+    expect(buttonLabelled(el, `New area`)?.disabled).toBe(false);
+    expect(nameControl(el, `Docs`)?.textContent).toBe(`Docs, Rename area`);
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Support desk, Rename area`)).toBe(false);
+    expect(el.querySelectorAll(`[aria-label="Delete area"]`)).toHaveLength(1);
+    expect(el.textContent).toContain(`The areas your own access is held to are changed by the owner or someone with Full access.`);
 });

@@ -1,4 +1,5 @@
 import { oc } from "@orpc/contract";
+import type { ManageRight } from "../schemas/members.js";
 import type { MemberRole } from "../schemas/shared.js";
 
 // Every route's policy, declared beside it: how a request authenticates, which member tier and which machine
@@ -21,6 +22,9 @@ export interface RouteMeta {
     readonly stream?: true;
     // The lowest member role that may call it. Absent: viewer for a read (GET, HEAD), maintainer for anything else.
     readonly floor?: MemberRole;
+    // The part of the sandbox it runs (members.ts `ManageRightSchema`): a person below the floor who was given that part
+    // reaches it too. The handler holds anything finer (members.ts `peopleChangeRefusal`).
+    readonly right?: ManageRight;
     // On a guest member's allowlist, which is the whole of what a guest reaches.
     readonly guest?: true;
     // Beyond the guest list, for a home-only member (members.ts `agents: "home"`) whose work lands by itself
@@ -61,6 +65,7 @@ const ACCESS = {
     beforeBoot: (meta) => meta.beforeBoot === true,
     stream: (meta) => meta.stream === true,
     floor: (meta, method) => meta.floor ?? defaultFloor(method),
+    right: (meta) => meta.right ?? "none",
     guest: (meta) => meta.guest === true,
     home: (meta) => meta.home ?? "none",
     attachmentFloor: (meta) => meta.attachmentFloor ?? "none",

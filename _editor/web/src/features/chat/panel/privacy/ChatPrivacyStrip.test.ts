@@ -7,6 +7,8 @@
 import "@intentic/testing/dom";
 import { ACP, CLAUDE_CODE, CURSOR, type AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, type PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
+import { holdsRight, type ManageRight } from "@intentic/sandbox-contract/schemas/members";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { type App, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -31,8 +33,10 @@ jest.mock(`../../../../models/conversations/panel/useChat-view`, () => ({
     }),
 }));
 const reachable = ref(true);
-const active = ref<{ role: string } | undefined>({ role: `owner` });
-jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
+// The reader's tier and the parts they were given: granting is for whoever runs the shield (sandbox-contract `holdsRight`).
+const caller = ref<{ role: MemberRole; manages?: ManageRight[] }>({ role: `owner` });
+jest.mock(`../../../../client/sandbox/access/useAccess`, () => ({ useAccess: () => ({ holds: (right: ManageRight) => holdsRight(caller.value, right) }) }));
 
 const policy = ref<PrivacyShieldPolicy>({ ...DEFAULT_PRIVACY_SHIELD, mode: `on` });
 const status = ref<PrivacyShieldStatus | undefined>(undefined);
@@ -94,7 +98,7 @@ beforeEach(() => {
     streaming.value = false;
     runner.value = undefined;
     reachable.value = true;
-    active.value = { role: `owner` };
+    caller.value = { role: `owner` };
     policy.value = { ...DEFAULT_PRIVACY_SHIELD, mode: `on` };
     status.value = statusOf(policy.value);
     written.length = 0;
@@ -183,11 +187,23 @@ it(`takes the grant back from the quiet line it leaves`, async () => {
     expect(element.textContent).toContain(`won't send this to My agent`);
 });
 
-it(`a member is told only the owner can let it through, and offered no press that would be refused`, () => {
-    active.value = { role: `member` };
+it(`a member is told who can let it through, and offered no press that would be refused`, () => {
+    caller.value = { role: `collaborator`, manages: [`secrets`] };
     const element = mount();
-    expect(element.textContent).toContain(`Only the sandbox's owner can let it through.`);
+    expect(element.textContent).toContain(`The owner, Full access, or someone given the Privacy shield can let it through.`);
     expect(named(element, `Let My agent read this conversation`)).toBeUndefined();
+});
+
+it(`lets someone given the Privacy shield let it through, as Full access can`, () => {
+    for (const reader of [{ role: `collaborator` as const, manages: [`privacy` as const] }, { role: `maintainer` as const }]) {
+        caller.value = reader;
+        const element = mount();
+        expect(named(element, `Let My agent read this conversation`)?.tagName).toBe(`BUTTON`);
+        expect(element.textContent).not.toContain(`can let it through`);
+        app?.unmount();
+        document.body.innerHTML = ``;
+    }
+    app = undefined;
 });
 
 it(`says a refused grant beside the press, and sends nothing`, async () => {

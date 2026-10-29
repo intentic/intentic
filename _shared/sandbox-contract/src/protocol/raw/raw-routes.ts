@@ -65,8 +65,9 @@ export const RAW_ROUTES = {
     "GET /system/desktop-view": { auth: "door", beforeBoot: true, control: "never" },
     // Deploy-target enrollment, gated by the connect token.
     "POST /enroll": { auth: "door", control: "never" },
-    // A server-connect code for the owner's command: its single-use enroll token stands in for the connect token.
-    "POST /system/enroll/code": { floor: "owner", control: "never" },
+    // A server-connect code for the command that connects a server: its single-use enroll token stands in for the connect
+    // token. Anybody who operates the sandbox may connect a server to it.
+    "POST /system/enroll/code": { control: "never" },
     // An event automation's webhook, gated by the automation's own token.
     "POST /automations/{id}/fire": { auth: "door" },
     // The release gate a pipeline runner waits on, gated by the workflow's minted gate token.
@@ -84,21 +85,22 @@ export const RAW_ROUTES = {
     "GET /intake/{id}/config": { auth: "door", embedded: true },
     "GET /intake/{id}/challenge": { auth: "door", embedded: true },
     "POST /intake/{id}/report": { auth: "door", embedded: true },
-    // The roster is ownership's to read and change; giving up one's own grant is every tier's. Reading it is floored at
-    // the owner here as well as in its handler (members.routes.ts), so the editor knows before asking.
-    "GET /members": { floor: "owner", control: "never" },
-    "POST /members": { control: "never" },
-    "DELETE /members": { control: "never" },
+    // The roster is for whoever runs people and access (Full access, or the People & access right) to read and change;
+    // giving up one's own grant is every tier's. Reading it is floored here as well as in its handler (members.routes.ts),
+    // so the editor knows before asking; what someone below Full access may change is the handler's (peopleChangeRefusal).
+    "GET /members": { floor: "maintainer", right: "people", control: "never" },
+    "POST /members": { right: "people", control: "never" },
+    "DELETE /members": { right: "people", control: "never" },
     "DELETE /members/self": { floor: "viewer", guest: true, control: "never" },
     // What one's own grant allows, read by the editor to offer only what will be taken.
     "GET /members/self": { floor: "viewer", guest: true, control: "never" },
-    // Asking the owner for more access is every member's, a guest's included, from wherever they were refused; reading
-    // and dismissing the requests is the owner's, beside the roster they are answered on (schemas/members.ts).
+    // Asking for more access is every member's, a guest's included, from wherever they were refused; reading and
+    // dismissing the requests is for whoever runs people and access, beside the roster they are answered on.
     "POST /members/requests": { floor: "viewer", guest: true, control: "never" },
-    "GET /members/requests": { floor: "owner", control: "never" },
-    "DELETE /members/requests": { floor: "owner", control: "never" },
+    "GET /members/requests": { floor: "maintainer", right: "people", control: "never" },
+    "DELETE /members/requests": { right: "people", control: "never" },
     // The owner's Reconnect: register with the platform now, having it adopt the sandbox first when it holds no record.
-    "POST /platform/relink": { control: "never" },
+    "POST /platform/relink": { floor: "owner", control: "never" },
     "GET /environment": {},
     "GET /environment/contents": {},
     "POST /environment/approve": {},
@@ -282,16 +284,17 @@ export const RAW_ROUTES = {
     "POST /system/control/tokens": { control: "never" },
     "GET /system/control/tokens": { floor: "maintainer", control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },
-    // One's own passkeys are identity, like staying signed in; the policy and recovery codes are ownership's.
+    // One's own passkeys are identity, like staying signed in; the policy and recovery codes are the owner's own door, so
+    // they stay ownership's whoever else runs the sandbox.
     "GET /system/passkeys": { guest: true, control: "never" },
     "POST /system/passkeys/register/options": { floor: "viewer", guest: true, enrolment: true, control: "never" },
     "POST /system/passkeys/register": { floor: "viewer", guest: true, enrolment: true, control: "never" },
     // The assertion has no bearer yet, since it is how one is minted.
     "POST /system/passkeys/assert/options": { auth: "door", beforeBoot: true, control: "never" },
     "POST /system/passkeys/assert": { auth: "door", beforeBoot: true, control: "never" },
-    "POST /system/passkeys/policy": { control: "never" },
-    "POST /system/passkeys/recovery": { control: "never" },
-    // One's own passkey; the handler holds another member's to the owner.
+    "POST /system/passkeys/policy": { floor: "owner", control: "never" },
+    "POST /system/passkeys/recovery": { floor: "owner", control: "never" },
+    // One's own passkey; the handler holds another member's to whoever runs people and access, and the owner's to the owner.
     "DELETE /system/passkeys/{id}": { floor: "viewer", guest: true, control: "never" },
     // Checks its own bearer, since the require-passkey policy would otherwise hold out the owner it exists for.
     "POST /system/session/recover": { auth: "door", beforeBoot: true, control: "never" },

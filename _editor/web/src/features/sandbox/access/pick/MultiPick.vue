@@ -181,7 +181,8 @@ const optionNote = (option: PickOption, inFamily: boolean): string | undefined =
                     <slot name="mark" :value="option.value" :size="22" />
                     <span class="flex min-w-0 flex-1 items-baseline gap-2">
                         <span class="truncate text-content" :class="option.mono ? `font-mono text-xs` : `text-sm`">{{ option.label }}</span>
-                        <span v-if="option.detail" class="truncate font-mono text-2xs text-subtle">{{ option.detail }}</span>
+                        <!-- The detail takes what the name leaves, so on a narrow row it is cut short and the name is not. -->
+                        <span v-if="option.detail" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ option.detail }}</span>
                     </span>
                     <span v-if="option.note" class="inline-flex shrink-0 items-center gap-1 text-xs text-subtle">
                         <Icon v-if="option.noteIcon" :name="option.noteIcon" class="text-2xs" />{{ option.note }}
@@ -323,7 +324,7 @@ const optionNote = (option: PickOption, inFamily: boolean): string | undefined =
                                 <slot name="mark" :value="row.option.value" :size="18" />
                                 <span class="flex min-w-0 flex-1 items-baseline gap-2">
                                     <span class="truncate text-content" :class="row.option.mono ? `font-mono text-xs` : `text-sm md:text-xs`">{{ row.option.label }}</span>
-                                    <span v-if="row.option.detail" class="truncate font-mono text-2xs text-subtle">{{ row.option.detail }}</span>
+                                    <span v-if="row.option.detail" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ row.option.detail }}</span>
                                 </span>
                                 <span v-if="optionNote(row.option, row.inFamily)" class="inline-flex shrink-0 items-center gap-1 text-2xs text-subtle">
                                     <Icon v-if="row.option.noteIcon" :name="row.option.noteIcon" class="text-3xs" />{{ optionNote(row.option, row.inFamily) }}
