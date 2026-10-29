@@ -12,7 +12,8 @@ scripts.json): what Start runs is read from the repo's own files.
 
 ## What Start runs
 
-The first of these the repo has wins (`_sandbox/sandbox/src/panels/run-plan.ts`):
+The first of these the repo has wins (the daemon's `/opt/sandbox/dist/panels/run-plan.js`, in every sandbox;
+`_sandbox/sandbox/src/panels/run-plan.ts` where the intentic source is checked out):
 
 1. A **`Procfile`** at the repo root, one `name: command` line per process, as Heroku and foreman read it. The `web`
    entry (or the only one) gets `PORT`; the others run beside it with `PORT` unset, and stop when it stops.

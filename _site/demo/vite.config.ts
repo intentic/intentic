@@ -21,7 +21,15 @@ const spaFallback = (): Plugin => ({
     configureServer: (server) => {
         // Runs before Vite strips the base prefix, so the rewrite must include the base too.
         const entry = `${server.config.base}index.html`;
-        server.middlewares.use((request, _response, next) => {
+        server.middlewares.use((request, response, next) => {
+            // The bare origin is where a preview frame opens (the repository's Start, see the root Procfile): send it to
+            // the app's own base rather than mounting the app at a path its router does not know.
+            if (request.method === `GET` && request.url === `/` && server.config.base !== `/`) {
+                response.statusCode = 302;
+                response.setHeader(`Location`, server.config.base);
+                response.end();
+                return;
+            }
             if (request.method === `GET` && request.headers.accept?.includes(`text/html`) === true) {
                 request.url = entry;
             }
@@ -146,6 +154,10 @@ export default defineConfig({
         host: `127.0.0.1`,
         port: 47146,
         strictPort: true,
+        // Started by the sandbox's Start (the root Procfile, which passes the PORT it assigns), the server is reached
+        // through the preview proxy, which forwards its own `preview-<repo>-<sandboxId>.<zone>` Host unchanged. Run by
+        // hand or as an agent's managed preview there is no PORT, and Vite's default ([]: localhost and IPs) stands.
+        allowedHosts: process.env[`PORT`] === undefined ? [] : true,
         fs: { allow: cache.fsAllow },
         // The app's start, transformed as the server comes up (see the app's own vite.config.ts): the demo's entry, and
         // the app's, which it imports dynamically after installing its fakes, so no crawl from the first reaches it.

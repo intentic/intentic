@@ -19,6 +19,7 @@
 // something else holds it, so the origin survives a restart.
 //
 // INTENTIC_PREVIEW_DIRECT=1 runs Vite in the foreground even in a turn, for the rare check that needs its console.
+// A PORT in the environment (the sandbox's Start, through the repository's root Procfile) does the same on that port.
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
@@ -229,7 +230,11 @@ const list = (owner) => {
 const main = async () => {
     const args = process.argv.slice(2);
     const owner = process.env[OWNER_ENV];
-    const inTurn = owner !== undefined && owner !== "" && !NOT_CONVERSATIONS.has(owner) && process.env["INTENTIC_PREVIEW_DIRECT"] !== "1";
+    // A run that is handed a PORT is the sandbox's Start for this repository (the root Procfile): Vite in the foreground of
+    // Start's terminal, on that port, behind the preview proxy (vite.config.ts, allowedHosts), never a managed preview.
+    const assigned = process.env["PORT"];
+    const started = assigned !== undefined && assigned !== "";
+    const inTurn = !started && owner !== undefined && owner !== "" && !NOT_CONVERSATIONS.has(owner) && process.env["INTENTIC_PREVIEW_DIRECT"] !== "1";
     if (args.includes("--list")) {
         process.exit(list(inTurn ? owner : undefined));
     }
@@ -238,7 +243,7 @@ const main = async () => {
             say("demo: --stop stops a conversation's managed preview, and this shell is not in one.");
             process.exit(2);
         }
-        direct(args);
+        direct(started ? [...args, "--port", assigned] : args);
         return;
     }
     if (args.includes("--help") || args.includes("-h")) {
@@ -249,7 +254,9 @@ const main = async () => {
         process.exit(await stop(owner));
     }
     if (args.length > 0) {
-        say(`demo: in an agent's turn the demo runs as this conversation's managed preview, on a port of its own; ${args.join(" ")} is not taken here.\n`);
+        say(
+            `demo: in an agent's turn the demo runs as this conversation's managed preview, on a port of its own; ${args.join(" ")} is not taken here.\n`,
+        );
         say(USAGE);
         process.exit(2);
     }
