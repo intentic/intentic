@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Button, Icon, type IconName, InfoHint, ui, useDevice } from "@intentic/ui";
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { LANE_GAP_PX } from "./laneSeat";
 import { type Notification, type NotificationAction, type NotificationTone, useNotifications } from "./notifications";
+import { useLaneSeat } from "./useLaneSeat";
 import { useT } from "@intentic/ui/i18n";
 
 // The one place the app floats anything over itself: the store decides what and why, this file is the lane
 // (layout, card shape, timing). The wrapper is inert; only the cards catch pointer events. It grows upward from
-// the bottom-right, last item anchored, so receipts (frequent) come first and questions (fixed point) last.
+// the bottom-left, beside the rail and over the status bar (laneSeat.ts says why that corner), last item anchored, so
+// receipts (frequent) come first and questions (fixed point) last.
 
 const t = useT();
 
@@ -41,6 +44,25 @@ watch(
 
 onBeforeUnmount(() => clearTimeout(timer));
 
+// A phone keeps the full-width lane over its tab bar; a desktop stands it in the measured corner.
+const lane = ref<HTMLElement>();
+const seat = useLaneSeat(
+    lane,
+    computed(() => !mobile.value && notifications.value.length > 0),
+);
+const seatStyle = computed(() => {
+    if (mobile.value || seat.value === undefined) {
+        return undefined;
+    }
+    const { left, bottom } = seat.value;
+    return {
+        left: `${left}px`,
+        bottom: `${bottom}px`,
+        maxWidth: `calc(100vw - ${left + LANE_GAP_PX}px)`,
+        maxHeight: `calc(100dvh - ${bottom + LANE_GAP_PX}px)`,
+    };
+});
+
 // Tone changes only the glyph and colour; every card is otherwise the same box.
 const GLYPH: Record<NotificationTone, IconName> = {
     done: `check`,
@@ -62,7 +84,7 @@ const TINT: Record<NotificationTone, string> = {
 const tintOf = (entry: Notification): string => (entry.spin === true ? `text-primary-600` : TINT[entry.tone]);
 
 // Receipt width fits its sentence; other cards take the lane's width or more if they carry a body. All
-// right-align, but below `sm` they span the full lane so a narrow phone doesn't misalign.
+// left-align, but below `sm` they span the full lane so a narrow phone doesn't misalign.
 const widthOf = (entry: Notification): string =>
     entry.kind === `receipt` ? `w-full sm:w-auto sm:max-w-[22rem]` : entry.wide ? `w-full sm:w-[32rem]` : `w-full sm:w-[22rem]`;
 
@@ -87,8 +109,14 @@ const press = (entry: Notification, action: NotificationAction): void => {
 <template>
     <!-- Viewport clipping retires overflowing receipts while keeping fixed questions reachable. -->
     <div
-        class="pointer-events-none fixed inset-x-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col items-end justify-end gap-2 overflow-hidden sm:left-auto sm:right-3 sm:max-w-[calc(100vw-1.5rem)]"
-        :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
+        ref="lane"
+        class="pointer-events-none fixed z-50 flex flex-col justify-end gap-2 overflow-hidden"
+        :class="
+            mobile
+                ? `inset-x-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-1.5rem)] items-end`
+                : `bottom-3 left-3 max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] items-start`
+        "
+        :style="seatStyle"
     >
         <!-- `appear`, because each card is born inside its own <Transition>, which otherwise plays only a later toggle:
              without it a new card popped in and only a leaving one moved. -->

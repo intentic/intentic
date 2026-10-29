@@ -40,7 +40,7 @@ export interface NotificationInput {
     readonly hint?: string;
     /** Escape hatch: a component rendered under the text, for content that isn't two strings. */
     readonly body?: Component;
-    /** A card that needs room for its body; widens the lane and stays right-aligned. */
+    /** A card that needs room for its body; widens the lane, still anchored to its corner. */
     readonly wide?: boolean;
     /** At most two; three buttons on a floating card is an unblocked dialog. */
     readonly actions?: readonly NotificationAction[];

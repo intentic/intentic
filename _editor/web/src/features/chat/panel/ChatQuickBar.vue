@@ -193,7 +193,10 @@ const restingLine = computed(() => {
         >
             <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
                  boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->
+            <!-- The pill, not the float around it, is the notification lane's floor (laneSeat.ts); open, the composer in the
+                 slot is its own. -->
             <div
+                data-lane-floor
                 class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom transition-opacity motion-reduce:transition-none"
                 :class="
                     open

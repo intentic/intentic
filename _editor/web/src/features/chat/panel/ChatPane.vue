@@ -537,9 +537,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     </template>
                 </ChatPaneTurns>
 
-                <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
+                <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band.
+                     A floor of the notification lane (laneSeat.ts), which stands above it where a narrow window puts it in the lane's column. -->
                 <div
                     ref="footer"
+                    data-lane-floor
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
                     :class="strip ? 'chat-footer-strip' : 'px-2 pt-3'"
                 >

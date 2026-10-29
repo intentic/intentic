@@ -413,6 +413,17 @@ onBeforeUnmount(() => {
             </button>
         </template>
 
+        <!-- Head of the rail: New agent (the fleet board's own wording, at the board's own top right), and nothing else. The rail
+             is one form whether it stands in /chat or in a popped-out window, so neither grows an action the other lacks; past
+             chats are the docked sheet's. At the head rather than the foot: the new chat appears at the top of the list, under
+             the press, and the foot is the notification lane's corner (workbench/notifications/laneSeat.ts). -->
+        <div v-if="vertical && !readOnly" class="flex shrink-0 justify-end">
+            <!-- It starts as no one in particular: the new chat's posture is picked in its composer, or matched from its first message. -->
+            <Button size="small" tier="boring" :label="vocabulary.newAgent" @click="startAgent()">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+        </div>
+
         <!-- The rail's list: always open, filling the height the window gives it. -->
         <ChatTabList
             v-if="vertical"
@@ -457,18 +468,6 @@ onBeforeUnmount(() => {
             </button>
         </div>
 
-        <!-- Foot of the rail: New agent (the fleet board's own wording), and nothing else. The rail is one form whether it stands
-             in /chat or in a popped-out window, so neither grows an action the other lacks; past chats are the docked sheet's. -->
-        <div v-else-if="!readOnly" class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- The kit's compact secondary tier. It starts as no one in particular: the new chat's posture is picked in its
-                 composer, or matched from its first message. -->
-            <Button size="small" tier="boring" @click="startAgent()">
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-500/15 text-link">
-                    <Icon name="plus" class="text-2xs" />
-                </span>
-                <span class="leading-none">{{ vocabulary.newAgent }}</span>
-            </Button>
-        </div>
 
         <!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
         <div

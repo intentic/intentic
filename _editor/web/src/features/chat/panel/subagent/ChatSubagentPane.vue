@@ -202,7 +202,7 @@ const takeFocus = (): void => {
                         </p>
                     </template>
                 </ChatPaneTurns>
-                <div class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
+                <div data-lane-floor class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
                     <ChatSubagentBar
                         :child="session"
                         :parent-title="parentTitle"

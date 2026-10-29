@@ -46,6 +46,7 @@ const close = (): void => {
         v-if="drawn"
         role="region"
         :aria-label="t(`agents.statusBar.label`)"
+        data-lane-floor
         class="flex min-w-0 shrink-0 flex-col border-t border-line bg-canvas text-2xs"
     >
         <!-- `open` already means metrics; said again here only so the template narrows them for the panel. -->
