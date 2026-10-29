@@ -699,7 +699,11 @@ mod tests {
         // Lost twice, then taken: three tries, both pauses.
         let mut answers = vec![Delivery::Taken, Delivery::Unanswered, Delivery::Unanswered];
         let mut paused = Vec::new();
-        let delivery = until_taken(|| answers.pop().expect("a try too many"), &pauses, |wait| paused.push(wait));
+        let delivery = until_taken(
+            || answers.pop().expect("a try too many"),
+            &pauses,
+            |wait| paused.push(wait),
+        );
         assert_eq!(delivery, Delivery::Taken);
         assert_eq!(paused, pauses.to_vec());
         // A refusal is the answer: no second try.
