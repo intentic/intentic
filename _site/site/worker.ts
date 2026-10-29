@@ -1,7 +1,8 @@
 import { INSTALL_SCRIPTS, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { DESKTOP_ROUTES } from "./src/lib/desktop-downloads";
 import { createReleaseResolver } from "./src/lib/release";
-import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
+import type { LiveContent, LiveSwitch } from "./src/lib/live";
+import { createLiveContentResolver } from "./src/lib/worker/live-resolver";
 import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
 import { aiFetchOf, sendAiFetch } from "./src/lib/ai-fetch";
 import { handleSiteWire, type WireEnv } from "./src/lib/site-wire";
@@ -87,29 +88,7 @@ async function latestReleaseJson(): Promise<Response> {
     });
 }
 
-// Live document, read per request and memoised for LIVE_CACHE_SECONDS; any failure leaves the page as built.
-const LIVE_TTL_MS = LIVE_CACHE_SECONDS * 1000;
-let liveCache: { content: LiveContent | undefined; at: number } | undefined;
-
-async function liveContent(): Promise<LiveContent | undefined> {
-    if (liveCache !== undefined && Date.now() - liveCache.at < LIVE_TTL_MS) {
-        return liveCache.content;
-    }
-    let content: LiveContent | undefined;
-    try {
-        const response = await fetch(LIVE_CONTENT_URL, { cf: { cacheTtl: LIVE_CACHE_SECONDS, cacheEverything: true } });
-        if (response.ok) {
-            content = parseLiveContent(await response.json());
-        } else {
-            console.warn(`live content: ${LIVE_CONTENT_URL} answered ${response.status}; the built page stands and no switch applies`);
-        }
-    } catch (error) {
-        // Unreachable, rate-limited, or not JSON at all: the built page stands, and `wrangler tail` says why.
-        console.warn(`live content: ${LIVE_CONTENT_URL} could not be read (${String(error)}); the built page stands and no switch applies`);
-    }
-    liveCache = { content, at: Date.now() };
-    return content;
-}
+const liveContent = createLiveContentResolver((input, init) => fetch(input, init));
 
 // Switch controls matched by what a control already looks like (`a.btn` to the app host, or a download href).
 const APP_HOST = new URL(PLATFORM_WEB_ORIGIN).host;
@@ -220,13 +199,13 @@ export default {
             return secure;
         }
 
-        // Read once per request and handed to the route: two of its three effects are the route's own decisions.
-        const live = await liveContent();
-        const response = await route(request, url, env, live);
+        const response = await route(request, url, env);
 
         // Rewrite only documents; `/demo/` is skipped since it is an app with no notice strip or controls to rewrite.
+        // Assets and redirects can return while GitHub is slow or a notice refresh is in flight.
         const isDocument = response.headers.get("content-type")?.includes("text/html") === true;
-        const shaped = live !== undefined && isDocument && !url.pathname.startsWith("/demo") ? withLiveContent(response, live) : response;
+        const live = isDocument && !url.pathname.startsWith("/demo") ? await liveContent() : undefined;
+        const shaped = live !== undefined ? withLiveContent(response, live) : response;
 
         // An AI assistant or crawler reading a page is counted after the response, so the count never delays it.
         const aiFetch = aiFetchOf(request.headers.get("user-agent") ?? "", url.pathname, shaped.status, request.cf?.verifiedBotCategory);
@@ -248,9 +227,9 @@ async function desktopDownload(
     request: Request,
     url: URL,
     env: { ASSETS: { fetch: typeof fetch } },
-    live: LiveContent | undefined,
 ): Promise<Response> {
     // The switch is the route's: these URLs are published everywhere, so a dimmed button alone would not stop it.
+    const live = await liveContent();
     if (live?.switches.download.enabled === false) {
         return Response.redirect(new URL("/download/", url).href, 302);
     }
@@ -264,7 +243,7 @@ async function desktopDownload(
     return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
 }
 
-async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }, live: LiveContent | undefined): Promise<Response> {
+async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
     if (url.pathname === SITEMAP_ALIAS) {
         return Response.redirect(new URL("/sitemap-index.xml", url).href, 301);
     }
@@ -281,7 +260,7 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
 
     const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];
     if (download !== undefined) {
-        return desktopDownload(download, request, url, env, live);
+        return desktopDownload(download, request, url, env);
     }
 
     const canonical = canonicalForMarkdown(url.pathname);
