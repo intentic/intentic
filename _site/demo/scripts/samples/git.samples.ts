@@ -13,6 +13,8 @@ const api = (seed: string): string => seedSha(`api`, seed);
 const GIT_SAMPLES: Samples[`git`] = {
     repos: undefined,
     changes: undefined,
+    viewChanges: { view: { repo: `api`, branch: `feature/rate-limits` } },
+    branchLandings: { repo: `api`, branch: `feature/rate-limits` },
     fileDiff: { repo: `web`, path: `src/lib/checkout.ts`, side: `unstaged` },
     branches: { repo: `web` },
     stage: { repo: `web`, paths: [`src/lib/checkout.ts`] },

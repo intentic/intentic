@@ -158,8 +158,13 @@ const requestFor = (contract: Contract, route: ContractRoute, input: unknown): R
     const rest = params.length === 0 ? input : fields.length > 0 ? Object.fromEntries(fields) : undefined;
     const url = new URL(contract.requestPathFor(route, input), ORIGIN);
     if (route.method === `GET`) {
+        // An object field in OpenAPI's bracket spelling (view[repo]=api&view[branch]=main), as the link sends it.
         for (const [key, value] of Object.entries(rest ?? {})) {
-            url.searchParams.append(key, String(value));
+            if (value instanceof Object) {
+                for (const [member, inner] of Object.entries(value)) { url.searchParams.append(`${key}[${member}]`, String(inner)); }
+            } else {
+                url.searchParams.append(key, String(value));
+            }
         }
         return new Request(url);
     }
