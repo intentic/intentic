@@ -22,6 +22,9 @@ import { arrivalLanding } from "./remote/project-arrival.js";
 import { gitImplementer, indexRoutes } from "./index.routes.js";
 import { createOffMainLine, mainLineRoutes } from "./main-line.routes.js";
 import { opt } from "../opt.js";
+import { branchLandings } from "./review/branch-landings.js";
+import { callerFence } from "../areas/area-scope.js";
+import { refuseFenced } from "../workspace/layout/workspace-fence.js";
 
 // How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
 const COALESCE_MS = 500;
@@ -323,6 +326,12 @@ export const createGitRoutes = (services: Services) => {
     };
 
     return {
+        branchLandings: i.branchLandings.handler(async ({ input, context }) => {
+            refuseFenced(callerFence(await services.areas.list(), context.identity), input.repo === "root" ? "" : input.repo);
+            const main = await repoDir(input.repo);
+            const dir = await services.branchCheckouts.refresh(input.repo, input.branch);
+            return branchLandings(dir, main, input.before);
+        }),
         // Review set plus `committing`, read after the scan settles (not merged into the memoized result), so a commit
         // that starts or ends during the coalesce window still shows on this response.
         changes: i.changes.handler(async () => {

@@ -17,7 +17,7 @@ import { personaStartDirs } from "../../../models/sandbox/personas/personaRules"
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../../models/sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
-import { isShared, workspaceDir, workspaceView } from "../../../app/workspaceScope";
+import { isShared, scopeKey, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import { type ProjectFocus, projectIdsOf } from "../explorer/projectFocus";
@@ -58,6 +58,7 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import ScopedChangesPanel from "../changes/scoped/ScopedChangesPanel.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
@@ -123,6 +124,7 @@ const scopeBroken = computed(() => !isShared(workspaceView.value) && error.value
 
 // Chip for committed work still on disk with nothing to count; gated on zero for the more urgent of the two.
 const changesMark = computed(() => {
+    if (!isShared(workspaceView.value)) { return {}; }
     const work = changes.outgoing.value;
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
@@ -134,7 +136,7 @@ const sidebarModeOptions = computed(() => [
     { label: t(`shared.files`), value: `files` as const },
     // Both audiences get the panel, since the rail badges this count at both and a badge with nowhere to press is
     // only a nag; what differs is the panel behind it (SavePanel has no index and writes its own message).
-    { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    { label: words.value.changes, value: `changes` as const, badge: isShared(workspaceView.value) ? changes.count.value : undefined, ...changesMark.value },
 ]);
 
 // State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
@@ -724,7 +726,7 @@ const homeTooltip = computed((): Tip => ({
                         <Icon name="history" class="text-xs" />
                     </button>
                     <!-- Changes' panel-wide actions ride the switch's row, since the tab already titles the panel and shows its count. -->
-                    <template v-if="layout.sidebarPanel.value === 'changes'">
+                    <template v-if="layout.sidebarPanel.value === 'changes' && isShared(workspaceView)">
                         <button
                             type="button"
                             :class="ui.iconButton()"
@@ -742,7 +744,8 @@ const homeTooltip = computed((): Tip => ({
                     </template>
                 </div>
                 <template v-if="layout.sidebarPanel.value === 'changes'">
-                    <SavePanel v-if="maker" @open-diff="openDiff" />
+                    <ScopedChangesPanel v-if="!isShared(workspaceView)" :key="scopeKey(workspaceView)" @open-diff="openDiff" />
+                    <SavePanel v-else-if="maker" @open-diff="openDiff" />
                     <ReviewPanel v-else @open-diff="openDiff" />
                 </template>
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />

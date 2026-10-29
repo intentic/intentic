@@ -91,6 +91,7 @@ it(`refreshes every open agent review when a commit moves the refs`, () => {
     expect(reaches(rpcKey(`agents.history`, { id: `a1` }))).toBe(true);
     // The workspace's own review still refreshes, which is what this signal always did.
     expect(reaches(rpcKey(`git.changes`))).toBe(true);
+    expect(reaches(rpcKey(`git.branchLandings`, { repo: `web`, branch: `feature/annual-copy` }))).toBe(true);
     // Transcripts don't refresh: a commit says nothing about what anyone said, and rereading one is expensive.
     expect(reaches(rpcKey(`agents.transcript`, { id: `a1` }, UNPERSISTED))).toBe(false);
 });

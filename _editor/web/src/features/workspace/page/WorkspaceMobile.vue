@@ -57,11 +57,12 @@ import { useEmptyDirs } from "../explorer/useEmptyDirs";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import ScopedChangesPanel from "../changes/scoped/ScopedChangesPanel.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import BringProjectButton from "../explorer/BringProjectButton.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
-import { isShared, scopeFields, workspaceDir, workspaceView } from "../../../app/workspaceScope";
+import { isShared, scopeFields, scopeKey, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -173,13 +174,14 @@ const segment = computed<SidebarPanel>({
 // The Changes tab's chip: the count while there's work to review, then the outgoing mark, so a clean tree
 // with commits to push doesn't read as empty.
 const changesMark = computed(() => {
+    if (!isShared(workspaceView.value)) { return {}; }
     const work = changes.outgoing.value;
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
 const segmentOptions = computed(() => [
     // Touch has no hover; `markTitle` reaches the reader via the pill's accessible name (nameOf), not a tooltip.
     { label: t(`shared.files`), value: `files` as const },
-    { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    { label: words.value.changes, value: `changes` as const, badge: isShared(workspaceView.value) ? changes.count.value : undefined, ...changesMark.value },
 ]);
 
 // Same search state as desktop; match switches get their own row here, since a row is a better touch target.
@@ -411,6 +413,7 @@ const onPick = (event: Event): void => {
                 </button>
                 <!-- One refresh for the row, refetching whichever segment shows; Changes no longer carries its own header row. -->
                 <button
+                    v-if="segment !== `changes` || isShared(workspaceView)"
                     type="button"
                     :class="ui.iconButton({ size: `xl` })"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
@@ -431,7 +434,8 @@ const onPick = (event: Event): void => {
             <NoticeStack :of="[actionError, treeNotice]" class="shrink-0 px-3 py-1.5" />
 
             <template v-if="segment === 'changes'">
-                <SavePanel v-if="maker" @open-diff="openDiffNav" />
+                <ScopedChangesPanel v-if="!isShared(workspaceView)" :key="scopeKey(workspaceView)" @open-diff="openDiffNav" />
+                <SavePanel v-else-if="maker" @open-diff="openDiffNav" />
                 <ReviewPanel v-else @open-diff="openDiffNav" />
             </template>
             <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" />

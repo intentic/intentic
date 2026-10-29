@@ -12740,7 +12740,7 @@
             "startHint": "Nowa kopia współdzielonej przestrzeni roboczej",
             "startFrom": "Zacznij od",
             "remoteOnly": "Tylko zdalna",
-            "staysShared": "Zmieniają się tylko pliki: wyszukiwanie, Zmiany, terminale i podglądy zostają przy współdzielonej przestrzeni roboczej.",
+            "staysShared": "Wyszukiwanie, terminale i podglądy korzystają ze wspólnej przestrzeni roboczej.",
             "clickToLook": "Kliknij, by zobaczyć inną",
             "sharedAria": "Współdzielona przestrzeń robocza, na {name}",
             "branchAria": "Gałąź, tylko do odczytu: {name}",
@@ -13059,6 +13059,15 @@
         "workspaceViewNote": {
             "readOnly": "Podgląd {name}, tylko do odczytu",
             "backToShared": "Wróć do wspólnej"
+        },
+        "scopedChanges": {
+            "branchHint": "Każde przeniesienie porównuje gałąź przed pracą tej sesji i po niej.",
+            "sessionHint": "Praca tej sesji, w tym zmiany już przeniesione.",
+            "loading": "Wczytywanie zmian…",
+            "noLandings": "Na tej stronie nie ma zmian sesji spoza {branch}.",
+            "noChanges": "Brak zmian w tej sesji.",
+            "latest": "Najnowsze przeniesienia",
+            "older": "Starsze przeniesienia"
         }
     },
     "needs": {

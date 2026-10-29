@@ -8,6 +8,9 @@ describe(`derivedDiffSource`, () => {
         expect(derivedDiffSource(diffRawUrls(working, `Brief.docx`, `modified`))).toEqual({ ...working, path: `Brief.docx` });
         const agent = { source: `agent`, agent: `abc123`, repo: `web` } as const;
         expect(derivedDiffSource(diffRawUrls(agent, `docs/spec.pdf`, `added`))).toEqual({ ...agent, path: `docs/spec.pdf` });
+        const commit = { source: `commit`, sha: `a`.repeat(40), repo: `web` } as const;
+        expect(derivedDiffSource(diffRawUrls(commit, `docs/landed.pdf`, `modified`))).toEqual({ ...commit, path: `docs/landed.pdf` });
+        expect(diffRawUrls(commit, `docs/deleted.pdf`, `deleted`).afterRaw).toBeUndefined();
         const checkpoint = { source: `checkpoint`, snapshot: `s-9`, scope: `root` } as const;
         expect(derivedDiffSource(diffRawUrls(checkpoint, `deck.pptx`, `deleted`))).toEqual({ ...checkpoint, path: `deck.pptx` });
     });

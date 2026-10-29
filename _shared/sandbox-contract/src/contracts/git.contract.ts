@@ -48,11 +48,22 @@ import {
 import { IndexRunSchema, IndexRunStartSchema } from "../schemas/git/index-run.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
+import { BranchLandingsQuerySchema, BranchLandingsSchema } from "../schemas/git/branch-landings.js";
 
 // Per-repo git ops over the workspace repos; `root` is /work, others are discovered under it, and {repo} is the
 // root-relative dir, URL-encoded. Unknown {repo} throws NOT_FOUND, an escaping path throws BAD_REQUEST. `changes` is
 // the workspace-wide review set; commit/discard take optional `paths`.
 export const gitContract = {
+    branchLandings: procedure
+        .route({
+            method: "GET",
+            path: "/git/{repo}/branch-landings",
+            summary: "Session work landed onto a branch",
+            description:
+                "Session commits unique to the selected branch, newest first. Each commit compares the branch before that landing with the result, independently of later edits or session worktree cleanup. Continue with the returned next cursor.",
+        })
+        .input(BranchLandingsQuerySchema)
+        .output(BranchLandingsSchema),
     changes: procedure
         .route({
             method: "GET",

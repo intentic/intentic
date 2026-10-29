@@ -13352,7 +13352,7 @@
             "startHint": "Eine neue Kopie des geteilten Workspace",
             "startFrom": "Starten von",
             "remoteOnly": "Nur remote",
-            "staysShared": "Nur die Dateien wechseln: Suche, Änderungen, Terminals und Vorschauen bleiben beim geteilten Workspace.",
+            "staysShared": "Suche, Terminals und Vorschauen nutzen den geteilten Workspace.",
             "clickToLook": "Klicken für eine andere",
             "sharedAria": "Geteilter Workspace, auf {name}",
             "branchAria": "Branch, schreibgeschützt: {name}",
@@ -13656,6 +13656,15 @@
         "workspaceViewNote": {
             "readOnly": "Ansicht von {name}, schreibgeschützt",
             "backToShared": "Zurück zum geteilten"
+        },
+        "scopedChanges": {
+            "branchHint": "Jede Übernahme vergleicht den Branch vor und nach der Arbeit dieser Sitzung.",
+            "sessionHint": "Die Arbeit dieser Sitzung, einschließlich bereits übernommener Änderungen.",
+            "loading": "Änderungen werden geladen…",
+            "noLandings": "Keine Sitzungsübernahmen außerhalb von {branch} auf dieser Seite.",
+            "noChanges": "Keine Änderungen in dieser Sitzung.",
+            "latest": "Neueste Übernahmen",
+            "older": "Ältere Übernahmen"
         }
     },
     "gettingStarted": {

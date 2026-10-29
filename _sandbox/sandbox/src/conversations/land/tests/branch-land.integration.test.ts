@@ -17,6 +17,7 @@ import { createBranchCheckouts } from "../../worktrees/branches/branch-checkouts
 import { noIsolation } from "../../worktrees/isolation.testing.js";
 import { createAgentWorktrees } from "../../worktrees/worktrees.js";
 import { branchLinesOf } from "../branch/branch-land.js";
+import { branchLandings } from "../../../git/review/branch-landings.js";
 import { landAgent } from "../land.js";
 import { syncConversation } from "../sync.js";
 
@@ -136,7 +137,7 @@ test("opening from a branch cuts that repo's copy from the branch's tip, every o
 });
 
 test("a land commits the branch repo's work onto the branch, and the other repo's into the shared tree as any land does", async () => {
-    const { work, ui, mainTip, featureTip, worktrees, open, land } = await setup();
+    const { work, ui, mainTip, featureTip, worktrees, branchCheckouts, open, land } = await setup();
     const worktree = await open();
     await writeFile(join(worktree.cwd, "agent.ts"), "the agent's work\n");
     await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "button, fixed\n");
@@ -148,6 +149,10 @@ test("a land commits the branch repo's work onto the branch, and the other repo'
     expect(await sh(work, "log", "-1", "--format=%s", "feature")).toBe(`Agent: ${TITLE}`);
     expect(await sh(work, "log", "-1", "--format=%B", "feature")).toContain(ID);
     expect(await sh(work, "show", "feature:agent.ts")).toBe("the agent's work");
+    const review = await branchLandings(await branchCheckouts.refresh("root", "feature"), work);
+    expect(review.commits.map(({ agent, sha, subject }) => ({ agent, sha, subject }))).toEqual([
+        { agent: ID, sha: await sh(work, "rev-parse", "feature"), subject: `Agent: ${TITLE}` },
+    ]);
     // The shared tree's root repo took nothing and never moved.
     expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
     await expect(readFile(join(work, "agent.ts"), "utf8")).rejects.toThrow();

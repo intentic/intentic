@@ -13352,7 +13352,7 @@
             "startHint": "Une nouvelle copie de l'espace de travail partagé",
             "startFrom": "Partir de",
             "remoteOnly": "Distante seule",
-            "staysShared": "Seuls les fichiers changent : la recherche, les Modifications, les terminaux et les aperçus restent sur l'espace de travail partagé.",
+            "staysShared": "La recherche, les terminaux et les aperçus utilisent l’espace de travail partagé.",
             "clickToLook": "Cliquer pour une autre",
             "sharedAria": "Espace de travail partagé, sur {name}",
             "branchAria": "Branche, en lecture seule : {name}",
@@ -13656,6 +13656,15 @@
         "workspaceViewNote": {
             "readOnly": "Aperçu de {name}, en lecture seule",
             "backToShared": "Revenir au partagé"
+        },
+        "scopedChanges": {
+            "branchHint": "Chaque intégration compare la branche avant et après le travail de cette session.",
+            "sessionHint": "Le travail de cette session, y compris les modifications déjà intégrées.",
+            "loading": "Chargement des modifications…",
+            "noLandings": "Aucune intégration de session en dehors de {branch} sur cette page.",
+            "noChanges": "Aucune modification dans cette session.",
+            "latest": "Intégrations récentes",
+            "older": "Intégrations précédentes"
         }
     },
     "gettingStarted": {

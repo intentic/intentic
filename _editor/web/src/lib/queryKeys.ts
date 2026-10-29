@@ -21,8 +21,8 @@ export const rpcKeyAt = (sandboxId: string, procedure: ProcedureName, input?: un
     sandboxId,
 ];
 
-// The working tree's review: its change list and the file diffs read from it, which go stale only together.
-const WORKING_REVIEW: readonly ProcedureName[] = [`git.changes`, `git.fileDiff`];
+// Changes lists refresh after a land or ref move, including the session commits shown for a selected branch.
+const WORKING_REVIEW: readonly ProcedureName[] = [`git.changes`, `git.fileDiff`, `git.branchLandings`];
 export const workingReviewKeys: readonly (readonly string[])[] = WORKING_REVIEW.map(rpcPrefix);
 
 // An agent's review: its diff against the main line, the file diffs read from it, and where its landed work went,

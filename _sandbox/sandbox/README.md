@@ -693,6 +693,11 @@ flowchart LR
   (2026-10-26) Explicitly restricted child environments keep their boundary; adding daemon variables to them was
   rejected. Browser calls hold their sessions until completion or failure; Codex stream teardown and aborted Claude
   hooks also release their holds, so an interrupted tool does not retain a browser indefinitely.
+- The Workspace's branch Changes view reads session commits unique to that branch through `git.branchLandings`
+  (`git/review/branch-landings.ts`). Landings are identified by their `Conversation-Id` trailer on the branch's
+  first-parent history, excluding commits already reachable from the main line. Each landing opens the existing
+  commit-diff routes, so its before and after remain fixed after later lands or session cleanup. The read keeps the
+  caller's repository fence and paginates by commit, rejecting a cursor no longer on the branch after a rewrite.
 - Review Git evidence is reused for matching checkout generations and placement/landing metadata, for at most ten
   seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh. Chore
   evidence has the same ten-second generation bound, and each fresh pass shares one workspace-manifest reading.

@@ -13352,7 +13352,7 @@
             "startHint": "A new copy of the shared workspace",
             "startFrom": "Start from",
             "remoteOnly": "Remote only",
-            "staysShared": "Only the files change: search, Changes, terminals and previews stay on the shared workspace.",
+            "staysShared": "Search, terminals and previews use the shared workspace.",
             "clickToLook": "Click to view another",
             "sharedAria": "Shared workspace, on {name}",
             "branchAria": "Branch, read-only: {name}",
@@ -13656,6 +13656,15 @@
         "workspaceViewNote": {
             "readOnly": "Looking at {name}, read-only",
             "backToShared": "Back to shared"
+        },
+        "scopedChanges": {
+            "branchHint": "Each landing compares the branch before and after that session’s work.",
+            "sessionHint": "This session’s work, including changes already landed.",
+            "loading": "Loading changes…",
+            "noLandings": "No session landings outside {branch} on this page.",
+            "noChanges": "No changes in this session.",
+            "latest": "Latest landings",
+            "older": "Older landings"
         }
     },
     "gettingStarted": {

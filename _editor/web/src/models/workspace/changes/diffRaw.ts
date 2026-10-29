@@ -11,6 +11,7 @@ export type DiffRawSource =
     | { readonly source: "working"; readonly repo: string; readonly side: GitDiffSide }
     // One agent's work vs the base its review is listed against.
     | { readonly source: "agent"; readonly agent: string; readonly repo: string }
+    | { readonly source: "commit"; readonly sha: string; readonly repo: string }
     // A checkpoint in the timeline, vs the previous visible checkpoint.
     | { readonly source: "checkpoint"; readonly snapshot: string; readonly scope: string };
 

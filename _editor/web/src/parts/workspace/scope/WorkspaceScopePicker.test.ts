@@ -136,7 +136,7 @@ it(`marks the branch on screen, and says what stays on the shared workspace`, as
     const el = await mount({ repo: `apps/web`, branch: `next` });
 
     expect(el.querySelector(`[role=option][aria-selected=true]`)?.textContent).toContain(`next`);
-    expect(el.textContent).toContain(`search, Changes, terminals and previews stay on the shared workspace`);
+    expect(el.textContent).toContain(`Search, terminals and previews use the shared workspace.`);
     // A branch has no card to review.
     expect(el.querySelector(`a[href^="/agents/"]`)).toBeNull();
 });

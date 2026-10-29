@@ -13352,7 +13352,7 @@
             "startHint": "Una copia nueva del espacio de trabajo compartido",
             "startFrom": "Empezar desde",
             "remoteOnly": "Solo remota",
-            "staysShared": "Solo cambian los archivos: la búsqueda, Cambios, las terminales y las vistas previas siguen en el espacio de trabajo compartido.",
+            "staysShared": "La búsqueda, las terminales y las vistas previas usan el espacio de trabajo compartido.",
             "clickToLook": "Clic para ver otra",
             "sharedAria": "Espacio de trabajo compartido, en {name}",
             "branchAria": "Rama, solo lectura: {name}",
@@ -13656,6 +13656,15 @@
         "workspaceViewNote": {
             "readOnly": "Viendo {name}, solo lectura",
             "backToShared": "Volver al compartido"
+        },
+        "scopedChanges": {
+            "branchHint": "Cada integración compara la rama antes y después del trabajo de esa sesión.",
+            "sessionHint": "El trabajo de esta sesión, incluidos los cambios ya integrados.",
+            "loading": "Cargando cambios…",
+            "noLandings": "No hay integraciones de sesiones fuera de {branch} en esta página.",
+            "noChanges": "No hay cambios en esta sesión.",
+            "latest": "Integraciones recientes",
+            "older": "Integraciones anteriores"
         }
     },
     "gettingStarted": {

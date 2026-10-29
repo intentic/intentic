@@ -8,6 +8,7 @@ import { branchList, commitDiff, commitFileDiff, gitLog, stashDiff, stashList, u
 import { abort, checkout, createBranch, createBranchAt, createTag, deleteBranch, deleteTag, operation, returnToMainLine, stashApply, stashDrop } from "./gitRefs";
 import { cherryPick, drop, merge, rebase, reset, revert, undo } from "./gitRewrite";
 import type { Doors } from "../doors";
+import { branchLandings } from "./branchLandings";
 
 // Every repo's git, simulated for the page load over one commit graph per repo (daemon/gitGraph.ts): the index moves and
 // commits of the Changes panel, the log, branches, tags, stash and undo of the history view, and fetch, pull and push
@@ -21,6 +22,7 @@ const onDisk = (repo: string, path: string) => {
 };
 
 export const gitDoors = {
+    branchLandings: ({ repo, branch, before }) => branchLandings(repo, branch, before),
     repos: () => ({ repos: [...REPOS] }),
     changes: () => gitChanges(),
     fileDiff: ({ repo, path }) => pendingDiff(repo, path) ?? fileDiff(repo, path),
