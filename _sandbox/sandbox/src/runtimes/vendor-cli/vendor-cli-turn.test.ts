@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
@@ -34,7 +35,8 @@ interface Ran {
     readonly options: AcpTurnOptions | undefined;
 }
 
-const harness = (accounts: StoredCliAccount[], replies: AgentEvent[] = [{ kind: "done" }]) => {
+// What the refusal ledger holds for the provider: an account it names is passed over by a turn naming none.
+const harness = (accounts: StoredCliAccount[], replies: AgentEvent[] = [{ kind: "done" }], refusals: readonly ProviderRefusal[] = []) => {
     const ran: Ran[] = [];
     const written: StoredCliAccount[] = [];
     const parts = {
@@ -69,6 +71,14 @@ const harness = (accounts: StoredCliAccount[], replies: AgentEvent[] = [{ kind: 
         dependencies: unstubbed("dependencies", {}),
         agents: unstubbed("agents", { entry: () => undefined }),
         logger: createLogger(testConfig),
+        // The one rule a turn naming no account is placed by (serviceability.ts unnamedAccount): the CLI's own accounts
+        // as their door lists them, no translator subscription, and the refusals on file.
+        providerAccounts: async () => accounts.map((entry) => ({ id: entry.id, label: entry.id, connectedAt: entry.connectedAt })),
+        cliProxy: unstubbed("cliProxy", { accounts: async () => ({ codex: [], gemini: [], grok: [], kimi: [] }) }),
+        providerRefusals: unstubbed("providerRefusals", { onFile: async () => ({ kimi: refusals }), flapping: async () => new Set<string>() }),
+        accountUsage: unstubbed("accountUsage", {}),
+        claudeSeats: unstubbed("claudeSeats", {}),
+        claudeStore: unstubbed("claudeStore", {}),
         async *acpAgent(id: string, launch: AcpLaunch, _request: AgentRequest, options?: AcpTurnOptions) {
             ran.push({ id, launch, options });
             yield* replies;
@@ -121,7 +131,7 @@ test("with nothing signed in the turn is refused with the sign-in fix", async ()
     );
 });
 
-test("the first account's home serves, its own CLI process, on the model the turn names", async () => {
+test("the first account nothing refused serves, its own CLI process, on the model the turn names", async () => {
     const h = harness([account("a"), account("b")]);
     await run(h, turn({ model: "kimi-k2" }));
     expect(h.ran).toEqual([
@@ -131,6 +141,14 @@ test("the first account's home serves, its own CLI process, on the model the tur
             options: { model: "kimi-k2" },
         },
     ]);
+});
+
+// The Devin failure on every CLI loop: a spent first account took each turn naming none while the others sat idle.
+test("a turn naming no account passes over one whose allowance the records call spent", async () => {
+    const spent: ProviderRefusal = { at: Date.now(), kind: "limit", message: "Kimi Code usage limit reached", account: "a", model: "kimi-k2" };
+    const h = harness([account("a"), account("b")], [{ kind: "done" }], [spent]);
+    await run(h, turn({ model: "kimi-k2" }));
+    expect(h.ran[0]?.id).toBe("kimi-cli:b");
 });
 
 test("Grok Build runs its own agent, unshared, with its ask-user tool switched off", async () => {

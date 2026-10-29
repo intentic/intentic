@@ -21,7 +21,8 @@ const MODELS_TTL_MS = 60_000;
 
 export const createCursorCatalog = (store: CursorStore, persistPath: string): CursorCatalog => {
     // Uses the first usable account, not all: accounts can see different lists (plan, policy), and a union would
-    // promise models the other can't run. The first connected account is also the one an unrouted turn spends.
+    // promise models the other can't run. A turn naming no account may run on another one (cursor-usage.ts), whose turn
+    // then runs the model it asked for or that account's own refusal says why.
     const discover = async (): Promise<ModelListItem[]> => {
         const sdk = await cursorSdk();
         if (sdk === undefined) {

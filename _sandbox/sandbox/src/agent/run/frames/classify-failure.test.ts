@@ -845,3 +845,22 @@ describe("a turn the safety classifier stopped", () => {
         expect(plan.held).toBeUndefined();
     });
 });
+
+// A loop with a sign-in of its own (Kimi CLI, Grok Build) ran on that sign-in, so its refusal names it: filed under no
+// account, a spent first sign-in read like every other and took each turn naming none (2026-10-29).
+describe("a spent allowance on a routed provider", () => {
+    const kimi = (harness: "native" | "vendor") =>
+        context({ turn: { agent: "kimi", harness, prompt: "ship it", conversationId: "c-1" }, provider: "kimi", model: "kimi-k3", account: "cli-a", attribution: { ...attribution, account: "cli-a" } });
+    const filedAccount = async (harness: "native" | "vendor") => {
+        const write = (await classifyFailure(limit, kimi(harness), answering({ way }))).writes.find((candidate) => candidate.kind === "provider-refusal");
+        return write?.kind === "provider-refusal" ? write.refusal.account : "none filed";
+    };
+
+    test("names the sign-in a vendor CLI loop ran on", async () => {
+        expect(await filedAccount("vendor")).toBe("cli-a");
+    });
+
+    test("names no account where the translator picked the credential", async () => {
+        expect(await filedAccount("native")).toBeUndefined();
+    });
+});

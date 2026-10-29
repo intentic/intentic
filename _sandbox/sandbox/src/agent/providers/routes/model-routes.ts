@@ -18,7 +18,7 @@ import { parseHeaders, unversionedBase, versionedBase } from "../../../endpoints
 import { endpointModelId } from "../../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import type { TurnAllowance } from "../harness-credentials.js";
-import { fleetCapacityOf, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { fleetCapacityOf, type ServiceabilityDeps, unnamedAccount } from "../../../usage/serviceability/serviceability.js";
 
 // Where a model is reached, apart from which loop drives it. One answer per (provider, account, model, loop): the wire
 // the loop speaks there, the URL and bearer it sends to, the model id that URL knows, whose account and allowance the
@@ -209,16 +209,20 @@ export const goneAccountMessage = (provider: string): string =>
 // A minted provider publishes its own endpoints, so the loop is pointed at the estate's with the sign-in's key; no
 // translation. Which of them depends on the wire: Anthropic Messages, Responses, or Chat Completions (the catalog root).
 const resolveMintedRoute = async (
-    services: Pick<Services, "minted">,
+    services: Pick<Services, "minted"> & ServiceabilityDeps,
     provider: MintedProvider,
     loop: AgentLoop,
     wire: RouteWire,
     input: Pick<RouteInput, "account" | "model">,
 ): Promise<RouteResult> => {
     const accounts = await services.minted[provider].store.credentials();
-    // The account the conversation runs on; only a turn naming none takes the first. A named one that is gone refuses:
-    // running on another account instead is a switch nobody chose.
-    const picked = input.account === undefined ? accounts[0] : accounts.find((account) => account.id === input.account);
+    // The account the conversation runs on; a turn naming none is placed by the sandbox's one rule (serviceability.ts
+    // unnamedAccount), never onto a spent first account with others free. A named one that is gone refuses: running on
+    // another account instead is a switch nobody chose.
+    const picked =
+        input.account === undefined
+            ? await unnamedAccount(services, provider, accounts, input.model)
+            : accounts.find((account) => account.id === input.account);
     if (picked === undefined && input.account !== undefined) {
         return { ok: false, message: goneAccountMessage(providerLabel(provider)) };
     }

@@ -53,8 +53,9 @@ export interface MintedProviderSlice {
     // The catalog a turn on a given account must use, by estate: a shared cache would serve one estate's rows to the
     // other, and every turn on such a row would be refused by a host that never had that model.
     readonly catalogOf: (variant: string) => MintedCatalog;
-    // The provider-level catalog the picker and readiness sweep read: the estate of the first connected account, since
-    // that's the account a turn defaults to.
+    // The provider-level catalog the picker and readiness sweep read: the estate of the first connected account. A turn
+    // naming no account is placed by the sandbox's rule (serviceability.ts unnamedAccount), and its route validates the
+    // pick against the estate of the account it lands on (model-routes.ts resolveMintedRoute).
     readonly catalog: MintedCatalog;
 }
 

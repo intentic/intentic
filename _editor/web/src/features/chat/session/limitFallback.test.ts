@@ -48,6 +48,18 @@ it(`does not offer an account nobody has measured`, () => {
     expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
 });
 
+// The 2026-10-29 Devin chat: refused for its weekly quota, offered nothing, with two accounts nothing had refused.
+it(`offers an account nothing has refused where the provider publishes no allowance, never one refused`, () => {
+    providerRefusals.value = { devin: [{ kind: `limit`, account: `a`, at: Date.now(), message: `Your weekly usage quota has been exhausted.` }] };
+    expect(fallbackAccount(`devin`, `a`, ACCOUNTS)?.id).toBe(`b`);
+
+    providerRefusals.value = {
+        devin: [`a`, `b`].map((id) => ({ kind: `limit` as const, account: id, at: Date.now(), message: `Your weekly usage quota has been exhausted.` })),
+    };
+    expect(fallbackAccount(`devin`, `b`, ACCOUNTS)?.id).toBe(`c`);
+    expect(fallbackAccount(`devin`, `c`, [account(`b`), account(`c`)])?.id).toBeUndefined();
+});
+
 it(`does not offer an idle account whose organisation refused its seat`, () => {
     setAccountUsage(`claude`, `a`, reading(99));
     setAccountUsage(`claude`, `b`, reading(0));

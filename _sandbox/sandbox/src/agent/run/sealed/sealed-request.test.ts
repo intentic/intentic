@@ -50,7 +50,12 @@ const arm = (frames: (planned: Planned) => AsyncGenerator<AgentEvent>, refusal?:
 
 const services = (adapter: Adapter, policy: Parameters<typeof privacySliceFake>[0] = {}) => {
     const privacy = privacySliceFake(policy);
-    const refusals = { record: jest.fn(async (_provider: string, _refusal: ProviderRefusal) => {}), settle: jest.fn(async () => {}) };
+    // `onFile` answers when a refusal naming no instant reopens (limit-reset.ts standingReopensAt): nothing stands here.
+    const refusals = {
+        record: jest.fn(async (_provider: string, _refusal: ProviderRefusal) => {}),
+        settle: jest.fn(async () => {}),
+        onFile: async () => ({}),
+    };
     const fake = unstubbed<Services>("services", {
         privacyShield: privacy.privacyShield,
         adapters: { for: () => adapter, all: [adapter] },
@@ -59,6 +64,8 @@ const services = (adapter: Adapter, policy: Parameters<typeof privacySliceFake>[
         providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", refusals),
         headroom: unstubbed<Services["headroom"]>("headroom", { refresh: async () => undefined, read: async () => ({}) }),
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { clear: async () => {} }),
+        // What a spent allowance naming no instant is timed by (limit-reset.ts): no reading is on file here.
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
     });
     return { fake, refusals, ledger: privacy.privacyLedger };
@@ -270,7 +277,9 @@ test("the caller's cancel stops the loop, and what it threw is not dressed as th
 
 // Two Cursor accounts behind one arm that picks the first one the filed limits leave room on, as cursorAccountForTurn
 // does; the frames say whether that account still has Composer.
-const fleet = (spentOn: readonly string[]) => {
+// `said` is the refusal as the account's loop words it: coded by the runtime, or only in the provider's words, as an ACP
+// agent's (Devin's) arrives.
+const fleet = (spentOn: readonly string[], said: AgentEvent = { kind: "error", code: "rate_limit", message: "429 usage limit reached", resetsAt: 1_900_000_000 }) => {
     const asked: string[] = [];
     const filed = new Set<string>();
     const adapter: Adapter = {
@@ -286,7 +295,7 @@ const fleet = (spentOn: readonly string[]) => {
                 async *run () {
                     asked.push(account);
                     if (spentOn.includes(account)) {
-                        yield { kind: "error", code: "rate_limit", message: "429 usage limit reached", resetsAt: 1_900_000_000 };
+                        yield said;
                     } else {
                         yield* saying("fix: tree truncation");
                     }
@@ -310,6 +319,14 @@ test("a spent allowance on one account is filed before the arm plans again, and 
     const { fake, asked } = fleet(["one"]);
     await expect(runSealedRequest(fake, ask())).resolves.toBe("fix: tree truncation");
     expect(asked).toEqual(["one", "two"]);
+});
+
+// The 2026-10-29 Devin commit subject: refused for a weekly quota in words alone, never filed, never tried on a sibling.
+test("a spent allowance said only in the provider's words is filed and moved off the same way", async () => {
+    const { fake, asked, refusals } = fleet(["one"], { kind: "error", message: "Your weekly usage quota has been exhausted. Visit https://app.devin.ai/settings/usage" });
+    await expect(runSealedRequest(fake, ask())).resolves.toBe("fix: tree truncation");
+    expect(asked).toEqual(["one", "two"]);
+    expect(refusals.record).toHaveBeenCalledWith("cursor", expect.objectContaining({ kind: "limit", account: "one" }));
 });
 
 test("a fleet entirely out of the model refuses in the vendor's own words, having asked each account once", async () => {

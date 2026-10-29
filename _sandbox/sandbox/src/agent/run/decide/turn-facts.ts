@@ -23,7 +23,7 @@ import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type FreshFacts, freshFactsIfAny } from "../../context/fresh-session.js";
 import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
-import { cacheCold, placeCold } from "../../providers/accounts/account-placement.js";
+import { cacheCold, offSpentAccount, placeCold } from "../../providers/accounts/account-placement.js";
 import { type ReachedRoute, routeWithinReach } from "./account-reach.js";
 import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { routingFor } from "../../../conversations/registry/routing.js";
@@ -257,8 +257,9 @@ const conversationCold = (services: Pick<TurnFactsDeps, "conversations">, conver
 
 // Asked only for a turn on a conversation remembering an account, naming none or that one, so every other turn pays no
 // read. An unreadable verdict routes as before: the credential then refuses on its own read if the account cannot serve.
-// First off an account that cannot serve (blocked-account.ts), pinned or not; then, where the cache is cold and nobody
-// pinned the account, onto one with clearly more room (account-placement.ts).
+// First off an account that cannot serve, pinned or not: one its organisation switched off (blocked-account.ts), then
+// one the records call spent (account-placement.ts offSpentAccount); then, where the cache is cold and nobody pinned
+// the account, onto one with clearly more room (account-placement.ts placeCold).
 //
 // A turn naming the account its conversation already runs on names nothing new (a re-run of a held turn, a Continue, a
 // composer still holding the pick it made), so it is moved off that account where another can serve, as the remembered
@@ -279,6 +280,11 @@ const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry:
             }
             if (blocked.kind !== "keep") {
                 return blocked;
+            }
+            // Then off a spent allowance, pinned or not (account-placement.ts offSpentAccount).
+            const spent = await offSpentAccount(services, { provider: input.agent, named: undefined, remembered, model: input.model });
+            if (spent.kind !== "keep") {
+                return spent;
             }
             const pinned = entry !== undefined && pinnedAccount(entry.profile) === remembered;
             return placeCold(services, {

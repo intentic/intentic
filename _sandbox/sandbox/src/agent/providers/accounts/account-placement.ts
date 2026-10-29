@@ -1,4 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
+import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
 import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { PROMPT_CACHE_1H_MS } from "../../run/turn/prompt-cache.js";
@@ -87,5 +89,40 @@ export const placeCold = async (deps: ServiceabilityDeps, turn: ColdTurn): Promi
         labels: { from: current.label, to: best.label },
         reason: `"${current.label}" had ${roomWords(here)} and "${best.label}" ${roomWords(there)}; the cache had gone cold, so moving cost nothing`,
         cold: true,
+    };
+};
+
+/* OFF AN ACCOUNT THE RECORDS CALL SPENT, BEFORE THE TURN IS SENT TO BE REFUSED. Asked after blocked-account.ts and before
+   placeCold, for the account the conversation remembers, pinned or not: a pin holds while the account can serve, and a
+   spent one cannot. A person's press always went out, so a conversation placed on an account whose allowance was spent
+   was refused on every press while the provider's other accounts sat idle: a Devin chat was refused twice in half an hour
+   with two accounts beside it nothing had refused (2026-10-29). It goes where every move goes (account-moves.ts
+   moveDestination): proven room, or where the provider publishes no allowance, an account nothing has refused. With
+   nowhere to go it stays, and the provider's own refusal says why. A turn naming another account is never asked. */
+
+/** Where a conversation remembering a spent account goes: keep, or a move onto the account the move rule picks. */
+export const offSpentAccount = async (deps: ServiceabilityDeps, turn: Pick<ColdTurn, "provider" | "named" | "remembered" | "model">): Promise<AccountRoute> => {
+    const { provider, named, remembered, model } = turn;
+    if (named !== undefined || remembered === undefined || KeyedProviderSchema.safeParse(provider).success) {
+        return { kind: "keep" };
+    }
+    const rows = await namedServiceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+    const current = rows.find((row) => row.id === remembered);
+    if (current?.state.kind !== "spent") {
+        return { kind: "keep" };
+    }
+    const to = moveDestination(
+        rows.filter((row) => row.id !== remembered),
+        reportsPlanLimits(provider),
+    );
+    if (to === undefined) {
+        return { kind: "keep" };
+    }
+    return {
+        kind: "move",
+        from: remembered,
+        to: to.id,
+        labels: { from: current.label, to: to.label },
+        reason: `"${current.label}" has used up its allowance, and "${to.label}" ${to.state.kind === "ready" ? `has ${roomWords(to.state.room)}` : "has not been refused"}`,
     };
 };

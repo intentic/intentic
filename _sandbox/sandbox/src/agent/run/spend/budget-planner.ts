@@ -16,9 +16,11 @@ import { turnRate } from "./token-meter.js";
    measured once it ran long enough to have one, else its model's pace), and the children this planner placed whose
    turns have not begun yet; and what one more child of the model costs.
 
-   Claude is the provider whose account the sandbox picks for a turn that names none, so a Claude child is PLACED: the
-   account rides on its spec, and its conversation keeps it. A routed provider balances its own credentials (the
-   translator), so its ready accounts are judged as one pool, and a child is only admitted or held.
+   Claude is the provider whose readings this projects, so a Claude child is PLACED: the account rides on its spec, and its
+   conversation keeps it. Another provider whose accounts a turn can name (Cursor, Devin, the minted keys) publishes no
+   reading to project, so its child is placed by the turn's own rule as it plans (serviceability.ts unnamedAccount). A
+   routed provider balances its own credentials (the translator), so its ready accounts are judged as one pool, and a
+   child is only admitted or held.
 
    Claims are made one at a time per provider: a fan-out of ten spawns in a few seconds, and each must see the ones
    before it, or ten reads of the same figure send ten children to the same account, which is the failure this is for. */

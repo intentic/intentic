@@ -137,3 +137,20 @@ test("moves onto the account the fan-out planner projects roomiest once its load
         }
     }
 });
+
+// The 2026-10-29 Devin chat: refused for a weekly quota on one account, held for a press with two connected beside it
+// that nothing had refused. A provider that publishes no allowance moves onto an account nothing has refused.
+test("a Devin turn refused on one account moves onto one nothing has refused, never back onto a refused one", async () => {
+    const devin = (refusedOn: readonly string[]) => ({
+        ...fakeServices({ accounts: [], usage: {} }),
+        providerAccounts: async (provider: string) => (provider === "devin" ? [account("first"), account("second"), account("third")] : []),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
+            onFile: async () => ({
+                devin: refusedOn.map((id) => ({ at: Date.now(), kind: "limit" as const, message: "Your weekly usage quota has been exhausted.", account: id, model: "swe-1-6-slow" })),
+            }),
+        }),
+    });
+    expect(await siblingWithRoom(devin(["first"]), { provider: "devin", model: "swe-1-6-slow", refused: "first" })).toBe("second");
+    expect(await siblingWithRoom(devin(["first", "second"]), { provider: "devin", model: "swe-1-6-slow", refused: "second" })).toBe("third");
+    expect(await siblingWithRoom(devin(["first", "second", "third"]), { provider: "devin", model: "swe-1-6-slow", refused: "third" })).toBeUndefined();
+});

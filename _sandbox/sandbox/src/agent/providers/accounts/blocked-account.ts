@@ -1,6 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { providerLabel, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
@@ -73,10 +73,12 @@ export const offBlockedAccount = async (
     if (probed && (await deps.claudeSeatCheck.recheck(remembered))) {
         return KEEP;
     }
-    // Proven room; where the plan publishes no reading to prove any (Cursor's), an account nothing has refused.
-    const others = accounts.filter((account) => account.id !== remembered);
-    const unread = reportsPlanLimits(provider) ? undefined : others.find((account) => account.state.kind === "unknown");
-    const to = roomiestAccount(others) ?? unread;
+    // Proven room; where the plan publishes no reading to prove any (Cursor's, Devin's), an account nothing has refused
+    // (account-moves.ts, the rule the limit move and the editor's offer read too).
+    const to = moveDestination(
+        accounts.filter((account) => account.id !== remembered),
+        reportsPlanLimits(provider),
+    );
     if (to !== undefined) {
         return { kind: "move", from: remembered, to: to.id, labels: { from: current?.label ?? remembered, to: to.label }, reason: state.reason };
     }

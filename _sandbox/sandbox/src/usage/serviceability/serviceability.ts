@@ -2,7 +2,15 @@ import type { AccountState, TranslatorAccount, TranslatorAccounts } from "@inten
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
-import { type FleetCapacity, fleetOf, type ModelRef, reopensAtOf, type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
+import {
+    type FleetCapacity,
+    fleetOf,
+    type ModelRef,
+    preferredAccount,
+    reopensAtOf,
+    type ServiceFacts,
+    serviceStates,
+} from "@intentic/sandbox-contract/models/plan-pools";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
 import { accountStateLogFor } from "./state-log.js";
@@ -112,6 +120,37 @@ export const namedServiceabilities = async (
     model?: ModelRef,
 ): Promise<readonly (Serviceability & { readonly label: string })[]> =>
     (await rows(deps, provider, model)).map(({ entry, row }) => ({ ...row, label: entry.label ?? entry.account }));
+
+/* WHERE A TURN NAMING NO ACCOUNT RUNS, for every runtime that holds its accounts' credentials and so can be pointed at
+   one: Claude (harness-credentials.ts), Cursor (cursor-usage.ts, on the same rule over its refusals alone), Devin, the
+   minted keys (Meta, Z.ai) and a vendor CLI's sign-ins (Grok Build, Kimi CLI). One rule, preferredAccount: room, then
+   unmeasured, then at the line, then spent. A routed subscription is the translator's to balance and is never placed
+   here. Devin, the minted keys and the CLIs each took their first connected account instead, so a spent first account
+   took every turn while the others sat idle (Devin, 2026-10-28 and 10-29). */
+
+/**
+ * The account a turn naming none runs on, among `accounts` (those its loop can serve, in the provider's own order),
+ * judged for `model` where it names one. A single account is not a choice; a verdict that cannot be read keeps the
+ * first, as before, and says so.
+ */
+export const unnamedAccount = async <T extends { readonly id: string }>(
+    deps: ServiceabilityDeps,
+    provider: AgentProvider,
+    accounts: readonly T[],
+    model?: string | undefined,
+): Promise<T | undefined> => {
+    if (accounts.length < 2) {
+        return accounts[0];
+    }
+    try {
+        const judgedRows = await serviceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+        const picked = preferredAccount(judgedRows.filter((row) => accounts.some((account) => account.id === row.id)))?.id;
+        return accounts.find((account) => account.id === picked) ?? accounts[0];
+    } catch (error) {
+        deps.logger?.warn({ err: error, provider }, "serviceability: the accounts' verdicts could not be read, the turn runs on the first connected");
+        return accounts[0];
+    }
+};
 
 /** One account's verdict; `unknown` for an account the provider does not hold. */
 export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef): Promise<AccountState> =>

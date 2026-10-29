@@ -7,6 +7,7 @@ import { opt } from "../../../opt.js";
 import type { ArmPlan, TurnArmPlan, TurnContext } from "../../providers/adapter.js";
 import { readableProviderText } from "../../../engines/provider-error-text.js";
 import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames/classify-failure.js";
+import { codedFailure } from "../frames/error-frames.js";
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
 import { type SealedDeadline, sealedDeadline } from "./sealed-deadline.js";
@@ -167,7 +168,10 @@ const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadli
         } else if (event.kind === "provider_retry" && (event.nextAttemptAt ?? 0) - Date.now() > MAX_RETRY_WAIT_MS) {
             early = { error: new Error(`the model did not answer (retry deferred ${Math.round(((event.nextAttemptAt ?? 0) - Date.now()) / 1000)}s)`) };
         } else if (event.kind === "error") {
-            early = { outcome: await failure(services, event, { ask, plan, sessionId, answered }) };
+            // Coded by its words as a turn's frame is at stream-agent's door (codedFailure): an ACP agent's spent allowance
+            // (Devin's "weekly usage quota has been exhausted") arrives uncoded, and uncoded it was neither filed against
+            // the account nor retried on a sibling, so the next turn went to the same spent account (2026-10-29).
+            early = { outcome: await failure(services, codedFailure(event), { ask, plan, sessionId, answered }) };
         }
         if (early !== undefined) {
             stop();

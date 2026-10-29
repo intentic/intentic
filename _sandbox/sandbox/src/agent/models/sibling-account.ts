@@ -1,17 +1,21 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
+import { moveDestination } from "@intentic/sandbox-contract/models/account-moves";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../composition.js";
 import { accountFactsOf, serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { pickAccount, type PlannerDeps } from "../run/spend/budget-planner.js";
 import { breakPolicyFor } from "../run/turn/break-policy.js";
 import { ACCOUNTS_ALL, accountReachAllows } from "../../secrets/credential-reach.js";
 
-// Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
-// is left. Picks among the accounts the one serviceability rule calls ready with room: a revoked, seatless, benched,
-// refused, spent or unmeasured account is never a move's destination, however idle its meter looks. Of those, the one
-// the fan-out planner projects left with the most room once this turn and what already runs there are on it (ten
-// children once moved together onto the account reading most room and emptied it in thirty minutes, 2026-10-20); the
-// roomiest by its reading where the planner cannot say.
+// Every provider whose accounts a turn can name (Claude, Cursor, Devin, the minted keys, a vendor CLI's sign-ins); a
+// routed provider balances its own credentials before refusing, so a refusal there already means nothing is left.
+// Picks by the one move rule (account-moves.ts moveDestination): a revoked, seatless, benched, refused or spent account
+// is never a move's destination, however idle its meter looks, and an unmeasured one only where the provider publishes
+// no allowance to measure (Devin's refused turns were held with two unrefused accounts beside them until 2026-10-29).
+// Among Claude's ready accounts, the one the fan-out planner projects left with the most room once this turn and what
+// already runs there are on it (ten children once moved together onto the account reading most room and emptied it in
+// thirty minutes, 2026-10-20); the roomiest by its reading where the planner cannot say.
 // `allows` narrows the destinations to the accounts the people the conversation works for may use (account-reach.ts):
 // a move onto any other would only be refused when it fires.
 export const siblingWithRoom = async (
@@ -23,17 +27,18 @@ export const siblingWithRoom = async (
         readonly allows?: ((account: string) => boolean) | undefined;
     },
 ): Promise<string | undefined> => {
-    if (params.provider !== "claude") {
+    if (KeyedProviderSchema.safeParse(params.provider).success) {
         return undefined;
     }
     const model = params.model === undefined || params.model === "" ? undefined : { id: params.model };
     const allows = params.allows ?? (() => true);
-    const accounts = (await serviceabilities(services, "claude", model).catch(() => [])).filter(
+    const accounts = (await serviceabilities(services, params.provider, model).catch(() => [])).filter(
         (account) => account.id !== params.refused && allows(account.id),
     );
-    const roomiest = roomiestAccount(accounts)?.id;
-    const planned = model === undefined ? undefined : await plannedSibling(services, model.id, params.refused);
-    return planned !== undefined && accounts.some((account) => account.id === planned) ? planned : roomiest;
+    const destination = moveDestination(accounts, reportsPlanLimits(params.provider))?.id;
+    // The planner projects Claude's children alone (budget-planner.ts).
+    const planned = model === undefined || params.provider !== "claude" ? undefined : await plannedSibling(services, model.id, params.refused);
+    return planned !== undefined && accounts.some((account) => account.id === planned) ? planned : destination;
 };
 
 // The planner's pick, where this caller's services carry what it projects from.

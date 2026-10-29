@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { loopDoor } from "@intentic/sandbox-contract/models/agent-catalog";
 import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -143,9 +144,11 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
    is a label (Codex's "codex-subscription"), the key of no reading. Filed under it, a refusal was read as one for an
    account since disconnected ("gone", refusalVerdict) and the listing a parent read next ignored it, and the re-read it
    owes was scoped to that label and read nothing (2026-10-13). Filed under no account, it stands over the provider's
-   accounts until a reading after it shows room, and its re-read covers them all. */
-const refusingAccount = (provider: AgentProvider, account: string | undefined): string | undefined =>
-    KeyedProviderSchema.safeParse(provider).success ? undefined : account;
+   accounts until a reading after it shows room, and its re-read covers them all.
+   A loop that signs in through a door of its own (Grok Build, Kimi CLI) is not routed: the turn ran on that sign-in, so
+   its refusal is filed under it, or a spent first sign-in would read like every other and keep taking the turns. */
+const refusingAccount = (provider: AgentProvider, harness: AgentHarness, account: string | undefined): string | undefined =>
+    KeyedProviderSchema.safeParse(provider).success && loopDoor(provider, harness) === undefined ? undefined : account;
 
 /* The instant a spent allowance's refusal stands until, against every reading: the provider's own. Where its words
    decided the booking (an instant, or a pool it named by length, whose reset the reading holds), the same instant, so the
@@ -168,7 +171,7 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         return [];
     }
     const { provider, now } = context;
-    const account = refusingAccount(provider, context.account);
+    const account = refusingAccount(provider, context.turn.harness, context.account);
     const { account: _label, ...actor } = context.attribution;
     const model = named(context.model);
     // Routed turns have no account to name; the model, so the refusal reads the pool it spends.
@@ -180,7 +183,7 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         kind,
         message: event.message,
         ...actor,
-        ...opt("account", refusingAccount(provider, context.attribution.account)),
+        ...opt("account", refusingAccount(provider, context.turn.harness, context.attribution.account)),
         ...opt("model", model),
         ...opt("resetsAt", kind === "limit" ? refusalReset(event, context, reopening) : undefined),
         // An admin's allowance no usage endpoint reads (Cursor's team spend limit): the refusal stands against every
