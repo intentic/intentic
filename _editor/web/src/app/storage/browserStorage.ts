@@ -25,6 +25,9 @@ export {
 // Which sandbox this browser last had open: the account's, so the next person to sign in is not put on it.
 export const ACTIVE_SANDBOX_KEY = accountKey(`intentic.activeSandboxId`);
 
+// What another sandbox last held for the Changes panel's ledger, per sandbox, so one asleep is not unknown after a reload
+// (models/workspace/changes/changesAcross.ts).
+export const changesAcrossKey = sandboxKeys(`intentic.changesAcross.`);
 // The chat's tabs, per sandbox (models/conversations/tabs/tabSnapshot.ts).
 export const chatTabsKey = sandboxKeys(`intentic.chatTabs.`);
 // The last prompts sent, per sandbox (features/chat/drafts/inputHistory.ts).

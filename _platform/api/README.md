@@ -249,6 +249,13 @@ flowchart LR
   drops). A held ask also reads again every ten seconds, so a lost notification costs at most that. A machine that
   hangs up is let go and handed nothing, a replica shutting down answers its held asks at once, and the hold lifts
   Bun's idle timeout for itself.
+- (2026-10-29) Every ask also stamps `sleepCheckedAt` on the sleepers whose key matched, at most once a minute each,
+  from the read the ask already makes; an ask that is not held reads the sandboxes due a stamp beside those with a
+  request, so a token is decrypted once a minute per sleeper. Every summary row, a member's too, carries `sleep`
+  (`host-report.ts` `sleepOf`): asleep when the newest report says so or a stamp is newer than it, awake again once a
+  report or an announce comes after, and `wakeable` while its machine was heard within three minutes. A sandbox whose
+  sleep report never landed still reads asleep from its machine's asks. Before this, every view of the account's other
+  sandboxes said "not answering" about one that had only gone to sleep.
 - The report key is lowercase hex HMAC-SHA256 over `intentic/host-report/v1` (`HOST_REPORT_KEY_LABEL`), keyed with
   the connect token. `ic` derives it from the container's env and keeps it, so the machine agent's own runs report
   with no code. The platform derives it from the token it keeps encrypted and compares in constant time, and it

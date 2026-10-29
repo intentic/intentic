@@ -12,11 +12,15 @@ import {
     pushingRow,
     pushRow,
     pushRowError,
+    type QuietBox,
+    quietChangeBoxes,
     refreshChangesAcross,
-    silentChangeBoxes,
+    sleepingChangeBoxes,
     subscribeChanges,
     uncommittedAcross,
+    wakeAndRead,
 } from "../../../models/workspace/changes/changesAcross";
+import { sleepingOn } from "../../../client/sandbox/wake/sandboxAnswer";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { retrySandboxRead } from "../../../client/sandbox/reachability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -33,7 +37,8 @@ const release = subscribeChanges();
 onUnmounted(release);
 
 const rows = computed(() => ledgerRows.value);
-const silent = computed(() => silentChangeBoxes.value);
+// The boxes it cannot vouch for, each with the reason it is quiet.
+const quiet = computed(() => quietChangeBoxes.value);
 
 // Commits listed first: an unpushed commit reads as saved and so is the less obviously at-risk of the two exposures.
 const summary = computed(() => {
@@ -53,36 +58,60 @@ const summary = computed(() => {
 });
 
 // Reported separately from the summary: 'nothing outstanding' and 'two machines didn't answer' are different claims
-// that must not merge into one.
+// that must not merge into one. Nor are 'asleep' and 'not answering' (2026-10-29): a sandbox its own computer put to sleep
+// is quiet on purpose and is woken from here, one whose computer is off cannot be, and only a box that should answer and
+// does not is said in warning ink.
 const retryError = ref<string>();
-const retrying = ref(false);
-const retry = async (box: (typeof silent.value)[number]): Promise<void> => {
-    if (retrying.value) {
+// The box a press is working on: one at a time, since a wake is a boot on somebody's computer.
+const pressing = ref<string>();
+const press = async ({ box, answer }: QuietBox): Promise<void> => {
+    if (pressing.value !== undefined) {
         return;
     }
-    retrying.value = true;
+    pressing.value = box.sandbox.id;
     retryError.value = undefined;
     try {
-        await retrySandboxRead(box.sandbox, useSandbox().wake, refreshChangesAcross);
+        if (answer === `asleep`) {
+            if (!(await wakeAndRead(box.sandbox, useSandbox().wake))) {
+                retryError.value = t(`workspace.otherSandboxChanges.didNotWake`, { name: box.sandbox.name });
+            }
+        } else {
+            await retrySandboxRead(box.sandbox, useSandbox().wake, refreshChangesAcross);
+        }
     } catch (error) {
         retryError.value = errorMessage(error);
     } finally {
-        retrying.value = false;
+        pressing.value = undefined;
     }
 };
-const silentText = (box: (typeof silent.value)[number]): string => {
-    const state = box.sandbox.hosted?.state;
-    if (state === `asleep` || state === `starting`) {
-        return `${box.sandbox.name} · ${t(state === `asleep` ? `sandbox.sandboxSwitcher.asleep` : `sandbox.sandboxSwitcher.starting`)}`;
+const quietText = ({ box, answer }: QuietBox): string => {
+    const name = box.sandbox.name;
+    switch (answer) {
+        case `asleep`:
+            return pressing.value === box.sandbox.id ? t(`workspace.otherSandboxChanges.waking`, { name }) : t(`workspace.otherSandboxChanges.asleep`, { name });
+        case `unwakeable`: {
+            const machine = sleepingOn(box.sandbox);
+            return machine === undefined
+                ? t(`workspace.otherSandboxChanges.asleepComputerOff`, { name })
+                : t(`workspace.otherSandboxChanges.asleepMachineOff`, { name, machine });
+        }
+        case `starting`:
+            return t(`workspace.otherSandboxChanges.starting`, { name });
+        case `not-answering`:
+            return t(`workspace.otherSandboxChanges.notAnswering`, { names: name, count: 1 }, 1);
     }
-    return t(`workspace.otherSandboxChanges.notAnswering`, { names: box.sandbox.name, count: 1 }, 1);
 };
+// Wake for a sleeper its computer can start, Retry for a box that should answer; nothing for one whose computer is off,
+// which nothing here can start and which this ledger reads again once the list says its computer is back.
+const pressLabel = ({ answer }: QuietBox): string | undefined =>
+    answer === `asleep` ? t(`workspace.otherSandboxChanges.wake`) : answer === `unwakeable` ? undefined : t(`ui.action.retry`);
+const asleepRow = (row: LedgerRow): boolean => sleepingChangeBoxes.value.has(row.sandboxId);
 
 // ReviewPanel's leading-glyph slot: 10px, so a chevron here sits in the same column as the repo rows' above.
 const LEAD = `flex w-2.5 shrink-0 items-center justify-center`;
 
 // Absent when there's nothing outstanding, rather than showing a permanent all-clear row.
-const show = computed(() => hasOtherSandboxes.value && (rows.value.length > 0 || silent.value.length > 0));
+const show = computed(() => hasOtherSandboxes.value && (rows.value.length > 0 || quiet.value.length > 0));
 
 // Lives here, not in changesAcross, so that module doesn't need a router import every node-environment test would
 // carry. Destination is recorded before the switch, so it doesn't land on whatever the target was last showing.
@@ -91,7 +120,8 @@ const openWorkspaceIn = (sandboxId: string): void => {
     useSandbox().select(sandboxId);
 };
 
-const sendable = (row: LedgerRow): boolean => !row.unreadable && (row.ahead > 0 || row.publish);
+// A sleeping box's rows are what it held before it slept: pushing waits until it is awake, one press away on the arrow.
+const sendable = (row: LedgerRow): boolean => !row.unreadable && !asleepRow(row) && (row.ahead > 0 || row.publish);
 // Publish for a branch never pushed, Push otherwise; a branch that's both is sent by one ordinary push.
 const sendVerb = (row: LedgerRow): string =>
     row.publish && row.ahead === 0 ? t(`workspace.otherSandboxChanges.publish`) : t(`workspace.otherSandboxChanges.push`);
@@ -109,6 +139,9 @@ const detail = (row: LedgerRow): string => {
     }
     if (row.uncommitted > 0) {
         parts.push(t(`workspace.otherSandboxChanges.uncommitted`, { count: row.uncommitted }, row.uncommitted));
+    }
+    if (asleepRow(row)) {
+        parts.push(t(`workspace.otherSandboxChanges.asleepRow`));
     }
     return parts.join(` · `);
 };
@@ -133,16 +166,22 @@ const detail = (row: LedgerRow): string => {
         </button>
 
         <!-- Name the boxes so a summary cannot be mistaken for a complete list. -->
-        <p v-for="box in silent" :key="box.sandbox.id" class="flex items-center gap-1.5 py-0.5 pl-5 pr-1 text-2xs text-subtle">
-            <span class="min-w-0 flex-1 truncate">{{ silentText(box) }}</span>
+        <p
+            v-for="entry in quiet"
+            :key="entry.box.sandbox.id"
+            class="flex items-center gap-1.5 py-0.5 pl-5 pr-1 text-2xs"
+            :class="entry.answer === 'not-answering' ? 'text-warning' : 'text-subtle'"
+        >
+            <span class="min-w-0 flex-1 truncate">{{ quietText(entry) }}</span>
             <!-- Pulled out by its own padding, so the word ends on the gutter Commit and the row glyphs end on. -->
             <button
+                v-if="pressLabel(entry) !== undefined"
                 type="button"
                 class="-mr-1 shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay"
-                :disabled="retrying"
-                @click="retry(box)"
+                :disabled="pressing !== undefined"
+                @click="press(entry)"
             >
-                {{ t(`ui.action.retry`) }}
+                {{ pressLabel(entry) }}
             </button>
         </p>
 
@@ -167,7 +206,17 @@ const detail = (row: LedgerRow): string => {
                         <span class="text-muted">{{ row.sandboxName }}</span>
                         <span class="px-1 text-subtle">/</span>{{ row.repo }}
                     </p>
-                    <p class="min-w-0 truncate text-2xs" :class="row.unreadable ? 'text-danger' : 'text-subtle'">{{ detail(row) }}</p>
+                    <p
+                        class="min-w-0 truncate text-2xs"
+                        :class="row.unreadable ? 'text-danger' : 'text-subtle'"
+                        v-tooltip.top="
+                            asleepRow(row)
+                                ? { title: t(`workspace.otherSandboxChanges.asleepTitle`), note: t(`workspace.otherSandboxChanges.asleepRowNote`) }
+                                : undefined
+                        "
+                    >
+                        {{ detail(row) }}
+                    </p>
                 </div>
                 <Button
                     v-if="sendable(row)"

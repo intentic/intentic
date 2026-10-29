@@ -35,6 +35,10 @@ flowchart LR
   that acknowledgement before it sleeps, so an older or unreachable platform leaves it awake; one with nothing due
   sleeps whatever the answer. (2026-10-18: accepting sleep before a platform alarm exists could strand a distant
   scheduled message or automation.)
+- A sandbox summary's `sleep` says a sandbox on its owner's own machine is asleep, on every role's row: `heardAt`, when
+  that machine last said anything about it (its sleep report, or an ask for wakes), and `wakeable`, whether that was
+  within `SLEEP_CHECK_FRESH_MS`, judged on the platform's clock. Null while awake and for a hosted sandbox, whose
+  `hosted.state` says the same. Without it, a sleeping sandbox and a broken one look the same to anyone but its owner.
 - `modelCatalog` is public browsing metadata at `GET /api/model-catalog`: integration-specific model IDs and labels,
   with the time each source was successfully verified. It grants no account access. The editor drops snapshots a week
   old and reads connected accounts' catalogs separately. Refresh and expiry constants live in `src/model-catalog.ts`.

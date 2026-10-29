@@ -997,6 +997,28 @@ describe(`sandbox.list and the host report`, () => {
     });
 });
 
+/* ASLEEP ON ITS OWN MACHINE, ON EVERY ROLE'S ROW (2026-10-29): the report it is read from stays the owner's, but whether
+ * the sandbox sleeps and whether its machine can start it are owed to anyone who would otherwise read it as broken. */
+describe(`sandbox.list and a sleeping sandbox`, () => {
+    it(`says asleep and wakeable on the owner's row and a member's alike, and nothing for a hosted sandbox`, async () => {
+        const at = new Date(Date.now() - 30_000);
+        const asleep: HostReport = { source: `agent`, machine: `omen`, os: `windows`, stage: `done`, outcome: `healthy`, checks: [], asleep: true, at: at.toISOString() };
+        const row = { ...sandboxRow, hostReport: asleep, sleepCheckedAt: null, lastSeenAt: new Date(Date.now() - 60 * 60_000), hosted: null };
+        const prisma = fakePrisma({
+            sandbox: {
+                findMany: jest.fn().mockResolvedValue([row, { ...row, id: `s3`, hosted: { region: `iad`, warm: false, previousImage: null } }]),
+            },
+            sandboxMember: { findMany: jest.fn().mockResolvedValue([{ role: `viewer`, sandbox: { ...row, id: `s2`, ownerId: `u2` } }]) },
+        });
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
+        expect(sandboxes.map(({ id, sleep, hostReport }) => ({ id, sleep, reported: hostReport !== null }))).toEqual([
+            { id: `s1`, sleep: { heardAt: at.toISOString(), wakeable: true }, reported: true },
+            { id: `s3`, sleep: null, reported: false },
+            { id: `s2`, sleep: { heardAt: at.toISOString(), wakeable: true }, reported: false },
+        ]);
+    });
+});
+
 /* TWO COPIES OF ONE SANDBOX (2026-10-05): named on the owner's row while either still announces (announce-copies.ts). */
 describe(`sandbox.list and two copies of one sandbox`, () => {
     const minutesAgo = (minutes: number): string => new Date(Date.now() - minutes * 60_000).toISOString();

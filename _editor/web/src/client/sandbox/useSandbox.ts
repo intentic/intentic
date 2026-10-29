@@ -1,4 +1,5 @@
 import { track } from "../../app/analytics";
+import { sleepOfSandbox } from "./wake/sandboxAnswer";
 import { noteUnreachable } from "./reachability";
 import { pageLeaving } from "@intentic/ui/reload-reason";
 import type { SandboxSummary } from "@intentic/api-contract";
@@ -118,8 +119,9 @@ const refresh = withConcurrency<void, SandboxSummary[]>(
 // follow the new active id.
 const select = (id: string): void => {
     persistActive(id);
+    // Asleep, hosted or on its own computer (wake/sandboxAnswer.ts): the wake is asked now rather than after the first dial fails.
     const box = sandboxes.value.find((row) => row.id === id);
-    if (box?.hosted?.state === `asleep`) {
+    if (box !== undefined && sleepOfSandbox(box) !== undefined) {
         // allow(silent-catch): wake() already recorded the refusal for the gate and sent sandbox_wake with its outcome
         void wake(id, `switch`).catch(() => undefined);
     }
@@ -246,7 +248,7 @@ const requestWake = withConcurrency<{ sandboxId: string; source: `retry` | `swit
         try {
             await apiClient.sandbox.wake({ sandboxId });
             // Taken, so the sandbox is due back within seconds: the connection loop redials it every second until it answers
-            // (wake/wakeWindow.ts), whether this ask came from a failure (above) or from selecting a hosted one asleep (select).
+            // (wake/wakeWindow.ts), whether this ask came from a failure (above) or from selecting one asleep (select).
             // Only for the sandbox the loop dials, and not one whose stream already proved itself while the ask was out: a
             // list that still said asleep, or a box that came back on its own (2026-10-19).
             if (activeSandboxId.value === sandboxId && connection.value.onlineSince === undefined) {

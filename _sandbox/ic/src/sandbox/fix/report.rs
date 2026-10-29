@@ -201,16 +201,6 @@ pub fn forced_platform() -> Option<String> {
         .filter(|url| !url.is_empty())
 }
 
-/// One report, sent now and waited for (bounded): for a verb that reports once and is done, where the poster's
-/// coalescing has nothing to coalesce. A failure is ignored, as every post's is.
-pub fn post_now(target: &Target, body: serde_json::Value) {
-    post(&Pending {
-        target: target.clone(),
-        stage: Stage::Done,
-        body,
-    });
-}
-
 /* THE WAKES THE PLATFORM HOLDS. Somebody opening a sandbox that sleeps on this computer (`ic sandbox sleep`) leaves a
 wake request on the platform, which has no way to reach this machine; the machine agent asks for them instead (`ic
 sandbox wakes`, every few seconds while anything here sleeps): `POST /host-report/wakes` with each sleeping sandbox's
@@ -380,11 +370,76 @@ impl Poster {
 }
 
 fn post(report: &Pending) {
+    let _ = deliver(report);
+}
+
+/// What became of one post.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Delivery {
+    /// The platform took it (or skipped it as a repeat, which it answers the same).
+    Taken,
+    /// The platform answered no for good: a key that is not this sandbox's, a sandbox it hosts.
+    Refused,
+    /// No answer, or one that says try again (a 5xx, a 429).
+    Unanswered,
+}
+
+/// Which delivery an answer's status is. Pure.
+pub fn delivery_of(status: Option<u16>) -> Delivery {
+    match status {
+        Some(code) if (200..300).contains(&code) => Delivery::Taken,
+        Some(code) if code == 429 || code >= 500 => Delivery::Unanswered,
+        Some(_) => Delivery::Refused,
+        None => Delivery::Unanswered,
+    }
+}
+
+fn deliver(report: &Pending) -> Delivery {
     let body = serde_json::json!({ "sandbox": report.target.sandbox, "report": report.body });
-    let _ = agent(&report.target.platform, POST_LIMIT)
+    let sent = agent(&report.target.platform, POST_LIMIT)
         .post(format!("{}/host-report", report.target.platform))
         .header("Authorization", &format!("Bearer {}", report.target.key))
         .send_json(&body);
+    match sent {
+        Ok(answer) => delivery_of(Some(answer.status().as_u16())),
+        Err(ureq::Error::StatusCode(code)) => delivery_of(Some(code)),
+        Err(_) => delivery_of(None),
+    }
+}
+
+/// The pauses before each retry of a report that has to land (`post_until_taken`): three tries over about four seconds,
+/// each bounded by POST_LIMIT, so a platform that is down holds a sleep under twenty seconds.
+pub const RETRY_PAUSES: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(3)];
+
+/// Tries `send` until it is taken or refused, pausing `pauses` between tries (one try more than pauses). Pure over its
+/// two closures.
+pub fn until_taken(
+    mut send: impl FnMut() -> Delivery,
+    pauses: &[Duration],
+    mut pause: impl FnMut(Duration),
+) -> Delivery {
+    let mut delivery = send();
+    for wait in pauses {
+        if delivery != Delivery::Unanswered {
+            break;
+        }
+        pause(*wait);
+        delivery = send();
+    }
+    delivery
+}
+
+/// One report sent now and waited for, for a verb that reports once and is done: a sandbox's sleep, said once, which is
+/// what tells the page a sleeping sandbox from a broken one. Tried again while the platform does not answer, since a
+/// lost one used to leave the sleep unsaid (2026-10-29); bounded by RETRY_PAUSES, past which the platform still reads
+/// the sleep off the machine's asks for wakes (api host-report.ts `sleepOf`).
+pub fn post_until_taken(target: &Target, body: serde_json::Value) -> Delivery {
+    let report = Pending {
+        target: target.clone(),
+        stage: Stage::Done,
+        body,
+    };
+    until_taken(|| deliver(&report), &RETRY_PAUSES, std::thread::sleep)
 }
 
 /* THE MACHINE-READABLE HALF, for `--json` (the machine agent reads it): progress as `intentic-fix: {json}` lines,
@@ -625,5 +680,49 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&result).expect("one JSON object");
         assert_eq!(parsed["slug"], "sandbox-abc");
         assert_eq!(parsed["report"]["stage"], "done");
+    }
+
+    #[test]
+    fn a_status_reads_as_taken_refused_or_worth_another_try() {
+        assert_eq!(delivery_of(Some(204)), Delivery::Taken);
+        assert_eq!(delivery_of(Some(200)), Delivery::Taken);
+        assert_eq!(delivery_of(Some(401)), Delivery::Refused);
+        assert_eq!(delivery_of(Some(404)), Delivery::Refused);
+        assert_eq!(delivery_of(Some(429)), Delivery::Unanswered);
+        assert_eq!(delivery_of(Some(503)), Delivery::Unanswered);
+        assert_eq!(delivery_of(None), Delivery::Unanswered);
+    }
+
+    #[test]
+    fn a_report_that_has_to_land_is_tried_again_only_while_unanswered() {
+        let pauses = [Duration::from_secs(1), Duration::from_secs(3)];
+        // Lost twice, then taken: three tries, both pauses.
+        let mut answers = vec![Delivery::Taken, Delivery::Unanswered, Delivery::Unanswered];
+        let mut paused = Vec::new();
+        let delivery = until_taken(|| answers.pop().expect("a try too many"), &pauses, |wait| paused.push(wait));
+        assert_eq!(delivery, Delivery::Taken);
+        assert_eq!(paused, pauses.to_vec());
+        // A refusal is the answer: no second try.
+        let mut tries = 0;
+        let refused = until_taken(
+            || {
+                tries += 1;
+                Delivery::Refused
+            },
+            &pauses,
+            |_| panic!("paused after a refusal"),
+        );
+        assert_eq!((refused, tries), (Delivery::Refused, 1));
+        // Never answered: one try per pause and one more, then given up.
+        let mut tries = 0;
+        let lost = until_taken(
+            || {
+                tries += 1;
+                Delivery::Unanswered
+            },
+            &pauses,
+            |_| {},
+        );
+        assert_eq!((lost, tries), (Delivery::Unanswered, 3));
     }
 }

@@ -8505,7 +8505,9 @@
             "switchToThisComputer": "Zu „Dieser Computer“ wechseln",
             "sandboxState": "Sandbox {state}",
             "switchToSlot": "Zu Platz {slot} wechseln",
-            "switchTo": "Zu {name} wechseln"
+            "switchTo": "Zu {name} wechseln",
+            "asleepComputerOff": "im Ruhezustand: Rechner offline",
+            "asleepMachineOff": "im Ruhezustand: {machine} offline"
         },
         "removeAsk": {
             "titleRemove": "„{name}“ entfernen?",
@@ -12956,7 +12958,17 @@
             "uncommitted": "{count} nicht committet",
             "unpublishedWork": "unveröffentlichte Arbeit",
             "unpushed": "{count} nicht gepusht | {count} nicht gepusht",
-            "unreadable": "git konnte dieses Repository nicht lesen"
+            "unreadable": "git konnte dieses Repository nicht lesen",
+            "asleep": "{name} ist im Ruhezustand",
+            "asleepComputerOff": "{name} ist im Ruhezustand und sein Rechner ist offline",
+            "asleepMachineOff": "{name} ist im Ruhezustand auf {machine}, das offline ist",
+            "starting": "{name} startet",
+            "waking": "{name} wird geweckt…",
+            "wake": "Wecken",
+            "didNotWake": "{name} antwortet nach dem Wecken noch nicht: sein Rechner startet es vielleicht noch.",
+            "asleepRow": "im Ruhezustand",
+            "asleepRowNote": "Zahlen von vor dem Einschlafen",
+            "asleepTitle": "Im Ruhezustand"
         },
         "proseDiffView": {
             "nothingInTextChanged": "Am Text hat sich nichts geändert; nur Abstände oder Zeilenumbrüche.",

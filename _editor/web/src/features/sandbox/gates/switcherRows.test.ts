@@ -16,21 +16,21 @@ describe(`removalTakes`, () => {
     });
 });
 
-// A hosted box asleep read as "not answering" in warning ink, as if it were broken, when picking it wakes it.
+// A hosted box asleep read as "not answering" in warning ink, as if it were broken, when picking it wakes it; a box its
+// own computer put to sleep did the same until 2026-10-29, since only a hosted machine's state was read.
 describe(`answerNote`, () => {
-    it(`says asleep without a warning, answered or not`, () => {
-        expect([answerNote(`asleep`, true), answerNote(`asleep`, false)]).toEqual([{ text: `asleep: opens when you select it` }, { text: `asleep: opens when you select it` }]);
+    it(`says asleep without a warning, and which computer is off when nothing can start it`, () => {
+        expect(answerNote(`asleep`)).toEqual({ text: `asleep: opens when you select it` });
+        expect(answerNote(`unwakeable`, `omen`)).toEqual({ text: `asleep: omen offline` });
+        expect(answerNote(`unwakeable`)).toEqual({ text: `asleep: computer offline` });
     });
 
-    it(`warns only for a silent box that is not booting`, () => {
-        expect(answerNote(`starting`, true)).toEqual({ text: `starting: ready in a moment` });
-        expect([answerNote(`awake`, true), answerNote(undefined, true)]).toEqual([
-            { text: `not answering`, ink: `text-warning` },
-            { text: `not answering`, ink: `text-warning` },
-        ]);
+    it(`warns only for a box that should answer and does not`, () => {
+        expect(answerNote(`starting`)).toEqual({ text: `starting: ready in a moment` });
+        expect(answerNote(`not-answering`)).toEqual({ text: `not answering`, ink: `text-warning` });
     });
 
-    it(`says nothing for a box that answers`, () => {
-        expect([answerNote(`starting`, false), answerNote(`awake`, false), answerNote(undefined, false)]).toEqual([undefined, undefined, undefined]);
+    it(`says nothing for a box that answers, or one not read yet`, () => {
+        expect([answerNote(`answering`), answerNote(`unknown`)]).toEqual([undefined, undefined]);
     });
 });

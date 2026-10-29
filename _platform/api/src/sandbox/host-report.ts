@@ -1,5 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { HOST_REPORT_KEY_LABEL, type HostReport, type HostReportInput, HostReportSchema } from "@intentic/api-contract";
+import {
+    HOST_REPORT_KEY_LABEL,
+    type HostReport,
+    type HostReportInput,
+    HostReportSchema,
+    SLEEP_CHECK_FRESH_MS,
+    type SandboxSleep,
+} from "@intentic/api-contract";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
@@ -132,6 +139,51 @@ const WAKE_HOLD_IDLE_MARGIN_S = 10;
 export const wakeIsLive = (requestedAt: Date | null, nowMs: number): boolean =>
     requestedAt !== null && nowMs - requestedAt.getTime() <= WAKE_REQUEST_TTL_MS && requestedAt.getTime() - nowMs <= WAKE_REQUEST_TTL_MS;
 
+/* ASLEEP, AND WHETHER ITS MACHINE CAN WAKE IT (2026-10-29). A sleeping sandbox and a broken one both leave the browser
+ * unanswered, and only the owner's row carried the report that told them apart, so every view of the account's other
+ * sandboxes said "not answering" about a sandbox that had only gone to sleep. Two things here prove a sleep: the
+ * machine's report that it put the sandbox to sleep (`asleep`), and its keeper asking for wakes on it, which it does
+ * only for sandboxes its records say sleep. The second is stamped on the row (`sleepCheckedAt`, at most once a
+ * SLEEP_STAMP_EVERY_MS) and is also the sleep itself when the report never landed: a stamp newer than the newest report
+ * says it still sleeps. Either is undone by the sandbox announcing after it, which only a running daemon does. Each
+ * stamp proves the machine was up then; none within SLEEP_CHECK_FRESH_MS is a machine that is off or cannot reach us,
+ * and a wake asked for now waits for it. */
+const SLEEP_STAMP_EVERY_MS = 60_000;
+
+export interface SleepEvidence {
+    // Newest first, as hostReportsOf reads them.
+    readonly reports: readonly HostReport[];
+    readonly sleepCheckedAt: Date | null;
+    readonly lastSeenAt: Date | null;
+}
+
+// Null for a sandbox nothing says sleeps, or one that announced since. Pure.
+export const sleepOf = ({ reports, sleepCheckedAt, lastSeenAt }: SleepEvidence, nowMs: number): SandboxSleep | null => {
+    const newest = reports[0];
+    const reportAt = newest === undefined ? Number.NEGATIVE_INFINITY : Date.parse(newest.at);
+    const checkedAt = sleepCheckedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const reportSleeps = newest?.asleep === true;
+    // A stamp older than an awake report belongs to a sleep that report ended.
+    if (!reportSleeps && checkedAt <= reportAt) {
+        return null;
+    }
+    const heardAt = reportSleeps ? Math.max(reportAt, checkedAt) : checkedAt;
+    if (!Number.isFinite(heardAt) || (lastSeenAt !== null && lastSeenAt.getTime() > heardAt)) {
+        return null;
+    }
+    return { heardAt: new Date(heardAt).toISOString(), wakeable: nowMs - heardAt <= SLEEP_CHECK_FRESH_MS };
+};
+
+// Stamps `sleepCheckedAt` on the sleepers an ask proved it keeps whose stamp is older than SLEEP_STAMP_EVERY_MS: one
+// write a minute per machine at most, however often it asks. Best effort: the ask is the machine's way to its wakes, and
+// a stamp that failed is the next ask's to make.
+const stampCheckIns = async (prisma: PrismaClient, rows: readonly { readonly id: string; readonly sleepCheckedAt: Date | null }[], nowMs: number): Promise<void> => {
+    const due = rows.filter((row) => (row.sleepCheckedAt?.getTime() ?? 0) < nowMs - SLEEP_STAMP_EVERY_MS);
+    if (due.length > 0) {
+        await prisma.sandbox.updateMany({ where: { id: { in: due.map((row) => row.id) } }, data: { sleepCheckedAt: new Date(nowMs) } });
+    }
+};
+
 // A fresh code, replacing whatever the row held. The setup code's generator: the same kind of code, pasted the same way.
 export const mintFixCode = async (prisma: PrismaClient, sandboxId: string): Promise<{ code: string; expiresAt: string }> => {
     const code = mintSetupCode();
@@ -213,22 +265,30 @@ const hostWakes =
         };
         let look = hold > 0 ? listen([...keyOf.keys()]) : undefined;
         try {
+            const nowMs = Date.now();
             const rows = await prisma.sandbox.findMany({
                 where: {
                     tunnelId: { in: [...keyOf.keys()] },
-                    // An ask that is not held reads only the sandboxes with a request, as it always has; a held one reads
-                    // every sleeper it names, whose keys it needs checked to know what it waits on.
-                    wakeRequestedAt: hold > 0 ? undefined : { not: null },
+                    // An ask that is not held reads the sandboxes with a request, as it always has, and the ones due a
+                    // check-in stamp, so a token is decrypted once a minute per sleeper rather than on every ask; a held
+                    // one reads every sleeper it names, whose keys it needs checked to know what it waits on.
+                    OR:
+                        hold > 0
+                            ? undefined
+                            : [{ wakeRequestedAt: { not: null } }, { sleepCheckedAt: null }, { sleepCheckedAt: { lt: new Date(nowMs - SLEEP_STAMP_EVERY_MS) } }],
                     hosted: null,
                     removedAt: null,
                 },
-                select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+                select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true, sleepCheckedAt: true },
             });
             const verified = rows.filter((row) => {
                 const presented = keyOf.get(row.tunnelId);
                 const expected = reportKeyOf(config, row.token);
                 return presented !== undefined && expected !== undefined && keysMatch(presented, expected);
             });
+            await stampCheckIns(prisma, verified, nowMs).catch((error: Error) =>
+                c.get(`logger`).warn({ err: error }, `host wakes: the machine's check-in on its sleepers was not stamped`),
+            );
             if (look === undefined || verified.length === 0) {
                 return kit.answer({ wake: await claimWakes(prisma, verified, gone) });
             }

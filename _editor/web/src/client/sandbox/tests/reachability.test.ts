@@ -62,11 +62,16 @@ test("unreachable telemetry names the cause and is shared once per sandbox in a 
     note({ ...sandbox({ region: "iad", warm: false, state: "starting" }), id: "booting" });
     note({ ...sandbox(null), id: "local" });
     note({ ...sandbox({ region: "iad", warm: false, state: "awake" }), id: "down" });
+    // (2026-10-29) One its own computer put to sleep, and one whose computer is off, are not outages either.
+    note({ ...sandbox(null), id: "own-asleep", sleep: { heardAt: "2026-10-29T09:00:00.000Z", wakeable: true } });
+    note({ ...sandbox(null), id: "own-offline", sleep: { heardAt: "2026-10-29T09:00:00.000Z", wakeable: false } });
     expect(capture.mock.calls).toEqual([
         ["sandbox_unreachable", { cause: "asleep", hosted: true }],
         ["sandbox_unreachable", { cause: "starting", hosted: true }],
         ["sandbox_unreachable", { cause: "down", hosted: false }],
         ["sandbox_unreachable", { cause: "down", hosted: true }],
+        ["sandbox_unreachable", { cause: "asleep", hosted: false }],
+        ["sandbox_unreachable", { cause: "machine-offline", hosted: false }],
     ]);
 });
 

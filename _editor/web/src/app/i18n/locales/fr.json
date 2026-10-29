@@ -8505,7 +8505,9 @@
             "switchToThisComputer": "Passer à Cet ordinateur",
             "sandboxState": "Sandbox {state}",
             "switchToSlot": "Passer à l'emplacement {slot}",
-            "switchTo": "Passer à {name}"
+            "switchTo": "Passer à {name}",
+            "asleepComputerOff": "en veille : ordinateur hors ligne",
+            "asleepMachineOff": "en veille : {machine} hors ligne"
         },
         "removeAsk": {
             "titleRemove": "Supprimer « {name} » ?",
@@ -12956,7 +12958,17 @@
             "uncommitted": "{count} non committé(s)",
             "unpublishedWork": "travail non publié",
             "unpushed": "{count} non poussé | {count} non poussés",
-            "unreadable": "git n'a pas pu lire ce dépôt"
+            "unreadable": "git n'a pas pu lire ce dépôt",
+            "asleep": "{name} est en veille",
+            "asleepComputerOff": "{name} est en veille et son ordinateur est hors ligne",
+            "asleepMachineOff": "{name} est en veille sur {machine}, qui est hors ligne",
+            "starting": "{name} démarre",
+            "waking": "Réveil de {name}…",
+            "wake": "Réveiller",
+            "didNotWake": "{name} ne répond toujours pas après son réveil : son ordinateur est peut-être encore en train de le démarrer.",
+            "asleepRow": "en veille",
+            "asleepRowNote": "Chiffres d’avant la veille",
+            "asleepTitle": "En veille"
         },
         "proseDiffView": {
             "nothingInTextChanged": "Rien n'a changé dans le texte ; seuls l'espacement ou les sauts de ligne.",

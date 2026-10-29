@@ -28,7 +28,7 @@ import {
 } from "./hosted/hosted-cleanup.js";
 import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { hostedRegionFor } from "./hosted/region.js";
-import { hostReportsOf, mintFixCode } from "./host-report.js";
+import { hostReportsOf, mintFixCode, sleepOf } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, SandboxHeldByOrganisation, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
@@ -90,6 +90,8 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // `hostReport` is what the machine a sandbox runs on last found of it (host-report.ts), the owner's alone like the
 // token, and only for a sandbox on a machine of its own: a hosted one is narrated by hostedStatus. `hostReporters` is
 // the newest report of each machine and environment that reported, newest first, on the same rows (2026-10-05).
+// `sleep` says a sandbox asleep on its own machine and whether that machine can wake it (host-report.ts `sleepOf`), on
+// every role's row, since the report it is read from is the owner's alone (2026-10-29).
 // `duplicateCopies` names two copies of the sandbox announcing side by side (announce-copies.ts), on the owner's row:
 // only the owner can remove one of them (2026-10-05).
 const toSummary = async (
@@ -109,6 +111,8 @@ const toSummary = async (
         daemonVersion?: string | null;
         // Absent likewise; reads as no report.
         hostReport?: Prisma.JsonValue;
+        // Absent likewise; reads as no keeper ever asking.
+        sleepCheckedAt?: Date | null;
         // Absent likewise; reads as one copy announcing.
         seenInstances?: Prisma.JsonValue;
         duplicateSince?: Date | null;
@@ -122,7 +126,8 @@ const toSummary = async (
     const zone = intenticZoneOf(context);
     const providedAddress = sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`);
     const hosted = sandbox.hosted ?? null;
-    const hostReports = role === `owner` && hosted === null ? hostReportsOf(sandbox.hostReport) : [];
+    const reports = hosted === null ? hostReportsOf(sandbox.hostReport) : [];
+    const hostReports = role === `owner` ? reports : [];
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -139,6 +144,8 @@ const toSummary = async (
         removedBy: sandbox.removedBy,
         daemonVersion: sandbox.daemonVersion ?? null,
         hosted: hosted === null ? null : await hostedSummaryOf(context.config, hosted),
+        // Every role's: a member asked to wait for a sleeping sandbox is owed the same answer as its owner.
+        sleep: hosted === null ? sleepOf({ reports, sleepCheckedAt: sandbox.sleepCheckedAt ?? null, lastSeenAt: sandbox.lastSeenAt }, Date.now()) : null,
         token: connectTokenFor(context.config, sandbox.token, role),
         hostReport: hostReports[0] ?? null,
         ...(role === `owner` && hosted === null ? { hostReporters: hostReports } : {}),

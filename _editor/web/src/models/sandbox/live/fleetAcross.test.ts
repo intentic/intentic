@@ -8,7 +8,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // number ends up on both the switcher row and the rail badge, and disagreeing between them is the failure to avoid.
 
 // Mocks the query client and the daemon client, neither of which the derivation under test touches.
-const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
+const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null; hosted?: null; sleep?: unknown }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
 const list = jest.fn();
@@ -16,7 +16,7 @@ const seen = jest.fn();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
-const { boxAttention, markSeenAcross, otherBoxes, refreshAcross, subscribe } = await import("./fleetAcross");
+const { boxAttention, markSeenAcross, otherBoxes, refreshAcross, silentBoxes, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -139,3 +139,24 @@ describe("a box older than `next`", () => {
         release();
     });
 });
+
+// A sandbox its own computer put to sleep was named on the board as "not answering", beside the broken ones (2026-10-29).
+describe("a box that did not answer", () => {
+    it("is named silent only when nothing says it sleeps", async () => {
+        const at = `2026-01-01T00:00:00Z`;
+        sandboxes.value = [
+            { id: `sbx-here`, name: `Guest`, lastSeenAt: at },
+            { id: `sbx-down`, name: `Desk`, lastSeenAt: at, hosted: null, sleep: null },
+            { id: `sbx-asleep`, name: `Laptop`, lastSeenAt: at, hosted: null, sleep: { heardAt: at, wakeable: true } },
+        ];
+        list.mockRejectedValue(new Error(`no tunnel`));
+        const release = subscribe();
+        await waitFor(() => expect(otherBoxes.value.find((entry) => entry.sandbox.id === `sbx-down`)?.state).toBe(`unreachable`));
+        // The sleeper is left alone rather than read, and is not silent either way.
+        await settled();
+        expect(silentBoxes.value.map((entry) => entry.sandbox.id)).toEqual([`sbx-down`]);
+        release();
+    });
+});
+
+const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));

@@ -1,6 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { pageLeaving } from "@intentic/ui/reload-reason";
 import { track } from "../../app/analytics";
+import { answerOf, type SandboxAnswer } from "./wake/sandboxAnswer";
 
 // Reaching a sandbox other than the one in front: what a failed read reports, and what a deliberate retry does about it.
 
@@ -9,6 +10,10 @@ import { track } from "../../app/analytics";
 // leaving. A page that leaves runs no more timers, so a report that waits this long is never sent from one, however it
 // left: a reload, a link, a closed tab.
 const SETTLE_MS = 1_000;
+
+// The words `sandbox_unreachable` has always used, and `machine-offline` for a sleeper whose computer is off.
+const causeOf = (answer: SandboxAnswer): `asleep` | `machine-offline` | `starting` | `down` =>
+    answer === `asleep` ? `asleep` : answer === `unwakeable` ? `machine-offline` : answer === `starting` ? `starting` : `down`;
 
 export const createReachabilityTelemetry = (
     capture: typeof track,
@@ -25,9 +30,9 @@ export const createReachabilityTelemetry = (
             return;
         }
         reported.add(sandbox.id);
-        // A machine that is booting is neither asleep nor broken, and counting it as down would inflate the outage rate.
-        const state = sandbox.hosted?.state;
-        const properties = { cause: state === `asleep` || state === `starting` ? state : `down`, hosted: sandbox.hosted != null };
+        // A machine that is booting is neither asleep nor broken, and counting it as down would inflate the outage rate;
+        // nor is one its own computer put to sleep, which counted as down until 2026-10-29 (wake/sandboxAnswer.ts).
+        const properties = { cause: causeOf(answerOf(sandbox, false)), hosted: sandbox.hosted != null };
         page.later(() => {
             if (page.leaving()) {
                 // Not an outage after all; if the page stays, the box's next failure is its own to report.

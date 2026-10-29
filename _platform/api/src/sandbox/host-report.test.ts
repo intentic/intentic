@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { type HostReport, type HostReportInput, HostReportSchema } from "@intentic/api-contract";
+import { type HostReport, type HostReportInput, HostReportSchema, SLEEP_CHECK_FRESH_MS } from "@intentic/api-contract";
 import {
     HOST_REPORT_INTERVAL_MS,
     HOST_REPORTERS,
@@ -8,6 +8,7 @@ import {
     hostReportsOf,
     reporterOf,
     skipsWrite,
+    sleepOf,
     WAKE_REQUEST_TTL_MS,
     wakeIsLive,
     withHostReport,
@@ -134,5 +135,51 @@ describe(`wakeIsLive`, () => {
         expect(wakeIsLive(new Date(NOW - WAKE_REQUEST_TTL_MS), NOW)).toBe(true);
         expect(wakeIsLive(new Date(NOW - WAKE_REQUEST_TTL_MS - 1), NOW)).toBe(false);
         expect(wakeIsLive(null, NOW)).toBe(false);
+    });
+});
+
+// Every view of the account's other sandboxes said "not answering" about one that had only gone to sleep, since the
+// report saying so was the owner's alone and nothing said whether its machine could still start it (2026-10-29).
+describe(`sleepOf`, () => {
+    const done: HostReportInput = { ...checking, stage: `done`, outcome: `healthy` };
+    const ago = (ms: number): Date => new Date(NOW - ms);
+    const asleepAt = (ms: number): HostReport => storedAged(ms, { ...done, asleep: true });
+
+    it(`is asleep and wakeable on the report that put it to sleep, before any ask has come`, () => {
+        expect(sleepOf({ reports: [asleepAt(10_000)], sleepCheckedAt: null, lastSeenAt: ago(60 * 60_000) }, NOW)).toEqual({
+            heardAt: ago(10_000).toISOString(),
+            wakeable: true,
+        });
+    });
+
+    it(`stays wakeable while its machine keeps asking, however long ago it went to sleep`, () => {
+        const sleep = sleepOf({ reports: [asleepAt(8 * 60 * 60_000)], sleepCheckedAt: ago(30_000), lastSeenAt: ago(9 * 60 * 60_000) }, NOW);
+        expect(sleep).toEqual({ heardAt: ago(30_000).toISOString(), wakeable: true });
+    });
+
+    it(`is not wakeable once its machine has not been heard for longer than the window`, () => {
+        const off = sleepOf({ reports: [asleepAt(60 * 60_000)], sleepCheckedAt: ago(SLEEP_CHECK_FRESH_MS + 1), lastSeenAt: null }, NOW);
+        expect(off).toEqual({ heardAt: ago(SLEEP_CHECK_FRESH_MS + 1).toISOString(), wakeable: false });
+        expect(sleepOf({ reports: [asleepAt(SLEEP_CHECK_FRESH_MS)], sleepCheckedAt: null, lastSeenAt: null }, NOW)?.wakeable).toBe(true);
+    });
+
+    it(`is asleep on its machine's asks alone when the report saying so never landed`, () => {
+        expect(sleepOf({ reports: [storedAged(20 * 60_000, done)], sleepCheckedAt: ago(5_000), lastSeenAt: ago(30 * 60_000) }, NOW)).toEqual({
+            heardAt: ago(5_000).toISOString(),
+            wakeable: true,
+        });
+        expect(sleepOf({ reports: [], sleepCheckedAt: ago(5_000), lastSeenAt: null }, NOW)?.wakeable).toBe(true);
+    });
+
+    it(`is awake once a report or an announce comes after the last word of the sleep`, () => {
+        // The wake's own report: the keeper starting it.
+        expect(sleepOf({ reports: [storedAged(2_000, { ...checking, stage: `fixing` }), asleepAt(60_000)], sleepCheckedAt: ago(30_000), lastSeenAt: null }, NOW)).toBeNull();
+        // Started some other way: the daemon announced.
+        expect(sleepOf({ reports: [asleepAt(60_000)], sleepCheckedAt: ago(30_000), lastSeenAt: ago(1_000) }, NOW)).toBeNull();
+    });
+
+    it(`is awake with nothing saying it sleeps`, () => {
+        expect(sleepOf({ reports: [], sleepCheckedAt: null, lastSeenAt: ago(1_000) }, NOW)).toBeNull();
+        expect(sleepOf({ reports: [storedAged(1_000, done)], sleepCheckedAt: null, lastSeenAt: null }, NOW)).toBeNull();
     });
 });

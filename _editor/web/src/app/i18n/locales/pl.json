@@ -8033,7 +8033,9 @@
             "switchToThisComputer": "Przełącz na Ten komputer",
             "sandboxState": "Sandbox: {state}",
             "switchToSlot": "Przełącz na slot {slot}",
-            "switchTo": "Przełącz na {name}"
+            "switchTo": "Przełącz na {name}",
+            "asleepComputerOff": "uśpiona: komputer offline",
+            "asleepMachineOff": "uśpiona: {machine} offline"
         },
         "removeAsk": {
             "titleRemove": "Usunąć „{name}”?",
@@ -12341,7 +12343,17 @@
             "uncommitted": "{count} bez commita",
             "unpublishedWork": "nieopublikowana praca",
             "unpushed": "{count} niewypchnięty | {count} niewypchnięte | {count} niewypchniętych",
-            "unreadable": "git nie mógł odczytać tego repozytorium"
+            "unreadable": "git nie mógł odczytać tego repozytorium",
+            "asleep": "{name} śpi",
+            "asleepComputerOff": "{name} śpi, a komputer, na którym działa, jest offline",
+            "asleepMachineOff": "{name} śpi na {machine}, który jest offline",
+            "starting": "{name} się uruchamia",
+            "waking": "Wybudzanie {name}…",
+            "wake": "Wybudź",
+            "didNotWake": "{name} wciąż nie odpowiada po wybudzeniu: uruchamianie może jeszcze trwać.",
+            "asleepRow": "śpi",
+            "asleepRowNote": "Liczby sprzed uśpienia",
+            "asleepTitle": "Śpi"
         },
         "proseDiffView": {
             "nothingInTextChanged": "W tekście nic się nie zmieniło; zmieniły się tylko odstępy albo łamanie linii.",

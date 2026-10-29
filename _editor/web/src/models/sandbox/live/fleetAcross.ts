@@ -7,6 +7,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { type AcrossRecord, createAcrossStore } from "./acrossSandboxes";
+import { answerOf, isAsleep } from "../../../client/sandbox/wake/sandboxAnswer";
 
 // What every other sandbox's fleet looks like, for the board's All-sandboxes scope and the switcher's counts; polling
 // rules live in acrossSandboxes.ts. Every call is a background one, since reaching a sessionless box would raise a
@@ -50,8 +51,12 @@ export const refreshAcross = store.refresh;
 // Every other sandbox in list order, answered or not; unanswered ones render as unknown, never dropped.
 export const otherBoxes = store.entries;
 
-// Boxes unreachable on their last attempt; named once so surfaces can't derive it separately and disagree.
-export const silentBoxes = computed<readonly BoxFleet[]>(() => otherBoxes.value.filter((box) => box.state === `unreachable`));
+// Boxes unreachable on their last attempt that should have answered; named once so surfaces can't derive it separately
+// and disagree. One its own computer put to sleep is not among them: it is quiet on purpose, runs no agent while it sleeps,
+// and was named "not answering" on the board beside the broken ones until 2026-10-29 (client/sandbox/wake/sandboxAnswer.ts).
+export const silentBoxes = computed<readonly BoxFleet[]>(() =>
+    otherBoxes.value.filter((box) => box.state === `unreachable` && !isAsleep(answerOf(box.sandbox, box.answered))),
+);
 
 // How many cards one other box's Attention lane draws, its child agents folded under their parents as the board folds
 // them, plus held automation wakes: the contract's fleetAttention, the very count the daemon gives the desktop app's

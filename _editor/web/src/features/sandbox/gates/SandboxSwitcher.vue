@@ -25,6 +25,7 @@ import { localFace } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
+import { answerOf, sleepingOn } from "../../../client/sandbox/wake/sandboxAnswer";
 import { removalKey } from "./removal/removalPlan";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
@@ -128,11 +129,12 @@ const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
 // An unanswered box gets undefined, which draws nothing rather than a zero.
 const attentionFor = (option: SandboxSummary): number | undefined => (isActive(option) ? undefined : attentionByBox.value.get(option.id));
 
-// A box whose last read went unanswered. Said in words on its row, because "is it even up" is the question a reader
-// asks before switching to it. A box still on its first read says nothing yet: a hover-raised panel opens on that
-// moment every time, and a word that flickers away a beat later teaches the reader not to read it.
-const silent = (option: SandboxSummary): boolean =>
-    !isActive(option) && otherBoxes.value.some((box) => box.sandbox.id === option.id && box.state === `unreachable`);
+// Whether another box answers, asleep or down. Said in words on its row, because "is it even up" is the question a reader
+// asks before switching to it. A box still on its first read says nothing yet unless the list says it sleeps: a
+// hover-raised panel opens on that moment every time, and a word that flickers away a beat later teaches the reader not
+// to read it. The active row says its own connection instead.
+const answerFor = (option: SandboxSummary): NotePart | undefined =>
+    isActive(option) ? undefined : answerNote(answerOf(option, otherBoxes.value.find((box) => box.sandbox.id === option.id)?.answered), sleepingOn(option));
 
 // The same fact per row, and the ACTIVE row borrows the refined one above rather than deriving its own: the tile and
 // the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
@@ -162,7 +164,7 @@ const rowNote = (option: SandboxSummary): readonly NotePart[] => {
         { text: place.label },
         option.role !== `owner` && place.kind !== `shared` ? { text: t(`shared.shared`).toLocaleLowerCase() } : undefined,
         isActive(option) && !quiet.value ? { text: connectionLabel.value, ink: connectionInkClass.value } : undefined,
-        answerNote(option.hosted?.state, silent(option)),
+        answerFor(option),
     ];
     return parts.filter((part) => part !== undefined);
 };

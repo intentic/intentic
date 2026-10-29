@@ -8505,7 +8505,9 @@
             "switchToThisComputer": "Switch to This computer",
             "sandboxState": "Sandbox {state}",
             "switchToSlot": "Switch to Slot {slot}",
-            "switchTo": "Switch to {name}"
+            "switchTo": "Switch to {name}",
+            "asleepComputerOff": "asleep: computer offline",
+            "asleepMachineOff": "asleep: {machine} offline"
         },
         "removeAsk": {
             "titleRemove": "Remove \"{name}\"?",
@@ -12956,7 +12958,17 @@
             "uncommitted": "{count} uncommitted",
             "unpublishedWork": "unpublished work",
             "unpushed": "{count} unpushed | {count} unpushed",
-            "unreadable": "git couldn't read this repo"
+            "unreadable": "git couldn't read this repo",
+            "asleep": "{name} is asleep",
+            "asleepComputerOff": "{name} is asleep and its computer is offline",
+            "asleepMachineOff": "{name} is asleep on {machine}, which is offline",
+            "starting": "{name} is starting",
+            "waking": "Waking {name}…",
+            "wake": "Wake",
+            "didNotWake": "{name} still isn't answering after waking: its computer may still be starting it.",
+            "asleepRow": "asleep",
+            "asleepRowNote": "Numbers from before it slept",
+            "asleepTitle": "Asleep"
         },
         "proseDiffView": {
             "nothingInTextChanged": "Nothing in the text changed; only spacing or line breaks did.",

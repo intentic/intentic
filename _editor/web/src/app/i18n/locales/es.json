@@ -8505,7 +8505,9 @@
             "switchToThisComputer": "Cambiar a Este ordenador",
             "sandboxState": "Sandbox {state}",
             "switchToSlot": "Cambiar a la ranura {slot}",
-            "switchTo": "Cambiar a {name}"
+            "switchTo": "Cambiar a {name}",
+            "asleepComputerOff": "en reposo: ordenador desconectado",
+            "asleepMachineOff": "en reposo: {machine} desconectado"
         },
         "removeAsk": {
             "titleRemove": "¿Quitar «{name}»?",
@@ -12956,7 +12958,17 @@
             "uncommitted": "{count} sin commit",
             "unpublishedWork": "trabajo sin publicar",
             "unpushed": "{count} sin push | {count} sin push",
-            "unreadable": "git no pudo leer este repo"
+            "unreadable": "git no pudo leer este repo",
+            "asleep": "{name} está en reposo",
+            "asleepComputerOff": "{name} está en reposo y su ordenador está desconectado",
+            "asleepMachineOff": "{name} está en reposo en {machine}, que está desconectado",
+            "starting": "{name} se está iniciando",
+            "waking": "Despertando {name}…",
+            "wake": "Despertar",
+            "didNotWake": "{name} sigue sin responder tras despertarlo: puede que su ordenador aún lo esté iniciando.",
+            "asleepRow": "en reposo",
+            "asleepRowNote": "Cifras de antes de dormirse",
+            "asleepTitle": "En reposo"
         },
         "proseDiffView": {
             "nothingInTextChanged": "Nada del texto cambió; solo el espaciado o los saltos de línea.",

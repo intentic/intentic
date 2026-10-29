@@ -473,7 +473,7 @@ fn put_to_sleep(slug: &str, source: Source, alarm: Option<u64>) -> Result<()> {
     power::sleep(slug, alarm)?;
     if let Some(reporter) = reporter {
         let body = reporter.body(source, Stage::Done, None, Some(Outcome::Healthy), &[], true);
-        report::post_now(&reporter.target, body);
+        report::post_until_taken(&reporter.target, body);
     }
     Ok(())
 }

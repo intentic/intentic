@@ -237,6 +237,25 @@ export const SandboxHostedSchema = z.object({
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
+/* A SANDBOX ASLEEP ON ITS OWN MACHINE (2026-10-29), on every role's row. `ic`'s keeper stops a quiet sandbox and says so
+ * in a host report, which only the owner's row carries (`hostReport`), so a member, and every surface reading the
+ * account's other sandboxes, took a sleeping box for a broken one. While anything sleeps on a machine, that machine's
+ * keeper asks the platform every few seconds whether somebody wants it back (POST /host-report/wakes), and that ask is
+ * what proves the machine is up and can start it. Null while awake and for a hosted sandbox, whose `hosted.state` says
+ * the same; absent from an older platform. */
+export const SandboxSleepSchema = z.object({
+    // When its machine last said anything about it while it slept: the report that it went to sleep, or an ask for wakes.
+    heardAt: z.string(),
+    // Whether that was within SLEEP_CHECK_FRESH_MS of this answer, judged on the platform's clock, not the reader's:
+    // true, opening it starts it; false, its machine is off or cannot reach the platform, so nothing can start it now.
+    wakeable: z.boolean(),
+});
+export type SandboxSleep = z.infer<typeof SandboxSleepSchema>;
+
+// How recent a keeper's ask must be for its machine to count as up. The keeper asks every few seconds, each ask held
+// up to 25 s, and the platform stamps at most once a minute (api host-report.ts), so three minutes is two missed stamps.
+export const SLEEP_CHECK_FRESH_MS = 3 * 60_000;
+
 // The `data.reason` a refusal carries when the free hosted lane (or the trial, or Repair) needs a Google sign-in linked to
 // an account that signs in only by email.
 export const GOOGLE_REQUIRED_REASON = "google-required";
@@ -316,6 +335,9 @@ export const SandboxSummarySchema = z.object({
     localHostname: z.string().nullable(),
     // The hosted lane's machine placement, null off-platform. An asleep machine wakes when selected or retried.
     hosted: SandboxHostedSchema.nullable(),
+    // (2026-10-29) Asleep on its own machine, and whether that machine can wake it (`SandboxSleepSchema`), on every role's
+    // row; null while awake and for a hosted sandbox, absent from an older platform.
+    sleep: SandboxSleepSchema.nullable().optional(),
     // The version the sandbox's daemon named in its last check-in, which is what the platform knows it runs even
     // while it is down. Null until a daemon that names its version checks in; absent from an older platform.
     daemonVersion: z.string().nullable().optional(),

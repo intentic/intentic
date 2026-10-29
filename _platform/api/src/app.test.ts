@@ -472,8 +472,26 @@ const askWakes = (prisma: PrismaClient, body: unknown, { hub, signal }: { hub?: 
         signal,
     });
 
-// A sleeping own-machine sandbox's row as the wakes route selects it, asked for `agoMs` ago.
-const sleeperRow = (agoMs: number, token = `tok`) => ({ id: `s1`, tunnelId: TUNNEL_ID, token, wakeRequestedAt: new Date(Date.now() - agoMs) });
+// A sleeping own-machine sandbox's row as the wakes route selects it, asked for `agoMs` ago, its machine's check-in
+// stamped `checkedAgoMs` ago (a second, by default: not yet due another).
+const sleeperRow = (agoMs: number, token = `tok`, checkedAgoMs = 1_000) => ({
+    id: `s1`,
+    tunnelId: TUNNEL_ID,
+    token,
+    wakeRequestedAt: new Date(Date.now() - agoMs),
+    sleepCheckedAt: new Date(Date.now() - checkedAgoMs),
+});
+const WAKES_SELECT = { id: true, tunnelId: true, token: true, wakeRequestedAt: true, sleepCheckedAt: true };
+// What an ask that is not held reads: the sandboxes with a request, and those due a check-in stamp.
+const unheldRead = {
+    where: {
+        tunnelId: { in: [TUNNEL_ID] },
+        OR: [{ wakeRequestedAt: { not: null } }, { sleepCheckedAt: null }, { sleepCheckedAt: { lt: expect.any(Date) } }],
+        hosted: null,
+        removedAt: null,
+    },
+    select: WAKES_SELECT,
+};
 
 describe(`POST /host-report/wakes`, () => {
     it(`hands out a recent request under the right key, once, clearing exactly the stamp it read`, async () => {
@@ -483,10 +501,7 @@ describe(`POST /host-report/wakes`, () => {
         const res = await askWakes(fakePrisma({ sandbox: { findMany, updateMany } }), { asks: [{ sandbox: TUNNEL_ID, key: REPORT_KEY }] });
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ wake: [TUNNEL_ID] });
-        expect(findMany).toHaveBeenCalledWith({
-            where: { tunnelId: { in: [TUNNEL_ID] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
-            select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
-        });
+        expect(findMany).toHaveBeenCalledWith(unheldRead);
         // Pinned to the stamp read, so a request made in between survives for the next ask.
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `s1`, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
     });
@@ -521,6 +536,43 @@ describe(`POST /host-report/wakes`, () => {
         expect(findMany).not.toHaveBeenCalled();
     });
 
+    /* THE MACHINE IS UP (2026-10-29): an ask is the proof that the machine keeping a sleeper can start it, so each one
+     * stamps the sleepers it proved it keeps, at most once a minute, and nothing it did not prove. */
+    it(`stamps the check-in of a sleeper it proved it keeps once that stamp is a minute old, and not before`, async () => {
+        const asks = [{ sandbox: TUNNEL_ID, key: REPORT_KEY }];
+        const due = { ...sleeperRow(0, `tok`, 61_000), wakeRequestedAt: null };
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const res = await askWakes(fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([due]), updateMany } }), { asks });
+        expect(await res.json()).toEqual({ wake: [] });
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: [`s1`] } }, data: { sleepCheckedAt: expect.any(Date) } });
+        const fresh = jest.fn();
+        await askWakes(fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([{ ...due, sleepCheckedAt: new Date() }]), updateMany: fresh } }), { asks });
+        expect(fresh).not.toHaveBeenCalled();
+    });
+
+    it(`stamps nothing for a sleeper whose key does not match`, async () => {
+        const updateMany = jest.fn();
+        const other = createHmac(`sha256`, `other`).update(`intentic/host-report/v1`).digest(`hex`);
+        const never = { ...sleeperRow(0, `tok`), wakeRequestedAt: null, sleepCheckedAt: null };
+        await askWakes(fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([never]), updateMany } }), { asks: [{ sandbox: TUNNEL_ID, key: other }] });
+        expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it(`still hands out a wake when the check-in stamp fails`, async () => {
+        const updateMany = jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            if (`sleepCheckedAt` in data) {
+                throw new Error(`deadlock`);
+            }
+            return { count: 1 };
+        });
+        const row = sleeperRow(5_000, `tok`, 61_000);
+        const res = await askWakes(fakePrisma({ sandbox: { findMany: jest.fn().mockResolvedValue([row]), updateMany } }), {
+            asks: [{ sandbox: TUNNEL_ID, key: REPORT_KEY }],
+        });
+        expect(await res.json()).toEqual({ wake: [TUNNEL_ID] });
+    });
+
     /* A HELD ASK (2026-10-19): an ask naming `waitMs` is answered the moment somebody asks for one of its sandboxes, or
      * with nothing once that time is up. One sandbox row stands in for the table, so the wake route's stamp and the
      * held ask's reads and clear meet as they do in Postgres. */
@@ -535,7 +587,7 @@ describe(`POST /host-report/wakes`, () => {
                     row.stamp = data.wakeRequestedAt;
                     return {};
                 }),
-                findMany: jest.fn(async () => [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp }]),
+                findMany: jest.fn(async () => [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp, sleepCheckedAt: new Date() }]),
                 updateMany: jest.fn(async ({ where }: { where: { wakeRequestedAt: Date | null } }) => {
                     if (row.stamp === null || where.wakeRequestedAt?.getTime() !== row.stamp.getTime()) {
                         return { count: 0 };
@@ -566,10 +618,7 @@ describe(`POST /host-report/wakes`, () => {
                 expect(await (await askWakes(prisma, body, { hub })).json()).toEqual({ wake: [] });
                 expect(listened).not.toHaveBeenCalled();
                 expect(sandbox.findMany).toHaveBeenCalledTimes(1);
-                expect(sandbox.findMany).toHaveBeenCalledWith({
-                    where: { tunnelId: { in: [TUNNEL_ID] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
-                    select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
-                });
+                expect(sandbox.findMany).toHaveBeenCalledWith(unheldRead);
             }
         });
 
@@ -584,7 +633,7 @@ describe(`POST /host-report/wakes`, () => {
             expect(sandbox.findMany).toHaveBeenCalledTimes(1);
             expect(sandbox.findMany).toHaveBeenCalledWith({
                 where: { tunnelId: { in: [TUNNEL_ID] }, hosted: null, removedAt: null },
-                select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+                select: WAKES_SELECT,
             });
             expect(sandbox.updateMany).not.toHaveBeenCalled();
             expect(hub.waiting()).toBe(0);
@@ -651,7 +700,7 @@ describe(`POST /host-report/wakes`, () => {
             // The connection drops while the look the wake set off is reading.
             sandbox.findMany.mockImplementationOnce(async () => {
                 gone.abort();
-                return [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp }];
+                return [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp, sleepCheckedAt: new Date() }];
             });
             await wake(prisma, hub);
             await asked;
