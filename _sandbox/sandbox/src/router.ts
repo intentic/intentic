@@ -26,6 +26,7 @@ import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
+import { createSharingRoutes } from "./links/sharing.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
@@ -98,6 +99,8 @@ export const createRouter = (services: Services): SandboxRouter => ({
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),
     share: createShareRoutes(services),
+    // Model accounts brought in from, or lent to, another of the owner's sandboxes (links/accounts/).
+    sharing: createSharingRoutes(services),
     skills: createSkillsRoutes(services),
     areas: createAreasRoutes(services),
     intentic: createIntenticRoutes(services),

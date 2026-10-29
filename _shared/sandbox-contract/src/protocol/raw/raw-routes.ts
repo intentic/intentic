@@ -272,6 +272,13 @@ export const RAW_ROUTES = {
     "POST /link/conversations/{id}/messages": { auth: "door", control: "never" },
     "POST /link/conversations/{id}/answer": { auth: "door", control: "never" },
     "POST /link/conversations/{id}/stop": { auth: "door", control: "never" },
+    // An accounts link's doors (schemas/providers/account-sharing.ts): the accounts its terms name, a static key's copy,
+    // and a lent sign-in's access token per turn, re-minted mid-turn. The refresh token never leaves; each door checks the
+    // link token itself and answers only for what the terms name.
+    "GET /link/accounts": { auth: "door", control: "never" },
+    "POST /link/accounts/copy": { auth: "door", control: "never" },
+    "POST /link/credentials": { auth: "door", control: "never" },
+    "POST /link/credentials/refresh": { auth: "door", control: "never" },
     "POST /system/control/tokens": { control: "never" },
     "GET /system/control/tokens": { floor: "maintainer", control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },

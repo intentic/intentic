@@ -26,7 +26,7 @@ test("a minted token is shown once and kept only as its hash, and resolves to th
     const minted = await links.mint("dev", { terms: { approve: true }, createdBy: "owner@example.com" });
     expect(minted.token.startsWith(LINK_TOKEN_PREFIX)).toBe(true);
     expect(readFileSync(path, "utf8")).not.toContain(minted.token);
-    expect(await links.resolve(minted.token)).toEqual({ id: minted.id, label: "dev", terms: { approve: true, turnsPerHour: 20 } });
+    expect(await links.resolve(minted.token)).toEqual({ id: minted.id, label: "dev", terms: { approve: true, turnsPerHour: 20, tasks: true, accounts: [] } });
     expect(await links.resolve(`${LINK_TOKEN_PREFIX}nope`)).toBeUndefined();
     // A control token, or anything else, is never read as a link.
     expect(await links.resolve("ict_whatever")).toBeUndefined();
@@ -36,7 +36,7 @@ test("terms change field by field, an undefined field keeps what is there, and a
     const { links } = store();
     const minted = await links.mint("dev", { terms: { actsAs: "ops", turnsPerHour: 5 } });
     const changed = await links.update(minted.id, { approve: true, turnsPerHour: undefined, label: "dev box" });
-    expect(changed?.terms).toEqual({ actsAs: "ops", approve: true, turnsPerHour: 5 });
+    expect(changed?.terms).toEqual({ actsAs: "ops", approve: true, turnsPerHour: 5, tasks: true, accounts: [] });
     expect(changed?.label).toBe("dev box");
     expect(await links.update("lnk-none", { approve: true })).toBeUndefined();
     expect(await links.revoke(minted.id)).toBe(true);

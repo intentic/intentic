@@ -38,6 +38,12 @@ export const OauthAccountSchema = z.object({
     usage: AccountUsageSchema.optional().describe(
         "How full its plan limits were when last measured, so a picker can show what is left before committing work to it. Absent until a reading exists, which reads as unknown rather than as nothing left.",
     ),
+    borrowedFrom: z
+        .object({ name: z.string(), sandboxId: z.string().optional() })
+        .optional()
+        .describe(
+            "Another of the owner's sandboxes holds this sign-in and lends it here turn by turn (schemas/providers/account-sharing.ts). Absent means it is this sandbox's own.",
+        ),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({

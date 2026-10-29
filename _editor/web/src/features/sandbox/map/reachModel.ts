@@ -303,6 +303,11 @@ const tokenReach = (input: ReachInput, scope: ControlScope): Map<string, ReachHo
 };
 
 const linkReach = (input: ReachInput, link: InboundLinkSummary): Map<string, ReachHow> => {
+    // An accounts link takes no tasks (schemas/links.ts `tasks`): it lends this sandbox's model accounts out, and nothing
+    // runs here through it.
+    if (link.terms.tasks === false) {
+        return new Map();
+    }
     const actsAs = link.terms.actsAs;
     // Unpinned: the full toolbox, the whole workspace, and no signed-in account, since nobody here is watching.
     if (actsAs === undefined) {

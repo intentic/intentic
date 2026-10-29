@@ -21,6 +21,7 @@ import { refreshConnections } from "../../../models/conversations/accounts/useCh
 import { rememberPick } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { accessKnown, providerReady } from "../../../models/providers/access";
+import BringAccounts from "./BringAccounts.vue";
 import LocalModelsPanel from "./LocalModelsPanel.vue";
 import { localPrefetchStopped } from "./localPrefetch";
 import type { ModelSource, ModelSourceStanding } from "./modelSources";
@@ -481,6 +482,9 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
             </Row>
         </RowGroup>
         <Notice v-if="keyNotice" :of="keyNotice" />
+
+        <!-- What the owner's other sandboxes hold: brought in here without signing in again, or signed in here instead. -->
+        <BringAccounts :busy="starting !== undefined" @sign-in="(provider) => void connect(provider)" />
 
         <!-- The grid: every way in, always the same tiles in the same places. -->
         <div role="group" :aria-label="t(`shared.models`)" class="flex flex-wrap gap-1">

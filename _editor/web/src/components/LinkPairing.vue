@@ -7,7 +7,7 @@ import type { LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { DEFAULT_TERMS, type FarPersona, type PairedLink, pairWith, personasAt, preferredSandbox } from "./linkPairing";
+import { DEFAULT_TERMS, type FarPersona, type PairedLink, pairableSandboxes, pairWith, personasAt, preferredSandbox } from "./linkPairing";
 
 const t = useT();
 
@@ -26,15 +26,7 @@ const emit = defineEmits<{
 const { sandboxes, active, activeSandboxId, daemonUrl } = useSandbox();
 
 // The reader's other sandboxes they may mint a link on: one they operate, with an address to reach it at.
-const others = computed(() =>
-    sandboxes.value.filter(
-        (sandbox) =>
-            sandbox.id !== activeSandboxId.value &&
-            sandbox.daemonUrl !== null &&
-            sandbox.daemonUrl !== `` &&
-            (sandbox.role === `owner` || sandbox.role === `maintainer`),
-    ),
-);
+const others = computed(() => pairableSandboxes(sandboxes.value, activeSandboxId.value));
 const farOptions = computed<readonly PickerOption<string>[]>(() => others.value.map((sandbox) => ({ value: sandbox.id, label: sandbox.name })));
 
 const farId = ref<string | undefined>();
@@ -83,13 +75,13 @@ watch(farId, async (id) => {
 
 const pair = async (): Promise<void> => {
     const far = others.value.find((sandbox) => sandbox.id === farId.value);
-    if (far === undefined || far.daemonUrl === null || pairing.value) {
+    if (far === undefined || pairing.value) {
         return;
     }
     pairing.value = true;
     emit(`notice`, null);
     try {
-        const terms: LinkTerms = { approve: approve.value, turnsPerHour: turnsPerHour.value };
+        const terms: LinkTerms = { approve: approve.value, turnsPerHour: turnsPerHour.value, tasks: true, accounts: [] };
         if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
             terms.actsAs = actsAs.value;
         }

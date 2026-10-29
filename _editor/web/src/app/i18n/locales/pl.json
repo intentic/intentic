@@ -5048,7 +5048,14 @@
             "connectWay": "Podłącz: {way}",
             "empty": "Jeszcze nie podłączono. Logowanie zajmuje minutę, a konto zostaje w tym sandboxie.",
             "otherLive": "Logowanie do {other} wciąż czeka. Podłączenie {provider} je zastąpi.",
-            "showOther": "Pokaż {other}"
+            "showOther": "Pokaż {other}",
+            "borrowedFrom": "Użyczone przez {name}",
+            "signInAgainOn": "Wylogowano. Zaloguj się ponownie w {name}, który je tutaj użycza.",
+            "stopBorrowing": "Przestań korzystać",
+            "couldntStopBorrowing": "Nie udało się przestać korzystać z tego konta.",
+            "lentTo": "Użyczone dla {names}",
+            "stopLending": "Przestań użyczać",
+            "couldntStopLending": "Nie udało się przestać użyczać tego konta."
         },
         "providerTile": {
             "signingIn": "Logowanie…"
@@ -5062,6 +5069,29 @@
             "adding": "Dodawanie {server} jako punktu końcowego modelu",
             "couldntAdd": "Nie udało się dodać {server}.",
             "noneFound": "Do GPU uruchom Ollamę albo LM Studio na komputerze, na którym działa ten sandbox, a pojawi się tutaj. Na Linuksie uruchom Ollamę z OLLAMA_HOST=0.0.0.0; w LM Studio włącz serwowanie w sieci lokalnej."
+        },
+        "shareAccounts": {
+            "title": "Z innych Twoich sandboxów",
+            "from": "Przenieś konta z",
+            "which": "Sandbox",
+            "pickOne": "Wybierz sandbox",
+            "explain": "Bez ponownego logowania. Kopia: klucz, który się nie zmienia, zostaje skopiowany tutaj. Pożyczenie: logowanie do Claude zostaje w drugim sandboxie, który użycza go tutaj tura po turze.",
+            "reading": "Odczytywanie tego, co ma {name}…",
+            "nothing": "{name} nie ma kont modeli.",
+            "tooOld": "{name} działa na zbyt starym sandboxie, by udostępniać swoje konta. Zaktualizuj go i spróbuj ponownie.",
+            "couldntRead": "Nie udało się odczytać kont z {name}.",
+            "endpoint": "Punkt końcowy modelu",
+            "modeCopy": "Skopiuj klucz",
+            "modeLend": "Pożycz tura po turze",
+            "modeNo": "Nie można udostępnić",
+            "bring": "Przenieś",
+            "bringAll": "Przenieś wszystkie",
+            "signInHere": "Zaloguj się tutaj",
+            "bringing": "Przenoszenie kont z {name}",
+            "couldntBring": "Nie udało się przenieść tych kont z {name}.",
+            "failed": "Nie udało się go przenieść.",
+            "copied": "Skopiowano",
+            "borrowed": "Użyczone"
         }
     },
     "desktop": {
@@ -9842,7 +9872,8 @@
             "address": "Adres",
             "token": "Token",
             "createLink": "Utwórz połączenie",
-            "empty": "Brak połączonych sandboxów. Sparuj jeden z karty Połączony sandbox w drugim sandboxie albo utwórz połączenie tutaj ręcznie."
+            "empty": "Brak połączonych sandboxów. Sparuj jeden z karty Połączony sandbox w drugim sandboxie albo utwórz połączenie tutaj ręcznie.",
+            "lendsAccounts": "użycza {count} konto modelu i nie przyjmuje zadań | użycza {count} konta modeli i nie przyjmuje zadań | użycza {count} kont modeli i nie przyjmuje zadań"
         },
         "linkedSandboxRows": {
             "title": "Połączone sandboxy",

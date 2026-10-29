@@ -5048,7 +5048,14 @@
             "connectWay": "Connecter {way}",
             "empty": "Pas encore connecté. La connexion prend une minute et le compte reste dans ce sandbox.",
             "otherLive": "Votre connexion à {other} est toujours en attente. Connecter {provider} la remplace.",
-            "showOther": "Afficher {other}"
+            "showOther": "Afficher {other}",
+            "borrowedFrom": "Emprunté à {name}",
+            "signInAgainOn": "Déconnecté. Reconnectez-vous sur {name}, qui le prête ici.",
+            "stopBorrowing": "Arrêter l'emprunt",
+            "couldntStopBorrowing": "Impossible d'arrêter l'emprunt de ce compte.",
+            "lentTo": "Prêté à {names}",
+            "stopLending": "Arrêter le prêt",
+            "couldntStopLending": "Impossible d'arrêter le prêt de ce compte."
         },
         "providerTile": {
             "signingIn": "Connexion en cours…"
@@ -5062,6 +5069,29 @@
             "adding": "Ajout de {server} comme point d'accès de modèles",
             "couldntAdd": "Impossible d'ajouter {server}.",
             "noneFound": "Pour un GPU, lancez Ollama ou LM Studio sur l’ordinateur qui héberge ce sandbox et il apparaîtra ici. Sous Linux, démarrez Ollama avec OLLAMA_HOST=0.0.0.0 ; dans LM Studio, activez le service sur le réseau local."
+        },
+        "shareAccounts": {
+            "title": "Depuis vos autres sandboxes",
+            "from": "Importer les comptes de",
+            "which": "Sandbox",
+            "pickOne": "Choisissez un sandbox",
+            "explain": "Rien à reconnecter deux fois. Copier : une clé qui ne change pas est copiée ici. Emprunter : une connexion Claude reste sur l'autre sandbox, qui la prête ici tour par tour.",
+            "reading": "Lecture de ce que contient {name}…",
+            "nothing": "{name} n'a aucun compte de modèle.",
+            "tooOld": "{name} exécute un sandbox trop ancien pour partager ses comptes. Mettez-le à jour, puis réessayez.",
+            "couldntRead": "Impossible de lire les comptes de {name}.",
+            "endpoint": "Point de terminaison de modèle",
+            "modeCopy": "Copier sa clé",
+            "modeLend": "Emprunter tour par tour",
+            "modeNo": "Ne peut pas être partagé",
+            "bring": "Importer",
+            "bringAll": "Tout importer",
+            "signInHere": "Se connecter ici à la place",
+            "bringing": "Import des comptes depuis {name}",
+            "couldntBring": "Impossible d'importer ces comptes depuis {name}.",
+            "failed": "Impossible de l'importer.",
+            "copied": "Copié",
+            "borrowed": "Emprunté"
         }
     },
     "desktop": {
@@ -10439,7 +10469,8 @@
             "address": "Adresse",
             "token": "Jeton",
             "createLink": "Créer le lien",
-            "empty": "Aucun sandbox lié. Associez-en un depuis la carte Sandbox lié de l'autre sandbox, ou créez un lien ici à la main."
+            "empty": "Aucun sandbox lié. Associez-en un depuis la carte Sandbox lié de l'autre sandbox, ou créez un lien ici à la main.",
+            "lendsAccounts": "prête {count} compte de modèle et n'accepte aucune tâche | prête {count} comptes de modèles et n'accepte aucune tâche"
         },
         "linkedSandboxRows": {
             "title": "Sandboxes liés",

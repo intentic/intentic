@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AskQuestionSchema } from "../events/requests.js";
 import { entryId } from "./internal.js";
+import { SharedAccountRefSchema } from "./providers/account-sharing.js";
 
 // LINKED SANDBOXES: one of the owner's sandboxes handing tasks to another. The sandbox that hands work over holds a
 // `link` capability card (schemas/capabilities.ts LinkConfigSchema); the one that takes it holds an inbound link, minted
@@ -20,7 +21,28 @@ export const LINK_MAX_HOPS = 2;
 export const LINK_TURNS_PER_HOUR_MAX = 120;
 export const LINK_TURNS_PER_HOUR_DEFAULT = 20;
 
-// THE TERMS, set on the taking side and enforced there: what the asking side is told, never what it decides.
+// THE TERMS, set on the taking side and enforced there: what the asking side is told, never what it decides. Each field
+// is spelled once below, without its default, so a change to the terms (InboundLinkTermsUpdateSchema) can name any of
+// them as optional without zod filling in the rest.
+const approveTerm = z
+    .boolean()
+    .describe("Each new task waits for this sandbox's owner to allow it before anything runs. Follow-up messages to a task already allowed do not.");
+const turnsPerHourTerm = z
+    .number()
+    .int()
+    .min(1)
+    .max(LINK_TURNS_PER_HOUR_MAX)
+    .describe("How many turns the link may start in an hour, new tasks and follow-ups alike. Words said into a turn already running are not counted.");
+const tasksTerm = z
+    .boolean()
+    .describe("Whether the link may hand this sandbox tasks at all. An accounts link is minted without: it only borrows and copies the accounts below.");
+const accountsTerm = z
+    .array(SharedAccountRefSchema)
+    .max(64)
+    .describe(
+        "The model accounts the asking sandbox may use (schemas/providers/account-sharing.ts): a static key it may copy, a sign-in it borrows turn by turn. Empty lends nothing.",
+    );
+
 export const LinkTermsSchema = z.object({
     actsAs: entryId
         .optional()
@@ -33,17 +55,10 @@ export const LinkTermsSchema = z.object({
         .describe(
             "The service every task through this link acts as: whose authority it uses, held to that service's access profile. Absent means this sandbox's owner, limited only by the persona.",
         ),
-    approve: z
-        .boolean()
-        .default(false)
-        .describe("Each new task waits for this sandbox's owner to allow it before anything runs. Follow-up messages to a task already allowed do not."),
-    turnsPerHour: z
-        .number()
-        .int()
-        .min(1)
-        .max(LINK_TURNS_PER_HOUR_MAX)
-        .default(LINK_TURNS_PER_HOUR_DEFAULT)
-        .describe("How many turns the link may start in an hour, new tasks and follow-ups alike. Words said into a turn already running are not counted."),
+    approve: approveTerm.default(false),
+    turnsPerHour: turnsPerHourTerm.default(LINK_TURNS_PER_HOUR_DEFAULT),
+    tasks: tasksTerm.default(true),
+    accounts: accountsTerm.default([]),
 });
 export type LinkTerms = z.infer<typeof LinkTermsSchema>;
 
@@ -91,11 +106,18 @@ export type InboundLinkMint = z.infer<typeof InboundLinkMintSchema>;
 export const InboundLinkMintedSchema = z.object({ id: z.string(), token: z.string() });
 export type InboundLinkMinted = z.infer<typeof InboundLinkMintedSchema>;
 // POST /system/links/{id}: new terms, whole fields replaced, the rest kept. `null` on the persona or the service takes it
-// off (2026-10-26): absence keeps a field, so before this neither could be cleared once set.
-export const InboundLinkTermsUpdateSchema = LinkTermsSchema.partial().extend({
+// off (2026-10-26): absence keeps a field, so before this neither could be cleared once set. Spelled field by field rather
+// than as LinkTermsSchema.partial(): zod still fills a partial's inner defaults, so a change naming only `accounts`
+// read as `approve: false, turnsPerHour: 20, tasks: true` and quietly turned an accounts link into one taking tasks
+// (2026-10-29).
+export const InboundLinkTermsUpdateSchema = z.object({
     label: z.string().trim().min(1).max(60).optional(),
     actsAs: entryId.nullable().optional().describe("The persona every task wears; null takes it off."),
     runAs: entryId.nullable().optional().describe("The service every task acts as; null takes it off, so tasks act for this sandbox's owner."),
+    approve: approveTerm.optional(),
+    turnsPerHour: turnsPerHourTerm.optional(),
+    tasks: tasksTerm.optional(),
+    accounts: accountsTerm.optional(),
 });
 export type InboundLinkTermsUpdate = z.infer<typeof InboundLinkTermsUpdateSchema>;
 // POST /system/links/{id}/requests/{request}: the owner's answer to one waiting task.
@@ -112,6 +134,9 @@ export const LinkHelloSchema = z.object({
         approve: z.boolean(),
         turnsPerHour: z.number().int(),
         persona: z.string().optional().describe("The name of the persona its tasks wear, when they wear one."),
+        // Absent from a sandbox older than accounts links, which takes tasks and lends nothing.
+        tasks: z.boolean().optional(),
+        accounts: z.number().int().nonnegative().optional().describe("How many accounts the link may use."),
     }),
     maxHops: z.number().int(),
 });

@@ -40,6 +40,22 @@ export const linkCardId = (name: string): string => {
     return slug === `` ? `linked` : slug;
 };
 
+/**
+ * The reader's other sandboxes a link may be minted on: one they operate (the far side's links are a maintainer's to
+ * mint), with an address to reach it at, and not this one.
+ */
+export const pairableSandboxes = <Candidate extends { readonly id: string; readonly daemonUrl: string | null; readonly role: string }>(
+    candidates: readonly Candidate[],
+    here: string | undefined,
+): (Candidate & { readonly daemonUrl: string })[] =>
+    candidates.filter(
+        (candidate): candidate is Candidate & { readonly daemonUrl: string } =>
+            candidate.id !== here &&
+            candidate.daemonUrl !== null &&
+            candidate.daemonUrl !== `` &&
+            (candidate.role === `owner` || candidate.role === `maintainer`),
+    );
+
 // The far sandbox an agent named when it asked for a link (`capabilities request link --target <it>`): by its name, the
 // card id that name makes, its id, or its address. Undefined when nothing, or more than one, answers to it.
 export const preferredSandbox = <Candidate extends { readonly id: string; readonly name: string; readonly daemonUrl: string | null }>(
@@ -95,4 +111,5 @@ export const pairWith = async ({ far, here, terms }: PairAsk, tooOld: string): P
     }
 };
 
-export const DEFAULT_TERMS: LinkTerms = { approve: true, turnsPerHour: LINK_TURNS_PER_HOUR_DEFAULT };
+// A task link: it takes tasks, and lends no model accounts (an accounts link is minted on Sandbox ▸ Models, shareAccounts.ts).
+export const DEFAULT_TERMS: LinkTerms = { approve: true, turnsPerHour: LINK_TURNS_PER_HOUR_DEFAULT, tasks: true, accounts: [] };

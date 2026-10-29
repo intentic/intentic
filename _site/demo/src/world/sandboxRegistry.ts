@@ -1,5 +1,6 @@
 import type { BootReport, SandboxHosted, SandboxSummary, SetupCode, SetupReport, TrashedSandbox } from "@intentic/api-contract";
-import { DEMO_SANDBOXES, DEMO_TRASH } from "./account";
+import { demoMode } from "../mode";
+import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_TRASH } from "./account";
 import { declineLocalShortcut } from "./browserSeeds";
 
 // THE ACCOUNT'S SANDBOXES AS LIVE STATE: the rows the platform lists, the trash a delete fills, and the setup codes it
@@ -12,7 +13,23 @@ const TRASH_DAYS = 7;
 // A setup code's life on the real platform (setup-code.ts `SETUP_CODE_TTL_MS`).
 const SETUP_CODE_TTL_MS = 30 * 60_000;
 
-const rows: SandboxSummary[] = DEMO_SANDBOXES.map((row) => ({ ...row }));
+// ANOTHER OF THE OWNER'S SANDBOXES, in the modes that show every state: Ada's laptop, running at an address of its own,
+// whose model accounts this sandbox's Models page can bring in (daemon/account/sharing.handler.ts) and which borrows this
+// one's Claude Max in turn (daemon/machine/linkStore.ts). Not in the calmer modes, whose rail is one sandbox on purpose.
+export const LENDING_SANDBOX = { id: `demo-laptop`, name: `ada-laptop`, origin: `https://laptop.demo.invalid` } as const;
+export const lendingSandboxShown = demoMode.id === `full` || demoMode.id === `busy`;
+// The owner's own machine, so nothing about it is the platform's to report.
+const lendingRow = (): SandboxSummary => ({
+    ...DEMO_SANDBOX,
+    id: LENDING_SANDBOX.id,
+    name: LENDING_SANDBOX.name,
+    daemonUrl: LENDING_SANDBOX.origin,
+    role: `owner`,
+    hosted: null,
+    hostReport: null,
+});
+
+const rows: SandboxSummary[] = [...DEMO_SANDBOXES, ...(lendingSandboxShown && DEMO_SANDBOXES.length > 0 ? [lendingRow()] : [])].map((row) => ({ ...row }));
 const trash: TrashedSandbox[] = [...DEMO_TRASH];
 // The rows the visitor made on this page: each one is a sandbox on its first day (world/fresh.ts serves it so).
 const madeHere = new Set<string>();

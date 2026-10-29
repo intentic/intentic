@@ -5048,7 +5048,14 @@
             "connectWay": "Conectar {way}",
             "empty": "Aún sin conectar. Iniciar sesión lleva un minuto y la cuenta permanece en este sandbox.",
             "otherLive": "Tu inicio de sesión en {other} sigue pendiente. Conectar {provider} lo sustituye.",
-            "showOther": "Mostrar {other}"
+            "showOther": "Mostrar {other}",
+            "borrowedFrom": "Prestada por {name}",
+            "signInAgainOn": "Sesión cerrada. Vuelve a iniciar sesión en {name}, que la presta aquí.",
+            "stopBorrowing": "Dejar de tomarla prestada",
+            "couldntStopBorrowing": "No se pudo dejar de tomar prestada esa cuenta.",
+            "lentTo": "Prestada a {names}",
+            "stopLending": "Dejar de prestar",
+            "couldntStopLending": "No se pudo dejar de prestar esa cuenta."
         },
         "providerTile": {
             "signingIn": "Iniciando sesión…"
@@ -5062,6 +5069,29 @@
             "adding": "Añadiendo {server} como endpoint de modelos",
             "couldntAdd": "No se ha podido añadir {server}.",
             "noneFound": "Para usar una GPU, ejecuta Ollama o LM Studio en el equipo que aloja este sandbox y aparecerá aquí. En Linux, inicia Ollama con OLLAMA_HOST=0.0.0.0; en LM Studio, activa el servicio en la red local."
+        },
+        "shareAccounts": {
+            "title": "Desde tus otros sandboxes",
+            "from": "Traer cuentas de",
+            "which": "Sandbox",
+            "pickOne": "Elige un sandbox",
+            "explain": "Nada que iniciar dos veces. Copiar: una clave que no cambia se copia aquí. Tomar prestada: un inicio de sesión de Claude se queda en el otro sandbox, que lo presta aquí turno a turno.",
+            "reading": "Leyendo lo que tiene {name}…",
+            "nothing": "{name} no tiene cuentas de modelos.",
+            "tooOld": "{name} ejecuta un sandbox demasiado antiguo para compartir sus cuentas. Actualízalo y vuelve a intentarlo.",
+            "couldntRead": "No se pudieron leer las cuentas de {name}.",
+            "endpoint": "Endpoint de modelo",
+            "modeCopy": "Copiar su clave",
+            "modeLend": "Tomar prestada turno a turno",
+            "modeNo": "No se puede compartir",
+            "bring": "Traer",
+            "bringAll": "Traer todas",
+            "signInHere": "Iniciar sesión aquí en su lugar",
+            "bringing": "Trayendo cuentas de {name}",
+            "couldntBring": "No se pudieron traer esas cuentas de {name}.",
+            "failed": "No se pudo traer.",
+            "copied": "Copiada",
+            "borrowed": "Prestada"
         }
     },
     "desktop": {
@@ -10439,7 +10469,8 @@
             "address": "Dirección",
             "token": "Token",
             "createLink": "Crear vínculo",
-            "empty": "No hay sandboxes vinculados. Empareja uno desde la tarjeta Sandbox vinculado del otro sandbox, o crea un vínculo aquí a mano."
+            "empty": "No hay sandboxes vinculados. Empareja uno desde la tarjeta Sandbox vinculado del otro sandbox, o crea un vínculo aquí a mano.",
+            "lendsAccounts": "presta {count} cuenta de modelo y no acepta tareas | presta {count} cuentas de modelos y no acepta tareas"
         },
         "linkedSandboxRows": {
             "title": "Sandboxes vinculados",

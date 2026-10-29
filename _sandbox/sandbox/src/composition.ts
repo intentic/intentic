@@ -312,6 +312,8 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         authRoot,
         workspaceRoot: config.workspaceRoot,
         providerRefusals: () => whole().providerRefusals,
+        // Sign-ins another of the owner's sandboxes lends here (links/accounts/), composed with the links slice later.
+        lender: () => whole().claudeLender,
     });
     const cursor = createCursorSlice({ authRoot, logger });
     // Every way 'what each account has left' can be polled: Claude's own tokens and routed subscriptions via the

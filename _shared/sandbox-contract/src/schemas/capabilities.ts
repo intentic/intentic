@@ -381,6 +381,12 @@ export const LinkConfigSchema = z.object({
     token: z.string().min(1).describe("The link token that sandbox minted for this one. Stored, never echoed back."),
     name: z.string().max(100).optional().describe("What the other sandbox is called, as its owner named it."),
     sandboxId: z.string().max(100).optional().describe("The other sandbox's id on the owner's account."),
+    purpose: z
+        .enum(["tasks", "accounts"])
+        .optional()
+        .describe(
+            "What the link is for: tasks to hand over (absent), or model accounts this sandbox borrows from that one (schemas/providers/account-sharing.ts), which mounts no delegate tool.",
+        ),
 });
 export type LinkConfig = z.infer<typeof LinkConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;

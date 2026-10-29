@@ -11,6 +11,9 @@ import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "./inb
 import { createLinkedChildren, type LinkedChildren } from "./linked-children.js";
 import { linkedChildrenDocument } from "./linked-children-store.js";
 import { linkMountsOf } from "./link-mounts.js";
+import type { ClaudeLender } from "../agent/providers/claude/claude-lender.js";
+import { createBorrowedClaude } from "./accounts/borrowed-claude.js";
+import { type BorrowedStore, borrowedAccountsDocument, fileBorrowedStore } from "./accounts/borrowed-store.js";
 
 // LINKED SANDBOXES, both halves: the other sandboxes allowed to hand this one tasks, and the tasks this one handed to
 // others. Either half works without the other; a sandbox is usually one side of a given link and may be both.
@@ -21,6 +24,10 @@ export interface LinksSlice {
     readonly linkedChildren: LinkedChildren;
     // A turn's linked sandboxes as tool servers on its lease, one per granted card, as its computers are mounted.
     readonly linkMounts: (granted: readonly Capability[], lease: Pick<TurnLease, "open">, conversationId: string | undefined) => AgentTool[];
+    // Model accounts another of the owner's sandboxes lends this one over an accounts link (accounts/): where to ask.
+    readonly borrowedAccounts: BorrowedStore;
+    // The Claude sign-ins among them, asked for a token turn by turn; the Claude store lists and spends them.
+    readonly claudeLender: ClaudeLender;
 }
 
 const createLinksSlice = ({
@@ -56,7 +63,9 @@ const createLinksSlice = ({
     });
     const linkMounts: LinksSlice["linkMounts"] = (granted, lease, conversationId) =>
         linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
-    return { inboundLinks, linkedChildren, linkMounts };
+    const borrowedAccounts = fileBorrowedStore(join(historyRoot, borrowedAccountsDocument.path));
+    const claudeLender = createBorrowedClaude({ store: borrowedAccounts, cards: () => whole().capabilities.list(), logger });
+    return { inboundLinks, linkedChildren, linkMounts, borrowedAccounts, claudeLender };
 };
 
 export const linksSlice = defineSlice<LinksSlice>({

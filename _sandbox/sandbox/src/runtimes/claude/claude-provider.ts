@@ -6,6 +6,7 @@ import { type HarnessPlanDeps, planHarnessTurn } from "../../agent/run/harness/h
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "../../agent/providers/claude/claude-credentials.js";
+import { type ClaudeLender, withLender } from "../../agent/providers/claude/claude-lender.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "../../agent/providers/claude/claude-seats.js";
 import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "../../agent/providers/claude/claude-seat-check.js";
@@ -38,8 +39,12 @@ export const createClaudeSlice = (input: {
     readonly logger: Logger;
     // Composed in the providers slice, after this one: read per call.
     readonly providerRefusals: () => ProviderRefusalStore;
+    // The sign-ins another of the owner's sandboxes lends here (links/accounts/), composed after this slice: read per call.
+    readonly lender?: () => ClaudeLender | undefined;
 }): ClaudeSlice => {
-    const claudeStore = fileClaudeStore(join(input.authRoot, "claude"), input.logger);
+    const own = fileClaudeStore(join(input.authRoot, "claude"), input.logger);
+    const lender = input.lender;
+    const claudeStore = lender === undefined ? own : withLender(own, lender);
     const claudeSeats = fileClaudeSeatStore(join(input.authRoot, "claude", "seats.json"), input.logger);
     return {
         claudeStore,

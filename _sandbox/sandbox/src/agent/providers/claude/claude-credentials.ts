@@ -7,6 +7,7 @@ import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { accountFiles } from "../accounts/account-files.js";
+import { type ClaudeLender, lenderFor } from "./claude-lender.js";
 
 // Claude subscription OAuth (PKCE) against the public Claude Code client; the sandbox owns these credentials, not the
 // platform. The constants mirror claude setup-token and are unofficial. Two redirects, the two Claude Code itself uses:
@@ -320,6 +321,8 @@ export interface ClaudeStore {
     // Runs act with no other holder, in this process or any other, touching that account's tokens.
     readonly withRefreshLock: <T>(id: string, act: () => Promise<T>) => Promise<T>;
     readonly logger: Logger;
+    // Where a borrowed account's tokens come from (claude-lender.ts); absent on a store with none.
+    readonly lender?: () => ClaudeLender | undefined;
 }
 
 // A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/claude/ (outside the three repos).
@@ -427,6 +430,11 @@ const rotate = async (store: ClaudeStore, id: string, spent: string | undefined,
 // Returns a usable access token, refreshing and persisting first if expired or close to it. undefined when unconnected
 // or revoked; callers then fall back to the container's ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN env.
 export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: RefreshFn = refreshTokens): Promise<string | undefined> => {
+    // A borrowed account is renewed where it is held; this sandbox only asks for the token.
+    const lending = lenderFor(store, id);
+    if (lending !== undefined) {
+        return await lending.token(id);
+    }
     // Waits for any in-flight rotation first, so a new turn never snapshots the token that rotation is superseding.
     await refreshes.joined(id)?.catch(() => undefined);
     const account = await store.read(id);
@@ -459,7 +467,7 @@ export const replaceRejectedToken = (
     id: string,
     rejected: string,
     refresh: RefreshFn = refreshTokens,
-): Promise<string | undefined> => rotate(store, id, rejected, refresh);
+): Promise<string | undefined> => lenderFor(store, id)?.replace(id, rejected) ?? rotate(store, id, rejected, refresh);
 
 // Rotates when nobody holds the token and it is within OPPORTUNISTIC_AHEAD_MS of expiry. Failure is logged and left;
 // the token is still valid for hours, and the next gap tries again.
@@ -495,7 +503,8 @@ export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000, 
             return;
         }
         for (const account of accounts) {
-            if (account.needsReauth === true) {
+            // A borrowed account is renewed by the sandbox that lends it.
+            if (account.needsReauth === true || account.borrowedFrom !== undefined) {
                 continue;
             }
             await quietly(account.id);

@@ -30,6 +30,11 @@ import {
     stopTask,
 } from "./link-tasks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
+import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
+import { toRunnerCredential } from "../sandboxes/credential-lending.js";
+import { copyOf, heldAccounts } from "./accounts/held-accounts.js";
+import { createLinkAccountDoors, type LinkAccountDoors } from "./accounts/link-account-doors.js";
 
 // The two halves of a link as routes. The owner's (`/system/links`): mint one, change its terms, revoke it, answer a task
 // that waits on them; each refused to anyone below the operating tier, like a control token's. The link doors (`/link`):
@@ -47,7 +52,7 @@ export interface LinkRoutesDeps extends LinkTaskDeps {
 }
 
 /** The routes' deps, read off the daemon's services. */
-export const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "personas">): LinkRoutesDeps => ({
+const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "personas">): LinkRoutesDeps => ({
     ...linkTaskDepsOf(services),
     auth: services.auth,
     sandboxName: () => services.info?.name ?? "this sandbox",
@@ -93,17 +98,36 @@ const unknownService = async (deps: LinkRoutesDeps, runAs: string | null | undef
     return known.includes(runAs) ? undefined : `no service here is called "${runAs}"`;
 };
 
-export const createLinkRoutes = (deps: LinkRoutesDeps) => {
-    // The link this request presents, or the refusal: a token nothing here was minted as, or one since revoked, reads the
-    // same, since telling them apart would tell a stranger which tokens once worked.
-    const linkOf = async (c: Context<AppEnv>): Promise<ResolvedLink | Response> => {
-        const link = await deps.links.resolve(c.req.header(LINK_HEADER) ?? "");
-        if (link === undefined) {
-            return c.json({ error: "This link is not one this sandbox holds: it was revoked, or never minted here. Its owner can link the two sandboxes again." }, 401);
-        }
-        void deps.links.touch(link.id).catch((error: Error) => deps.logger.warn({ err: error, link: link.id }, "link: last use not recorded"));
-        return link;
+// What GET /link answers: the link still works, and the terms it is held to, the persona by the name it is shown by.
+const helloOf = async (deps: LinkRoutesDeps, link: ResolvedLink): Promise<LinkHello> => {
+    const persona = link.terms.actsAs === undefined ? undefined : (await deps.personas()).find((candidate) => candidate.id === link.terms.actsAs);
+    return {
+        sandbox: deps.sandboxName(),
+        link: { id: link.id, label: link.label },
+        terms: {
+            approve: link.terms.approve,
+            turnsPerHour: link.terms.turnsPerHour,
+            ...opt("persona", persona === undefined ? undefined : (persona.label ?? persona.id)),
+            tasks: link.terms.tasks,
+            accounts: link.terms.accounts.length,
+        },
+        maxHops: LINK_MAX_HOPS,
     };
+};
+
+// The link this request presents, or the refusal: a token nothing here was minted as, or one since revoked, reads the
+// same, since telling them apart would tell a stranger which tokens once worked.
+const presentedLink = async (deps: Pick<LinkRoutesDeps, "links" | "logger">, c: Context<AppEnv>): Promise<ResolvedLink | Response> => {
+    const link = await deps.links.resolve(c.req.header(LINK_HEADER) ?? "");
+    if (link === undefined) {
+        return c.json({ error: "This link is not one this sandbox holds: it was revoked, or never minted here. Its owner can link the two sandboxes again." }, 401);
+    }
+    void deps.links.touch(link.id).catch((error: Error) => deps.logger.warn({ err: error, link: link.id }, "link: last use not recorded"));
+    return link;
+};
+
+export const createLinkRoutes = (deps: LinkRoutesDeps) => {
+    const linkOf = (c: Context<AppEnv>): Promise<ResolvedLink | Response> => presentedLink(deps, c);
     // The task this link opened under the path's conversation id; any other conversation is answered as no such task.
     const taskOf = async (c: Context<AppEnv>, link: ResolvedLink): Promise<StoredLinkTask | Response> => {
         const task = await deps.links.task(link.id, { conversationId: c.req.param("id") ?? "" });
@@ -196,18 +220,7 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
             if (link instanceof Response) {
                 return link;
             }
-            const persona = link.terms.actsAs === undefined ? undefined : (await deps.personas()).find((candidate) => candidate.id === link.terms.actsAs);
-            const hello: LinkHello = {
-                sandbox: deps.sandboxName(),
-                link: { id: link.id, label: link.label },
-                terms: {
-                    approve: link.terms.approve,
-                    turnsPerHour: link.terms.turnsPerHour,
-                    ...opt("persona", persona === undefined ? undefined : (persona.label ?? persona.id)),
-                },
-                maxHops: LINK_MAX_HOPS,
-            };
-            return c.json(hello);
+            return c.json(await helloOf(deps, link));
         },
         /** POST /link/conversations */
         ask: async (c: Context<AppEnv>): Promise<Response> => {
@@ -289,11 +302,41 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
     };
 };
 
-// Linked sandboxes: the owner's links for other sandboxes of theirs (mint, terms, revoke, a waiting task's answer), and
-// the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened.
-export const linkRawRoutes = defineRawRoutes((services: Parameters<typeof linkRoutesDepsOf>[0]) => {
-    const links = createLinkRoutes(linkRoutesDepsOf(services));
+// An accounts link's doors (accounts/link-account-doors.ts), each behind the link the request presents.
+export const linkAccountRoutes = (deps: Pick<LinkRoutesDeps, "links" | "logger">, doors: LinkAccountDoors) => {
+    const behindLink =
+        (door: (c: Context<AppEnv>, link: ResolvedLink) => Promise<Response>) =>
+        async (c: Context<AppEnv>): Promise<Response> => {
+            const link = await presentedLink(deps, c);
+            return link instanceof Response ? link : await door(c, link);
+        };
     return {
+        "GET /link/accounts": behindLink(doors.accounts),
+        "POST /link/accounts/copy": behindLink(doors.copy),
+        "POST /link/credentials": behindLink(doors.credential),
+        "POST /link/credentials/refresh": behindLink(doors.refresh),
+    };
+};
+
+// What the account doors read of the daemon: what it holds, and how its own turns resolve a credential.
+const linkAccountDoorsOf = (services: Services): LinkAccountDoors =>
+    createLinkAccountDoors({
+        logger: services.logger,
+        held: () => heldAccounts(services),
+        copyOf: (ref) => copyOf(services, ref),
+        // "" for the container's own credential: that is this sandbox's, and never lent to another.
+        credential: async (input) => toRunnerCredential(await resolveHarnessCredentials(services, input), services.config.translator.url, ""),
+        remint: (account, rejected) => replaceRejectedToken(services.claudeStore, account, rejected),
+    });
+
+// Linked sandboxes: the owner's links for other sandboxes of theirs (mint, terms, revoke, a waiting task's answer), and
+// the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened, and the
+// accounts doors an accounts link borrows through.
+export const linkRawRoutes = defineRawRoutes((services: Services) => {
+    const deps = linkRoutesDepsOf(services);
+    const links = createLinkRoutes(deps);
+    return {
+        ...linkAccountRoutes(deps, linkAccountDoorsOf(services)),
         "GET /system/links": links.list,
         "POST /system/links": links.mint,
         "POST /system/links/{id}": links.update,

@@ -146,6 +146,11 @@ export const renameNativeAccount = (provider: string, id: string, label: string)
     return account;
 };
 
+/** Files an account another of the owner's sandboxes copied or lends here (sharing.handler.ts), as a row of this store. */
+export const fileNativeAccount = (provider: string, account: OauthAccount): void => {
+    listOf(provider).push(account);
+};
+
 // Clears one credential and stops any sign-in still in flight for the provider, as the real disconnect does.
 export const disconnectNativeAccount = (provider: string, id: string): void => {
     nativeStore().set(

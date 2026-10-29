@@ -181,8 +181,10 @@ export const claudeHeadroomSource = (
 ): HeadroomSource => ({
     targets: async () =>
         (await store.list())
-            // Revoked credential can't read anything; asking would only mint a 401 per sweep.
-            .filter((account) => account.needsReauth !== true)
+            // Revoked credential can't read anything; asking would only mint a 401 per sweep. A borrowed account is read
+            // by the sandbox that lends it, whose reading comes with its row: a second reader would spend the endpoint's
+            // per-account budget twice.
+            .filter((account) => account.needsReauth !== true && account.borrowedFrom === undefined)
             .map((account) => ({
                 key: account.id,
                 provider: "claude",

@@ -5048,7 +5048,14 @@
             "connectWay": "Connect {way}",
             "empty": "Not connected yet. Signing in takes a minute, and the account stays in this sandbox.",
             "otherLive": "Your {other} sign-in is still waiting. Connecting {provider} replaces it.",
-            "showOther": "Show {other}"
+            "showOther": "Show {other}",
+            "borrowedFrom": "Borrowed from {name}",
+            "signInAgainOn": "Signed out. Sign in again on {name}, which lends it here.",
+            "stopBorrowing": "Stop borrowing",
+            "couldntStopBorrowing": "Couldn't stop borrowing that account.",
+            "lentTo": "Lent to {names}",
+            "stopLending": "Stop lending",
+            "couldntStopLending": "Couldn't stop lending that account."
         },
         "providerTile": {
             "signingIn": "Signing in…"
@@ -5062,6 +5069,29 @@
             "adding": "Adding {server} as a model endpoint",
             "couldntAdd": "Couldn't add {server}.",
             "noneFound": "For a GPU, run Ollama or LM Studio on the computer that hosts this sandbox and it shows up here. On Linux, start Ollama with OLLAMA_HOST=0.0.0.0; in LM Studio, turn on serving on the local network."
+        },
+        "shareAccounts": {
+            "title": "From your other sandboxes",
+            "from": "Bring accounts from",
+            "which": "Sandbox",
+            "pickOne": "Pick a sandbox",
+            "explain": "Nothing to sign in to twice. Copy: a key that does not change is copied here. Borrow: a Claude sign-in stays on the other sandbox, which lends it here turn by turn.",
+            "reading": "Reading what {name} holds…",
+            "nothing": "{name} holds no model accounts.",
+            "tooOld": "{name} runs a sandbox too old to share its accounts. Update it, then try again.",
+            "couldntRead": "Couldn't read {name}'s accounts.",
+            "endpoint": "Model endpoint",
+            "modeCopy": "Copy its key",
+            "modeLend": "Borrow turn by turn",
+            "modeNo": "Can't be shared",
+            "bring": "Bring",
+            "bringAll": "Bring all",
+            "signInHere": "Sign in here instead",
+            "bringing": "Bringing accounts in from {name}",
+            "couldntBring": "Couldn't bring those accounts in from {name}.",
+            "failed": "Couldn't bring it in.",
+            "copied": "Copied",
+            "borrowed": "Borrowed"
         }
     },
     "desktop": {
@@ -10439,7 +10469,8 @@
             "address": "Address",
             "token": "Token",
             "createLink": "Create link",
-            "empty": "No linked sandboxes. Pair one from the other sandbox's Linked sandbox card, or make a link here by hand."
+            "empty": "No linked sandboxes. Pair one from the other sandbox's Linked sandbox card, or make a link here by hand.",
+            "lendsAccounts": "lends {count} model account and takes no tasks | lends {count} model accounts and takes no tasks"
         },
         "linkedSandboxRows": {
             "title": "Linked sandboxes",

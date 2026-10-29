@@ -103,6 +103,9 @@ export interface LinkRefusal {
 
 const refusal = (refused: LinkRefusal["refused"], message: string): LinkRefusal => ({ refused, message });
 
+// What a link minted only to lend model accounts says to a task (schemas/providers/account-sharing.ts).
+const NO_TASKS = "This link only lends model accounts: it takes no tasks. Its owner can link the two sandboxes for tasks separately.";
+
 const nowOf = (deps: LinkTaskDeps): number => (deps.now ?? Date.now)();
 
 // True, and booked, when the link may start one more turn this hour.
@@ -228,6 +231,10 @@ const heldNotice = (link: ResolvedLink, task: StoredLinkTask, words: string): Pu
 
 /** A new task from the link: filed, then held for the owner or started, as the link's terms say. */
 export const askTask = async (deps: LinkTaskDeps, link: ResolvedLink, asked: LinkTask): Promise<LinkTaskStatus | LinkRefusal> => {
+    // An accounts link lends models and takes no work: refused before anything is filed, so it never opens a conversation.
+    if (!link.terms.tasks) {
+        return refusal(409, NO_TASKS);
+    }
     const earlier = await deps.links.task(link.id, { requestId: asked.requestId });
     if (earlier !== undefined) {
         return statusOf(deps, earlier);
@@ -299,6 +306,9 @@ export const messageTask = async (
     task: StoredLinkTask,
     message: LinkMessage,
 ): Promise<LinkMessageReceipt | LinkRefusal> => {
+    if (!link.terms.tasks) {
+        return refusal(409, NO_TASKS);
+    }
     if (task.state === "held") {
         return refusal(409, "It has not started: this sandbox's owner has not allowed it yet. Wait for that, then send again.");
     }

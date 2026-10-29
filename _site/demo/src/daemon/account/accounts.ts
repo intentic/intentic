@@ -1,3 +1,4 @@
+import type { ShareableAccount } from "@intentic/sandbox-contract/schemas/providers/account-sharing";
 import type { LoginStart, Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ProviderRefusals, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { homeRecording, seatsOff } from "../../mode";
@@ -167,3 +168,60 @@ export const demoSignInStart = (provider: string, variant: string | undefined, s
               ]
             : [],
 });
+
+// WHAT ANOTHER OF THE OWNER'S SANDBOXES HOLDS: Ada's laptop (world/sandboxRegistry.ts LENDING_SANDBOX), so Sandbox ▸
+// Models' "From your other sandboxes" has accounts to bring in, one of each way: a Claude sign-in it lends turn by turn,
+// two keys it copies, and two it cannot share, each saying why.
+
+/** One account the lending sandbox holds: how its Models page lists it, and the row a copy or a loan files here. */
+export interface LentFixture {
+    readonly shareable: ShareableAccount;
+    readonly row: OauthAccount;
+}
+
+export const lendingAccounts = (): readonly LentFixture[] => {
+    const connectedAt = STARTED_AT - 9 * 24 * 3_600_000;
+    const usage: OauthAccount[`usage`] = {
+        measuredAt: STARTED_AT - 3 * 60_000,
+        windows: [
+            { kind: `seven_day`, utilization: 41, resetsAt: Math.round(STARTED_AT / 1000) + 2 * 24 * 3600, gates: `all` },
+            { kind: `five_hour`, utilization: 12, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 3600, gates: `all` },
+        ],
+    };
+    const row = (id: string, label: string, email: string): OauthAccount => ({ id, label, email, connectedAt });
+    return [
+        {
+            shareable: { provider: `claude`, account: `acc_laptop_max`, label: `Claude Max`, email: `ada@lovelace.dev`, mode: `lend` },
+            row: { ...row(`acc_laptop_max`, `Claude Max`, `ada@lovelace.dev`), organization: `Lovelace`, usage },
+        },
+        {
+            shareable: { provider: `cursor`, account: `cur_laptop`, label: `Cursor Pro`, email: `ada@lovelace.dev`, mode: `copy` },
+            row: row(`cur_laptop`, `Cursor Pro`, `ada@lovelace.dev`),
+        },
+        {
+            shareable: { provider: `zai`, account: `zai_laptop`, label: `GLM Coding Plan`, email: `ada@lovelace.dev`, mode: `copy` },
+            row: row(`zai_laptop`, `GLM Coding Plan`, `ada@lovelace.dev`),
+        },
+        {
+            shareable: {
+                provider: `claude`,
+                account: `acc_laptop_team`,
+                label: `Claude Team`,
+                email: `ada@acme.dev`,
+                mode: `no`,
+                reason: `It needs signing in again here first.`,
+            },
+            row: { ...row(`acc_laptop_team`, `Claude Team`, `ada@acme.dev`), needsReauth: true },
+        },
+        {
+            shareable: {
+                provider: `codex`,
+                label: `ChatGPT`,
+                email: `ada@lovelace.dev`,
+                mode: `no`,
+                reason: `Subscriptions the translator holds can't be lent between sandboxes yet: sign in on this sandbox too.`,
+            },
+            row: row(`codex`, `ChatGPT`, `ada@lovelace.dev`),
+        },
+    ];
+};

@@ -114,7 +114,11 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this
   machine and endpoint the sandbox can run on, what needs a person (sign in again, verify, an admin's seat), and the
   one place a model is connected. `/connect` is an old address for it. Connecting is the owner's (a maintainer's);
-  send them there rather than describing the steps.
+  send them there rather than describing the steps. Its **Use accounts from another sandbox** brings in accounts one of
+  the owner's other sandboxes already holds, with no sign-in: static keys (Cursor, Devin, Z.ai, Muse, model endpoints)
+  are copied, a Claude subscription is borrowed turn by turn from the sandbox that holds it (and stops working while that
+  sandbox is down), and translator subscriptions (Codex, Grok, Kimi, Gemini) still need a sign-in on each sandbox. A
+  borrowed row says "Borrowed from <sandbox>"; the lender's row says who it is lent to, with Stop lending.
 
 "An orchestrator on one model that delegates to cheaper subagents": the orchestrator is whatever its conversation
 runs on (the pill, or the persona's **Runs on**). A spawned subagent's provider and model are named by the parent

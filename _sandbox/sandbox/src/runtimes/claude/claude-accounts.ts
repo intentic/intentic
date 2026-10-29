@@ -30,6 +30,10 @@ import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 // Merges in the usage window when measured; account objects from the store are not mutated in place.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
+// A borrowed row is the lending sandbox's sign-in (claude-lender.ts): never the same seat as one of this sandbox's own,
+// so neither a sign-in here nor the boot merge can fold one into the other.
+const claudeIdentity = (row: OauthAccount): string | undefined => (row.borrowedFrom === undefined ? signInIdentity(row) : undefined);
+
 // The seat mark rides on the row as the fact it is; which of a revoked sign-in and a lost seat wins is the
 // serviceability rule's to say (`serviceState`), once, in the `state` the account list publishes.
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
@@ -123,7 +127,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             // Reconnect and "add another" are the same sign-in; which one it was is decided by whose account came back
             // (the one connect rule, account-identity.ts): the same identity lands on the same id, so its row, usage
             // history and every chat or automation pinned to it carry on.
-            const match = sameAccount(await services.claudeStore.list(), tokens);
+            const match = sameAccount(await services.claudeStore.list(), tokens, claudeIdentity);
             const stored = match === undefined ? undefined : await services.claudeStore.read(match.id);
             const account = stored === undefined ? newAccount(tokens, label) : reconnectAccount(stored, tokens, label);
             await services.claudeStore.write(account);
@@ -234,7 +238,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             // Rename must carry the seat note too; it replaces the whole row on the card.
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
-        identityOf: signInIdentity,
+        identityOf: claudeIdentity,
         // Clears the credential, usage, refusals and seat state together, so nothing is left to orphan.
         forget,
     };

@@ -97,7 +97,7 @@ const personaOptions = computed<readonly PickerOption<string>[]>(() => [
 const personaName = (id: string | undefined): string | undefined =>
     id === undefined ? undefined : (personas.value.find((persona) => persona.id === id)?.label ?? id);
 
-const termsLine = (terms: LinkTerms): string =>
+const taskTermsLine = (terms: LinkTerms): string =>
     [
         terms.actsAs === undefined
             ? t(`sandbox.linkedSandboxes.wearsNothing`)
@@ -106,6 +106,11 @@ const termsLine = (terms: LinkTerms): string =>
         terms.approve ? t(`sandbox.linkedSandboxes.eachWaits`) : t(`sandbox.linkedSandboxes.startsAtOnce`),
         t(`sandbox.linkedSandboxes.perHour`, { count: terms.turnsPerHour }),
     ].join(` · `);
+// An accounts link (minted on the other sandbox's Models page) takes no tasks: what it lends is all there is to say of it.
+const termsLine = (terms: LinkTerms): string =>
+    terms.tasks === false
+        ? t(`sandbox.linkedSandboxes.lendsAccounts`, { count: terms.accounts.length }, terms.accounts.length)
+        : taskTermsLine(terms);
 
 const describe = (link: InboundLinkSummary): string =>
     [
@@ -183,7 +188,10 @@ const submit = async (): Promise<void> => {
     if (named === `` || minting.value) {
         return;
     }
-    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, ...(runAs.value === undefined ? {} : { runAs: runAs.value }) };
+    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, tasks: true, accounts: [] };
+    if (runAs.value !== undefined) {
+        terms.runAs = runAs.value;
+    }
     if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
         terms.actsAs = actsAs.value;
     }
@@ -285,6 +293,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                     </template>
                     <template #control>
                         <Button
+                            v-if="link.terms.tasks !== false"
                             :label="t(`sandbox.linkedSandboxes.terms`)"
                             size="small"
                             tier="quiet"

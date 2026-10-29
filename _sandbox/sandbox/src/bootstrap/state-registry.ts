@@ -57,6 +57,7 @@ import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
+import { borrowedAccountsDocument } from "../links/accounts/borrowed-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
@@ -191,6 +192,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     hookRequestsDocument,
     hostSetupSeededDocument,
     issuesDocument,
+    borrowedAccountsDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
     loopDesignsDocument,
@@ -224,10 +226,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
-    sandboxKeyringKeysDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,

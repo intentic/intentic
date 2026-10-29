@@ -29,6 +29,7 @@ import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
 import { accountOffLine } from "./accountOff";
+import { lendingKey, useProviderSharing } from "./useAccountSharing";
 
 // ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
 // one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
@@ -91,6 +92,9 @@ const attemptBlock = useTemplateRef<InstanceType<typeof ConnectAttempt>>(`attemp
 defineExpose({ reveal: () => attemptBlock.value?.reveal() });
 
 const { accountBusy, accountUsage, usageLoaded, renameAccount, disconnect, disconnectTranslator, translatorKey } = useChat();
+// Loans both ways (useAccountSharing.ts): a row another of the owner's sandboxes lends here is ended here and fixed there;
+// a row of this one's own that another borrows says so, with the press that takes it back.
+const { borrowedFrom, lentNote, stopBorrowing, stopLending, busy: loanBusy, notice: loanNotice } = useProviderSharing();
 
 // The provider as the translator keys it, where it holds subscriptions there at all; parsed once, so every routed read
 // below names a provider the translator knows rather than asserting one.
@@ -270,26 +274,44 @@ interface AccountView {
     readonly variant?: string | undefined;
     readonly busy: string;
     readonly disconnect: () => void;
+    // What taking it off is called: Disconnect, or for one another sandbox lends here, Stop borrowing.
+    readonly removeLabel: string;
+    // Ends another sandbox's loan of this one, when one borrows it.
+    readonly stopLending?: (() => void) | undefined;
 }
 
-const nativeViews = computed<readonly AccountView[]>(() =>
-    rowsOf(nativeAccounts.value, accountFacts).map(({ account, headroom, exhausted, state }) => ({
+// A row of this sandbox's own, or one another of the owner's sandboxes lends here (`from`): signed in over there, so it is
+// renamed, reconnected and signed in again there, and taking it off here only stops borrowing it.
+const nativeView = ({ account, headroom, exhausted, state }: AccountRow<OauthAccount>): AccountView => {
+    const from = borrowedFrom(account);
+    const own = { provider, account: account.id };
+    const lent = from === undefined ? lentNote(own) : undefined;
+    // The loan first, since it is why this row's buttons differ from its neighbours'.
+    const note = [from === undefined ? lent : t(`connect.providerPanel.borrowedFrom`, { name: from }), loopNote(account), identityNote(account)];
+    return {
         key: account.id,
         title: account.label,
-        note: [loopNote(account), identityNote(account)].filter((part) => part !== undefined).join(` · `) || undefined,
-        description: stateLine(state, account, account.needsReauth === true && account.detail === undefined),
+        note: note.filter((part) => part !== undefined).join(` · `) || undefined,
+        // A borrowed sign-in is fixed where it is held: the daemon's own words for why, else the way to that sandbox.
+        description:
+            from !== undefined && needsReconnect(state)
+                ? (account.detail ?? t(`connect.providerPanel.signInAgainOn`, { name: from }))
+                : stateLine(state, account, account.needsReauth === true && account.detail === undefined),
         state,
         headroom,
         exhausted,
         activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(account.id),
-        rename: renameOf(account),
+        rename: from === undefined ? renameOf(account) : undefined,
         verify: verifyUrl(state),
-        reconnect: needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
+        reconnect: from === undefined && needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
         variant: doorOf(account)?.door,
         busy: account.id,
-        disconnect: () => void disconnect(account.id, provider),
-    })),
-);
+        disconnect: from === undefined ? () => void disconnect(account.id, provider) : () => void stopBorrowing(account.id),
+        removeLabel: from === undefined ? t(`ui.action.disconnect`) : t(`connect.providerPanel.stopBorrowing`),
+        stopLending: lent === undefined ? undefined : () => void stopLending(own),
+    };
+};
+const nativeViews = computed<readonly AccountView[]>(() => rowsOf(nativeAccounts.value, accountFacts).map(nativeView));
 
 // A subscription is named by whoever signs in to it (the translator's label is that email). Only a provider that can hold
 // both kinds side by side (Grok, Kimi) says which kind this is.
@@ -312,6 +334,7 @@ const routedViews = computed<readonly AccountView[]>(() =>
                 void disconnectTranslator(keyed.value, account.name);
             }
         },
+        removeLabel: t(`ui.action.disconnect`),
     })),
 );
 
@@ -405,6 +428,9 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         <RowNote v-if="notice" variant="block">
             <Notice :of="notice" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="emit(`dismissNotice`)" />
         </RowNote>
+        <RowNote v-if="loanNotice" variant="block">
+            <Notice :of="loanNotice" size="sm" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="loanNotice = undefined" />
+        </RowNote>
 
         <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
         <RowNote v-if="accountsOutdated && rows.length > 0" variant="block">
@@ -437,12 +463,21 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                     :disabled="busy"
                     @click="ask(row.via, row.variant)"
                 />
+                <!-- Lent to another of the owner's sandboxes: taking the loan back leaves the account here. -->
                 <Button
-                    :label="t(`ui.action.disconnect`)"
+                    v-if="row.stopLending"
+                    :label="t(`connect.providerPanel.stopLending`)"
+                    size="small"
+                    tier="quiet"
+                    :loading="loanBusy === lendingKey({ provider, account: row.key })"
+                    @click="row.stopLending()"
+                />
+                <Button
+                    :label="row.removeLabel"
                     size="small"
                     tier="quiet"
                     tone="danger"
-                    :loading="accountBusy === row.busy"
+                    :loading="accountBusy === row.busy || loanBusy === row.busy"
                     @click="row.disconnect()"
                 />
             </template>

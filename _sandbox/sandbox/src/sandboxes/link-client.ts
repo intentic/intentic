@@ -8,6 +8,13 @@ import {
     type LinkTaskStatus,
 } from "@intentic/sandbox-contract/schemas/links";
 import type { LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { LinkAccountCopy, LinkAccounts, SharedAccountRef } from "@intentic/sandbox-contract/schemas/providers/account-sharing";
+import type {
+    RunnerCredential,
+    RunnerCredentialRefresh,
+    RunnerCredentialRefreshRequest,
+    RunnerCredentialRequest,
+} from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { z } from "zod";
@@ -147,4 +154,37 @@ export const linkStop = (target: LinkTarget, conversationId: string): Promise<Li
         method: "POST",
         path: rawRouteUrl("POST /link/conversations/{id}/stop", { id: conversationId }),
         schema: RAW_JSON_ROUTES["POST /link/conversations/{id}/stop"].output,
+    });
+
+/* An accounts link's doors (schemas/providers/account-sharing.ts): read by the borrowing side's daemon, never a browser. */
+
+/** GET /link/accounts: what the link may use, with the lending side's usage readings. */
+export const linkAccounts = (target: LinkTarget, signal?: AbortSignal): Promise<LinkAnswerOf<LinkAccounts>> =>
+    call(target, { method: "GET", path: rawRouteUrl("GET /link/accounts"), schema: RAW_JSON_ROUTES["GET /link/accounts"].output }, signal);
+
+/** POST /link/accounts/copy: one static account's value, which only this daemon ever reads. */
+export const linkAccountCopy = (target: LinkTarget, ref: SharedAccountRef): Promise<LinkAnswerOf<LinkAccountCopy>> =>
+    call(target, {
+        method: "POST",
+        path: rawRouteUrl("POST /link/accounts/copy"),
+        body: ref,
+        schema: RAW_JSON_ROUTES["POST /link/accounts/copy"].output,
+    });
+
+/** POST /link/credentials: a lent sign-in's access token for one turn, the runner door's own shapes. */
+export const linkCredential = (target: LinkTarget, request: RunnerCredentialRequest): Promise<LinkAnswerOf<RunnerCredential>> =>
+    call(target, {
+        method: "POST",
+        path: rawRouteUrl("POST /link/credentials"),
+        body: request,
+        schema: RAW_JSON_ROUTES["POST /link/credentials"].output,
+    });
+
+/** POST /link/credentials/refresh: a fresh access token in place of the one a provider refused mid-turn. */
+export const linkCredentialRefresh = (target: LinkTarget, request: RunnerCredentialRefreshRequest): Promise<LinkAnswerOf<RunnerCredentialRefresh>> =>
+    call(target, {
+        method: "POST",
+        path: rawRouteUrl("POST /link/credentials/refresh"),
+        body: request,
+        schema: RAW_JSON_ROUTES["POST /link/credentials/refresh"].output,
     });
