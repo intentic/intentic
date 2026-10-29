@@ -119,7 +119,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.15.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.16.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the

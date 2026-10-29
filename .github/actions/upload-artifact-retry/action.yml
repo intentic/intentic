@@ -25,7 +25,7 @@ runs:
   using: composite
   steps:
     - id: first
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       continue-on-error: true
       with:
         name: ${{ inputs.name }}
@@ -44,7 +44,7 @@ runs:
         sleep 15
     - id: second
       if: steps.first.outcome == 'failure'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       continue-on-error: true
       with:
         name: ${{ inputs.name }}
@@ -62,7 +62,7 @@ runs:
         sleep 45
     # No `continue-on-error` on the last attempt: this is the step that fails the job.
     - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}

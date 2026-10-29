@@ -130,7 +130,7 @@ overrides:
   # load before a single file is linted. oxlint-plugin-complexity asks for ^1.73.0, which floats to 1.80 on its
   # own; this holds it at the catalog pin instead.
   # ponytail: bump together with oxlint.
-  "@oxlint/plugins": 1.89.0
+  "@oxlint/plugins": 1.90.0
 
 # 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
 # only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
@@ -233,10 +233,10 @@ catalogPrune: true
 catalog:
   "@agentclientprotocol/sdk": 2.0.2
   "@anthropic-ai/claude-agent-sdk": 0.3.312
-  "@astrojs/check": 0.9.10
+  "@astrojs/check": 0.9.12
   "@astrojs/sitemap": 3.7.4
-  "@commitlint/cli": 21.2.3
-  "@commitlint/config-conventional": 21.2.3
+  "@commitlint/cli": 21.2.4
+  "@commitlint/config-conventional": 21.2.4
   "@commitlint/types": 21.2.3
   # Cursor's own agent runtime (cursor/ in the daemon), and the ONE entry in this catalog that is not
   # open-source: its licence is "all rights reserved, use subject to Cursor's Terms of Service", which grants
@@ -273,7 +273,7 @@ catalog:
   "@orpc/openapi-client": 1.16.1
   "@orpc/server": 1.16.1
   # The plugin API the vendored anti-slop rules compile against, pinned to `oxlint` — see the override above.
-  "@oxlint/plugins": 1.89.0
+  "@oxlint/plugins": 1.90.0
   "@playwright/mcp": 0.0.83
   "@playwright/test": 1.64.1
   # Held on the PrimeVue 4 line on purpose: PrimeVue 5 (and @primeuix/themes 3, which it pairs with) left MIT for
@@ -360,7 +360,7 @@ catalog:
   # Types only, and pinned to what @orpc/openapi itself resolves: it is the JSON Schema dialect oRPC's
   # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
   json-schema-typed: 9.0.0
-  knip: 6.39.0
+  knip: 6.43.0
   # GitHub Actions secrets are sealed boxes (_deploy/providers/src/github/github-api.ts).
   libsodium-wrappers: 0.8.4
   mailparser: 3.12.4
@@ -381,7 +381,7 @@ catalog:
   # The privacy shield's text reader (_sandbox/ocr) runs PP-OCRv6 with it directly. The same pin as
   # @huggingface/transformers' own, so the daemon carries one runtime, not two.
   onnxruntime-node: 1.30.0
-  oxlint: 1.89.0
+  oxlint: 1.90.0
   # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
   # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the
   # diagnostic actionable rather than a number to argue with. Its own peers (oxc-parser, estree-walker, diff)
@@ -397,7 +397,7 @@ catalog:
   pkijs: 4.0.0
   playwright: 1.64.1
   posthog-js: 1.436.1
-  prettier: 3.9.9
+  prettier: 3.9.10
   primevue: 4.5.5
   prisma: 7.10.1
   quickjs-emscripten-core: 0.32.0
@@ -431,7 +431,7 @@ catalog:
   tar-stream: 3.2.2
   testcontainers: 12.2.1
   tsx: 4.23.15
-  turbo: 2.11.7
+  turbo: 2.11.10
   # The released native compiler replaces tsgo. Compiler-API scripts use @typescript/typescript6 explicitly;
   # Vue and Astro keep the typescript6 catalog below until their checkers support the native compiler.
   typescript: 7.0.2
@@ -448,7 +448,7 @@ catalog:
   vue-router: 5.4.0
   vue-tsc: 3.3.13
   web-push: 3.6.7
-  wrangler: 4.147.0
+  wrangler: 4.154.0
   ws: 8.22.0
   xadesjs: 2.6.8
   xmldsigjs: 2.8.8
