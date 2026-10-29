@@ -21,7 +21,7 @@ import type { GitActionResult, GitCommit } from "@intentic/sandbox-contract/sche
 import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
-import { branchMenuItems, shortBranchName } from "./branchActions.js";
+import { branchMenuItems, shortBranchName, STARTABLE_REMOTE } from "./branchActions.js";
 import { host } from "./host.js";
 import { repoAt } from "./repos.js";
 import { useBranches } from "./useBranches.js";
@@ -430,8 +430,9 @@ const refMenuItems = computed<MenuItem[]>(() => {
     }
     // Viewed or started from by its short name, never switched to; the branch the workspace stands on offers neither.
     const offered = (name: string): MenuItem[] => (name === branch.value ? [] : branchMenuItems(repoRef.value, name));
+    // Only origin's: another remote's branch has no local one the daemon can make (branchActions.ts opensFrom).
     if (kind === `remote`) {
-        return offered(shortBranchName(target.decoration, remoteNames.value));
+        return target.decoration.startsWith(`${STARTABLE_REMOTE}/`) ? offered(shortBranchName(target.decoration, remoteNames.value)) : [];
     }
     return [
         ...offered(label),

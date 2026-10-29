@@ -118,12 +118,19 @@ case $sub in
         ;;
     checkout)
         first=""
+        separated=""
         old_ifs=$IFS
         IFS='
 '
         for arg in $past; do
+            # Past `--` every word is a path: a restore, which moves nothing. A bare trailing `--` names no path, and
+            # `git checkout feature --` switches to `feature` all the same, so it is read on.
+            if [ -n "$separated" ]; then
+                IFS=$old_ifs
+                exec "$real" "$@"
+            fi
             case $arg in
-                --) IFS=$old_ifs; exec "$real" "$@" ;;
+                --) separated=1 ;;
                 -b|-B|--orphan|--detach|-) IFS=$old_ifs; refuse "" ;;
                 -p|--patch) IFS=$old_ifs; exec "$real" "$@" ;;
                 -*) ;;

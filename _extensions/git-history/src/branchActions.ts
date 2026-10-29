@@ -9,6 +9,13 @@ import { t } from "./i18n.js";
 /** The branch a ref names by its short name, the only spelling a view or a start takes: `origin/feature/x` is `feature/x`
  *  (the daemon makes the local one when it is first needed). The longest matching remote wins, so a remote whose own
  *  name has a slash in it still strips whole; a local branch's name comes back as it is. */
+/** The one remote a branch is viewed or started from by its short name: the daemon makes the local branch from origin's
+ *  tip when it is first needed, and a branch only another remote holds has none to make. */
+export const STARTABLE_REMOTE = `origin`;
+
+/** Whether a branch can be viewed or started from: one of its own here, or one origin holds. */
+export const opensFrom = (local: boolean, remotes: readonly string[]): boolean => local || remotes.includes(STARTABLE_REMOTE);
+
 export const shortBranchName = (ref: string, remotes: readonly string[]): string => {
     const remote = remotes.filter((name) => ref.startsWith(`${name}/`)).toSorted((a, b) => b.length - a.length)[0];
     return remote === undefined ? ref : ref.slice(remote.length + 1);

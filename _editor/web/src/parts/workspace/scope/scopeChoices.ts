@@ -83,6 +83,9 @@ export interface BranchGroup {
     readonly hidden: number;
 }
 
+/** The one remote whose branches the daemon takes by their short name. */
+const STARTABLE_REMOTE = `origin`;
+
 /** The prefix every conversation's own branch carries (the daemon's `agent/<id>`). */
 const AGENT_BRANCH_PREFIX = `agent/`;
 
@@ -97,10 +100,11 @@ export const branchChoices = (repo: string, listing: Listing, mainBranch?: strin
     const offered = (name: string): boolean => !name.startsWith(AGENT_BRANCH_PREFIX) && name !== current && name !== mainBranch && name !== `HEAD`;
     const locals = new Set(listing.branches.map((branch) => branch.name));
     const choices: BranchChoice[] = listing.branches.filter((branch) => offered(branch.name)).map((branch) => ({ repo, branch: branch.name, at: branch.at }));
-    // A branch on two remotes is one branch to start from: the first one listed answers for it.
+    // A remote-only branch is offered from `origin` alone: the daemon makes the local branch from origin's tip when it is
+    // first viewed or started from (its branch-checkouts.ts), and a branch only another remote holds has none to make.
     const remoteOnly = new Map<string, BranchChoice>();
     for (const seen of listing.remotes) {
-        if (offered(seen.branch) && !locals.has(seen.branch) && !remoteOnly.has(seen.branch)) {
+        if (seen.remote === STARTABLE_REMOTE && offered(seen.branch) && !locals.has(seen.branch) && !remoteOnly.has(seen.branch)) {
             remoteOnly.set(seen.branch, { repo, branch: seen.branch, at: seen.at, remote: seen.remote });
         }
     }

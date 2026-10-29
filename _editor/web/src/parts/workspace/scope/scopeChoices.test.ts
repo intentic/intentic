@@ -147,6 +147,13 @@ describe(`the branches the switcher offers`, () => {
         ]);
     });
 
+    // The daemon makes a local branch from origin's tip only, so a branch no other place holds is nothing to view or start from.
+    it(`offers a remote-only branch from origin alone`, () => {
+        const listing = { branches: [local(`main`, 50, true)], remotes: [seen(`upstream`, `topic`, 60), seen(`fork`, `wip`, 55), seen(`origin`, `ready`, 30)] };
+
+        expect(branchChoices(`web`, listing).map((choice) => choice.branch)).toEqual([`ready`]);
+    });
+
     it(`also leaves out the main line a repository was moved off, when the changes name it`, () => {
         const listing = { branches: [local(`hotfix`, 50, true), local(`main`, 40), local(`next`, 30)], remotes: [] };
 

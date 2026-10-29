@@ -674,6 +674,9 @@ describe("git.branch-switch", () => {
         expect(shared("git symbolic-ref -m why HEAD refs/heads/feature")).toContain("git.branch-switch");
         expect(shared("git symbolic-ref --short HEAD")).not.toContain("git.branch-switch");
         expect(shared("git -C /work checkout -- src/app.ts")).not.toContain("git.branch-switch");
+        // A separator with no path after it restores nothing: git switches all the same.
+        expect(shared("git checkout feature --")).toContain("git.branch-switch");
+        expect(shared("git checkout feature -- && pnpm build")).toContain("git.branch-switch");
     });
 });
 

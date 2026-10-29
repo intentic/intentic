@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, Popover, SearchBar, timeAgo, ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { startAgentFrom, viewInWorkspace } from "./branchActions.js";
+import { opensFrom, startAgentFrom, viewInWorkspace } from "./branchActions.js";
 import { useBranches } from "./useBranches.js";
 import { t } from "./i18n.js";
 
@@ -145,7 +145,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             </div>
                             <!-- The branch the shared workspace stands on is what the Workspace already shows: named, not offered. -->
                             <span v-if="branch.local?.current" class="shrink-0 pr-1.5 text-2xs text-subtle">{{ t(`branchSwitcher.workspace`) }}</span>
-                            <template v-else>
+                            <template v-else-if="opensFrom(branch.local !== undefined, branch.remotes.map((entry) => entry.remote))">
                                 <button
                                     type="button"
                                     :class="ui.iconButton({ size: `xs`, tone: `subtle` })"

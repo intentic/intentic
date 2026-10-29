@@ -53,6 +53,8 @@ test("every spelling of a move off the main line is refused in the shared checko
         ["checkout", "-b", "topic"],
         ["checkout", "--detach"],
         ["checkout", "-"],
+        // A bare trailing separator names no path: git still switches.
+        ["checkout", "feature", "--"],
         ["switch", "feature"],
         ["switch", "-c", "topic"],
         ["switch", "--detach", "main"],

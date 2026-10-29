@@ -2,7 +2,7 @@ import type { IntenticApi } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { unstubbed } from "@intentic/testing";
-import { branchMenuItems, shortBranchName, workspaceViewPath } from "./branchActions.js";
+import { branchMenuItems, opensFrom, shortBranchName, workspaceViewPath } from "./branchActions.js";
 import { bindHost } from "./host.js";
 import { messages } from "./i18n.js";
 import { manifest } from "./manifest.js";
@@ -25,6 +25,15 @@ describe(`shortBranchName`, () => {
 
     it(`strips the whole of a remote whose own name has a slash`, () => {
         expect(shortBranchName(`team/fork/fix`, [`team`, `team/fork`])).toBe(`fix`);
+    });
+});
+
+// The daemon makes the local branch from origin's tip; a branch only another remote holds has none to make.
+describe(`opensFrom`, () => {
+    it(`opens a local branch, or one origin holds, and nothing only another remote has`, () => {
+        expect(opensFrom(true, [])).toBe(true);
+        expect(opensFrom(false, [`origin`, `fork`])).toBe(true);
+        expect(opensFrom(false, [`upstream`])).toBe(false);
     });
 });
 
