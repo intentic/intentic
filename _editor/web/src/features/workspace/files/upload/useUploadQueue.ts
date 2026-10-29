@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
-import { isBrowsableArchive } from "@intentic/sandbox-contract/text/archives";
+import { isBrowsableArchive } from "@intentic/sandbox-contract/formats/archives";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { basename, joinPath } from "@intentic/ui/path";

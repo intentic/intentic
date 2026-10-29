@@ -1,6 +1,6 @@
 import { refuse } from "@intentic/contract-serve";
 import type { WorkspaceChildren, WorkspaceTree, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { archiveFormat, archiveStem, wrapsItsOwnName } from "@intentic/sandbox-contract/text/archives";
+import { archiveFormat, archiveStem, wrapsItsOwnName } from "@intentic/sandbox-contract/formats/archives";
 import { archiveMembers, deleteEntry, workspaceChildren, workspaceEntries, workspaceTree } from "../../fixture/workspace";
 import { forgetBytes, moveBytes, copyBytes } from "./bytes";
 import { pushPaths } from "./workspaceBroadcast";

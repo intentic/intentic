@@ -1920,13 +1920,15 @@ describe("a turn the child did not get from its parent", () => {
         expect(await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
             matched: { status: "paused" },
         });
-        const dropped = Date.now();
+        // The monotonic clock: Date is the wall clock, which another file's jest.setSystemTime in the same worker or the
+        // host's own clock can move mid-test (CI 2026-10-29: 19958ms of Date in a 6.7s test).
+        const dropped = performance.now();
         actors.send(result.id, { kind: "resume-dropped" });
         expect(await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["finished"], timeoutMs: 10_000 })).toMatchObject({
             outcome: "finished",
             matched: { status: "failed" },
         });
-        expect(Date.now() - dropped).toBeLessThan(10_000);
+        expect(performance.now() - dropped).toBeLessThan(10_000);
         expect(told.some((said) => said.startsWith(`Your subagent \`${result.id}\` ("Port the parser") stays stopped:`))).toBe(true);
     });
 

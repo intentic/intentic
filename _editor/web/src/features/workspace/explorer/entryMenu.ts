@@ -1,4 +1,4 @@
-import { archiveFormat } from "@intentic/sandbox-contract/text/archives";
+import { archiveFormat } from "@intentic/sandbox-contract/formats/archives";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { MenuItem } from "primevue/menuitem";
 import { t } from "@intentic/ui/i18n";

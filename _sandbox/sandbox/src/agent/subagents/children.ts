@@ -49,7 +49,7 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { opt } from "../../opt.js";
 import { dispatchOf, placementOf } from "../../runners/child-placement.js";
-import { childPlacement } from "./child-placement.js";
+import { childPlacement } from "./child-placement-live.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";

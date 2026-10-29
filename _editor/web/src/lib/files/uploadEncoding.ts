@@ -1,4 +1,4 @@
-import { isPackedName } from "@intentic/sandbox-contract/text/packed-formats";
+import { isPackedName } from "@intentic/sandbox-contract/formats/packed-formats";
 
 // Whether a chunk of an upload crosses gzipped, pure and framework-free. Measured on the daemon's own payloads, gzip
 // leaves a source tree, logs or JSON at a quarter to a third of its size, while the browser encodes it at tens of MB/s

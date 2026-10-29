@@ -1,5 +1,5 @@
 import { zipSync } from "fflate";
-import { isPackedName } from "@intentic/sandbox-contract/text/packed-formats";
+import { isPackedName } from "@intentic/sandbox-contract/formats/packed-formats";
 import { json } from "../../transport";
 import { workspaceEntries } from "../../fixture/workspace";
 import { bytesOf } from "./bytes";

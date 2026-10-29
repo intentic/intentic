@@ -17,10 +17,11 @@ const tz = defineModel<string>({ required: true });
 const ZONES = Intl.supportedValuesOf(`timeZone`);
 
 // "GMT+2" beside each, so a zone is recognised by where its clock stands today, not only by its city.
-// allow(format-tiers): a UTC offset is notation, the same in every language, and the kit has no formatter for one
 const offsetOf = (zone: string): string =>
-    new Intl.DateTimeFormat(`en`, { timeZone: zone, timeZoneName: `shortOffset` }).formatToParts(Date.now()).find((part) => part.type === `timeZoneName`)
-        ?.value ?? ``;
+    // allow(format-tiers): a UTC offset is notation, the same in every language, and the kit has no formatter for one
+    new Intl.DateTimeFormat(`en`, { timeZone: zone, timeZoneName: `shortOffset` })
+        .formatToParts(Date.now())
+        .find((part) => part.type === `timeZoneName`)?.value ?? ``;
 const named = (zone: string): string => zone.replace(/_/g, ` `);
 
 const options = computed<readonly PickerGroup[]>(() => {

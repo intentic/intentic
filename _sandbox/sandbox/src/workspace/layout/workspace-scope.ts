@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import { type ArchivePath, archivePrefixOf, archiveRootOf } from "@intentic/sandbox-contract/text/archives";
+import { type ArchivePath, archivePrefixOf, archiveRootOf } from "@intentic/sandbox-contract/formats/archives";
 import { ConversationIdSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { WorkspaceChildren } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { ORPCError } from "@orpc/server";

@@ -1,6 +1,6 @@
 import { Duplex, pipeline, Readable, Transform } from "node:stream";
 import { constants, crc32, createDeflateRaw } from "node:zlib";
-import { isPackedName } from "@intentic/sandbox-contract/text/packed-formats";
+import { isPackedName } from "@intentic/sandbox-contract/formats/packed-formats";
 
 // The bundle's gzip, its level following what is being packed into it. Most of /history is already compressed (the
 // zstd transcript records and blobs, git's packed and loose objects), and deflate spends ten times as long failing to

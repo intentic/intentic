@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isControlPlanePath, isUnder } from "../workspace-files-paths.js";
 import type { ZipEntry } from "./workspace-zip.js";
-import { isPackedName } from "@intentic/sandbox-contract/text/packed-formats";
+import { isPackedName } from "@intentic/sandbox-contract/formats/packed-formats";
 
 // What a download of several files and folders at once is: the selection resolved at mint time (the ticket carries it,
 // so a selection of thousands never rides a URL), walked into ZIP entries when the browser comes for it.
@@ -26,7 +26,7 @@ export interface DownloadPlan {
 // Below this a deflate stream's own framing eats what it saves.
 const WORTH_DEFLATING = 128;
 
-// Stored as is when deflating would save nothing: a tiny file, or one already compressed (text/packed-formats.ts).
+// Stored as is when deflating would save nothing: a tiny file, or one already compressed (sandbox-contract formats/packed-formats.ts).
 export const methodFor = (name: string, size: number): 0 | 8 => (size < WORTH_DEFLATING || isPackedName(name) ? 0 : 8);
 
 // Stats run this many at a time: a folder of 100k files is walked in well under a second without flooding libuv.

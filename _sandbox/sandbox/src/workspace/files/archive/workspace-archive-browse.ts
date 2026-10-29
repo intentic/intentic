@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { BoundedMap } from "@intentic/base/held";
-import { archiveFormat, archivePrefixOf, archiveRootOf, archiveStem, isBrowsableArchive } from "@intentic/sandbox-contract/text/archives";
+import { archiveFormat, archivePrefixOf, archiveRootOf, archiveStem, isBrowsableArchive } from "@intentic/sandbox-contract/formats/archives";
 import type { WorkspaceChildren } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { tidyUnpacked, unpack } from "./workspace-extract.js";
 import { resolveWithin } from "../workspace-files-paths.js";

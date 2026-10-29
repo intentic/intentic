@@ -1,4 +1,4 @@
-import { archivePrefixOf, archiveRootOf, isBrowsableArchive } from "@intentic/sandbox-contract/text/archives";
+import { archivePrefixOf, archiveRootOf, isBrowsableArchive } from "@intentic/sandbox-contract/formats/archives";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // Which workspace paths are an archive's contents rather than the workspace's own. A zip or tar is entered like a
