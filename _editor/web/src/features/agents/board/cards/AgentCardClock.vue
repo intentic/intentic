@@ -204,9 +204,9 @@ const coolingTip = computed((): Tip | undefined =>
     <span v-if="working" class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-link">
         <!-- A size container, which is what contains the words; below a few characters' room they drop out and the glyph speaks alone, rather than a stub like "B…". -->
         <span v-tooltip.top="activityText" class="@container min-w-4 flex-1 truncate text-right">
-            <!-- Inline, inside the clipped words, so it rides next to them when they fit and survives first when they don't. Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
+            <!-- Inline, inside the clipped words, so it rides next to them when they fit and survives first when they don't. Glyph follows the tool the agent itself is using. -->
             <Icon
-                :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)"
+                :name="activityIcon(agent.activity?.tool)"
                 class="mr-1.5 text-2xs"
             /><span class="hidden @[4.5rem]:inline">{{ activityText ?? t(`ui.status.working`) }}</span></span
         >

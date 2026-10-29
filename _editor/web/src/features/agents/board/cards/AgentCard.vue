@@ -178,8 +178,8 @@ const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: t
     // rail's row names them too (settingsChip).
     return settingsChip(own, props.agent, settingsPages.value, ownerHold.value?.kind === `deleted`);
 });
-// Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
-const activityText = computed(() => activityLine(props.agent));
+// ChildCount already shows the working children in the metadata row; this line describes the agent's own activity.
+const activityText = computed(() => activityLine({ activity: props.agent.activity }));
 // Archive appears wherever it means something (not just the Finished lane, see canArchive), including in Attention,
 // since nothing is lost by it.
 // It sits beside the rename pencil, reachable by touch and keyboard, rather than behind the drag gesture which only
