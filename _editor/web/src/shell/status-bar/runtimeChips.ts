@@ -64,7 +64,9 @@ export const terminalChip = (facts: {
 /**
  * Everything live the Browsers view shows, as one chip: the live apps while something answers, the agents' web windows
  * while one is open, the sandbox's desktop while a window is open on it. They are all tabs of one view, so three chips
- * for one place only split the reader's attention; the hover card says what is behind the count.
+ * for one place only split the reader's attention; the hover card says what is behind the count. An app counts only
+ * while a tab shows it: closing the tab leaves its server running, which the card still says, but the number reads as
+ * what is open, and a closed tab is not.
  *
  * A repo that merely has an operator panel is somewhere to start an app from, not something running; a closed browser
  * the daemon still lists is the Browsers page's record, not news. Warning while an agent waits on the reader in one,
@@ -74,6 +76,8 @@ interface BrowsersFacts {
     readonly sessions: readonly BrowserSession[];
     /** Live apps answering. */
     readonly apps: number;
+    /** Of those, the ones a tab of the view shows; the rest are said on the hover card but not counted. */
+    readonly appsOpen: number;
     /** Windows open on the desktop; undefined for a reader who may not drive it. */
     readonly desktopWindows: number | undefined;
     /** What this reader calls a live app (the vocabulary's word). */
@@ -118,8 +122,9 @@ export const browsersChip = (facts: BrowsersFacts): RuntimeChip | undefined => {
     const live = facts.sessions.filter((session) => session.running).length;
     const helping = facts.sessions.filter((session) => session.help !== undefined).length;
     const desktop = facts.desktopWindows ?? 0;
-    const total = facts.apps + live + desktop;
-    if (total === 0 && helping === 0 && !facts.here) {
+    // The number is what the view has open; an app answering with no tab on it keeps the chip without adding to it.
+    const total = facts.appsOpen + live + desktop;
+    if (total === 0 && facts.apps === 0 && helping === 0 && !facts.here) {
         return undefined;
     }
     const label = t(`shared.browsers`);

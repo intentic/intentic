@@ -9,6 +9,7 @@ import {
     pickTarget,
     portTargets,
     previewHealthyCount,
+    previewOpenCount,
     publicTarget,
     barTargets,
     repoTargets,
@@ -219,6 +220,15 @@ describe(`the status bar's half`, () => {
         expect(previewHealthyCount([], [port({})], [])).toBe(1);
         // A server somebody started by hand in a repo Start has nothing for is still that repo answering.
         expect(previewHealthyCount([panel({ repo: `lib`, hasPanel: false, healthy: true })], [], [])).toBe(1);
+    });
+
+    it(`counts as open only what a tab shows, a tab on one of a monorepo's apps standing for its repo`, () => {
+        const panels = [panel({ healthy: true }), panel({ repo: `mono`, monorepo: true, healthy: true })];
+        expect(previewOpenCount(panels, [port({})], [], [])).toBe(0);
+        expect(previewOpenCount(panels, [port({})], [], [`repo:shop`, `port:3000`])).toBe(2);
+        expect(previewOpenCount(panels, [], [], [`app:mono/web`])).toBe(1);
+        // A tab on an app that stopped answering is not open on anything live.
+        expect(previewOpenCount([panel({})], [], [], [`repo:shop`])).toBe(0);
     });
 });
 

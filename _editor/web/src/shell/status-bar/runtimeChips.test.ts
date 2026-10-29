@@ -28,6 +28,7 @@ describe(`the terminal's chip`, () => {
 const facts = (overrides: Partial<Parameters<typeof browsersChip>[0]> = {}): Parameters<typeof browsersChip>[0] => ({
     sessions: [],
     apps: 0,
+    appsOpen: 0,
     desktopWindows: 0,
     appsLabel: `Live app`,
     here: false,
@@ -36,7 +37,7 @@ const facts = (overrides: Partial<Parameters<typeof browsersChip>[0]> = {}): Par
 
 describe(`the browsers' chip`, () => {
     it(`is one chip for everything the Browsers view shows: live apps, web windows and the desktop`, () => {
-        const chip = browsersChip(facts({ apps: 1, sessions: [browser(), browser({ name: `b2` })], desktopWindows: 1 }));
+        const chip = browsersChip(facts({ apps: 1, appsOpen: 1, sessions: [browser(), browser({ name: `b2` })], desktopWindows: 1 }));
         expect(chip).toMatchObject({ label: `Browsers`, count: 4, to: `/browsers` });
         expect(chip?.tip?.rows).toEqual([
             { label: `Live app`, value: `1 running` },
@@ -53,13 +54,21 @@ describe(`the browsers' chip`, () => {
         expect(browsersChip(facts({ desktopWindows: undefined }))).toBeUndefined();
     });
 
+    it(`counts an app only while a tab shows it, and stays, uncounted, while its server answers with the tab closed`, () => {
+        const closed = browsersChip(facts({ apps: 1, appsOpen: 0 }));
+        expect(closed).toMatchObject({ to: `/browsers?preview` });
+        expect(closed?.count).toBeUndefined();
+        expect(closed?.tip?.rows).toEqual([{ label: `Live app`, value: `1 running` }]);
+        expect(browsersChip(facts({ apps: 2, appsOpen: 1, sessions: [browser()] }))?.count).toBe(2);
+    });
+
     it(`ignores browsers that have closed: the daemon's record of them is the Browsers page's`, () => {
         expect(browsersChip(facts({ sessions: [browser({ running: false, finishedAt: 2 })] }))).toBeUndefined();
         expect(browsersChip(facts({ sessions: [browser({ running: false, finishedAt: 2 })], here: true }))).toMatchObject({ active: true });
     });
 
     it(`opens the one kind that is live by name, since a bare /browsers reopens whatever tab was in front`, () => {
-        expect(browsersChip(facts({ apps: 2 }))).toMatchObject({ to: `/browsers?preview`, count: 2 });
+        expect(browsersChip(facts({ apps: 2, appsOpen: 2 }))).toMatchObject({ to: `/browsers?preview`, count: 2 });
         expect(browsersChip(facts({ desktopWindows: 3 }))).toMatchObject({ to: `/browsers/desktop`, count: 3 });
         expect(browsersChip(facts({ sessions: [browser(), browser({ name: `b2` }), browser({ name: `b3`, running: false })] }))).toMatchObject({
             count: 2,

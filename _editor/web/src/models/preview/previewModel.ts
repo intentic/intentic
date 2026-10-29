@@ -240,5 +240,21 @@ export const barTargets = (panels: readonly PanelSummary[], ports: readonly Port
     mergeTargets(repoTargets(panels), [], portTargets(ports), publicTarget(publicFiles));
 
 // How many previewable things are actually answering right now: the status bar's count, and whether its chip shows.
+const healthyServers = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): PreviewTarget[] =>
+    barTargets(panels, ports, publicFiles).filter((target) => target.healthy && target.kind !== `public`);
+
 export const previewHealthyCount = (panels: readonly PanelSummary[], ports: readonly PortSummary[], publicFiles: readonly PublicFile[]): number =>
-    barTargets(panels, ports, publicFiles).filter((target) => target.healthy && target.kind !== `public`).length;
+    healthyServers(panels, ports, publicFiles).length;
+
+// Of those, how many a tab of the Browsers view is showing: the chip's number, so closing an app's tab takes it off the
+// count while its server, which a closed tab never stops, keeps the chip there. A tab on one of a monorepo's apps
+// shows its repo's row, which is the one the bar lists.
+export const previewOpenCount = (
+    panels: readonly PanelSummary[],
+    ports: readonly PortSummary[],
+    publicFiles: readonly PublicFile[],
+    tabIds: readonly string[],
+): number =>
+    healthyServers(panels, ports, publicFiles).filter(
+        (target) => tabIds.includes(target.id) || (target.repo !== undefined && tabIds.some((id) => id.startsWith(`app:${target.repo}/`))),
+    ).length;

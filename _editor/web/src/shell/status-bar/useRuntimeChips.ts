@@ -6,7 +6,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useBrowsersQuery } from "../../features/browsers/browsersQuery";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
 import { usePanels } from "../../models/extensions/usePanels";
-import { previewHealthyCount } from "../../models/preview/previewModel";
+import { previewHealthyCount, previewOpenCount } from "../../models/preview/previewModel";
 import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useTerminalActivity } from "../../features/terminal/useTerminalActivity";
@@ -15,6 +15,7 @@ import { usePublicOutbox } from "../../models/workspace/push/usePublicOutbox";
 import { commandShortcut } from "../../workbench/commands/useCommands";
 import { sectionReachable } from "../../workbench/views/registry";
 import { useVocabulary } from "../../workbench/views/vocabulary";
+import { browsersPinned } from "../../workbench/browsers/browsersSurface";
 import { browsersChip, portsChip, type RuntimeChip, terminalChip, vpnChip } from "./runtimeChips";
 
 // The facts behind the status bar's runtime chips (runtimeChips.ts), read once for the desktop shell. Always-on and
@@ -59,6 +60,12 @@ export function useRuntimeChips(): RuntimeChips {
             browsersChip({
                 sessions: browsers.value,
                 apps: previewHealthyCount(panels.value, forwarded.value, publicFiles.value),
+                appsOpen: previewOpenCount(
+                    panels.value,
+                    forwarded.value,
+                    publicFiles.value,
+                    browsersPinned.value.flatMap((tab) => (tab.kind === `preview` ? [tab.id] : [])),
+                ),
                 // The daemon lets nobody below maintainer drive the desktop.
                 desktopWindows: canShip.value ? (windows.value ?? 0) : undefined,
                 appsLabel: words.value.preview,
