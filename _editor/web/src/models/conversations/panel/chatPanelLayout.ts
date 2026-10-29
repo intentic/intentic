@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import type { Router } from "vue-router";
 import type { ScreenPoint } from "../../../workbench/window/floating";
 import { chatFullSlot } from "../../../workbench/window/panelSlots";
+import { homeFrame } from "../../../lib/routes/homeSection";
 import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../workbench/window/useLayout";
 
@@ -16,7 +17,9 @@ const floating = useChatFloating();
 const layout = useLayout();
 
 export const chatWide = computed(() => floating.floats.value || chatFullSlot.value !== null);
-export const chatOnRail = computed(() => layout.chatHome.value === `rail`);
+// Home's frame around a section of a sandbox (lib/routes/homeSection.ts) decides for itself: its Chat is the full-window
+// chat, and every other section has the chat docked to its right, whichever home the reader keeps it in inside a sandbox.
+export const chatOnRail = computed(() => (homeFrame.value === undefined ? layout.chatHome.value === `rail` : homeFrame.value === `chat`));
 // The rail's home with this page drawing it: the chat is the rail tile's full-window /chat, not a window of its own.
 export const chatOnRailTile = computed(() => chatOnRail.value && !floating.floats.value);
 // The side home in effect: the chat lives in the side panel, under whatever was opened beside it (shell/side). Neither

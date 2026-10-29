@@ -62,6 +62,9 @@ export const goInside = async (navigate: () => Promise<NavigationFailure | void 
     }
 };
 
+/** Whether the navigation under way is a deliberate step inside, which also leaves Home's frame (models/home/masterRail.ts). */
+export const isSteppingInside = (): boolean => steppingInside;
+
 /** The router's guard: the rule above, except for a step inside. */
 export const homeViewGuard = (to: To, from: From): RouteLocationRaw | true => (steppingInside ? true : (homeViewFor(to, from) ?? true));
 

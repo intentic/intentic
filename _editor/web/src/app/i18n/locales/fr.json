@@ -13722,6 +13722,17 @@
             "back": "Retour au chat",
             "continueInChat": "Continuer dans le chat"
         },
+        "section": {
+            "choose": "Choisir une vue",
+            "findView": "Chercher une vue",
+            "forEverySandbox": "Pour chaque sandbox",
+            "homeConversation": "Conversation d’accueil",
+            "inEverySandbox": "Dans chaque sandbox",
+            "listTitle": "Ce qu’ouvre chaque sandbox",
+            "noneNamed": "Aucune vue de ce nom.",
+            "showing": "Affiche {name} de chaque sandbox",
+            "view": "Vue"
+        },
         "newSandbox": {
             "title": "Nouveau sandbox",
             "settingUp": "Configuration de {name}",

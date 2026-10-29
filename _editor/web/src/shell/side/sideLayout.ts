@@ -1,5 +1,7 @@
 import { computed } from "vue";
 import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
+import { homeFrame } from "../../lib/routes/homeSection";
+import { masterRail } from "../../models/home/masterRail";
 import { useSidePanel } from "../../workbench/side/sideTabs";
 import { shownSideTabs } from "../../workbench/side/sideViews";
 import { reviewFocused } from "../../workbench/window/reviewFocus";
@@ -19,6 +21,10 @@ export const besideFills = computed(() => besideChat.value && !panel.split.value
 // The side panel takes its column while it holds anything: the chat whose home is the side, or what was opened beside
 // the section. Empty, the column is 0 wide. Holding both, what was opened fills the middle, the panel spanning the
 // section's cell too, or, split, the column is wide enough for the two side by side.
-export const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
+// The column is the sandbox's: inside it, and in Home's frame around one of its sections (lib/routes/homeSection.ts
+// homeFrame), where every section but the Chat has the chat docked there. Home's own page has its one chat as its page.
+export const sideShown = computed(
+    () => (!masterRail.value || homeFrame.value !== undefined) && (chatInSidePanel.value || shownSideTabs.value.length > 0),
+);
 // Focus review (reviewFocus.ts) gives the section the panel's column too: the panel stays mounted, only hidden.
 export const sideColumnShown = computed(() => sideShown.value && !reviewFocused.value);

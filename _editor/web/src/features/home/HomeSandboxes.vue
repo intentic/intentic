@@ -11,7 +11,8 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { processAskedBy } from "../../models/processes/processAddress";
-import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { sandboxEntryPath, sectionEntryPath } from "../../models/sandbox/sandboxScreen";
+import { homeFrame, homeSection } from "../../lib/routes/homeSection";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
@@ -66,8 +67,9 @@ const noteOf = (id: string): string => {
 const route = useRoute();
 // While the new sandbox's page, or a process's, stands in the chat's place, its tile is the selected one; the new
 // sandbox's dialog over the chat leaves the chat's own tile selected.
+// Around the section Home shows of every sandbox (lib/routes/homeSection.ts), the sandbox it is showing is the selected one.
 const selected = (id: string): boolean =>
-    route.name === `home` &&
+    (route.name === `home` || homeFrame.value !== undefined) &&
     sandbox.activeSandboxId.value === id &&
     !newSandboxPageShown(route, newSandbox.value) &&
     processAskedBy(route) === undefined;
@@ -89,7 +91,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
     } else if (phone) {
         void router.push(`/home/${encodeURIComponent(id)}`);
     } else {
-        void router.replace(`/home`);
+        // The section Home was asked to show of every sandbox, of this one; else its home conversation.
+        const section = homeOnly.value ? undefined : homeSection.value;
+        void router.replace(section === undefined ? `/home` : sectionEntryPath(id, section));
     }
 };
 </script>

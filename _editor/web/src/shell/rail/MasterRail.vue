@@ -1,5 +1,6 @@
 <!-- THE MASTER VIEW'S RAIL (models/home/masterRail.ts says when the shell wears it): the shell's own rail, its look and its
-     account control, with the sandboxes as its tiles (features/home/HomeSandboxes.vue), then the processes under way
+     account control, with the sandboxes as its tiles (features/home/HomeSandboxes.vue), what Home shows of each above the
+     account (HomeSectionPicker.vue), then the processes under way
      (RailProcesses.vue), less those about a sandbox that has its tile here, which wears them itself; which the reader follows and answers here rather than on another screen. Signed out, which only Home
      allows, the account's place is the way to sign in: a returning person's sandboxes are behind it. -->
 <script setup lang="ts">
@@ -13,6 +14,8 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeSandboxes from "../../features/home/HomeSandboxes.vue";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
+import { useRole } from "../../client/sandbox/useRole";
+import HomeSectionPicker from "./HomeSectionPicker.vue";
 import AccountPanel from "../AccountPanel.vue";
 import RailProcesses from "./RailProcesses.vue";
 
@@ -22,6 +25,10 @@ const signedOut = computed(() => user.value === null);
 // The sandboxes HomeSandboxes.vue draws a tile for: their runs are worn on those tiles, not beside them.
 const sandbox = useSandbox();
 const tiled = computed(() => new Set(switchableSandboxes(sandbox.sandboxes.value).map((box) => box.id)));
+// What Home shows of every sandbox is chosen by its foot, once there is a sandbox to show; never by a member whose Home is
+// all they reach (useRole `homeOnly`).
+const { homeOnly } = useRole();
+const choosesSection = computed(() => tiled.value.size > 0 && !homeOnly.value);
 </script>
 
 <template>
@@ -39,6 +46,10 @@ const tiled = computed(() => new Set(switchableSandboxes(sandbox.sandboxes.value
             <!-- The account's empty place, as LocalAccountTile.vue draws it: an arrow into a door reads as leaving here. -->
             <Icon name="user" class="icon-rail-glyph" aria-hidden="true" />
         </RouterLink>
-        <AccountPanel v-else />
+        <!-- The foot, held together at the bottom: the view over the account, whose own top margin finds no room inside it. -->
+        <div v-else class="mt-auto flex flex-col items-center" style="gap: var(--icon-rail-gap)">
+            <HomeSectionPicker v-if="choosesSection" />
+            <AccountPanel />
+        </div>
     </nav>
 </template>

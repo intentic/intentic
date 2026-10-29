@@ -39,7 +39,8 @@ jest.mock("../../client/sandbox/useRole", () => ({ useRole: () => ({ isGuest: gu
 const router = { afterEach: (hook: AfterEach) => void hooks.push(hook), currentRoute, replace };
 jest.mock("../../workbench/navigation/navigation", () => ({ onNavigation: (run: (installed: typeof router) => void) => run(router) }));
 
-await import("./sandboxScreen");
+const { sectionEntryPath } = await import("./sandboxScreen");
+const { homeFrame, homeSection } = await import("../../lib/routes/homeSection");
 
 // A navigation that landed, as the router reports it: the route becomes current, then the afterEach hooks run.
 const navigate = (to: Landing, failure?: unknown): void => {
@@ -65,6 +66,8 @@ beforeEach(() => {
     activeSandboxId.value = `sb1`;
     guest.value = false;
     currentRoute.value = shellRoute(`/workspace`);
+    homeFrame.value = undefined;
+    homeSection.value = undefined;
 });
 
 describe(`landing on a switched-to sandbox`, () => {
@@ -178,5 +181,34 @@ describe(`the master view spans sandboxes`, () => {
         navigate(shellRoute(`/workspace`));
         await switchTo(`sb1`);
         expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    });
+});
+
+// Home's frame around the section it shows of every sandbox (lib/routes/homeSection.ts): a switch there stays on that
+// section, of the sandbox switched to.
+describe(`a switch in Home's frame around a section`, () => {
+    const workspace = { id: `workspace`, to: `/workspace`, label: `Workspace` };
+
+    it(`lands on the section, at the screen that sandbox was last on there when it has one`, async () => {
+        navigate(shellRoute(`/agents`));
+        await switchTo(`sb2`);
+        navigate(shellRoute(`/workspace/src/b.ts`));
+        homeSection.value = workspace;
+        homeFrame.value = `docked`;
+
+        await switchTo(`sb1`);
+        expect(replace).toHaveBeenLastCalledWith(`/workspace`);
+
+        await switchTo(`sb2`);
+        expect(replace).toHaveBeenLastCalledWith(`/workspace/src/b.ts`);
+    });
+
+    it(`is the section's own address for a sandbox never shown, and the remembered screen only when the section owns it`, () => {
+        session.set(`intentic.sandboxScreen.sb2`, `/workspace/src/b.ts?agent=cnv_1`);
+        session.set(`intentic.sandboxScreen.sb3`, `/workspaces`);
+
+        expect(sectionEntryPath(`sb-fresh`, workspace)).toBe(`/workspace`);
+        expect(sectionEntryPath(`sb2`, workspace)).toBe(`/workspace/src/b.ts?agent=cnv_1`);
+        expect(sectionEntryPath(`sb3`, workspace)).toBe(`/workspace`);
     });
 });

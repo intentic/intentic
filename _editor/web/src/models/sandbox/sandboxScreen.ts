@@ -5,7 +5,8 @@ import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
-import { type LandingRole, sandboxEntry, sandboxLanding } from "../../lib/routes/firstScreens";
+import { type LandingRole, sandboxEntry } from "../../lib/routes/firstScreens";
+import { homeFrame, type HomeSection, homeSection, sectionOwns } from "../../lib/routes/homeSection";
 
 // Remembers which screen each sandbox was last on and lands there on a switch, since a route naming something
 // in the outgoing sandbox means nothing in the incoming one. Kept per window. Registered at module scope, like
@@ -29,14 +30,20 @@ const roleNow = (): LandingRole => {
     return { isGuest: role.isGuest.value, homeOnly: role.homeOnly.value };
 };
 
-/** The active sandbox's own first screen (lib/routes/firstScreens.ts), by the person's standing in it now. */
-export const sandboxLandingNow = (): string => sandboxLanding(roleNow());
-
 /**
  * Where opening a sandbox goes, from Home or a link naming it: the screen it was last left on in this window, else its
  * first screen. Read after the sandbox is selected, since the landing depends on the person's standing in it.
  */
 export const sandboxEntryPath = (sandboxId: string): string => sandboxEntry(readWindowState(screenKey(sandboxId), parseScreen), roleNow());
+
+/**
+ * Where a sandbox opens in Home's frame, on the section chosen there (lib/routes/homeSection.ts): the screen it was last
+ * left on in this window when that is the section's own (a file open in its Workspace), else the section itself.
+ */
+export const sectionEntryPath = (sandboxId: string, section: Pick<HomeSection, "to">): string => {
+    const last = readWindowState(screenKey(sandboxId), parseScreen);
+    return last !== undefined && sectionOwns(section, last) ? last : section.to;
+};
 
 // Overrides "land on the last screen" for a switch with a known destination (opening an agent from another
 // sandbox's card). Recorded rather than pushed after the switch: the landing watch replaces at flush:post and
@@ -67,7 +74,9 @@ onNavigation((router) => {
                 return;
             }
             // Its own first screen, not `/`, which is Home since 2026-10-25: a switch made inside a sandbox stays inside one.
-            void router.replace(sandboxEntryPath(sandboxId));
+            // One made in Home's frame around a section stays on that section, of the sandbox switched to.
+            const section = homeFrame.value === undefined ? undefined : homeSection.value;
+            void router.replace(section === undefined ? sandboxEntryPath(sandboxId) : sectionEntryPath(sandboxId, section));
         },
         { flush: `post` },
     );

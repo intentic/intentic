@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useDevice } from "@intentic/ui";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
@@ -11,7 +11,12 @@ import { processAskedBy } from "../../models/processes/processAddress";
 import HomeNewSandbox from "./newSandbox/HomeNewSandbox.vue";
 import NewSandboxDialog from "./newSandbox/NewSandboxDialog.vue";
 import { newSandbox, newSandboxDialogShown, newSandboxPageShown } from "./newSandbox/newSandbox";
+import { useRole } from "../../client/sandbox/useRole";
+import { homeSection } from "../../lib/routes/homeSection";
+import { sectionEntryPath } from "../../models/sandbox/sandboxScreen";
 const route = useRoute();
+const router = useRouter();
+const { homeOnly } = useRole();
 const { mobile } = useDevice();
 const sandbox = useSandbox();
 const list = computed(() => mobile.value && route.params[`sandbox`] === undefined);
@@ -22,6 +27,25 @@ const asking = computed(() => !mobile.value && newSandboxDialogShown(route, newS
 const making = computed(() => !mobile.value && newSandboxPageShown(route, newSandbox.value));
 // A process's page (sign-in, this PC's setup, a sandbox's) in the chat's place while its tile is selected (HomeProcess.vue).
 const following = computed(() => !mobile.value && !making.value && processAskedBy(route) !== undefined);
+// HOME OPENS ON THE SECTION CHOSEN FOR IT (lib/routes/homeSection.ts): its bare address (the first screen, the Home
+// command, a dialog closing back onto it) shows that section of the selected sandbox rather than its home conversation.
+// Every other ask of Home (a dialog, a process's page, a view shown in place) is answered here as it always was.
+const sectionTarget = computed(() => {
+    const section = mobile.value || homeOnly.value ? undefined : homeSection.value;
+    const id = sandbox.activeSandboxId.value;
+    const bare = route.name === `home` && route.params[`sandbox`] === undefined && Object.keys(route.query).length === 0 && route.hash === ``;
+    const offered = switchableSandboxes(sandbox.sandboxes.value).some((box) => box.id === id);
+    return section === undefined || id === undefined || !bare || !offered ? undefined : sectionEntryPath(id, section);
+});
+watch(
+    sectionTarget,
+    (target) => {
+        if (target !== undefined) {
+            void router.replace(target);
+        }
+    },
+    { immediate: true },
+);
 watch(
     () => [route.params[`sandbox`], sandbox.sandboxes.value] as const,
     ([id, boxes]) => {
@@ -37,7 +61,7 @@ watch(
 <template>
     <div class="flex h-full min-h-0 overflow-hidden" data-home-view>
         <HomeSandboxes v-if="list" :phone="true" class="w-full" />
-        <template v-else>
+        <template v-else-if="sectionTarget === undefined">
             <HomeNewSandbox v-if="making" />
             <HomeProcess v-else-if="following" />
             <HomeChat v-show="!making && !following" :key="sandbox.activeSandboxId.value" />

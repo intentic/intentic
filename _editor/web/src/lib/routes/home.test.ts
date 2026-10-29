@@ -20,6 +20,13 @@ test("settings opened from the master view keep its rail; a sandbox's page gives
     expect(masterRailAfter(true, `/settingsx`)).toBe(false);
 });
 
+test("the section Home shows of every sandbox keeps its frame when entered from it; any other page of a sandbox gives the rail back", () => {
+    expect(masterRailAfter(true, `/workspace/src/a.ts`, true)).toBe(true);
+    expect(masterRailAfter(true, `/agents`, false)).toBe(false);
+    // Reached from inside a sandbox, the same page stays the sandbox's own.
+    expect(masterRailAfter(false, `/workspace`, true)).toBe(false);
+});
+
 test.each([`/home`, `/home/box-1`, `/settings`, `/settings/appearance`, `/settings?plan=welcome`, `/settings/notifications#voice`, `/deleted-sandboxes`, `/deleted-sandboxes/`, `/deleted-sandboxes#deleted`])(
     `%s belongs to the account without needing a sandbox`,
     (path) => expect(isAccountPath(path)).toBe(true),

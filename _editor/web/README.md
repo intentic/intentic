@@ -667,6 +667,17 @@ it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<vi
 hidden, so its draft survives the trip. One router guard covers every door to the view, so no link needs to know it
 was pressed on Home; a tile's double-click and the desktop opener enter the sandbox for real (`goInside`). A dialog was
 the rejected alternative: a sign-in is a trip to another tab and back, which an address survives and a dialog does not.
+**Home can show a section of each sandbox instead of its home conversation** (2026-10-29, `lib/routes/homeSection.ts`).
+A quiet tile at the foot of Home's rail, above the account (`shell/rail/HomeSectionPicker.vue`), offers the home
+conversation, which is the default, and the sections the selected sandbox's own rail offers: its Chat, Board, Workspace,
+Devices and extension views. It works the way Show a file picks one file for every folder. The choice is this device's
+and applies to every sandbox: a press on a tile opens that section of the sandbox, and Home's bare address opens on it
+too. The section runs on its own address, since each section keeps its state there, behind the sandbox's gate. The shell
+keeps Home's frame around it: the rail of sandboxes stays (`models/home/masterRail.ts`, kept for the tab's reloads),
+the Chat fills the page, and every other section docks the sandbox's chat panel to its right, whatever chat
+home the reader keeps inside a sandbox. Any other page of the sandbox, a double-click on a tile, or the composer's Open
+gives the rail back, as it does from Home's own page. A corner of the page was the rejected place for the tile: every
+section has its own header there, and only the rail is the same in every view.
 With no model connected, the chat's one press is the notice's "Connect a model" (or "Connect Claude" for a provider
 somebody picked), Send is disabled and its Enter shakes that press, and the composer's pill says "No model" rather
 than offering a second door (`features/chat/accounts/ChatAccountPanel.vue`).

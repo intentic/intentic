@@ -315,7 +315,7 @@ const sideWidth = computed(() =>
     besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
 const gridStyle = computed(() => ({
-    "--side-width": !masterRail.value && sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
+    "--side-width": sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
     ...railFrame(iconRailSize.value),
 }));
@@ -592,7 +592,7 @@ useGettingStarted();
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
-        <SidePanel v-if="!masterRail && sideShown" v-show="sideColumnShown" />
+        <SidePanel v-if="sideShown" v-show="sideColumnShown" />
 
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
              comes back as it was left, scrolled where it was. -->
