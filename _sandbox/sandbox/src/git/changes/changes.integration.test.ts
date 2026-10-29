@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -1069,4 +1069,29 @@ test("commitOnly carries a deletion, and is a no-op false when the paths already
     expect(await commitOnly(dir, ["gone.txt"], "chore: drop it", author)).toBe(true);
     expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("gone.txt");
     expect(await sh(dir, "log", "-1", "--format=%s")).toBe("chore: drop it");
+});
+
+// The daemon stages under core.fileMode=false, where git records a new file as 100644 whatever its disk mode: a script
+// made executable here must still reach other checkouts runnable, while a bit an upload or sync stripped stays unrecorded.
+test("staging records an executable bit a file gained, never one it lost", async () => {
+    const dir = await tempRepo();
+    const mode = async (path: string): Promise<string> => (await sh(dir, "ls-files", "-s", "--", path)).split(" ")[0]!;
+    await writeFile(join(dir, "kept.sh"), "#!/bin/sh\n");
+    await chmod(join(dir, "kept.sh"), 0o755);
+    await sh(dir, "add", "kept.sh");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "seed");
+
+    await writeFile(join(dir, "new.sh"), "#!/bin/sh\necho hi\n");
+    await chmod(join(dir, "new.sh"), 0o755);
+    await chmod(join(dir, "a.txt"), 0o755);
+    await chmod(join(dir, "kept.sh"), 0o644);
+    await stageAll(dir);
+    expect(await mode("new.sh")).toBe("100755");
+    expect(await mode("a.txt")).toBe("100755");
+    expect(await mode("kept.sh")).toBe("100755");
+
+    await writeFile(join(dir, "picked.sh"), "#!/bin/sh\n");
+    await chmod(join(dir, "picked.sh"), 0o755);
+    await stagePaths(dir, ["picked.sh"]);
+    expect(await mode("picked.sh")).toBe("100755");
 });

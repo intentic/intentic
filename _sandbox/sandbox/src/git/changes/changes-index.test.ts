@@ -79,7 +79,7 @@ const commitGit = (head: string, { diffThrows }: { diffThrows: boolean }) => {
             return { stdout: `${head}\n`, stderr: "" };
         }
         calls.push([...args]);
-        if (args.includes("diff") && diffThrows) {
+        if (args.includes("--quiet") && diffThrows) {
             throw Object.assign(new Error("diff exit 1"), { code: 1 });
         }
         return { stdout: "", stderr: "" };
@@ -95,7 +95,7 @@ test("commitOnly chunks the diff check when paths exceed ARG_MAX", async () => {
     await commitOnly("/repo", paths, "chore: bulk", { name: "t", email: "t@t" }, git);
 
     // The diff call should be chunked — only the first chunk needs to return (breaks early on diff).
-    const diffCalls = calls.filter((args) => args.includes("diff"));
+    const diffCalls = calls.filter((args) => args.includes("--quiet"));
     expect(diffCalls.length).toBe(1);
 
     // The commit call should use --pathspec-from-file since paths don't fit one argv.

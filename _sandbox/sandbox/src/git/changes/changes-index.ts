@@ -78,6 +78,9 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
     const reachable = beyond.size === 0 ? paths : paths.filter((path) => !beyond.has(path));
     await overPaths(dir, reachable, (chunk) => ["add", "-A", "--", ...chunk], git);
     await overPaths(dir, [...beyond], (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk], git);
+    for (const chunk of chunkPaths(reachable)) {
+        await recordGainedExecutableBits(dir, ["--", ...chunk], git);
+    }
 };
 
 // Stages the whole repo but `scratch` in one spawn, with no ceiling to chunk under; what a whole-repo commit resolves to.
@@ -85,6 +88,32 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
 // - advice.addEmbeddedRepo=false: a nested repo is scanned here, not warned about as a gitlink.
 export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<void> => {
     await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
+    // Unscoped: the diff reads only the index, which scratch, being untracked and unstaged, is never in.
+    await recordGainedExecutableBits(dir, [], git);
+};
+
+// The daemon reads modes with core.fileMode=false (GIT_GLOBAL_ARGS), so a bit an upload or a Windows sync stripped is
+// never an edit. Under that setting git also stages every NEW file as 100644 whatever its disk mode, so a script made
+// executable here reached every other checkout (a conversation's worktree, a clone, CI) as "permission denied". After
+// staging, a file executable on disk that the index holds as 100644 is recorded 100755: a bit gained is kept, a bit lost
+// still is not. `--raw` against the worktree under core.fileMode=true names exactly those, from the index's stat cache.
+const recordGainedExecutableBits = async (dir: string, pathspecArgs: readonly string[], git: GitRunner): Promise<void> => {
+    const { stdout } = await git(dir, ["-c", "core.fileMode=true", "diff", "--raw", "-z", "--no-renames", "--no-abbrev", ...pathspecArgs]);
+    const gained = gainedExecutablePaths(stdout);
+    await overPaths(dir, gained, (chunk) => ["update-index", "--chmod=+x", "--", ...chunk], git);
+};
+
+// `diff --raw -z` rows: `:<src mode> <dst mode> <src sha> <dst sha> <status>` NUL `<path>` NUL (no renames asked for).
+const gainedExecutablePaths = (raw: string): readonly string[] => {
+    const fields = raw.split("\0");
+    const paths: string[] = [];
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+        const [src, dst] = fields[i]!.slice(1).split(" ");
+        if (src === "100644" && dst === "100755") {
+            paths.push(fields[i + 1]!);
+        }
+    }
+    return paths;
 };
 
 // Unstages exactly `paths`, worktree untouched; on an unborn HEAD the entry is dropped instead (`rm --cached`).
