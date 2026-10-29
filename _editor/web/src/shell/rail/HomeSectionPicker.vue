@@ -52,7 +52,7 @@ const choose = (section: HomeSection | undefined): void => {
         data-home-section-picker
         @click="open = !open"
     >
-        <Icon name="layout-left" class="icon-rail-glyph" aria-hidden="true" />
+        <Icon name="book" class="icon-rail-glyph" aria-hidden="true" />
     </button>
     <ResponsiveOverlay v-model="open" :anchor="anchor" side="right" cross="end" :header="t(`home.section.choose`)" panel-class="w-64 p-1">
         <HomeSectionChoices :chosen="chosen" @choose="choose" />

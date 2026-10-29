@@ -413,11 +413,11 @@ onBeforeUnmount(() => {
             </button>
         </template>
 
-        <!-- Head of the rail: New agent (the fleet board's own wording, at the board's own top right), and nothing else. The rail
+        <!-- Head of the rail: New agent, and nothing else. The rail
              is one form whether it stands in /chat or in a popped-out window, so neither grows an action the other lacks; past
              chats are the docked sheet's. At the head rather than the foot: the new chat appears at the top of the list, under
              the press, and the foot is the notification lane's corner (workbench/notifications/laneSeat.ts). -->
-        <div v-if="vertical && !readOnly" class="flex shrink-0 justify-end">
+        <div v-if="vertical && !readOnly" class="flex shrink-0 justify-center">
             <!-- It starts as no one in particular: the new chat's posture is picked in its composer, or matched from its first message. -->
             <Button size="small" tier="boring" :label="vocabulary.newAgent" @click="startAgent()">
                 <template #icon><Icon name="plus" /></template>
