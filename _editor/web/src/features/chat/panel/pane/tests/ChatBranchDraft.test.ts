@@ -35,7 +35,7 @@ it(`names the branch and where its work goes, and unlinks back to the main line`
     await nextTick();
 
     expect(element.textContent).toContain(`apps/web · feature/login`);
-    expect(element.textContent).toContain(`its work is committed onto that branch`);
+    expect(element.textContent).toContain(`its work lands there uncommitted`);
     element.querySelector<HTMLButtonElement>(`button[aria-label="Unlink"]`)?.click();
     await nextTick();
 

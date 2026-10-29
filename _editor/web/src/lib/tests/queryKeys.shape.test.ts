@@ -50,7 +50,7 @@ describe("pushedKeys", () => {
 
     it("reads a runtime path joined, and the working tree's review whole", () => {
         expect(pushedKeys([`git`, `changes`])).toEqual([[`git`, `changes`], ...workingReviewKeys]);
-        expect(workingReviewKeys).toEqual([[`git.changes`], [`git.fileDiff`]]);
+        expect(workingReviewKeys).toEqual([[`git.changes`], [`git.viewChanges`], [`git.fileDiff`], [`git.branchLandings`]]);
     });
 
     it("passes a name the app reads nothing under straight through, for the extension that does", () => {

@@ -52,6 +52,9 @@ export const HISTORY_FILES_WITHOUT_DOCUMENT: readonly StateFile[] = [
     },
     // Search phrase index, derived from the conversations' transcripts; rebuilt by the first boot's backfill instead.
     { path: "said-index/", portability: "derived", note: "Rebuilt from the carried transcripts by the first boot's backfill." },
+    // Each selected checkout's own checkpoint timeline (history/history-slice.ts), beside the worktrees it snapshots: a
+    // worktree is re-attached on the target, so its restore points stay behind with the checkout they were taken in.
+    { path: "checkout-history/", portability: "derived", note: "Restore points for edits made in a branch's or agent's checkout stay behind." },
     { path: "overlays/", portability: "derived" },
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },

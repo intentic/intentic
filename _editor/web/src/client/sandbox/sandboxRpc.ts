@@ -145,7 +145,8 @@ const onceLoaded = <T extends ClientContext>(build: (contract: ContractModule) =
             link ??= build(await loadContract());
             if (path[0] !== `git`) { return link.call(path, input, options); }
             const scoped = GitViewQuerySchema.loose().parse(input ?? {});
-            scoped.view = options.context.gitView ?? scoped.view;
+            // SAFETY: every client built here carries a SandboxCallContext, whose gitView is a GitView or absent.
+            scoped.view = (options.context[`gitView`] as GitView | undefined) ?? scoped.view;
             const view = scoped.view;
             if ((view?.agent !== undefined || view?.branch !== undefined) && !supportsRoute(`git.viewChanges`)) {
                 throw new Error(`This sandbox needs an update before Git can operate in a selected checkout.`);

@@ -24,7 +24,7 @@ const band = (): WarmBand => {
 
 export const changesWarmSource = (): readonly WarmTask[] => {
     // The list shares its rows' band; a list warmed below its rows would never come first.
-    const list = warmQuery(`changes:list`, band(), { queryKey: changesKey(), queryFn: fetchChanges });
+    const list = warmQuery(`changes:list`, band(), { queryKey: changesKey(), queryFn: () => fetchChanges() });
     const held = queryClient.getQueryData<GitChanges>(changesKey());
     if (held === undefined) {
         // Nothing to walk yet: the list is the only wish until it lands.

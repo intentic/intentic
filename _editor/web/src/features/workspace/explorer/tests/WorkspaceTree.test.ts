@@ -588,14 +588,14 @@ describe(`empty folders (barren branches)`, () => {
         await advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
-        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web` }]);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web`, view: {} }]);
         const { receipt } = useNotifications();
         expect(receipt.value?.title).toContain(`web / demo / assets`);
         expect(receipt.value?.title).toMatch(/removed/i);
 
         // Undo brings the whole chain back out of the trash in one piece.
         await receipt.value?.actions?.[0]?.run();
-        expect([inputsTo(`workspace.restore`), inputsTo(`workspace.mkdir`)]).toEqual([[{ trashed: `t:web` }], []]);
+        expect([inputsTo(`workspace.restore`), inputsTo(`workspace.mkdir`)]).toEqual([[{ trashed: `t:web`, view: {} }], []]);
     });
 
     it(`says where a buried folder is, on the line and on the receipt`, async () => {
@@ -622,7 +622,7 @@ describe(`empty folders (barren branches)`, () => {
         // Receipt only counts; naming happens on the sweep line before the click.
         expect(useNotifications().receipt.value?.title).toContain(`2`);
         expect(useNotifications().receipt.value?.title).toMatch(/removed/i);
-        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web` }, { path: `src/old` }]);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web`, view: {} }, { path: `src/old`, view: {} }]);
     });
 
     it(`skips the confirm dialog when the Delete key lands on a barren-only selection`, async () => {
@@ -752,7 +752,7 @@ describe(`where a drop on a row lands`, () => {
 
         await dragOnto(rowNamed(el, `README.md`), rowNamed(el, `routes.ts`));
 
-        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
+        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md`, view: {} }]);
     });
 
     it(`still puts what was dropped on a folder inside that folder`, async () => {
@@ -761,7 +761,7 @@ describe(`where a drop on a row lands`, () => {
 
         await dragOnto(rowNamed(el, `README.md`), rowNamed(el, `api`));
 
-        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
+        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md`, view: {} }]);
     });
 
     it(`asks the daemon for nothing when the file aimed at is already a neighbour`, async () => {
@@ -925,7 +925,7 @@ describe(`a file gesture before the daemon has answered`, () => {
         await renameTo(el, `main.ts`, `entry.ts`);
 
         expect(rows(el)).toEqual([`src`, `api`, `entry.ts`, `README.md`]);
-        expect(inputsTo(`workspace.move`)).toEqual([{ from: `src/main.ts`, to: `src/entry.ts` }]);
+        expect(inputsTo(`workspace.move`)).toEqual([{ from: `src/main.ts`, to: `src/entry.ts`, view: {} }]);
     });
 
     it(`puts the old name back when the rename is refused`, async () => {
@@ -1012,7 +1012,7 @@ describe(`a file gesture before the daemon has answered`, () => {
 
         // Both rows gone, and both deletes already in flight while the first answer is still parked.
         expect(rows(el)).toEqual([`src`, `api`]);
-        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `src/main.ts` }, { path: `README.md` }]);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `src/main.ts`, view: {} }, { path: `README.md`, view: {} }]);
     });
 });
 
@@ -1099,7 +1099,7 @@ describe(`a tree rooted at one project`, () => {
         await runBackgroundVerb(el, `New Folder`);
         await typeName(el, `drafts`);
 
-        expect(inputsTo(`workspace.mkdir`)).toEqual([{ path: `${PROJECT}/drafts` }]);
+        expect(inputsTo(`workspace.mkdir`)).toEqual([{ path: `${PROJECT}/drafts`, view: {} }]);
         expect(rows(el)).toContain(`drafts`);
     });
 });
@@ -1155,7 +1155,7 @@ describe(`the gestures the template hands on`, () => {
         const { receipt } = useNotifications();
         expect([document.querySelector(`[role="dialog"]`), inputsTo(`workspace.delete`), receipt.value?.title]).toEqual([
             null,
-            [{ path: `src/main.ts` }],
+            [{ path: `src/main.ts`, view: {} }],
             `main.ts deleted`,
         ]);
 
@@ -1163,7 +1163,7 @@ describe(`the gestures the template hands on`, () => {
         await undo?.run();
         await undo?.run();
         expect([inputsTo(`workspace.restore`), useNotifications().receipt.value?.title]).toEqual([
-            [{ trashed: `t:src/main.ts` }],
+            [{ trashed: `t:src/main.ts`, view: {} }],
             `main.ts restored`,
         ]);
     });
