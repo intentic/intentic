@@ -1,3 +1,4 @@
+import { EncodedGitViewSchema } from "./git/git-view.js";
 // diff: one side of a file diff named by its source, for the routes that answer with something other than the text
 // diff itself (bytes on /diff/raw, derived text on /diff/derived).
 import { z } from "zod";
@@ -12,6 +13,7 @@ export const DiffSourceQuerySchema = z.discriminatedUnion("source", [
     z
         .object({
             source: z.literal("working"),
+            view: EncodedGitViewSchema.optional(),
             repo,
             side: GitDiffSideSchema.describe("Which git side the row came from; a half-staged file is two different diffs."),
             path,

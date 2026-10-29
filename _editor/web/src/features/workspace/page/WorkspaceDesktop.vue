@@ -58,7 +58,6 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
-import ScopedChangesPanel from "../changes/scoped/ScopedChangesPanel.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
@@ -112,7 +111,7 @@ const scopedBarren = computed(() =>
     workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`)),
 );
 const { enqueue } = useUploadQueue();
-const changes = useChanges();
+const changes = useChanges(workspaceView);
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
 
@@ -124,7 +123,6 @@ const scopeBroken = computed(() => !isShared(workspaceView.value) && error.value
 
 // Chip for committed work still on disk with nothing to count; gated on zero for the more urgent of the two.
 const changesMark = computed(() => {
-    if (!isShared(workspaceView.value)) { return {}; }
     const work = changes.outgoing.value;
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
@@ -136,7 +134,7 @@ const sidebarModeOptions = computed(() => [
     { label: t(`shared.files`), value: `files` as const },
     // Both audiences get the panel, since the rail badges this count at both and a badge with nowhere to press is
     // only a nag; what differs is the panel behind it (SavePanel has no index and writes its own message).
-    { label: words.value.changes, value: `changes` as const, badge: isShared(workspaceView.value) ? changes.count.value : undefined, ...changesMark.value },
+    { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
 // State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
@@ -726,7 +724,7 @@ const homeTooltip = computed((): Tip => ({
                         <Icon name="history" class="text-xs" />
                     </button>
                     <!-- Changes' panel-wide actions ride the switch's row, since the tab already titles the panel and shows its count. -->
-                    <template v-if="layout.sidebarPanel.value === 'changes' && isShared(workspaceView)">
+                    <template v-if="layout.sidebarPanel.value === 'changes'">
                         <button
                             type="button"
                             :class="ui.iconButton()"
@@ -744,9 +742,8 @@ const homeTooltip = computed((): Tip => ({
                     </template>
                 </div>
                 <template v-if="layout.sidebarPanel.value === 'changes'">
-                    <ScopedChangesPanel v-if="!isShared(workspaceView)" :key="scopeKey(workspaceView)" @open-diff="openDiff" />
-                    <SavePanel v-else-if="maker" @open-diff="openDiff" />
-                    <ReviewPanel v-else @open-diff="openDiff" />
+                    <SavePanel v-if="maker" :key="scopeKey(workspaceView)" @open-diff="openDiff" />
+                    <ReviewPanel v-else :key="scopeKey(workspaceView)" @open-diff="openDiff" />
                 </template>
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
                 <!-- The search box over the Files list, the same one a folder of this computer shows (ExplorerSearchBar.vue). -->

@@ -1076,12 +1076,12 @@
             "working": "{count} en cours"
         },
         "branchStart": {
-            "commitTo": "Committer sur {branch}",
+            "commitTo": "Intégrer dans {branch}",
             "from": "depuis {branch}",
             "fromTitle": "Depuis une branche",
-            "fromNote": "Son travail y est committé",
-            "committed": "{name} committé sur {branch}",
-            "onBranch": "Sur {branch} : son travail est committé sur cette branche",
+            "fromNote": "Son travail y est intégré sans commit",
+            "committed": "{name} intégré dans {branch}",
+            "onBranch": "Sur {branch} : son travail y est intégré sans commit",
             "howItWorks": "Depuis une branche",
             "howItWorksNote": "L'espace partagé ne bouge pas",
             "unlink": "Délier",
@@ -13341,7 +13341,7 @@
             "copyUnreadable": "Copie illisible",
             "findCopy": "Trouver une branche ou une copie",
             "noCopyMatches": "Aucune copie ne correspond.",
-            "readOnlyClickToSwitch": "Lecture seule · clic pour changer",
+            "readOnlyClickToSwitch": "Cliquer pour changer",
             "sharedHint": "Là où arrive le travail terminé",
             "sharedWorkspace": "Espace de travail partagé",
             "showFilesFrom": "Afficher les fichiers de",
@@ -13355,7 +13355,7 @@
             "staysShared": "La recherche, les terminaux et les aperçus utilisent l’espace de travail partagé.",
             "clickToLook": "Cliquer pour une autre",
             "sharedAria": "Espace de travail partagé, sur {name}",
-            "branchAria": "Branche, en lecture seule : {name}",
+            "branchAria": "Branche : {name}",
             "newAgentFromHere": "Nouvel agent à partir d'ici",
             "newAgentFromHereNote": "Son travail revient ici",
             "newAgentTip": "Nouvel agent"
@@ -13654,17 +13654,8 @@
             "andMore": "{names} et {count} de plus"
         },
         "workspaceViewNote": {
-            "readOnly": "Aperçu de {name}, en lecture seule",
+            "readOnly": "Modification de {name}",
             "backToShared": "Revenir au partagé"
-        },
-        "scopedChanges": {
-            "branchHint": "Chaque intégration compare la branche avant et après le travail de cette session.",
-            "sessionHint": "Le travail de cette session, y compris les modifications déjà intégrées.",
-            "loading": "Chargement des modifications…",
-            "noLandings": "Aucune intégration de session en dehors de {branch} sur cette page.",
-            "noChanges": "Aucune modification dans cette session.",
-            "latest": "Intégrations récentes",
-            "older": "Intégrations précédentes"
         }
     },
     "gettingStarted": {

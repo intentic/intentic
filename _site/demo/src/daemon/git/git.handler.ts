@@ -1,3 +1,4 @@
+import { inGitView } from "./gitView";
 import { refuse } from "@intentic/contract-serve";
 import { fileBody, fileDiff, REMOTE_REPOS, REPOS } from "../../fixture/workspace";
 import { graphOf } from "./gitGraph";
@@ -24,22 +25,23 @@ const onDisk = (repo: string, path: string) => {
 export const gitDoors = {
     branchLandings: ({ repo, branch, before }) => branchLandings(repo, branch, before),
     repos: () => ({ repos: [...REPOS] }),
-    changes: () => gitChanges(),
-    fileDiff: ({ repo, path }) => pendingDiff(repo, path) ?? fileDiff(repo, path),
-    branches: ({ repo }) => branchList(repo),
-    stage: ({ repo, ...target }) => stage(repo, target),
-    unstage: ({ repo, ...target }) => unstage(repo, target),
-    commit: ({ repo, message, stage: stageFirst }) => commit(repo, message, stageFirst),
-    indexRunStart: (start) => startIndexRun(start),
-    indexRunState: ({ repo }) => indexRunState(repo),
+    changes: ({ view } = {}) => inGitView(view, gitChanges),
+    viewChanges: ({ view }) => inGitView(view, gitChanges),
+    fileDiff: ({ view, repo, path }) => inGitView(view, () => pendingDiff(repo, path) ?? fileDiff(repo, path)),
+    branches: ({ view, repo }) => inGitView(view, () => branchList(repo)),
+    stage: ({ view, repo, ...target }) => inGitView(view, () => stage(repo, target)),
+    unstage: ({ view, repo, ...target }) => inGitView(view, () => unstage(repo, target)),
+    commit: ({ view, repo, message, stage: stageFirst }) => inGitView(view, () => commit(repo, message, stageFirst)),
+    indexRunStart: (start) => inGitView(start.view, () => startIndexRun(start)),
+    indexRunState: ({ view, repo }) => inGitView(view, () => indexRunState(repo)),
     indexRunCancel: () => ({ ok: true }),
-    discard: ({ repo, ...target }) => discard(repo, target),
-    log: ({ repo, limit, skip }) => gitLog(repo, limit, skip),
+    discard: ({ view, repo, ...target }) => inGitView(view, () => discard(repo, target)),
+    log: ({ view, repo, limit, skip }) => inGitView(view, () => gitLog(repo, limit, skip)),
     commitDiff: ({ repo, sha }) => commitDiff(repo, sha),
     commitFileDiff: ({ repo, sha, path }) => commitFileDiff(repo, sha, path),
     readFile: ({ repo, path }) => onDisk(repo, path),
     operation: ({ repo }) => operation(repo),
-    abort: ({ repo }) => abort(repo),
+    abort: ({ view, repo }) => inGitView(view, () => abort(repo)),
     undoable: ({ repo }) => {
         const action = undoableOf(graphOf(repo));
         return action === undefined ? { repo } : { repo, action };
@@ -63,11 +65,11 @@ export const gitDoors = {
     revert: ({ repo, sha }) => revert(repo, sha),
     drop: ({ repo, sha }) => drop(repo, sha),
     reset: ({ repo, sha, mode }) => reset(repo, sha, mode),
-    fetch: ({ repo }) => fetch(repo),
-    pull: ({ repo }) => pull(repo),
-    push: ({ repo, branch }) => startPush(repo, branch),
-    pushState: ({ repo }) => pushState(repo),
-    pushCancel: ({ repo }) => cancelPush(repo),
+    fetch: ({ view, repo }) => inGitView(view, () => fetch(repo)),
+    pull: ({ view, repo }) => inGitView(view, () => pull(repo)),
+    push: ({ view, repo, branch }) => inGitView(view, () => startPush(repo, branch)),
+    pushState: ({ view, repo }) => inGitView(view, () => pushState(repo)),
+    pushCancel: ({ view, repo }) => inGitView(view, () => cancelPush(repo)),
     // Where each repo lives online, matched against the registry for the publish path picker.
     remoteRepos: () => ({ repos: [...REMOTE_REPOS] }),
     publishFile: ({ repo, path, content, message }) => publishFile(repo, path, content, message),

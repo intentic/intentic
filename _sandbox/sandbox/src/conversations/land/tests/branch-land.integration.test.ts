@@ -1,3 +1,5 @@
+import { createAgentOrigins } from "../origins.js";
+import { createExpiryTracker } from "../../registry/expiry.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -131,28 +133,29 @@ test("opening from a branch cuts that repo's copy from the branch's tip, every o
     expect(entry().placement.branches).toEqual([{ repo: "root", branch: "feature" }]);
     expect(agents.get(ID)?.branches).toEqual([{ repo: "root", branch: "feature" }]);
     // The model is told where its work goes.
-    expect((await contextNoteFor(services, ID))?.text).toContain("started from branch `feature`; your finished work is committed onto `feature`, not the main line");
+    expect((await contextNoteFor(services, ID))?.text).toContain("started from branch `feature`; your finished work lands there as uncommitted changes");
     // The shared checkout never moved.
     expect(await sh(work, "symbolic-ref", "--short", "HEAD")).toBe("main");
     expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
 });
 
-test("a land commits the branch repo's work onto the branch and leaves every shared repository untouched", async () => {
-    const { work, ui, mainTip, featureTip, branchCheckouts, open, land } = await setup();
+test("a land leaves the branch repo's work uncommitted and every shared repository untouched", async () => {
+    const { work, ui, mainTip, featureTip, branchCheckouts, agents, open, land } = await setup();
     const worktree = await open();
     await writeFile(join(worktree.cwd, "agent.ts"), "the agent's work\n");
     const outcome = await land();
     expect(outcome.landed).toBe(true);
     expect(outcome.conflicts ?? []).toEqual([]);
-    // The branch moved by one commit carrying the work, named and trailed like the conversation's own commits.
-    expect(await sh(work, "rev-parse", "feature~1")).toBe(featureTip);
-    expect(await sh(work, "log", "-1", "--format=%s", "feature")).toBe(`Agent: ${TITLE}`);
-    expect(await sh(work, "log", "-1", "--format=%B", "feature")).toContain(ID);
-    expect(await sh(work, "show", "feature:agent.ts")).toBe("the agent's work");
-    const review = await branchLandings(await branchCheckouts.refresh("root", "feature"), work);
-    expect(review.commits.map(({ agent, sha, subject }) => ({ agent, sha, subject }))).toEqual([
-        { agent: ID, sha: await sh(work, "rev-parse", "feature"), subject: `Agent: ${TITLE}` },
-    ]);
+    expect(await sh(work, "rev-parse", "feature")).toBe(featureTip);
+    const checkout = await branchCheckouts.refresh("root", "feature");
+    expect(await readFile(join(checkout, "agent.ts"), "utf8")).toBe("the agent's work\n");
+    expect(await sh(checkout, "diff", "--cached", "--name-only")).toBe("");
+    expect(await sh(checkout, "status", "--porcelain")).toBe("?? agent.ts");
+    expect((await branchLandings(checkout, work)).commits).toEqual([]);
+    const origins = createAgentOrigins({ agents, logger, expiry: createExpiryTracker() });
+    expect(await origins.forRepo("root", work)).toEqual({});
+    expect(await origins.forRepo("root", checkout, undefined, { repo: "root", branch: "feature" })).toEqual({ "agent.ts": [ID] });
+    expect(await origins.forRepo("root", work)).toEqual({});
     // The shared tree's root repo took nothing and never moved.
     expect(await sh(work, "rev-parse", "HEAD")).toBe(mainTip);
     await expect(readFile(join(work, "agent.ts"), "utf8")).rejects.toThrow();
@@ -176,7 +179,7 @@ test.each(["check", "merge", "measure"] as const)("%s refuses a nested branch se
 });
 
 test("a root-only edit in a nested branch session is refused, and the branch can be committed after the root edit is undone", async () => {
-    const { work, ui, uiTip, worktrees, open, land } = await setup("libs/ui");
+    const { work, ui, uiTip, worktrees, branchCheckouts, open, land } = await setup("libs/ui");
     const worktree = await open();
     const original = await readFile(join(worktree.cwd, "app.ts"), "utf8");
     await writeFile(join(worktree.cwd, "app.ts"), "test edit outside the selected repo\n");
@@ -184,8 +187,8 @@ test("a root-only edit in a nested branch session is refused, and the branch can
     await writeFile(join(worktree.cwd, "app.ts"), original);
     await writeFile(join(worktrees.worktreeDir(ID, "libs/ui"), "button.ts"), "branch edit\n");
     expect((await land()).landed).toBe(true);
-    expect(await sh(ui, "rev-parse", "feature~1")).toBe(uiTip);
-    expect(await sh(ui, "show", "feature:button.ts")).toBe("branch edit");
+    expect(await sh(ui, "rev-parse", "feature")).toBe(uiTip);
+    expect(await readFile(join(branchCheckouts.checkoutDir("libs/ui", "feature"), "button.ts"), "utf8")).toBe("branch edit\n");
     expect(await sh(work, "status", "--porcelain")).toBe("");
     expect(await sh(ui, "status", "--porcelain")).toBe("");
 });
@@ -201,11 +204,14 @@ test("a root branch session refuses changes in another repository without commit
     expect(await sh(ui, "status", "--porcelain")).toBe("");
 });
 
-test("a branch that moved on is synced onto, and the next land commits on top of it", async () => {
-    const { work, worktrees, services, open, entry, land, moveFeature } = await setup();
+test("a branch that moved on is synced onto, and the next land stays uncommitted on top of it", async () => {
+    const { work, worktrees, services, branchCheckouts, open, entry, land, moveFeature } = await setup();
     const worktree = await open();
     await writeFile(join(worktree.cwd, "agent.ts"), "first\n");
     await land();
+    const checkout = branchCheckouts.checkoutDir("root", "feature");
+    await sh(checkout, "add", "-A");
+    await sh(checkout, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-qm", "test: owner commits first landing");
     const moved = await moveFeature("other.ts", "from elsewhere\n");
     const lines = await branchLinesOf(services, entry().placement);
     const recorded = entry().placement.repos;
@@ -226,12 +232,12 @@ test("a branch that moved on is synced onto, and the next land commits on top of
     await writeFile(join(worktree.cwd, "agent.ts"), "first, then second\n");
     const outcome = await land();
     expect(outcome.landed).toBe(true);
-    expect(await sh(work, "rev-parse", "feature~1")).toBe(moved);
-    expect(await sh(work, "show", "feature:agent.ts")).toBe("first, then second");
+    expect(await sh(work, "rev-parse", "feature")).toBe(moved);
+    expect(await readFile(join(checkout, "agent.ts"), "utf8")).toBe("first, then second\n");
     expect(await sh(work, "show", "feature:other.ts")).toBe("from elsewhere");
 });
 
-test("a land that clashes with the branch is its conflict, naming the branch, and leaves the branch and its checkout as they were", async () => {
+test("a conflicting branch land leaves editable markers without moving its branch", async () => {
     const { work, branchCheckouts, open, land, moveFeature } = await setup();
     const worktree = await open();
     await writeFile(join(worktree.cwd, "app.ts"), "a\nb\nAGENT\nd\ne\n");
@@ -239,15 +245,13 @@ test("a land that clashes with the branch is its conflict, naming the branch, an
     const checked = await land("check");
     expect(checked.landed).toBe(false);
     expect(checked.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0, mainBranch: "feature" }]);
-    // A merge would leave markers nobody resolves in a checkout nobody edits: undone, and the same conflict.
+    // A merge leaves markers for the owner to resolve in the branch checkout.
     const merged = await land("merge");
-    expect(merged.landed).toBe(false);
-    expect(merged.conflicts?.map(({ repo, mainBranch, paths }) => ({ repo, mainBranch, paths: paths.map(({ path }) => path) }))).toEqual([
-        { repo: "root", mainBranch: "feature", paths: ["app.ts"] },
-    ]);
+    expect(merged.landed).toBe(true);
+    expect(merged.resolving).toEqual([{ repo: "root", paths: ["app.ts"] }]);
     expect(await sh(work, "rev-parse", "feature")).toBe(moved);
     const checkout = branchCheckouts.checkoutDir("root", "feature");
-    expect(await sh(checkout, "status", "--porcelain")).toBe("");
-    expect(await readFile(join(checkout, "app.ts"), "utf8")).toBe("a\nb\nBRANCH\nd\ne\n");
+    expect(await sh(checkout, "status", "--porcelain")).toBe("M app.ts");
+    expect(await readFile(join(checkout, "app.ts"), "utf8")).toContain("<<<<<<<");
     expect(await sh(work, "status", "--porcelain")).toBe("");
 });

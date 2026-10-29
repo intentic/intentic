@@ -1,7 +1,7 @@
+import { GitRepoParamSchema } from "./git-view.js";
 // The Git Graph view over a repo's real commits.
 import { z } from "zod";
 import { RefNameSchema } from "../internal.js";
-import { RepoParamSchema } from "../shared.js";
 import { GitChangeSchema } from "./git.js";
 // A hex sha, full or abbreviated; commit routes accept only this, never an arbitrary git revision expression.
 const ShaSchema = z.string().regex(/^[0-9a-f]{4,64}$/);
@@ -38,7 +38,7 @@ export const GitLogSchema = z.object({
         ),
 });
 export type GitLog = z.infer<typeof GitLogSchema>;
-export const GitLogQuerySchema = RepoParamSchema.extend({
+export const GitLogQuerySchema = GitRepoParamSchema.extend({
     limit: z.coerce.number().int().positive().max(2000).optional().describe("How many commits to return."),
     // Page cursor: how many newer commits to skip before returning results.
     skip: z.coerce
@@ -70,7 +70,7 @@ export const GitRemoteReposSchema = z.object({
 export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
 // Writes one file to the default branch and publishes it: write, commit that path alone, push, in one call. `message`
 // is the caller's, since it lands in the user's own commit history.
-export const GitPublishFileSchema = RepoParamSchema.extend({
+export const GitPublishFileSchema = GitRepoParamSchema.extend({
     path: z.string().min(1).describe("Which file, relative to the repository."),
     content: z.string().describe("Its whole new contents."),
     message: z.string().min(1).describe("The commit message."),
@@ -92,7 +92,7 @@ export const GitPublishFileResultSchema = z.object({
         ),
 });
 export type GitPublishFileResult = z.infer<typeof GitPublishFileResultSchema>;
-export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema.describe("Which commit.") });
+export const GitCommitDiffQuerySchema = GitRepoParamSchema.extend({ sha: ShaSchema.describe("Which commit.") });
 // A commit's changed files, diffed against its first parent (a root commit against the empty tree); reuses `GitChange`
 // so working-tree and commit diffs share one shape.
 export const GitCommitDiffSchema = z.object({
@@ -103,32 +103,32 @@ export const GitCommitDiffSchema = z.object({
         ),
 });
 export type GitCommitDiff = z.infer<typeof GitCommitDiffSchema>;
-export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({
+export const GitCommitFileDiffQuerySchema = GitRepoParamSchema.extend({
     sha: ShaSchema.describe("Which commit."),
     path: z.string().min(1).describe("Which file in it."),
 });
 // Git write actions from the graph's context menu. Branch/tag only add a ref (no checkpoint); sequence ops, checkout,
 // and reset are auto-checkpointed, and a conflict returns `ok:false` instead of throwing.
-export const GitBranchCreateSchema = RepoParamSchema.extend({
+export const GitBranchCreateSchema = GitRepoParamSchema.extend({
     sha: ShaSchema.describe("Which commit to start it at."),
     name: RefNameSchema.describe("The new branch's name."),
 });
-export const GitTagCreateSchema = RepoParamSchema.extend({
+export const GitTagCreateSchema = GitRepoParamSchema.extend({
     sha: ShaSchema.describe("Which commit to tag."),
     name: RefNameSchema.describe("The tag's name."),
 });
-export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema.describe("Where to switch to: a branch, a tag, or a commit.") });
+export const GitCheckoutSchema = GitRepoParamSchema.extend({ ref: RefNameSchema.describe("Where to switch to: a branch, a tag, or a commit.") });
 // Deletes a tag locally, and on the named remote too; a tag never pushed there does not fail the local delete.
-export const GitTagDeleteSchema = RepoParamSchema.extend({
+export const GitTagDeleteSchema = GitRepoParamSchema.extend({
     name: RefNameSchema.describe("Which tag."),
     remote: RefNameSchema.optional().describe("Also delete it there. Leave it out to remove it locally only."),
 });
 // Pushes only the named tag, never every unpushed tag.
-export const GitTagPushSchema = RepoParamSchema.extend({
+export const GitTagPushSchema = GitRepoParamSchema.extend({
     name: RefNameSchema.describe("Which tag."),
     remote: RefNameSchema.describe("Which remote to send it to."),
 });
-export const GitResetSchema = RepoParamSchema.extend({
+export const GitResetSchema = GitRepoParamSchema.extend({
     sha: ShaSchema.describe("Which commit to move the branch to."),
     mode: z
         .enum(["soft", "mixed", "hard"])
@@ -136,7 +136,7 @@ export const GitResetSchema = RepoParamSchema.extend({
             "How much to take with it: move the branch alone, also unstage, or also throw away what is on disk. The last one takes a checkpoint first.",
         ),
 });
-export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema.describe("Which commit to act on.") });
+export const GitCommitActionSchema = GitRepoParamSchema.extend({ sha: ShaSchema.describe("Which commit to act on.") });
 export const GitActionResultSchema = z.object({
     ok: z.boolean().describe("Whether it worked."),
     reason: z
@@ -166,17 +166,17 @@ export const StashListSchema = z.object({
 });
 // A stash ref as git numbers it (`stash@{0}`); constrained because it reaches a shell argument.
 const StashRefSchema = z.string().regex(/^stash@\{\d{1,4}\}$/);
-export const StashPushSchema = RepoParamSchema.extend({
+export const StashPushSchema = GitRepoParamSchema.extend({
     message: z.string().max(500).optional().describe("What to call it, so you know what it was later."),
     includeUntracked: z.boolean().optional().describe("Also set aside files git is not yet tracking, which are otherwise left where they are."),
 });
 // `pop` drops the entry after a clean apply; `apply` keeps it, git's own resume-vs-try-again distinction.
-export const StashApplySchema = RepoParamSchema.extend({
+export const StashApplySchema = GitRepoParamSchema.extend({
     ref: StashRefSchema.describe("Which entry."),
     pop: z.boolean().optional().describe("Remove it from the stash once it has been applied cleanly."),
 });
-export const StashRefParamSchema = RepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
-export const StashDiffQuerySchema = RepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
+export const StashRefParamSchema = GitRepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
+export const StashDiffQuerySchema = GitRepoParamSchema.extend({ ref: StashRefSchema.describe("Which entry.") });
 // The last ref move on this branch, and whether it can be undone; complements Checkpoints, which restores the working
 // tree instead. `previousSha` doubles as a concurrency token: refused if the branch moved since it was read.
 export const UndoKindSchema = z.enum(["commit", "amend", "merge", "rebase", "cherry-pick", "revert", "reset", "pull", "other"]);
@@ -203,7 +203,7 @@ export const GitUndoStateSchema = z.object({
 });
 export type GitUndoState = z.infer<typeof GitUndoStateSchema>;
 // `previousSha` must match what the caller was shown; `discardChanges` picks a hard reset over a soft one.
-export const GitUndoSchema = RepoParamSchema.extend({
+export const GitUndoSchema = GitRepoParamSchema.extend({
     previousSha: ShaSchema.describe(
         "Where to go back to, from the matching read. It is also proof you looked: one prepared against a stale view is refused.",
     ),

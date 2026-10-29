@@ -1076,12 +1076,12 @@
             "working": "{count} aktiv"
         },
         "branchStart": {
-            "commitTo": "Auf {branch} committen",
+            "commitTo": "Nach {branch} übernehmen",
             "from": "von {branch}",
             "fromTitle": "Von einem Branch",
-            "fromNote": "Seine Arbeit wird dort committet",
-            "committed": "{name} auf {branch} committet",
-            "onBranch": "Auf {branch}: Seine Arbeit wird auf diesen Branch committet",
+            "fromNote": "Die Arbeit wird dort uncommittet übernommen",
+            "committed": "{name} nach {branch} übernommen",
+            "onBranch": "Auf {branch}: Die Arbeit wird dort uncommittet übernommen",
             "howItWorks": "Von einem Branch",
             "howItWorksNote": "Der geteilte Workspace bleibt",
             "unlink": "Verknüpfung lösen",
@@ -13341,7 +13341,7 @@
             "copyUnreadable": "Kopie unlesbar",
             "findCopy": "Branch oder Kopie suchen",
             "noCopyMatches": "Keine Kopie passt.",
-            "readOnlyClickToSwitch": "Schreibgeschützt · Klick wechselt",
+            "readOnlyClickToSwitch": "Zum Wechseln klicken",
             "sharedHint": "Hier landet fertige Arbeit",
             "sharedWorkspace": "Geteilter Workspace",
             "showFilesFrom": "Dateien zeigen aus",
@@ -13355,7 +13355,7 @@
             "staysShared": "Suche, Terminals und Vorschauen nutzen den geteilten Workspace.",
             "clickToLook": "Klicken für eine andere",
             "sharedAria": "Geteilter Workspace, auf {name}",
-            "branchAria": "Branch, schreibgeschützt: {name}",
+            "branchAria": "Branch: {name}",
             "newAgentFromHere": "Neuer Agent von hier",
             "newAgentFromHereNote": "Seine Arbeit landet wieder hier",
             "newAgentTip": "Neuer Agent"
@@ -13654,17 +13654,8 @@
             "andMore": "{names} und {count} weitere"
         },
         "workspaceViewNote": {
-            "readOnly": "Ansicht von {name}, schreibgeschützt",
+            "readOnly": "{name} bearbeiten",
             "backToShared": "Zurück zum geteilten"
-        },
-        "scopedChanges": {
-            "branchHint": "Jede Übernahme vergleicht den Branch vor und nach der Arbeit dieser Sitzung.",
-            "sessionHint": "Die Arbeit dieser Sitzung, einschließlich bereits übernommener Änderungen.",
-            "loading": "Änderungen werden geladen…",
-            "noLandings": "Keine Sitzungsübernahmen außerhalb von {branch} auf dieser Seite.",
-            "noChanges": "Keine Änderungen in dieser Sitzung.",
-            "latest": "Neueste Übernahmen",
-            "older": "Ältere Übernahmen"
         }
     },
     "gettingStarted": {

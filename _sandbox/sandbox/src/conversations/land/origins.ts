@@ -1,3 +1,4 @@
+import type { GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { OriginAgent } from "@intentic/sandbox-contract/schemas/git/git";
 import type { Logger } from "pino";
@@ -42,7 +43,7 @@ const claimDerived = async (dir: string, landings: readonly Landing[], origins: 
 
 export interface AgentOrigins {
     // path -> ids that landed it, newest first; empty when nothing here is attributable.
-    readonly forRepo: (repo: string, dir: string, head?: string) => Promise<Readonly<Record<string, readonly string[]>>>;
+    readonly forRepo: (repo: string, dir: string, head?: string, view?: GitView) => Promise<Readonly<Record<string, readonly string[]>>>;
     // Resolved here, not the client: attribution reads the whole registry, archived agents included.
     readonly identify: (ids: Iterable<string>) => Record<string, OriginAgent>;
     // Cache sizes and text weight for the durable resource series; these maps were once a memory leak.
@@ -115,18 +116,18 @@ export const createAgentOrigins = (
     };
 
     // One entry per agent landed into this repo, newest first, the order the panel shows chips in.
-    const liveLandings = (repo: string): Landing[] =>
+    const liveLandings = (repo: string, view?: GitView): Landing[] =>
         agents
             .ids()
             .flatMap((id) => {
                 const entry = agents.entry(id);
                 // A child whose last land went into its parent's checkout put nothing in the main tree: its work
                 // reaches it with the parent's own land, and is the parent's claim there. Nor did a repo started from a branch.
-                if (entry === undefined || (entry.placement.kind === "worktree" && entry.placement.landedInto !== undefined)) {
+                if (entry === undefined || (entry.placement.kind === "worktree" && entry.placement.landedInto !== view?.agent)) {
                     return [];
                 }
                 const composed = reposOf(entry).find((candidate) => candidate.repo === repo);
-                if (composed?.landedTip === undefined || composed.landedHead === undefined || branchOf(worktreeOf(entry), repo) !== undefined) {
+                if (composed?.landedTip === undefined || composed.landedHead === undefined || branchOf(worktreeOf(entry), repo) !== view?.branch) {
                     return [];
                 }
                 // Absorbed or unresolvable landings skip all git; a fresh land gets a new, unmarked row.
@@ -195,8 +196,8 @@ export const createAgentOrigins = (
             }
             return identities;
         },
-        forRepo: async (repo, dir, knownHead) => {
-            const landings = liveLandings(repo);
+        forRepo: async (repo, dir, knownHead, view) => {
+            const landings = liveLandings(repo, view);
             if (landings.length === 0) {
                 return {};
             }
@@ -205,13 +206,13 @@ export const createAgentOrigins = (
                 return {};
             }
             const key = [head, ...landings.map((landing) => `${landing.id} ${landing.head} ${landing.tip}`)].join("\0");
-            const answered = answers.get(repo);
+            const answered = answers.get(dir);
             const sources = answered?.key === key ? answered.origins : {};
             if (answered?.key !== key) {
                 for (const landing of landings) {
                     await claim(repo, dir, head, landing, sources);
                 }
-                answers.set(repo, { key, origins: sources });
+                answers.set(dir, { key, origins: sources });
             }
             const origins = { ...sources };
             await claimDerived(dir, landings, origins, git);

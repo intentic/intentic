@@ -13,7 +13,7 @@ import { Readable } from "node:stream";
 import { webStream } from "@intentic/base/web-stream";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
 import { isRendition, isVideo, thumbnailable, videoToolsPresent, workspaceThumbnail } from "./workspace-thumbnail.js";
-import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
+import { insideArchive, scopedTarget, workspaceWriteRootFor } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
@@ -124,6 +124,33 @@ const movedOnFrom = async (files: WorkspaceBytesRoutesDeps["files"], target: str
 const uploadBody = (c: Context<AppEnv>): { readonly body: ReadableStream<Uint8Array> | null } | Response => {
     const decoded = decodedBody(c.req.raw.body, c.req.header("content-encoding"));
     return "unsupported" in decoded ? c.json({ error: `an upload cannot be sent in the ${decoded.unsupported} coding` }, 415) : decoded;
+};
+
+const uploadStatus = new Map<string, 400 | 403 | 404 | 412>([
+    ["PRECONDITION_FAILED", 412], ["NOT_FOUND", 404], ["FORBIDDEN", 403],
+]);
+const uploadRoot = async (services: WorkspaceBytesRoutesDeps, c: Context<AppEnv>): Promise<string | Response> => {
+        try {
+            const agent = c.req.query("agent");
+            const entry = agent === undefined ? undefined : services.workspaceScope.entry(agent);
+            if (entry !== undefined) { refuseUnlessVisible(c.get("identity"), provenanceOf(entry)); }
+            return await workspaceWriteRootFor(services.workspaceScope, {
+                agent: c.req.query("agent"), branch: c.req.query("branch"), repo: c.req.query("repo"),
+            }, c.req.query("path") ?? "");
+        } catch (error) {
+            if (!(error instanceof ORPCError)) { throw error; }
+            return c.json({ error: error.message }, uploadStatus.get(error.code) ?? 400);
+        }
+};
+const notifyUpload = (services: WorkspaceBytesRoutesDeps, root: string): void => {
+    if (root === services.workspace.root) { services.history.notifyUserWrite(); }
+};
+
+const uploadFileTarget = async (services: WorkspaceBytesRoutesDeps, c: Context<AppEnv>): Promise<{ root: string; target: string } | Response> => {
+    const root = await uploadRoot(services, c);
+    if (root instanceof Response) { return root; }
+    const resolved = await uploadTarget(root, callerEditFence(await services.areas.list(), c.get("identity")), c.req.query("path"));
+    return "error" in resolved ? c.json({ error: resolved.error }, resolved.status) : { root, target: resolved.target };
 };
 
 const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
@@ -281,15 +308,9 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     // POST /workspace/upload: writes one file under /work; drag-drop and the editor's save both post here.
     // Streams straight to disk (parent dirs auto-created); 400 on escape, 413 on oversize.
     upload: async (c: Context<AppEnv>): Promise<Response> => {
-        const resolved = await uploadTarget(
-            services.workspace.root,
-            callerEditFence(await services.areas.list(), c.get("identity")),
-            c.req.query("path"),
-        );
-        if ("error" in resolved) {
-            return c.json({ error: resolved.error }, resolved.status);
-        }
-        const target = resolved.target;
+        const resolved = await uploadFileTarget(services, c);
+        if (resolved instanceof Response) { return resolved; }
+        const { root, target } = resolved;
         const offset = partOffset(c);
         if (offset instanceof Response) {
             return offset;
@@ -324,7 +345,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         if (Number.isFinite(mtime)) {
             await services.files.setMtime(target, mtime);
         }
-        services.history.notifyUserWrite();
+        notifyUpload(services, root);
         return c.json({ ok: true });
     },
 

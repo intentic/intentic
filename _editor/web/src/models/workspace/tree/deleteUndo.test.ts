@@ -1,3 +1,4 @@
+import { workspaceView } from "../../../app/workspaceScope";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type DeleteBatch, fileUndoable, rememberCreated, rememberDelete, rememberMoves, takeStep } from "./deleteUndo";
 
@@ -41,4 +42,17 @@ it(`holds moves and entries made beside deletes, in the order they were done`, (
     rememberCreated([]);
 
     expect([takeStep(), takeStep(), takeStep(), takeStep()]).toEqual([{ created: [`new.txt`] }, { moves: [{ from: `b.txt`, to: `docs/b.txt` }] }, deleted, undefined]);
+});
+
+it(`keeps Undo in the checkout where each gesture happened`, () => {
+    const shared = batch(`same.txt`);
+    rememberDelete(shared);
+    workspaceView.value = { repo: `app`, branch: `feature` };
+    expect(fileUndoable.value).toBe(false);
+    expect(takeStep(shared)).toBeUndefined();
+    rememberCreated([`same.txt`]);
+    workspaceView.value = {};
+    expect(takeStep()).toEqual(shared);
+    workspaceView.value = { repo: `app`, branch: `feature` };
+    expect(takeStep()).toEqual({ created: [`same.txt`] });
 });

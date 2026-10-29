@@ -12,7 +12,8 @@ import type {
     RepoTarget,
 } from "@intentic/sandbox-contract/schemas/git/git";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
-import { computed, watch } from "vue";
+import { computed, watch, toValue, type MaybeRefOrGetter } from "vue";
+import { isShared, scopeKey, SHARED_SCOPE, type ViewScope } from "../../app/workspaceScope";
 import { withinScope } from "../../app/projectScope";
 import { useChat } from "../conversations/run/useChat";
 import { queryClient, UNPERSISTED } from "../../lib/queryPersistence";
@@ -90,8 +91,12 @@ interface ScopedTask {
 }
 
 // A busy span and per-repo failures over one sandbox's repositories; a switch starts the panel clean.
-const actionBusy = sandboxRef(() => false);
-const failures = sandboxRef<ReadonlyMap<string, ActionFailure>>(() => new Map());
+const states = sandboxRef(() => new Map<string, { busy: boolean; failures: ReadonlyMap<string, ActionFailure> }>());
+const actionState = (view: ViewScope) => {
+    const key = scopeKey(view);
+    if (!states.value.has(key)) { states.value.set(key, { busy: false, failures: new Map() }); }
+    return states.value.get(key)!;
+};
 // Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
 const { canShip } = useRole();
 
@@ -111,34 +116,38 @@ export interface PressFace {
 export interface CommitPress {
     readonly repos: readonly string[];
     readonly face: PressFace;
+    readonly viewKey?: string;
 }
 // The ledger's key for this sandbox's commit; the ledger stamps it with the sandbox it began on.
 export const COMMIT_RUN = `changes/commit`;
-const commitPress = (): CommitPress | undefined => {
-    const run = operationAt<void, NoticeModel, CommitPress>(COMMIT_RUN);
+const commitRunKey = (view: ViewScope): string => `${COMMIT_RUN}${isShared(view) ? `` : `/${scopeKey(view)}`}`;
+const commitPress = (view: ViewScope): CommitPress | undefined => {
+    const run = operationAt<void, NoticeModel, CommitPress>(commitRunKey(view));
     return run?.state === `running` ? run.progress : undefined;
 };
 
-const dismissFailure = (scope: string): void => {
-    if (!failures.value.has(scope)) {
+const dismissFailure = (scope: string, view: ViewScope): void => {
+    const state = actionState(view);
+    if (!state.failures.has(scope)) {
         return;
     }
-    const next = new Map(failures.value);
+    const next = new Map(state.failures);
     next.delete(scope);
-    failures.value = next;
+    state.failures = next;
 };
 
 // Runs per-scope tasks concurrently under one busy span; a failure is filed per scope without cancelling the rest.
 // `settle` runs unawaited, since holding busy across a slow rescan would freeze the panel with no explanation.
-const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>): Promise<void> => {
-    if (actionBusy.value) {
+const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>, view: ViewScope): Promise<void> => {
+    const state = actionState(view);
+    if (state.busy) {
         return;
     }
     // A member below maintainer tier is refused here, before anything is sent, filed as an ordinary per-scope failure in
     // the words every access refusal uses. The save panel offers them none of these presses (SavePanel.vue).
     if (!canShip.value) {
-        failures.value = new Map([
-            ...failures.value,
+        state.failures = new Map([
+            ...state.failures,
             ...tasks.map((task): [string, ActionFailure] => [
                 task.scope,
                 { action: task.action, detail: accessWords({ kind: `tier`, floor: `maintainer` }).note },
@@ -146,11 +155,11 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
         ]);
         return;
     }
-    actionBusy.value = true;
+    state.busy = true;
     // Clears every scope up front, not per task, so a second repo committing under COMMIT_SCOPE doesn't erase the
     // first's failure.
     const scopes = new Set(tasks.map((task) => task.scope));
-    failures.value = new Map([...failures.value].filter(([scope]) => !scopes.has(scope)));
+    state.failures = new Map([...state.failures].filter(([scope]) => !scopes.has(scope)));
     // A batch outlasting a switch reports to nobody: its failures, its busy span and its settling (dropping buffers,
     // rescanning) were the outgoing sandbox's.
     const current = sandboxScopeGuard();
@@ -161,7 +170,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                     await task.run();
                 } catch (caught) {
                     if (current()) {
-                        failures.value = new Map(failures.value).set(task.scope, {
+                        state.failures = new Map(state.failures).set(task.scope, {
                             action: task.action,
                             detail: messageOr(caught, t(`workspace.useChanges.gitGaveNoReason`)),
                             ...(caught instanceof PushRefused ? { run: caught.run } : {}),
@@ -172,7 +181,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
         );
     } finally {
         if (current()) {
-            actionBusy.value = false;
+            state.busy = false;
         }
     }
     if (current()) {
@@ -185,12 +194,12 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
 // only a write can make a diff wrong, not time. Unpersisted: two full file texts.
 const FILE_DIFF_GC_MS = 5 * 60 * 1000;
 
-export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => rpcKey(`git.fileDiff`, { repo, path, side }, UNPERSISTED);
+export const fileDiffKey = (repo: string, path: string, side: GitDiffSide, view: ViewScope = SHARED_SCOPE): unknown[] => rpcKey(`git.fileDiff`, { repo, path, side, ...(!isShared(view) ? { view } : {}) }, UNPERSISTED);
 
 // Named apart from the fetcher below so a background loader can be handed the query object directly.
-export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
-    queryKey: fileDiffKey(repo, path, side),
-    queryFn: (): Promise<FileDiff> => sandboxRpc.git.fileDiff({ repo, path, side }),
+export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide, view: ViewScope = SHARED_SCOPE) => ({
+    queryKey: fileDiffKey(repo, path, side, view),
+    queryFn: (): Promise<FileDiff> => sandboxRpc.git.fileDiff({ repo, path, side }, { context: { gitView: view } }),
     staleTime: Infinity,
     gcTime: FILE_DIFF_GC_MS,
     // No retry: a daemon hiccup during read-ahead would otherwise multiply requests; a failed read simply isn't cached.
@@ -198,12 +207,12 @@ export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => 
 });
 
 // Wraps the query above in fetchQuery; the panel is the only caller, the loader uses the query object directly.
-const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiff> => queryClient.fetchQuery(fileDiffQuery(repo, path, side));
+const fileDiff = (repo: string, path: string, side: GitDiffSide, view: ViewScope = SHARED_SCOPE): Promise<FileDiff> => queryClient.fetchQuery(fileDiffQuery(repo, path, side, view));
 
 // Named apart from the composable that reads it, so the loader can warm the same cache entry.
-export const changesKey = (): unknown[] => rpcKey(`git.changes`);
+export const changesKey = (view: ViewScope = SHARED_SCOPE): unknown[] => rpcKey(`git.changes`, isShared(view) ? undefined : { view });
 
-export const fetchChanges = (): Promise<GitChanges> => sandboxRpc.git.changes();
+export const fetchChanges = (view: ViewScope = SHARED_SCOPE): Promise<GitChanges> => isShared(view) ? sandboxRpc.git.changes() : sandboxRpc.git.viewChanges({ view });
 
 // Invalidates the change list, its file diffs, and every agent's review: committing or discarding changes what a review
 // reads though no ref moved. Fired directly, not left to the throttled file-watcher pass.
@@ -221,15 +230,17 @@ watch(landingNow, (now, was) => {
 
 // Two target shapes: `paths` are rows the user picked (limited to what's rendered); `scope` is a description
 // the daemon resolves itself. Bulk verbs send a scope, so a truncated review can still act on all of it.
-const targetBody = (target: GitTarget): GitTarget => ({
-    ...(target.paths !== undefined ? { paths: target.paths } : {}),
-    ...(target.scope !== undefined ? { scope: target.scope } : {}),
-});
+const targetBody = (target: GitTarget): GitTarget => {
+    const body: GitTarget = {};
+    if (target.paths !== undefined) { body.paths = target.paths; }
+    if (target.scope !== undefined) { body.scope = target.scope; }
+    return body;
+};
 
 // Splices the commit's own answer into the cached review; a no-op when the cache is empty, since there's
 // nothing yet to splice into. Cancels any in-flight scan first, so a stale read can't overwrite it on arrival.
-const applyCommitResult = async (repo: string, result: CommitResult): Promise<void> => {
-    const queryKey = changesKey();
+const applyCommitResult = async (repo: string, result: CommitResult, view: ViewScope): Promise<void> => {
+    const queryKey = changesKey(view);
     await queryClient.cancelQueries({ queryKey });
     queryClient.setQueryData<GitChanges>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
 };
@@ -240,11 +251,12 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
 // Answers whether any repo recorded a commit: a "Commit all" over nothing but scratch stages nothing, and git's
 // `committed: false` is then the only sign the typed message went nowhere.
-const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean, face: PressFace): Promise<boolean> => {
+const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean, face: PressFace, view: ViewScope = SHARED_SCOPE): Promise<boolean> => {
     let recorded = false;
-    const ended = await startOperation<void, NoticeModel, CommitPress>(COMMIT_RUN, {
+    const key = commitRunKey(view);
+    const ended = await startOperation<void, NoticeModel, CommitPress>(key, {
         what: t(`workspace.useChanges.committing`),
-        progress: { repos: groups.map((group) => group.repo), face },
+        progress: { repos: groups.map((group) => group.repo), face, viewKey: scopeKey(view) },
         // runBatch files a commit's failure under COMMIT_SCOPE, where the panel draws it; the run itself never throws.
         failed: t(`workspace.useChanges.commitFailed`),
         // The panel is where a commit ends, and its rows say so: no receipt.
@@ -258,66 +270,70 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
                         const run = await runIndexJob(
                             group.repo,
                             stageFirst ? { op: `commit`, message, target: targetBody(group) } : { op: `commit`, message },
+                            view,
                         );
                         // A passed commit run carries the commit route's own answer.
                         const result = run.result ?? { committed: false };
                         recorded ||= result.committed;
-                        await applyCommitResult(group.repo, result);
+                        await applyCommitResult(group.repo, result, view);
                     },
                 })),
-                () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
+                () => (actionState(view).failures.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
+                view,
             ),
     });
     // Put away once read here: the press is over. Only this run, should another sandbox be on screen by now.
-    if (ended !== undefined && operationAt(COMMIT_RUN) === ended) {
-        dismissOperation(COMMIT_RUN);
+    if (ended !== undefined && operationAt(key) === ended) {
+        dismissOperation(key);
     }
     return recorded;
 };
 
 // Discards a selection: tracked content resets to HEAD, untracked files are deleted; an empty target discards the whole
 // repo.
-const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
+const discardGroups = (groups: readonly RepoTarget[], view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         groups.map((group) => ({
             scope: group.repo,
             action: t(`workspace.useChanges.discardFailed`),
             run: async (): Promise<void> => {
-                await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) });
+                await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) }, { context: { gitView: view } });
             },
         })),
         () => {
             // Stale edit buffers would resurrect discarded files on save; the tree's whole prefix, since its scope is
             // part of its key.
-            dropEditBuffers();
+            dropEditBuffers(view);
             return Promise.all([queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) }), invalidateChanges()]);
         },
+        view,
     );
 
 // Ends a halted merge/rebase/cherry-pick/revert left by a terminal; nothing this app runs leaves a repo in
 // that state. Checkpointed daemon-side first, since the discarded conflict resolution is real work.
-const abortOperation = (repo: string): Promise<void> =>
+const abortOperation = (repo: string, view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         [
             {
                 scope: repo,
                 action: t(`workspace.useChanges.abortFailed`),
                 run: async (): Promise<void> => {
-                    await sandboxRpc.git.abort({ repo });
+                    await sandboxRpc.git.abort({ repo }, { context: { gitView: view } });
                 },
             },
         ],
         () => {
-            dropEditBuffers();
+            dropEditBuffers(view);
             return Promise.all([queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) }), invalidateChanges()]);
         },
+        view,
     );
 
 // Index-only move; the worktree is untouched, so unlike discard nothing needs resetting or refetching.
 // A group with an empty path list is dropped, since sending it would read as the whole-repo target. A described target
 // (a side, an origin, the whole repo) stages as a run (indexRuns.ts), since it has no size bound; picked paths are
 // bounded by the wire (MAX_ACTION_PATHS) and stay one request.
-const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<void> =>
+const stageGroups = (groups: readonly RepoTarget[], staged: boolean, view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         groups
             .filter((group) => group.paths === undefined || group.paths.length > 0)
@@ -326,14 +342,15 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
                 action: staged ? t(`workspace.useChanges.stageFailed`) : t(`workspace.useChanges.unstageFailed`),
                 run: async (): Promise<void> => {
                     if (staged && group.paths === undefined) {
-                        await runIndexJob(group.repo, { op: `stage`, target: targetBody(group) });
+                        await runIndexJob(group.repo, { op: `stage`, target: targetBody(group) }, view);
                         return;
                     }
                     const target = { repo: group.repo, ...targetBody(group) };
-                    await (staged ? sandboxRpc.git.stage(target) : sandboxRpc.git.unstage(target));
+                    await (staged ? sandboxRpc.git.stage(target, { context: { gitView: view } }) : sandboxRpc.git.unstage(target, { context: { gitView: view } }));
                 },
             })),
         invalidateChanges,
+        view,
     );
 
 // An origin chip's reversible move (GitIndexMove.chip): clearing writes back what the daemon remembers that chip
@@ -343,7 +360,7 @@ interface ChipMove {
     readonly origin: string | undefined;
     readonly repos: readonly string[];
 }
-const swapChip = (clear: ChipMove, light: ChipMove): Promise<void> => {
+const swapChip = (clear: ChipMove, light: ChipMove, view: ViewScope = SHARED_SCOPE): Promise<void> => {
     const clearIn = clear.origin === undefined ? [] : clear.repos;
     const lightIn = light.origin === undefined ? [] : light.repos;
     const repos = [...new Set([...clearIn, ...lightIn])];
@@ -356,33 +373,34 @@ const swapChip = (clear: ChipMove, light: ChipMove): Promise<void> => {
             action: lightIn.includes(repo) ? t(`workspace.useChanges.stageFailed`) : t(`workspace.useChanges.unstageFailed`),
             run: async (): Promise<void> => {
                 if (clear.origin !== undefined && clearIn.includes(repo)) {
-                    await sandboxRpc.git.unstage({ repo, chip: clear.origin });
+                    await sandboxRpc.git.unstage({ repo, chip: clear.origin }, { context: { gitView: view } });
                 }
                 if (light.origin !== undefined && lightIn.includes(repo)) {
-                    await sandboxRpc.git.stage({ repo, chip: light.origin });
+                    await sandboxRpc.git.stage({ repo, chip: light.origin }, { context: { gitView: view } });
                 }
             },
         })),
         invalidateChanges,
+        view,
     );
 };
 
 // Pull is the only sync verb that touches the worktree, so only it resets buffers and refetches the tree.
 // Fetch and push move refs the worktree never sees, so they need neither.
-const afterPull = async (): Promise<void> => {
-    dropEditBuffers();
+const afterPull = async (view: ViewScope): Promise<void> => {
+    dropEditBuffers(view);
     await queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
 };
 
 // Fetches every repo with a remote in one busy span, each failing on its own GitActionResult rather than a
 // generic error. Pull and push route through the panel's sync door instead, where a refusal becomes a question.
-const fetchRepos = (repos: readonly string[]): Promise<void> =>
+const fetchRepos = (repos: readonly string[], view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         repos.map((repo) => ({
             scope: repo,
             action: t(`workspace.useChanges.fetchFailed`),
             run: async (): Promise<void> => {
-                const result = await sandboxRpc.git.fetch({ repo });
+                const result = await sandboxRpc.git.fetch({ repo }, { context: { gitView: view } });
                 if (!result.ok) {
                     // git's own condensed reason; empty falls through to runBatch's generic fallback message.
                     throw new Error(result.reason);
@@ -390,6 +408,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
             },
         })),
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
+        view,
     );
 
 // One busy span with one real sync per repo (git can't span remotes); per repo, pull runs before push so a
@@ -400,7 +419,7 @@ export interface SyncTarget {
     readonly push: boolean; // True when ahead, or unpublished; sent (and published, if new) after any pull.
 }
 
-const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
+const syncAll = (targets: readonly SyncTarget[], view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         targets.map((target) => ({
             scope: target.repo,
@@ -414,16 +433,16 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
                       : t(`workspace.useChanges.pullFailed`),
             run: async (): Promise<void> => {
                 if (target.pull) {
-                    const pulled = await sandboxRpc.git.pull({ repo: target.repo });
+                    const pulled = await sandboxRpc.git.pull({ repo: target.repo }, { context: { gitView: view } });
                     if (!pulled.ok) {
                         throw new Error(pulled.reason);
                     }
-                    await afterPull();
+                    await afterPull(view);
                 }
                 if (target.push) {
                     // Followed as a run (usePushRun), not one request, since the pre-push hook can take minutes;
                     // failures carry the run.
-                    const pushed = await usePushRun(target.repo).start();
+                    const pushed = await usePushRun(target.repo, undefined, view).start();
                     if (pushed.status !== `passed`) {
                         throw new PushRefused(pushed);
                     }
@@ -431,23 +450,28 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
             },
         })),
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
+        view,
     );
 
 // Polls while another tab's (or this tab's pre-reload) commit is running — this tab's own splices in directly.
 // Needed since a refused or no-op commit moves no ref, so the ref watcher alone would never end "Committing…".
 const COMMIT_WATCH_MS = 1000;
 
-export function useChanges() {
+export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
+    const press = computed(() => {
+        const held = commitPress(toValue(view));
+        return (held?.viewKey ?? ``) === scopeKey(toValue(view)) ? held : undefined;
+    });
     const { query, error } = useSandboxQuery({
-        queryKey: changesKey(),
-        queryFn: fetchChanges,
+        queryKey: computed(() => changesKey(toValue(view))),
+        queryFn: () => fetchChanges(toValue(view)),
         // The gate, not just the invalidations above: with staleTime at 0, opening the panel mid-land would scan on
         // mount alone — the very case this is about. Held data stays on screen under the strip that explains it, and
         // re-enabling is itself a refetch, since stale data fetches the moment a query is allowed to run again.
         enabled: computed(() => !landingNow.value),
         // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
-            commitPress() === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
+            commitPress(toValue(view)) === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : isShared(toValue(view)) ? false : 10_000,
     });
 
     // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
@@ -469,7 +493,7 @@ export function useChanges() {
     const outgoing = computed(() => outgoingWork(repos.value));
     // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
     // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
-    const committing = computed<readonly string[]>(() => [...new Set([...(commitPress()?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
+    const committing = computed<readonly string[]>(() => [...new Set([...(press.value?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
 
     return {
         repos,
@@ -477,7 +501,7 @@ export function useChanges() {
         count,
         committing,
         // This tab's commit while it runs, the press as pressed included.
-        press: computed(() => commitPress()),
+        press,
         stagedCount,
         outgoing,
         // A read is in flight: what the refresh control spins on. True for background refreshes too, so nothing that
@@ -495,17 +519,17 @@ export function useChanges() {
         landing: landingLine,
         error,
         refresh: query.refetch,
-        fileDiff,
-        commitRepos,
-        discardGroups,
-        abortOperation,
-        stageGroups,
-        swapChip,
-        fetchRepos,
-        syncAll,
-        actionBusy,
+        fileDiff: (repo: string, path: string, side: GitDiffSide) => fileDiff(repo, path, side, toValue(view)),
+        commitRepos: (groups: readonly RepoTarget[], message: string, stageFirst: boolean, face: PressFace) => commitRepos(groups, message, stageFirst, face, toValue(view)),
+        discardGroups: (groups: readonly RepoTarget[]) => discardGroups(groups, toValue(view)),
+        abortOperation: (repo: string) => abortOperation(repo, toValue(view)),
+        stageGroups: (groups: readonly RepoTarget[], staged: boolean) => stageGroups(groups, staged, toValue(view)),
+        swapChip: (clear: ChipMove, light: ChipMove) => swapChip(clear, light, toValue(view)),
+        fetchRepos: (repoIds: readonly string[]) => fetchRepos(repoIds, toValue(view)),
+        syncAll: (targets: readonly SyncTarget[]) => syncAll(targets, toValue(view)),
+        actionBusy: computed(() => actionState(toValue(view)).busy),
         // Keyed by repo id (the per-repo verbs) or COMMIT_SCOPE, the panel renders each one where it happened.
-        failures,
-        dismissFailure,
+        failures: computed(() => actionState(toValue(view)).failures),
+        dismissFailure: (scope: string) => dismissFailure(scope, toValue(view)),
     };
 }

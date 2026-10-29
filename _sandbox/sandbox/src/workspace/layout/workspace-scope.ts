@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+import { discoverRepos } from "./repo-discovery.js";
 import { access } from "node:fs/promises";
 import { type ArchivePath, archivePrefixOf, archiveRootOf } from "@intentic/sandbox-contract/formats/archives";
 import { ConversationIdSchema } from "@intentic/sandbox-contract/schemas/agent";
@@ -11,8 +13,7 @@ import { branchRegion, branchScopeOf, type BranchViews, branchViewRoot, type Rea
 // Resolves where a read really lands, for every file-serving route; downstream just takes the answer. Two questions in
 // one place: whose copy of the workspace it means (the shared tree, a conversation's checkout, or a branch the shared
 // tree is not on: branch-view.ts), and whether it reads through an archive into that archive's unpacked copy.
-// Reads only: no write route's schema carries a scope field, so the file API can't write into a checkout mid-turn, and
-// nothing is ever written back into an archive.
+// Writes use workspaceWriteRootFor to enforce repository ownership. Nothing is written back into an archive.
 
 export interface WorkspaceScopeDeps {
     // The shared /work tree: the answer when no conversation is named, and the fallback.
@@ -87,6 +88,24 @@ export const workspaceRootFor = async (deps: WorkspaceScopeDeps, scope: ReadScop
     return dir;
 };
 
+export const workspaceWriteRootFor = async (deps: WorkspaceScopeDeps, scope: ReadScope, relPath: string): Promise<string> => {
+    const branch = branchScopeOf(scope);
+    if (branch !== undefined && !(await branchRegion(deps.main, branch.repo)).owns(relPath)) {
+        throw new ORPCError("BAD_REQUEST", { message: "This path is outside the selected branch's repository." });
+    }
+    if (scope.agent !== undefined) {
+        const entry = deps.entry(scope.agent);
+        if (entry?.placement.kind === "worktree") {
+            const path = posix.normalize(relPath).replace(/^\.\//, "");
+            const owner = (await discoverRepos(deps.main)).filter((repo) => path === repo || path.startsWith(`${repo}/`)).toSorted((a, b) => b.length - a.length)[0] ?? "root";
+            if (!entry.placement.repos.some(({ repo }) => repo === owner)) {
+                throw new ORPCError("BAD_REQUEST", { message: "This path is outside the selected session's repositories." });
+            }
+        }
+    }
+    return workspaceRootFor(deps, scope);
+};
+
 // Whether a path names an archive FILE in this root. Only ever asked of a segment already named like an archive, so
 // an ordinary path costs no syscall.
 const archiveHere =
@@ -110,7 +129,7 @@ const asBadRequest = (failure: unknown): never => {
 export const insideArchive = (root: string, relPath: string): boolean => archiveSplit(root, relPath) !== undefined;
 
 /** `containedIn`, plus the redirect into an archive's unpacked copy. Every read route resolves through this. */
-export const containedForRead = async (root: string, relPath: string): Promise<string> => {
+const containedForRead = async (root: string, relPath: string): Promise<string> => {
     const split = archiveSplit(root, relPath);
     if (split === undefined) {
         return containedIn(root, relPath);

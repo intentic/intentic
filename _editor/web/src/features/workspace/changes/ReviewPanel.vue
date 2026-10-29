@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceView, scopeKey, scopeFields } from "../../../app/workspaceScope";
 import { DISCARDABLE_SIDES, discardOutcome, scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
 import { isScratch, type GitChange, type GitDiffSide, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract/schemas/git/git";
 import type { LandedMessage, LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
@@ -88,7 +89,7 @@ import { formatChord, isApplePlatform } from "../../../workbench/commands/keybin
 
 const t = useT();
 
-const changes = useChanges();
+const changes = useChanges(workspaceView);
 const words = useVocabulary();
 // The push, started here but owned above this panel, so leaving the view doesn't lose the run or its question.
 const pushFlow = usePushFlow();
@@ -385,14 +386,14 @@ const DISCARD_GAP = `max-md:ml-2`;
 // render.
 const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: OpenMode): void => {
     const tab = {
-        key: `working:${repo}:${side}`,
+        key: `working:${scopeKey(workspaceView.value)}:${repo}:${side}`,
         scope: repo,
         label: side === `staged` ? `${changeLabel(repo, change)} (staged)` : changeLabel(repo, change),
         status: change.status,
         path: change.path,
         additions: change.additions,
         deletions: change.deletions,
-        ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
+        ...diffRawUrls({ source: `working`, repo, side, view: scopeFields(workspaceView.value) }, change.path, change.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
     void changes.fileDiff(repo, change.path, side).then((body) => fillDiff({ ...tab, ...body }));

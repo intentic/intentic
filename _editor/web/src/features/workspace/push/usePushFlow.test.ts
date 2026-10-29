@@ -1,6 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
-import { computed, ref } from "vue";
+import { workspaceView, type ViewScope } from "../../../app/workspaceScope";
+import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
 import { refusalSummary } from "../../../models/workspace/push/refusalSummary";
 
@@ -27,8 +28,14 @@ jest.mock(`../../../models/changes/useChanges`, () => {
     // `syncAll` than the one under assertion.
     const actionBusy = ref(false);
     const failures = ref(new Map<string, { action: string; detail: string; run?: PushRun }>());
-    const syncAll = jest.fn(async () => {});
-    return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
+    let selected: MaybeRefOrGetter<ViewScope> = {};
+    const sentViews: ViewScope[] = [];
+    const syncAll = jest.fn(async () => { sentViews.push(toValue(selected)); });
+    return { COMMIT_SCOPE: `commit`, sentViews, useChanges: (view?: MaybeRefOrGetter<ViewScope>) => {
+        if (view !== undefined) { selected = view; }
+        return { actionBusy, failures, syncAll };
+    } };
+
 });
 
 // Push runs live behind useChanges (mocked above); this seam only tracks the terminal a refused push ran in,
@@ -53,6 +60,7 @@ const PUSH = [{ repo: `intentic`, pull: false, push: true }];
 
 const load = async () => {
     jest.clearAllMocks();
+    workspaceView.value = {};
     // Seams before the flow: each is asked for its state and put back to the start before the flow captures it.
     const changes = await import(`../../../models/changes/useChanges`);
     const pushRuns = (await import(`../../../models/workspace/push/usePushRun`)) as unknown as {
@@ -65,11 +73,19 @@ const load = async () => {
     live.quietTree();
     const module = await freshImport<typeof import("./usePushFlow")>("./usePushFlow", import.meta.url);
     // The flow captures useChanges on its first call; singletons carry over from the last case.
-    const git = changes.useChanges();
+    // SAFETY: the mock above exports this recording beside the real module's names.
+    const { sentViews } = changes as typeof changes & { sentViews: ViewScope[] };
+    sentViews.length = 0;
+    // SAFETY: the mock above owns writable refs; useChanges exposes computed refs in production.
+    const git = changes.useChanges() as Omit<ReturnType<typeof changes.useChanges>, `actionBusy` | `failures`> & {
+        actionBusy: Ref<boolean>;
+        failures: Ref<ReadonlyMap<string, { action: string; detail: string; run?: PushRun }>>;
+    };
     git.actionBusy.value = false;
     git.failures.value = new Map();
     return {
         git,
+        sentViews,
         writeToTree: live.writeToTree,
         pushTerminal: pushRuns.pushTerminal,
         flow: module.usePushFlow(),
@@ -358,4 +374,28 @@ test(`a push that hit its ceiling is named as timed out, in the verb the user cl
         command: `git push origin main`,
         detail: `never finished: it hit its time limit and was killed.`,
     });
+});
+
+test(`a queued push retains its checkout when the Workspace changes`, async () => {
+    const { flow, git, sentViews } = await load();
+    const view = { repo: `intentic`, branch: `feature` };
+    workspaceView.value = view;
+    git.actionBusy.value = true;
+    flow.askSync(`Push`, `branch commits`, PUSH);
+    workspaceView.value = {};
+    git.actionBusy.value = false;
+    await flush();
+    expect(sentViews).toEqual([view]);
+});
+
+test(`a refused push retries in its original checkout`, async () => {
+    const loaded = await load();
+    const view = { agent: `review-copy` };
+    workspaceView.value = view;
+    await pushRefused(loaded);
+    workspaceView.value = { repo: `intentic`, branch: `another` };
+    loaded.git.failures.value = new Map();
+    loaded.flow.retry();
+    await flush();
+    expect(loaded.sentViews).toEqual([view, view]);
 });

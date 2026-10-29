@@ -245,7 +245,7 @@ export const workspaceContract = {
                 "Removes one entry and everything under it. It goes to the trash rather than being erased, and the answer carries the id that brings it back through the restore call for a day. The path travels in the body rather than the address, the same as every other write in this group.",
         })
         .meta({ floor: "writer" })
-        .input(WorkspaceFileQuerySchema)
+        .input(WorkspaceFileQuerySchema.extend({ view: WorkspaceScopeSchema.optional() }))
         .output(WorkspaceDeletedSchema),
     restore: procedure
         .route({
@@ -287,7 +287,7 @@ export const workspaceContract = {
                 "Unpacks a zip or tar already in the workspace into a new folder beside it, named after the archive. An archive that is one folder of its own name lands as that folder rather than as it twice, and a .gz, .bz2, .xz or .zst holding a single file lands as that file. Nothing is ever written over: the answer says where it landed. Formats with no tool here, such as .7z and .rar, are refused.",
         })
         .meta({ floor: "writer" })
-        .input(WorkspaceFileQuerySchema)
+        .input(WorkspaceFileQuerySchema.extend({ view: WorkspaceScopeSchema.optional() }))
         .output(WorkspaceExtractSchema),
     // An imported project lacks node_modules/.venv; until this says ready, its type checks and tests can mislead.
     setup: procedure

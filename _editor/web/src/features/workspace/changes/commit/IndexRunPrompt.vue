@@ -3,13 +3,14 @@ import type { IndexRunDir } from "@intentic/sandbox-contract/schemas/git/index-r
 import { ConfirmDialog, formatBytes, formatCount, Icon } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { sameScope, SHARED_SCOPE, workspaceView } from "../../../../app/workspaceScope";
 import { holdQuestions } from "../../../../models/changes/indexRuns";
 
 // The guardrail's question before a stage or commit run (models/changes/indexRuns.ts) that would take thousands of
 // files, naming the folders that make it big, asked from whichever Changes panel is open. Where a run is while it goes
 // is the bar's own line (runLine.ts, drawn by IndexRunLine.vue), never a second one here.
 
-const question = computed(() => holdQuestions.value[0]);
+const question = computed(() => holdQuestions.value.find((held) => sameScope(held.view ?? SHARED_SCOPE, workspaceView.value)));
 const files = computed(() => question.value?.hold.files ?? 0);
 const header = computed(() =>
     question.value?.op === `commit`

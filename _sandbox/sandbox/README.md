@@ -693,14 +693,13 @@ flowchart LR
   (2026-10-26) Explicitly restricted child environments keep their boundary; adding daemon variables to them was
   rejected. Browser calls hold their sessions until completion or failure; Codex stream teardown and aborted Claude
   hooks also release their holds, so an interrupted tool does not retain a browser indefinitely.
-- The Workspace's branch Changes view reads session commits unique to that branch through `git.branchLandings`
-  (`git/review/branch-landings.ts`). Landings are identified by their `Conversation-Id` trailer on the branch's
-  first-parent history, excluding commits already reachable from the main line. Each landing opens the existing
-  commit-diff routes, so its before and after remain fixed after later lands or session cleanup. The read keeps the
-  caller's repository fence and paginates by commit, rejecting a cursor no longer on the branch after a rewrite.
-- A conversation started from a branch defaults to that repository's folder. Its commit refuses changes in any
-  repository without a branch destination before writing anything; those changes stay in its worktree. Other
-  repositories are available for context, and branch sessions never land or version work in the shared checkout.
+- The Workspace's Git routes accept an optional `view` naming a branch or session worktree. Scans and mutations
+  resolve that checkout, including its own index, runs and push state. Paths outside the selected composition refuse;
+  shared `/work` stays on its main line. Branch checkout refresh and idle cleanup preserve uncommitted work.
+  Destructive Git actions checkpoint the selected checkout separately from shared workspace history.
+- A conversation started from a branch defaults to that repository's folder. Its landing refuses changes in any
+  repository without a branch destination before writing anything; those changes stay in its worktree. Work lands
+  uncommitted in the branch checkout, where the owner stages and commits it through Changes.
 - Review Git evidence is reused for matching checkout generations and placement/landing metadata, for at most ten
   seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh. Chore
   evidence has the same ten-second generation bound, and each fresh pass shares one workspace-manifest reading.

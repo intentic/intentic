@@ -10,6 +10,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
+import { workspaceView } from "../../../app/workspaceScope";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
@@ -45,7 +46,7 @@ const indexRunState = jest.fn(async ({ repo }: { repo: string }): Promise<IndexR
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, stage, unstage, discard, indexRunStart, indexRunState } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, viewChanges: changes, stage, unstage, discard, indexRunStart, indexRunState } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 
@@ -87,6 +88,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
     queryClient.clear();
     held.length = 0;
+    workspaceView.value = {};
     registry.value = [];
     stage.mockClear();
     unstage.mockClear();
@@ -275,7 +277,7 @@ it(`stages a session's work when its chip is lit, and unstages it when the chip 
 
     buttonNamed(el, `Fix sandbox turn cleanup`)?.click();
     await settle();
-    expect(stage).toHaveBeenCalledWith({ repo: `root`, chip: `a1` });
+    expect(stage).toHaveBeenCalledWith({ repo: `root`, chip: `a1` }, { context: { gitView: {} } });
     expect(unstage).not.toHaveBeenCalled();
     // Under a lit chip Commit records the index, never a stage-first over rows the filter hides. Until the rescan says
     // what the chip staged, the press keeps the face it had (its label changing twice in a second moved the bar) but
@@ -291,7 +293,7 @@ it(`stages a session's work when its chip is lit, and unstages it when the chip 
     await settle();
     // Cleared by name, not by scope: the daemon writes back what that chip replaced and nothing else, so a file the
     // owner staged by hand before lighting it stays staged (chip-staging.integration.test.ts asserts git's side).
-    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `a1` });
+    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `a1` }, { context: { gitView: {} } });
     expect(stage).toHaveBeenCalledTimes(1);
 });
 
@@ -321,11 +323,11 @@ it(`moving from one chip to another clears the first by name before lighting the
     });
     chip(`You`)?.click();
     await settle();
-    expect(stage).toHaveBeenLastCalledWith({ repo: `root`, chip: `yours` });
+    expect(stage).toHaveBeenLastCalledWith({ repo: `root`, chip: `yours` }, { context: { gitView: {} } });
     chip(TITLE)?.click();
     await settle();
-    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `yours` });
-    expect(stage).toHaveBeenLastCalledWith({ repo: `root`, chip: `a1` });
+    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `yours` }, { context: { gitView: {} } });
+    expect(stage).toHaveBeenLastCalledWith({ repo: `root`, chip: `a1` }, { context: { gitView: {} } });
     expect(unstage.mock.invocationCallOrder[0]).toBeLessThan(stage.mock.invocationCallOrder[1]!);
     // No scope that would sweep the owner's hand-staged mine.ts out with the chip's own staging.
     expect(unstage).not.toHaveBeenCalledWith(expect.objectContaining({ scope: expect.anything() }));
@@ -373,7 +375,7 @@ it(`a repo discard under an agent's chip names every file its scope takes, a ren
         .find((button) => button.textContent?.trim() === `Discard`)
         ?.click();
     await settle();
-    expect(discard).toHaveBeenCalledWith({ repo: `root`, scope: { origin: `a1` } });
+    expect(discard).toHaveBeenCalledWith({ repo: `root`, scope: { origin: `a1` } }, { context: { gitView: {} } });
 });
 
 // The chip row used to be drawn only while an agent had files, so a lit "You" outlived its own chip once the last
@@ -404,7 +406,7 @@ it(`a lit You chip stays on screen after the last agent's work leaves, so cleari
     expect(buttonNamed(el, `Commit all`)).toBeUndefined();
     chip(`You`)?.click();
     await settle();
-    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `yours` });
+    expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `yours` }, { context: { gitView: {} } });
     // The press says what it records once the rescan after the unstage does.
     await answer({ repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [], unstaged: [{ path: `mine.ts`, status: `modified` }] }] });
     expect(buttonNamed(el, `Commit all`)).toBeInstanceOf(HTMLButtonElement);
@@ -583,4 +585,18 @@ it(`files a commit as a ledger run, refuses a second while it runs, and puts it 
     await settle();
     expect(operationAt(COMMIT_RUN)).toBeUndefined();
     expect(useChanges().press.value).toBeUndefined();
+});
+
+
+test(`the normal Changes panel stages and commits in its selected branch`, async () => {
+    const view = { repo: `app`, branch: `feature` } as const;
+    workspaceView.value = view;
+    const el = await mount();
+    await answer({ repos: [{ repo: `app`, branch: `feature`, conflicted: [], staged: [], unstaged: [{ path: `a.ts`, status: `modified` }] }] });
+    commitMessage.value = `feat: branch work`;
+    await settle();
+    buttonNamed(el, `Commit all`)?.click();
+    await settle();
+    expect(indexRunStart).toHaveBeenCalledWith({ repo: `app`, op: `commit`, message: `feat: branch work`, target: {}, view });
+    expect(useChanges().failures.value.size).toBe(0);
 });

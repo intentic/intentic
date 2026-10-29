@@ -13,19 +13,9 @@ import { commonDirOf, gitDirOf } from "../../../store/git/git-dir.js";
 import { isValidRepoId } from "../../../workspace/layout/repo-discovery.js";
 import type { AgentWorktrees } from "../worktrees.js";
 
-// A CHECKOUT THE DAEMON KEEPS OF A BRANCH (2026-10-29). The shared checkout stays on its main line (git/main-line-lock.ts),
-// so another branch is read from a checkout of its own: what the Workspace shows a person who picked that branch
-// (workspace/layout/workspace-scope.ts), and what a conversation started from it syncs onto and commits its land into
-// (conversations/land/branch/branch-land.ts). One per repository and branch, at <history>/branches/<repo>/<branch>/, laid out
-// like /work: the workspace's own checkout is that folder, a nested repository's sits at <that folder>/<repo>, so a
-// path resolves against it exactly as against /work.
-//
-// It never holds uncommitted work: nobody edits it, a land commits what it writes before it lets go of the repo's lock,
-// and `refresh` brings it back to its branch's tip whenever something else moved the branch (a fetch, a push from
-// another copy). Attached to the branch, never detached, so a land's commit moves the branch itself. Taken under the
-// repo's own lock (worktrees.ts withRepoLock), since adding, resetting and removing one touch the repository's worktree
-// admin, as a conversation's checkout does. One no live conversation lands onto and nobody looked at for a week is
-// removed by the daily sweep; the branch itself is never touched by that.
+// A branch checkout lives beside the shared workspace, laid out like /work. Branch sessions land uncommitted work
+// here, and the owner edits, stages and commits it through Workspace. Refresh follows external ref moves only when
+// Git can preserve local edits. The idle sweep removes clean, unused checkouts; dirty checkouts keep their work.
 
 /** How long a checkout nobody lands onto stays after it was last looked at. */
 export const BRANCH_CHECKOUT_IDLE_MS = 7 * DAY_MS;
@@ -43,7 +33,7 @@ export interface BranchCheckouts {
      * checkout when it is not there yet; answers its folder. ORPCError with a plain reason when refused.
      */
     readonly ensure: (repo: string, branch: string) => Promise<string>;
-    /** `ensure`, and the checkout brought to the branch's tip with nothing uncommitted; answers its folder. */
+    /** `ensure`, following the branch's tip while preserving local work; answers its folder. */
     readonly refresh: (repo: string, branch: string) => Promise<string>;
     /** Removes the checkout, never the branch; answers whether one stood. */
     readonly release: (repo: string, branch: string) => Promise<boolean>;
@@ -152,7 +142,7 @@ const ensureHeld = async (held: Held, repo: string, branch: string): Promise<str
     held.settledAt.delete(keyOf(repo, branch));
     if (await pathExists(join(dir, ".git"))) {
         // Standing, but no longer on its branch: it is the daemon's own, so it is simply put back.
-        await git(dir, ["checkout", "-q", "-f", branch]);
+        await git(dir, ["checkout", "-q", branch]);
         return dir;
     }
     // A folder a crash left without its `.git`, and an admin entry for a checkout no longer there, both go first.
@@ -171,8 +161,7 @@ const ensureHeld = async (held: Held, repo: string, branch: string): Promise<str
     return dir;
 };
 
-// Under the repo's lock: the checkout at its branch's tip with nothing else in it. A status that reads clean only
-// records where it stands; anything else is put back, since nothing in it is anyone's work.
+// Follow an external ref move with Git's two-tree merge, which refuses to overwrite overlapping local edits.
 const settleHeld = async (held: Held, repo: string, branch: string): Promise<string> => {
     const { git } = held;
     const dir = await ensureHeld(held, repo, branch);
@@ -181,9 +170,9 @@ const settleHeld = async (held: Held, repo: string, branch: string): Promise<str
     if (held.settledAt.get(key) === tip) {
         return dir;
     }
-    if ((await git(dir, ["status", "--porcelain", "-uall"])).stdout.trim() !== "") {
-        await git(dir, ["reset", "-q", "--hard", "HEAD"]);
-        await git(dir, ["clean", "-q", "-fd"]);
+    const previous = held.settledAt.get(key);
+    if (previous !== undefined && previous !== tip) {
+        await git(dir, ["read-tree", "-m", "-u", previous, tip]);
     }
     held.settledAt.set(key, tip);
     return dir;
@@ -197,6 +186,10 @@ const releaseHeld = async (held: Held, repo: string, branch: string): Promise<bo
         return false;
     }
     const main = held.mainDir(repo);
+    const dir = held.checkoutDir(repo, branch);
+    if (await pathExists(join(dir, ".git")) && (await git(dir, ["status", "--porcelain", "-uall"])).stdout.trim() !== "") {
+        return false;
+    }
     const repository = await pathExists(join(main, ".git"));
     if (repository) {
         // allow(silent-catch): a checkout git no longer knows is removed by the `rm` below, its admin entry by prune.

@@ -104,12 +104,12 @@ const lossy = ref(false);
 // Bumped by Reload to remount the editable surface (uncontrolled, seeded via :key) from disk text.
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
-const edit = useEditBuffers();
+const viewScope = useViewScope();
+const edit = useEditBuffers(viewScope);
 const { saveText, run, canWriteAt, entry: entryAt } = useWorkspaceTree();
 // Whether the member may change this file (their tier and edit fence): outside it the file opens read-only.
-const memberWrites = computed(() => canWriteAt(path));
+const memberWrites = computed(() => canWriteAt(path, viewScope.value));
 // Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel); keyed, undefined on the shared tree.
-const viewScope = useViewScope();
 const viewAgent = computed(() => (isShared(viewScope.value) ? undefined : scopeKey(viewScope.value)));
 // Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
@@ -148,7 +148,7 @@ const pathViewerProps = (target: string, agent: string | undefined): PathViewerP
     if (agent !== undefined) {
         props.agent = agent;
     }
-    if (readOnly || !writableHere(target) || !canWriteAt(target)) {
+    if (readOnly || !writableHere(target) || !canWriteAt(target, viewScope.value)) {
         props.readOnly = true;
     }
     return props;
@@ -180,6 +180,7 @@ let reading: AbortController | undefined;
 const firstWindow = ref<WorkspaceFileWindow | undefined>(undefined);
 // True when this file came from the shared tree despite a scoped view; text reads only carry this fact.
 const fromShared = ref(false);
+const sharedFallback = computed(() => !isShared(viewScope.value) && fromShared.value);
 
 // A missing open tab is exceptional, handled once here instead of at every read call site.
 class FileGone extends Error {}
@@ -427,9 +428,8 @@ watch(
                 // Settles the tokenizer with the real size now known; set before `text` so CodeView mounts coloured.
                 lang.value = highlightLangFor(currentPath, window.size, content);
                 text.value = content;
-                // Skipped in scope, since a path-keyed buffer would mislabel the shared file, and in a look, which never
-                // edits: a baseline written from here could move the one an unsaved edit in the Workspace is measured from.
-                if (viewAgent.value === undefined && !readOnly) {
+                // Read-only surfaces and shared fallback files cannot change this checkout's edit baseline.
+                if (!readOnly && !sharedFallback.value) {
                     edit.setBaseline(currentPath, content);
                 }
             }, fail);
@@ -536,14 +536,12 @@ const { mobile } = useDevice();
 // Whether this surface can put a caret in the file, scope aside; split from `canEdit` since one decides the
 // editable state, the other whether its absence needs explaining.
 const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
-// Off in a scope: the daemon can't write into a checkout at all, so a Save here would silently hit the shared
-// file of the same path, possibly racing the agent's own writes to it. Off for a lossy read, whose save would write the
-// replacement characters back, and for any file but a document window's own.
+// A shared fallback, an archive member or a lossy read cannot be saved into this checkout.
 const canEdit = computed(
     () =>
         !readOnly &&
         memberWrites.value &&
-        viewAgent.value === undefined &&
+        !sharedFallback.value &&
         !inArchive.value &&
         editableKind.value &&
         !lossy.value &&
@@ -552,7 +550,7 @@ const canEdit = computed(
 // Reason lives here, where a reader would look for edit capability (readOnlyTip.ts names the four causes); any one
 // disables Edit. A lossy read says why in a line of its own over the text instead.
 const scopedReadOnly = computed(
-    () => !mobile.value && editableKind.value && (!memberWrites.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
+    () => !mobile.value && editableKind.value && (!memberWrites.value || sharedFallback.value || inArchive.value || !writableHere(path)),
 );
 // A look at a file this reader could edit in the Workspace: says where the caret is, rather than leaving it missing.
 const lookReadOnly = computed(() => readOnly && !mobile.value && !scopedReadOnly.value && editableKind.value && !lossy.value);
@@ -607,29 +605,32 @@ const openLinked = (target: string): void => {
 };
 // Offered only while reading code with comments present.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !previewing.value);
-// In a scope the file shown is disk, not a buffer: a dirty dot here would misattribute someone else's edit to
-// this agent's copy.
-const dirtyThis = computed(() => !readOnly && viewAgent.value === undefined && edit.isDirty(path));
-const editorSeed = computed(() => (!readOnly && viewAgent.value === undefined ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
+// Dirty state belongs to the file in this checkout.
+const dirtyThis = computed(() => !readOnly && !sharedFallback.value && edit.isDirty(path));
+const editorSeed = computed(() => (!readOnly && !sharedFallback.value ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
 // markSaved runs only after a successful write. Guarded by the baseline's hash: the daemon 409s on a
 // since-changed file instead of clobbering it, raising the same stale-on-disk banner.
 const onEditorSave = (value: string): void =>
     void run(async () => {
-        const base = edit.baselineOf(path);
+        const view = viewScope.value;
+        const savedEdit = useEditBuffers(view);
+        const base = savedEdit.baselineOf(path);
         try {
-            await saveText(path, value, base === undefined ? undefined : await sha256Hex(base));
+            await saveText(path, value, base === undefined ? undefined : await sha256Hex(base), view);
         } catch (err) {
-            if (err instanceof SandboxHttpError && err.status === 409) {
+            if (err instanceof SandboxHttpError && err.status === 409 && scopeKey(viewScope.value) === scopeKey(view)) {
                 staleOnDisk.value = true;
                 return;
             }
             throw err;
         }
-        edit.markSaved(path, value);
+        savedEdit.markSaved(path, value);
         // Read view shows `text`, not the buffer: adopt it too.
-        text.value = value;
+        if (scopeKey(viewScope.value) === scopeKey(view)) {
+            text.value = value;
+        }
     }, t(`workspace.fileViewer.saveFailed`));
 </script>
 

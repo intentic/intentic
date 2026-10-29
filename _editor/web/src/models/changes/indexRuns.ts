@@ -1,3 +1,4 @@
+import { isShared, scopeKey, SHARED_SCOPE, type ViewScope } from "../../app/workspaceScope";
 import { sandboxRef } from "@intentic/extension-api";
 import { followCommandRun } from "@intentic/sandbox-contract/policy/command-run";
 import type { IndexRun, IndexRunHold, IndexRunOp, IndexRunStart } from "@intentic/sandbox-contract/schemas/git/index-run";
@@ -20,6 +21,7 @@ export const SLOW_GIT_OP_MS = 30_000;
 // What the panel draws under the commit box while a run goes (IndexRunPrompt.vue): the run as last read, and whether
 // the last read failed, so "still trying" is said rather than a frozen phase.
 interface FollowedRun {
+    readonly view?: ViewScope;
     readonly run: IndexRun;
     readonly lostContact: boolean;
     // When this tab started following it, on the tab's own clock (the run's `startedAt` is the daemon's), so the prompt
@@ -32,6 +34,7 @@ export const followedRuns = sandboxRef<ReadonlyMap<string, FollowedRun>>(() => n
 interface HoldQuestion {
     // Matched by id, never by identity: the list is a ref, so what it hands back is a reactive proxy of what went in.
     readonly id: number;
+    readonly view?: ViewScope;
     readonly repo: string;
     readonly op: IndexRunOp;
     readonly hold: IndexRunHold;
@@ -39,24 +42,28 @@ interface HoldQuestion {
 }
 export const holdQuestions = sandboxRef<readonly HoldQuestion[]>(() => []);
 
-const show = (repo: string, followed: FollowedRun | undefined): void => {
+const runKey = (repo: string, view: ViewScope = SHARED_SCOPE): string => isShared(view) ? repo : `${scopeKey(view)}\0${repo}`;
+
+const show = (repo: string, followed: FollowedRun | undefined, view?: ViewScope): void => {
+    const key = runKey(repo, view);
     const next = new Map(followedRuns.value);
     if (followed === undefined) {
-        next.delete(repo);
+        next.delete(key);
     } else {
-        next.set(repo, followed);
+        next.set(key, { ...followed, view });
     }
     followedRuns.value = next;
 };
 
 let asked = 0;
-const ask = (repo: string, op: IndexRunOp, hold: IndexRunHold): Promise<boolean> =>
+const ask = (repo: string, op: IndexRunOp, hold: IndexRunHold, view?: ViewScope): Promise<boolean> =>
     new Promise((resolve) => {
         asked += 1;
         const id = asked;
         const question: HoldQuestion = {
             id,
             repo,
+            view,
             op,
             hold,
             answer: (go) => {
@@ -75,17 +82,24 @@ const reportIfSlow = (run: IndexRun): void => {
     }
 };
 
+type RepoInView = Pick<IndexRunStart, `repo` | `view`>;
+const repoInView = (repo: string, view?: ViewScope) => {
+    const input: RepoInView = { repo };
+    if (view !== undefined && !isShared(view)) { input.view = view; }
+    return input;
+};
+
 // One start, followed to its verdict. A state naming another run means this one is gone from the daemon (a restart
 // forgets runs), which is said rather than read as that other run's verdict.
-const follow = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
-    const started = await sandboxRpc.git.indexRunStart({ repo, ...request });
+const follow = async (repo: string, request: Omit<IndexRunStart, `repo`>, view?: ViewScope): Promise<IndexRun> => {
+    const started = await sandboxRpc.git.indexRunStart({ ...repoInView(repo, view), ...request });
     const since = Date.now();
-    show(repo, { run: started, lostContact: false, since });
+    show(repo, { run: started, lostContact: false, since }, view);
     try {
-        const settled = await followCommandRun(() => sandboxRpc.git.indexRunState({ repo }), {
+        const settled = await followCommandRun(() => sandboxRpc.git.indexRunState(repoInView(repo, view)), {
             intervalMs: POLL_MS,
-            onState: (run) => show(repo, { run, lostContact: false, since }),
-            onError: () => show(repo, { run: followedRuns.value.get(repo)?.run ?? started, lostContact: true, since }),
+            onState: (run) => show(repo, { run, lostContact: false, since }, view),
+            onError: () => show(repo, { run: followedRuns.value.get(runKey(repo, view))?.run ?? started, lostContact: true, since }, view),
         });
         if (settled === undefined || settled.id !== started.id) {
             throw new Error(t(`workspace.indexRuns.lost`, { repo }));
@@ -93,19 +107,19 @@ const follow = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promi
         reportIfSlow(settled);
         return settled;
     } finally {
-        show(repo, undefined);
+        show(repo, undefined, view);
     }
 };
 
 // A daemon from before the runs (a self-hosted sandbox updates on its own schedule) has only the one-request routes,
 // which is how every stage and commit went before them: answered as a passed run, and failing as they always did.
-const oneShot = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
+const oneShot = async (repo: string, request: Omit<IndexRunStart, `repo`>, view?: ViewScope): Promise<IndexRun> => {
     const ran = { status: `passed`, id: ``, repo, op: request.op, output: `` } as const;
     if (request.op === `stage`) {
-        await sandboxRpc.git.stage({ repo, ...request.target });
+        await sandboxRpc.git.stage({ repo, ...request.target, view });
         return { ...ran, command: `git add` };
     }
-    const body = { repo, message: request.message ?? `` };
+    const body = { repo, view, message: request.message ?? `` };
     const result = await sandboxRpc.git.commit(request.target === undefined ? body : { ...body, stage: request.target });
     return { ...ran, command: `git commit`, result };
 };
@@ -113,16 +127,16 @@ const oneShot = async (repo: string, request: Omit<IndexRunStart, `repo`>): Prom
 // Starts a stage or commit and follows it; a guardrail hold asks first and, on a yes, starts again past it. Resolves
 // with the passed run, and throws a sentence for everything else: refused by git, stopped, or declined at the prompt,
 // so the panel files each where it files any failure, and the typed commit message stays in its box.
-export const runIndexJob = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
+export const runIndexJob = async (repo: string, request: Omit<IndexRunStart, `repo`>, view?: ViewScope): Promise<IndexRun> => {
     if (!supportsRoute(`git.indexRunStart`)) {
-        return oneShot(repo, request);
+        return oneShot(repo, request, view);
     }
-    let settled = await follow(repo, request);
+    let settled = await follow(repo, request, view);
     if (settled.held !== undefined) {
-        if (!(await ask(repo, request.op, settled.held))) {
+        if (!(await ask(repo, request.op, settled.held, view))) {
             throw new Error(t(`workspace.indexRuns.declined`, { count: formatCount(settled.held.files) }, settled.held.files));
         }
-        settled = await follow(repo, { ...request, confirmed: true });
+        settled = await follow(repo, { ...request, confirmed: true }, view);
     }
     if (settled.status === `cancelled`) {
         throw new Error(request.op === `stage` ? t(`workspace.indexRuns.stageStopped`) : t(`workspace.indexRuns.commitStopped`));
@@ -134,6 +148,6 @@ export const runIndexJob = async (repo: string, request: Omit<IndexRunStart, `re
 };
 
 // The Stop beside a running run; the daemon kills git and the follow above settles it as stopped.
-export const cancelIndexRun = async (repo: string): Promise<void> => {
-    await sandboxRpc.git.indexRunCancel({ repo });
+export const cancelIndexRun = async (repo: string, view?: ViewScope): Promise<void> => {
+    await sandboxRpc.git.indexRunCancel(repoInView(repo, view));
 };

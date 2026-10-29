@@ -1,3 +1,4 @@
+import { gitView, viewKey } from "./gitView";
 import type { GitOperation } from "@intentic/sandbox-contract/schemas/git/git";
 import { refuse } from "@intentic/contract-serve";
 import { deskSeed } from "../../fixture/git/deskHistory";
@@ -290,7 +291,8 @@ export const afterBuild: ((repo: Repo) => void)[] = [];
 
 /** The repo's graph, built on first ask. An id the workspace has no repo for is the daemon's NOT_FOUND. */
 export const graphOf = (id: string): Repo => {
-    const known = graphs.get(id);
+    const key = `${viewKey()}\0${id}`;
+    const known = graphs.get(key);
     if (known !== undefined) {
         return known;
     }
@@ -299,7 +301,9 @@ export const graphOf = (id: string): Repo => {
     }
     const seed = seedOf(id);
     const built = build(id, seed);
-    graphs.set(id, built);
+    const view = gitView();
+    if (view?.branch !== undefined && built.branches.has(view.branch)) { built.head = { branch: view.branch, detached: `` }; }
+    graphs.set(key, built);
     for (const hook of afterBuild) {
         hook(built);
     }

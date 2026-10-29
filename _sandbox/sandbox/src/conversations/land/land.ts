@@ -21,7 +21,7 @@ import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { assertLandable } from "./landable.js";
-import { type BranchLines, type BranchOnto, assertBranchDestination, branchOnto, lineDirOf, NO_BRANCH_LINES, settleOnBranch } from "./branch/branch-land.js";
+import { type BranchLines, type BranchOnto, assertBranchDestination, branchOnto, lineDirOf, NO_BRANCH_LINES } from "./branch/branch-land.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
@@ -505,7 +505,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
             ? { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff }
             : { plan: { next: composed }, changed: false, diff };
     }
-    const target = { main, repo, base, tip, from, onto: branchOnto(run.lines.get(repo), run.entry) } satisfies RepoLandTarget;
+    const target = { main, repo, base, tip, from, onto: branchOnto(run.lines.get(repo)) } satisfies RepoLandTarget;
     const patchPath = join(run.patchDir, `${repo.replaceAll("/", "_")}.patch`);
     if ((await writePatch(main, patchPath, [from, tip, ...UNDERIVED], git)) === 0) {
         // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
@@ -533,10 +533,6 @@ const landWrite = async (
     if (unwritten.length > 0) {
         const blocked = unwritten.map((path) => ({ path, reason: "workspace" as const }));
         return { conflict: await conflictOf(write.main, write.repo, { blocked, clean: [] }, git) };
-    }
-    const onBranch = write.onto === undefined ? undefined : await settleOnBranch(write.main, write.repo, write.kind === "merge" ? write.merge.conflicted : [], write.onto, git);
-    if (onBranch !== undefined) {
-        return { conflict: onBranch };
     }
     const landed = await advancedRepo(write, git);
     return write.kind === "merge" && write.merge.conflicted.length > 0 ? { landed, resolving: [...write.merge.conflicted] } : { landed };

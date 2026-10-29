@@ -2,11 +2,12 @@ import { join } from "node:path";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract/schemas/diff";
 import { gitBytes } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
+import { gitViewRepoDir } from "../review/git-view.js";
 import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
 import { MAX_RAW_BYTES } from "../../workspace/files/workspace-files-download.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 
-export type DiffLocatorDeps = Pick<Services, "files" | "workspace" | "agents" | "agentWorktrees" | "history">;
+export type DiffLocatorDeps = Pick<Services, "files" | "workspace" | "agents" | "agentWorktrees" | "history" | "branchCheckouts">;
 
 // Where one side of a named diff lives, and its bytes: the one resolver behind every route that answers a diff with
 // something other than its text (bytes on /diff/raw, derived text on /diff/derived). Each source mirrors the pairing
@@ -63,6 +64,8 @@ export interface DiffLocator {
     readonly read: (located: BlobLocation) => Promise<Buffer>;
 }
 
+const checkoutRoot = (dir: string, repo: string): string => repo === "root" ? dir : join(dir, ...repo.split("/").map(() => ".."));
+
 export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
     // The worktree side, opened the way /workspace/raw opens a file and read whole, since the other side is a whole
     // blob; a deleted file 404s honestly.
@@ -91,12 +94,12 @@ export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
 
     // Bars a path from leaving its repo or reaching the control plane, with the same review carve-out as git.routes'
     // guardDiffPath: a tracked control-plane entry the JSON diff shows must not 404 as a picture.
-    const guardPath = (dir: string, path: string): string => {
+    const guardPath = (dir: string, path: string, root = services.workspace.root): string => {
         const target = resolveWithin(dir, path);
         if (target === undefined) {
             throw new DiffLocateError(400, "invalid path");
         }
-        if (isControlPlanePath(services.workspace.root, target) && !isReviewableStatePath(services.workspace.root, target)) {
+        if (isControlPlanePath(root, target) && !isReviewableStatePath(root, target)) {
             throw new DiffLocateError(404, "not found");
         }
         return target;
@@ -104,9 +107,9 @@ export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
 
     // Uncommitted work (the Changes panel); mirrors stagedFileDiff/unstagedFileDiff/conflictedFileDiff's pairs exactly.
     // `:0:` is the index at stage 0; a conflict has none, so it reads HEAD instead.
-    const workingLocation = (query: Extract<DiffSourceQuery, { source: "working" }>, which: Which): BlobLocation => {
-        const dir = repoDir(query.repo);
-        const file = guardPath(dir, query.path);
+    const workingLocation = async (query: Extract<DiffSourceQuery, { source: "working" }>, which: Which): Promise<BlobLocation> => {
+        const dir = query.view === undefined ? repoDir(query.repo) : await gitViewRepoDir(services, query.view, query.repo);
+        const file = guardPath(dir, query.path, query.view === undefined ? services.workspace.root : checkoutRoot(dir, query.repo));
         if (query.side === "staged") {
             return { dir, spec: which === "before" ? `HEAD:${query.path}` : `:0:${query.path}` };
         }

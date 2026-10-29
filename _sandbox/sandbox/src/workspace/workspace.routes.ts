@@ -1,3 +1,5 @@
+import type { WorkspaceScope } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { isInside } from "@intentic/base/contained";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -33,7 +35,7 @@ import { moveTargetTaken } from "./files/workspace-files.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { workspaceReads } from "./workspace-reads.js";
-import { containedForRead, containedIn, insideArchive, refuseKeptFolder, workspaceRootFor } from "./layout/workspace-scope.js";
+import { containedIn, insideArchive, refuseKeptFolder, workspaceRootFor, workspaceWriteRootFor, scopedTarget } from "./layout/workspace-scope.js";
 import { scopedChildren, scopedTree } from "./layout/branch-listing.js";
 import {
     fencedChildren,
@@ -79,14 +81,16 @@ export const createWorkspaceRoutes = (services: Services) => {
     const i = implement(workspaceContract).$context<OrpcContext>();
     // Resolves a write target inside the shared tree; no write route can ever target a conversation's checkout, and an
     // archive's contents are read-only: nothing here repacks a zip.
-    const contained = async (context: OrpcContext, relPath: string): Promise<string> => {
-        if (insideArchive(services.workspace.root, relPath)) {
+    const contained = async (context: OrpcContext, relPath: string, view: WorkspaceScope = {}): Promise<string> => {
+        refuseUnseenAgent(context, view.agent);
+        const root = await workspaceWriteRootFor(services.workspaceScope, view, relPath);
+        if (insideArchive(root, relPath)) {
             throw new ORPCError("BAD_REQUEST", { message: "an archive's contents are read-only; extract it to change them" });
         }
         // The writer tier's whole boundary: the floor (sandbox-contract protocol/member-reach.ts) admits the route, this decides the path, by
         // where the caller may edit rather than where it may look. Maintainer and above are unfenced and pass through.
         refuseFenced(callerEditFence(await services.areas.list(), context.identity), relPath);
-        return containedIn(services.workspace.root, relPath);
+        return containedIn(root, relPath);
     };
     // The same guard for a shadow's source, answering the canonical relative path a sidecar is filed under: `./a//b.pdf`
     // and `a/b.pdf` name one file and must not name two shadows. No archive refusal: a member simply has no shadow.
@@ -114,8 +118,11 @@ export const createWorkspaceRoutes = (services: Services) => {
     // Every file write below ends here: history hears of it, and the resident tree is asked to re-list what it touched
     // as the write is answered rather than after the watcher's next batch, so the delta confirming it follows at once.
     const wrote = (...absPaths: string[]): void => {
-        services.workspaceWritten(absPaths);
-        services.history.notifyUserWrite();
+        const shared = absPaths.filter((path) => isInside(services.workspace.root, path));
+        if (shared.length > 0) {
+            services.workspaceWritten(shared);
+            services.history.notifyUserWrite();
+        }
     };
     return {
         // input.agent picks whose copy to walk, with no fallback; a file the walk misses can still be opened via
@@ -210,15 +217,15 @@ export const createWorkspaceRoutes = (services: Services) => {
         // Direct file management over /work (byte writes go through POST /workspace/upload). Move/copy resolve both
         // endpoints through `contained`; every mutation ends in `wrote`.
         mkdir: i.mkdir.handler(async ({ input, context }) => {
-            const dir = await contained(context, input.path);
+            const dir = await contained(context, input.path, input.view);
             await services.files.mkdir(dir);
             wrote(dir);
             return { ok: true } as const;
         }),
         // A delete is a move into the trash, answered with the id that takes it back.
         delete: i.delete.handler(async ({ input, context }) => {
-            const target = await contained(context, input.path);
-            await refuseKeptFolder(services.workspace.root, target);
+            const target = await contained(context, input.path, input.view);
+            await refuseKeptFolder(await workspaceRootFor(services.workspaceScope, input.view ?? {}), target);
             const trashed = await services.files.trash.put(target, input.path);
             wrote(target);
             return trashed === undefined ? ({ ok: true } as const) : ({ ok: true, trashed } as const);
@@ -227,9 +234,9 @@ export const createWorkspaceRoutes = (services: Services) => {
         // not write at that path today.
         restore: i.restore.handler(async ({ input, context }) => {
             try {
-                const landed = await services.files.trash.restore(input.trashed, (relPath) => contained(context, relPath));
+                const landed = await services.files.trash.restore(input.trashed, (relPath) => contained(context, relPath, input.view));
                 wrote(landed);
-                return { path: relative(services.workspace.root, landed) };
+                return { path: relative(await workspaceRootFor(services.workspaceScope, input.view ?? {}), landed) };
             } catch (failure) {
                 if (failure instanceof TrashMissError) {
                     throw new ORPCError("NOT_FOUND", { message: "that is no longer in the trash" });
@@ -238,9 +245,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
         }),
         move: i.move.handler(async ({ input, context }) => {
-            const [from, to] = [await contained(context, input.from), await contained(context, input.to)];
-            await refuseKeptFolder(services.workspace.root, from);
-            await refuseKeptFolder(services.workspace.root, to);
+            const [from, to] = [await contained(context, input.from, input.view), await contained(context, input.to, input.view)];
+            await refuseKeptFolder(await workspaceRootFor(services.workspaceScope, input.view ?? {}), from);
+            await refuseKeptFolder(await workspaceRootFor(services.workspaceScope, input.view ?? {}), to);
             // Never over an entry: what is there goes to the trash first if the caller means to replace it, so a delete
             // can take it back, which a rename over it never could.
             if (await moveTargetTaken(from, to)) {
@@ -255,13 +262,14 @@ export const createWorkspaceRoutes = (services: Services) => {
         copy: i.copy.handler(async ({ input, context }) => {
             // The source is a read, so it is held to where the caller may look, the target (`contained`) to where it may edit.
             refuseFenced(await fenceFor(context), input.from);
-            const to = await contained(context, input.to);
-            await refuseKeptFolder(services.workspace.root, to);
+            const to = await contained(context, input.to, input.view);
+            const root = await workspaceRootFor(services.workspaceScope, input.view ?? {});
+            await refuseKeptFolder(root, to);
             // A copy of `.intentic` or one of its groups leaves the locked entries in it behind, as a download does.
             await services.files.copy(
-                await containedForRead(services.workspace.root, input.from),
+                (await scopedTarget(services.workspaceScope, input.view ?? {}, input.from)).target,
                 to,
-                (path) => !isControlPlanePath(services.workspace.root, path),
+                (path) => !isControlPlanePath(root, path),
             );
             wrote(to);
             return { ok: true } as const;
@@ -269,11 +277,11 @@ export const createWorkspaceRoutes = (services: Services) => {
         // Unpacks beside the archive, into a name nothing holds yet; the tool it spawns is picked by suffix, so a
         // format this sandbox has no tool for is a refusal rather than an empty folder.
         extract: i.extract.handler(async ({ input, context }) => {
-            const archive = await contained(context, input.path);
+            const archive = await contained(context, input.path, input.view);
             try {
                 const landed = await services.files.extract(archive);
                 wrote(landed);
-                return { path: relative(services.workspace.root, landed) };
+                return { path: relative(await workspaceRootFor(services.workspaceScope, input.view ?? {}), landed) };
             } catch (failure) {
                 if (failure instanceof UnknownArchiveError) {
                     throw new ORPCError("BAD_REQUEST", { message: failure.message });

@@ -9,7 +9,7 @@ export const WorkspaceScopeSchema = z.object({
         "Read a conversation's own private copy of the workspace rather than the shared tree. Leave it out for the shared tree. A conversation that is not working privately resolves back to the shared tree rather than failing, so a link need not know which mode it runs in.",
     ),
     // A branch the shared checkout is not on (it stays on its main line): read from a checkout the daemon keeps of it,
-    // read-only; inside `repo` from the branch, everywhere else from the shared tree. Never together with `agent`.
+    // inside `repo` from the branch, everywhere else from the shared tree. Never together with `agent`.
     branch: BranchNameSchema.optional()
         .describe(
             "Read a branch of one repository as it stands, without the shared workspace leaving its main line: files inside that repository come from the branch, everything else from the shared tree. Never together with `agent`.",
@@ -385,11 +385,11 @@ export const WorkspaceResolveSchema = z.object({
 export type WorkspaceResolve = z.infer<typeof WorkspaceResolveSchema>;
 // Direct file management (delete, new folder, rename/move, copy). Byte writes and editor saves go through POST
 // /workspace/upload instead, since oRPC can't carry a body.
-export const WorkspaceDirSchema = z.object({ path: z.string().min(1).describe("The folder to create. Missing folders above it are created too.") });
+export const WorkspaceDirSchema = z.object({ path: z.string().min(1).describe("The folder to create. Missing folders above it are created too.") }).extend({ view: WorkspaceScopeSchema.optional() });
 export const WorkspaceMoveSchema = z.object({
     from: z.string().min(1).describe("What to move or copy, as a workspace path."),
     to: z.string().min(1).describe("Where it should end up. Changing only the last part is how you rename something."),
-});
+}).extend({ view: WorkspaceScopeSchema.optional() });
 // Unpacking an archive already in the workspace. Nothing is overwritten, so the answer is where it actually landed,
 // which is not always the name the caller would have guessed.
 export const WorkspaceExtractSchema = z.object({
@@ -411,7 +411,7 @@ export const WorkspaceDeletedSchema = z.object({
 export type WorkspaceDeleted = z.infer<typeof WorkspaceDeletedSchema>;
 export const WorkspaceRestoreSchema = z.object({
     trashed: z.string().min(1).describe("The trash id a delete answered with."),
-});
+}).extend({ view: WorkspaceScopeSchema.optional() });
 export const WorkspaceRestoredSchema = z.object({
     path: z
         .string()

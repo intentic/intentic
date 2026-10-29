@@ -1,6 +1,7 @@
+import { workspaceView } from "../../../app/workspaceScope";
 import { computed, ref, shallowRef } from "vue";
 import { externalDirtyPaths, setExternalDirty } from "../files/externalDirty";
-import { useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
+import { allDirtyPaths, useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 
 // The one guard in front of every close that would lose unsaved work, in the hosted workspace and in a local window
@@ -22,12 +23,12 @@ export interface CloseQuestion {
 }
 
 export const useCloseGuard = () => {
-    const { dirtyPaths, forget } = useEditBuffers();
+    const { dirtyPaths } = useEditBuffers(workspaceView);
     const { strip, closeTabIds } = useWorkspaceTabs();
     const unsavedAt = (path: string): boolean => dirtyPaths.value.has(path) || externalDirtyPaths.value.has(path);
-    const dirty = computed(() => dirtyPaths.value.size > 0 || externalDirtyPaths.value.size > 0);
+    const dirty = computed(() => allDirtyPaths.value.size > 0 || externalDirtyPaths.value.size > 0);
     /** Every unsaved file, whichever editor holds it, in a stable order. */
-    const unsavedPaths = (): readonly string[] => [...new Set([...dirtyPaths.value, ...externalDirtyPaths.value])].toSorted();
+    const unsavedPaths = (): readonly string[] => [...new Set([...allDirtyPaths.value, ...externalDirtyPaths.value])].toSorted();
 
     // The last question asked, kept after it is answered so the box says the same thing while it fades; `asking` is
     // whether it is up.
@@ -38,18 +39,14 @@ export const useCloseGuard = () => {
         asking.value = true;
     };
 
-    // A closed tab's edits go with it, whichever editor held them, and the dirty flag reads the same accounts.
-    const forgetPath = (path: string): void => {
-        forget(path);
-        setExternalDirty(path, false);
-    };
     // Both panes: a companion pane's unsaved work is the easiest to miss.
     const filesOf = (ids: ReadonlySet<string>): readonly string[] =>
         [...strip.value.main.tabs, ...strip.value.side.tabs].flatMap((tab) => (ids.has(tab.id) && tab.kind === `file` ? [tab.path] : []));
 
     /** Closes tabs: at once, unless one holds unsaved edits, in which case only once the reader agrees. */
     const closeTabs = (ids: ReadonlySet<string>): void => {
-        const close = (): void => closeTabIds(ids).forEach(forgetPath);
+        const edits = useEditBuffers(workspaceView.value);
+        const close = (): void => closeTabIds(ids).forEach((path) => { edits.forget(path); setExternalDirty(path, false); });
         const unsaved = [...new Set(filesOf(ids).filter(unsavedAt))];
         if (unsaved.length === 0) {
             close();

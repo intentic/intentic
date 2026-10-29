@@ -1,3 +1,5 @@
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import type { ViewScope } from "../../../app/workspaceScope";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -13,7 +15,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { selfMember } from "../../../client/sandbox/useMembers";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
-import { editFenceOf, fenceWrites, viewFence, writesSomewhere } from "./editScope";
+import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
@@ -40,7 +42,7 @@ import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { isShared, scopeFields, scopeQuery, workspaceView } from "../../../app/workspaceScope";
 import { basename, joinPath, parentDir } from "@intentic/ui/path";
-import { rpcPrefix } from "../../../lib/queryKeys";
+import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "./workspaceTreeKey";
 
 // How long a confirmed write waits for the pushed delta before the listing is read again. The daemon re-lists its own
@@ -70,6 +72,7 @@ watch(expanded, (dirs) => {
 // Cut/copy clipboard; module-level so it survives the tree component unmounting on sidebar/search switches.
 const clipboard = sandboxRef<{ readonly mode: "copy" | "cut"; readonly paths: readonly string[] } | undefined>(() => undefined);
 // Collapses every open directory; no-op when already empty.
+watch(workspaceView, () => { clipboard.value = undefined; }, { flush: "sync" });
 const collapseAll = (): void => {
     expanded.value = new Set();
 };
@@ -196,9 +199,16 @@ export function useWorkspaceTree() {
     // The manifest only matters for a writer whose edit names areas; everyone else's answer needs none of it.
     const namesAreas = computed(() => role.value === `writer` && Array.isArray(self.value?.edit));
     const { query: areasQuery } = useSandboxQuery({ ...rpcQuery(`areas.list`), enabled: namesAreas });
-    const editFence = computed(() => viewFence(editFenceOf(role.value, self.value, areasQuery.data.value?.areas), isShared(workspaceView.value)));
+    const editFence = computed(() => editFenceOf(role.value, self.value, areasQuery.data.value?.areas));
     // Whether the member may change `path` (a file, or a folder and what goes in it).
-    const canWriteAt = (path: string): boolean => fenceWrites(editFence.value, path);
+    const canWriteAt = (path: string, view: ViewScope = workspaceView.value): boolean =>
+        fenceWrites(editFence.value, path) && (view.branch === undefined || view.repo === `root` || path === view.repo || path.startsWith(`${view.repo}/`));
+    const writeView = (view: ViewScope = workspaceView.value): ViewScope => {
+        if (!isShared(view) && !supportsRoute(`git.viewChanges`)) {
+            throw new Error(`This sandbox needs an update before editing a selected checkout.`);
+        }
+        return view;
+    };
     // Whether they may change anything at all: what decides a surface's read-only look as a whole.
     const canEditFiles = computed(() => writesSomewhere(editFence.value));
 
@@ -213,17 +223,18 @@ export function useWorkspaceTree() {
     // current one.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
     // `baseHash` 409s the save if the file changed since it was read; omitted for creates.
-    const uploadText = (path: string, text: string, baseHash?: string): Promise<{ ok: true }> =>
+    const uploadText = (path: string, text: string, baseHash?: string, view: ViewScope = workspaceView.value): Promise<{ ok: true }> =>
         sandboxRaw(`POST /workspace/upload`, {
-            query: { path },
+            query: { path, ...scopeFields(writeView(view)) },
             headers: baseHash === undefined ? undefined : { "x-intentic-base-hash": baseHash },
             input: text,
         });
     // An editor save: the row is already real, so nothing provisional is involved, and the shared tree takes the file's
     // new size from the delta pushed for it (afterWrite). Nothing is read back here, so callers markSaved before that
     // echo can race it into a false "changed on disk".
-    const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
-        await uploadText(path, text, baseHash);
+    const saveText = async (path: string, text: string, baseHash?: string, view: ViewScope = workspaceView.value): Promise<void> => {
+        await uploadText(path, text, baseHash, view);
+        for (const queryKey of workingReviewKeys) { void queryClient.invalidateQueries({ queryKey }); }
         refreshWalkedTrees();
     };
 
@@ -254,45 +265,48 @@ export function useWorkspaceTree() {
     const typeOf = (path: string): "file" | "dir" => (entriesByPath.value.get(path)?.type === `dir` ? `dir` : `file`);
 
     const createDir = async (path: string): Promise<void> => {
+        const view = writeView();
         noteArriving(path, { kind: `write`, type: `dir` });
         await settleEach(
             [path],
             (dir) => [dir],
-            (dir) => sandboxRpc.workspace.mkdir({ path: dir }),
+            (dir) => sandboxRpc.workspace.mkdir({ path: dir, view }),
         );
-        rememberCreated([path]);
+        rememberCreated([path], view);
     };
     // A new, empty file. Same route as a save, but its row has to exist before the walk agrees and has to be taken back
     // if the write is refused, which is exactly what an editor save must not do.
     const createFile = async (path: string): Promise<void> => {
+        const view = writeView();
         noteArriving(path, { kind: `write`, type: `file` });
         await settleEach(
             [path],
             (file) => [file],
-            (file) => uploadText(file, ``),
+            (file) => uploadText(file, ``, undefined, view),
         );
-        rememberCreated([path]);
+        rememberCreated([path], view);
     };
     // Rename is the only single move (same parent, new name); every other op goes through a batch variant below. The
     // pair moves together: the old row goes and the new one arrives in the same frame, so nothing flickers between.
     // `remember` is false for a move that is itself an undo, which must not become the next thing Mod+Z takes back.
-    const moveEntry = async (from: string, to: string, remember = true): Promise<void> => {
+    const moveEntry = async (from: string, to: string, remember = true, view = writeView()): Promise<void> => {
         noteLeaving(from);
         noteArriving(to, { kind: `write`, type: typeOf(from) });
         renameOpenPaths(from, to);
         await settleEach(
             [{ from, to }],
             (move) => [move.from, move.to],
-            (move) => sandboxRpc.workspace.move(move),
+            (move) => sandboxRpc.workspace.move({ ...move, view }),
             (move) => renameOpenPaths(move.to, move.from),
         );
         if (remember) {
-            rememberMoves([{ from, to }]);
+            rememberMoves([{ from, to }], view);
         }
     };
     // Each entry goes to the daemon's trash; the ones that went are remembered as one batch for Mod+Z, even when some
     // of the gesture was refused, and answered so a receipt's Undo can name exactly this delete.
     const removeEntries = async (paths: readonly string[]): Promise<DeleteBatch> => {
+        const view = writeView();
         const types = new Map(paths.map((path) => [path, typeOf(path)]));
         for (const path of paths) {
             noteLeaving(path);
@@ -304,7 +318,7 @@ export function useWorkspaceTree() {
                 paths,
                 (path) => [path],
                 async (path) => {
-                    const { trashed } = await sandboxRpc.workspace.delete({ path });
+                    const { trashed } = await sandboxRpc.workspace.delete({ path, view });
                     if (trashed !== undefined) {
                         entries.push({ path, type: types.get(path) ?? `file`, trashed });
                     }
@@ -313,7 +327,7 @@ export function useWorkspaceTree() {
                 `delete`,
             );
         } finally {
-            rememberDelete(batch);
+            rememberDelete(batch, view);
         }
         return batch;
     };
@@ -321,6 +335,7 @@ export function useWorkspaceTree() {
     // many the trash no longer held. A row appears at once where the old one stood, unless that name is taken again.
     // What a failed request left in the trash goes back on the stack, so the next Mod+Z can try it again.
     const restoreDeleted = async (batch: DeleteBatch): Promise<{ readonly landed: readonly string[]; readonly gone: number }> => {
+        const view = writeView();
         const landed: string[] = [];
         const settled = new Set<string>();
         let gone = 0;
@@ -333,7 +348,7 @@ export function useWorkspaceTree() {
             (entry) => (free.includes(entry) ? [entry.path] : []),
             async (entry) => {
                 try {
-                    const { path } = await sandboxRpc.workspace.restore({ trashed: entry.trashed });
+                    const { path } = await sandboxRpc.workspace.restore({ trashed: entry.trashed, view });
                     landed.push(path);
                     settled.add(entry.trashed);
                 } catch (failure) {
@@ -349,10 +364,11 @@ export function useWorkspaceTree() {
             },
             undefined,
             `restore`,
-        ).finally(() => rememberDelete({ entries: batch.entries.filter((entry) => !settled.has(entry.trashed)) }));
+        ).finally(() => rememberDelete({ entries: batch.entries.filter((entry) => !settled.has(entry.trashed)) }, view));
         return { landed, gone };
     };
     const copyEntries = async (pairs: readonly { from: string; to: string }[]): Promise<void> => {
+        const view = writeView();
         for (const { from, to } of pairs) {
             noteArriving(to, { kind: `write`, type: typeOf(from) });
         }
@@ -361,18 +377,19 @@ export function useWorkspaceTree() {
             pairs,
             (pair) => [pair.to],
             async (pair) => {
-                await sandboxRpc.workspace.copy(pair);
+                await sandboxRpc.workspace.copy({ ...pair, view });
                 copied.push(pair.to);
             },
             undefined,
             `copy`,
-        ).finally(() => rememberCreated(copied));
+        ).finally(() => rememberCreated(copied, view));
     };
     // Unpacks an archive beside itself and answers where it landed. No provisional row: only the daemon, which can see
     // inside the archive and knows which names are free, can say what the new entry is called.
     const extractEntry = async (path: string): Promise<string> => {
-        const landed = await sandboxRpc.workspace.extract({ path });
-        rememberCreated([landed.path]);
+        const view = writeView();
+        const landed = await sandboxRpc.workspace.extract({ path, view });
+        rememberCreated([landed.path], view);
         await invalidate();
         return landed.path;
     };
@@ -380,6 +397,7 @@ export function useWorkspaceTree() {
     // a source under another name, where its own is taken there (a move's Keep Both, moveConflicts.ts); the daemon refuses
     // a move onto an entry already there rather than replacing it.
     const moveIntoMany = async (sources: readonly string[], targetDir: string, names?: ReadonlyMap<string, string>): Promise<void> => {
+        const view = writeView();
         const moves = sources
             .filter((source) => canMoveInto(source, targetDir))
             .map((source) => ({ from: source, to: joinPath(targetDir, names?.get(source) ?? basename(source)) }));
@@ -393,12 +411,12 @@ export function useWorkspaceTree() {
             moves,
             (move) => [move.from, move.to],
             async (move) => {
-                await sandboxRpc.workspace.move(move);
+                await sandboxRpc.workspace.move({ ...move, view });
                 moved.push(move);
             },
             (move) => renameOpenPaths(move.to, move.from),
             `move`,
-        ).finally(() => rememberMoves(moved));
+        ).finally(() => rememberMoves(moved, view));
     };
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);

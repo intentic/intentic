@@ -1,12 +1,12 @@
+import { GitRepoParamSchema } from "./git-view.js";
 import { z } from "zod";
 import { AgentProviderSchema } from "../agent.js";
 import { LandConflictSchema, LandedMessageSchema } from "../agents.js";
 import { CommandRunSchema } from "../ci.js";
 import { RefNameSchema } from "../internal.js";
-import { MainBranchSchema, RepoParamSchema } from "../shared.js";
+import { MainBranchSchema } from "../shared.js";
 
-// Which of the working tree's diffs a row is about; a path can be both staged and edited again, so a side is never
-// defaulted.
+// Which working-tree diff a row names: a path can be both staged and edited again, so side is required.
 // staged: index vs HEAD.
 // unstaged: worktree vs index (untracked ⇒ no before side).
 // conflicted: HEAD vs worktree, markers included (no stage 0 to diff against).
@@ -65,7 +65,7 @@ const oneTarget = (target: GitTarget): boolean => target.paths === undefined || 
 // { paths }: stage exactly those paths, then commit.
 // Never `commit --only`: a partial commit over a half-staged file would record the worktree while the row showed the
 // index.
-export const CommitSchema = RepoParamSchema.extend({
+export const CommitSchema = GitRepoParamSchema.extend({
     message: z.string().min(1).describe("The commit message."),
     stage: GitTargetSchema.refine(oneTarget, ONE_TARGET)
         .optional()
@@ -73,7 +73,7 @@ export const CommitSchema = RepoParamSchema.extend({
             "What to stage before committing. Leave it out to record the index exactly as it stands; give it an empty object to stage everything first.",
         ),
 });
-export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
+export const DiscardSchema = GitRepoParamSchema.extend(GitTargetSchema.shape)
     .describe("What to throw away. Neither paths nor a scope discards every uncommitted change in the repository.")
     .refine(oneTarget, ONE_TARGET);
 // Index-only moves; nothing on disk changes, so neither needs a checkpoint. An empty target means the whole repository
@@ -83,7 +83,7 @@ export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
 // merge's clean result survives one on/off. It names its own target, so it goes alone.
 const oneIndexMove = (move: GitTarget & { readonly chip?: string | undefined }): boolean =>
     oneTarget(move) && (move.chip === undefined || (move.paths === undefined && move.scope === undefined));
-export const GitIndexMoveSchema = RepoParamSchema.extend(GitTargetSchema.shape)
+export const GitIndexMoveSchema = GitRepoParamSchema.extend(GitTargetSchema.shape)
     .extend({
         chip: z
             .string()
@@ -97,7 +97,7 @@ export const GitIndexMoveSchema = RepoParamSchema.extend(GitTargetSchema.shape)
     .refine(oneIndexMove, { message: "name paths, a scope or a chip, not more than one" });
 // No separate "set upstream" flag: the daemon runs `push -u` exactly when the branch has none yet, which is never
 // destructive.
-export const PushSchema = RepoParamSchema.extend({
+export const PushSchema = GitRepoParamSchema.extend({
     branch: z
         .string()
         .min(1)
@@ -124,12 +124,12 @@ export const PushRunSchema = CommandRunSchema.extend({
     ),
 });
 export type PushRun = z.infer<typeof PushRunSchema>;
-export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1).describe("The file to read, relative to the repository root.") });
-export const GitFileWriteSchema = RepoParamSchema.extend({
+export const GitFileQuerySchema = GitRepoParamSchema.extend({ path: z.string().min(1).describe("The file to read, relative to the repository root.") });
+export const GitFileWriteSchema = GitRepoParamSchema.extend({
     path: z.string().min(1).describe("Where to write, relative to the repository root. Missing folders are created."),
     content: z.string().describe("The file's whole new contents."),
 });
-export const GitFileDiffQuerySchema = RepoParamSchema.extend({
+export const GitFileDiffQuerySchema = GitRepoParamSchema.extend({
     path: z.string().min(1).describe("The file, relative to the repository root."),
     side: GitDiffSideSchema.describe(
         "Which comparison you want. A file that is staged and then edited again has genuinely different answers for each, which is why this is required rather than assumed.",
@@ -234,13 +234,13 @@ export const GitBranchesSchema = z.object({
 });
 export type GitBranches = z.infer<typeof GitBranchesSchema>;
 // Creates at `start` (sha or ref; absent means HEAD); `checkout` switches to it immediately.
-export const GitBranchCreateAtSchema = RepoParamSchema.extend({
+export const GitBranchCreateAtSchema = GitRepoParamSchema.extend({
     name: RefNameSchema.describe("The new branch's name."),
     start: z.string().min(1).optional().describe("Where to start it: a commit or another branch. Leave it out to start from where you are."),
     checkout: z.boolean().optional().describe("Switch to it as well as creating it."),
 });
 // `force` is the deliberate retry after git refuses to drop an unmerged branch.
-export const GitBranchDeleteSchema = RepoParamSchema.extend({
+export const GitBranchDeleteSchema = GitRepoParamSchema.extend({
     name: RefNameSchema.describe("The branch to delete."),
     force: z
         .boolean()

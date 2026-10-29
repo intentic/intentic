@@ -1,3 +1,4 @@
+import { workspaceView, type ViewScope } from "../../../app/workspaceScope";
 import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
@@ -25,6 +26,7 @@ import { t } from "@intentic/ui/i18n";
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
 // click ("Publish", "Sync") instead of renaming it "Push".
 export interface PendingPush {
+    readonly view?: ViewScope;
     readonly verb: string;
     // What is going out, e.g. "3 commits across 2 repos", "intentic's branch".
     readonly what: string;
@@ -186,10 +188,10 @@ const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQue
 /* WHICH PUSH RUNS THE MOMENT IS ABOUT: the ones a send in flight is writing, or the ones a refusal filed. Only. */
 const runsInQuestion = (): readonly ReturnType<typeof usePushRun>[] => {
     if (sending.value) {
-        return (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo));
+        return (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo, undefined, pending.value?.view));
     }
     const refused = refusedRuns.value.length > 0 ? refusedRuns.value : (standing.value?.runs ?? []);
-    return refused.map((run) => usePushRun(run.repo));
+    return refused.map((run) => usePushRun(run.repo, undefined, (pending.value ?? standing.value?.push)?.view));
 };
 
 // The terminal of the push in question, while it runs and for as long as its refusal stands.
@@ -208,7 +210,7 @@ const dismiss = (): void => {
 };
 
 export function usePushFlow() {
-    git ??= useChanges();
+    git ??= useChanges(computed(() => pending.value?.view ?? workspaceView.value));
 
     const reposNeedingPull = computed(() => new Set(refusedRuns.value.filter(pushNeedsPull).map((run) => run.repo)));
     const canSyncAndRetry = computed(() => pending.value?.targets.some((target) => target.push && reposNeedingPull.value.has(target.repo)) === true);
@@ -230,7 +232,7 @@ export function usePushFlow() {
         if (sending.value) {
             return;
         }
-        void send({ verb, what, targets });
+        void send({ verb, what, targets, view: workspaceView.value });
     };
 
     // The same push again, hook and all.

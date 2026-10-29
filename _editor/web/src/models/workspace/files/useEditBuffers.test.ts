@@ -72,3 +72,24 @@ describe(`useEditBuffers`, () => {
         expect(edit.bufferOf(`f.ts`)).toBeUndefined();
     });
 });
+
+
+test(`edits of the same path stay separate across shared, branch and session checkouts`, () => {
+    const branch = { repo: `app`, branch: `feature` } as const;
+    const session = { agent: `session-1` } as const;
+    const shared = useEditBuffers();
+    const selected = useEditBuffers(branch);
+    const agent = useEditBuffers(session);
+    for (const edit of [shared, selected, agent]) { edit.setBaseline(`app/a.ts`, `base`); }
+    shared.setBuffer(`app/a.ts`, `shared edit`);
+    selected.setBuffer(`app/a.ts`, `branch edit`);
+    agent.setBuffer(`app/a.ts`, `session edit`);
+    selected.renamePath(`app/a.ts`, `app/b.ts`);
+    expect(shared.bufferOf(`app/a.ts`)).toBe(`shared edit`);
+    expect(agent.bufferOf(`app/a.ts`)).toBe(`session edit`);
+    expect(selected.bufferOf(`app/b.ts`)).toBe(`branch edit`);
+    dropEditBuffers(branch);
+    expect(selected.dirtyPaths.value.size).toBe(0);
+    expect(shared.isDirty(`app/a.ts`)).toBe(true);
+    expect(agent.isDirty(`app/a.ts`)).toBe(true);
+});

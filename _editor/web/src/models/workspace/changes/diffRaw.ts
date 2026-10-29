@@ -1,3 +1,4 @@
+import type { GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
 import type { ChangeStatus } from "@intentic/extension-api";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract/schemas/diff";
 import type { GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
@@ -8,7 +9,7 @@ import type { GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 
 export type DiffRawSource =
     // Uncommitted work in a workspace repo; `side` is the git side, since a half-staged file is two different diffs.
-    | { readonly source: "working"; readonly repo: string; readonly side: GitDiffSide }
+    | { readonly source: "working"; readonly repo: string; readonly side: GitDiffSide; readonly view?: GitView }
     // One agent's work vs the base its review is listed against.
     | { readonly source: "agent"; readonly agent: string; readonly repo: string }
     | { readonly source: "commit"; readonly sha: string; readonly repo: string }
@@ -16,7 +17,7 @@ export type DiffRawSource =
     | { readonly source: "checkpoint"; readonly snapshot: string; readonly scope: string };
 
 const sideUrl = (source: DiffRawSource, path: string, which: "before" | "after"): string =>
-    `/diff/raw?${new URLSearchParams({ ...source, path, which }).toString()}`;
+    `/diff/raw?${new URLSearchParams(Object.entries({ ...source, path, which }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, key === `view` ? JSON.stringify(value) : String(value)])).toString()}`;
 
 // The two URLs for a binary file's sides; an omitted key means that side doesn't exist, so the viewer gives the
 // other the whole pane.

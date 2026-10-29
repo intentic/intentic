@@ -1076,12 +1076,12 @@
             "working": "{count} working"
         },
         "branchStart": {
-            "commitTo": "Commit to {branch}",
+            "commitTo": "Land to {branch}",
             "from": "from {branch}",
             "fromTitle": "From a branch",
-            "fromNote": "Its work is committed there",
-            "committed": "Committed {name} to {branch}",
-            "onBranch": "On {branch}: its work is committed onto that branch",
+            "fromNote": "Its work lands there uncommitted",
+            "committed": "Landed {name} to {branch}",
+            "onBranch": "On {branch}: its work lands there uncommitted",
             "howItWorks": "From a branch",
             "howItWorksNote": "The shared workspace stays put",
             "unlink": "Unlink",
@@ -13341,7 +13341,7 @@
             "copyUnreadable": "Copy unreadable",
             "findCopy": "Find a branch or a copy",
             "noCopyMatches": "No copy matches.",
-            "readOnlyClickToSwitch": "Read-only · click to switch",
+            "readOnlyClickToSwitch": "Click to switch",
             "sharedHint": "Where finished work lands",
             "sharedWorkspace": "Shared workspace",
             "showFilesFrom": "Show files from",
@@ -13355,7 +13355,7 @@
             "staysShared": "Search, terminals and previews use the shared workspace.",
             "clickToLook": "Click to view another",
             "sharedAria": "Shared workspace, on {name}",
-            "branchAria": "Branch, read-only: {name}",
+            "branchAria": "Branch: {name}",
             "newAgentFromHere": "New agent from here",
             "newAgentFromHereNote": "Its work lands back here",
             "newAgentTip": "New agent"
@@ -13654,17 +13654,8 @@
             "andMore": "{names} and {count} more"
         },
         "workspaceViewNote": {
-            "readOnly": "Looking at {name}, read-only",
+            "readOnly": "Editing {name}",
             "backToShared": "Back to shared"
-        },
-        "scopedChanges": {
-            "branchHint": "Each landing compares the branch before and after that session’s work.",
-            "sessionHint": "This session’s work, including changes already landed.",
-            "loading": "Loading changes…",
-            "noLandings": "No session landings outside {branch} on this page.",
-            "noChanges": "No changes in this session.",
-            "latest": "Latest landings",
-            "older": "Older landings"
         }
     },
     "gettingStarted": {

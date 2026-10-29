@@ -6,7 +6,7 @@ import { isShared, SHARED_SCOPE, workspaceView } from "../../../app/workspaceSco
 import { useScopeTitle } from "../health/scopeTitle";
 
 // Another copy on screen (a branch, a conversation's own), said at the explorer's foot where the project scope is
-// (WorkspaceScopeNote.vue): it is read-only, files and Changes follow it, and search, terminals and previews use the
+// (WorkspaceScopeNote.vue): files and Changes follow it, and search, terminals and previews use the
 // shared workspace. The chip in the bar says which copy;
 // this says what that means, in words, since a lit chip alone left readers searching a branch for a file only it had.
 

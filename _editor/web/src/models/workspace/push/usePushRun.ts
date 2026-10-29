@@ -1,3 +1,4 @@
+import { scopeKey, SHARED_SCOPE, type ViewScope } from "../../../app/workspaceScope";
 import { sandboxValue } from "@intentic/extension-api";
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -14,13 +15,13 @@ const watchers = sandboxValue(
     (previous) => previous.forEach((watcher) => watcher.forget()),
 );
 
-export const usePushRun = (repo: string, at?: string): RunWatcher<PushRun> => {
-    const key = `${at ?? ``}:${repo}`;
+export const usePushRun = (repo: string, at?: string, view: ViewScope = SHARED_SCOPE): RunWatcher<PushRun> => {
+    const key = `${at ?? ``}:${repo}:${scopeKey(view)}`;
     const existing = watchers.value.get(key);
     if (existing !== undefined) {
         return existing;
     }
-    const options = { context: { at } };
+    const options = { context: { at, gitView: view } };
     const watcher = createRunWatcher<PushRun>({
         idle: { status: `idle`, repo, command: ``, output: `` },
         start: () => sandboxRpc.git.push({ repo }, options),

@@ -85,10 +85,26 @@ const bodyOf = async (request: Request): Promise<unknown> => {
     return text === `` ? undefined : JSON.parse(text);
 };
 
-// oRPC's compact input: the path's params overlaid by the query's keys for a GET, by the JSON body otherwise, then the
-// procedure's input schema over the whole. Flat keys only: no GET input in the contract carries an array or an object.
+// Object query fields use OpenAPI's bracket spelling, e.g. view[repo]=app&view[branch]=feature.
+type QueryFields = Record<string, string | Record<string, string>>;
+const queryOf = (query: URLSearchParams) => {
+    const data: QueryFields = {};
+    const objects = new Map<string, Record<string, string>>();
+    for (const [key, value] of query) {
+        const nested = key.match(/^([^[\]]+)\[([^[\]]+)\]$/);
+        if (nested === null) { Object.defineProperty(data, key, { value, enumerable: true, configurable: true }); continue; }
+        const [, name = ``, member = ``] = nested;
+        const fields = objects.get(name) ?? {};
+        Object.defineProperty(fields, member, { value, enumerable: true, configurable: true });
+        objects.set(name, fields);
+        Object.defineProperty(data, name, { value: fields, enumerable: true, configurable: true });
+    }
+    return data;
+};
+
+// Path params overlaid by query fields for GET, or the JSON body otherwise, then parsed by the procedure's schema.
 const inputOf = async (group: string, name: string, request: Request, url: URL, params: Readonly<Record<string, string>>): Promise<unknown> => {
-    const data = request.method === `GET` ? Object.fromEntries(url.searchParams) : await bodyOf(request);
+    const data = request.method === `GET` ? queryOf(url.searchParams) : await bodyOf(request);
     const merged = data === undefined ? params : typeof data === `object` && data !== null && !Array.isArray(data) ? { ...params, ...data } : data;
     const schema = inputSchemaOf(group, name);
     if (schema === undefined) {

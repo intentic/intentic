@@ -1,3 +1,4 @@
+import { GitViewQuerySchema,GitRepoParamSchema } from "../schemas/git/git-view.js";
 import { procedure } from "../protocol/route-meta.js";
 import {
     CommitResultSchema,
@@ -47,7 +48,7 @@ import {
 } from "../schemas/git/git-history.js";
 import { IndexRunSchema, IndexRunStartSchema } from "../schemas/git/index-run.js";
 import { FileDiffSchema } from "../schemas/history.js";
-import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
+import { OkSchema } from "../schemas/shared.js";
 import { BranchLandingsQuerySchema, BranchLandingsSchema } from "../schemas/git/branch-landings.js";
 
 // Per-repo git ops over the workspace repos; `root` is /work, others are discovered under it, and {repo} is the
@@ -72,6 +73,17 @@ export const gitContract = {
             description:
                 "The workspace's whole review set in one answer: every repo that has something uncommitted, and within it every changed file with its status and line counts. This is what the Changes panel draws, and it is the call to make when you want to know whether a workspace is clean without walking the repos yourself.",
         })
+        .input(GitViewQuerySchema.optional())
+        .output(GitChangesSchema),
+    viewChanges: procedure
+        .route({
+            method: "GET",
+            path: "/git/view/changes",
+            summary: "Uncommitted work across every repo",
+            description:
+                "The workspace's whole review set in one answer: every repo that has something uncommitted, and within it every changed file with its status and line counts. This is what the Changes panel draws, and it is the call to make when you want to know whether a workspace is clean without walking the repos yourself.",
+        })
+        .input(GitViewQuerySchema)
         .output(GitChangesSchema),
     // Read-only: repo list, commit log, lazy per-commit diff; commit/discard on the tree are a separate write path.
     repos: procedure
@@ -133,7 +145,7 @@ export const gitContract = {
             description:
                 "Names the git operation the worktree is stuck inside, if any: a conflicted merge, an interrupted rebase, a half-applied cherry-pick. Check this first when another call refuses, because a halted worktree is the usual reason and the abort call is the way out.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitOperationStateSchema),
     abort: procedure
         .route({
@@ -143,7 +155,7 @@ export const gitContract = {
             description:
                 "Runs git's own abort for whichever operation has the worktree halted, putting the repo back where it stood before the operation started. Nothing else clears that state.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitActionResultSchema),
     // Moves the branch ref via reflog; requires `previousSha` from the matching read as a concurrency token.
     undoable: procedure
@@ -154,7 +166,7 @@ export const gitContract = {
             description:
                 "Reads the branch's reflog to describe the move that undo would reverse, and hands back the commit it would land on. Pass that commit to the undo call as proof you looked, and an undo prepared against a view that has since moved is refused rather than landing somewhere unexamined.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitUndoStateSchema),
     undo: procedure
         .route({
@@ -175,7 +187,7 @@ export const gitContract = {
             description:
                 "The repo's stash entries, newest first, each with the message and the commit behind it. A stash entry is a commit, so it reads the same way a log entry does and its contents come back from the stash diff call.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(StashListSchema),
     stashDiff: procedure
         .route({
@@ -272,7 +284,7 @@ export const gitContract = {
             description:
                 "Switches a shared checkout that something moved off its main line back onto it, which is the only switch the shared workspace takes. Uncommitted work that would be overwritten is reported instead of being trampled, and nothing happens when it is already there.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitActionResultSchema),
     cherryPick: procedure
         .route({
@@ -352,7 +364,7 @@ export const gitContract = {
             description:
                 "The current branch, its sync position against the remote, and every staged, unstaged and untracked path. The single-repo counterpart to the workspace-wide changes call.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitStatusSchema),
     commit: procedure
         .route({
@@ -404,7 +416,7 @@ export const gitContract = {
             description:
                 "Every local branch with how many commits it sits ahead of and behind its remote counterpart, so a branch switcher can show sync state without a call per branch.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitBranchesSchema),
     createBranchAt: procedure
         .route({
@@ -435,7 +447,7 @@ export const gitContract = {
             description:
                 "How far the current branch sits ahead of and behind its remote, as of the last fetch, plus whether a remote and working credentials exist at all. This is a read of what the daemon already knows, not a network call, which is why fetching is a separate button.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitRemoteStateSchema),
     fetch: procedure
         .route({
@@ -445,7 +457,7 @@ export const gitContract = {
             description:
                 "Contacts the remote and updates the daemon's picture of it without touching your branch. Run this before trusting the sync position.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitActionResultSchema),
     pull: procedure
         .route({
@@ -455,7 +467,7 @@ export const gitContract = {
             description:
                 "Fetches and integrates the remote's commits into the current branch. A pull that cannot fast-forward is reported in the answer rather than raised, because that is an ordinary thing to be told.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitActionResultSchema),
     // Starts the push and returns at once; poll `pushState` for the verdict, since it runs the pre-push hook.
     push: procedure
@@ -476,7 +488,7 @@ export const gitContract = {
             description:
                 "The verdict, or the progress so far: where it is, the terminal it runs in, and for a push that did not go, git's last words and who refused it, the repository's own pre-push hook, the remote, or the transport. Idle when nothing has been started for this repository.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(PushRunSchema),
     pushCancel: procedure
         .route({
@@ -485,7 +497,7 @@ export const gitContract = {
             summary: "Stop the push",
             description: "Kills the run. It settles as cancelled; nothing that git had not already sent reaches the remote.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(OkSchema),
     // Stage-all and commit-all as runs (index-run.ts): a stage over tens of thousands of files outlives the browser's
     // header deadline, so it starts, answers at once and is polled, like a push.
@@ -507,7 +519,7 @@ export const gitContract = {
             description:
                 "The repository's latest stage or commit run: its phase and file counts while it runs, then its verdict, the commit's answer, or what held it at the guardrail. Idle when none has been started since the sandbox last started.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(IndexRunSchema),
     indexRunCancel: procedure
         .route({
@@ -517,7 +529,7 @@ export const gitContract = {
             description:
                 "Kills the git the run is waiting on. It settles as cancelled; a stage stopped part way leaves the index as git last wrote it, which unstaging takes back, and a commit stopped before git recorded it records nothing.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(OkSchema),
     files: procedure
         .route({
@@ -527,7 +539,7 @@ export const gitContract = {
             description:
                 "The flat list of files git tracks, which is what a file picker or a search box wants. Ignored and untracked files are not in it.",
         })
-        .input(RepoParamSchema)
+        .input(GitRepoParamSchema)
         .output(GitFilesSchema),
     readFile: procedure
         .route({

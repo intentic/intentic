@@ -1,19 +1,9 @@
-import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { commitIndex } from "../../../git/changes/changes-index.js";
-import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../../git-identity.js";
-import type { IsolatedAgent, WorktreePlacement } from "../../registry/agents-store.js";
+import type { WorktreePlacement } from "../../registry/agents-store.js";
 import type { BranchCheckouts } from "../../worktrees/branches/branch-checkouts.js";
 
-// A LAND ONTO A BRANCH (2026-10-29). A repo a conversation was started from a branch of (branch-repos.ts) lands the way
-// every repo does (land.ts), with the branch's checkout (worktrees/branches/branch-checkouts.ts) standing where the main tree
-// would: the delta is measured against it, judged against it and written into it, and the write proven there. Then,
-// unlike the main tree, where a land waits uncommitted for the owner, it is committed, so the branch itself moves and
-// the checkout is clean again for the next reader. A merge that left conflict markers is undone and reported as the
-// conflict it is instead: nobody edits that checkout, so nobody would ever resolve them there. The shared tree is never
-// read or written for such a repo, nor its derived files re-derived (rederive.ts).
+// Branch landings use the same uncommitted patch application as shared /work, with the selected branch checkout as
+// the destination. Each repository needs an explicit branch destination before any write begins.
 
-/** Where one repo's work goes instead of the main tree: the branch, and the checkout of it a land writes into. */
 export interface BranchLine {
     readonly branch: string;
     readonly dir: string;
@@ -26,7 +16,7 @@ export const lineDirOf = (worktrees: { readonly mainDir: (repo: string) => strin
     lines.get(repo)?.dir ?? worktrees.mainDir(repo);
 
 /**
- * Each of the conversation's repos started from a branch, its checkout brought to the branch's tip with nothing in it;
+ * Each of the conversation's repos started from a branch, its checkout refreshed while preserving local work;
  * before any repo lock is taken, which the refresh takes itself. Empty, at no cost, for every other conversation.
  */
 export const branchLinesOf = async (
@@ -44,56 +34,19 @@ export const branchLinesOf = async (
     return lines;
 };
 
-/** What a write onto a branch is committed as: `Agent: <title>`, trailed with the conversation like its own commits. */
+/** The branch named by a repository's landing destination. */
 export interface BranchOnto {
     readonly branch: string;
-    readonly message: string;
 }
 
-export const branchOnto = (line: BranchLine | undefined, entry: Pick<IsolatedAgent, "id" | "social">): BranchOnto | undefined =>
-    line === undefined ? undefined : { branch: line.branch, message: withConversationTrailer(`Agent: ${entry.social.title?.text ?? entry.id}`, entry.id) };
+export const branchOnto = (line: BranchLine | undefined): BranchOnto | undefined =>
+    line === undefined ? undefined : { branch: line.branch };
 
 /** A branch commit never falls back to writing a repository's shared checkout. Called before any planned write. */
 export const assertBranchDestination = (placement: Pick<WorktreePlacement, "branches">, onto: BranchOnto | undefined, repo: string): void => {
     const started = placement.branches ?? [];
     if (started.length > 0 && onto === undefined) {
         const destinations = started.map((branch) => `${branch.repo} · ${branch.branch}`).join(", ");
-        throw new Error(`This conversation commits to ${destinations}. Changes in ${repo} have no branch destination. Nothing was landed; move or undo those changes before committing to the branch.`);
-    }
-};
-
-// Back to the branch's tip with nothing else in it, the state every reader of the checkout expects.
-const putBack = async (dir: string, git: GitRunner): Promise<void> => {
-    await git(dir, ["reset", "-q", "--hard", "HEAD"]);
-    await git(dir, ["clean", "-q", "-fd"]);
-};
-
-/**
- * After a write into a branch's checkout is proven there: committed onto the branch, so it moves. A merge that left
- * markers (`conflicted`) is put back instead and answered as its conflict, the branch named where the main line's
- * would be. Undefined once committed, or when the write left nothing to commit.
- */
-export const settleOnBranch = async (
-    dir: string,
-    repo: string,
-    conflicted: readonly string[],
-    onto: BranchOnto,
-    git: GitRunner = defaultGit,
-): Promise<LandConflict | undefined> => {
-    if (conflicted.length > 0) {
-        await putBack(dir, git);
-        return { repo, paths: conflicted.map((path) => ({ path, reason: "diverged" as const })), clean: 0, mainBranch: onto.branch };
-    }
-    try {
-        await git(dir, ["add", "-A"]);
-        // Hooks skipped, as every commit the daemon makes for an agent: the work was the agent's, and so is its checking.
-        await commitIndex(dir, onto.message, AGENT_GIT_AUTHOR, git, "skip");
-        return undefined;
-    } catch (error) {
-        // A commit that did not go through leaves the checkout as it was before the write, and the land throws.
-        // allow(silent-catch): the commit's own error is what the land reports; a put-back that fails too is mended by
-        // the next refresh, which resets this daemon-owned checkout to its branch before anything reads it.
-        await putBack(dir, git).catch(() => undefined);
-        throw error;
+        throw new Error(`This conversation lands to ${destinations}. Changes in ${repo} have no branch destination. Nothing was landed; move or undo those changes before landing to the branch.`);
     }
 };

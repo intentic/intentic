@@ -1,6 +1,7 @@
 // The open-file dispatcher mounted for real: which surface a tab ends on, and what it hands that surface. jsdom, since
 // what is asserted is what is on screen.
 import "@intentic/testing/dom";
+import type { ViewScope } from "../../../../app/workspaceScope";
 import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -31,10 +32,12 @@ jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: () => new Promise(() => undefined),
 }));
 // The tree's write half and the member's edit fence: the owner's (everywhere) unless a test narrows it, nothing written.
+const saveText = jest.fn(async (_path: string, _text: string, _baseHash?: string, _view?: ViewScope) => {});
+let saveSurface: ((value: string) => void) | undefined;
 let writable = (path: string): boolean => path.length >= 0;
 jest.mock("../../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({
-        saveText: () => Promise.resolve(),
+        saveText,
         run: (work: () => Promise<void>) => work(),
         canWriteAt: (path: string) => writable(path),
         entry: () => undefined,
@@ -50,8 +53,11 @@ jest.mock("../../files/useMonaco", () => ({
 const surface = (name: string) =>
     defineComponent({
         props: { editable: Boolean, path: String, code: String, source: String },
-        setup: (props) => () =>
-            h(`section`, { class: name, "data-editable": String(props.editable), "data-path": props.path }, props.code ?? props.source),
+        emits: [`save`],
+        setup: (props, { emit }) => {
+            saveSurface = (value) => emit(`save`, value);
+            return () => h(`section`, { class: name, "data-editable": String(props.editable), "data-path": props.path }, props.code ?? props.source);
+        },
     });
 jest.mock("../CodeView.vue", () => ({ default: surface(`code-view`) }));
 jest.mock("../MarkdownViewer.vue", () => ({ default: surface(`markdown-view`) }));
@@ -166,6 +172,8 @@ afterEach(() => {
     reportUnsaved = undefined;
     setups = 0;
     reads.length = 0;
+    saveText.mockClear();
+    saveSurface = undefined;
     answer = (path) => ({ present: false, path });
     writable = (path) => path.length >= 0;
     document.body.innerHTML = ``;
@@ -545,4 +553,18 @@ describe(`a sandbox that is not answering`, () => {
         await settle();
         expect(element.querySelector(`.fake-viewer`)?.textContent).toBe(`viewer of brief.docx`);
     });
+});
+
+it(`saves an editable session file into its pinned checkout after the Workspace switches`, async () => {
+    const path = `docs/session-save.txt`;
+    answer = (file) => ({ ...text(file, `session baseline`), shared: false });
+    const element = mount(path, { scope: `c-save` });
+    await settle();
+    expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
+    workspaceAgent.value = `c-other`;
+    saveSurface?.(`session edit`);
+    await settle();
+    expect(saveText).toHaveBeenCalledWith(path, `session edit`, expect.any(String), { agent: `c-save` });
+    expect(useEditBuffers({ agent: `c-save` }).bufferOf(path)).toBe(`session edit`);
+    expect(useEditBuffers({ agent: `c-other` }).bufferOf(path)).toBeUndefined();
 });

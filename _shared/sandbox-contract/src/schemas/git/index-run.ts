@@ -1,6 +1,6 @@
+import { GitRepoParamSchema } from "./git-view.js";
 import { z } from "zod";
 import { CommandRunSchema } from "../ci.js";
-import { RepoParamSchema } from "../shared.js";
 import { CommitResultSchema, GitTargetSchema } from "./git.js";
 
 // Stage-all and commit-all as runs the daemon keeps, not requests held open: over a tree of tens of thousands of
@@ -40,7 +40,7 @@ export type IndexRunHold = z.infer<typeof IndexRunHoldSchema>;
 
 // Flat rather than a union on `op`: the route's path parameter merges into the input, which a discriminated union cannot
 // take, and the one cross-field rule (a commit needs a message) is a refine.
-export const IndexRunStartSchema = RepoParamSchema.extend({
+export const IndexRunStartSchema = GitRepoParamSchema.extend({
     op: IndexRunOpSchema.describe("Stage, or commit (staging `target` first when given)."),
     target: GitTargetSchema.optional().describe(
         "What to stage. For a stage, leave it out for the whole repository. For a commit, leave it out to record the index exactly as it stands, or give an empty object to stage everything first.",

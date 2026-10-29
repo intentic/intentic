@@ -1,3 +1,5 @@
+import { mapBounded } from "./review/scan-repos.js";
+import { gitRoutesInViews } from "./review/git-view.routes.js";
 import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
@@ -5,6 +7,8 @@ import { pathExists } from "@intentic/base/fs";
 import { scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
 import { type GitChange, type GitChanges, isScratch, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { ORPCError } from "@orpc/server";
+import type { GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
+import { gitViewRepoDir, gitViewRepos, gitViewHistory } from "./review/git-view.js";
 import type { Services } from "../composition.js";
 import { repoGitDir, syncRootExcludes, syncProjectExcludes } from "../workspace/layout/git-layout.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
@@ -51,29 +55,15 @@ export const capRepoChanges = (
 // Fairness bound on concurrent repo scans, not a throughput cap; sized from the machine's own core count.
 const SCAN_CONCURRENCY = Math.max(2, Math.min(8, availableParallelism()));
 
-// `Promise.all` with a ceiling; workers pull from one shared cursor so a slow item delays only itself, and results keep
-// input order.
-const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> => {
-    const results = Array.from({ length: items.length }) as R[];
-    let cursor = 0;
-    const worker = async (): Promise<void> => {
-        while (cursor < items.length) {
-            const index = cursor;
-            cursor += 1;
-            results[index] = await run(items[index] as T);
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-    return results;
-};
-
 // Per-repo git ops over `root` (the /work repo) and every discovered repo; unknown repo is NOT_FOUND, an escaping path
 // BAD_REQUEST, missing file NOT_FOUND.
-export const createGitRoutes = (services: Services) => {
+export const routesInView = (services: Services, view?: GitView) => {
     const i = gitImplementer();
+    const { checkpoint, notifyWrite } = gitViewHistory(services, view);
     // Rewrites the --separate-git-dir pointer if deleted, mirroring history's healGitPointer convention
     // (/history/gits/<name>).
     const healPointer = async (repo: string, dir: string): Promise<void> => {
+        if (view !== undefined) { return; }
         if (await pathExists(join(dir, ".git"))) {
             return;
         }
@@ -83,6 +73,9 @@ export const createGitRoutes = (services: Services) => {
         }
     };
     const repoDir = async (repo: string): Promise<string> => {
+        if (view !== undefined) {
+            return gitViewRepoDir(services, view, repo);
+        }
         if (repo === "root") {
             await healPointer(repo, services.workspace.root);
             return services.workspace.root;
@@ -103,7 +96,7 @@ export const createGitRoutes = (services: Services) => {
         if (target === undefined) {
             throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
         }
-        if (isControlPlanePath(services.workspace.root, target)) {
+        if (isControlPlanePath(dir, target)) {
             throw new ORPCError("NOT_FOUND", { message: "not found" });
         }
         return target;
@@ -115,15 +108,17 @@ export const createGitRoutes = (services: Services) => {
         if (target === undefined) {
             throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
         }
-        if (isControlPlanePath(services.workspace.root, target) && !isReviewableStatePath(services.workspace.root, target)) {
+        if (isControlPlanePath(dir, target) && !isReviewableStatePath(dir, target)) {
             throw new ORPCError("NOT_FOUND", { message: "not found" });
         }
         return target;
     };
     // Serializes user writes here with an agent's land (conversations/land.ts) on the same repo lock (worktrees.withRepoLock);
     // never nest calls, the chain is a queue, not reentrant. Read-only routes stay outside it.
-    const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
-        services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
+    const onRepo = async <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> => {
+        const dir = await repoDir(repo);
+        return services.agentWorktrees.withRepoLock(repo, () => task(dir));
+    };
 
     // What a target names in a repo, and the index moves over it (index-targets.ts).
     const targets = createIndexTargets(services);
@@ -137,7 +132,7 @@ export const createGitRoutes = (services: Services) => {
     });
     const lightChip = async (repo: string, dir: string, origin: string): Promise<void> => {
         const { head, unstaged } = await services.git.changedFiles(dir);
-        const origins = await services.agentOrigins.forRepo(repo, dir, head);
+        const origins = await services.agentOrigins.forRepo(repo, dir, head, view);
         const scratch = await targets.scratchIn(repo, dir);
         const paths = scopedPaths({ conflicted: [], staged: [], unstaged: ownWork(repo, unstaged) }, ["unstaged"], { origin }, origins);
         await chips.light(repo, dir, origin, head, paths.filter((path) => !isScratch(path, scratch)));
@@ -169,15 +164,16 @@ export const createGitRoutes = (services: Services) => {
     // the result on a clean apply.
     const guarded = (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> =>
         onRepo(repo, async (dir) => {
-            await services.history.snapshot("user", label);
+            await checkpoint(dir, label);
             const result = await run(dir);
             if (result.ok) {
                 invalidateScan();
-                services.history.notifyUserWrite();
+                notifyWrite();
             }
             return result;
         });
     const offMainLine = createOffMainLine();
+    const mainBranchOf = (dir: string, branch?: string) => view === undefined ? offMainLine(dir, branch) : Promise.resolve(undefined);
     // Repo dirs the last scan walked; the real driver behind scan latency.
     let scannedRepos = 0;
     // One repo's review row, used both by the workspace scan and by the commit route re-reading the repo it just wrote
@@ -195,12 +191,12 @@ export const createGitRoutes = (services: Services) => {
                     services.git.operationInProgress(dir),
                 ]);
                 const worktree = ownWork(repo, unstaged);
-                const [scratch, mainBranch] = await Promise.all([targets.scratchRow(repo, dir, worktree), offMainLine(dir, branch)]);
+                const [scratch, mainBranch] = await Promise.all([targets.scratchRow(repo, dir, worktree), mainBranchOf(dir, branch)]);
                 // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
                     // Attribution only decorates rows; a failure here degrades to none, not a whole-repo error.
-                    services.agentOrigins.forRepo(repo, dir, head).catch((error: unknown) => {
+                    services.agentOrigins.forRepo(repo, dir, head, view).catch((error: unknown) => {
                         services.logger.debug({ err: error, repo }, "git changes: origins unavailable");
                         return {};
                     }),
@@ -277,6 +273,12 @@ export const createGitRoutes = (services: Services) => {
         services.agentOrigins.identify(new Set(repos.flatMap((scanned) => Object.values(scanned.origins ?? {}).flat())));
 
     const scanAll = async (): Promise<GitChanges> => {
+        if (view !== undefined) {
+            const scanned = await mapBounded(gitViewRepos(services, view), SCAN_CONCURRENCY, async (repo) => scanRepo(repo, await repoDir(repo)));
+            const repos = scanned.filter((repo) => repo !== undefined);
+            const originAgents = identifyOrigins(repos);
+            return { repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
+        }
         const repoIds = await services.perf.track("git.discover", {}, () => currentRepos(services.workspace.root));
         // Converges root excludes on the repo set first, so a fresh clone isn't swept into the root scope.
         await syncRootExcludes(services.config.historyRoot, repoIds);
@@ -312,7 +314,7 @@ export const createGitRoutes = (services: Services) => {
         scan = scanAll().then(
             (result) => {
                 services.perf.record("git.scan", elapsed(), { repos: scannedRepos, changed: result.repos.length, coalesced: shared });
-                reusableUntil = Date.now() + COALESCE_MS;
+                reusableUntil = Date.now() + (view === undefined ? COALESCE_MS : 0);
                 return result;
             },
             (error: unknown) => {
@@ -335,6 +337,10 @@ export const createGitRoutes = (services: Services) => {
         // Review set plus `committing`, read after the scan settles (not merged into the memoized result), so a commit
         // that starts or ends during the coalesce window still shows on this response.
         changes: i.changes.handler(async () => {
+            const scanned = await coalescedScan();
+            return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
+        }),
+        viewChanges: i.viewChanges.handler(async () => {
             const scanned = await coalescedScan();
             return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
         }),
@@ -391,10 +397,10 @@ export const createGitRoutes = (services: Services) => {
                 if (operation === undefined) {
                     return { ok: false, reason: "nothing in progress" };
                 }
-                await services.history.snapshot("user", `before aborting ${operation} in ${input.repo}`);
+                await checkpoint(dir, `before aborting ${operation} in ${input.repo}`);
                 await services.git.abortOperation(dir, operation);
                 invalidateScan();
-                services.history.notifyUserWrite();
+                notifyWrite();
                 return { ok: true };
             }),
         ),
@@ -407,13 +413,13 @@ export const createGitRoutes = (services: Services) => {
         // undo, repo moved) come back as `ok: false`, not a throw.
         undo: i.undo.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.history.snapshot("user", `before undo in ${input.repo}`);
+                await checkpoint(dir, `before undo in ${input.repo}`);
                 const result = await services.git.undoLastAction(dir, input.previousSha, input.discardChanges === true);
                 if (!result.ok) {
                     return { ok: false, reason: result.reason };
                 }
                 invalidateScan();
-                services.history.notifyUserWrite();
+                notifyWrite();
                 return { ok: true };
             }),
         ),
@@ -425,12 +431,12 @@ export const createGitRoutes = (services: Services) => {
         stashPush: i.stashPush.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 const result = await services.git.stashPush(dir, {
-                    ...(input.message !== undefined ? { message: input.message } : {}),
-                    ...(input.includeUntracked !== undefined ? { includeUntracked: input.includeUntracked } : {}),
+                    ...opt("message", input.message),
+                    ...opt("includeUntracked", input.includeUntracked),
                 });
                 if (result.ok) {
                     invalidateScan();
-                    services.history.notifyUserWrite();
+                    notifyWrite();
                 }
                 return result;
             }),
@@ -445,7 +451,7 @@ export const createGitRoutes = (services: Services) => {
         // first to stay reversible from Checkpoints.
         stashDrop: i.stashDrop.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.history.snapshot("user", `before dropping ${input.ref} in ${input.repo}`);
+                await checkpoint(dir, `before dropping ${input.ref} in ${input.repo}`);
                 await services.git.stashDrop(dir, input.ref);
                 invalidateScan();
                 return { ok: true } as const;
@@ -471,10 +477,10 @@ export const createGitRoutes = (services: Services) => {
         }),
         reset: i.reset.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.history.snapshot("user", `before reset --${input.mode}`);
+                await checkpoint(dir, `before reset --${input.mode}`);
                 await services.git.resetTo(dir, input.sha, input.mode);
                 invalidateScan();
-                services.history.notifyUserWrite();
+                notifyWrite();
                 return { ok: true } as const;
             }),
         ),
@@ -497,7 +503,7 @@ export const createGitRoutes = (services: Services) => {
         // Stage and commit, the plain routes and the runs (index.routes.ts).
         ...indexRoutes(i, { services, repoDir, onRepo, whileCommitting, invalidateScan, targets, lightChip, scanRepo, identifyOrigins }),
         // Checkout, branch-and-switch and the way back: the shared checkout stays on its main line (main-line.routes.ts).
-        ...mainLineRoutes(i, { services, repoDir, onRepo, invalidateScan }),
+        ...mainLineRoutes(i, { services, repoDir, onRepo, invalidateScan, checkpoint, notifyWrite, fixedCheckout: view !== undefined }),
         unstage: i.unstage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await (input.chip === undefined ? targets.unstageTarget(input.repo, dir, input) : clearChip(input.repo, dir, input.chip));
@@ -524,11 +530,11 @@ export const createGitRoutes = (services: Services) => {
         }),
         pull: i.pull.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await services.history.snapshot("user", "before pull");
+                await checkpoint(dir, "before pull");
                 const result = await services.git.pullRemote(dir, AGENT_GIT_AUTHOR);
                 if (result.ok) {
                     invalidateScan();
-                    services.history.notifyUserWrite();
+                    notifyWrite();
                 }
                 return result;
             }),
@@ -536,7 +542,7 @@ export const createGitRoutes = (services: Services) => {
         discard: i.discard.handler(({ input, context }) =>
             onRepo(input.repo, async (dir) => {
                 // Snapshot before discard: git can't walk this back (untracked deleted, no reflog for worktree state).
-                await services.history.snapshot("user", `before discard in ${input.repo}`);
+                await checkpoint(dir, `before discard in ${input.repo}`);
                 // Named before the tree moves, so landed work going with it is read as this person's doing, not an agent's.
                 services.agents.noteRemover({
                     kind: "person",
@@ -546,7 +552,7 @@ export const createGitRoutes = (services: Services) => {
                 await targets.discardTarget(input.repo, dir, input);
                 invalidateScan();
                 // Worktree changed, so record it like any other user write.
-                services.history.notifyUserWrite();
+                notifyWrite();
                 return { ok: true } as const;
             }),
         ),
@@ -573,7 +579,7 @@ export const createGitRoutes = (services: Services) => {
         writeFile: i.writeFile.handler(async ({ input }) => {
             await services.files.write(guardRepoPath(await repoDir(input.repo), input.path), input.content);
             invalidateScan();
-            services.history.notifyUserWrite();
+            notifyWrite();
             return { ok: true } as const;
         }),
         // Write + single-path commit + push, under the repo lock and committing flag like the commit route (a land
@@ -590,9 +596,12 @@ export const createGitRoutes = (services: Services) => {
             );
             if (result.wrote) {
                 invalidateScan();
-                services.history.notifyUserWrite();
+                notifyWrite();
             }
             return result;
         }),
     };
 };
+
+
+export const createGitRoutes = (services: Services) => gitRoutesInViews(services, (view) => routesInView(services, view));

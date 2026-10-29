@@ -16,6 +16,9 @@ export interface MainLineRouteDeps {
     readonly repoDir: (repo: string) => Promise<string>;
     readonly onRepo: <T>(repo: string, task: (dir: string) => Promise<T>) => Promise<T>;
     readonly invalidateScan: () => void;
+    readonly checkpoint?: (dir: string, label: string) => Promise<void>;
+    readonly notifyWrite?: () => void;
+    readonly fixedCheckout?: boolean;
 }
 
 // How long a latched main line is reused by the changes scan, which asks it of every repo on every poll: the config
@@ -38,19 +41,24 @@ export const createOffMainLine = () => {
 
 export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
     const { services, onRepo, invalidateScan } = deps;
+    const checkpoint = deps.checkpoint ?? (async (_dir: string, label: string) => { await services.history.snapshot("user", label); });
+    const refuseSwitch = (): void => {
+        if (deps.fixedCheckout === true) { throw new ORPCError("PRECONDITION_FAILED", { message: "Select a different branch in the workspace to switch checkouts." }); }
+    };
     const moved = (): void => {
         invalidateScan();
-        services.history.notifyUserWrite();
+        if (deps.notifyWrite === undefined) { services.history.notifyUserWrite(); } else { deps.notifyWrite(); }
     };
     return {
         // Said as an outcome the switcher shows rather than as a breakage, before any checkpoint is taken.
         checkout: i.checkout.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
+                refuseSwitch();
                 const locked = await lockedBranchOf(dir);
                 if (locked !== undefined && !staysOnMainLine(locked, input.ref)) {
                     return { ok: false, reason: mainLineRefusal(locked, input.ref) };
                 }
-                await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
+                await checkpoint(dir, `before checkout ${input.ref.slice(0, 12)}`);
                 await services.git.checkoutRef(dir, input.ref);
                 moved();
                 return { ok: true } as const;
@@ -59,12 +67,13 @@ export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
         // Non-destructive unless it also checks out, which in a shared checkout is a move off its main line.
         createBranchAt: i.createBranchAt.handler(async ({ input }) => {
             const dir = await deps.repoDir(input.repo);
+            if (input.checkout === true) { refuseSwitch(); }
             const locked = input.checkout === true ? await lockedBranchOf(dir) : undefined;
             if (locked !== undefined) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: mainLineRefusal(locked, input.name) });
             }
             if (input.checkout === true) {
-                await services.history.snapshot("user", `before new branch ${input.name}`);
+                await checkpoint(dir, `before new branch ${input.name}`);
             }
             await services.git.createBranch(dir, input.name, input.start, input.checkout === true);
             if (input.checkout === true) {
@@ -76,11 +85,12 @@ export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
         // overwrite uncommitted work is the answer's reason; a checkpoint first, as for any HEAD-mover.
         returnToMainLine: i.returnToMainLine.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
+                refuseSwitch();
                 const standing = await mainLineStanding(dir);
                 if (standing.on || standing.locked === undefined) {
                     return { ok: true };
                 }
-                await services.history.snapshot("user", `before returning to ${standing.locked}`);
+                await checkpoint(dir, `before returning to ${standing.locked}`);
                 try {
                     await services.git.checkoutRef(dir, standing.locked);
                 } catch (error) {

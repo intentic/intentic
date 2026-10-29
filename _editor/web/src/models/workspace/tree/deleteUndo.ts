@@ -1,4 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
+import { scopeKey, workspaceView, type ViewScope } from "../../../app/workspaceScope";
 import { computed, toRaw } from "vue";
 
 // File changes this tab can take back, newest last, as a file manager's Undo walks back its own history: a delete, a
@@ -35,32 +36,34 @@ export type FileStep = DeleteBatch | MoveBatch | CreateBatch;
 // Deep enough for a run of changes worth walking back; past it the oldest drop off the bottom.
 const DEPTH = 50;
 
-const stack = sandboxRef<readonly FileStep[]>(() => []);
+const stacks = sandboxRef(() => new Map<string, readonly FileStep[]>());
+const stackIn = (view: ViewScope): readonly FileStep[] => stacks.value.get(scopeKey(view)) ?? [];
 
 /** Whether there is anything to take back: what decides whether Mod+Z is the workspace's or passes through. */
-export const fileUndoable = computed(() => stack.value.length > 0);
+export const fileUndoable = computed(() => stackIn(workspaceView.value).length > 0);
 
-const remember = (step: FileStep, size: number): void => {
+const remember = (step: FileStep, size: number, view: ViewScope): void => {
     if (size > 0) {
-        stack.value = [...stack.value, step].slice(-DEPTH);
+        stacks.value.set(scopeKey(view), [...stackIn(view), step].slice(-DEPTH));
     }
 };
 
-export const rememberDelete = (batch: DeleteBatch): void => remember(batch, batch.entries.length);
+export const rememberDelete = (batch: DeleteBatch, view = workspaceView.value): void => remember(batch, batch.entries.length, view);
 
-export const rememberMoves = (moves: MoveBatch[`moves`]): void => remember({ moves }, moves.length);
+export const rememberMoves = (moves: MoveBatch[`moves`], view = workspaceView.value): void => remember({ moves }, moves.length, view);
 
-export const rememberCreated = (created: readonly string[]): void => remember({ created }, created.length);
+export const rememberCreated = (created: readonly string[], view = workspaceView.value): void => remember({ created }, created.length, view);
 
 // Takes the step off the stack, or the newest with none named; undefined when it was taken already (an Undo button
 // pressed after Mod+Z took the same delete back), so a step is never taken back twice.
 // Compared raw: the stack hands out reactive proxies, a receipt holds the batch as it was made.
 export const takeStep = <T extends FileStep>(step?: T): T | FileStep | undefined => {
-    const wanted = step ?? stack.value.at(-1);
+    const stack = stackIn(workspaceView.value);
+    const wanted = step ?? stack.at(-1);
     const taken = wanted === undefined ? undefined : toRaw(wanted);
-    if (taken === undefined || !stack.value.some((held) => toRaw(held) === taken)) {
+    if (taken === undefined || !stack.some((held) => toRaw(held) === taken)) {
         return undefined;
     }
-    stack.value = stack.value.filter((held) => toRaw(held) !== taken);
+    stacks.value.set(scopeKey(workspaceView.value), stack.filter((held) => toRaw(held) !== taken));
     return taken;
 };

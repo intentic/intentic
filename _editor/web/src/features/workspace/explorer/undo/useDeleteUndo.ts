@@ -1,3 +1,4 @@
+import { workspaceView } from "../../../../app/workspaceScope";
 import { commandShortcut } from "../../../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../../../../app/environments/local";
@@ -23,9 +24,10 @@ export const useDeleteUndo = () => {
     // Each entry moved home, newest first, so a folder moved and then renamed unwinds in the order it was done. A rename
     // in place says the name it went back to; a move says how many came back.
     const unmove = async ({ moves }: MoveBatch): Promise<void> => {
+        const view = workspaceView.value;
         await store.run(async () => {
             for (const { from, to } of moves.toReversed()) {
-                await store.moveEntry(to, from, false);
+                await store.moveEntry(to, from, false, view);
             }
             const [only] = moves;
             say(

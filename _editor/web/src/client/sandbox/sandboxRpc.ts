@@ -1,3 +1,4 @@
+import { GitViewQuerySchema, type GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
 import { errorMessage } from "@intentic/base/errors";
 import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
 import type { sandboxContract } from "@intentic/sandbox-contract";
@@ -6,7 +7,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { trackPerf } from "../../app/perf/perf";
 import { uuid } from "../../lib/uuid";
-import { routeRefusalText, staleDaemonReason } from "./useDaemonRoutes";
+import { routeRefusalText, staleDaemonReason, supportsRoute } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
@@ -24,6 +25,7 @@ export interface SandboxCallContext {
     // Another sandbox by id; absent means the active one. Only the active daemon's refusals get a route-drift reading:
     // this browser's fingerprint of its own daemon says nothing about another box's build.
     readonly at?: string | undefined;
+    readonly gitView?: GitView | undefined;
     // Nobody is waiting (a fleet-wide poll): never raises a sign-in, and with no credential in hand fails the way an
     // unreachable box does.
     readonly background?: boolean;
@@ -141,7 +143,14 @@ const onceLoaded = <T extends ClientContext>(build: (contract: ContractModule) =
     return {
         call: async (path, input, options) => {
             link ??= build(await loadContract());
-            return link.call(path, input, options);
+            if (path[0] !== `git`) { return link.call(path, input, options); }
+            const scoped = GitViewQuerySchema.loose().parse(input ?? {});
+            scoped.view = options.context.gitView ?? scoped.view;
+            const view = scoped.view;
+            if ((view?.agent !== undefined || view?.branch !== undefined) && !supportsRoute(`git.viewChanges`)) {
+                throw new Error(`This sandbox needs an update before Git can operate in a selected checkout.`);
+            }
+            return link.call(path, view === undefined ? input : scoped, options);
         },
     };
 };

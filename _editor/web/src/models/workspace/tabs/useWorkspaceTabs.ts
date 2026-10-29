@@ -1,3 +1,4 @@
+import { workspaceView } from "../../../app/workspaceScope";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref, watch } from "vue";
 import { documentTabId } from "../../../workbench/views/documentRegistry";
@@ -141,7 +142,7 @@ export const renameOpenPaths = (from: string, to: string): void => {
 
 // Editing a previewed file promotes it, the third promotion gesture beside the double-click. Without it, the
 // next peek would replace the tab and discard-prompt an edit the user never asked to open.
-const { dirtyPaths, forget, renamePath } = useEditBuffers();
+const { dirtyPaths, forget, renamePath } = useEditBuffers(workspaceView);
 watch(dirtyPaths, (dirty) => {
     for (const which of [`main`, `side`] as const) {
         const previewed = pane(which).tabs.find((tab) => tab.id === pane(which).preview);

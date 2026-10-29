@@ -21,7 +21,7 @@ export const agentScope = (agent: string | undefined): ViewScope => (agent === u
 /** A branch of one repository, or the shared tree for none. */
 export const branchScope = (from: RepoBranch | undefined): ViewScope => (from === undefined ? SHARED_SCOPE : { repo: from.repo, branch: from.branch });
 
-/** Whether a scope is the shared tree, the one copy a reader may write. */
+/** Whether a scope is the shared tree, the default checkout. */
 export const isShared = (scope: ViewScope): boolean => scope.agent === undefined && scope.branch === undefined;
 
 /** A branch as the reader names it: the branch alone for the workspace's own repository, its folder first for another. */
@@ -39,8 +39,7 @@ export const scopeFields = (scope: ViewScope): { agent?: string; branch?: string
 
 // Which copy the Workspace shows. A per-person view, kept in this browser: nothing moves on disk, and the shared
 // checkout stays on its main line whatever anyone looks at. Module-level singleton, since consumers span outside the
-// Workspace (chat sets it, the route mirrors it); one sandbox's, so a switch goes back to the shared tree. Read-only
-// whenever it is not the shared tree, since the daemon refuses writes into anything else.
+// Workspace (chat sets it, the route mirrors it); one sandbox's, so a switch goes back to the shared tree.
 export const workspaceView = sandboxShallowRef<ViewScope>(() => SHARED_SCOPE);
 
 // The conversation whose copy is on screen, undefined for the shared tree or a branch. Writing one switches the view to

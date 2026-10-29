@@ -1,3 +1,4 @@
+import { gitView, viewKey } from "./gitView";
 import type { CommitResult, GitChange, GitChanges, GitScope, GitTarget, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import type { IndexRun, IndexRunStart } from "@intentic/sandbox-contract/schemas/git/index-run";
 import { UNATTRIBUTED_ORIGIN } from "@intentic/sandbox-contract/schemas/git/git";
@@ -23,7 +24,7 @@ const OK = { ok: true } as const;
 /** What a stage or unstage names: paths, a scope, or one origin's chip (GitIndexMoveSchema). */
 type IndexMove = GitTarget & { readonly chip?: string | undefined };
 
-const keyOf = (repo: string, path: string): string => `${repo}/${path}`;
+const keyOf = (repo: string, path: string): string => `${viewKey()}\0${repo}/${path}`;
 
 // A repo is listed when it has uncommitted work, or when the sync controls have something to do: ahead or behind its
 // upstream, a branch never published, or an operation halted (the daemon's own inclusion rule, git.routes.ts).
@@ -64,7 +65,8 @@ const placed = (repo: RepoChanges): RepoChanges => {
 /** The workspace-wide review as git would report it after this page load's index moves and git verbs. */
 export const gitChanges = (): GitChanges => {
     const changes = worktreeChanges();
-    const ids = [`root`, ...REPOS];
+    const view = gitView();
+    const ids = view?.branch === undefined ? [`root`, ...REPOS] : [view.repo ?? `root`];
     const recorded = new Map(changes.repos.map((repo) => [repo.repo, repo]));
     changes.repos = ids
         .map((repo) => placed(recorded.get(repo) ?? { repo, conflicted: [], staged: [], unstaged: [] }))
@@ -198,11 +200,11 @@ export const startIndexRun = ({ repo, op, target, message }: IndexRunStart): Ind
     } else {
         stage(repo, target ?? {});
     }
-    runs.set(repo, run);
+    runs.set(`${viewKey()}\0${repo}`, run);
     return run;
 };
 
-export const indexRunState = (repo: string): IndexRun => runs.get(repo) ?? { status: `idle`, id: ``, repo, command: ``, output: `` };
+export const indexRunState = (repo: string): IndexRun => runs.get(`${viewKey()}\0${repo}`) ?? { status: `idle`, id: ``, repo, command: ``, output: `` };
 
 export const discard = (repo: string, target: GitTarget) => {
     const paths = resolve(repo, target);
@@ -227,22 +229,22 @@ export const settleAll = (repo: string): void => {
 /** A land rewrites these root-relative paths, so they are pending again even where a commit had taken them. */
 export const reopen = (paths: readonly string[]): void => {
     for (const path of paths) {
-        settled.delete(path);
+        settled.delete(`${viewKey()}\0${path}`);
     }
 };
 
 /** Which recording rows are pending right now, as `repo/path` keys: what a checkpoint records of the tree. */
 export const pendingKeys = (): Set<string> =>
-    new Set(gitChanges().repos.flatMap((repo) => [...repo.staged, ...repo.unstaged, ...repo.conflicted].map((row) => keyOf(repo.repo, row.path))));
+    new Set(gitChanges().repos.flatMap((repo) => [...repo.staged, ...repo.unstaged, ...repo.conflicted].map((row) => `${repo.repo}/${row.path}`)));
 
 /** Puts the tree back to a checkpoint's pending set: rows it held come back, rows it did not are settled. */
 export const restorePending = (keys: ReadonlySet<string>, recorded: ReadonlySet<string>): void => {
     for (const key of recorded) {
         if (keys.has(key)) {
-            settled.delete(key);
+            settled.delete(`${viewKey()}\0${key}`);
         } else {
-            settled.add(key);
-            staged.delete(key);
+            settled.add(`${viewKey()}\0${key}`);
+            staged.delete(`${viewKey()}\0${key}`);
         }
     }
 };

@@ -42,6 +42,7 @@ export const fakeHistory = (overrides: Partial<Services["history"]> = {}): Servi
         start: () => {},
         stop: () => {},
         snapshot: async () => undefined,
+        checkpointIn: async () => {},
         notifyUserWrite: () => {},
         list: async () => [],
         diff: async () => undefined,

@@ -1,3 +1,4 @@
+import { copyInSharedWorkspace, requireUploadScope, sharedUploadRoute } from "./uploadScope";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
 import { isBrowsableArchive } from "@intentic/sandbox-contract/formats/archives";
@@ -5,7 +6,7 @@ import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { basename, joinPath } from "@intentic/ui/path";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../../../models/workspace/tree/dropEntries";
 import { packTar } from "../../explorer/transfer/tarArchive";
@@ -18,7 +19,7 @@ import { scopeFields, workspaceView } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../../../../models/workspace/files/provisionalEntries";
 import { encodingFor, multiplexed } from "./uploadLink";
-import { captureNativeDrop, copyNatively, type NativeDrop, type NativeEvent, type NativeProgress } from "./nativeCopy";
+import { captureNativeDrop, type NativeDrop, type NativeEvent, type NativeProgress } from "./nativeCopy";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
 // Per-file transport is a bounded XHR pool; a chunk of many small files goes as one tar archive instead, falling back to
@@ -344,7 +345,7 @@ const restartQueue = (): void => {
     installSettled.value = false;
     pending.value = [];
 };
-
+watch(workspaceView, restartQueue, { flush: `sync` });
 // Matches a repo's own .git: the directory, anything under it, or the file a worktree/submodule uses instead.
 // Segment-wise, so `src/.gitignore` or `notes/git` don't match.
 const isGitEntry = (path: string): boolean => path.split(`/`).includes(`.git`);
@@ -359,7 +360,7 @@ const recomputeBytesDone = (): void => {
 // Asks the daemon which dropped files are already identical (size + mtime) so a re-drop only sends what changed.
 // Any error returns everything unfiltered; dedup must never block or drop an upload.
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[], signal: AbortSignal): Promise<readonly DroppedFile[]> => {
-    if (!supportsRoute(DIFF_ROUTE)) {
+    if (!sharedUploadRoute(DIFF_ROUTE)) {
         return entries;
     }
     try {
@@ -386,7 +387,7 @@ const uploadOneXhr = async (item: QueueFile, signal: AbortSignal): Promise<void>
         schedulePublish();
     };
     await sandboxRawUpload(`POST /workspace/upload`, item.file, {
-        query: { path: item.path, mtime: String(item.file.lastModified) },
+        query: { ...scopeFields(workspaceView.value), path: item.path, mtime: String(item.file.lastModified) },
         signal,
         onProgress: counted,
         encoding: encodingFor([item]),
@@ -493,7 +494,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
                 return;
             }
         }
-        if (archive && chunk.length > TAR_THRESHOLD && supportsRoute(ARCHIVE_ROUTE)) {
+        if (archive && chunk.length > TAR_THRESHOLD && sharedUploadRoute(ARCHIVE_ROUTE)) {
             if ((await uploadViaTar(chunk, signal)) === `done` || signal.aborted) {
                 return;
             }
@@ -542,10 +543,8 @@ const offerSetup = (detected: readonly ProjectSetup[]): void => {
     setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
 };
 
-// A drop the desktop app copies itself (nativeCopy.ts), its reports fed into the tally the card reads, so the card is
-// the same one an upload draws. Each report carries the copy's running totals; what this copy has already added is
-// kept, so each adds only what changed. "declined" hands the drop back to the browser, taking the app's scan back out
-// of the counts first, since the browser's walk counts it again.
+// Native copy reports cumulative counts; add only each report's delta. On decline the browser walks the drop again,
+// so remove the native attempt's counts first.
 const copyViaApp = async (drop: NativeDrop, targetDir: string, signal: AbortSignal, endScan: () => void): Promise<"declined" | "handled"> => {
     const now = tally.value;
     const added = { scanned: 0, scannedBytes: 0, done: 0, doneBytes: 0, sentBytes: 0, failed: 0 };
@@ -645,7 +644,7 @@ const copyViaApp = async (drop: NativeDrop, targetDir: string, signal: AbortSign
             publish();
         }
     };
-    const outcome = await copyNatively(drop, targetDir, signal, report);
+    const outcome = await copyInSharedWorkspace(drop, targetDir, signal, report);
     if (outcome === `declined` && !signal.aborted) {
         scanned(0, 0);
         now.scanningName = ``;
@@ -718,9 +717,9 @@ const run = async (): Promise<void> => {
 export function useUploadQueue() {
     queryClient = useQueryClient();
 
-    // Adds a drop/pick to the queue and (re)starts the worker. targetDir is baked into each file's path here, so
-    // the transports below don't need to thread it separately.
+    // Adds a drop/pick with targetDir baked into each destination path.
     const enqueue = async (targetDir: string, dropped: readonly DroppedFile[]): Promise<void> => {
+        requireUploadScope();
         // Filtered out before project detection or the diff manifest, so the root's own .git never reaches either.
         const entries = dropped.filter((entry) => !isRootGitPath(joinPath(targetDir, entry.path)));
         if (entries.length === 0) {
@@ -741,7 +740,7 @@ export function useUploadQueue() {
         preparing.value += entries.length;
         try {
             // Detected before the unchanged-file filter prunes the usually-unchanged manifests; dedupe by dir across drops.
-            const detected = supportsRoute(INSTALL_ROUTE) ? await detectSetup(targetDir, entries) : [];
+            const detected = sharedUploadRoute(INSTALL_ROUTE) ? await detectSetup(targetDir, entries) : [];
             const unchanged = await filterUnchanged(targetDir, entries, signal);
             if (signal.aborted) {
                 return;

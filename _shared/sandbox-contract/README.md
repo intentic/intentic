@@ -199,3 +199,7 @@ pnpm --filter @intentic/sandbox-contract test
 Storage reports include optional current history-volume admission figures and per-repository HEAD checkout estimates.
 A `sandbox-disk-low` error turns a new checkout's turn away before the model runs; it stays held for a person to resend
 once space is available, rather than retrying automatically as a workspace-setup hold does.
+
+Git reads and mutations accept an optional `view` selecting a session worktree or a repository's branch checkout.
+`git.viewChanges` advertises this support so an older daemon cannot silently apply scoped writes to shared `/work`.
+File mutations carry the same selector; working diff URLs encode it as JSON.

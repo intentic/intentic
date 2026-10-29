@@ -128,11 +128,10 @@ flowchart LR
   with no branch, status letters or line counts, and ends in Accept under one sentence saying what accepting does
   (`features/agents/review/results/PlainResultReview.vue`); that press carries the documents even where git ignores
   them. A developer's review and land are unchanged.
-- **Changes in another copy.** The Workspace's Changes tab follows its selected branch or session worktree on desktop
-  and phone (`features/workspace/changes/scoped/ScopedChangesPanel.vue`). A branch lists session landing commits outside
-  the main line, with each file compared against that landing's first parent. A session shows its own review and
-  committed work. These views are read-only; shared `/work` keeps the staging and commit controls. Landing lists refresh
-  after lands and ref moves, and older pages use a commit cursor so a newer landing does not shift them.
+- **Changes in another copy.** The Workspace uses the same staging, commit, discard and sync controls for the
+  selected branch or session worktree as for shared `/work`. Git requests carry that checkout's `view`; cache entries,
+  edit buffers and running operations keep their originating view. Branch landings remain uncommitted until the owner
+  stages and commits them. Older daemons refuse scoped writes until updated.
 - **A first run.** The agents board is always its three lanes, even empty: a first run draws the first agent's
   dashed slot in Active, where its card will arrive, and says in each empty lane what will land there
   (`features/agents/board/view/firstScreen.ts`). A maintainer's first run also carries a getting-started checklist,

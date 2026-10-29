@@ -64,3 +64,17 @@ describe(`servedProcedures`, () => {
         expect(servedProcedures(procedures)).toEqual([`workspace.file`, `system.events`]);
     });
 });
+
+
+test(`GET checkout selectors reach the handler as objects and invalid combinations refuse`, async () => {
+    const selected: unknown[] = [];
+    const fixture = serve({ git: { viewChanges: ({ view }) => { selected.push(view); return { repos: [] }; } } }, {}, {}, { speaker: `Fixture`, tag: `[test]`, log: () => {} });
+    const call = async (query: string) => {
+        const url = new URL(`http://daemon.test/git/view/changes?${query}`);
+        return fixture(new Request(url), url);
+    };
+    expect((await call(`view[repo]=app&view[branch]=feature%2Ftest`)).status).toBe(200);
+    expect((await call(`view[agent]=session-1`)).status).toBe(200);
+    expect(selected).toEqual([{ repo: `app`, branch: `feature/test` }, { agent: `session-1` }]);
+    expect((await call(`view[agent]=session-1&view[branch]=feature`)).status).toBe(400);
+});

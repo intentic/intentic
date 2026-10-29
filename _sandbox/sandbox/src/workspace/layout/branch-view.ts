@@ -9,8 +9,8 @@ import { discoverRepos } from "./repo-discovery.js";
 // checkout the daemon keeps of it (conversations/worktrees/branches/branch-checkouts.ts), laid out like /work. What belongs to
 // that repository is read from the branch alone: a file the branch deleted is not there, however much the shared tree
 // still holds it. Everything else (the other repositories, the workspace's own files around a nested one, a repository
-// nested deeper inside the one viewed) is the shared tree's, so the rest of the workspace stays in view. Read-only, as
-// every scope is: no write route takes one.
+// nested deeper inside the one viewed) is the shared tree's, so the rest of the workspace stays in view. Writes are restricted
+// to the selected repository.
 
 /** Which copy a read means, as every scoped route's input carries it (WorkspaceScopeSchema). */
 export interface ReadScope {

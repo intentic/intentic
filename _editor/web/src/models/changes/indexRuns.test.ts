@@ -150,3 +150,15 @@ test("a daemon without the runs commits and stages through its one-request route
     ]);
     expect(starts).toEqual([]);
 });
+
+
+test(`a scoped commit keeps its destination through a guardrail confirmation`, async () => {
+    const view = { repo: `app`, branch: `feature` } as const;
+    script = [settled(1, { status: `error`, held: { files: 4000, dirs: [] } }), settled(2, { result: { committed: true } })];
+    const running = runIndexJob(`app`, { op: `commit`, message: `feat: scoped` }, view);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(holdQuestions.value[0]?.view).toEqual(view);
+    holdQuestions.value[0]!.answer(true);
+    expect((await running).result?.committed).toBe(true);
+    expect(starts.map((start) => start.view)).toEqual([view, view]);
+});

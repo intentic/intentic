@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -100,7 +100,7 @@ test("the main line, an agent's own branch, a branch that is nowhere and a repos
     expect(await branches.standing()).toEqual([]);
 });
 
-test("refresh follows a branch that moved and puts back anything left in the checkout", async () => {
+test("refresh follows a moved branch and refuses to overwrite local work", async () => {
     const { work, branches } = await setup();
     const dir = await branches.refresh("root", "feature");
     // Moved by someone else (a fetch, another copy's push): the checkout's files follow on the next refresh.
@@ -114,14 +114,13 @@ test("refresh follows a branch that moved and puts back anything left in the che
     expect(await branches.refresh("root", "feature")).toBe(dir);
     expect(await readFile(join(dir, "README.md"), "utf8")).toBe("feature, moved on\n");
     expect(await sh(dir, "status", "--porcelain")).toBe("");
-    // Anything left in it (a land that died mid-write) is not anyone's work, and goes.
+    // Local work survives a refresh; an overlapping external ref move is refused.
     await writeFile(join(dir, "README.md"), "half written\n");
     await writeFile(join(dir, "stray.ts"), "stray\n");
     await sh(work, "update-ref", "refs/heads/feature", await sh(work, "rev-parse", "feature~1"));
-    await branches.refresh("root", "feature");
-    expect(await readFile(join(dir, "README.md"), "utf8")).toBe("feature\n");
-    await expect(stat(join(dir, "stray.ts"))).rejects.toThrow();
-    expect(await sh(dir, "status", "--porcelain")).toBe("");
+    await expect(branches.refresh("root", "feature")).rejects.toThrow();
+    expect(await readFile(join(dir, "README.md"), "utf8")).toBe("half written\n");
+    expect(await readFile(join(dir, "stray.ts"), "utf8")).toBe("stray\n");
 });
 
 test("the sweep removes a checkout nobody lands onto or looked at for a week, never the branch, and keeps the rest", async () => {
@@ -149,4 +148,24 @@ test("a released checkout lets git delete its branch", async () => {
     expect(await branches.release("root", "feature")).toBe(true);
     await sh(work, "branch", "-D", "feature");
     expect(await branches.release("root", "feature")).toBe(false);
+});
+
+
+test("staged, unstaged and untracked edits survive refresh and idle cleanup", async () => {
+    const { branches } = await setup();
+    const dir = await branches.refresh("root", "feature");
+    await writeFile(join(dir, "README.md"), "staged\n");
+    await sh(dir, "add", "README.md");
+    await writeFile(join(dir, "README.md"), "unstaged\n");
+    await writeFile(join(dir, "new.ts"), "new\n");
+    const before = await sh(dir, "status", "--porcelain");
+    await branches.refresh("root", "feature");
+    expect(await sh(dir, "show", ":README.md")).toBe("staged");
+    const old = new Date(Date.now() - BRANCH_CHECKOUT_IDLE_MS - 60_000);
+    await utimes(branches.viewRoot("root", "feature"), old, old);
+    expect(await branches.sweep(() => [])).toEqual([]);
+    expect(await branches.release("root", "feature")).toBe(false);
+    expect(await sh(dir, "status", "--porcelain")).toBe(before);
+    expect(await readFile(join(dir, "README.md"), "utf8")).toBe("unstaged\n");
+    expect(await readFile(join(dir, "new.ts"), "utf8")).toBe("new\n");
 });

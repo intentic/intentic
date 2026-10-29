@@ -1,3 +1,4 @@
+import { sameScope, SHARED_SCOPE, workspaceView } from "../../../../app/workspaceScope";
 import type { IndexRun } from "@intentic/sandbox-contract/schemas/git/index-run";
 import { formatCount } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
@@ -54,26 +55,26 @@ export const phaseWords = (repo: string, run: IndexRun | undefined): string => {
 
 /** The runs this tab follows, as the one line a bar draws for them; undefined while none runs. */
 export const useRunLine = (): ComputedRef<RunLine | undefined> => {
-    const following = computed(() => [...followedRuns.value.entries()].filter(([, followed]) => followed.run.status === `running`));
+    const following = computed(() => [...followedRuns.value.values()].filter((followed) => followed.run.status === `running` && sameScope(followed.view ?? SHARED_SCOPE, workspaceView.value)));
     const now = useNow(() => following.value.length > 0, 250);
     return computed(() => {
         const runs = following.value;
         const [lead] = runs;
-        const ran = (ms: number): boolean => runs.some(([, followed]) => now.value - followed.since >= ms);
+        const ran = (ms: number): boolean => runs.some((followed) => now.value - followed.since >= ms);
         const slow = ran(SLOW_RUN_MS);
-        if (lead === undefined || !(slow || runs.some(([, followed]) => followed.run.op === `commit`))) {
+        if (lead === undefined || !(slow || runs.some((followed) => followed.run.op === `commit`))) {
             return undefined;
         }
         return {
-            words: phaseWords(lead[0], lead[1].run),
+            words: phaseWords(lead.run.repo, lead.run),
             others: runs.length - 1,
-            tip: runs.length > 1 ? runs.map(([repo, followed]) => phaseWords(repo, followed.run)).join(`\n`) : undefined,
-            lostContact: runs.some(([, followed]) => followed.lostContact),
+            tip: runs.length > 1 ? runs.map((followed) => phaseWords(followed.run.repo, followed.run)).join(`\n`) : undefined,
+            lostContact: runs.some((followed) => followed.lostContact),
             slow,
             stuck: ran(STUCK_RUN_MS),
             stop: () => {
-                for (const [repo] of runs) {
-                    void cancelIndexRun(repo);
+                for (const followed of runs) {
+                    void cancelIndexRun(followed.run.repo, followed.view);
                 }
             },
         };

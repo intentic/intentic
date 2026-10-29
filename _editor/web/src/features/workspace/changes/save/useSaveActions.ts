@@ -1,3 +1,4 @@
+import { workspaceView } from "../../../../app/workspaceScope";
 import { sandboxRef } from "@intentic/extension-api";
 import type { RepoTarget } from "@intentic/sandbox-contract/schemas/git/git";
 import type { TooltipValue } from "@intentic/ui";
@@ -30,7 +31,7 @@ const isBatch = (target: ChangedFile | ChangeBatch): target is ChangeBatch => `f
 
 export function useSaveActions() {
     const t = useT();
-    const changes = useChanges();
+    const changes = useChanges(workspaceView);
     const words = useVocabulary();
     const pushFlow = usePushFlow();
 

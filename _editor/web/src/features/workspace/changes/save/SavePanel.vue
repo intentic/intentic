@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceView, scopeKey, scopeFields } from "../../../../app/workspaceScope";
 import type { ChangeStatus, IconName, Tip } from "@intentic/ui";
 import { Button, Modal, Notice, ui, useDevice } from "@intentic/ui";
 import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
@@ -38,7 +39,7 @@ import { useRole } from "../../../../client/sandbox/useRole";
 
 const t = useT();
 
-const changes = useChanges();
+const changes = useChanges(workspaceView);
 const words = useVocabulary();
 const actions = useSaveActions();
 const { fleet } = useAgents();
@@ -132,12 +133,12 @@ const pending = computed(() => changes.count.value);
 // Opens on the click, not on the fetched answer: the row already carries everything the tab needs to draw itself.
 const openDiff = (file: ChangedFile, mode: OpenMode): void => {
     const tab = {
-        key: `working:${file.repo}:${file.side}`,
+        key: `working:${scopeKey(workspaceView.value)}:${file.repo}:${file.side}`,
         scope: file.repo,
         label: file.label,
         status: file.status,
         path: file.path,
-        ...diffRawUrls({ source: `working`, repo: file.repo, side: file.side }, file.path, file.status),
+        ...diffRawUrls({ source: `working`, repo: file.repo, side: file.side, view: scopeFields(workspaceView.value) }, file.path, file.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
     void changes.fileDiff(file.repo, file.path, file.side).then((body) => fillDiff({ ...tab, ...body }));

@@ -1076,12 +1076,12 @@
             "working": "{count} pracuje"
         },
         "branchStart": {
-            "commitTo": "Zatwierdź w {branch}",
+            "commitTo": "Przenieś do {branch}",
             "from": "z {branch}",
             "fromTitle": "Z gałęzi",
-            "fromNote": "Jego praca trafia tam",
-            "committed": "Zatwierdzono {name} w {branch}",
-            "onBranch": "Na {branch}: jego praca trafia do tej gałęzi",
+            "fromNote": "Praca trafia tam bez commita",
+            "committed": "Przeniesiono {name} do {branch}",
+            "onBranch": "Na {branch}: praca trafia tam bez commita",
             "howItWorks": "Z gałęzi",
             "howItWorksNote": "Wspólna przestrzeń się nie zmienia",
             "unlink": "Odłącz",
@@ -12729,7 +12729,7 @@
             "copyUnreadable": "Kopia nieczytelna",
             "findCopy": "Znajdź gałąź lub kopię",
             "noCopyMatches": "Żadna kopia nie pasuje.",
-            "readOnlyClickToSwitch": "Tylko odczyt · kliknij, by zmienić",
+            "readOnlyClickToSwitch": "Kliknij, aby przełączyć",
             "sharedHint": "Tu trafia skończona praca",
             "sharedWorkspace": "Współdzielona przestrzeń robocza",
             "showFilesFrom": "Pokaż pliki z",
@@ -12743,7 +12743,7 @@
             "staysShared": "Wyszukiwanie, terminale i podglądy korzystają ze wspólnej przestrzeni roboczej.",
             "clickToLook": "Kliknij, by zobaczyć inną",
             "sharedAria": "Współdzielona przestrzeń robocza, na {name}",
-            "branchAria": "Gałąź, tylko do odczytu: {name}",
+            "branchAria": "Gałąź: {name}",
             "newAgentFromHere": "Nowy agent stąd",
             "newAgentFromHereNote": "Jego praca wraca tutaj",
             "newAgentTip": "Nowy agent"
@@ -13057,17 +13057,8 @@
             "andMore": "{names} i {count} więcej"
         },
         "workspaceViewNote": {
-            "readOnly": "Podgląd {name}, tylko do odczytu",
+            "readOnly": "Edytujesz {name}",
             "backToShared": "Wróć do wspólnej"
-        },
-        "scopedChanges": {
-            "branchHint": "Każde przeniesienie porównuje gałąź przed pracą tej sesji i po niej.",
-            "sessionHint": "Praca tej sesji, w tym zmiany już przeniesione.",
-            "loading": "Wczytywanie zmian…",
-            "noLandings": "Na tej stronie nie ma zmian sesji spoza {branch}.",
-            "noChanges": "Brak zmian w tej sesji.",
-            "latest": "Najnowsze przeniesienia",
-            "older": "Starsze przeniesienia"
         }
     },
     "needs": {

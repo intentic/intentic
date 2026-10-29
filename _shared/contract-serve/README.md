@@ -13,7 +13,7 @@ flowchart LR
 
 - `serve(procedures, raw, unserved, voice)` resolves a request by the contract's route table, decodes a procedure's
   input the way oRPC's handler does and parses it with the procedure's own schema, and types every handler by the
-  contract, so a contract change breaks its callers' typecheck rather than their runtime.
+  contract. GET object fields decode from OpenAPI bracket notation, including checkout selectors. A contract change breaks its callers' typecheck rather than their runtime.
 - A handler refuses with `refuse(message, status)`, answered in the daemon's own `{ error }` body. A streamed
   procedure (`/events`) answers `Frames`, written in oRPC's event-iterator wire format (`sse.ts`).
 - A request nothing answers gets a 404 and one log line in the caller's voice, with the reason `unserved` gives for

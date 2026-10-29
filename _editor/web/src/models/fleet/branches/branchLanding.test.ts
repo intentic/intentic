@@ -10,7 +10,7 @@ describe(`a branch start's land wording`, () => {
     });
 
     it(`says it commits to the branch, by the branch's own name`, () => {
-        expect(landWord([{ repo: `apps/web`, branch: `feature/login` }], `Land now`)).toBe(`Commit to apps/web · feature/login`);
+        expect(landWord([{ repo: `apps/web`, branch: `feature/login` }], `Land now`)).toBe(`Land to apps/web · feature/login`);
         expect(landsOnto([{ repo: `root`, branch: `release` }])).toBe(`release`);
     });
 

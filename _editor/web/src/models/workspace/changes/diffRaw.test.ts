@@ -27,3 +27,11 @@ describe(`derivedDiffSource`, () => {
         expect(derivedDiffSource({ afterRaw: `/somewhere/else?x=1` })).toBeUndefined();
     });
 });
+
+
+test(`working diff raw URLs keep the selected branch or session checkout`, () => {
+    for (const view of [{ repo: `app`, branch: `feature/a-b` }, { agent: `session-1` }]) {
+        const source = { source: `working`, repo: `app`, side: `staged`, view } as const;
+        expect(derivedDiffSource(diffRawUrls(source, `a.docx`, `modified`))).toEqual({ ...source, path: `a.docx` });
+    }
+});

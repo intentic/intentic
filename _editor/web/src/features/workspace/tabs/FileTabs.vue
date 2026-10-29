@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceView } from "../../../app/workspaceScope";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import {
     type IconName,
@@ -33,7 +34,7 @@ const emit = defineEmits<{
 }>();
 
 const t = useT();
-const { isDirty } = useEditBuffers();
+const { isDirty } = useEditBuffers(workspaceView);
 const { explorerStyle } = useExplorerStyle();
 
 // Locked files show a padlock in the tab too, matching the row that opened them (isLockedWorkspacePath).
