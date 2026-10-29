@@ -5,7 +5,7 @@ import type { ScreenPoint } from "../../../workbench/window/floating";
 import { chatFullSlot } from "../../../workbench/window/panelSlots";
 import { homeFrame } from "../../../lib/routes/homeSection";
 import { useChatFloating } from "./chatFloating";
-import { useLayout } from "../../../workbench/window/useLayout";
+import { type ChatPosition, useLayout } from "../../../workbench/window/useLayout";
 
 // Which of the panel's three homes (the side panel, the rail, its own window) is in effect, derived from where it's
 // drawn, never a stored mode.
@@ -48,14 +48,24 @@ export const showParkedChat = (): void => {
 // sandbox's file or agent, so a switch starts it over.
 export const lastSectionPath = sandboxRef(() => `/agents`);
 
-// Single source of truth for every dock/undock control. Docking to rail also navigates there; from floating it docks
-// first. Docking to the side only navigates away from the section the column replaces.
+// Docking to the side only leaves /chat, restoring the section the column replaces.
+export const dockChatToSide = (router: Router, position?: ChatPosition): void => {
+    if (position !== undefined) {
+        layout.set(position);
+    }
+    if (floating.floats.value) {
+        floating.dock();
+    }
+    layout.setChatHome(`side`);
+    if (router.currentRoute.value.name === `chat`) {
+        void router.push(lastSectionPath.value);
+    }
+};
+
+// Single source of truth for every dock/undock control. Docking to rail also navigates there; from floating it docks first.
 export const toggleChatHome = (router: Router): void => {
     if (chatOnRail.value) {
-        layout.setChatHome(`side`);
-        if (router.currentRoute.value.name === `chat`) {
-            void router.push(lastSectionPath.value);
-        }
+        dockChatToSide(router);
         return;
     }
     if (floating.floats.value) {

@@ -1,12 +1,14 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref, shallowRef } from "vue";
-import { floatChatAt } from "../../models/conversations/panel/chatPanelLayout";
+import type { Router } from "vue-router";
+import { dockChatToSide, floatChatAt } from "../../models/conversations/panel/chatPanelLayout";
 import { useNotifications } from "../../workbench/notifications/notifications";
 import type { ScreenPoint } from "../../workbench/window/floating";
+import { useLayout } from "../../workbench/window/useLayout";
+import { toScreenPx } from "../../workbench/window/uiScale";
 
-// THE CHAT TILE, DRAGGED OFF THE RAIL. A third way to the pop-out F9 and the tile's right-click already offer: let go
-// anywhere outside the rail and the chat opens in a window of its own, at the place it was let go, the way a browser tab
-// torn off its strip becomes a window where it lands. Let go over the rail, or press Escape, and nothing happens.
+// THE CHAT TILE, DRAGGED OFF THE RAIL. The middle opens a window where the tile was let go; the right edge docks the
+// chat beside the current section. Let go over the rail, or press Escape, and nothing happens.
 // Pointer Events rather than HTML5 drag-and-drop, as the board's card drag (useAgentDrag): a ghost of our own drawing,
 // Escape to cancel, and no browser picture of a link being carried. Mouse and pen only; a touch on the rail scrolls it.
 
@@ -14,18 +16,17 @@ import type { ScreenPoint } from "../../workbench/window/floating";
 const DRAG_THRESHOLD_PX = 5;
 
 /**
- * Where the pointer holds the window it carries, from that window's top-left: on its title bar, by the chat glyph. The
- * layer draws the outline this far up and left of the pointer, and the window opens the same distance from where the
- * pointer let go, so it lands where its outline was.
+ * Where the pointer holds a new window, from its top-left: on its title bar, by the chat glyph.
  */
 export const GRAB = { x: 16, y: 14 } as const;
 
 /**
  * - `pressed`: the button is down on the tile and has not travelled yet; a release here is the tile's own click.
  * - `rail`: carried, over the rail; a release puts it back.
- * - `out`: carried, anywhere outside the rail, past the window's edge included; a release opens the window.
+ * - `dock`: carried, over the right-side target; a release docks the chat on the right.
+ * - `out`: carried, outside both targets, past the window's edge included; a release opens the window.
  */
-export type ChatDragPhase = `idle` | `pressed` | `rail` | `out`;
+export type ChatDragPhase = `idle` | `pressed` | `rail` | `out` | `dock`;
 
 interface Box {
     readonly left: number;
@@ -34,18 +35,18 @@ interface Box {
     readonly bottom: number;
 }
 
-/** Whether a point is over the rail; anywhere else, beyond the window's own edges too, is somewhere to open it. */
-export const overRail = (x: number, y: number, rail: Box | undefined): boolean =>
-    rail !== undefined && x >= rail.left && x < rail.right && y >= rail.top && y < rail.bottom;
+/** The painted targets include their top and left edges, and exclude their bottom and right edges. */
+export const containsPoint = (x: number, y: number, box: Box | undefined): boolean =>
+    box !== undefined && x >= box.left && x < box.right && y >= box.top && y < box.bottom;
 
 /** Where the window's top-left goes for a release at this screen point: the grab, undone. */
-export const dropPoint = (screenX: number, screenY: number): ScreenPoint => ({ left: screenX - GRAB.x, top: screenY - GRAB.y });
+const dropPoint = (screenX: number, screenY: number): ScreenPoint => ({ left: screenX - GRAB.x, top: screenY - GRAB.y });
 
 /**
  * The drop itself: the chat into its own window, at `at`. A browser holds a window back once the press that asked for
  * it is a few seconds old, which a slow drag can be; then a receipt offers the same window from a press of its own.
  */
-export const popChatOutAt = (at: ScreenPoint): void => {
+const popChatOutAt = (at: ScreenPoint): void => {
     if (floatChatAt(at)) {
         return;
     }
@@ -60,16 +61,36 @@ export const popChatOutAt = (at: ScreenPoint): void => {
 export interface ChatTileDragOptions {
     /** The rail's box now; read at the press, since the rail does not move under a held pointer. */
     readonly rail: () => Box | undefined;
-    /** What a release outside the rail does. */
+    /** Width of the docked chat, in viewport pixels. The target leaves at least half the room for a new window. */
+    readonly dockWidth: () => number;
+    readonly dock: () => void;
+    /** What a release outside the rail and the dock target does. */
     readonly drop: (at: ScreenPoint) => void;
 }
 
-export function useChatTileDrag({ rail, drop }: ChatTileDragOptions) {
+// A drag's release also lands as a click. Capture it before the tile's router link can navigate to /chat.
+const swallowClick = (): void => {
+    const swallow = (event: MouseEvent): void => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+    window.addEventListener(`click`, swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener(`click`, swallow, { capture: true }), 0);
+};
+
+export function useChatTileDrag({ rail, dockWidth, dock, drop }: ChatTileDragOptions) {
     const phase = ref<ChatDragPhase>(`idle`);
     // Viewport pixels, for the layer to draw at.
     const pointer = ref({ x: 0, y: 0 });
     const railBox = shallowRef<Box | undefined>(undefined);
-    const dragging = computed(() => phase.value === `rail` || phase.value === `out`);
+    const dockBox = shallowRef<Box | undefined>(undefined);
+    const dragging = computed(() => phase.value === `rail` || phase.value === `out` || phase.value === `dock`);
+    const targetAt = (x: number, y: number): ChatDragPhase => {
+        if (containsPoint(x, y, railBox.value)) {
+            return `rail`;
+        }
+        return containsPoint(x, y, dockBox.value) ? `dock` : `out`;
+    };
 
     let origin = { x: 0, y: 0 };
     // Whether this press ever became a drag: its release must not land as the tile's click, even after an Escape.
@@ -80,18 +101,6 @@ export function useChatTileDrag({ rail, drop }: ChatTileDragOptions) {
         gesture?.abort();
         gesture = undefined;
         phase.value = `idle`;
-    };
-
-    // A drag's release also lands as a click (on the tile, or wherever it and the release share an ancestor), and the
-    // tile is a link to /chat. Taken in the capture phase, before the router's own listener sees it; dropped once this
-    // task is over, since the click, if one comes, is dispatched in the same one as the release.
-    const swallowClick = (): void => {
-        const swallow = (event: MouseEvent): void => {
-            event.preventDefault();
-            event.stopPropagation();
-        };
-        window.addEventListener(`click`, swallow, { capture: true, once: true });
-        setTimeout(() => window.removeEventListener(`click`, swallow, { capture: true }), 0);
     };
 
     const onMove = (event: PointerEvent): void => {
@@ -106,16 +115,19 @@ export function useChatTileDrag({ rail, drop }: ChatTileDragOptions) {
         // Without this a press-and-drag paints a text selection across whatever it passes.
         event.preventDefault();
         pointer.value = { x: event.clientX, y: event.clientY };
-        phase.value = overRail(event.clientX, event.clientY, railBox.value) ? `rail` : `out`;
+        phase.value = targetAt(event.clientX, event.clientY);
     };
 
     const onUp = (event: PointerEvent): void => {
-        const released = phase.value === `out` && overRail(event.clientX, event.clientY, railBox.value) === false;
+        // Use the release's position too: its last move can have been in the other target.
+        const target = dragging.value ? targetAt(event.clientX, event.clientY) : undefined;
         if (carried) {
             swallowClick();
         }
         end();
-        if (released) {
+        if (target === `dock`) {
+            dock();
+        } else if (target === `out`) {
             drop(dropPoint(event.screenX, event.screenY));
         }
     };
@@ -139,6 +151,12 @@ export function useChatTileDrag({ rail, drop }: ChatTileDragOptions) {
         origin = { x: event.clientX, y: event.clientY };
         pointer.value = origin;
         railBox.value = rail();
+        dockBox.value = {
+            left: window.innerWidth - Math.min(dockWidth(), (window.innerWidth - (railBox.value?.right ?? 0)) / 2),
+            top: 0,
+            right: window.innerWidth,
+            bottom: window.innerHeight,
+        };
         carried = false;
         phase.value = `pressed`;
         gesture = new AbortController();
@@ -153,5 +171,15 @@ export function useChatTileDrag({ rail, drop }: ChatTileDragOptions) {
 
     onScopeDispose(end);
 
-    return { phase, dragging, pointer, railBox, press, cancel: end };
+    return { phase, dragging, pointer, railBox, dockBox, press, cancel: end };
 }
+
+export const useChatRailDrag = (rail: ChatTileDragOptions[`rail`], router: Router) => {
+    const layout = useLayout();
+    return useChatTileDrag({
+        rail,
+        dockWidth: () => toScreenPx(layout.chatWidth.value),
+        dock: () => dockChatToSide(router, `right`),
+        drop: popChatOutAt,
+    });
+};

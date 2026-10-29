@@ -58,7 +58,7 @@ import { besideChat, besideFills, sideColumnShown, sideShown } from "./side/side
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
 import { useRailPins } from "./rail/railPins";
-import { popChatOutAt, useChatTileDrag } from "./rail/chatTileDrag";
+import { useChatRailDrag } from "./rail/chatTileDrag";
 import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
 import RailIcon from "./rail/RailIcon.vue";
 import TileMark from "../components/TileMark.vue";
@@ -158,10 +158,9 @@ const railTileLabel = (tile: SectionTile): string => [tileLabel(tile), visitingN
 const railTileTip = (tile: SectionTile): TooltipValue =>
     tileTip(tile, chatCarriable(tile) ? t(`shell.shellDesktop.dragChatOut`) : visitingNote(tile));
 
-// The chat tile, carried off the rail, opens the chat in a window of its own where it is let go: a drag for what F9 and
-// the tile's menu already do. Not while it floats, when the tile is only passing through (chatTileSeated).
+// Carry the chat tile to a new window or the right side. Not while it floats, when the tile is only passing through.
 const railNav = ref<HTMLElement | null>(null);
-const chatDrag = useChatTileDrag({ rail: () => railNav.value?.getBoundingClientRect(), drop: popChatOutAt });
+const chatDrag = useChatRailDrag(() => railNav.value?.getBoundingClientRect(), router);
 const chatCarriable = (tile: RailTile): boolean => tile.id === `chat` && !chatFloats.value;
 const pressTile = (tile: RailTile, event: PointerEvent): void => {
     if (chatCarriable(tile)) {
@@ -635,6 +634,7 @@ useGettingStarted();
             :phase="chatDrag.phase.value"
             :pointer="chatDrag.pointer.value"
             :rail-right="chatDrag.railBox.value?.right ?? 0"
+            :dock-left="chatDrag.dockBox.value?.left ?? 0"
         />
 
         <!-- A tile's right-click menu (tileMenuItems): the chat's homes, or the pin. -->
