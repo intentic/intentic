@@ -1,4 +1,5 @@
 import { refuse } from "@intentic/contract-serve";
+import { ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { cancelCi, ciJobs, ciRunsResponse, rerunCi } from "../../fixture/ci";
 import { demoMode, demoQuiet } from "../../mode";
 import { pushRuntime } from "../runtimePush";
@@ -12,6 +13,9 @@ import type { Doors } from "../doors";
 const options = () => ({ mainFailing: demoMode.id === `full`, green: demoQuiet() });
 
 const RERUN_PUSH_MS = 45_000;
+// What a real Fix press waits on before any agent exists: the failed run's job list and each failed job's whole log, read
+// from the forge (about 1 s and 2 s on GitHub for a 4 MB log), so the board's card standing in for it is seen as it is.
+const FIX_READS_LOGS_MS = 3_000;
 
 export const ciDoors = {
     runs: () => ciRunsResponse(Date.now(), options()),
@@ -33,7 +37,8 @@ export const ciDoors = {
         return { ok: true as const };
     },
     // One attempt per run: a second press continues the conversation already holding the failure.
-    fix: ({ repo, runId, mode }) => {
+    fix: async ({ repo, runId, mode }) => {
+        await new Promise((resolve) => setTimeout(resolve, FIX_READS_LOGS_MS));
         const run = ciRunsResponse(Date.now(), options()).runs.find((candidate) => candidate.repo === repo && candidate.runId === runId) ?? refuse(`No run ${runId} on ${repo}.`, 404);
         const conversationId = `ci-fix-${repo}-${runId}`;
         const now = Date.now();
@@ -42,7 +47,7 @@ export const ciDoors = {
             return { conversationId };
         }
         const failed = run.failedJobs?.join(`, `) ?? `the failed job`;
-        putCard(workCard({ id: conversationId, title: `Fix the failing pipeline on ${run.branch}`, now, startIn: repo, todo: `Reproduce ${failed} from its log` }));
+        putCard(workCard({ id: conversationId, title: ciFixTitle(run), now, startIn: repo, todo: `Reproduce ${failed} from its log` }));
         return { conversationId };
     },
 } satisfies Doors<`ci`>;

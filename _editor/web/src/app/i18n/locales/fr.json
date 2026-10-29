@@ -689,6 +689,13 @@
             "runsInSeconds": "s'exécute seul dans {seconds} s",
             "waiting": "vous attend"
         },
+        "launchCard": {
+            "notStarted": "Non démarré",
+            "waiting": "En attente de la sandbox",
+            "opening": "Ouverture de l'agent",
+            "backTo": "Retour à {place}",
+            "didNotStart": "« {title} » n'a pas démarré"
+        },
         "childRows": {
             "finished": "Terminés : {count}",
             "inProcess": "Interne",

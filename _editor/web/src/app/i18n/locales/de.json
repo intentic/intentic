@@ -689,6 +689,13 @@
             "runsInSeconds": "läuft von selbst in {seconds} Sek.",
             "waiting": "wartet auf Sie"
         },
+        "launchCard": {
+            "notStarted": "Nicht gestartet",
+            "waiting": "Wartet auf die Sandbox",
+            "opening": "Agent wird geöffnet",
+            "backTo": "Zurück zu {place}",
+            "didNotStart": "„{title}“ wurde nicht gestartet"
+        },
         "childRows": {
             "finished": "{count} fertig",
             "inProcess": "Im Prozess",

@@ -88,7 +88,6 @@
         "passedAgain": "Wieder grün",
         "passedSince": "Seitdem grün",
         "proveTheFix": "Fix beweisen",
-        "readingLogs": "Logs werden gelesen…",
         "reRun": "Erneut laufen lassen",
         "startOver": "Von vorn beginnen",
         "supersededBy": "überholt von",
@@ -132,7 +131,8 @@
         "openRepo": "Repo öffnen",
         "pipelines": "Pipelines",
         "runs": "{runs} Läufe",
-        "thisRepo": "dieses Repo"
+        "thisRepo": "dieses Repo",
+        "readingLogs": "Liest die Logs der fehlgeschlagenen Jobs"
     },
     "runSide": {
         "notListed": "Lauf #{number} von {repo} gehört nicht zu den letzten Läufen, die die Sandbox vorhält.",

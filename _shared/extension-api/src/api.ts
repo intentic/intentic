@@ -306,6 +306,15 @@ export interface RunAllowance {
 
 export type SettingValue = string | number | boolean;
 
+// What the agents board draws for an agent an extension is starting (`chat.launchAgent`), from the press until the
+// agent's own card arrives: a dashed card in the Active lane, so the press is answered before the sandbox is.
+export interface AgentLaunchCard {
+    // The title the agent's own card will wear ("Fix CI: Bump vite"), so one card hands over to the other.
+    readonly title: string;
+    // What the start is waiting on, in a few words ("Reading the failed jobs' logs"); the card counts the seconds beside it.
+    readonly note?: string | undefined;
+}
+
 export interface ProcessStatus {
     readonly name: string;
     readonly running: boolean;
@@ -463,6 +472,8 @@ export interface IntenticApi {
         // Like `composeWorkflow`, but arms the composer's loop badge: the next message becomes the loop's
         // goal, and Send starts it running.
         composeLoop(loopId: string): void;
+        /* START AN AGENT AND SHOW IT AT ONCE: the agents board opens now with `card` standing in for the agent while `start` runs, and the agent's own card takes its place once `start` answers with the conversation's id. A refusal is said on that card (or as a toast once the reader has left the board), then thrown back to the caller. */
+        launchAgent<T extends { readonly conversationId: string }>(card: AgentLaunchCard, start: () => Promise<T>): Promise<T>;
     };
     // Which model a run this extension starts will spend; the host owns the picker, a live read of every
     // connected provider's catalog. Covers provider, account, harness and model together.

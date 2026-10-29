@@ -417,6 +417,15 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             fleetJobs.add(`${project.repo}/${heard}`);
             return "fleet";
         }
+        // Kept whether or not an agent is sent now: a failure waiting for the owner is the one a person then presses Fix
+        // on, and that press reads the log from here (keptJobLog) instead of downloading it a second time.
+        const logPath = await orElse(
+            services,
+            keepJobLog(ciLogsRoot(), { repo: project.repo, runId: job.runId, jobId: job.jobId, name: job.name }, log),
+            undefined,
+            "ci repair: the failed job's log could not be kept for its fix agent",
+            { repo: project.repo, runId: job.runId, jobId: job.jobId },
+        );
         const streak = await services.ciStore.failure(project.repo, job.branch, (previous) => withJob(previous, job, Date.now()));
         publishRuntimeChange("ci");
         if (streak === undefined || waitsForOwner(streak)) {
@@ -432,13 +441,6 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             }
             return "code";
         }
-        const logPath = await orElse(
-            services,
-            keepJobLog(ciLogsRoot(), { repo: project.repo, runId: job.runId, jobId: job.jobId, name: job.name }, log),
-            undefined,
-            "ci repair: the failed job's log could not be kept for its fix agent",
-            { repo: project.repo, runId: job.runId, jobId: job.jobId },
-        );
         park(services, project, job, log, logPath, fetchFn);
         return "code";
     });

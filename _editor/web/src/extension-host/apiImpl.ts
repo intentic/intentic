@@ -18,6 +18,7 @@ import { useChat } from "../models/conversations/run/useChat";
 import { accountsOf } from "../models/conversations/accounts/useChat-accounts";
 import { useAgents } from "../models/fleet/useAgents";
 import { startAgent } from "../models/fleet/agentActions";
+import { hostLaunchAgent } from "./agentLaunch";
 import { declaredChord } from "../workbench/commands/builtinCommands";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
@@ -513,6 +514,7 @@ export const createExtensionApi = (
                 startAgent();
                 useChat().active.value.loopId.value = loopId;
             },
+            launchAgent: hostLaunchAgent,
         },
         // Nothing here is gated on a manifest permission: the extension never learns a credential or reaches a provider
         // route, only the selection the user made and the words for it.

@@ -13,4 +13,7 @@
 // when a spent allowance reopens, by the rule the composer's Send books by, and `pick({ schedules })` has the panel's verbs
 // say when a run on such a model starts. The kit's `useAgentRunPick` reads it as `spent` and `booking`, and
 // `<AgentRunButton>` draws the press as the time it starts. Additive. The recorded surface grows `modelsApi`.
-export const extensionApiVersion = "2.38.0";
+// 2.39.0 lets a view start an agent the board shows from the press: `api.chat.launchAgent(card, start)` opens the agents
+// board at once with a dashed card standing in for the agent while `start` runs, hands over to the agent's own card when
+// `start` answers with its id, and says a refusal on the card. Additive. The recorded surface grows `chatApi`.
+export const extensionApiVersion = "2.39.0";

@@ -1,5 +1,5 @@
 import type { AgentRunPick } from "@intentic/sandbox-contract/schemas/agent";
-import { ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { ciFixConversationId, ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { errorMessage } from "@intentic/base/errors";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
@@ -9,10 +9,9 @@ import type { TurnInput } from "../seams/turn-starter.js";
 import { AttemptRefused, daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
 import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../agent/models/run-role-model.js";
 import { digestOf, excerptOf } from "./logs/failure-digest.js";
-import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
+import { ciLogsRoot, jobLogPath, keepJobLog, keptJobLog } from "./logs/job-logs.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
-import { TITLE_MAX } from "../seams/conversation-title.js";
 
 // One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent with
 // the first run that fails on a main-line branch (main-fixer.ts).
@@ -85,17 +84,25 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
             return empty;
         };
     const failedSteps = await client.failedSteps(project, runId).catch(missing<readonly FailedStep[]>("failed steps", []));
-    // Every failed job's log, whole and side by side; one that cannot be read is left out, and only its end is asked
-    // whether the fleet died.
-    const logs = await Promise.all(failedSteps.map((failed) => client.jobLog(project, failed.id, WHOLE_LOG).catch(missing(`log of ${failed.job}`, ""))));
+    const root = ciLogsRoot();
+    const jobOf = (failed: FailedStep) => ({ repo: project.repo, runId, jobId: failed.id, name: failed.job });
+    // Every failed job's log, whole and side by side: the one an earlier read kept (keptJobLog), else the forge's. One that
+    // cannot be read is left out, and only its end is asked whether the fleet died.
+    const reread = await Promise.all(failedSteps.map((failed) => keptJobLog(root, jobOf(failed)).catch(missing(`kept log of ${failed.job}`, undefined))));
+    const logs = await Promise.all(
+        failedSteps.map((failed, index) => reread[index] ?? client.jobLog(project, failed.id, WHOLE_LOG).catch(missing(`log of ${failed.job}`, ""))),
+    );
     const infraReasons = fleetReasons(failedSteps, logs);
-    // Each whole log is kept where the agent can read it (job-logs.ts); one that cannot be written is left unnamed.
+    // Each whole log is kept where the agent can read it (job-logs.ts), unless it was read from there; one that cannot be
+    // written is left unnamed.
     const kept = await Promise.all(
         failedSteps.map((failed, index) =>
-            keepJobLog(ciLogsRoot(), { repo: project.repo, runId, jobId: failed.id, name: failed.job }, logs[index] ?? "").catch((error: unknown) => {
-                logger.warn({ reason: errorMessage(error), repo: project.repo, runId }, `ci fix: the log of ${failed.job} could not be kept for its fix agent`);
-                return undefined;
-            }),
+            reread[index] !== undefined
+                ? jobLogPath(root, project.repo, runId, failed.id, failed.job)
+                : keepJobLog(root, jobOf(failed), logs[index] ?? "").catch((error: unknown) => {
+                      logger.warn({ reason: errorMessage(error), repo: project.repo, runId }, `ci fix: the log of ${failed.job} could not be kept for its fix agent`);
+                      return undefined;
+                  }),
         ),
     );
     return {
@@ -199,7 +206,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
             prompt: promptOf(request, where),
             nudge,
             errands: { prompt: "ci-fix", nudge: "ci-fix-nudge" },
-            title: `Fix CI: ${run?.title ?? project.repo}`.slice(0, TITLE_MAX),
+            title: ciFixTitle({ title: run?.title, repo: project.repo }),
             // `runRole` alone is what pins the model (turn-resume.ts); the pick and who pressed ride in `turn`.
             turn: { isolated: true, runRole: `pipeline-fix`, ...chatDefault, ...request.turn },
             resume: request.resume,

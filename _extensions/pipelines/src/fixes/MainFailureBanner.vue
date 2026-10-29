@@ -39,8 +39,6 @@ const props = defineProps<{
     repo: CiRepo | undefined;
     // The action the view has in flight, by run key; the press here shares the run rows' lock.
     busy: string | undefined;
-    // The run whose fix press is out, by run key: the press then names its wait, as the run row's does.
-    starting?: string | undefined;
 }>();
 // The run row's own event, so the view handles both the same way: the caret's model pick, and the verb its panel ended
 // with over the agent's attempt (Continue / Start over).
@@ -331,7 +329,7 @@ onBeforeUnmount(() => {
                          agent that already tried, its panel ends in Continue / Start over. -->
                     <AgentRunButton
                         v-if="press !== undefined"
-                        :label="starting !== undefined && starting === runKey ? t(`pipelineRunRow.readingLogs`) : press.label"
+                        :label="press.label"
                         :picker="picker"
                         :tier="press.primary ? `accent` : `quiet`"
                         :loading="busy !== undefined && busy === runKey"

@@ -1,7 +1,8 @@
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 
 // WHERE A FAILED JOB'S WHOLE LOG IS KEPT FOR ITS FIX AGENT. The digest (failure-digest.ts) is what an agent reads first,
 // but a cause it cut off used to cost the agent a log download through the forge's API (21 MB for one verify group,
@@ -38,7 +39,8 @@ const pruneRuns = async (repoDir: string): Promise<void> => {
 };
 
 /** Writes a failed job's whole log where its fix agent can read it, prunes the repository's older runs, and answers with
- *  the file's path. An empty log is not kept. */
+ *  the file's path. An empty log is not kept. Written beside its place and moved in, so a reader (an agent, a second
+ *  press reading it back with keptJobLog) never meets half of it. */
 export const keepJobLog = async (
     root: string,
     job: { readonly repo: string; readonly runId: number; readonly jobId: number; readonly name: string },
@@ -49,7 +51,22 @@ export const keepJobLog = async (
     }
     const path = jobLogPath(root, job.repo, job.runId, job.jobId, job.name);
     await mkdir(join(root, segment(job.repo), String(job.runId)), { recursive: true });
-    await writeFile(path, log);
+    await writeFileAtomic(path, log);
     await pruneRuns(join(root, segment(job.repo)));
     return path;
+};
+
+// What the forges' readers (providers.ts) hand back for a log they were refused, kept as the log so the digest says so.
+const UNAVAILABLE = "(log unavailable";
+
+/** A failed job's log as an earlier read kept it, or undefined. A finished job's log never changes (a re-run makes new
+ *  jobs, with new ids), so a second read of one run (main's fix agent started on it, then a press; Continue; a retry)
+ *  takes it from here instead of downloading it again: two seconds for a 4 MB log from GitHub. The note kept for a log
+ *  the forge would not serve yet is not that log, and is asked for again. */
+export const keptJobLog = async (
+    root: string,
+    job: { readonly repo: string; readonly runId: number; readonly jobId: number; readonly name: string },
+): Promise<string | undefined> => {
+    const log = await readFile(jobLogPath(root, job.repo, job.runId, job.jobId, job.name), "utf8").catch(undefinedIfMissing);
+    return log === undefined || log === "" || log.startsWith(UNAVAILABLE) ? undefined : log;
 };

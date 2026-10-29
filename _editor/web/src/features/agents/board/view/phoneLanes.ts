@@ -44,13 +44,16 @@ export interface PhoneLanesHost {
     readonly scope: { readonly scopedHeld: Readonly<Ref<readonly unknown[]>>; readonly attentionElsewhere: Readonly<Ref<number>> };
     readonly dragging: Readonly<Ref<boolean>>;
     readonly filtering: Readonly<Ref<boolean>>;
+    // Agents a press elsewhere is starting, drawn at the head of Active (boardLaunches.ts): rows of that lane.
+    readonly launching?: Readonly<Ref<readonly unknown[]>>;
 }
 
 // The board's lanes as a phone draws them (all of them elsewhere), and per lane: whether it is Finished drawn for its
 // archive door alone, which says nothing under its header; and whether it says its empty line.
 export const usePhoneLanes = (host: PhoneLanesHost) => {
     const { mobile, view, lanes, scope, dragging, filtering } = host;
-    const rows = (key: FleetLane): number => lanes.cardsFor(key).length + lanes.runsFor(key).length;
+    const launched = (key: FleetLane): number => (key === `active` ? (host.launching?.value.length ?? 0) : 0);
+    const rows = (key: FleetLane): number => lanes.cardsFor(key).length + lanes.runsFor(key).length + launched(key);
     const content = (key: FleetLane): LaneContent => {
         const held = key === `attention` && !view.value.archive && (scope.scopedHeld.value.length > 0 || scope.attentionElsewhere.value > 0);
         const tail = key === `finished` && (view.value.archive || (!filtering.value && lanes.hiddenFinished.value > 0));

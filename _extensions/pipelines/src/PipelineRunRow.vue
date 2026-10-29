@@ -42,8 +42,6 @@ import { t } from "./i18n.js";
 const props = defineProps<{
     run: PipelineRun;
     busy: string | undefined;
-    // The run whose fix press is out (PipelinesView `starting`), by run key: this row's Fix button then says what it waits on.
-    starting?: string | undefined;
     // Job name to consecutive failing runs; lifted to the view, a fact no single row can see.
     recurring: ReadonlyMap<string, number>;
     // Whether this is the branch's open failure, and which run closed it, if any; sets how loud the row is.
@@ -310,14 +308,9 @@ const startHint = computed((): Tip | undefined => {
     };
 });
 
-// While its press is out the button names the wait (the daemon reads the failed jobs' logs before an agent exists), so a
-// press of seconds reads as work under way rather than a click that did not take.
-const fixLabel = computed(() => {
-    if (props.starting === actionKey) {
-        return t(`pipelineRunRow.readingLogs`);
-    }
-    return fixState.value?.retry === true ? t(`pipelineRunRow.continue`) : t(`pipelineRunRow.fixAgent`);
-});
+// The press opens the agents board at once, where a card stands in for the agent while the sandbox reads the logs
+// (PipelinesView `fixRun`), so the button never has to name that wait itself.
+const fixLabel = computed(() => (fixState.value?.retry === true ? t(`pipelineRunRow.continue`) : t(`pipelineRunRow.fixAgent`)));
 
 const startFix = (): void => {
     emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined, fixModel.resume.value, fixModel.booking.value);

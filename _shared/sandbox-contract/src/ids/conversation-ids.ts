@@ -166,6 +166,10 @@ const repoSlug = (repo: string): string =>
         .slice(0, REPO_SLUG_MAX)
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
+// The title a CI fix conversation opens with: the daemon names it so (ci-fix.ts), and the board's card standing in for it
+// while the press is out (Pipelines, `chat.launchAgent`) wears the same words, so the one hands over to the other unchanged.
+export const ciFixTitle = (run: { readonly title?: string | undefined; readonly repo: string }): string =>
+    `Fix CI: ${run.title ?? run.repo}`.slice(0, CONVERSATION_TITLE_MAX);
 
 // FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same
 // seven characters in every browser and in node. The one spelling: what a failing main owes is named by it too (a

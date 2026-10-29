@@ -619,6 +619,13 @@
             "runsInSeconds": "uruchomi się sam za {seconds} s",
             "waiting": "czeka na Ciebie"
         },
+        "launchCard": {
+            "notStarted": "Nie uruchomiono",
+            "waiting": "Czeka na sandbox",
+            "opening": "Otwieranie agenta",
+            "backTo": "Wróć do: {place}",
+            "didNotStart": "„{title}” nie został uruchomiony"
+        },
         "childRows": {
             "finished": "Skończone: {count}",
             "inProcess": "W procesie",

@@ -2,6 +2,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
+import { ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { CiFix } from "./fixes/ciFixes";
 import {
     Await,
@@ -23,7 +24,7 @@ import {
     type TallyItem,
     ProjectChip,
 } from "@intentic/extension-ui";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, ref } from "vue";
 import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
 import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
@@ -165,7 +166,6 @@ const boardOf = (standing: RepoStanding): RepoBoard => boards.value.get(standing
 const rowProps = (run: PipelineRun, covered = false) => ({
     run,
     busy: busy.value,
-    starting: starting.value,
     recurring: recurringFor(run),
     open: open.value.has(run),
     superseded: covered ? undefined : superseded.value.get(run),
@@ -235,18 +235,12 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     }
 };
 
-// The run whose fix is out, apart from `busy`, which a re-run or cancel holds too: only this press names what it waits
-// on, the failed jobs' logs the daemon reads before any agent exists (ci.fix), a wait of seconds.
-const starting = ref<string | undefined>();
-// The board was left while a press was out: its answer then starts the agent without pulling the reader back here.
-let left = false;
-onBeforeUnmount(() => {
-    left = true;
-});
-
 // `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
 // `resume` is the verb that caret's panel was ended with over an attempt that already exists (Continue / Start over).
 // `booking` is the button's: its model's allowance is spent, so the agent opens now with its task booked for the reopen.
+// The press opens the agents board at once (`chat.launchAgent`), not once the sandbox answers: it reads the failed jobs'
+// logs before any agent exists, seconds the board used to sit through looking as if the press had not taken. A card
+// there stands in for the agent with the title it will wear, says what it waits on, and says a refusal.
 const fixRun = async (
     run: PipelineRun,
     pick: AgentRunChoice | undefined,
@@ -254,21 +248,18 @@ const fixRun = async (
     booking: AgentRunBooking | undefined,
 ): Promise<void> => {
     busy.value = actionKey(run);
-    starting.value = actionKey(run);
     actionError.value = undefined;
     try {
-        const { conversationId } = await fix.mutateAsync({ run, pick, mode: resume, booking });
-        // Not awaited: navigation below is the point, so the row shows 'Agent working' without delaying it.
+        await api.chat.launchAgent({ title: ciFixTitle(run), note: t(`pipelinesView.readingLogs`) }, () =>
+            fix.mutateAsync({ run, pick, mode: resume, booking }),
+        );
+        // Not awaited: the row reads 'Agent working' on the reader's way back without waiting for the next poll.
         void refreshFixes();
-        // Opens the fleet board, not the diff view: nothing to review yet. `?focus` waits for the roster.
-        if (!left) {
-            api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
-        }
     } catch (failure) {
+        // Said on the board's card already; here too, for a reader back on this board before it answered.
         actionError.value = errorMessage(failure);
     } finally {
         busy.value = undefined;
-        starting.value = undefined;
     }
 };
 </script>
@@ -381,7 +372,6 @@ const fixRun = async (
                                         :runs="standing.runs"
                                         :repo="standing.repo"
                                         :busy="busy"
-                                        :starting="starting"
                                         @fix="fixRun"
                                     >
                                         <PipelineRunRow

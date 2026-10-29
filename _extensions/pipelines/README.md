@@ -50,6 +50,11 @@ flowchart LR
   runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`). A plain press sends the model the button
   names (the job's pin in Models, else the model a new chat would open on) as `fallback`: the daemon holds no chat pick
   of its own, so it runs that one when no pinned model can, while it can serve its provider (`src/usePipelines.ts`).
+- The press opens the agents board at once (`api.chat.launchAgent`) rather than when the daemon answers. The daemon
+  reads the failed jobs' list and whole logs before any agent exists (about 1 s and 2 s for a 4 MB log on GitHub), so
+  a dashed card on the board stands in for the agent meanwhile: the title it will wear (the contract's `ciFixTitle`),
+  "Reading the failed jobs' logs" and the seconds so far. The agent's own card takes its place once it exists, and a
+  refusal (a runner failure, an attempt already in play) is said on that card, with the way back here.
 - When the button's model has no allowance left, the press shows the time the allowance comes back, by the same rule
   the composer's Send uses (`api.models.allowance`). Pressing it opens the fix conversation now and books its task for
   that time (`sendAt`, `sendAtReopen`), naming that model, so picking a model with no allowance schedules the fix for

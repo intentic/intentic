@@ -14,7 +14,7 @@ import {
     ui,
     useDevice,
 } from "@intentic/ui";
-import { computed, onMounted, provide, ref, watch } from "vue";
+import { computed, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { usePanels } from "../../../models/extensions/usePanels";
@@ -51,6 +51,7 @@ import ChildRows from "../../../parts/fleet/ChildRows.vue";
 import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
 import { cardKey } from "../../../models/fleet/board/childFold";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
+import LaunchCards from "./cards/LaunchCards.vue";
 import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import ActiveGroupHead from "./ActiveGroupHead.vue";
@@ -58,6 +59,7 @@ import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
 import { usePhoneLanes } from "./view/phoneLanes";
+import { useBoardLaunches } from "./view/boardLaunches";
 import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { followAcross, useBoardScope } from "../../../models/fleet/board/boardScope";
@@ -72,7 +74,7 @@ import { useRowReveal } from "@intentic/ui/motion";
 import { laneOrder, useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
 import { useWallpaper } from "../../../skins/useWallpaper";
-import { useNotifications } from "../../../workbench/notifications/notifications";
+import { useNoticeToasts } from "./view/boardNotices";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
 // (laneDrop), never assigns status directly. Template and wiring: what the lanes draw and cover, how the board is being
 // read, the selection, the menu, the motion and the commands are the headless modules in `view/`.
@@ -82,22 +84,8 @@ const router = useRouter();
 const { mobile, coarse } = useDevice();
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
-// A refused press (a land, an archive, a restore) is said as a toast in the app's notification lane, not as a strip
-// across the board: a strip pushed the lanes down under the reader and sat there until dismissed. Raising it hands
-// the message over, so the same refusal pressed twice toasts twice. `immediate`: one raised while the board was
-// closed is said when it opens.
-const { warn } = useNotifications();
-watch(
-    notice,
-    (message) => {
-        if (message === undefined) {
-            return;
-        }
-        warn(message);
-        dismissNotice();
-    },
-    { immediate: true },
-);
+// A refused press is said as a toast in the app's notification lane (boardNotices.ts).
+useNoticeToasts(notice, dismissNotice);
 // The geek metrics are the desktop's: its shell reads them for its status bar and hands them down to the cards
 // (liveMetrics.ts). A phone reads none, whatever Settings says: its board has no foot to spare from the floating New agent.
 const drag = useAgentDrag();
@@ -279,8 +267,9 @@ useAttentionAsk({
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
+const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
-const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering });
+const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -461,6 +450,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @reject="releaseWake(entry.id, `reject`)"
                         />
                     </div>
+                    <LaunchCards v-if="lane.key === 'active'" :launching="launching" :dense="narrow" />
                     <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <WorkflowRunCard
@@ -493,7 +483,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </p>
                     <!-- A first run's Active lane holds the first agent's slot, where its card will arrive. -->
                     <div
-                        v-else-if="first && lane.key === 'active' && cardsFor('active').length === 0 && runsFor('active').length === 0"
+                        v-else-if="first && lane.key === 'active' && cardsFor('active').length === 0 && runsFor('active').length === 0 && launching.length === 0"
                         class="flex flex-col pb-2.5"
                     >
                         <FirstAgentSlot :starters="starters" />

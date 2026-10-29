@@ -88,7 +88,6 @@
         "passedAgain": "Repassé",
         "passedSince": "Passé depuis",
         "proveTheFix": "Prouver le correctif",
-        "readingLogs": "Lecture des logs…",
         "reRun": "Relancer",
         "startOver": "Tout reprendre",
         "supersededBy": "remplacée par",
@@ -132,7 +131,8 @@
         "openRepo": "Ouvrir le dépôt",
         "pipelines": "Pipelines",
         "runs": "{runs} exécutions",
-        "thisRepo": "ce dépôt"
+        "thisRepo": "ce dépôt",
+        "readingLogs": "Lecture des logs des jobs en échec"
     },
     "runSide": {
         "notListed": "L'exécution #{number} de {repo} ne fait pas partie des exécutions récentes que la sandbox conserve.",

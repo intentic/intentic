@@ -88,7 +88,6 @@
         "passedAgain": "Passed again",
         "passedSince": "Passed since",
         "proveTheFix": "Prove the fix",
-        "readingLogs": "Reading logs…",
         "reRun": "Re-run",
         "startOver": "Start over",
         "supersededBy": "superseded by",
@@ -132,7 +131,8 @@
         "openRepo": "Open repo",
         "pipelines": "Pipelines",
         "runs": "{runs} runs",
-        "thisRepo": "this repo"
+        "thisRepo": "this repo",
+        "readingLogs": "Reading the failed jobs' logs"
     },
     "runSide": {
         "notListed": "Run #{number} of {repo} isn't among the recent runs the sandbox keeps.",

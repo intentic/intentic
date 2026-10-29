@@ -237,6 +237,15 @@ const packages = [
                     agent work with its own dialog that looks like nothing else in the product.
                 </td>
             </tr>
+            <tr>
+                <td><code>chat.launchAgent(card, start)</code></td>
+                <td>
+                    Start an agent your own route creates, and show it from the press. The agents board opens at once with a dashed card
+                    (<code>card.title</code>, and <code>card.note</code> saying what the start waits on) while <code>start</code> runs; the
+                    agent's own card takes its place once <code>start</code> resolves with <code>{"{ conversationId }"}</code>. A rejection is
+                    said on that card, or as a toast once the reader has left the board, and then rejects the call too. Since 2.39.0.
+                </td>
+            </tr>
         </tbody>
     </table>
 
