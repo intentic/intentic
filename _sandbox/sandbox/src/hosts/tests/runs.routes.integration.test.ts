@@ -17,7 +17,12 @@ const workspace = (): string => {
     mkdirSync(join(root, "app", STATE_DIR), { recursive: true });
     writeFileSync(
         join(root, "app", RUN_TARGETS_FILE),
-        JSON.stringify({ targets: [{ name: "desktop", device: "rog", build: "make win", artifact: { "app.exe": "out/app.exe" }, program: "app.exe" }] }),
+        JSON.stringify({
+            targets: [
+                { name: "desktop", device: "rog", build: "make win", artifact: { "app.exe": "out/app.exe" }, program: "app.exe" },
+                { name: "web", command: "pnpm dev" },
+            ],
+        }),
     );
     mkdirSync(join(root, "broken", ".git"), { recursive: true });
     mkdirSync(join(root, "broken", STATE_DIR), { recursive: true });
@@ -30,7 +35,10 @@ test("each repository's file is read as it is: its targets, what is wrong with i
     const repos = await readRunTargets(workspace());
     expect(repos.map((entry) => entry.repo).toSorted()).toEqual(["app", "broken"]);
     const app = repos.find((entry) => entry.repo === "app");
-    expect(app).toMatchObject({ path: "app/.intentic/run.json", targets: [{ name: "desktop", device: "rog", args: [], reach: [], isolated: false }] });
+    expect(app).toMatchObject({
+        path: "app/.intentic/run.json",
+        targets: [{ name: "desktop", device: "rog", args: [], reach: [], isolated: false }, { name: "web", command: "pnpm dev" }],
+    });
     const broken = repos.find((entry) => entry.repo === "broken");
     expect(broken?.targets).toEqual([]);
     expect(broken?.error).toContain("artifact");
@@ -99,5 +107,7 @@ test("a target nobody declared, and a computer that cannot take it, are refused 
     await expect(call(routes(workspace(), true, ["programs"], fake).start, { repo: "app", target: "nope", device: "rog" })).rejects.toThrow("no run target");
     await expect(call(routes(workspace(), false, ["programs"], fake).start, { repo: "app", target: "desktop", device: "rog" })).rejects.toThrow("not connected");
     await expect(call(routes(workspace(), true, [], fake).start, { repo: "app", target: "desktop", device: "rog" })).rejects.toThrow("too old");
+    // A target with only a command runs in the sandbox: there is nothing to carry to a computer.
+    await expect(call(routes(workspace(), true, ["programs"], fake).start, { repo: "app", target: "web", device: "rog" })).rejects.toThrow("sandbox only");
     expect(ran).toEqual([]);
 });

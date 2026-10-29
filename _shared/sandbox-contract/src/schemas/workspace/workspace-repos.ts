@@ -67,16 +67,18 @@ export const TemplatesListSchema = z.object({
     templates: z.array(TemplateSummarySchema).describe("The kinds of app the configured source repository knows how to scaffold."),
 });
 export type TemplatesList = z.infer<typeof TemplatesListSchema>;
-// One app instance in a monorepo, with its own dev server and status. previewUrl is
-// https://preview-<repo>--<app>-<sandboxId>.<zone>, absent without a zone or connect token.
+// One app inside a repository, with its own dev server and status: a target its .intentic/run.json runs in the sandbox,
+// or an instance in a monorepo's `_apps/`. previewUrl is https://preview-<repo>--<app>-<sandboxId>.<zone>, absent without
+// a zone or connect token.
 export const RepoAppSchema = z.object({
-    app: z.string().describe("The app's name, which is also its folder."),
+    app: z.string().describe("The app's name: its run.json target's name, or its folder under _apps/."),
     kind: z
         .string()
         .optional()
         .describe(
             "What sort of app it is: the template it came from, or the framework worked out from its dependencies. Absent when it was found purely by having a dev script.",
         ),
+    command: z.string().optional().describe("What runs it, as the repository's .intentic/run.json says. Absent for an app found under _apps/."),
     previewUrl: z.string().optional().describe("Where to open it. Absent when this sandbox has no outside address."),
     running: z.boolean().describe("Whether its dev server is up."),
     healthy: z.boolean().describe("Whether it is actually answering."),

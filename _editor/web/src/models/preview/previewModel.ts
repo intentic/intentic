@@ -7,7 +7,8 @@ import { t } from "@intentic/ui/i18n";
 // Everything the workspace can show live, as one flat list both the status bar's chip and the panel build from (so a
 // count can never disagree with what the panel shows). Pure: contract types in, targets out, no app imports.
 // - repo: a repository's dev server, from /panels
-// - app: one app inside a monorepo, from the per-repo /apps routes
+// - app: one app inside a repository (a run.json target that runs in the sandbox, or a monorepo's `_apps/` instance), from
+//   the per-repo /apps routes
 // - port: a forwarded port, from /ports
 // - public: the outbox's served page, no process
 
@@ -88,7 +89,9 @@ export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
 export const appTargetId = (repo: string, app: string): string => `app:${repo}/${app}`;
 
 // One monorepo's apps. The session name is the process manager's own convention (appPanelKey: `<repo>--<app>`).
-export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarget[] =>
+// A run.json target (`command` set) may be a program with a window: it shows the windows its repository's programs have
+// open on the sandbox desktop while it runs, which `repoWindows` carries.
+export const appTargets = (repo: string, apps: readonly RepoApp[], repoWindows: PreviewTarget[`windows`] = []): PreviewTarget[] =>
     apps.map((app) => ({
         id: appTargetId(repo, app.app),
         kind: `app`,
@@ -105,9 +108,9 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
         startable: true,
         installed: app.installed,
         launch: app.launch,
-        runs: undefined,
-        builds: false,
-        windows: [],
+        runs: app.command,
+        builds: CARGO.test(app.command ?? ``),
+        windows: app.command !== undefined && app.running ? repoWindows : [],
     }));
 
 // One forwarded port's target id; the panel also forwards ports itself and needs to name what it made.

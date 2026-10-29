@@ -63,7 +63,7 @@ const step = (run: Run, after: number, change: () => void): void => {
 export const startPanel = (rows: readonly PanelSummary[], repo: string) => {
     const row = rows.find((candidate) => candidate.repo === repo) ?? refuse(`no repository with that name`, 404);
     if (!row.hasPanel) {
-        refuse(`${repo} has nothing to start: add a Procfile, a dev or start script, or a Cargo binary`, 400);
+        refuse(`${repo} has nothing to start: declare a target with a command in .intentic/run.json, or add a Procfile, a dev or start script, or a Cargo binary`, 400);
     }
     return okAfter(() => {
         if (runs.has(repo)) {

@@ -22,7 +22,7 @@ const spaFallback = (): Plugin => ({
         // Runs before Vite strips the base prefix, so the rewrite must include the base too.
         const entry = `${server.config.base}index.html`;
         server.middlewares.use((request, response, next) => {
-            // The bare origin is where a preview frame opens (the repository's Start, see the root Procfile): send it to
+            // The bare origin is where a preview frame opens (the `demo` target in .intentic/run.json): send it to
             // the app's own base rather than mounting the app at a path its router does not know.
             if (request.method === `GET` && request.url === `/` && server.config.base !== `/`) {
                 response.statusCode = 302;
@@ -154,7 +154,7 @@ export default defineConfig({
         host: `127.0.0.1`,
         port: 47146,
         strictPort: true,
-        // Started by the sandbox's Start (the root Procfile, which passes the PORT it assigns), the server is reached
+        // Run by the sandbox (the `demo` target in .intentic/run.json, handed the PORT it assigns), the server is reached
         // through the preview proxy, which forwards its own `preview-<repo>-<sandboxId>.<zone>` Host unchanged. Run by
         // hand or as an agent's managed preview there is no PORT, and Vite's default ([]: localhost and IPs) stands.
         allowedHosts: process.env[`PORT`] === undefined ? [] : true,

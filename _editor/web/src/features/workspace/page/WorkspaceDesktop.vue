@@ -52,8 +52,8 @@ import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
 import MoveConflictDialog from "../explorer/transfer/MoveConflictDialog.vue";
 import { filesToEntries } from "../../../models/workspace/tree/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
-import DirectoryRuns from "../directory-ui/DirectoryRuns.vue";
-import { useRunTargets } from "../directory-ui/useRunTargets";
+import { useRunTargets } from "../../../models/runs/useRunTargets";
+import { openRunDialog } from "../../../models/runs/runDialog";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
@@ -290,10 +290,23 @@ const checkDirs = computed(
 );
 // Repository whose checks are open in the quick panel; undefined means closed.
 const checksDir = ref<string | undefined>(undefined);
-// Repositories declaring programs to run on the owner's computers, and the one whose runs are open.
+// Repositories with something to run, in the sandbox or on the owner's computers: what their .intentic/run.json
+// declares, else the one run Start finds in their own files. The Run dialog is the shell's (runDialog.ts).
 const { repos: runningRepos } = useRunTargets();
-const runDirs = computed(() => new Map((runningRepos.value ?? []).map((entry) => [entry.repo, Math.max(entry.targets.length, 1)])));
-const runsDir = ref<string | undefined>(undefined);
+const runDirs = computed(() => {
+    const counts = new Map((runningRepos.value ?? []).map((entry) => [entry.repo, entry.targets.length]));
+    // What Start finds is one more row wherever the file declares nothing for the sandbox (runRows.ts).
+    for (const panel of panels.value) {
+        if (panel.hasPanel && panel.sandboxTargets !== true) {
+            counts.set(panel.repo, (counts.get(panel.repo) ?? 0) + 1);
+        }
+    }
+    // A file that does not parse still opens the dialog, which says what is wrong with it.
+    for (const entry of runningRepos.value ?? []) {
+        counts.set(entry.repo, Math.max(counts.get(entry.repo) ?? 0, 1));
+    }
+    return counts;
+});
 
 // What each directory row offers beside its name (documents, personas, checks, management). Composed here, where the
 // openers live; passed as a function so only on-screen rows are asked.
@@ -311,9 +324,7 @@ const rowActions = (dir: string): readonly RowAction[] =>
             checksDir.value = target;
         },
         runDirs: runDirs.value,
-        openRuns: (target: string): void => {
-            runsDir.value = target;
-        },
+        openRuns: openRunDialog,
         openDocument,
     });
 
@@ -938,7 +949,6 @@ const homeTooltip = computed((): Tip => ({
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />
-        <DirectoryRuns v-model="runsDir" />
         <!-- The pill a row or tile becomes while the pointer carries it, over either surface. -->
         <EntryDragGhost />
         <MoveConflictDialog />

@@ -5911,9 +5911,10 @@
             "onDesktop": "{label} is running on the sandbox desktop.",
             "onDesktopLine": "It has no page to preview here: a program with a window is shown on the desktop.",
             "showWindow": "Show",
-            "nothingToStart": "Start has nothing to run here yet: no {procfile}, no {dev} or {start} script, and no single Cargo binary. Anything it runs from a terminal shows up under Forwarded ports.",
+            "nothingToStart": "Start has nothing to run here yet: no {runjson} target with a command, no {procfile}, no {dev} or {start} script, and no single Cargo binary. Anything it runs from a terminal shows up under Forwarded ports.",
             "makeStartable": "Make it startable",
-            "makeStartablePrompt": "Make the repository `{repo}` startable from the Start button in Browsers. Start runs the first of these it finds: a Procfile at the repository's root (one `name: command` line per process; the `web` entry, or the only one, is given its port in the PORT environment variable), a `dev` or `start` script in its package.json, or `cargo run` when its Cargo.toml has exactly one binary. Work out how a developer runs this project locally and add whichever of these fits. Then run that command yourself to show it starts: a page answering on its port, or a window on the sandbox desktop."
+            "makeStartablePrompt": "Make the repository `{repo}` runnable in the sandbox. Work out how a developer runs this project locally, then declare it in its `.intentic/run.json` as a target with a `command`, run from the repository's root: for example a target named `web` with the command `pnpm dev`. A server must listen on the port in the PORT environment variable; a program with a window opens it on the sandbox desktop. Targets that run on the owner's computers live in the same file, with an `artifact` instead. Then run the command yourself to show it starts: a page answering on its port, or a window on the sandbox desktop.",
+            "runOnComputer": "Run on a computer…"
         },
         "previewPass": {
             "opening": "Opening the preview…",
@@ -12734,20 +12735,31 @@
         },
         "directoryRuns": {
             "agentTooOld": "The agent on {device} is too old to run programs. Update it there.",
-            "computer": "Computer",
             "connectOne": "Connect one",
             "couldntRun": "Couldn't run {target} on {device}.",
-            "declaresNothing": "This repository declares nothing to run on your computers. Put a file at",
+            "couldntStart": "Couldn't start {target} in the sandbox: {reason}",
+            "declaresNothing": "Nothing here says how to run it yet. An agent can work that out, or you can declare it yourself in",
             "editFile": "Edit {file}",
+            "foundCargo": "Its Cargo binary",
+            "foundDev": "The dev script in its package.json",
+            "foundOperator": "The dev script of its operator/ panel",
+            "foundProcfile": "From its Procfile",
+            "foundStart": "The start script in its package.json",
+            "inSandboxOnly": "Runs in the sandbox only: it has nothing to carry to a computer.",
             "isolated": "Windows Sandbox",
             "noComputers": "No computer is connected to this sandbox.",
             "offline": "{device} isn't connected right now.",
+            "onComputersOnly": "Runs on your computers, not in the sandbox.",
             "openCard": "Open its card",
             "run": "Run",
             "runIn": "Run {dir}",
+            "runInSandbox": "Run {target} in the sandbox",
             "runOn": "Run {target} on {device}",
             "runTip": "Builds here, then starts on {device} in a terminal you can watch",
+            "runTipSandbox": "Starts in the sandbox and opens it in Browsers",
+            "sandbox": "Sandbox",
             "switchOff": "\"Run programs this sandbox sends\" is off for {device}.",
+            "where": "Where",
             "yourComputers": "Your computers"
         },
         "directoryPersonas": {
@@ -13055,7 +13067,7 @@
             "checksPaused": "Checks paused",
             "manage": "Manage",
             "personas": "{count} persona | {count} personas",
-            "runTargets": "Run on a computer | {count} things to run on your computers"
+            "runTargets": "Run in the sandbox or on a computer | Run in the sandbox or on a computer: {count} targets"
         },
         "savePanel": {
             "allChanges": "all {count} change | all {count} changes",

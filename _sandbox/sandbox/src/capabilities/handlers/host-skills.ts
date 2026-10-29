@@ -225,8 +225,10 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
 
 When the repository has a \`${RUN_TARGETS_FILE}\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
 its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
-the sandbox needs, the start. The owner's "Run on" button in the file tree runs the very same command. A new target is
-a few lines in that file (\`devices --help\`); write one when you will run a program here more than once.
+the sandbox needs, the start. The owner's Run dialog (the ▷ on the repository's row in the file tree), with this
+computer picked, runs the very same command. A new target is a few lines in that file (\`devices --help\`): an
+\`artifact\` makes it run here, a \`command\` makes it run in the sandbox too; write one when you will run a program here
+more than once.
 
 - **Isolated:** \`app_start\` with \`isolated: true\` (or \`devices start \${id} <program> --isolated\`) runs it inside
   Windows Sandbox, a throwaway VM that sees only the build, read-only, and is discarded by \`app_stop\`. It needs Windows

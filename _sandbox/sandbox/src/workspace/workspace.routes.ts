@@ -12,7 +12,8 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { repoGitDir, syncRootExcludes } from "./layout/git-layout.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { appPanelKey, buildAppSpec, discoverApps } from "./layout/app-previews.js";
+import { appPanelKey, buildAppSpec, repoApps } from "./layout/app-previews.js";
+import { runFileApps } from "./layout/run-file.js";
 import { classifyWorkspace } from "./deps/classify.js";
 import { readModules } from "./deps/modules.js";
 import { readWorkspaceManifests } from "./deps/package-graph.js";
@@ -376,8 +377,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             await services.processes.start(`${repo}--add_apps`, { command, cwd: repoDir, oneShot: true });
             return { ok: true } as const;
         }),
-        // App instances in this monorepo with preview URL and live status, for the apps extension's list; scans
-        // `_apps/` for scaffolded instances and dev-server packages.
+        // App instances in this repository with preview URL and live status, for the apps extension's list and the
+        // preview's targets: the targets its .intentic/run.json runs in the sandbox, then `_apps/`'s scaffolded instances
+        // and dev-server packages.
         appsList: i.appsList.handler(async ({ input, context }) => {
             const repo = await monorepoOf(context, input.repo);
             const repoDir = join(services.workspace.root, repo);
@@ -385,7 +387,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             // Apps install at their monorepo's root, so one read of node_modules answers for every row.
             const installed = existsSync(join(repoDir, "node_modules"));
             const apps = await Promise.all(
-                discoverApps(repoDir, manifest).map(async ({ app, kind }) => {
+                repoApps(repoDir, manifest, runFileApps(repoDir)).map(async ({ app, kind, command }) => {
                     const port = services.processes.portOf(appPanelKey(repo, app));
                     // Probe settles which scheme answers the assigned port; an unprobed https dev server would read as
                     // down.
@@ -399,6 +401,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                     return Object.assign(
                         summary,
                         kind !== undefined ? { kind } : {},
+                        command !== undefined ? { command } : {},
                         url !== undefined ? { previewUrl: url } : {},
                         launch !== undefined ? { launch } : {},
                     );
@@ -425,14 +428,14 @@ export const createWorkspaceRoutes = (services: Services) => {
             const repo = await monorepoOf(context, input.repo);
             const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
-            const found = discoverApps(repoDir, manifest).find(({ app }) => app === input.app);
+            const found = repoApps(repoDir, manifest, runFileApps(repoDir)).find(({ app }) => app === input.app);
             if (found === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `no app "${input.app}" in ${repo}` });
             }
-            await services.processes.start(
-                appPanelKey(repo, input.app),
-                buildAppSpec({ repo, repoDir, pkg: found.pkg, app: input.app, preview: found.preview, zone, sandboxId }),
-            );
+            const spec = buildAppSpec({ repo, repoDir, pkg: found.pkg, app: input.app, preview: found.preview, zone, sandboxId });
+            // A run.json target may be a program with a window rather than a server: it gets the sandbox desktop, as a
+            // repository's own Start does.
+            await services.processes.start(appPanelKey(repo, input.app), found.command === undefined ? spec : { ...spec, desktop: true });
             return { ok: true } as const;
         }),
         stopApp: i.stopApp.handler(async ({ input, context }) => {

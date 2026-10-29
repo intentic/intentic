@@ -27,6 +27,13 @@ export const PanelSummarySchema = z.object({
         })
         .optional()
         .describe("What Start runs. Absent for a repository with nothing to start."),
+    // Optional on the wire, like `start`: a sandbox older than this field lists such targets with nothing.
+    sandboxTargets: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether its .intentic/run.json declares targets that run in the sandbox. Each is one of its apps, with its own preview address, Start and Stop.",
+        ),
     running: z.boolean().describe("Whether the sandbox has it running."),
     // True for a repo with nothing runnable — nothing to install for.
     installed: z

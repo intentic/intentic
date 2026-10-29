@@ -1,18 +1,45 @@
 ---
 name: panels
-description: Make a repository startable from its Start button (a Procfile, a dev or start script, a Cargo binary) and give it an operator panel, a small web UI the user opens from the sidebar to run and preview that repo, by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to start, open, preview, or operate from the sidebar.
+description: Make a repository runnable in the sandbox and on the owner's computers (targets in its `.intentic/run.json`, or a Procfile, a dev or start script, a Cargo binary that Start finds) and give it an operator panel, a small web UI the user opens from the sidebar to run and preview that repo, by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to start, open, preview, or operate from the sidebar.
 ---
 
 # Operator panels (per-repository)
 
 The user's workspace sidebar lists every git repository under `/work`. Clicking one opens that
 repo's **operator panel**: a live web UI served from inside the sandbox and previewed in an iframe at
-`https://preview-<repo>-<sandboxId>.<zone>`, with hot reload. There is no Intentic manifest (no apps.json /
-scripts.json): what Start runs is read from the repo's own files.
+`https://preview-<repo>-<sandboxId>.<zone>`, with hot reload.
 
-## What Start runs
+## One file for where it runs: `.intentic/run.json`
 
-The first of these the repo has wins (the daemon's `/opt/sandbox/dist/panels/run-plan.js`, in every sandbox;
+A repository says what it runs, and where, in `.intentic/run.json`. The owner sees it as one **Run** dialog (the ▷ on
+the repo's row in the file tree, or "Run on a computer…" in Browsers): **where** is picked once, the sandbox beside each
+connected computer, then each target is one row with one Run.
+
+```json
+{
+  "targets": [
+    { "name": "web", "description": "The shop", "command": "pnpm dev" },
+    { "name": "api", "command": "pnpm --filter api dev", "env": { "WEB_ORIGIN": "{previewUrl:web}" } },
+    { "name": "desktop", "device": "my-pc", "build": "cargo xwin build --release --target x86_64-pc-windows-msvc",
+      "artifact": "target/x86_64-pc-windows-msvc/release/app.exe" }
+  ]
+}
+```
+
+- **`command`: runs in the sandbox**, from the repo root, with `PORT` and the desktop's `DISPLAY` (below). Each such
+  target is its own app, `preview-<repo>--<name>-<sandboxId>.<zone>`, with its own Start and Stop in Browsers, so
+  several run side by side; its name is lowercase letters, digits and dashes. An `env` value `{previewUrl:<target>}` is
+  a sibling's preview address, which is how a web app finds its API. A Node repo installs first.
+- **`artifact`: runs on one of the owner's computers**: `build` here, carry the artifact, start it there (the device
+  skill; `devices run <target>` is the same run an agent types).
+- A target with both runs in either place.
+
+Write a target whenever the owner should be able to run something with one press. Once the file has a sandbox target,
+Browsers shows those targets instead of the repository's own Start.
+
+## What Start finds without one
+
+With no sandbox target in `.intentic/run.json`, the repository's own Start runs the first of these it has (the daemon's `/opt/sandbox/dist/panels/run-plan.js`, in every sandbox;
 `_sandbox/sandbox/src/panels/run-plan.ts` where the intentic source is checked out):
 
 1. A **`Procfile`** at the repo root, one `name: command` line per process, as Heroku and foreman read it. The `web`
@@ -24,7 +51,7 @@ The first of these the repo has wins (the daemon's `/opt/sandbox/dist/panels/run
    choice the repo makes itself, with a Procfile.
 
 Node runs install first when `node_modules` is missing (`pnpm install`); a Cargo run builds as it starts. A repo with
-none of these lists with **Make it startable**, which asks an agent to add whichever fits.
+none of these lists with **Make it startable**, which asks an agent to declare its run in `.intentic/run.json`.
 
 For a web app:
 

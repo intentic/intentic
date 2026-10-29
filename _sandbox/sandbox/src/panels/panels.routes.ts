@@ -17,6 +17,7 @@ import type { ListeningPort } from "../ports/port-scan.js";
 import { panelSession } from "@intentic/sandbox-contract/session-names";
 import { publicAddressOf } from "../env.config.js";
 import { testRunnerOf } from "../workspace/layout/test-runner.js";
+import { sandboxTargetsAt } from "../workspace/layout/run-file.js";
 
 // Per-repository panel routes. `list` reports each repo's runtime status and the content facts extensions detect on
 // (role, marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
@@ -170,6 +171,8 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWi
                             ...contentFacts(dir),
                         },
                         presentFacts({ repo, plan, opened, launch, port, url }),
+                        // Its run.json's sandbox targets are its apps; said only when it has some.
+                        sandboxTargetsAt(dir).length > 0 ? { sandboxTargets: true } : {},
                     );
                 }),
             );
@@ -186,7 +189,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWi
             }
             if (found.plan === undefined) {
                 throw new ORPCError("BAD_REQUEST", {
-                    message: `${input.repo} has nothing to start: add a Procfile, a dev or start script, or a Cargo binary`,
+                    message: `${input.repo} has nothing to start: declare a target with a command in .intentic/run.json, or add a Procfile, a dev or start script, or a Cargo binary`,
                 });
             }
             await services.processes.start(key, {

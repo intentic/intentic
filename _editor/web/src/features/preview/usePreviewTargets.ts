@@ -21,7 +21,8 @@ export function usePreviewTargets(active: Ref<boolean>) {
     // this adds no request.
     const { offered } = usePorts();
 
-    const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
+    // The repositories that have apps: a monorepo's `_apps/`, and the sandbox targets a .intentic/run.json declares.
+    const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo || panel.sandboxTargets === true).map((panel) => panel.repo));
     const { query: appsQuery } = useSandboxQuery({
         // Keyed on the monorepo list, held as one element so a single repo's read can never share the entry; a repo
         // appearing or vanishing refetches, matching the daemon's `apps` push.
@@ -41,7 +42,9 @@ export function usePreviewTargets(active: Ref<boolean>) {
     const targets = computed<readonly PreviewTarget[]>(() =>
         mergeTargets(
             repoTargets(panels.value),
-            (appsQuery.data.value ?? []).flatMap(({ repo, apps }) => appTargets(repo, apps)),
+            (appsQuery.data.value ?? []).flatMap(({ repo, apps }) =>
+                appTargets(repo, apps, panels.value.find((panel) => panel.repo === repo)?.windows ?? []),
+            ),
             portTargets(offered.value),
             publicTarget(publicFiles.value),
         ),

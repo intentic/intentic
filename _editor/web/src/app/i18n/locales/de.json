@@ -5911,9 +5911,10 @@
             "onDesktop": "{label} läuft auf dem Desktop der Sandbox.",
             "onDesktopLine": "Es hat hier keine Seite für eine Vorschau: Ein Programm mit Fenster wird auf dem Desktop gezeigt.",
             "showWindow": "Zeigen",
-            "nothingToStart": "„Starten“ hat hier noch nichts auszuführen: keine {procfile}, kein {dev}- oder {start}-Skript und kein eindeutiges Cargo-Programm. Was es aus einem Terminal startet, taucht unter „Weitergeleitete Ports“ auf.",
+            "nothingToStart": "„Starten“ hat hier noch nichts auszuführen: kein Ziel mit Befehl in {runjson}, kein {procfile}, kein {dev}- oder {start}-Skript und kein einzelnes Cargo-Programm. Alles, was es aus einem Terminal startet, erscheint unter „Weitergeleitete Ports“.",
             "makeStartable": "Startbar machen",
-            "makeStartablePrompt": "Mach das Repository `{repo}` mit der Schaltfläche „Starten“ unter „Browser“ startbar. „Starten“ führt das Erste aus, das es findet: eine Procfile im Wurzelverzeichnis des Repositorys (eine Zeile `name: command` pro Prozess; der Eintrag `web`, oder der einzige, bekommt seinen Port in der Umgebungsvariable PORT), ein `dev`- oder `start`-Skript in seiner package.json oder `cargo run`, wenn seine Cargo.toml genau ein Programm hat. Finde heraus, wie ein Entwickler dieses Projekt lokal startet, und füge das Passende davon hinzu. Führe den Befehl dann selbst aus und zeig, dass es startet: eine Seite, die auf ihrem Port antwortet, oder ein Fenster auf dem Desktop der Sandbox."
+            "makeStartablePrompt": "Mach das Repository `{repo}` in der Sandbox ausführbar. Finde heraus, wie ein Entwickler dieses Projekt lokal startet, und trag das in seiner `.intentic/run.json` als Ziel mit einem `command` ein, das vom Stammverzeichnis des Repositorys aus läuft: zum Beispiel ein Ziel namens `web` mit dem Befehl `pnpm dev`. Ein Server muss auf dem Port aus der Umgebungsvariable PORT lauschen; ein Programm mit Fenster öffnet es auf dem Desktop der Sandbox. Ziele, die auf den Computern des Besitzers laufen, stehen in derselben Datei, mit einem `artifact` statt eines Befehls. Führe den Befehl danach selbst aus und zeig, dass er startet: eine Seite, die auf ihrem Port antwortet, oder ein Fenster auf dem Desktop der Sandbox.",
+            "runOnComputer": "Auf einem Computer ausführen…"
         },
         "previewPass": {
             "opening": "Die Vorschau wird geöffnet…",
@@ -12734,20 +12735,31 @@
         },
         "directoryRuns": {
             "agentTooOld": "Der Agent auf {device} ist zu alt, um Programme auszuführen. Aktualisieren Sie ihn dort.",
-            "computer": "Computer",
             "connectOne": "Einen verbinden",
             "couldntRun": "{target} ließ sich auf {device} nicht ausführen.",
-            "declaresNothing": "Dieses Repository gibt nichts an, was auf Ihren Computern laufen soll. Legen Sie eine Datei an unter",
+            "couldntStart": "{target} konnte in der Sandbox nicht gestartet werden: {reason}",
+            "declaresNothing": "Hier steht noch nirgends, wie es ausgeführt wird. Ein Agent kann das herausfinden, oder Sie legen es selbst fest in",
             "editFile": "{file} bearbeiten",
+            "foundCargo": "Sein Cargo-Programm",
+            "foundDev": "Das dev-Skript in seiner package.json",
+            "foundOperator": "Das dev-Skript seines operator/-Panels",
+            "foundProcfile": "Aus seinem Procfile",
+            "foundStart": "Das start-Skript in seiner package.json",
+            "inSandboxOnly": "Läuft nur in der Sandbox: Es gibt nichts, was auf einen Computer übertragen wird.",
             "isolated": "Windows Sandbox",
             "noComputers": "Mit dieser Sandbox ist kein Computer verbunden.",
             "offline": "{device} ist gerade nicht verbunden.",
+            "onComputersOnly": "Läuft auf Ihren Computern, nicht in der Sandbox.",
             "openCard": "Seine Karte öffnen",
             "run": "Ausführen",
             "runIn": "{dir} ausführen",
+            "runInSandbox": "{target} in der Sandbox ausführen",
             "runOn": "{target} auf {device} ausführen",
             "runTip": "Wird hier gebaut und dann auf {device} in einem Terminal gestartet, das Sie verfolgen können",
+            "runTipSandbox": "Startet in der Sandbox und öffnet es unter Browser",
+            "sandbox": "Sandbox",
             "switchOff": "„Programme ausführen, die diese Sandbox sendet“ ist für {device} aus.",
+            "where": "Wo",
             "yourComputers": "Ihre Computer"
         },
         "directoryPersonas": {
@@ -13055,7 +13067,7 @@
             "checksPaused": "Checks pausiert",
             "manage": "Verwalten",
             "personas": "{count} Persona | {count} Personas",
-            "runTargets": "Auf einem Computer ausführen | {count} Dinge zum Ausführen auf Ihren Computern"
+            "runTargets": "In der Sandbox oder auf einem Computer ausführen | In der Sandbox oder auf einem Computer ausführen: {count} Ziele"
         },
         "savePanel": {
             "allChanges": "alle {count} Änderung | alle {count} Änderungen",

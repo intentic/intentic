@@ -19,7 +19,8 @@
 // something else holds it, so the origin survives a restart.
 //
 // INTENTIC_PREVIEW_DIRECT=1 runs Vite in the foreground even in a turn, for the rare check that needs its console.
-// A PORT in the environment (the sandbox's Start, through the repository's root Procfile) does the same on that port.
+// A PORT in the environment (the `demo` target in the repository's .intentic/run.json, run in the sandbox) does the same
+// on that port.
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, readFileSync } from "node:fs";
 import { get } from "node:http";
@@ -230,8 +231,9 @@ const list = (owner) => {
 const main = async () => {
     const args = process.argv.slice(2);
     const owner = process.env[OWNER_ENV];
-    // A run that is handed a PORT is the sandbox's Start for this repository (the root Procfile): Vite in the foreground of
-    // Start's terminal, on that port, behind the preview proxy (vite.config.ts, allowedHosts), never a managed preview.
+    // A run that is handed a PORT is the sandbox running the repository's `demo` target (.intentic/run.json): Vite in the
+    // foreground of its terminal, on that port, behind the preview proxy (vite.config.ts, allowedHosts), never a managed
+    // preview.
     const assigned = process.env["PORT"];
     const started = assigned !== undefined && assigned !== "";
     const inTurn = !started && owner !== undefined && owner !== "" && !NOT_CONVERSATIONS.has(owner) && process.env["INTENTIC_PREVIEW_DIRECT"] !== "1";

@@ -1,6 +1,11 @@
 {
     "targets": [
         {
+            "name": "demo",
+            "description": "The editor's demo build in the sandbox: the real editor on sample data, with no platform, daemon, database or sign-in.",
+            "command": "pnpm -C _site/demo dev"
+        },
+        {
             "name": "desktop",
             "description": "The Intentic desktop app for Windows: cross-built here, laid out as its installer would lay it out, started on the computer.",
             "device": "omen",

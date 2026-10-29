@@ -32,6 +32,7 @@ import { tellHomeRuns } from "../features/home/homeProcesses";
 import { useAuth } from "../client/auth/useAuth";
 import { signInAt } from "../lib/routes/signIn";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
+import { runDialogAsked, runDialogRepo } from "../models/runs/runDialog";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
 // pointer, ShellMobile (a rail on the board, full-screen views) below 768px. State lives in module composables, so
@@ -49,6 +50,8 @@ const AddSandboxDialog = defineAsyncComponent(loadAddSandboxDialog);
 // so a removal's run and its closing fade outlive the page that asked, which removing the sandbox on screen takes away.
 const RemoveSandboxHost = defineAsyncComponent(() => import(`../features/sandbox/gates/removal/RemoveSandboxHost.vue`));
 const NewSandboxHost = defineAsyncComponent(loadNewSandboxHost);
+// The window's one Run dialog (models/runs/runDialog.ts): fetched on the first ask, then kept.
+const DirectoryRuns = defineAsyncComponent(() => import(`../features/workspace/directory-ui/DirectoryRuns.vue`));
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
@@ -143,4 +146,5 @@ tellHomeRuns();
     <AddSandboxDialog v-if="addSandboxAsked" @close="closeAddSandbox" />
     <RemoveSandboxHost v-if="removeSandboxNeeded" />
     <NewSandboxHost v-if="newSandboxHosted" :key="newSandboxGeneration" />
+    <DirectoryRuns v-if="runDialogAsked" v-model="runDialogRepo" />
 </template>

@@ -32,7 +32,8 @@ export interface RowActionSources {
     // Repositories that declare checks of their own, and whether those are running: the icon is evidence the file
     // exists, and its tooltip is the one thing a reader wants from it, which is whether anything happens.
     readonly checkDirs: ReadonlyMap<string, { readonly adopted: boolean; readonly changed: boolean }>;
-    // Repositories that declare programs to run on the owner's computers (`.intentic/run.json`), by how many.
+    // Repositories with something to run, in the sandbox or on the owner's computers, by how many: what their
+    // `.intentic/run.json` declares, else the one run Start finds in their own files.
     readonly runDirs?: ReadonlyMap<string, number>;
     readonly openRuns?: (dir: string) => void;
     readonly openDirectory: (dir: string) => void;
@@ -84,7 +85,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openChecks(dir),
         });
     }
-    // Evidence the file exists, like checks: the repository says it can be run on one of the owner's computers.
+    // Evidence, like checks: the repository can be run, in the sandbox or on one of the owner's computers.
     const runCount = sources.runDirs?.get(dir) ?? 0;
     if (runCount > 0 && sources.openRuns !== undefined) {
         const openRuns = sources.openRuns;

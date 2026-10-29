@@ -5911,9 +5911,10 @@
             "onDesktop": "{label} tourne sur le bureau du sandbox.",
             "onDesktopLine": "Il n'a pas de page à prévisualiser ici : un programme avec une fenêtre s'affiche sur le bureau.",
             "showWindow": "Afficher",
-            "nothingToStart": "Démarrer n'a encore rien à exécuter ici : ni {procfile}, ni script {dev} ou {start}, ni binaire Cargo unique. Tout ce qu'il lance depuis un terminal apparaît sous « Ports transférés ».",
+            "nothingToStart": "Démarrer n'a encore rien à exécuter ici : aucune cible avec une commande dans {runjson}, aucun {procfile}, aucun script {dev} ou {start} et aucun binaire Cargo unique. Ce qu'il lance depuis un terminal apparaît sous Ports redirigés.",
             "makeStartable": "Le rendre démarrable",
-            "makeStartablePrompt": "Rends le dépôt `{repo}` démarrable depuis le bouton Démarrer de Navigateurs. Démarrer exécute la première de ces choses qu'il trouve : un Procfile à la racine du dépôt (une ligne `name: command` par processus ; l'entrée `web`, ou la seule, reçoit son port dans la variable d'environnement PORT), un script `dev` ou `start` dans son package.json, ou `cargo run` quand son Cargo.toml a exactement un binaire. Trouve comment un développeur lance ce projet en local et ajoute ce qui convient. Lance ensuite cette commande toi-même pour montrer qu'il démarre : une page qui répond sur son port, ou une fenêtre sur le bureau du sandbox."
+            "makeStartablePrompt": "Rends le dépôt `{repo}` exécutable dans le sandbox. Trouve comment un développeur lance ce projet en local, puis déclare-le dans son `.intentic/run.json` comme une cible avec une `command`, exécutée depuis la racine du dépôt : par exemple une cible nommée `web` avec la commande `pnpm dev`. Un serveur doit écouter sur le port de la variable d'environnement PORT ; un programme avec une fenêtre l'ouvre sur le bureau du sandbox. Les cibles qui s'exécutent sur les ordinateurs du propriétaire vont dans le même fichier, avec un `artifact` au lieu d'une commande. Lance ensuite la commande toi-même pour montrer qu'il démarre : une page qui répond sur son port, ou une fenêtre sur le bureau du sandbox.",
+            "runOnComputer": "Exécuter sur un ordinateur…"
         },
         "previewPass": {
             "opening": "Ouverture de l'aperçu…",
@@ -12734,20 +12735,31 @@
         },
         "directoryRuns": {
             "agentTooOld": "L'agent sur {device} est trop ancien pour lancer des programmes. Mettez-le à jour sur place.",
-            "computer": "Ordinateur",
             "connectOne": "En connecter un",
             "couldntRun": "Impossible de lancer {target} sur {device}.",
-            "declaresNothing": "Ce dépôt ne déclare rien à lancer sur vos ordinateurs. Placez un fichier à",
+            "couldntStart": "Impossible de démarrer {target} dans le sandbox : {reason}",
+            "declaresNothing": "Rien n'indique encore comment l'exécuter. Un agent peut le trouver, ou vous pouvez le déclarer vous-même dans",
             "editFile": "Modifier {file}",
+            "foundCargo": "Son binaire Cargo",
+            "foundDev": "Le script dev de son package.json",
+            "foundOperator": "Le script dev de son panneau operator/",
+            "foundProcfile": "Depuis son Procfile",
+            "foundStart": "Le script start de son package.json",
+            "inSandboxOnly": "S'exécute uniquement dans le sandbox : il n'a rien à porter sur un ordinateur.",
             "isolated": "Windows Sandbox",
             "noComputers": "Aucun ordinateur n'est connecté à ce sandbox.",
             "offline": "{device} n'est pas connecté pour le moment.",
+            "onComputersOnly": "S'exécute sur vos ordinateurs, pas dans le sandbox.",
             "openCard": "Ouvrir sa carte",
             "run": "Lancer",
             "runIn": "Lancer {dir}",
+            "runInSandbox": "Exécuter {target} dans le sandbox",
             "runOn": "Lancer {target} sur {device}",
             "runTip": "Compile ici, puis démarre sur {device} dans un terminal que vous pouvez suivre",
+            "runTipSandbox": "Le démarre dans le sandbox et l'ouvre dans Navigateurs",
+            "sandbox": "Sandbox",
             "switchOff": "« Exécuter les programmes envoyés par ce sandbox » est désactivé pour {device}.",
+            "where": "Où",
             "yourComputers": "Vos ordinateurs"
         },
         "directoryPersonas": {
@@ -13055,7 +13067,7 @@
             "checksPaused": "Checks en pause",
             "manage": "Gérer",
             "personas": "{count} persona | {count} personas",
-            "runTargets": "Lancer sur un ordinateur | {count} choses à lancer sur vos ordinateurs"
+            "runTargets": "Exécuter dans le sandbox ou sur un ordinateur | Exécuter dans le sandbox ou sur un ordinateur : {count} cibles"
         },
         "savePanel": {
             "allChanges": "{count} changement au total | les {count} changements",

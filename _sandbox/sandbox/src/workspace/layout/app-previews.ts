@@ -19,6 +19,8 @@ export interface AppPreview {
     readonly kind: string | undefined;
     readonly pkg: string;
     readonly preview: AppRun;
+    // Set for a target the repository's .intentic/run.json declares (run-file.ts): its command, as a person types it.
+    readonly command?: string | undefined;
 }
 
 // package.json fields discovery reads: name, intentic.template, the dev script, and framework dependency blocks.
@@ -138,6 +140,15 @@ export const buildAppSpec = (opts: {
         }
         env[key] = fill(value);
     }
-    // `&&` runs dev only after install succeeds; no `exec`, so the shell survives for Ctrl+C and history.
-    return { command: `test -d node_modules || pnpm install && ${fill(opts.preview.dev)}`, cwd: opts.repoDir, env, portEnv };
+    // `&&` runs dev only after install succeeds; no `exec`, so the shell survives for Ctrl+C and history. A repository
+    // with no package.json (a Cargo one declaring its run in run.json) has nothing for pnpm to install.
+    const install = existsSync(join(opts.repoDir, "package.json")) ? "test -d node_modules || pnpm install && " : "";
+    return { command: `${install}${fill(opts.preview.dev)}`, cwd: opts.repoDir, env, portEnv };
+};
+
+// Every app the repository at `repoDir` runs in the sandbox: the targets its .intentic/run.json declares with a command,
+// then its `_apps/`; a name both use is the run file's, since that is where the repository says how it runs.
+export const repoApps = (repoDir: string, manifest: TemplateManifest, declared: readonly AppPreview[]): AppPreview[] => {
+    const names = new Set(declared.map(({ app }) => app));
+    return [...declared, ...discoverApps(repoDir, manifest).filter(({ app }) => !names.has(app))];
 };

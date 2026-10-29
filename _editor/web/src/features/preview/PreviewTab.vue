@@ -23,6 +23,8 @@ import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
 import { onScreen } from "../../workbench/window/onScreen";
 import { composeAgent } from "../../models/fleet/agentActions";
+import { useRunTargets } from "../../models/runs/useRunTargets";
+import { openRunDialog } from "../../models/runs/runDialog";
 import { useT } from "@intentic/ui/i18n";
 
 export interface PreviewActions {
@@ -267,6 +269,12 @@ const startTip = computed(() => (target === undefined ? undefined : startTipOf(t
 // The ask that makes a repository with nothing to start startable, filled into the composer and never sent: what Start
 // looks for is in the words, so the agent adds the one that fits.
 const makeStartable = (repo: string): void => composeAgent(t(`preview.previewPanel.makeStartablePrompt`, { repo }));
+
+// The repository's other place to run: targets its .intentic/run.json carries to a computer, run from the Run dialog.
+const { repos: runFiles } = useRunTargets();
+const alsoOnComputers = computed(() =>
+    (runFiles.value ?? []).some((entry) => entry.repo === target?.repo && entry.targets.some((declared) => declared.artifact !== undefined)),
+);
 
 /* The wait duration stays visible while the preview is starting. */
 const waitingSince = ref<number | undefined>(undefined);
@@ -565,6 +573,7 @@ watch(
             <template #line>
                 <template v-if="startHint">{{ startHint }}</template>
                 <i18n-t v-else keypath="preview.previewPanel.nothingToStart" scope="global">
+                    <template #runjson><span class="font-mono">.intentic/run.json</span></template>
                     <template #procfile><span class="font-mono">Procfile</span></template>
                     <template #dev><span class="font-mono">dev</span></template>
                     <template #start><span class="font-mono">start</span></template>
@@ -574,6 +583,7 @@ watch(
                 <Button tier="accent" :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
+                <Button v-if="alsoOnComputers" tier="quiet" :label="t(`preview.previewPanel.runOnComputer`)" size="small" @click="openRunDialog(target.repo!)" />
             </template>
             <!-- Nothing to start: the ask that makes it startable goes into the composer, for the reader to send. -->
             <template v-else-if="target.kind === `repo` && target.repo !== undefined" #actions>

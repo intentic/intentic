@@ -5314,9 +5314,10 @@
             "onDesktop": "{label} działa na pulpicie sandboxa.",
             "onDesktopLine": "Nie ma tu strony do podglądu: program z oknem jest pokazywany na pulpicie.",
             "showWindow": "Pokaż",
-            "nothingToStart": "„Uruchom” nie ma tu jeszcze czego uruchomić: brak {procfile}, brak skryptu {dev} lub {start} i brak jednoznacznego programu Cargo. Cokolwiek uruchomi z terminala, pojawi się w „Przekierowanych portach”.",
+            "nothingToStart": "„Uruchom” nie ma tu jeszcze czego uruchomić: brak celu z poleceniem w {runjson}, brak pliku {procfile}, brak skryptu {dev} lub {start} i brak pojedynczego programu Cargo. Wszystko, co uruchomi z terminala, pojawi się w „Przekierowanych portach”.",
             "makeStartable": "Spraw, by dało się uruchomić",
-            "makeStartablePrompt": "Spraw, by repozytorium `{repo}` dało się uruchomić przyciskiem „Uruchom” w „Przeglądarkach”. „Uruchom” uruchamia pierwsze, co znajdzie: plik Procfile w katalogu głównym repozytorium (jedna linia `name: command` na proces; wpis `web`, albo jedyny, dostaje swój port w zmiennej środowiskowej PORT), skrypt `dev` lub `start` w jego package.json albo `cargo run`, gdy jego Cargo.toml ma dokładnie jeden program. Ustal, jak programista uruchamia ten projekt lokalnie, i dodaj to, co pasuje. Potem sam uruchom to polecenie i pokaż, że startuje: strona odpowiadająca na swoim porcie albo okno na pulpicie sandboxa."
+            "makeStartablePrompt": "Spraw, by repozytorium `{repo}` dało się uruchomić w sandboxie. Ustal, jak programista uruchamia ten projekt lokalnie, i zadeklaruj to w jego `.intentic/run.json` jako cel z poleceniem `command`, uruchamianym z katalogu głównego repozytorium: na przykład cel o nazwie `web` z poleceniem `pnpm dev`. Serwer musi nasłuchiwać na porcie ze zmiennej środowiskowej PORT; program z oknem otwiera je na pulpicie sandboxa. Cele uruchamiane na komputerach właściciela są w tym samym pliku, z `artifact` zamiast polecenia. Potem sam uruchom to polecenie i pokaż, że startuje: strona odpowiadająca na swoim porcie albo okno na pulpicie sandboxa.",
+            "runOnComputer": "Uruchom na komputerze…"
         },
         "previewPass": {
             "opening": "Otwieranie podglądu…",
@@ -12051,20 +12052,31 @@
         },
         "directoryRuns": {
             "agentTooOld": "Agent na {device} jest za stary, by uruchamiać programy. Zaktualizuj go tam.",
-            "computer": "Komputer",
             "connectOne": "Podłącz komputer",
             "couldntRun": "Nie udało się uruchomić {target} na {device}.",
-            "declaresNothing": "To repozytorium nie deklaruje niczego do uruchomienia na Twoich komputerach. Umieść plik w",
+            "couldntStart": "Nie udało się uruchomić {target} w sandboxie: {reason}",
+            "declaresNothing": "Nic tu jeszcze nie mówi, jak to uruchomić. Agent może to ustalić albo możesz to zadeklarować sam w",
             "editFile": "Edytuj {file}",
+            "foundCargo": "Jego program Cargo",
+            "foundDev": "Skrypt dev z jego package.json",
+            "foundOperator": "Skrypt dev jego panelu operator/",
+            "foundProcfile": "Z jego pliku Procfile",
+            "foundStart": "Skrypt start z jego package.json",
+            "inSandboxOnly": "Działa tylko w sandboxie: nie ma nic do przeniesienia na komputer.",
             "isolated": "Windows Sandbox",
             "noComputers": "Do tego sandboxa nie jest podłączony żaden komputer.",
             "offline": "{device} nie jest teraz połączony.",
+            "onComputersOnly": "Działa na twoich komputerach, nie w sandboxie.",
             "openCard": "Otwórz jego kartę",
             "run": "Uruchom",
             "runIn": "Uruchom {dir}",
+            "runInSandbox": "Uruchom {target} w sandboxie",
             "runOn": "Uruchom {target} na {device}",
             "runTip": "Buduje tutaj, potem startuje na {device} w terminalu, który możesz obserwować",
+            "runTipSandbox": "Uruchamia w sandboxie i otwiera w „Przeglądarkach”",
+            "sandbox": "Sandbox",
             "switchOff": "„Uruchamiaj programy wysłane z sandboxa” jest wyłączone dla {device}.",
+            "where": "Gdzie",
             "yourComputers": "Twoje komputery"
         },
         "directoryPersonas": {
@@ -12440,7 +12452,7 @@
             "checksPaused": "Kontrole wstrzymane",
             "manage": "Zarządzaj",
             "personas": "{count} persona | {count} persony | {count} person",
-            "runTargets": "Uruchom na komputerze | {count} rzeczy do uruchomienia na Twoich komputerach | {count} rzeczy do uruchomienia na Twoich komputerach"
+            "runTargets": "Uruchom w sandboxie lub na komputerze | Uruchom w sandboxie lub na komputerze: {count} cele | Uruchom w sandboxie lub na komputerze: {count} celów"
         },
         "savePanel": {
             "allChanges": "wszystkie zmiany ({count}) | wszystkie zmiany ({count}) | wszystkie zmiany ({count})",

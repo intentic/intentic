@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage } from "@intentic/base/errors";
 import { DEVICE_FEATURE_PROGRAMS, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
-import { RUN_TARGETS_FILE, RunTargetsFileSchema, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import { RUN_TARGETS_FILE, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
 import { runsContract } from "@intentic/sandbox-contract/contracts/runs.contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { implement, ORPCError } from "@orpc/server";
@@ -10,6 +9,7 @@ import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { createTerminalRunner, type TerminalRunner } from "../terminal/terminal-run.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { readRunFile } from "../workspace/layout/run-file.js";
 
 // THE EDITOR'S "RUN ON <DEVICE>" (contracts/runs.contract.ts). A repository's targets are read off its own
 // `.intentic/run.json` every time, like its checks: a commit or an agent can change the file between two openings. A run
@@ -19,28 +19,10 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 type RunsServices = Pick<Services, "capabilities" | "hostHub" | "runGrants" | "workspace" | "logger">;
 
 const repoDir = (root: string, repo: string): string => (repo === "root" ? root : join(root, repo));
-const filePath = (repo: string): string => (repo === "root" ? RUN_TARGETS_FILE : `${repo}/${RUN_TARGETS_FILE}`);
-
-const readRepo = async (root: string, repo: string): Promise<RunTargetsList["repos"][number] | undefined> => {
-    let text: string | undefined;
-    try {
-        text = await readFile(join(repoDir(root, repo), RUN_TARGETS_FILE), "utf8").catch(undefinedIfMissing);
-    } catch (error) {
-        return { repo, path: filePath(repo), targets: [], error: `the file could not be read (${errnoCode(error) ?? errorMessage(error)})` };
-    }
-    if (text === undefined) {
-        return undefined;
-    }
-    try {
-        return { repo, path: filePath(repo), targets: RunTargetsFileSchema.parse(JSON.parse(text)).targets };
-    } catch (error) {
-        return { repo, path: filePath(repo), targets: [], error: errorMessage(error) };
-    }
-};
 
 export const readRunTargets = async (root: string): Promise<RunTargetsList["repos"]> => {
     const repos = ["root", ...(await discoverRepos(root))];
-    const read = await Promise.all(repos.map((repo) => readRepo(root, repo)));
+    const read = await Promise.all(repos.map((repo) => readRunFile(root, repo)));
     return read.filter((entry) => entry !== undefined);
 };
 
@@ -68,12 +50,15 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             return { repos, devices };
         }),
         start: i.start.handler(async ({ input }) => {
-            const declared = await readRepo(services.workspace.root, input.repo);
+            const declared = await readRunFile(services.workspace.root, input.repo);
             const target = declared?.targets.find((entry) => entry.name === input.target);
             if (target === undefined) {
                 throw new ORPCError("NOT_FOUND", {
                     message: declared?.error ?? `${input.repo} declares no run target called "${input.target}" in ${RUN_TARGETS_FILE}`,
                 });
+            }
+            if (target.artifact === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: `"${input.target}" runs in the sandbox only: it declares a command and nothing to carry to a computer` });
             }
             const state = services.hostHub.state(input.device);
             if (!state.online) {

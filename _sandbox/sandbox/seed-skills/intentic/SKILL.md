@@ -86,7 +86,7 @@ with no restart (`references/instructions-and-settings.md`).
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: `environment propose <tool>` puts the overlay steps on a card the owner approves |
 | an account, folder or shelf of tools this conversation's persona or area withholds | `grants request capability\|folder\|shelf <what> --why "…"`; it reaches the conversation from its next turn |
 | to know what this conversation is still waiting on people for | `needs`; answers arrive by themselves, so never poll and never ask twice |
-| a repo they can start, run and preview from the sidebar or Browsers | `panels` skill: what Start runs (a Procfile, a `dev` or `start` script, a Cargo binary), and an `operator/` web app for a panel |
+| a repo they can start, run and preview from the sidebar or Browsers | `panels` skill: `.intentic/run.json` targets that run in the sandbox or on their computers, what Start finds without one, and an `operator/` web app for a panel |
 | a model on their GPU, or a model server they already run | a model endpoint, never a model built into this image: `references/personas-and-models.md` |
 | to pay an x402 endpoint | `wallet` skill; the owner approves each payment outside their auto-approve band |
 | a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill (`sandboxes` CLI); every create and removal asks in chat first. A difference only in how a turn behaves is a persona, not a machine |

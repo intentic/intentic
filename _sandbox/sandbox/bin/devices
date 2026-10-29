@@ -36,7 +36,8 @@ const USAGE = `devices — run a program built here on one of the owner's connec
   devices run [<target>] [--device <device>] [--no-build] [--repo <dir>]
       Everything a repository's ${RUN_FILE} declares for <target> (the only one, when there is one): run its build
       here, carry the result to the computer, open the ports it says the sandbox needs, start it there. Prints the
-      run id the computer's app_status, app_logs and app_stop take.
+      run id the computer's app_status, app_logs and app_stop take. A target with only a "command" runs in the sandbox
+      (the Run dialog's Sandbox, or Start in Browsers), not here.
 
   devices push <device> <path> [--name <name>]
       Copy a file (an .exe, an installer) or a whole folder (a build with its DLLs) to <device>, the computer's name as
@@ -315,12 +316,19 @@ const targetsOf = (root) => {
         if (typeof target?.name !== "string" || !NAME.test(target.name)) {
             die(`${where} needs a "name" of letters, digits, . - _`);
         }
+        // A target with only a `command` runs in the sandbox (Start, the Run dialog's Sandbox), never through this command.
         const artifact = target.artifact;
+        if (artifact === undefined && typeof target.command !== "string") {
+            die(`${where} needs a "command" (to run in the sandbox) or an "artifact" (to run on a computer)`);
+        }
         const paths = typeof artifact === "string" ? [artifact] : artifact !== null && typeof artifact === "object" ? Object.values(artifact) : [];
-        if (paths.length === 0 || paths.some((entry) => typeof entry !== "string" || entry.startsWith("/") || entry.split(/[\\/]/).includes(".."))) {
+        if (
+            artifact !== undefined &&
+            (paths.length === 0 || paths.some((entry) => typeof entry !== "string" || entry.startsWith("/") || entry.split(/[\\/]/).includes("..")))
+        ) {
             die(`${where} needs an "artifact": a path inside the repository, or an object of name → path`);
         }
-        for (const key of ["build", "device", "program", "description"]) {
+        for (const key of ["build", "command", "device", "program", "description"]) {
             if (target[key] !== undefined && typeof target[key] !== "string") {
                 die(`${where}.${key} must be text`);
             }
@@ -378,11 +386,17 @@ const programIn = (pushedPath, localFolder, target) => {
 const run = async (args) => {
     const { options, rest } = parse(args, { flags: ["--no-build"], values: ["--device", "--repo"] });
     const root = repoRoot(options.repo);
-    const targets = targetsOf(root);
+    // Only the targets that carry something to a computer; the sandbox's own are Start's.
+    const targets = targetsOf(root).filter((entry) => entry.artifact !== undefined);
     const [wanted] = rest;
     const target = wanted === undefined ? (targets.length === 1 ? targets[0] : undefined) : targets.find((entry) => entry.name === wanted);
     if (target === undefined) {
-        die(`${wanted === undefined ? "which target?" : `no target called "${wanted}"`} ${RUN_FILE} declares: ${targets.map((entry) => entry.name).join(", ")}`);
+        const sandboxOnly = wanted !== undefined && targetsOf(root).some((entry) => entry.name === wanted);
+        die(
+            sandboxOnly
+                ? `${wanted} runs in the sandbox only (it has a "command" and no "artifact"): start it from the Run dialog or the Browsers view, or run its command here`
+                : `${wanted === undefined ? "which target?" : `no target called "${wanted}"`} ${RUN_FILE} declares for computers: ${targets.map((entry) => entry.name).join(", ") || "none"}`,
+        );
     }
     const device = options.device ?? target.device;
     if (device === undefined) {
