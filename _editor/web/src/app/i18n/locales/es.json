@@ -5072,14 +5072,7 @@
         },
         "shareAccounts": {
             "title": "Desde tus otros sandboxes",
-            "from": "Traer cuentas de",
-            "which": "Sandbox",
-            "pickOne": "Elige un sandbox",
             "explain": "Nada que iniciar dos veces. Copiar: una clave que no cambia se copia aquí. Tomar prestada: un inicio de sesión de Claude se queda en el otro sandbox, que lo presta aquí turno a turno.",
-            "reading": "Leyendo lo que tiene {name}…",
-            "nothing": "{name} no tiene cuentas de modelos.",
-            "tooOld": "{name} ejecuta un sandbox demasiado antiguo para compartir sus cuentas. Actualízalo y vuelve a intentarlo.",
-            "couldntRead": "No se pudieron leer las cuentas de {name}.",
             "endpoint": "Endpoint de modelo",
             "modeCopy": "Copiar su clave",
             "modeLend": "Tomar prestada turno a turno",
@@ -5091,7 +5084,19 @@
             "couldntBring": "No se pudieron traer esas cuentas de {name}.",
             "failed": "No se pudo traer.",
             "copied": "Copiada",
-            "borrowed": "Prestada"
+            "borrowed": "Prestada",
+            "on": "en {name}",
+            "looking": "Mirando qué tienen tus otros sandboxes…",
+            "allHere": "Todo lo que tienen tus otros sandboxes ya está aquí.",
+            "unreachable": "No se pudo contactar con {names}, así que sus cuentas no aparecen.",
+            "tooOldThere": "{names} ejecuta una versión demasiado antigua para compartir cuentas. Actualízalo para verlas aquí.",
+            "notRunning": "{names} no está en marcha. Inícialo para traer sus cuentas aquí.",
+            "noAnswer": "No respondió.",
+            "outdatedHere": "Las cuentas de tus otros sandboxes se pueden traer aquí sin volver a iniciar sesión.",
+            "offerHere": "{label} ya tiene la sesión iniciada en {name}. Úsala aquí sin volver a iniciar sesión.",
+            "useFrom": "Usar desde {name}",
+            "onOther": "En {name}",
+            "onOtherNote": "Úsala sin iniciar sesión"
         }
     },
     "desktop": {

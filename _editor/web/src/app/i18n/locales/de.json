@@ -5072,14 +5072,7 @@
         },
         "shareAccounts": {
             "title": "Aus Ihren anderen Sandboxes",
-            "from": "Konten übernehmen aus",
-            "which": "Sandbox",
-            "pickOne": "Sandbox wählen",
             "explain": "Nichts muss zweimal angemeldet werden. Kopieren: Ein Schlüssel, der sich nicht ändert, wird hierher kopiert. Leihen: Eine Claude-Anmeldung bleibt in der anderen Sandbox, die sie hier Zug um Zug verleiht.",
-            "reading": "Lese, was {name} enthält…",
-            "nothing": "{name} hat keine Modellkonten.",
-            "tooOld": "{name} betreibt eine Sandbox, die zu alt ist, um ihre Konten zu teilen. Aktualisieren Sie sie und versuchen Sie es erneut.",
-            "couldntRead": "Die Konten von {name} konnten nicht gelesen werden.",
             "endpoint": "Modell-Endpunkt",
             "modeCopy": "Schlüssel kopieren",
             "modeLend": "Zug um Zug leihen",
@@ -5091,7 +5084,19 @@
             "couldntBring": "Diese Konten konnten nicht aus {name} übernommen werden.",
             "failed": "Konnte nicht übernommen werden.",
             "copied": "Kopiert",
-            "borrowed": "Geliehen"
+            "borrowed": "Geliehen",
+            "on": "auf {name}",
+            "looking": "Prüfe, was Ihre anderen Sandboxes enthalten…",
+            "allHere": "Alles, was Ihre anderen Sandboxes enthalten, ist bereits hier.",
+            "unreachable": "{names} war nicht erreichbar, daher fehlen seine Konten.",
+            "tooOldThere": "{names} läuft mit einem Build, der zu alt zum Teilen von Konten ist. Aktualisieren Sie ihn, um sie hier zu sehen.",
+            "notRunning": "{names} läuft nicht. Starten Sie ihn, um seine Konten hierher zu übernehmen.",
+            "noAnswer": "Keine Antwort.",
+            "outdatedHere": "Konten Ihrer anderen Sandboxes lassen sich hierher übernehmen, ohne sich erneut anzumelden.",
+            "offerHere": "{label} ist auf {name} bereits angemeldet. Nutzen Sie es hier, ohne sich erneut anzumelden.",
+            "useFrom": "Von {name} nutzen",
+            "onOther": "Auf {name}",
+            "onOtherNote": "Ohne Anmeldung nutzen"
         }
     },
     "desktop": {

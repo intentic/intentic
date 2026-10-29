@@ -30,7 +30,7 @@ A task opens a conversation, and its first turn carries the taking sandbox's who
 
 ## Accounts links
 
-The same link carries model accounts. An owner who wants another of their sandboxes to use the accounts this one already signed in to opens Sandbox ▸ Models there and picks this sandbox under **Use accounts from another sandbox**. Their editor, signed in to both, mints an *accounts link* here and saves its card there (`purpose: "accounts"`). Its terms say `tasks: false`, so it takes no tasks and mounts no `delegate` tool, and `accounts` names exactly what it may use ([`account-sharing.ts`](../../_shared/sandbox-contract/src/schemas/providers/account-sharing.ts)).
+The same link carries model accounts. An owner who wants another of their sandboxes to use the accounts this one already signed in to opens Sandbox ▸ Models there: **From your other sandboxes** lists, without being asked, every account their other sandboxes hold that this one lacks, a provider's tile is marked when one of them holds it, and its empty panel offers **Use from <sandbox>**. One press, and their editor, signed in to both, mints an *accounts link* here and saves its card there (`purpose: "accounts"`). Its terms say `tasks: false`, so it takes no tasks and mounts no `delegate` tool, and `accounts` names exactly what it may use ([`account-sharing.ts`](../../_shared/sandbox-contract/src/schemas/providers/account-sharing.ts)).
 
 Each account goes the one way that is safe for its credential ([`held-accounts.ts`](../../_sandbox/sandbox/src/links/accounts/held-accounts.ts)):
 

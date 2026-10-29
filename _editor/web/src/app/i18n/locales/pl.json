@@ -5072,14 +5072,7 @@
         },
         "shareAccounts": {
             "title": "Z innych Twoich sandboxów",
-            "from": "Przenieś konta z",
-            "which": "Sandbox",
-            "pickOne": "Wybierz sandbox",
             "explain": "Bez ponownego logowania. Kopia: klucz, który się nie zmienia, zostaje skopiowany tutaj. Pożyczenie: logowanie do Claude zostaje w drugim sandboxie, który użycza go tutaj tura po turze.",
-            "reading": "Odczytywanie tego, co ma {name}…",
-            "nothing": "{name} nie ma kont modeli.",
-            "tooOld": "{name} działa na zbyt starym sandboxie, by udostępniać swoje konta. Zaktualizuj go i spróbuj ponownie.",
-            "couldntRead": "Nie udało się odczytać kont z {name}.",
             "endpoint": "Punkt końcowy modelu",
             "modeCopy": "Skopiuj klucz",
             "modeLend": "Pożycz tura po turze",
@@ -5091,7 +5084,19 @@
             "couldntBring": "Nie udało się przenieść tych kont z {name}.",
             "failed": "Nie udało się go przenieść.",
             "copied": "Skopiowano",
-            "borrowed": "Użyczone"
+            "borrowed": "Użyczone",
+            "on": "na {name}",
+            "looking": "Sprawdzanie, co mają Twoje inne sandboxy…",
+            "allHere": "Wszystko, co mają Twoje inne sandboxy, jest już tutaj.",
+            "unreachable": "Nie udało się połączyć z {names}, więc jego konta nie są widoczne.",
+            "tooOldThere": "{names} działa na wersji zbyt starej, by udostępniać konta. Zaktualizuj go, by zobaczyć je tutaj.",
+            "notRunning": "{names} nie działa. Uruchom go, by przenieść tutaj jego konta.",
+            "noAnswer": "Brak odpowiedzi.",
+            "outdatedHere": "Konta z Twoich innych sandboxów można przenieść tutaj bez ponownego logowania.",
+            "offerHere": "{label} jest już zalogowane na {name}. Użyj go tutaj bez ponownego logowania.",
+            "useFrom": "Użyj z {name}",
+            "onOther": "Na {name}",
+            "onOtherNote": "Użyj bez logowania"
         }
     },
     "desktop": {

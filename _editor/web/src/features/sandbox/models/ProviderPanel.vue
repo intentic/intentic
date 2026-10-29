@@ -29,7 +29,9 @@ import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
 import { accountOffLine } from "./accountOff";
+import { offerFor } from "./otherAccounts";
 import { lendingKey, useProviderSharing } from "./useAccountSharing";
+import { useBringOther, useOtherAccounts } from "./useOtherAccounts";
 
 // ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
 // one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
@@ -95,6 +97,10 @@ const { accountBusy, accountUsage, usageLoaded, renameAccount, disconnect, disco
 // Loans both ways (useAccountSharing.ts): a row another of the owner's sandboxes lends here is ended here and fixed there;
 // a row of this one's own that another borrows says so, with the press that takes it back.
 const { borrowedFrom, lentNote, stopBorrowing, stopLending, busy: loanBusy, notice: loanNotice } = useProviderSharing();
+// The same account signed in on another of the owner's sandboxes: with nothing here, using it is one press, not a sign-in.
+const { rows: otherRows } = useOtherAccounts();
+const { bring, bringing, notice: bringNotice, tag: bringTag, dismiss: dismissBring } = useBringOther();
+const offer = computed(() => offerFor(otherRows.value, provider));
 
 // The provider as the translator keys it, where it holds subscriptions there at all; parsed once, so every routed read
 // below names a provider the translator knows rather than asserting one.
@@ -499,15 +505,48 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         <RowNote v-if="rows.length === 0 && attempt === undefined" variant="block">
             <div class="flex flex-col items-start gap-3">
                 <p class="text-xs text-muted">
-                    {{ found ? t(`connect.connect.foundSignedIn`) : t(`connect.providerPanel.empty`) }}
+                    {{
+                        offer
+                            ? t(`connect.shareAccounts.offerHere`, { label: offer.account.label, name: offer.source.name })
+                            : found
+                              ? t(`connect.connect.foundSignedIn`)
+                              : t(`connect.providerPanel.empty`)
+                    }}
                 </p>
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
-                <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
+                <EstatePicker v-if="offersEstates && !offer" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
                 <div class="flex flex-wrap gap-2">
-                    <Button v-for="(way, index) in ways" :tier="index === 0 ? `accent` : `boring`" :key="way.key" size="small" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
+                    <!-- Already signed in over there: bringing it is the step asked for, signing in again the alternative. -->
+                    <Button
+                        v-if="offer"
+                        tier="accent"
+                        size="small"
+                        :label="t(`connect.shareAccounts.useFrom`, { name: offer.source.name })"
+                        :loading="bringing === offer.key"
+                        :disabled="busy || bringing !== undefined"
+                        @click="bring([offer], offer.key)"
+                    >
+                        <template #icon><Icon name="link" /></template>
+                    </Button>
+                    <Button
+                        v-for="(way, index) in ways"
+                        :key="way.key"
+                        :tier="index === 0 && !offer ? `accent` : `boring`"
+                        size="small"
+                        :label="way.label"
+                        :disabled="busy"
+                        @click="ask(way.via, way.variant)"
+                    >
                         <template #icon><Icon name="sign-in" /></template>
                     </Button>
                 </div>
+                <Notice
+                    v-if="offer && bringNotice && bringTag === offer.key"
+                    :of="bringNotice"
+                    size="sm"
+                    :dismiss-label="t(`ui.action.dismiss`)"
+                    @dismiss="dismissBring()"
+                />
             </div>
         </RowNote>
 

@@ -5072,14 +5072,7 @@
         },
         "shareAccounts": {
             "title": "Depuis vos autres sandboxes",
-            "from": "Importer les comptes de",
-            "which": "Sandbox",
-            "pickOne": "Choisissez un sandbox",
             "explain": "Rien à reconnecter deux fois. Copier : une clé qui ne change pas est copiée ici. Emprunter : une connexion Claude reste sur l'autre sandbox, qui la prête ici tour par tour.",
-            "reading": "Lecture de ce que contient {name}…",
-            "nothing": "{name} n'a aucun compte de modèle.",
-            "tooOld": "{name} exécute un sandbox trop ancien pour partager ses comptes. Mettez-le à jour, puis réessayez.",
-            "couldntRead": "Impossible de lire les comptes de {name}.",
             "endpoint": "Point de terminaison de modèle",
             "modeCopy": "Copier sa clé",
             "modeLend": "Emprunter tour par tour",
@@ -5091,7 +5084,19 @@
             "couldntBring": "Impossible d'importer ces comptes depuis {name}.",
             "failed": "Impossible de l'importer.",
             "copied": "Copié",
-            "borrowed": "Emprunté"
+            "borrowed": "Emprunté",
+            "on": "sur {name}",
+            "looking": "Lecture de ce que contiennent vos autres sandboxes…",
+            "allHere": "Tout ce que contiennent vos autres sandboxes est déjà ici.",
+            "unreachable": "{names} n'a pas pu être joint, ses comptes ne sont donc pas listés.",
+            "tooOldThere": "{names} exécute une version trop ancienne pour partager des comptes. Mettez-le à jour pour les voir ici.",
+            "notRunning": "{names} n'est pas démarré. Démarrez-le pour importer ses comptes ici.",
+            "noAnswer": "Pas de réponse.",
+            "outdatedHere": "Les comptes de vos autres sandboxes peuvent être importés ici sans vous reconnecter.",
+            "offerHere": "{label} est déjà connecté sur {name}. Utilisez-le ici sans vous reconnecter.",
+            "useFrom": "Utiliser depuis {name}",
+            "onOther": "Sur {name}",
+            "onOtherNote": "Utilisable sans connexion"
         }
     },
     "desktop": {

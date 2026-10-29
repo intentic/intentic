@@ -5072,14 +5072,7 @@
         },
         "shareAccounts": {
             "title": "From your other sandboxes",
-            "from": "Bring accounts from",
-            "which": "Sandbox",
-            "pickOne": "Pick a sandbox",
             "explain": "Nothing to sign in to twice. Copy: a key that does not change is copied here. Borrow: a Claude sign-in stays on the other sandbox, which lends it here turn by turn.",
-            "reading": "Reading what {name} holds…",
-            "nothing": "{name} holds no model accounts.",
-            "tooOld": "{name} runs a sandbox too old to share its accounts. Update it, then try again.",
-            "couldntRead": "Couldn't read {name}'s accounts.",
             "endpoint": "Model endpoint",
             "modeCopy": "Copy its key",
             "modeLend": "Borrow turn by turn",
@@ -5091,7 +5084,19 @@
             "couldntBring": "Couldn't bring those accounts in from {name}.",
             "failed": "Couldn't bring it in.",
             "copied": "Copied",
-            "borrowed": "Borrowed"
+            "borrowed": "Borrowed",
+            "on": "on {name}",
+            "looking": "Looking at what your other sandboxes hold…",
+            "allHere": "Everything your other sandboxes hold is already here.",
+            "unreachable": "Couldn't reach {names}, so its accounts aren't listed.",
+            "tooOldThere": "{names} runs a build too old to share accounts. Update it to see them here.",
+            "notRunning": "{names} isn't running. Start it to bring its accounts here.",
+            "noAnswer": "It didn't answer.",
+            "outdatedHere": "Accounts your other sandboxes hold can be brought here without signing in again.",
+            "offerHere": "{label} is already signed in on {name}. Use it here without signing in again.",
+            "useFrom": "Use from {name}",
+            "onOther": "On {name}",
+            "onOtherNote": "Use it without signing in"
         }
     },
     "desktop": {

@@ -49,7 +49,7 @@ export const shareableAt = (sandboxId: string) => sandboxRpc.sharing.shareable(u
 export const borrowHere: ShareCalls[`borrow`] = (ask) => sandboxRpc.sharing.borrow(ask);
 
 /** What this sandbox borrows, for a reader who may connect things, from a daemon that has the route. */
-const useBorrowedAccounts = (enabled: MaybeRefOrGetter<boolean>) =>
+export const useBorrowedAccounts = (enabled: MaybeRefOrGetter<boolean>) =>
     useSandboxQuery({ ...rpcQuery(`sharing.borrowed`), enabled: computed(() => toValue(enabled) && supportsRoute(`sharing.borrowed`)) });
 
 /** After a bring or a stop: read again by every panel that draws them. */

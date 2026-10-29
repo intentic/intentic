@@ -44,6 +44,8 @@ import {
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
 import { useModelSources } from "./useModelSources";
+import { offerFor } from "./otherAccounts";
+import { useOtherAccounts } from "./useOtherAccounts";
 
 // Stable peer tiles for each provider and Local models open the sole accounts/sign-in or local/server panel below the grid.
 // All sign-in links use modelsPath.ts to land here and open the relevant tile; never expose competing sign-in doors.
@@ -141,6 +143,8 @@ const select = (tile: TileKey): void => {
 const STANDING_RANK = { attention: 0, blocked: 1, ready: 2, waiting: 3 } as const satisfies Record<ModelSourceStanding, number>;
 const sourcesOf = (tile: TileKey): readonly ModelSource[] =>
     sources.value.filter((source) => source.kind !== `trial` && tileOf(source.provider) === tile);
+// What the owner's other sandboxes hold that this one does not: a tile with nothing here names where its account is.
+const { rows: otherRows } = useOtherAccounts();
 const tileFacts = computed(() =>
     Object.fromEntries(
         MODEL_TILES.map((tile) => {
@@ -164,6 +168,7 @@ const tileFacts = computed(() =>
                     count: accessKnown.value ? tileCount(facts) : undefined,
                     standing: accessKnown.value ? standing : undefined,
                     found: accessKnown.value && facts.found && facts.count === 0,
+                    elsewhere: accessKnown.value && !facts.found && facts.count === 0 ? offerFor(otherRows.value, tile)?.source.name : undefined,
                 },
             ];
         }),
@@ -496,6 +501,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 :line="tileFacts[tile]?.line"
                 :standing="tileFacts[tile]?.standing"
                 :found="tileFacts[tile]?.found ?? false"
+                :elsewhere="tileFacts[tile]?.elsewhere"
                 :controls="panelId"
                 @select="select(tile)"
             />
