@@ -17,6 +17,7 @@ const composerWords = (conversation: Conversation): DraftWords => ({
     serves: servingOf(conversation),
     forkOf: conversation.pendingForkOf.value,
     freshOf: conversation.pendingFreshOf.value,
+    fromBranch: conversation.pendingFromBranch.value,
 });
 
 const composerHolds = (conversation: Conversation): Pick<SyncedDraft, "text" | "paths"> => {
@@ -35,6 +36,7 @@ const showDraft = (conversation: Conversation, draft: HeldDraft): void => {
     if (!conversation.registered.value) {
         conversation.pendingForkOf.value ??= draft.forkOf;
         conversation.pendingFreshOf.value ??= draft.freshOf;
+        conversation.pendingFromBranch.value ??= draft.fromBranch;
     }
 };
 

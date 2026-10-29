@@ -17,7 +17,6 @@ import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
-import type { Caller } from "../../auth/auth.js";
 import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { decodedBody } from "../../http/request-body.js";
@@ -33,22 +32,24 @@ export type WorkspaceBytesRoutesDeps = Pick<
 
 // Resolves path via scopedTarget and translates its ORPCError into this route's status shape; anything else propagates.
 // The same two questions the oRPC reads ask first — whose copy, and whether this caller may look there — since these
-// routes carry the bytes and would otherwise be the way around the fence the typed routes apply.
+// routes carry the bytes and would otherwise be the way around the fence the typed routes apply. The scope rides the
+// query string here (`agent`, or `branch` with `repo`), read as the typed routes read their input.
 const scopedFileTarget = async (
     services: Pick<Services, "workspaceScope" | "areas" | "agents">,
     path: string,
-    agent: string | undefined,
-    caller: Caller | undefined,
+    c: Context<AppEnv>,
 ): Promise<{ target: string } | { error: string; status: 400 | 403 | 404 | 412 }> => {
+    const scope = { agent: c.req.query("agent"), branch: c.req.query("branch"), repo: c.req.query("repo") };
+    const caller = c.get("identity");
     try {
-        if (agent !== undefined) {
-            const entry = services.agents.entry(agent);
+        if (scope.agent !== undefined) {
+            const entry = services.agents.entry(scope.agent);
             if (entry !== undefined) {
                 refuseUnlessVisible(caller, provenanceOf(entry));
             }
         }
         refuseFenced(callerFence(await services.areas.list(), caller), path);
-        return { target: (await scopedTarget(services.workspaceScope, agent, path)).target };
+        return { target: (await scopedTarget(services.workspaceScope, scope, path)).target };
     } catch (error) {
         if (!(error instanceof ORPCError)) {
             throw error;
@@ -134,7 +135,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
             return c.json({ error: "invalid path" }, 400);
         }
         // Shared with the oRPC file route so an image previews from the same scope its text reads from.
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
+        const scoped = await scopedFileTarget(services, path, c);
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
@@ -171,7 +172,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
             return c.json({ error: "unknown size" }, 400);
         }
         // Shared with the raw route, so a tile and the file it opens are read from the same scope.
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
+        const scoped = await scopedFileTarget(services, path, c);
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
@@ -210,7 +211,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         if (path === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
+        const scoped = await scopedFileTarget(services, path, c);
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }

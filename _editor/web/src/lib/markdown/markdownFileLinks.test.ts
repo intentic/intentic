@@ -9,7 +9,7 @@ import { treeCache, treeCacheModule } from "../../testing/treeCache";
 jest.mock("../queryPersistence", treeCacheModule);
 const { workspaceTreeKeyFor } = await import("../files/workspaceTreeCache");
 const seed = (tree: { root: string; tree: unknown[] }, agent?: string): void => {
-    treeCache.setQueryData(workspaceTreeKeyFor(agent), tree);
+    treeCache.setQueryData(workspaceTreeKeyFor({ agent }), tree);
 };
 
 const { fileLinkDecorator, renderMarkdown } = await import("./renderMarkdown");

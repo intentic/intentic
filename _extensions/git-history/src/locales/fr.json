@@ -1,8 +1,15 @@
 {
+    "branchActions": {
+        "start": "Démarrer un agent",
+        "startNamed": "Démarrer un agent depuis {branch}",
+        "view": "Voir dans l'espace de travail",
+        "viewNamed": "Voir {branch} dans l'espace de travail"
+    },
     "branchSwitcher": {
         "branch": "Branche",
         "branches": "Branches",
         "cancel": "Annuler",
+        "caption": "L'espace de travail reste sur sa ligne principale. Consultez une autre branche, ou démarrez un agent depuis celle-ci.",
         "create": "Créer",
         "delete": "Supprimer {name} ?",
         "delete2": "Supprimer",
@@ -15,7 +22,8 @@
         "newBranchHere": "Nouvelle branche d'ici",
         "noBranchesMatch": "Aucune branche ne correspond.",
         "unmergedForceDelete": "Non fusionnée, forcer la suppression ?",
-        "upstreamBranchDeleted": "Amont supprimé"
+        "upstreamBranchDeleted": "Amont supprimé",
+        "workspace": "espace de travail"
     },
     "extension": {
         "git": "Git",
@@ -33,9 +41,6 @@
         "cancel": "Annuler",
         "changed": "{count} modifiés",
         "changedFiles": "{count} fichier modifié | {count} fichiers modifiés",
-        "checkout": "Checkout…",
-        "checkout2": "Checkout",
-        "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry-pick…",
         "commit": "Commit",
         "conflicted": "{conflicted} en conflit",
@@ -90,8 +95,6 @@
         "dialog": {
             "branch": "Créer une branche",
             "branchConfirm": "Créer",
-            "checkout": "Checkout du commit",
-            "checkoutConfirm": "Checkout",
             "cherryPick": "Cherry-pick du commit",
             "cherryPickConfirm": "Cherry-pick",
             "drop": "Abandonner le commit",
@@ -108,7 +111,6 @@
             "tagConfirm": "Ajouter l'étiquette"
         },
         "body": {
-            "checkout": "Faire un checkout direct de {sha} (HEAD détachée). Des changements non committés l'empêcheront.",
             "cherryPick": "Copier le changement de {sha} sur la branche courante sous forme d'un nouveau commit.",
             "drop": "Retirer {sha} de l'historique, en rejouant les commits suivants sur son parent.",
             "merge": "Fusionner {sha} dans la branche courante ({branch}).",
@@ -125,7 +127,6 @@
         "actionFailed": "L'action a échoué."
     },
     "useBranches": {
-        "checkoutFailed": "Le checkout a échoué. Committez, indexez ou jetez d'abord vos changements.",
         "couldntCreate": "Impossible de créer cette branche.",
         "couldntDelete": "Impossible de supprimer cette branche.",
         "couldntPush": "Impossible de pousser cette branche.",

@@ -78,6 +78,10 @@ const WorktreePlacementSchema = z.object({
     // Whose checkout took the last land instead of the main tree: its parent's. The repos' landed provenance then names
     // that checkout, and nothing that reads main-tree landings (origins, presence, the version commit) counts it.
     landedInto: z.string().optional(),
+    // Added 2026-10-29, optional: the repos started from a branch rather than the main line (`fromBranch` on the opening
+    // turn), latched by the opening compose. Each is cut from, synced onto and lands as commits onto that branch
+    // (land/branch-repos.ts); its `base` and landed provenance name the branch's commits, never the main tree's.
+    branches: z.array(z.object({ repo: z.string(), branch: z.string() })).optional(),
 });
 export type WorktreePlacement = z.infer<typeof WorktreePlacementSchema>;
 const PlacementSchema = z.discriminatedUnion("kind", [z.object({ kind: z.literal("main") }), WorktreePlacementSchema]);

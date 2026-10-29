@@ -7,7 +7,7 @@ import { forgetEdgeVerdict, noteVerdict } from "../../../client/sandbox/edgeVerd
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import type { FreshLink } from "../run/turnRequest";
+import type { BranchLink, FreshLink } from "../run/turnRequest";
 
 // Pins that a fresh session's origin rides the first send the sandbox takes and no later one, and that a refused send
 // keeps it for the retry, so a press that failed never loses the link to the work it was opened on. And that a send the
@@ -24,7 +24,12 @@ const BOX = `sbx-1`;
 const ORIGIN: FreshLink = { conversationId: `origin`, kind: `review` };
 const RECEIPT: MessageReceipt = { delivered: `started`, run: `r1` };
 const body = (messageId: string): ProcedureInput<`agent.run`> => ({ messageId, prompt: `/code-review `, conversationId: `fresh`, isolated: true });
-const host = (box?: string) => ({ box: ref<string | undefined>(box), pendingFreshOf: ref<FreshLink | undefined>(ORIGIN) });
+const host = (box?: string) => ({
+    box: ref<string | undefined>(box),
+    pendingFreshOf: ref<FreshLink | undefined>(ORIGIN),
+    pendingFromBranch: ref<BranchLink | undefined>(),
+});
+const BRANCH: BranchLink = { repo: `apps/web`, branch: `feature/login` };
 // How each refusal reaches postTurn: the edge's and netd's are plain text, so they carry no words of the daemon's.
 const edge502 = () => new SandboxHttpError(502, `Request failed (502).`);
 const netdRestarting = () => new SandboxHttpError(503, `Request failed (503).`);
@@ -53,6 +58,27 @@ describe(`a fresh session's first send`, () => {
         expect(receipt).toBeInstanceOf(SandboxHttpError);
         expect(chat.pendingFreshOf.value).toEqual(ORIGIN);
         expect(run).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe(`a branch start's first send`, () => {
+    const onBranch = () => ({ ...host(), pendingFreshOf: ref<FreshLink | undefined>(), pendingFromBranch: ref<BranchLink | undefined>(BRANCH) });
+
+    it(`carries the branch on the opening send as fromBranch, then never again`, async () => {
+        run.mockResolvedValue(RECEIPT);
+        const chat = onBranch();
+        await postTurn(chat, body(`m1`), new AbortController().signal);
+        await postTurn(chat, body(`m2`), new AbortController().signal);
+        expect(run.mock.calls.map(([input]) => input.fromBranch)).toEqual([BRANCH, undefined]);
+        expect(run.mock.calls[0]?.[0].freshOf).toBeUndefined();
+        expect(chat.pendingFromBranch.value).toBeUndefined();
+    });
+
+    it(`keeps the branch when the sandbox refused the words, for the retry`, async () => {
+        run.mockRejectedValue(new SandboxHttpError(412, `no branch feature/login in apps/web`));
+        const chat = onBranch();
+        await postTurn(chat, body(`m1`), new AbortController().signal);
+        expect(chat.pendingFromBranch.value).toEqual(BRANCH);
     });
 });
 

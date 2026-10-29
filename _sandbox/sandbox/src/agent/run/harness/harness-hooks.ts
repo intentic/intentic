@@ -2,6 +2,7 @@ import { isAbsolute, join } from "node:path";
 import type { Rule, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { agentRepoAnchor } from "../../../conversations/land/agent-changes.js";
+import { branchOf } from "../../../conversations/land/branch/branch-repos.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";
 import { fromWorktree, inWorktree, type IsolationAnchor, ownWorktree } from "../../../conversations/worktrees/isolation.js";
@@ -101,11 +102,12 @@ const turnChangeOf = async (deps: HarnessHooksDeps, conversationId: string, name
     return { paths, repos: reposOf(paths, nested) };
 };
 
-// Where a subagent's own change in one repo starts, or undefined for any other conversation, whose checks measure from
-// where its branch left the main line, as they always have.
+// Where a subagent's own change in one repo starts, or a repo's started from a branch (whose own commits are not this
+// conversation's), or undefined for any other conversation, whose checks measure from where its branch left the main
+// line, as they always have.
 const childBaseOf = async (deps: HarnessHooksDeps, conversationId: string, repo: string | undefined): Promise<string | undefined> => {
     const entry = deps.agents.entry(conversationId);
-    if (entry === undefined || !isIsolated(entry) || entry.placement.parent === undefined) {
+    if (entry === undefined || !isIsolated(entry) || (entry.placement.parent === undefined && branchOf(entry.placement, repo ?? "root") === undefined)) {
         return undefined;
     }
     const composed = entry.placement.repos.find((record) => record.repo === (repo ?? "root"));

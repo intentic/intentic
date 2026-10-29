@@ -24,7 +24,7 @@ export const createWorkspaceMediaRoutes = (services: Services) => {
                 asked.map(async (path) => {
                     try {
                         refuseFenced(fence, path);
-                        return (await scopedTarget(services.workspaceScope, input.agent, path)).target;
+                        return (await scopedTarget(services.workspaceScope, input, path)).target;
                     } catch {
                         // allow(silent-catch): a refused or escaping path is one the answer leaves out, as the contract says
                         return undefined;

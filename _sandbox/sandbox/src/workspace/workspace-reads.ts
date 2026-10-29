@@ -5,6 +5,7 @@ import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import type { Services } from "../composition.js";
 import { refuseFenced } from "./layout/workspace-fence.js";
 import { scopedTarget } from "./layout/workspace-scope.js";
+import type { ReadScope } from "./layout/branch-view.js";
 
 // The questions every workspace read asks of its caller before a path reaches the resolver, shared by the workspace's
 // routes (workspace.routes.ts) and the tickets that stand in for a bearer (workspace-tickets.routes.ts), so the two
@@ -25,11 +26,12 @@ export const workspaceReads = (services: Pick<Services, "areas" | "agents" | "wo
         }
     };
     // Every scoped read asks both questions before a path reaches the resolver: whose copy, and whether this caller
-    // may look there at all.
-    const scopedRead = async (context: OrpcContext, agent: string | undefined, relPath: string) => {
-        refuseUnseenAgent(context, agent);
+    // may look there at all. A branch is read by whoever may read the shared tree, behind the same fence: it is the
+    // same workspace at another commit, nobody's own copy.
+    const scopedRead = async (context: OrpcContext, scope: ReadScope, relPath: string) => {
+        refuseUnseenAgent(context, scope.agent);
         refuseFenced(await fenceFor(context), relPath);
-        return scopedTarget(services.workspaceScope, agent, relPath);
+        return scopedTarget(services.workspaceScope, scope, relPath);
     };
     return { fenceFor, refuseUnseenAgent, scopedRead };
 };

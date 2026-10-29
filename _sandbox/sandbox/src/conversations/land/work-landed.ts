@@ -1,6 +1,7 @@
 import type { Services } from "../../composition.js";
 import { awaitingWake } from "../actor/conversation-state.js";
 import { endingStatus, reposOf, worktreeOf } from "../registry/agents-store.js";
+import { mainTreeRepos } from "./branch/branch-repos.js";
 
 // A message booked to go after another conversation's work (AgentTurn.sendAfter) waits on two readings of that other
 // conversation, both made here: whether it can be waited for at all, asked once at the booking, and whether its work
@@ -35,7 +36,7 @@ export const unwaitable = (services: Pick<Services, "agents" | "conversations">,
 // When work of this conversation last reached the workspace (ms), or 0 for never: a land into a parent's checkout is not
 // the workspace, and a workspace conversation has no land of its own.
 const landedAt = (entry: NonNullable<ReturnType<Services["agents"]["entry"]>>): number =>
-    worktreeOf(entry)?.landedInto === undefined ? Math.max(0, ...reposOf(entry).map((repo) => repo.landedAt ?? 0)) : 0;
+    worktreeOf(entry)?.landedInto === undefined ? Math.max(0, ...mainTreeRepos({ ...worktreeOf(entry), repos: reposOf(entry) }).map((repo) => repo.landedAt ?? 0)) : 0;
 
 /**
  * Whether conversation `id` has finished and all of its work is in the workspace, so what waits for it may go. Nothing

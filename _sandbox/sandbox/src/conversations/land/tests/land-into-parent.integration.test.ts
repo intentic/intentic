@@ -285,7 +285,7 @@ test.each(["check", "merge"] as const)("a %s land whose write the tree does not 
     }
     const entry = childEntry([{ repo: "root", base: kin.base }]);
 
-    const landed = await landAgent(kin.worktrees, entry, mode, "outstanding", "p1", applyWritesNothing);
+    const landed = await landAgent(kin.worktrees, entry, mode, "outstanding", "p1", undefined, applyWritesNothing);
 
     expect({ landed: landed.landed, resolving: landed.resolving, repos: landed.repos }).toEqual({ landed: false, resolving: undefined, repos: entry.placement.repos });
     expect(landed.conflicts?.flatMap(({ paths }) => paths)).toContainEqual({ path: "checkout.ts", reason: "workspace" });

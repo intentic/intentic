@@ -1,8 +1,15 @@
 {
+    "branchActions": {
+        "start": "Uruchom agenta",
+        "startNamed": "Uruchom agenta z {branch}",
+        "view": "Pokaż w przestrzeni roboczej",
+        "viewNamed": "Pokaż {branch} w przestrzeni roboczej"
+    },
     "branchSwitcher": {
         "branch": "Gałąź",
         "branches": "Gałęzie",
         "cancel": "Anuluj",
+        "caption": "Przestrzeń robocza zostaje na swojej głównej linii. Obejrzyj inną gałąź albo uruchom agenta z niej.",
         "create": "Utwórz",
         "delete": "Usunąć {name}?",
         "delete2": "Usuń",
@@ -15,7 +22,8 @@
         "newBranchHere": "Nowa gałąź stąd",
         "noBranchesMatch": "Żadna gałąź nie pasuje.",
         "unmergedForceDelete": "Niescalona, wymusić usunięcie?",
-        "upstreamBranchDeleted": "Upstream usunięty"
+        "upstreamBranchDeleted": "Upstream usunięty",
+        "workspace": "przestrzeń robocza"
     },
     "extension": {
         "git": "Git",
@@ -33,9 +41,6 @@
         "cancel": "Anuluj",
         "changed": "zmieniono {count}",
         "changedFiles": "{count} zmieniony plik | {count} zmienione pliki | {count} zmienionych plików",
-        "checkout": "Checkout…",
-        "checkout2": "Checkout",
-        "checkout3": "Checkout {local}",
         "cherryPick": "Cherry-pick…",
         "commit": "Commit",
         "conflicted": "{conflicted} w konflikcie",
@@ -90,8 +95,6 @@
         "dialog": {
             "branch": "Utwórz gałąź",
             "branchConfirm": "Utwórz",
-            "checkout": "Checkout commita",
-            "checkoutConfirm": "Checkout",
             "cherryPick": "Cherry-pick commita",
             "cherryPickConfirm": "Cherry-pick",
             "drop": "Odrzuć commit",
@@ -108,7 +111,6 @@
             "tagConfirm": "Dodaj tag"
         },
         "body": {
-            "checkout": "Przełącz bezpośrednio na {sha} (odłączony HEAD). Niezacommitowane zmiany to zablokują.",
             "cherryPick": "Skopiuj zmianę z {sha} na bieżącą gałąź jako nowy commit.",
             "drop": "Usuń {sha} z historii, odtwarzając commity po nim na jego rodzicu.",
             "merge": "Scal {sha} do bieżącej gałęzi ({branch}).",
@@ -125,7 +127,6 @@
         "actionFailed": "Akcja się nie powiodła."
     },
     "useBranches": {
-        "checkoutFailed": "Checkout się nie powiódł. Najpierw zrób commit, dodaj do indeksu albo odrzuć swoje zmiany.",
         "couldntCreate": "Nie udało się utworzyć tej gałęzi.",
         "couldntDelete": "Nie udało się usunąć tej gałęzi.",
         "couldntPush": "Nie udało się wypchnąć tej gałęzi.",

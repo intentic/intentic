@@ -14,6 +14,8 @@ import { opt } from "../../../opt.js";
 import { headSha } from "../../../git/changes/changes.js";
 import { materializedPaths } from "../../../git/changes/changes-porcelain.js";
 import type { IsolatedAgent, RepoRecord } from "../../registry/agents-store.js";
+import { branchOf } from "../branch/branch-repos.js";
+import { branchLinesOf } from "../branch/branch-land.js";
 import { outsideCheckout } from "../../worktrees/outside-checkout.js";
 import { strayStandings } from "../../worktrees/stray-work.js";
 import { NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../../git/changes/ignored-outputs.js";
@@ -26,7 +28,7 @@ import { commitsCarrying, historySpanStart } from "../landed-history.js";
 // its live copy keeps, the ignored files it wrote, the conflicts a land would meet, and the commits that carried what
 // already landed.
 
-export type ReviewDeps = Pick<Services, "agentWorktrees" | "agents" | "logger">;
+export type ReviewDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "logger">;
 
 // The review's `scratch`: repos with none left out, and the field absent when no repo has any.
 const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
@@ -88,7 +90,7 @@ const takenByLastLand = async (
     paths: readonly string[],
 ): Promise<ReadonlySet<string>> => {
     const { landedTip, landedHead } = composed;
-    if (paths.length === 0 || landedTip === undefined || landedHead === undefined || entry.placement.landedInto !== undefined) {
+    if (paths.length === 0 || landedTip === undefined || landedHead === undefined || entry.placement.landedInto !== undefined || branchOf(entry.placement, composed.repo) !== undefined) {
         return NONE;
     }
     try {
@@ -171,7 +173,7 @@ export const liveConflicts = async (deps: ReviewDeps, entry: IsolatedAgent): Pro
         ? []
         : entry.placement.repos.some(({ repo }) => deps.agentWorktrees.repoBusy(repo))
           ? entry.landing.conflicts
-          : await outstandingConflicts(deps.agentWorktrees, entry, intoOf(await landTargetOf(deps, entry)));
+          : await outstandingConflicts(deps.agentWorktrees, entry, intoOf(await landTargetOf(deps, entry)), await branchLinesOf(deps, entry.placement));
 // What a conversation's review shows right now, its repos read side by side and kept in composition order.
 const reviewCore = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<AgentChanges> => {
     const parts = await Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed)));

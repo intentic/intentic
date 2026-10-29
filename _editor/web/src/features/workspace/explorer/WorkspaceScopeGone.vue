@@ -3,11 +3,12 @@ import { Button, EmptyState, Icon } from "@intentic/ui";
 import { RouterLink } from "vue-router";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
-import { workspaceAgent } from "../../../app/workspaceScope";
+import { SHARED_SCOPE, workspaceAgent, workspaceView } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 
-// Shown when an archived agent has lost its checkout (work stays on its branch): the daemon's
-// PRECONDITION_FAILED, see workspace-scope.ts. Full pane, not a banner: the tree is already empty here.
+// Shown when the copy on screen cannot be read: an archived agent that lost its checkout (work stays on its branch), the
+// daemon's PRECONDITION_FAILED (workspace-scope.ts), or a branch that is gone. Full pane, not a banner: the tree is
+// already empty here.
 
 const t = useT();
 
@@ -20,11 +21,11 @@ const title = useScopeTitle();
     <EmptyState icon="robot" size="page" :title="t(`workspace.workspaceScopeGone.noWorkingCopyTo`, { title })" :line="error" class="h-full">
         <template #actions>
             <!-- A link styled as a button, not a button that navigates: it's a destination, meant to open in a new tab. -->
-            <Button tier="accent" size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
+            <Button v-if="workspaceAgent !== undefined" tier="accent" size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
                 <Icon name="check-square" />
                 {{ t(`workspace.words.seeChanges`) }}
             </Button>
-            <Button size="small" tier="boring" @click="workspaceAgent = undefined">
+            <Button size="small" :tier="workspaceAgent === undefined ? `accent` : `boring`" @click="workspaceView = SHARED_SCOPE">
                 <Icon name="folder" class="text-[0.7rem]" />
                 {{ t(`workspace.workspaceScopeGone.backToSharedWorkspace`) }}
             </Button>

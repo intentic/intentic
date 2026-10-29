@@ -1,5 +1,6 @@
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { ForkOfSchema, FreshOfSchema, QueuedServingSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { RepoBranchSchema } from "@intentic/sandbox-contract/schemas/shared";
 import type { DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { computed, type ComputedRef } from "vue";
 import { z } from "zod";
@@ -31,6 +32,7 @@ const StoredDraftSchema: z.ZodType<HeldDraft> = z.object({
     serves: QueuedServingSchema.optional().catch(undefined),
     forkOf: ForkOfSchema.optional().catch(undefined),
     freshOf: FreshOfSchema.optional().catch(undefined),
+    fromBranch: RepoBranchSchema.optional().catch(undefined),
     since: z.number(),
     editedAt: z.number(),
     synced: z.object({ revision: z.number(), text: z.string(), paths: z.array(z.string()) }).optional().catch(undefined),
@@ -51,6 +53,7 @@ const fromClosedTab = (tab: StoredTab, now: number): HeldDraft => ({
             : { agent: tab.provider, harness: tab.harness ?? `native`, model: tab.model, effort: tab.effort, account: tab.account },
     forkOf: tab.forkOf,
     freshOf: tab.freshOf,
+    fromBranch: tab.fromBranch,
     since: tab.draftAt ?? now,
     editedAt: now,
     pending: true,
@@ -372,7 +375,7 @@ export const draftsMoved = (): void => {
 /* ---- what a composer writes ---- */
 
 const sameServes = (left: DraftWords, right: DraftWords): boolean =>
-    JSON.stringify([left.serves, left.forkOf, left.freshOf]) === JSON.stringify([right.serves, right.forkOf, right.freshOf]);
+    JSON.stringify([left.serves, left.forkOf, left.freshOf, left.fromBranch]) === JSON.stringify([right.serves, right.forkOf, right.freshOf, right.fromBranch]);
 
 const unchanged = (draft: HeldDraft, words: DraftWords, box: string | undefined): boolean =>
     draft.text === words.text &&

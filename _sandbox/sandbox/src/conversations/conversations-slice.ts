@@ -25,6 +25,7 @@ import { sqliteAgentsStore } from "./registry/agents-store.js";
 import { createExpiryTracker } from "./registry/expiry.js";
 import { createTurnIsolation, type TurnIsolation } from "./worktrees/isolation.js";
 import { type AgentWorktrees, createAgentWorktrees } from "./worktrees/worktrees.js";
+import { type BranchCheckouts, createBranchCheckouts } from "./worktrees/branches/branch-checkouts.js";
 
 // The conversations: their registry and actors, turns, parked cards, worktrees, journals and checkpoints.
 export interface ConversationsSlice {
@@ -46,6 +47,8 @@ export interface ConversationsSlice {
     readonly cards: ParkedCards;
     // Per-conversation worktree compositions on /history/worktrees: create/repair/remove/prune.
     readonly agentWorktrees: AgentWorktrees;
+    // The checkouts kept of branches the shared tree is not on, on /history/branches: a branch view's and a branch land's.
+    readonly branchCheckouts: BranchCheckouts;
     // What is in flight right now; cleared on settle, so what remains at boot is what the daemon died under.
     readonly turnJournal: TurnJournal;
     // Armed condition watches; a watch's life is between turns, so only a boot-time read survives a recreate.
@@ -107,6 +110,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
         // Demoted: a worktree ensure is bulk agent-plane IO that must lose to the daemon's own loop under contention.
         politeGit,
     );
+    const branchCheckouts = createBranchCheckouts({ historyRoot, worktrees: agentWorktrees, logger }, politeGit);
     // The Changes scan and the turns share one registry; one tracker serves both landing readers' query.
     const landingExpiry = createExpiryTracker();
     const landedPresences = createLandedPresences(agentWorktrees, logger, landingExpiry);
@@ -165,6 +169,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                 (fields, message) => logger.info(fields, message),
             ),
             agentWorktrees,
+            branchCheckouts,
             turnJournal: sqliteTurnJournal(conversationsDb),
             // Beside the turn journal, for the same reason: it must outlive a container recreate.
             watchJournal: sqliteWatchJournal(conversationsDb),
@@ -180,6 +185,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                 main: workspace.root,
                 entry: (id) => agents.entry(id),
                 worktreeDir: (id) => agentWorktrees.conversationDir(id),
+                branches: branchCheckouts,
             },
         },
     };

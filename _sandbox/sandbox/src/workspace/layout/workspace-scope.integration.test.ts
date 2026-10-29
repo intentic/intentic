@@ -9,6 +9,15 @@ import { scopedTarget, type WorkspaceScopeDeps, workspaceRootFor } from "./works
 // Whose copy of the workspace a read means, and the three failures that resolution can produce.
 // Runs on disk, not mocked: whether the checkout exists is the question being answered.
 
+// No branch is read in these: a branch view is branch-scope.integration.test.ts's, on a real repository.
+const noBranches: WorkspaceScopeDeps["branches"] = {
+    refresh: async () => {
+        throw new Error("no branch is read here");
+    },
+    viewRoot: () => "",
+    checkoutDir: () => "",
+};
+
 const setup = async (): Promise<{ main: string; worktrees: string; deps: WorkspaceScopeDeps }> => {
     const base = await mkdtemp(join(tmpdir(), "scope-"));
     const main = join(base, "work");
@@ -22,7 +31,7 @@ const setup = async (): Promise<{ main: string; worktrees: string; deps: Workspa
     return {
         main,
         worktrees,
-        deps: { main, entry: (id) => entries.get(id), worktreeDir: (id) => join(worktrees, id) },
+        deps: { main, entry: (id) => entries.get(id), worktreeDir: (id) => join(worktrees, id), branches: noBranches },
     };
 };
 
@@ -38,32 +47,32 @@ const codeOf = async (run: () => Promise<unknown>): Promise<string> => {
 describe("workspaceRootFor", () => {
     it("answers with the shared tree when no conversation is named", async () => {
         const { main, deps } = await setup();
-        expect(await workspaceRootFor(deps, undefined)).toBe(main);
+        expect(await workspaceRootFor(deps, {})).toBe(main);
     });
 
     it("answers with the conversation's own checkout when it has one", async () => {
         const { worktrees, deps } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
-        expect(await workspaceRootFor(deps, "isolated")).toBe(join(worktrees, "isolated"));
+        expect(await workspaceRootFor(deps, { agent: "isolated" })).toBe(join(worktrees, "isolated"));
     });
 
     // Working directly in /work isn't an error: /work IS the conversation's tree, so a link from it needs no mode
     // check.
     it("sends a shared-workspace conversation back to the shared tree", async () => {
         const { main, deps } = await setup();
-        expect(await workspaceRootFor(deps, "shared-mode")).toBe(main);
+        expect(await workspaceRootFor(deps, { agent: "shared-mode" })).toBe(main);
     });
 
     // Archiving drops the checkout but keeps the branch; a stale link must read as "cleaned up", not "no such file".
     it("says so specifically when the checkout is gone rather than reporting a missing file", async () => {
         const { deps } = await setup();
-        expect(await codeOf(() => workspaceRootFor(deps, "archived"))).toBe("PRECONDITION_FAILED");
+        expect(await codeOf(() => workspaceRootFor(deps, { agent: "archived" }))).toBe("PRECONDITION_FAILED");
     });
 
     it("refuses an id the registry doesn't know, and one that isn't an id at all", async () => {
         const { deps } = await setup();
-        expect(await codeOf(() => workspaceRootFor(deps, "nobody"))).toBe("NOT_FOUND");
-        expect(await codeOf(() => workspaceRootFor(deps, "../../etc"))).toBe("BAD_REQUEST");
+        expect(await codeOf(() => workspaceRootFor(deps, { agent: "nobody" }))).toBe("NOT_FOUND");
+        expect(await codeOf(() => workspaceRootFor(deps, { agent: "../../etc" }))).toBe("BAD_REQUEST");
     });
 });
 
@@ -72,7 +81,7 @@ describe("scopedTarget", () => {
         const { worktrees, deps } = await setup();
         await mkdir(join(worktrees, "isolated", "docs"), { recursive: true });
         await writeFile(join(worktrees, "isolated", "docs", "plan.md"), "agent's own");
-        const { target, shared } = await scopedTarget(deps, "isolated", "docs/plan.md");
+        const { target, shared } = await scopedTarget(deps, { agent: "isolated" }, "docs/plan.md");
         expect(target).toBe(join(worktrees, "isolated", "docs", "plan.md"));
         expect(shared).toBe(false);
     });
@@ -82,7 +91,7 @@ describe("scopedTarget", () => {
         await mkdir(join(worktrees, "isolated"), { recursive: true });
         await writeFile(join(main, "README.md"), "shared");
         await writeFile(join(worktrees, "isolated", "README.md"), "edited by the agent");
-        const { target } = await scopedTarget(deps, "isolated", "README.md");
+        const { target } = await scopedTarget(deps, { agent: "isolated" }, "README.md");
         expect(target).toBe(join(worktrees, "isolated", "README.md"));
     });
 
@@ -90,7 +99,7 @@ describe("scopedTarget", () => {
         const { main, worktrees, deps } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
         await writeFile(join(main, "only-here.md"), "shared only");
-        const { target, shared } = await scopedTarget(deps, "isolated", "only-here.md");
+        const { target, shared } = await scopedTarget(deps, { agent: "isolated" }, "only-here.md");
         expect(target).toBe(join(main, "only-here.md"));
         expect(shared).toBe(true);
     });
@@ -98,13 +107,13 @@ describe("scopedTarget", () => {
     it("applies the escape guard inside the checkout, not just inside /work", async () => {
         const { deps, worktrees } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
-        expect(await codeOf(() => scopedTarget(deps, "isolated", "../../etc/passwd"))).toBe("BAD_REQUEST");
+        expect(await codeOf(() => scopedTarget(deps, { agent: "isolated" }, "../../etc/passwd"))).toBe("BAD_REQUEST");
     });
 
     it("keeps the daemon's own credential state unreachable through a scoped read", async () => {
         const { deps, worktrees } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
-        expect(await codeOf(() => scopedTarget(deps, "isolated", ".intentic/identity/owner.json"))).toBe("NOT_FOUND");
+        expect(await codeOf(() => scopedTarget(deps, { agent: "isolated" }, ".intentic/identity/owner.json"))).toBe("NOT_FOUND");
     });
 
     // A symlink escapes with no `../` in the path; lexically the target looks contained though its bytes are elsewhere.
@@ -115,8 +124,8 @@ describe("scopedTarget", () => {
         await symlink(elsewhere, join(main, "escape"));
         await symlink(join(elsewhere, "token.json"), join(main, "direct.json"));
 
-        expect(await codeOf(() => scopedTarget(deps, undefined, "escape/token.json"))).toBe("BAD_REQUEST");
-        expect(await codeOf(() => scopedTarget(deps, undefined, "direct.json"))).toBe("BAD_REQUEST");
+        expect(await codeOf(() => scopedTarget(deps, {}, "escape/token.json"))).toBe("BAD_REQUEST");
+        expect(await codeOf(() => scopedTarget(deps, {}, "direct.json"))).toBe("BAD_REQUEST");
     });
 
     it("still serves a symlink that stays inside the workspace", async () => {
@@ -125,13 +134,13 @@ describe("scopedTarget", () => {
         await writeFile(join(main, "real", "a.ts"), "export const a = 1;");
         await symlink(join(main, "real"), join(main, "linked"));
 
-        const { target } = await scopedTarget(deps, undefined, "linked/a.ts");
+        const { target } = await scopedTarget(deps, {}, "linked/a.ts");
         expect(target).toBe(join(main, "linked", "a.ts"));
     });
 
     it("does not refuse a path that does not exist yet: a write creates one", async () => {
         const { main, deps } = await setup();
-        const { target } = await scopedTarget(deps, undefined, "new/nested/file.ts");
+        const { target } = await scopedTarget(deps, {}, "new/nested/file.ts");
         expect(target).toBe(join(main, "new", "nested", "file.ts"));
     });
 });

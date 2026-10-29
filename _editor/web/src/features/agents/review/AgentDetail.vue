@@ -506,7 +506,7 @@ const confirmHandOver = async (): Promise<void> => {
                 ref="identityAnchor"
                 class="ui-status-pill hidden max-w-[16rem] shrink-0 items-center bg-overlay @2xl:inline-flex"
             >
-                <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
+                <SessionChip :branch="fleetAgent.branch" :from="fleetAgent.branches" reveal @reveal="identityOpen = !identityOpen" />
             </span>
             <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
@@ -548,7 +548,7 @@ const confirmHandOver = async (): Promise<void> => {
                 <AgentLandPress
                     v-if="landOffered"
                     :can-ship="canShip"
-                    :requested="fleetAgent?.landRequested !== undefined"
+                    :agent="fleetAgent"
                     :land-disabled="!canLand"
                     :requesting="requestingLand"
                     :land-hint="landHint"
@@ -638,7 +638,7 @@ const confirmHandOver = async (): Promise<void> => {
                     <AgentLandPress
                         block
                         :can-ship="canShip"
-                        :requested="fleetAgent?.landRequested !== undefined"
+                        :agent="fleetAgent"
                         :land-disabled="!canLand"
                         :requesting="requestingLand"
                         :land-hint="landHint"
@@ -672,7 +672,7 @@ const confirmHandOver = async (): Promise<void> => {
                     <AgentLandPress
                         :block="mobile"
                         :can-ship="canShip"
-                        :requested="fleetAgent?.landRequested !== undefined"
+                        :agent="fleetAgent"
                         :land-disabled="!canLand"
                         :requesting="requestingLand"
                         :land-hint="landHint"

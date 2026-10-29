@@ -11,6 +11,7 @@ import { oneLine } from "@intentic/base/one-line";
 import { routingFor } from "./routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
+import type { RepoBranch } from "@intentic/sandbox-contract/schemas/shared";
 import { parentOfActor } from "../../auth/principal.js";
 import { liveRunOf, turnComing } from "../actor/conversation-holdings.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
@@ -260,7 +261,8 @@ export interface AgentsRegistry {
     // Writes what a worktree conversation's checkout is (its repos, each with the main-line base) and, only when given,
     // what it should carry (`composition`); callers that merely rewrite repos keep the opening turn's decision.
     // `parent`, once, on the opening compose of a spawned child cut from its parent's checkout (placement.parent).
-    readonly recordWorktree: (id: string, repos: readonly RepoRecord[], composition?: Composition, parent?: string) => Promise<void>;
+    // `branches`, once too, on the opening compose of a conversation started from a branch (placement.branches).
+    readonly recordWorktree: (id: string, repos: readonly RepoRecord[], composition?: Composition, parent?: string, branches?: readonly RepoBranch[]) => Promise<void>;
     // Strips a deleted repo out of every checkout, live and archived. Only the registry's half; conversations/vanished-repos.ts
     // decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
@@ -891,12 +893,13 @@ export const createFleet = (
         },
         entry: entryOf,
         standingOf: standingIn(entryOf, standings),
-        recordWorktree: async (id, repos, composition, parent) => {
+        recordWorktree: async (id, repos, composition, parent, branches) => {
             const entry = entryOf(id);
             if (entry === undefined || !isIsolated(entry)) {
                 return;
             }
-            replace({ ...entry, placement: { ...entry.placement, repos: [...repos], ...opt("composition", composition), ...opt("parent", parent) } });
+            const started = branches === undefined || branches.length === 0 ? {} : { branches: [...branches] };
+            replace({ ...entry, placement: { ...entry.placement, repos: [...repos], ...opt("composition", composition), ...opt("parent", parent), ...started } });
             await persist();
         },
         dropRepos: async (repos) => {

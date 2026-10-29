@@ -472,6 +472,8 @@ export interface IntenticApi {
         // Like `composeWorkflow`, but arms the composer's loop badge: the next message becomes the loop's
         // goal, and Send starts it running.
         composeLoop(loopId: string): void;
+        /* START A NEW AGENT FROM A BRANCH: the host opens a chat as "New agent" does, its composer focused, whose private copy of `repo` is cut from `branch`'s tip and whose finished work is committed onto that branch; the shared workspace stays on its main line. `repo` is "root" for the workspace itself, and a remote-only branch goes by its short name (`feature/x`, not `origin/feature/x`): the daemon makes the local one when the agent starts. */
+        composeFrom(from: { readonly repo: string; readonly branch: string }): void;
         /* START AN AGENT AND SHOW IT AT ONCE: the agents board opens now with `card` standing in for the agent while `start` runs, and the agent's own card takes its place once `start` answers with the conversation's id. A refusal is said on that card (or as a toast once the reader has left the board), then thrown back to the caller. */
         launchAgent<T extends { readonly conversationId: string }>(card: AgentLaunchCard, start: () => Promise<T>): Promise<T>;
     };

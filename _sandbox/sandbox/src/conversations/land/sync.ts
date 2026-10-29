@@ -5,11 +5,13 @@ import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
 import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
 import { droppedRef } from "../../git/agent-refs.js";
+import { mainLineSha } from "../../git/main-line-tip.js";
 import { mainLineUnder, presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { Upstream } from "./land-target.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { assertLinked } from "../worktrees/checkout-link.js";
+import type { BranchLines } from "./branch/branch-land.js";
 
 // Rebase only this worktree onto main (or the parent's checkpointed checkout) before turns/land, without a repo lock.
 // Retry via replaySinceLanded only after upstreamAccountsForPrefix proves upstream still contains the dropped commits' content.
@@ -137,7 +139,8 @@ const syncOne = async (
     if (!(await worktrees.attached(id, repo))) {
         return undefined; // Standing on a branch of its own: see `standsElsewhere`.
     }
-    const head = await headSha(worktrees.mainDir(repo), git);
+    // The main line's tip, not HEAD: a checkout moved off it anyway is not what this branch follows (main-line-tip.ts).
+    const head = await mainLineSha(worktrees.mainDir(repo), git);
     if (head === undefined) {
         return undefined; // Unborn HEAD, or the main checkout is gone: no main line to sit on.
     }
@@ -168,29 +171,26 @@ const syncOne = async (
     return replayed === true ? behind : { ...behind, blocked: true };
 };
 
-// A child's repo onto its parent's checkout: the parent's remainder committed first, so the child sits on everything the
-// parent has written, then only the child's own commits replayed: from its last land's tip where the parent is read to
-// still hold what that drops (`replaySinceLanded`), else from the parent commit it sat on, every commit of it. A refusal
-// rolls back and leaves the branch where it was, as the main line's does.
-const syncOntoParent = async (
+// A repo onto another checkout's HEAD rather than the main line: its parent's, for a child cut from it, or a branch's,
+// for a repo started from that branch (branch-land.ts). Only this branch's own commits are replayed: from its last land's
+// tip where the upstream is read to still hold what that drops (`replaySinceLanded`), else from the upstream commit it
+// sat on (`base`), every commit of it. A refusal rolls back and leaves the branch where it was, as the main line's does.
+const syncOntoCheckout = async (
     worktrees: AgentWorktrees,
     id: string,
-    parent: string,
+    upstream: string,
     composed: SyncedRepo,
     title: string | undefined,
     git: GitRunner,
 ): Promise<RepoSync | undefined> => {
     const { repo, base, landedTip } = composed;
     const worktree = worktrees.worktreeDir(id, repo);
-    const upstream = worktrees.worktreeDir(parent, repo);
     if (base === undefined || !(await pathExists(join(worktree, ".git"))) || !(await pathExists(join(upstream, ".git")))) {
         return undefined;
     }
     if (!(await worktrees.attached(id, repo))) {
         return undefined; // Standing on a branch of its own: see `standsElsewhere`.
     }
-    // The remainder is the parent's own work on the parent's branch, so the trailer names the parent, not the child.
-    await commitWorktreeRemainder(repo, upstream, withConversationTrailer(`Agent: before ${title ?? id} caught up`, parent), worktrees.mainDir("root"), git);
     const head = await headSha(upstream, git);
     if (head === undefined) {
         return undefined;
@@ -209,12 +209,34 @@ const syncOntoParent = async (
     return replayed ? behind : { ...behind, blocked: true };
 };
 
-// One repo of a composition as a sync reads it: the land rung (`landedTip`) the main line's retry needs, and the commit
-// a child cut from its parent sits on (`base`).
+// A child's repo onto its parent's checkout, the parent's remainder committed first, so the child sits on everything the
+// parent has written.
+const syncOntoParent = async (
+    worktrees: AgentWorktrees,
+    id: string,
+    parent: string,
+    composed: SyncedRepo,
+    title: string | undefined,
+    git: GitRunner,
+): Promise<RepoSync | undefined> => {
+    const upstream = worktrees.worktreeDir(parent, composed.repo);
+    if (composed.base === undefined || !(await pathExists(join(upstream, ".git"))) || !(await worktrees.attached(id, composed.repo))) {
+        return undefined;
+    }
+    // The remainder is the parent's own work on the parent's branch, so the trailer names the parent, not the child.
+    const remainder = withConversationTrailer(`Agent: before ${title ?? id} caught up`, parent);
+    await commitWorktreeRemainder(composed.repo, upstream, remainder, worktrees.mainDir("root"), git);
+    return syncOntoCheckout(worktrees, id, upstream, composed, title, git);
+};
+
+// One repo of a composition as a sync reads it: the land rung (`landedTip`) the main line's retry needs, the commit
+// a child cut from its parent sits on (`base`), and for a repo started from a branch the checkout of that branch it
+// follows instead of either (`line`, branch-land.ts).
 interface SyncedRepo {
     readonly repo: string;
     readonly base?: string | undefined;
     readonly landedTip?: string | undefined;
+    readonly line?: string | undefined;
 }
 
 const MAIN_LINE: Upstream = { kind: "main" };
@@ -235,11 +257,14 @@ export const syncConversation = async (
     // A checkout that stopped sharing main's objects would make every range below a raw `bad object`.
     await assertLinked(worktrees, id, repos);
     const results = await Promise.all(
-        repos.map((composed) =>
-            upstream.kind === "parent"
+        repos.map((composed) => {
+            if (composed.line !== undefined) {
+                return syncOntoCheckout(worktrees, id, composed.line, composed, title, git);
+            }
+            return upstream.kind === "parent"
                 ? syncOntoParent(worktrees, id, upstream.parent, composed, title, git)
-                : syncOne(worktrees, id, composed.repo, composed.base, composed.landedTip, title, git),
-        ),
+                : syncOne(worktrees, id, composed.repo, composed.base, composed.landedTip, title, git);
+        }),
     );
     return results.filter((result) => result !== undefined);
 };
@@ -251,7 +276,8 @@ type ComposedRepo = { readonly repo: string; readonly base: string; readonly lan
 
 export const syncBeforeLand = async <Repo extends ComposedRepo>(
     worktrees: AgentWorktrees,
-    entry: { readonly id: string; readonly title?: string | undefined; readonly repos: readonly Repo[] },
+    // `lines`: the checkouts of the branches repos follow instead (branch-land.ts branchLinesOf).
+    entry: { readonly id: string; readonly title?: string | undefined; readonly repos: readonly Repo[]; readonly lines?: BranchLines },
     recordWorktree: (id: string, repos: readonly Repo[]) => Promise<void>,
     upstream: Upstream = MAIN_LINE,
     git: GitRunner = defaultGit,
@@ -259,7 +285,7 @@ export const syncBeforeLand = async <Repo extends ComposedRepo>(
     const synced = await syncConversation(
         worktrees,
         entry.id,
-        entry.repos.map(({ repo, base, landedTip }) => ({ repo, base, landedTip })),
+        entry.repos.map(({ repo, base, landedTip }) => ({ repo, base, landedTip, line: entry.lines?.get(repo)?.dir })),
         entry.title,
         upstream,
         git,

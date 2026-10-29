@@ -655,6 +655,26 @@ describe("git.branch-switch", () => {
     test("the card points at the verb, not the whole line", () => {
         expect(marked("cd repo && git switch main && pnpm build", "git.branch-switch")).toEqual(["git switch"]);
     });
+
+    // Naming the directory, or setting a config, on the way to the verb is the same move.
+    test("git's own options before the verb are read through", () => {
+        for (const command of [
+            "git -C /work checkout feature",
+            "git -C intentic switch -c topic",
+            "git -c core.hooksPath=x checkout --detach",
+            "git --git-dir=/history/gits/root --work-tree=/work checkout feature",
+        ]) {
+            expect(shared(command), command).toContain("git.branch-switch");
+        }
+        expect(marked("git -C /work switch main", "git.branch-switch")).toEqual(["git -C /work switch"]);
+    });
+
+    test("setting HEAD through plumbing is a switch, reading it is not", () => {
+        expect(shared("git symbolic-ref HEAD refs/heads/feature")).toContain("git.branch-switch");
+        expect(shared("git symbolic-ref -m why HEAD refs/heads/feature")).toContain("git.branch-switch");
+        expect(shared("git symbolic-ref --short HEAD")).not.toContain("git.branch-switch");
+        expect(shared("git -C /work checkout -- src/app.ts")).not.toContain("git.branch-switch");
+    });
 });
 
 describe("Windows' own shells", () => {

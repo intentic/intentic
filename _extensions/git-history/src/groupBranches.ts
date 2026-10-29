@@ -2,7 +2,7 @@ import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract/sche
 
 // Groups a local branch with its remote counterparts by name, not by configured upstream: a branch whose upstream is
 // gone, or that was never pushed, still lines up with same-named remotes. A remote-only branch gets a group with no
-// local, the row a checkout would start from.
+// local, the row a view or an agent's start makes the local one for.
 
 export interface BranchGroup {
     // The shared name (`main`, `feature/x`), the group's heading and its identity.

@@ -32,5 +32,11 @@ export const editFenceOf = (role: MemberRole, self: Pick<MemberSelf, "edit"> | u
 /** Whether the fence lets the person change `path` (workspace-relative; "" is the root) or anything under it. */
 export const fenceWrites = (fence: Fence, path: string): boolean => fenceAllows(fence, path);
 
+/**
+ * The fence in force for the copy on screen: the person's own on the shared tree, nowhere on anything else (a
+ * conversation's private copy, a branch), which the daemon only ever reads.
+ */
+export const viewFence = (fence: Fence, shared: boolean): Fence => (shared ? fence : []);
+
 /** Whether the fence lets the person change anything at all. */
 export const writesSomewhere = (fence: Fence): boolean => fence === undefined || fence.length > 0;

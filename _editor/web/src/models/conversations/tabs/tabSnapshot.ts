@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import type { Conversation } from "../session/conversation";
 import type { TurnPick } from "../run/turnDefaults";
-import type { ForkLink, FreshLink, SessionRef } from "../run/turnRequest";
+import type { BranchLink, ForkLink, FreshLink, SessionRef } from "../run/turnRequest";
+import { RepoBranchSchema } from "@intentic/sandbox-contract/schemas/shared";
 import type { ChatRunView } from "../run/chatRun";
 import { forgetWindowState, readWindowState, writeWindowState } from "../../../workbench/window/windowStore";
 import { chatTabsKey } from "../../../app/storage/browserStorage";
@@ -55,6 +56,8 @@ export interface StoredTab {
     readonly forkOf?: ForkLink;
     // A fresh session's origin, client-only until acked, like a fork's source: lost, the turn opens on nobody's work.
     readonly freshOf?: FreshLink;
+    // The branch a new conversation starts from, client-only until acked like the two above: lost, it opens on the main line.
+    readonly fromBranch?: BranchLink;
     // Only being looked at (Conversation.peek); also read by the docked/popped-window handoff, not just reload.
     readonly peek?: boolean;
     // When focus last left the chat, so the tidy clock survives a reload (Conversation.leftAt).
@@ -96,6 +99,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     session: conversation.session.value,
     forkOf: conversation.pendingForkOf.value,
     freshOf: conversation.pendingFreshOf.value,
+    fromBranch: conversation.pendingFromBranch.value,
     peek: conversation.peek.value,
     leftAt: conversation.leftAt.value,
     standIn: conversation.standIn.value,
@@ -160,6 +164,7 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     session: maybe(SessionSchema),
     forkOf: maybe(z.object({ conversationId: z.string().min(1), keep: z.number().int().nonnegative(), files: z.enum([`then`, `now`]) })),
     freshOf: maybe(z.object({ conversationId: z.string().min(1), kind: z.enum(FRESH_KINDS) })),
+    fromBranch: maybe(RepoBranchSchema),
     peek: flag,
     leftAt: maybe(z.number()),
     standIn: flag,

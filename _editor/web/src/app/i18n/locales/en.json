@@ -1074,6 +1074,18 @@
             "package": "Package",
             "subagents": "Subagents",
             "working": "{count} working"
+        },
+        "branchStart": {
+            "commitTo": "Commit to {branch}",
+            "from": "from {branch}",
+            "fromTitle": "From a branch",
+            "fromNote": "Its work is committed there",
+            "committed": "Committed {name} to {branch}",
+            "onBranch": "On {branch}: its work is committed onto that branch",
+            "howItWorks": "From a branch",
+            "howItWorksNote": "The shared workspace stays put",
+            "unlink": "Unlink",
+            "unlinkNote": "Starts from the main line"
         }
     },
     "app": {
@@ -3955,7 +3967,10 @@
             "plain": {
                 "mode": "How much it does on its own",
                 "modeNote": "When it stops to ask you first."
-            }
+            },
+            "startFrom": "Start from",
+            "startFromNote": "Or a branch, or another agent's copy.",
+            "startFromNamed": "Start from {name}"
         },
         "composerQuickPick": {
             "anotherSandbox": "Another sandbox",
@@ -12959,6 +12974,14 @@
                 "unknown": "something only the sandbox itself uses"
             }
         },
+        "mainLineBanner": {
+            "back": "Back to {main}",
+            "couldntReturn": "Could not return to {main}",
+            "offBranch": "{repo} is on {branch}, not {main} — agents' work waits until it is back.",
+            "offMain": "{repo} is not on {main} — agents' work waits until it is back.",
+            "returning": "Returning to {main}",
+            "workspace": "The workspace"
+        },
         "markdownOutline": {
             "documentOutline": "Document outline",
             "filterHeadings": "Filter headings…",
@@ -13316,13 +13339,26 @@
             "clickForShared": "Click for shared",
             "copyAria": "Private copy: {name}",
             "copyUnreadable": "Copy unreadable",
-            "findCopy": "Find a conversation's copy",
+            "findCopy": "Find a branch or a copy",
             "noCopyMatches": "No copy matches.",
             "readOnlyClickToSwitch": "Read-only · click to switch",
             "sharedHint": "Where finished work lands",
             "sharedWorkspace": "Shared workspace",
             "showFilesFrom": "Show files from",
-            "showMore": "Show {count} more"
+            "showMore": "Show {count} more",
+            "branches": "Branches",
+            "branchesIn": "Branches · {repo}",
+            "mainLine": "Main line",
+            "startHint": "A new copy of the shared workspace",
+            "startFrom": "Start from",
+            "remoteOnly": "Remote only",
+            "staysShared": "Only the files change: search, Changes, terminals and previews stay on the shared workspace.",
+            "clickToLook": "Click to view another",
+            "sharedAria": "Shared workspace, on {name}",
+            "branchAria": "Branch, read-only: {name}",
+            "newAgentFromHere": "New agent from here",
+            "newAgentFromHereNote": "Its work lands back here",
+            "newAgentTip": "New agent"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Back to the shared workspace",
@@ -13405,7 +13441,9 @@
             "outline": "Outline",
             "rowsChanged": "{count} row changed | {count} rows changed",
             "comments": "Comments",
-            "text": "Text"
+            "text": "Text",
+            "branchView": "A branch, read-only",
+            "branchReadOnly": "Start an agent from it to change it"
         },
         "fileVerbs": {
             "invalidName": "Invalid name.",
@@ -13534,7 +13572,7 @@
             "transportUnreachable": "it could not be contacted"
         },
         "useWorkspaceSearch": {
-            "sharedOnly": "Searching the shared workspace, an agent's own copy isn't indexed."
+            "sharedOnly": "Searching the shared workspace: the branch or copy on screen isn't indexed."
         },
         "fileDiffPane": {
             "allRegions": "{size} — {count} changed region; the rest of the file is unchanged. | {size} — {count} changed regions; the rest of the file is unchanged.",
@@ -13614,6 +13652,10 @@
             "stopping": "Stopping after the items already under way",
             "notDone": "Not done: {names}",
             "andMore": "{names} and {count} more"
+        },
+        "workspaceViewNote": {
+            "readOnly": "Looking at {name}, read-only",
+            "backToShared": "Back to shared"
         }
     },
     "gettingStarted": {

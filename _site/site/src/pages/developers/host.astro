@@ -246,6 +246,15 @@ const packages = [
                     said on that card, or as a toast once the reader has left the board, and then rejects the call too. Since 2.39.0.
                 </td>
             </tr>
+            <tr>
+                <td><code>chat.composeFrom({"{ repo, branch }"})</code></td>
+                <td>
+                    Open a new chat that starts from a branch: the agent's private copy of <code>repo</code> is cut from that branch's tip,
+                    and its finished work is committed onto that branch. The shared workspace stays on its main line, so this is how a
+                    view offers work on another branch instead of switching to it. A remote-only branch goes by its short name
+                    (<code>feature/x</code>, not <code>origin/feature/x</code>). Since 2.40.0.
+                </td>
+            </tr>
         </tbody>
     </table>
 

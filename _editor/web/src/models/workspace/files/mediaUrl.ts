@@ -1,7 +1,7 @@
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { elementAddress } from "../../../client/endpoint/elementAddress";
-import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
+import { scopeFields, scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
 
 // Only daemon URL handed straight to an element (/workspace/media): a <video>/<audio> issues its own byte-range
 // requests, with no way to add an Authorization header. A short-lived, file-scoped ticket (POST
@@ -10,7 +10,7 @@ import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspa
 export const mediaUrl = async (path: string, options: { readonly download?: true; readonly scope?: ViewScope } = {}): Promise<string> => {
     // Both mint and playback carry the view's scope; a URL resolving to a different file has its ticket refused.
     const scope = options.scope ?? workspaceScope();
-    const { ticket } = await sandboxRpc.workspace.mediaTicket({ path, agent: scope.agent });
+    const { ticket } = await sandboxRpc.workspace.mediaTicket({ path, ...scopeFields(scope) });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);

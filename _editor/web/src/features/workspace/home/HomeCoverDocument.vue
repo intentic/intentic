@@ -9,7 +9,7 @@ import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { resolveFile } from "../../../models/workspace/tree/fileType";
 import { readFileWindow } from "../../../models/workspace/files/fileWindow";
 import { openFileRefFromEvent } from "../../../models/workspace/files/openFileRef";
-import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { quickLookPlan } from "../../../models/workspace/home/quickLookContent";
 import { documentPicture, picture } from "../../../models/workspace/home/thumbnails";
@@ -146,7 +146,7 @@ const text = computed(() => (reading.value?.kind === `text` ? reading.value : un
 
 // A picture comes from the same cache the tiles fill, at the size a viewer draws it; undefined while it is on its way,
 // and a url of undefined when the daemon has nothing to draw.
-const drawn = computed(() => (entry === undefined || look.value !== `picture` ? undefined : picture(workspaceAgent.value, entry.path, `view`)));
+const drawn = computed(() => (entry === undefined || look.value !== `picture` ? undefined : picture(workspaceView.value, entry.path, `view`)));
 
 // Still arriving: the folder's listing, the file's text, or its picture.
 const waiting = computed(() => {
@@ -174,8 +174,8 @@ const undrawable = computed(
 // Relative links resolve against the file's own folder, and open in the reader's own scope, as the tab's do; a picture
 // beside the document is drawn from its own bytes in that scope (MarkdownViewer.vue).
 const decorate = computed(() => {
-    const agent = workspaceAgent.value;
-    return fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent, picture: (file) => documentPicture(agent, file) });
+    const scope = workspaceView.value;
+    return fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, scope, picture: (file) => documentPicture(scope, file) });
 });
 
 const open = (): void => {

@@ -1074,6 +1074,18 @@
             "package": "Paket",
             "subagents": "Subagenten",
             "working": "{count} aktiv"
+        },
+        "branchStart": {
+            "commitTo": "Auf {branch} committen",
+            "from": "von {branch}",
+            "fromTitle": "Von einem Branch",
+            "fromNote": "Seine Arbeit wird dort committet",
+            "committed": "{name} auf {branch} committet",
+            "onBranch": "Auf {branch}: Seine Arbeit wird auf diesen Branch committet",
+            "howItWorks": "Von einem Branch",
+            "howItWorksNote": "Der geteilte Workspace bleibt",
+            "unlink": "Verknüpfung lösen",
+            "unlinkNote": "Startet von der Hauptlinie"
         }
     },
     "app": {
@@ -3955,7 +3967,10 @@
             "plain": {
                 "mode": "Wie viel es selbst tut",
                 "modeNote": "Wann es dich zuerst fragt."
-            }
+            },
+            "startFrom": "Starten von",
+            "startFromNote": "Oder ein Branch, die Kopie eines Agenten.",
+            "startFromNamed": "Starten von {name}"
         },
         "composerQuickPick": {
             "anotherSandbox": "Eine andere Sandbox",
@@ -12959,6 +12974,14 @@
                 "unknown": "etwas, das nur die Sandbox selbst verwendet"
             }
         },
+        "mainLineBanner": {
+            "back": "Zurück zu {main}",
+            "couldntReturn": "Konnte nicht zu {main} zurückkehren",
+            "offBranch": "{repo} ist auf {branch}, nicht auf {main} – die Arbeit der Agenten wartet bis zur Rückkehr.",
+            "offMain": "{repo} ist nicht auf {main} – die Arbeit der Agenten wartet bis zur Rückkehr.",
+            "returning": "Kehrt zu {main} zurück",
+            "workspace": "Der Workspace"
+        },
         "markdownOutline": {
             "documentOutline": "Dokumentgliederung",
             "filterHeadings": "Überschriften filtern…",
@@ -13316,13 +13339,26 @@
             "clickForShared": "Klick: geteilter Bereich",
             "copyAria": "Private Kopie: {name}",
             "copyUnreadable": "Kopie unlesbar",
-            "findCopy": "Kopie einer Unterhaltung finden",
+            "findCopy": "Branch oder Kopie suchen",
             "noCopyMatches": "Keine Kopie passt.",
             "readOnlyClickToSwitch": "Schreibgeschützt · Klick wechselt",
             "sharedHint": "Hier landet fertige Arbeit",
             "sharedWorkspace": "Geteilter Workspace",
             "showFilesFrom": "Dateien zeigen aus",
-            "showMore": "{count} weitere zeigen"
+            "showMore": "{count} weitere zeigen",
+            "branches": "Branches",
+            "branchesIn": "Branches · {repo}",
+            "mainLine": "Hauptlinie",
+            "startHint": "Eine neue Kopie des geteilten Workspace",
+            "startFrom": "Starten von",
+            "remoteOnly": "Nur remote",
+            "staysShared": "Nur die Dateien wechseln: Suche, Änderungen, Terminals und Vorschauen bleiben beim geteilten Workspace.",
+            "clickToLook": "Klicken für eine andere",
+            "sharedAria": "Geteilter Workspace, auf {name}",
+            "branchAria": "Branch, schreibgeschützt: {name}",
+            "newAgentFromHere": "Neuer Agent von hier",
+            "newAgentFromHereNote": "Seine Arbeit landet wieder hier",
+            "newAgentTip": "Neuer Agent"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Zurück zum geteilten Workspace",
@@ -13405,7 +13441,9 @@
             "outline": "Gliederung",
             "rowsChanged": "{count} Zeile geändert | {count} Zeilen geändert",
             "comments": "Kommentare",
-            "text": "Text"
+            "text": "Text",
+            "branchView": "Ein Branch, schreibgeschützt",
+            "branchReadOnly": "Starten Sie einen Agenten darauf, um ihn zu ändern"
         },
         "fileVerbs": {
             "invalidName": "Ungültiger Name.",
@@ -13534,7 +13572,7 @@
             "transportUnreachable": "es war nicht erreichbar"
         },
         "useWorkspaceSearch": {
-            "sharedOnly": "Durchsucht wird der gemeinsame Workspace, die eigene Kopie eines Agenten ist nicht indexiert."
+            "sharedOnly": "Durchsucht wird der geteilte Workspace: der angezeigte Branch oder die Kopie ist nicht indiziert."
         },
         "fileDiffPane": {
             "allRegions": "{size} — {count} geänderter Bereich; der Rest der Datei ist unverändert. | {size} — {count} geänderte Bereiche; der Rest der Datei ist unverändert.",
@@ -13614,6 +13652,10 @@
             "stopping": "Hält nach den bereits laufenden Elementen an",
             "notDone": "Nicht erledigt: {names}",
             "andMore": "{names} und {count} weitere"
+        },
+        "workspaceViewNote": {
+            "readOnly": "Ansicht von {name}, schreibgeschützt",
+            "backToShared": "Zurück zum geteilten"
         }
     },
     "gettingStarted": {

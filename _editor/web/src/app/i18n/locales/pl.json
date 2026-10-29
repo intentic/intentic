@@ -1074,6 +1074,18 @@
             "package": "Pakiet",
             "subagents": "Subagenci",
             "working": "{count} pracuje"
+        },
+        "branchStart": {
+            "commitTo": "Zatwierdź w {branch}",
+            "from": "z {branch}",
+            "fromTitle": "Z gałęzi",
+            "fromNote": "Jego praca trafia tam",
+            "committed": "Zatwierdzono {name} w {branch}",
+            "onBranch": "Na {branch}: jego praca trafia do tej gałęzi",
+            "howItWorks": "Z gałęzi",
+            "howItWorksNote": "Wspólna przestrzeń się nie zmienia",
+            "unlink": "Odłącz",
+            "unlinkNote": "Startuje z głównej linii"
         }
     },
     "app": {
@@ -3955,7 +3967,10 @@
             "plain": {
                 "mode": "Ile robi sam",
                 "modeNote": "Kiedy najpierw Cię zapyta."
-            }
+            },
+            "startFrom": "Zacznij od",
+            "startFromNote": "Albo gałąź, albo kopia innego agenta.",
+            "startFromNamed": "Zacznij od {name}"
         },
         "composerQuickPick": {
             "anotherSandbox": "Inny sandbox",
@@ -12344,6 +12359,14 @@
                 "unknown": "coś, czego używa wyłącznie sam sandbox"
             }
         },
+        "mainLineBanner": {
+            "back": "Wróć na {main}",
+            "couldntReturn": "Nie udało się wrócić na {main}",
+            "offBranch": "{repo} jest na {branch}, nie na {main} — praca agentów czeka, aż wróci.",
+            "offMain": "{repo} nie jest na {main} — praca agentów czeka, aż wróci.",
+            "returning": "Powrót na {main}",
+            "workspace": "Przestrzeń robocza"
+        },
         "markdownOutline": {
             "documentOutline": "Konspekt dokumentu",
             "filterHeadings": "Filtruj nagłówki…",
@@ -12704,13 +12727,26 @@
             "clickForShared": "Kliknij: wspólna",
             "copyAria": "Prywatna kopia: {name}",
             "copyUnreadable": "Kopia nieczytelna",
-            "findCopy": "Znajdź kopię rozmowy",
+            "findCopy": "Znajdź gałąź lub kopię",
             "noCopyMatches": "Żadna kopia nie pasuje.",
             "readOnlyClickToSwitch": "Tylko odczyt · kliknij, by zmienić",
             "sharedHint": "Tu trafia skończona praca",
             "sharedWorkspace": "Współdzielona przestrzeń robocza",
             "showFilesFrom": "Pokaż pliki z",
-            "showMore": "Pokaż {count} więcej"
+            "showMore": "Pokaż {count} więcej",
+            "branches": "Gałęzie",
+            "branchesIn": "Gałęzie · {repo}",
+            "mainLine": "Główna linia",
+            "startHint": "Nowa kopia współdzielonej przestrzeni roboczej",
+            "startFrom": "Zacznij od",
+            "remoteOnly": "Tylko zdalna",
+            "staysShared": "Zmieniają się tylko pliki: wyszukiwanie, Zmiany, terminale i podglądy zostają przy współdzielonej przestrzeni roboczej.",
+            "clickToLook": "Kliknij, by zobaczyć inną",
+            "sharedAria": "Współdzielona przestrzeń robocza, na {name}",
+            "branchAria": "Gałąź, tylko do odczytu: {name}",
+            "newAgentFromHere": "Nowy agent stąd",
+            "newAgentFromHereNote": "Jego praca wraca tutaj",
+            "newAgentTip": "Nowy agent"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Wróć do współdzielonej przestrzeni roboczej",
@@ -12782,7 +12818,9 @@
             "outline": "Konspekt",
             "rowsChanged": "{count} zmieniony wiersz | {count} zmienione wiersze | {count} zmienionych wierszy",
             "comments": "Komentarze",
-            "text": "Tekst"
+            "text": "Tekst",
+            "branchView": "Gałąź, tylko do odczytu",
+            "branchReadOnly": "Uruchom z niej agenta, aby ją zmienić"
         },
         "fileVerbs": {
             "invalidName": "Nieprawidłowa nazwa.",
@@ -12937,7 +12975,7 @@
             "transportUnreachable": "nie udało się z nim połączyć"
         },
         "useWorkspaceSearch": {
-            "sharedOnly": "Przeszukuję współdzieloną przestrzeń roboczą: własna kopia agenta nie jest indeksowana."
+            "sharedOnly": "Przeszukiwana jest współdzielona przestrzeń robocza: wyświetlana gałąź lub kopia nie jest indeksowana."
         },
         "fileDiffPane": {
             "allRegions": "{size} — {count} zmieniony fragment; reszta pliku jest bez zmian. | {size} — {count} zmienione fragmenty; reszta pliku jest bez zmian. | {size} — {count} zmienionych fragmentów; reszta pliku jest bez zmian.",
@@ -13017,6 +13055,10 @@
             "stopping": "Zatrzymuje się po elementach już w toku",
             "notDone": "Nie wykonano: {names}",
             "andMore": "{names} i {count} więcej"
+        },
+        "workspaceViewNote": {
+            "readOnly": "Podgląd {name}, tylko do odczytu",
+            "backToShared": "Wróć do wspólnej"
         }
     },
     "needs": {

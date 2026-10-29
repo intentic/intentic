@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, provide, ref, useId, watch } from "vue";
 import { CHROME_SCOPE } from "../../features/workspace/files/viewerChrome";
-import { VIEW_SCOPE } from "../../app/workspaceScope";
+import { agentScope, VIEW_SCOPE } from "../../app/workspaceScope";
 import type { LineJump } from "../../models/workspace/tabs/workspaceTabs";
 import FileViewer from "../../features/workspace/viewers/FileViewer.vue";
 import { arrivalOf, FileSideInputSchema } from "../../workbench/side/sideFileInput";
@@ -21,7 +21,7 @@ const arrival = computed(() => arrivalOf(input));
 const told = computed(() => arrival.value !== undefined && (arrival.value.matches !== undefined || arrival.value.renamedFrom !== undefined));
 provide(
     VIEW_SCOPE,
-    computed(() => file.value?.agent),
+    computed(() => agentScope(file.value?.agent)),
 );
 // Teleport seats of its own, so a viewer's controls never land in the Workspace's bar, nor in another peek's.
 provide(CHROME_SCOPE, `side-${useId()}`);

@@ -6,7 +6,7 @@
     "category": "code",
     "icon": "history",
     "engines": {
-        "intentic": "^2.34.0"
+        "intentic": "^2.40.0"
     },
     "permissions": {
         "sandbox": [
@@ -25,7 +25,6 @@
             "POST /git/*/branch",
             "POST /git/*/branches",
             "POST /git/*/branches/delete",
-            "POST /git/*/checkout",
             "POST /git/*/cherry-pick",
             "POST /git/*/drop",
             "POST /git/*/merge",

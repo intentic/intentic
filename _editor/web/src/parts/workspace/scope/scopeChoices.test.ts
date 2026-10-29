@@ -1,7 +1,7 @@
 // The scope switcher once listed every conversation that ever had a branch, flat, in roster order, each under the same
 // robot: forty rows of near-identical names with nothing to tell them apart. These pin what replaced it.
-import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { copyMatches, SCOPE_WINDOW, scopeGroups, switchableCopies } from "../scopeChoices";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { BRANCH_WINDOW, branchChoices, branchGroups, copyMatches, SCOPE_WINDOW, scopeGroups, switchableCopies } from "./scopeChoices";
 
 const NONE = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
@@ -121,3 +121,62 @@ describe(`what a query matches`, () => {
         expect(copyMatches({ title: `Push button changes`, branch: `agent/x9k2` }, `pull`)).toBe(false);
     });
 });
+
+describe(`the branches the switcher offers`, () => {
+    const local = (name: string, at: number, current = false) => ({ name, current, at });
+    const seen = (remote: string, branch: string, at: number) => ({ remote, branch, at });
+
+    it(`lists a repository's other branches newest first, leaving out its main line and the agents' own`, () => {
+        const listing = {
+            branches: [local(`main`, 50, true), local(`feature/login`, 40), local(`agent/c-1`, 90), local(`release`, 60)],
+            remotes: [],
+        };
+
+        expect(branchChoices(`root`, listing).map((choice) => choice.branch)).toEqual([`release`, `feature/login`]);
+    });
+
+    it(`folds a remote copy of a local branch into it, keeps a remote-only one once by its short name, and drops the remotes' main and HEAD`, () => {
+        const listing = {
+            branches: [local(`main`, 50, true), local(`feature/login`, 40)],
+            remotes: [seen(`origin`, `main`, 50), seen(`origin`, `HEAD`, 50), seen(`origin`, `feature/login`, 45), seen(`origin`, `fix/typo`, 70), seen(`fork`, `fix/typo`, 20)],
+        };
+
+        expect(branchChoices(`web`, listing)).toEqual([
+            { repo: `web`, branch: `fix/typo`, at: 70, remote: `origin` },
+            { repo: `web`, branch: `feature/login`, at: 40 },
+        ]);
+    });
+
+    it(`also leaves out the main line a repository was moved off, when the changes name it`, () => {
+        const listing = { branches: [local(`hotfix`, 50, true), local(`main`, 40), local(`next`, 30)], remotes: [] };
+
+        expect(branchChoices(`root`, listing, `main`).map((choice) => choice.branch)).toEqual([`next`]);
+    });
+
+    it(`groups by repository in the order given, folds each to its newest few, and keeps the branch on screen`, () => {
+        const choices = [
+            ...Array.from({ length: BRANCH_WINDOW + 3 }, (_, i) => ({ repo: `root`, branch: `b${i}`, at: 100 - i })),
+            { repo: `apps/web`, branch: `web-only`, at: 1 },
+        ];
+        const groups = branchGroups(choices, { current: { repo: `root`, branch: `b${BRANCH_WINDOW + 2}` } });
+
+        expect(groups.map((group) => group.repo)).toEqual([`root`, `apps/web`]);
+        expect(groups[0]?.branches).toHaveLength(BRANCH_WINDOW + 1);
+        expect(groups[0]?.branches.at(-1)?.branch).toBe(`b${BRANCH_WINDOW + 2}`);
+        expect(groups[0]?.hidden).toBe(2);
+        expect(branchGroups(choices, { current: undefined, unfolded: new Set([`root`]) })[0]?.hidden).toBe(0);
+    });
+
+    it(`searches every branch, folded or not, by name or repository`, () => {
+        const choices = [
+            ...Array.from({ length: BRANCH_WINDOW + 3 }, (_, i) => ({ repo: `root`, branch: `b${i}`, at: 100 - i })),
+            { repo: `apps/web`, branch: `login`, at: 1 },
+        ];
+
+        expect(branchGroups(choices, { current: undefined, query: `b${BRANCH_WINDOW + 2}` }).flatMap((group) => group.branches.map((choice) => choice.branch))).toEqual([
+            `b${BRANCH_WINDOW + 2}`,
+        ]);
+        expect(branchGroups(choices, { current: undefined, query: `web log` }).map((group) => group.repo)).toEqual([`apps/web`]);
+    });
+});
+

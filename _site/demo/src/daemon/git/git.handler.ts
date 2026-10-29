@@ -5,7 +5,7 @@ import { commit, dirtyPaths, discard, gitChanges, indexRunState, stage, startInd
 import { pendingDiff } from "./gitPending";
 import { cancelPush, fetch, publishFile, pull, pushState, pushTag, startPush } from "./gitPush";
 import { branchList, commitDiff, commitFileDiff, gitLog, stashDiff, stashList, undoableOf } from "./gitReads";
-import { abort, checkout, createBranch, createBranchAt, createTag, deleteBranch, deleteTag, operation, stashApply, stashDrop } from "./gitRefs";
+import { abort, checkout, createBranch, createBranchAt, createTag, deleteBranch, deleteTag, operation, returnToMainLine, stashApply, stashDrop } from "./gitRefs";
 import { cherryPick, drop, merge, rebase, reset, revert, undo } from "./gitRewrite";
 import type { Doors } from "../doors";
 
@@ -48,6 +48,7 @@ export const gitDoors = {
     stashApply: ({ repo, ref, pop }) => stashApply(repo, ref, pop === true, dirtyPaths(repo)),
     stashDrop: ({ repo, ref }) => stashDrop(repo, ref),
     checkout: ({ repo, ref }) => checkout(repo, ref),
+    returnToMainLine: ({ repo }) => returnToMainLine(repo),
     createBranch: ({ repo, sha, name }) => createBranch(repo, sha, name),
     createBranchAt: ({ repo, name, start, checkout: andCheckout }) => createBranchAt(repo, name, start, andCheckout === true),
     deleteBranch: ({ repo, name, force }) => deleteBranch(repo, name, force === true),

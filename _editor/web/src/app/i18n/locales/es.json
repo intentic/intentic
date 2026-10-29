@@ -1074,6 +1074,18 @@
             "package": "Paquete",
             "subagents": "Subagentes",
             "working": "{count} trabajando"
+        },
+        "branchStart": {
+            "commitTo": "Confirmar en {branch}",
+            "from": "desde {branch}",
+            "fromTitle": "Desde una rama",
+            "fromNote": "Su trabajo se confirma ahí",
+            "committed": "{name} confirmado en {branch}",
+            "onBranch": "En {branch}: su trabajo se confirma en esa rama",
+            "howItWorks": "Desde una rama",
+            "howItWorksNote": "El espacio compartido no cambia",
+            "unlink": "Desvincular",
+            "unlinkNote": "Empieza desde la línea principal"
         }
     },
     "app": {
@@ -3955,7 +3967,10 @@
             "plain": {
                 "mode": "Cuánto hace por su cuenta",
                 "modeNote": "Cuándo te pregunta antes."
-            }
+            },
+            "startFrom": "Empezar desde",
+            "startFromNote": "O una rama, o la copia de otro agente.",
+            "startFromNamed": "Empezar desde {name}"
         },
         "composerQuickPick": {
             "anotherSandbox": "Otro sandbox",
@@ -12959,6 +12974,14 @@
                 "unknown": "algo que solo usa el propio sandbox"
             }
         },
+        "mainLineBanner": {
+            "back": "Volver a {main}",
+            "couldntReturn": "No se pudo volver a {main}",
+            "offBranch": "{repo} está en {branch}, no en {main}: el trabajo de los agentes espera hasta que vuelva.",
+            "offMain": "{repo} no está en {main}: el trabajo de los agentes espera hasta que vuelva.",
+            "returning": "Volviendo a {main}",
+            "workspace": "El espacio de trabajo"
+        },
         "markdownOutline": {
             "documentOutline": "Esquema del documento",
             "filterHeadings": "Filtrar encabezados…",
@@ -13316,13 +13339,26 @@
             "clickForShared": "Clic: espacio compartido",
             "copyAria": "Copia privada: {name}",
             "copyUnreadable": "Copia ilegible",
-            "findCopy": "Buscar la copia de una conversación",
+            "findCopy": "Buscar una rama o una copia",
             "noCopyMatches": "Ninguna copia coincide.",
             "readOnlyClickToSwitch": "Solo lectura · clic para cambiar",
             "sharedHint": "Aquí llega el trabajo terminado",
             "sharedWorkspace": "Espacio de trabajo compartido",
             "showFilesFrom": "Mostrar archivos de",
-            "showMore": "Mostrar {count} más"
+            "showMore": "Mostrar {count} más",
+            "branches": "Ramas",
+            "branchesIn": "Ramas · {repo}",
+            "mainLine": "Línea principal",
+            "startHint": "Una copia nueva del espacio de trabajo compartido",
+            "startFrom": "Empezar desde",
+            "remoteOnly": "Solo remota",
+            "staysShared": "Solo cambian los archivos: la búsqueda, Cambios, las terminales y las vistas previas siguen en el espacio de trabajo compartido.",
+            "clickToLook": "Clic para ver otra",
+            "sharedAria": "Espacio de trabajo compartido, en {name}",
+            "branchAria": "Rama, solo lectura: {name}",
+            "newAgentFromHere": "Nuevo agente desde aquí",
+            "newAgentFromHereNote": "Su trabajo vuelve aquí",
+            "newAgentTip": "Nuevo agente"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Volver al espacio de trabajo compartido",
@@ -13405,7 +13441,9 @@
             "outline": "Esquema",
             "rowsChanged": "{count} fila cambiada | {count} filas cambiadas",
             "comments": "Comentarios",
-            "text": "Texto"
+            "text": "Texto",
+            "branchView": "Una rama, solo lectura",
+            "branchReadOnly": "Inicia un agente desde ella para cambiarla"
         },
         "fileVerbs": {
             "invalidName": "Nombre no válido.",
@@ -13534,7 +13572,7 @@
             "transportUnreachable": "no se ha podido contactar con él"
         },
         "useWorkspaceSearch": {
-            "sharedOnly": "Buscando en el espacio de trabajo compartido; la copia propia de un agente no está indexada."
+            "sharedOnly": "Se busca en el espacio de trabajo compartido: la rama o copia en pantalla no está indexada."
         },
         "fileDiffPane": {
             "allRegions": "{size} — {count} zona modificada; el resto del archivo no ha cambiado. | {size} — {count} zonas modificadas; el resto del archivo no ha cambiado.",
@@ -13614,6 +13652,10 @@
             "stopping": "Se detiene tras los elementos ya en curso",
             "notDone": "Sin hacer: {names}",
             "andMore": "{names} y {count} más"
+        },
+        "workspaceViewNote": {
+            "readOnly": "Viendo {name}, solo lectura",
+            "backToShared": "Volver al compartido"
         }
     },
     "gettingStarted": {

@@ -1,5 +1,5 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
-import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
+import { editFenceOf, fenceWrites, viewFence, writesSomewhere } from "./editScope";
 
 // Pins where a member may change files by hand: the daemon's edit fence (area-scope.ts `callerEditFence`) as folders.
 
@@ -39,5 +39,17 @@ describe(`canWriteAt's fence`, () => {
             [true, true],
             [true, true],
         ]);
+    });
+});
+
+describe(`the fence while the Workspace shows another copy`, () => {
+    it(`takes away every write (rename, delete, upload, new file) on a conversation's copy or a branch, and gives the person's own back on the shared tree`, () => {
+        const everywhere = editFenceOf(`maintainer`, undefined, AREAS);
+        const scoped = viewFence(everywhere, false);
+        expect(at(scoped, ``, `docs/a.md`, `src/b.ts`)).toEqual([false, false, false]);
+        expect(writesSomewhere(scoped)).toBe(false);
+        expect(at(viewFence(everywhere, true), ``, `docs/a.md`)).toEqual([true, true]);
+        const writer = editFenceOf(`writer`, { edit: [`docs`] }, AREAS);
+        expect(at(viewFence(writer, true), `docs/a.md`, `src/b.ts`)).toEqual([true, false]);
     });
 });

@@ -28,6 +28,7 @@ jest.mock("../../../../../models/sandbox/devices/useRunners", () => ({ ...useRun
 
 const { useComposerControls } = await import("../composerControls");
 const { Conversation } = await import("../../../../../models/conversations/session/conversation");
+const { startFromFacts } = await import("../../../../../models/fleet/branches/branchStart");
 
 let unmount: (() => void) | undefined;
 const rowOf = () => {
@@ -45,6 +46,8 @@ const rowOf = () => {
         runThrough: ref<HTMLElement>(),
         more: ref<HTMLElement>(document.createElement(`button`)),
     };
+    // Where a new agent starts, as the pane hands it in (composerStartFrom.ts), the shared workspace on `main`.
+    const startFrom = { open: ref(false), mainLine: computed(() => `main`), situation: computed(() => ({ ...startFromFacts(chat), mainLine: `main` })) };
     let row: ReturnType<typeof useComposerControls> | undefined;
     const app = createApp({
         setup: () => {
@@ -59,13 +62,14 @@ const rowOf = () => {
                 pills,
                 plain: ref(false),
                 guest: ref(false),
+                startFrom,
             });
             return () => h(`div`);
         },
     });
     app.mount(document.createElement(`div`));
     unmount = () => app.unmount();
-    return { chat, mode, runState, runThrough, steered, editing, pills, row: row! };
+    return { chat, mode, runState, runThrough, steered, editing, pills, startFrom, row: row! };
 };
 const keys = (row: ReturnType<typeof rowOf>[`row`]): string[] => row.moreRows.value.map((entry) => entry.key);
 
@@ -80,20 +84,20 @@ afterEach(() => {
 describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`]);
-        expect(row.inRow.value).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
+        expect(keys(row)).toEqual([`mode`, `startFrom`, `persona`, `runThrough`, `land`]);
+        expect(row.inRow.value).toEqual({ mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false });
         expect(row.laterOffered.value).toBe(true);
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
         chat.autoLandDraft.value = true;
-        expect(keys(row)).toEqual([`runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: false, voice: false, land: true });
+        expect(keys(row)).toEqual([`startFrom`, `runThrough`]);
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, persona: true, runThrough: false, voice: false, land: true });
 
         // A loop takes the send somewhere a booking cannot follow: the send's caret offers no later then.
         runState.value = `loop`;
-        expect(keys(row)).toEqual([]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: true, voice: false, land: true });
+        expect(keys(row)).toEqual([`startFrom`]);
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, startFrom: false, persona: true, runThrough: true, voice: false, land: true });
         expect(row.laterOffered.value).toBe(false);
     });
 
@@ -103,7 +107,7 @@ describe(`the row and its overflow`, () => {
 
         // On the roster: the daemon has an entry to place into, whatever this tab has latched.
         rostered.value = [`c1`];
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `land`]);
+        expect(keys(row)).toEqual([`mode`, `startFrom`, `persona`, `runThrough`, `voice`, `land`]);
 
         // Registered, landing is the card's to answer: with no card on its branch in this window, it is not offered.
         rostered.value = [];
@@ -124,8 +128,8 @@ describe(`the row and its overflow`, () => {
     });
 
     it(`hands a row to the picker that owns it, closing itself first; the voice and landing rows are the press`, () => {
-        const { chat, runThrough, row } = rowOf();
-        const picks = [`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`] as const;
+        const { chat, runThrough, startFrom, row } = rowOf();
+        const picks = [`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `voice`, `land`] as const;
         for (const control of picks) {
             row.moreOpen.value = true;
             row.openFromMore(control);
@@ -134,6 +138,7 @@ describe(`the row and its overflow`, () => {
 
         expect(row.modeOpen.value).toBe(true);
         expect(row.placementOpen.value).toBe(true);
+        expect(startFrom.open.value).toBe(true);
         expect(row.personaOpen.value).toBe(true);
         expect(runThrough.open.value).toBe(true);
         expect(row.voiceAgent.value).toBe(true);
@@ -148,6 +153,38 @@ describe(`the row and its overflow`, () => {
         mode.value = `plan`;
 
         expect(row.modeAnchor.value).toBe(pills.mode.value);
+    });
+});
+
+describe(`where a new agent starts`, () => {
+    it(`offers the main line in the overflow, rides the row once a branch is picked, and leaves once the first turn is taken`, () => {
+        const { chat, row } = rowOf();
+        expect(row.moreRows.value.find((entry) => entry.key === `startFrom`)?.value).toBe(`main`);
+
+        chat.pendingFromBranch.value = { repo: `root`, branch: `feature/login` };
+        expect(row.inRow.value.startFrom).toBe(true);
+        expect(keys(row)).not.toContain(`startFrom`);
+
+        // Another agent's copy taken as the reader's own ask is a start too; a check on it has a strip of its own.
+        chat.pendingFromBranch.value = undefined;
+        chat.pendingFreshOf.value = { conversationId: `origin`, kind: `ask` };
+        expect(row.inRow.value.startFrom).toBe(true);
+        chat.pendingFreshOf.value = { conversationId: `origin`, kind: `review` };
+        expect(row.inRow.value.startFrom).toBe(false);
+        expect(keys(row)).not.toContain(`startFrom`);
+
+        chat.pendingFreshOf.value = undefined;
+        chat.registered.value = true;
+        expect(keys(row)).not.toContain(`startFrom`);
+    });
+
+    it(`is not offered to a chat on the shared tree, on a runner, or in another box`, () => {
+        const { chat, row } = rowOf();
+        chat.isolated.value = false;
+        expect(keys(row)).not.toContain(`startFrom`);
+        chat.isolated.value = true;
+        chat.runner.value = `studio-mac`;
+        expect(keys(row)).not.toContain(`startFrom`);
     });
 });
 
@@ -215,7 +252,7 @@ describe(`where the chat runs`, () => {
 
         runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
 
-        expect(keys(row)).toEqual([`mode`, `placement`, `persona`, `runThrough`, `land`]);
+        expect(keys(row)).toEqual([`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `land`]);
         expect(row.inRow.value.placement).toBe(false);
         expect(row.moreRows.value.find((entry) => entry.key === `placement`)).toMatchObject({ label: `Where this runs`, value: `This sandbox` });
         expect(row.placementAnchor.value).toBe(pills.more.value);

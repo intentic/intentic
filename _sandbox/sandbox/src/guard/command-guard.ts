@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AdmissionRule,CommandClass,CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
 import { outboundRefusal } from "./outbound-guard.js";
+import { mainLineOutcome } from "../git/main-line-guard.js";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import {
@@ -417,7 +418,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
     return {
         enforcing: true,
         async *consult(program, subject, where) {
-            const installed = outboundOutcome(options, program) ?? (yield* installTier(program, subject, where));
+            const installed = outboundOutcome(options, program) ?? mainLineOutcome(context, program) ?? (yield* installTier(program, subject, where));
             if (installed?.allow === false) {
                 return installed;
             }

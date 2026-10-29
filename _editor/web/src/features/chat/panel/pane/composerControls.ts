@@ -8,6 +8,7 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRunners } from "../../../../models/sandbox/devices/useRunners";
 import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
 import { useComposerLanding } from "../../composer/composerLanding";
+import type { useStartFrom } from "../../composer/composerStartFrom";
 import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { composerModelName, composerModelReading } from "../../composer/composerModelLabel";
@@ -59,6 +60,9 @@ const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>
         placement: () => {
             flags.placement.value = true;
         },
+        startFrom: () => {
+            flags.startFrom.value = true;
+        },
         persona: () => {
             flags.persona.value = true;
         },
@@ -85,6 +89,8 @@ export interface ControlsHost {
     // Plain words (a reader who does not write code) and a guest: what the overflow offers them (composerMore.ts).
     readonly plain: Readonly<Ref<boolean>>;
     readonly guest: Readonly<Ref<boolean>>;
+    // Where a new agent starts (composerStartFrom.ts): its own picker, and its part of the situation.
+    readonly startFrom: ReturnType<typeof useStartFrom>;
 }
 
 export const useComposerControls = (host: ControlsHost) => {
@@ -116,7 +122,7 @@ export const useComposerControls = (host: ControlsHost) => {
     );
     // Writing as the agent needs a registry entry to place into, which the chat has from its first turn on.
     const placeable = computed(() => conversation().registered.value || agentById(conversation().conversationId) !== undefined);
-    // Whether its finished work lands by itself, as this chat answers it (composerLanding.ts).
+    // Whether its finished work lands by itself, as this chat answers it (composerLanding.ts); where a new agent starts.
     const landing = useComposerLanding(conversation);
 
     // The pill's own rule (composerModelLabel.ts), read here for the accessible name beside it too.
@@ -135,6 +141,7 @@ export const useComposerControls = (host: ControlsHost) => {
         startingMode: startingMode(conversation().isolated.value),
         placementOffered: placementShown.value,
         placed: placedElsewhere(conversation()),
+        ...host.startFrom.situation.value,
         persona: conversation().selection.actsAs.value,
         runThrough: runThrough.state.value,
         voiceAgent: voiceAgent.value,
@@ -155,7 +162,8 @@ export const useComposerControls = (host: ControlsHost) => {
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const OPENERS = openersOf({ mode: modeOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
+    const flags = { mode: modeOpen, placement: placementOpen, startFrom: host.startFrom.open, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent };
+    const OPENERS = openersOf(flags, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.
@@ -174,11 +182,9 @@ export const useComposerControls = (host: ControlsHost) => {
             return;
         }
         voiceAgent.value = false;
-        modelOpen.value = false;
-        modeOpen.value = false;
-        personaOpen.value = false;
-        laterOpen.value = false;
-        moreOpen.value = false;
+        for (const open of [modelOpen, modeOpen, personaOpen, laterOpen, moreOpen, host.startFrom.open]) {
+            open.value = false;
+        }
     });
 
     return {

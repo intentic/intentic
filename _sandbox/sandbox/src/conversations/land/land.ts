@@ -20,7 +20,8 @@ import { planThreeWay, type ThreeWay, unwrittenThreeWay, writeThreeWay } from ".
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
-import { assertLinked } from "../worktrees/checkout-link.js";
+import { assertLandable } from "./landable.js";
+import { type BranchLines, type BranchOnto, branchOnto, lineDirOf, NO_BRANCH_LINES, settleOnBranch } from "./branch/branch-land.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
@@ -68,7 +69,6 @@ interface DeltaReport {
     readonly blocked: { path: string; reason: LandConflictReason }[];
     readonly clean: DeltaChange[];
 }
-
 
 // Every path main's own tree has something uncommitted on, a rename's source leg included: a staged copy is as much at
 // risk as an unstaged one. One status read; no line counts, which changedFiles would spend a read per untracked file on.
@@ -207,6 +207,7 @@ export const outstandingConflicts = async (
     entry: IsolatedAgent,
     // The parent whose checkout the work goes into, as the land itself would write it; undefined for the main tree.
     into: string | undefined = undefined,
+    lines: BranchLines = NO_BRANCH_LINES,
     git: GitRunner = defaultGit,
 ): Promise<LandConflict[]> => {
     const conflicts: LandConflict[] = [];
@@ -214,7 +215,7 @@ export const outstandingConflicts = async (
     try {
         for (const { repo, base, landedTip } of entry.placement.repos) {
             await worktrees.withRepoLock(repo, async () => {
-                const main = into === undefined ? worktrees.mainDir(repo) : worktrees.worktreeDir(into, repo);
+                const main = into === undefined ? lineDirOf(worktrees, lines, repo) : worktrees.worktreeDir(into, repo);
                 if (!(await pathExists(join(main, ".git")))) {
                     // Vanished main checkout: reported the same way land itself reports it.
                     conflicts.push({ repo, paths: [], clean: 0 });
@@ -227,7 +228,7 @@ export const outstandingConflicts = async (
                     return;
                 }
                 const refDir = attached ? worktree : main;
-                const from = await anchorOf(entry.placement, refDir, worktrees.mainDir(repo), tip, landedTip, base, git);
+                const from = await anchorOf(entry.placement, refDir, lineDirOf(worktrees, lines, repo), tip, landedTip, base, git);
                 if (tip === from) {
                     return;
                 }
@@ -266,6 +267,8 @@ interface RepoLandTarget {
     readonly tip: string;
     // The anchor the patch spans from; what a failed write is re-read against to name its paths.
     readonly from: string;
+    // Set where `main` is a branch's checkout: the write is committed there once proven (branch-land.ts).
+    readonly onto?: BranchOnto | undefined;
 }
 
 type RepoLandWrite =
@@ -360,6 +363,7 @@ interface LandRun {
     readonly span: AgentSpan;
     // Even a `measure` re-judges a stored refusal, or 'resolve' loops forever; only a verdict may replace a verdict.
     readonly rejudging: boolean;
+    readonly lines: BranchLines;
     readonly patchDir: string;
     readonly git: GitRunner;
 }
@@ -478,7 +482,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
     const { repo, base } = composed;
     // Where the main line is read, and the tree the patch is written into: the same checkout unless a child lands into
     // its parent's.
-    const mainLine = worktrees.mainDir(repo);
+    const mainLine = lineDirOf(worktrees, run.lines, repo);
     const main = run.into === undefined ? mainLine : worktrees.worktreeDir(run.into, repo);
     const none = { files: 0, insertions: 0, deletions: 0 };
     if (!(await pathExists(join(main, ".git")))) {
@@ -501,7 +505,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
             ? { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff }
             : { plan: { next: composed }, changed: false, diff };
     }
-    const target = { main, repo, base, tip, from } satisfies RepoLandTarget;
+    const target = { main, repo, base, tip, from, onto: branchOnto(run.lines.get(repo), run.entry) } satisfies RepoLandTarget;
     const patchPath = join(run.patchDir, `${repo.replaceAll("/", "_")}.patch`);
     if ((await writePatch(main, patchPath, [from, tip, ...UNDERIVED], git)) === 0) {
         // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
@@ -528,6 +532,10 @@ const landWrite = async (
     if (unwritten.length > 0) {
         const blocked = unwritten.map((path) => ({ path, reason: "workspace" as const }));
         return { conflict: await conflictOf(write.main, write.repo, { blocked, clean: [] }, git) };
+    }
+    const onBranch = write.onto === undefined ? undefined : await settleOnBranch(write.main, write.repo, write.kind === "merge" ? write.merge.conflicted : [], write.onto, git);
+    if (onBranch !== undefined) {
+        return { conflict: onBranch };
     }
     const landed = await advancedRepo(write, git);
     return write.kind === "merge" && write.merge.conflicted.length > 0 ? { landed, resolving: [...write.merge.conflicted] } : { landed };
@@ -569,10 +577,12 @@ export const landAgent = async (
     span: AgentSpan = "outstanding",
     // The parent whose checkout takes the work instead of the main tree (land-target.ts); undefined for the main tree.
     into: string | undefined = undefined,
+    // The checkouts of the branches a repo lands onto instead (branch-land.ts branchLinesOf), each refreshed already.
+    lines: BranchLines = NO_BRANCH_LINES,
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
-    // Before anything is read: a checkout that no longer shares main's objects stops here with a plain reason.
-    await assertLinked(worktrees, entry.id, entry.placement.repos);
+    // Before anything is read: a checkout that cannot be landed from or into stops here with a plain reason.
+    await assertLandable(worktrees, entry, into, git);
     const run: LandRun = {
         worktrees,
         entry,
@@ -580,6 +590,7 @@ export const landAgent = async (
         mode,
         span,
         rejudging: mode === "measure" && (entry.landing.conflicts?.length ?? 0) > 0,
+        lines,
         // One temp dir for this run's patch files, removed whole in the finally.
         patchDir: await mkdtemp(join(tmpdir(), "intentic-land-")),
         git,
@@ -607,17 +618,13 @@ export const landAgent = async (
                 if (conflicts.length > 0) {
                     return { landed: false, changed, repos: [...entry.placement.repos], diff, adjudicated, conflicts, ...target };
                 }
-                const written = await writePlans(
-                    plannings.map(({ plan }) => plan),
-                    run.patchDir,
-                    git,
-                );
+                const written = await writePlans(plannings.map(({ plan }) => plan), run.patchDir, git);
                 const resolving = written.resolving.length > 0 ? { resolving: written.resolving } : {};
                 if (written.conflicts.length > 0) {
                     return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
                 }
                 // Every write went through: the main tree derives its own files from them, after this land (rederive.ts).
-                const rederive = opt("rederive", into === undefined ? rederiveWrites(plannings.map(({ plan }) => plan.write)) : undefined);
+                const rederive = opt("rederive", into === undefined ? rederiveWrites(plannings.map(({ plan }) => (plan.write?.onto === undefined ? plan.write : undefined))) : undefined);
                 return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...target };
             },
         );

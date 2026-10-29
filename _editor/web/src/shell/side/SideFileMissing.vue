@@ -5,6 +5,7 @@ import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref, watch } from "vue";
 import { lookUpWorkspaceRef } from "../../models/workspace/files/resolveFileRef";
 import { useScopeTitle } from "../../features/workspace/health/scopeTitle";
+import { agentScope } from "../../app/workspaceScope";
 import { searchInQuickOpen, useQuickOpen } from "../../workbench/commands/useQuickOpen";
 import { FILE_SIDE_VIEW, fileSideInput, noteArrival } from "../../workbench/side/sideFileInput";
 import { openBeside } from "../../workbench/side/sideTabs";
@@ -34,7 +35,7 @@ const t = useT();
 const { mounted: paletteHere } = useQuickOpen();
 const name = computed(() => basename(reference));
 
-const copyTitle = useScopeTitle(computed(() => agent));
+const copyTitle = useScopeTitle(computed(() => agentScope(agent)));
 const copy = computed(() => (agent === undefined ? t(`shell.sidePanel.sharedCopy`) : t(`shell.sidePanel.agentCopy`, { title: copyTitle.value })));
 
 // Whatever answered last; a reference changing under the card drops a slower answer for the one before it.
@@ -48,7 +49,7 @@ watch(
         if (nearby !== undefined || reference === ``) {
             return;
         }
-        const found = await lookUpWorkspaceRef(reference, { agent });
+        const found = await lookUpWorkspaceRef(reference, agentScope(agent));
         if (mine !== question || found === undefined) {
             return;
         }

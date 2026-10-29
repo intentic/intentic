@@ -1,6 +1,6 @@
 import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract/text/path-refs";
 import type { WorkspaceTreeEntry, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { type ViewScope, workspaceScope } from "../../app/workspaceScope";
+import { SHARED_SCOPE, type ViewScope, workspaceScope } from "../../app/workspaceScope";
 import { cachedWorkspaceTree } from "./workspaceTreeCache";
 
 // A file reference is a suffix of the real path, matched against the fetched tree via tail + ranking rules shared with
@@ -16,7 +16,7 @@ export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+
 // until that scope's first fetch lands. One scope's tree only: more than one can be cached at once (workspaceScope), and
 // a reference in one conversation's words must never resolve against another copy's files.
 const cachedTree = (scope: ViewScope = workspaceScope()): WorkspaceTree | undefined => {
-    const data = cachedWorkspaceTree(scope.agent);
+    const data = cachedWorkspaceTree(scope);
     return data?.root === undefined || data.root === `` ? undefined : data;
 };
 
@@ -26,7 +26,7 @@ export const fileRefTree = (scope?: ViewScope): WorkspaceTree | undefined => cac
 
 // Container workspace root (e.g. /work); empty until a tree fetches once, so absolute references don't open yet
 // (relative ones still do). Every copy in one sandbox shares it, so any held tree answers when the scope's own is not.
-const containerRoot = (scope?: ViewScope): string => (cachedTree(scope) ?? cachedTree() ?? cachedTree({ agent: undefined }))?.root ?? ``;
+const containerRoot = (scope?: ViewScope): string => (cachedTree(scope) ?? cachedTree() ?? cachedTree(SHARED_SCOPE))?.root ?? ``;
 
 // Path set + basename→paths map resolveInTree matches against; memoized on the tree object, rebuilt only on refetch.
 // Files only, but ignored dirs (node_modules) are indexed too: a dependency's stack frame is worth following.

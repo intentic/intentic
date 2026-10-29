@@ -1,4 +1,5 @@
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
+import { queryWithScope, scopeFromQuery } from "./scopeRoute";
 
 /* The workspace deep-link route must remain resolvable by Vue Router. */
 
@@ -43,5 +44,34 @@ describe(`workspace splat route`, () => {
 
     it(`outranks the root catch-all for a nested path`, () => {
         expect(makeRouter().resolve(`/workspace/src/foo.ts`).name).toBe(`workspace`);
+    });
+});
+
+describe(`the scope the workspace URL carries`, () => {
+    it(`reads ?agent= as that conversation's copy, ?repo=&branch= as a branch, and nothing as the shared tree`, () => {
+        expect(scopeFromQuery({ agent: `c-1` })).toEqual({ agent: `c-1` });
+        expect(scopeFromQuery({ repo: `apps/web`, branch: `feature/login` })).toEqual({ repo: `apps/web`, branch: `feature/login` });
+        expect(scopeFromQuery({})).toEqual({});
+    });
+
+    it(`takes a branch with no repo as the workspace's own, and ignores a repeated or empty parameter`, () => {
+        expect(scopeFromQuery({ branch: `release` })).toEqual({ repo: `root`, branch: `release` });
+        expect(scopeFromQuery({ agent: ``, branch: [`a`, `b`] })).toEqual({});
+    });
+
+    it(`lets an agent outrank a branch, which the daemon never takes together`, () => {
+        expect(scopeFromQuery({ agent: `c-1`, repo: `root`, branch: `x` })).toEqual({ agent: `c-1` });
+    });
+
+    it(`writes either shape back in place of the other, keeping every other parameter`, () => {
+        expect(queryWithScope({ agent: `c-1`, dir: `src` }, { repo: `root`, branch: `x` })).toEqual({ dir: `src`, repo: `root`, branch: `x` });
+        expect(queryWithScope({ repo: `root`, branch: `x`, diff: `a.ts` }, { agent: `c-2` })).toEqual({ diff: `a.ts`, agent: `c-2` });
+        expect(queryWithScope({ repo: `root`, branch: `x`, dir: `src` }, {})).toEqual({ dir: `src` });
+    });
+
+    it(`round-trips a branch through a real URL, slashes and all`, () => {
+        const router = makeRouter();
+        const href = router.resolve({ name: `workspace`, params: { path: [] }, query: queryWithScope({}, { repo: `apps/web`, branch: `feature/a b` }) }).href;
+        expect(scopeFromQuery(router.resolve(href).query)).toEqual({ repo: `apps/web`, branch: `feature/a b` });
     });
 });

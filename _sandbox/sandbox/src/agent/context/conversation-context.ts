@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { AgentTurn, RepoBase } from "@intentic/sandbox-contract/schemas/agent";
+import type { RepoBranch } from "@intentic/sandbox-contract/schemas/shared";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { landTargetOf } from "../../conversations/land/land-target.js";
 import { compactedSinceLastTurn, type Composition, isIsolated, type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
@@ -10,7 +11,7 @@ import { fencedComposition } from "../../conversations/worktrees/worktree-cone.j
 import { headSha } from "../../git/changes/changes.js";
 import { conversationFence } from "../../areas/area-scope.js";
 import { checkpointWorktree } from "../checkpoints/checkpoint-worktree.js";
-import { contextNote, outsideCheckoutNote } from "./context-note.js";
+import { contextNote, outsideCheckoutNote, withBranchNote } from "./context-note.js";
 
 // Composition is decided once, by the route, on the turn that creates the conversation's worktrees — the one moment it
 // can still change what's checked out. No card, or none naming context, means everything. Static: the pick is a list on
@@ -55,6 +56,34 @@ const parentCut = async (services: Services, entry: PersistedAgent | undefined, 
     return repos.length > 0 && base.length === repos.length ? { parent: target.parent, base } : undefined;
 };
 
+// A conversation started from a branch (`fromBranch`, the route refused what may not be): that repo's copy cut from the
+// branch's tip, its checkout brought there first (which makes the local branch from origin's when only origin has it),
+// and every other repo from the main line as any conversation's is. A full base list, since a partial one would leave the
+// other repos out; not `worktreeBase`, which pins a workflow step and stops its rebase. Latched as `branches`.
+const branchCut = async (services: Services, from: RepoBranch | undefined): Promise<OpeningCut | undefined> => {
+    if (from === undefined) {
+        return undefined;
+    }
+    const tip = await headSha(await services.branchCheckouts.refresh(from.repo, from.branch));
+    if (tip === undefined) {
+        return undefined;
+    }
+    const mainLine = (await services.agentWorktrees.snapshot()).filter(({ repo }) => repo !== from.repo);
+    const base = from.repo === "root" ? [{ repo: from.repo, base: tip }, ...mainLine] : [...mainLine, { repo: from.repo, base: tip }];
+    return { base, branches: [{ repo: from.repo, branch: from.branch }] };
+};
+
+// What an opening compose with no base of its own is cut from besides the main line: a spawned child's parent's work, or
+// a branch it was started from.
+interface OpeningCut {
+    readonly base: RepoBase[];
+    readonly parent?: string;
+    readonly branches?: RepoBranch[];
+}
+
+const openingCut = async (services: Services, input: AgentTurn, entry: PersistedAgent | undefined, id: string, fromParent: boolean): Promise<OpeningCut | undefined> =>
+    (fromParent ? await parentCut(services, entry, id) : undefined) ?? (await branchCut(services, input.fromBranch));
+
 // Brings the checkout to what the conversation carries, for both the local turn and the runner's mirror. The opening
 // turn decides and records the composition; later turns reconcile the checkout to it. A local spawned child with no base
 // of its own opens on its parent's current work (`fromParent`); a runner's child opens on the main line, since the runner
@@ -71,13 +100,14 @@ export const ensureComposedWorktree = async (
     const recorded = worktreeOf(entry)?.repos ?? [];
     const opening = recorded.length === 0;
     const composition = opening ? await decideComposition(services, input) : worktreeOf(entry)?.composition;
-    const cut = opening && fromParent && base === undefined ? await parentCut(services, entry, conversationId) : undefined;
+    const cut = opening && base === undefined ? await openingCut(services, input, entry, conversationId, fromParent) : undefined;
     // The conversation's own fence, from the areas its starter held. Resolved here rather than latched as folders,
     // so editing an area narrows an existing conversation's checkout on its next turn.
     const fence = conversationFence(await services.areas.list(), entry?.identity);
     const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence);
     if (opening || !sameRepos(recorded, worktree.repos)) {
-        await services.agents.recordWorktree(conversationId, worktree.repos, composition, cut?.parent);
+        const branches = cut?.branches?.filter(({ repo }) => worktree.repos.some((composed) => composed.repo === repo));
+        await services.agents.recordWorktree(conversationId, worktree.repos, composition, cut?.parent, branches);
     }
     return worktree;
 };
@@ -138,6 +168,12 @@ const outsideNoteFor = async (
 // undefined when there is nothing to tell. The card is re-read for its label only — repos come from the record, so an
 // edited card changes nothing here.
 export const contextNoteFor = async (
+    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
+    conversationId: string,
+): Promise<TurnNote | undefined> =>
+    withBranchNote(await compositionNoteFor(services, conversationId), worktreeOf(services.agents.entry(conversationId))?.branches ?? []);
+
+const compositionNoteFor = async (
     services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
     conversationId: string,
 ): Promise<TurnNote | undefined> => {

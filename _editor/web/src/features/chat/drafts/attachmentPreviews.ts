@@ -1,5 +1,6 @@
 import { isAudioPath, isImagePath } from "./fileQuickLook";
 import { forgetOriginal, picture, rememberOriginal } from "../../../models/workspace/home/thumbnails";
+import { SHARED_SCOPE } from "../../../app/workspaceScope";
 
 // An attachment's own bytes as an element's source, the file's original (thumbnails.ts); `rememberMedia` seeds an upload.
 
@@ -28,7 +29,7 @@ export const attachmentKind = (path: string): MediaKind | undefined => staged.ge
 
 // The bytes' URL only where they are of the asked-for kind; undefined while in flight and for a refused path.
 const mediaOf = (path: string, kind: MediaKind): string | undefined =>
-    attachmentKind(path) === kind ? picture(undefined, path, `original`)?.url : undefined;
+    attachmentKind(path) === kind ? picture(SHARED_SCOPE, path, `original`)?.url : undefined;
 
 export const attachmentPreview = (path: string): string | undefined => mediaOf(path, `image`);
 export const attachmentAudio = (path: string): string | undefined => mediaOf(path, `audio`);

@@ -10,6 +10,9 @@ jest.mock(`../../../../app/workspaceScope`, () => ({ workspaceDir: computed(() =
 const setProjectScope = jest.fn();
 jest.mock(`../../../../app/projectScope`, () => ({ setProjectScope: (project: string | undefined) => setProjectScope(project) }));
 
+// The line about another copy on screen is its own component's to say (WorkspaceViewNote.vue).
+jest.mock(`../WorkspaceViewNote.vue`, () => ({ default: { render: () => null } }));
+
 const { default: WorkspaceScopeNote } = await import("../WorkspaceScopeNote.vue");
 
 let app: App | undefined;

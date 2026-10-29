@@ -33,6 +33,7 @@ import { useAgents } from "../../../models/fleet/useAgents";
 import { commitOnly, keepDeleted, restoreAndLand } from "../../../models/fleet/ownerHoldActions";
 import type { OwnerHold } from "../../../models/conversations/review/ownerHold";
 import { useNotifications } from "../../../workbench/notifications/notifications";
+import { landsOnto } from "../../../models/fleet/branches/branchLanding";
 
 // Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
 // staged/unstaged split. `landed` is read off the tree; committed files drop into `absorbed`. Land/discard replace
@@ -200,10 +201,16 @@ const finisherOf =
 // `at` is this agent's sandbox (undefined = active). Reads, land and discard cross sandboxes by id;
 // askResolve/setAutoLand/archive use the local fleet store, active sandbox only. `agent` is the caller's resolved
 // roster entry: `land` measures its rung from it, the presses name it, and its `landing` holds them.
+// What a land that moved something says: a branch start's commits onto its branch rather than reaching the workspace.
+const landedLine = (called: string, branches: AgentSummary[`branches`]): string => {
+    const onto = landsOnto(branches);
+    return onto === undefined ? t(`agents.useAgentChanges.landed`, { name: called }) : t(`agents.branchStart.committed`, { name: called, branch: onto });
+};
+
 export function useAgentChanges(
     agentId: Ref<string>,
     at?: Ref<string | undefined>,
-    agent?: Ref<(Pick<AgentSummary, `landedPresence`> & { readonly title?: string; readonly status?: string }) | undefined>,
+    agent?: Ref<(Pick<AgentSummary, `landedPresence` | `branches`> & { readonly title?: string; readonly status?: string }) | undefined>,
 ) {
     const reach = computed(() => at?.value);
     const { query, error, loaded } = useSandboxQuery(
@@ -346,7 +353,7 @@ export function useAgentChanges(
                     : !result.landed
                       ? t(`agents.useAgentChanges.landBlocked`, { name: called })
                       : result.changed
-                        ? t(`agents.useAgentChanges.landed`, { name: called })
+                        ? landedLine(called, agent?.value?.branches)
                         : nothingLanded(),
             task: async () => {
                 await commitSettings(settings, box);

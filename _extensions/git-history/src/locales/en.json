@@ -1,8 +1,15 @@
 {
+    "branchActions": {
+        "start": "Start an agent",
+        "startNamed": "Start an agent from {branch}",
+        "view": "View in Workspace",
+        "viewNamed": "View {branch} in Workspace"
+    },
     "branchSwitcher": {
         "branch": "Branch",
         "branches": "Branches",
         "cancel": "Cancel",
+        "caption": "The workspace stays on its main line. View another branch, or start an agent from it.",
         "create": "Create",
         "delete": "Delete {name}?",
         "delete2": "Delete",
@@ -15,7 +22,8 @@
         "newBranchHere": "New branch from here",
         "noBranchesMatch": "No branches match.",
         "unmergedForceDelete": "Unmerged, force delete?",
-        "upstreamBranchDeleted": "Upstream deleted"
+        "upstreamBranchDeleted": "Upstream deleted",
+        "workspace": "workspace"
     },
     "extension": {
         "git": "Git",
@@ -33,9 +41,6 @@
         "cancel": "Cancel",
         "changed": "{count} changed",
         "changedFiles": "{count} changed file | {count} changed files",
-        "checkout": "Checkout…",
-        "checkout2": "Checkout",
-        "checkout3": "Checkout {local}",
         "cherryPick": "Cherry Pick…",
         "commit": "Commit",
         "conflicted": "{conflicted} conflicted",
@@ -90,8 +95,6 @@
         "dialog": {
             "branch": "Create branch",
             "branchConfirm": "Create",
-            "checkout": "Checkout commit",
-            "checkoutConfirm": "Checkout",
             "cherryPick": "Cherry-pick commit",
             "cherryPickConfirm": "Cherry-pick",
             "drop": "Drop commit",
@@ -108,7 +111,6 @@
             "tagConfirm": "Add tag"
         },
         "body": {
-            "checkout": "Check out {sha} directly (detached HEAD). Uncommitted changes will block this.",
             "cherryPick": "Copy {sha}'s change onto the current branch as a new commit.",
             "drop": "Remove {sha} from history, replaying the commits after it onto its parent.",
             "merge": "Merge {sha} into the current branch ({branch}).",
@@ -125,7 +127,6 @@
         "actionFailed": "Action failed."
     },
     "useBranches": {
-        "checkoutFailed": "Checkout failed. Commit, stage or discard your changes first.",
         "couldntCreate": "Could not create that branch.",
         "couldntDelete": "Could not delete that branch.",
         "couldntPush": "Could not push that branch.",

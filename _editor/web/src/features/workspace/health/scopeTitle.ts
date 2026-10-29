@@ -1,10 +1,17 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { useAgents } from "../../../models/fleet/useAgents";
-import { workspaceAgent } from "../../../app/workspaceScope";
+import { branchLabel, type ViewScope, workspaceView } from "../../../app/workspaceScope";
 
-/* WHAT TO CALL THE CONVERSATION WHOSE COPY IS ON SCREEN: the Workspace's, or the one a surface reads (useViewScope). */
-export const useScopeTitle = (scope: Readonly<Ref<string | undefined>> = workspaceAgent): ComputedRef<string> => {
+/* WHAT TO CALL THE COPY ON SCREEN: the Workspace's, or the one a surface reads (useViewScope). A conversation's copy by
+   its title, a branch by its name, the shared tree by nothing. */
+export const useScopeTitle = (scope: Readonly<Ref<ViewScope>> = workspaceView): ComputedRef<string> => {
     const { agentById } = useAgents();
-    return computed(() => (scope.value === undefined ? `` : (agentById(scope.value)?.title ?? t(`workspace.scopeTitle.anAgent`))));
+    return computed(() => {
+        const { agent, branch, repo } = scope.value;
+        if (branch !== undefined) {
+            return branchLabel({ repo, branch });
+        }
+        return agent === undefined ? `` : (agentById(agent)?.title ?? t(`workspace.scopeTitle.anAgent`));
+    });
 };

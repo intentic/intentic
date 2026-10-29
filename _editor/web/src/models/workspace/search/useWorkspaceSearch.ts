@@ -7,7 +7,7 @@ import { computed } from "vue";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { firstTextPages, streamingPages } from "./streamedSearch";
 import { useSearchOptions } from "./useSearchOptions";
-import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { isShared, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 
@@ -112,10 +112,10 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         searching: computed(() => enabled.value && query.isFetching.value && !query.isFetchingNextPage.value),
         error: computed(() => (enabled.value && query.error.value ? query.error.value.message : undefined)),
         // What the engine did unasked (e.g. a regex rerun literally). Search always reads the shared /work tree, not an
-        // agent's own copy; the note says so when they differ.
+        // agent's own copy or a branch; the note says so when they differ.
         note: computed(() => {
             const said = live.value === undefined ? head.value?.note : undefined;
-            return workspaceAgent.value === undefined ? said : [said, t(`workspace.useWorkspaceSearch.sharedOnly`)].filter(Boolean).join(` `);
+            return isShared(workspaceView.value) ? said : [said, t(`workspace.useWorkspaceSearch.sharedOnly`)].filter(Boolean).join(` `);
         }),
         // True while input hasn't produced a searchable query yet, in either field: too short or still debouncing.
         pending: computed(

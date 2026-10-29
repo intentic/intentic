@@ -17,7 +17,7 @@ import { personaStartDirs } from "../../../models/sandbox/personas/personaRules"
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../../models/sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
-import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { isShared, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import { type ProjectFocus, projectIdsOf } from "../explorer/projectFocus";
@@ -119,7 +119,7 @@ const openReview = (): void => layout.setSidebarPanel(`changes`);
 provide(HOISTED_CONTEXT, true);
 
 // An archived agent's checkout is gone; every pane fails for the same reason, said once here, not three times.
-const scopeBroken = computed(() => workspaceAgent.value !== undefined && error.value !== undefined);
+const scopeBroken = computed(() => !isShared(workspaceView.value) && error.value !== undefined);
 
 // Chip for committed work still on disk with nothing to count; gated on zero for the more urgent of the two.
 const changesMark = computed(() => {
@@ -686,7 +686,7 @@ const homeTooltip = computed((): Tip => ({
     <div
         ref="rootEl"
         class="ws ui-enter flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
-        :class="{ 'ws-scoped': workspaceAgent !== undefined }"
+        :class="{ 'ws-scoped': !isShared(workspaceView) }"
         @dragover.prevent
         @drop.prevent
     >
@@ -907,7 +907,7 @@ const homeTooltip = computed((): Tip => ({
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error
                             }}</span>
-                            <!-- Which workspace copy this is about; absent on the shared tree, which needs no marker. -->
+                            <!-- Which copy of the workspace this is (its main line on the shared tree), and a new agent from it. -->
                             <WorkspaceScopeChip />
                             <!-- Which folder the tree is rooted at; absent on the whole tree. -->
                             <WorkspaceDirChip />

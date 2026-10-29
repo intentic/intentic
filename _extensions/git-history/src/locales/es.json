@@ -1,8 +1,15 @@
 {
+    "branchActions": {
+        "start": "Iniciar un agente",
+        "startNamed": "Iniciar un agente desde {branch}",
+        "view": "Ver en el espacio de trabajo",
+        "viewNamed": "Ver {branch} en el espacio de trabajo"
+    },
     "branchSwitcher": {
         "branch": "Rama",
         "branches": "Ramas",
         "cancel": "Cancelar",
+        "caption": "El espacio de trabajo se queda en su línea principal. Mira otra rama, o inicia un agente desde ella.",
         "create": "Crear",
         "delete": "¿Eliminar {name}?",
         "delete2": "Eliminar",
@@ -15,7 +22,8 @@
         "newBranchHere": "Rama nueva desde aquí",
         "noBranchesMatch": "Ninguna rama coincide.",
         "unmergedForceDelete": "Sin fusionar, ¿forzar la eliminación?",
-        "upstreamBranchDeleted": "Upstream eliminado"
+        "upstreamBranchDeleted": "Upstream eliminado",
+        "workspace": "espacio de trabajo"
     },
     "extension": {
         "git": "Git",
@@ -33,9 +41,6 @@
         "cancel": "Cancelar",
         "changed": "{count} cambiados",
         "changedFiles": "{count} archivo cambiado | {count} archivos cambiados",
-        "checkout": "Cambiar de rama…",
-        "checkout2": "Cambiar de rama",
-        "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry pick…",
         "commit": "Commit",
         "conflicted": "{conflicted} en conflicto",
@@ -90,8 +95,6 @@
         "dialog": {
             "branch": "Crear rama",
             "branchConfirm": "Crear",
-            "checkout": "Cambiar al commit",
-            "checkoutConfirm": "Cambiar",
             "cherryPick": "Aplicar commit con cherry-pick",
             "cherryPickConfirm": "Cherry-pick",
             "drop": "Eliminar commit",
@@ -108,7 +111,6 @@
             "tagConfirm": "Añadir etiqueta"
         },
         "body": {
-            "checkout": "Cambiar directamente a {sha} (HEAD separado). Los cambios sin commit bloquearán esta operación.",
             "cherryPick": "Copiar el cambio de {sha} a la rama actual como un commit nuevo.",
             "drop": "Eliminar {sha} del historial, reaplicando los commits posteriores sobre su padre.",
             "merge": "Fusionar {sha} con la rama actual ({branch}).",
@@ -125,7 +127,6 @@
         "actionFailed": "La acción ha fallado."
     },
     "useBranches": {
-        "checkoutFailed": "No se ha podido cambiar de rama. Primero haz commit, prepara o descarta tus cambios.",
         "couldntCreate": "No se ha podido crear esa rama.",
         "couldntDelete": "No se ha podido eliminar esa rama.",
         "couldntPush": "No se ha podido enviar esa rama.",

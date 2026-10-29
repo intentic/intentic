@@ -5,6 +5,7 @@ import { stopWaiting, whenNear } from "../../../../models/workspace/home/nearVie
 import { type AsideReason, type ChatShot, shotName, sortShots } from "./shots";
 import { shotLook } from "./shotLooks";
 import { picture } from "../../../../models/workspace/home/thumbnails";
+import { agentScope } from "../../../../app/workspaceScope";
 import PictureQuickLook from "../attachments/PictureQuickLook.vue";
 import { type QuickLookBox, aspectOf, quickLookBox } from "../attachments/pictureQuickLook";
 
@@ -70,7 +71,7 @@ const asideTip = (reason: AsideReason | undefined): string | undefined =>
 
 // A pointer resting on a tile is about to open it: its view starts coming now, not on the press.
 const prefetch = (shot: ChatShot): void => {
-    picture(props.agent, shot.path, `view`);
+    picture(agentScope(props.agent), shot.path, `view`);
 };
 
 // The tile being looked at and where its look is drawn. The look shows the tile's own shot (not the one a counted tile
@@ -88,7 +89,7 @@ const hideLook = (): void => {
 onBeforeUnmount(hideLook);
 const quickLookSrc = computed(() => {
     const shot = shown.value?.shot;
-    return shot === undefined ? undefined : (picture(props.agent, shot.path, `view`)?.url ?? picture(props.agent, shot.path, `strip`)?.url);
+    return shot === undefined ? undefined : (picture(agentScope(props.agent), shot.path, `view`)?.url ?? picture(agentScope(props.agent), shot.path, `strip`)?.url);
 });
 
 const tiles = computed(() =>
@@ -96,7 +97,7 @@ const tiles = computed(() =>
         shot,
         name: shotName(shot.path),
         // Held until the picture is judged too, so a blank one never flashes into the strip before it is set aside.
-        picture: near.value && shotLook(props.agent, shot.path) !== undefined ? picture(props.agent, shot.path, `strip`) : undefined,
+        picture: near.value && shotLook(props.agent, shot.path) !== undefined ? picture(agentScope(props.agent), shot.path, `strip`) : undefined,
         // The counted tile opens the turn's first shot, so the viewer walks forward through everything it stands for.
         opens: index === 0 && earlier.value > 0 ? drawn.value[0]! : shot,
         counted: index === 0 && earlier.value > 0,

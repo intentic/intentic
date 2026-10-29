@@ -2,6 +2,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/command-admission.js";
 import { SECRET_REFERENCE } from "../schemas/needs.js";
 import { inertRegions, isLive } from "../text/shell-regions.js";
+import { GIT_BRANCH_SWITCH } from "../text/git-branch-switch.js";
 
 // Classifies a shell command, shared by the sandbox gate and the machine agent's shell tool so they can't drift on what
 // a class means. A match now only means a judge should look, not a verdict, so tables should be over-inclusive, except
@@ -67,10 +68,6 @@ const GIT_DESTRUCTIVE = [
     /\bgit\s+branch\b[^|;&]*\s(?:-D\b|--delete\s+--force\b|--force\s+--delete\b)/,
     /\bgit\s+filter-branch\b/,
 ];
-
-// `switch` exists only to move HEAD, so every form of it counts. `checkout` is two commands wearing one name: with
-// `-- <path>` or a bare `.` it restores files and moves nothing, and those are the common ones, so they are cut out.
-const GIT_BRANCH_SWITCH = [/\bgit\s+switch\b/, /\bgit\s+checkout\b(?![^|;&]*\s--\s)(?![^|;&]*\s\.(?:\s|$))/];
 
 // The credential is IN the command, not in a file; there is nothing for a filesystem to fact-check here.
 const SECRET_REFERENCES = [SECRET_REFERENCE];

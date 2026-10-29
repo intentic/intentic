@@ -6,7 +6,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from "vue";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { workspaceAgent } from "../../../app/workspaceScope";
+import { isShared, scopeFields, scopeKey, workspaceView } from "../../../app/workspaceScope";
 import { actionError } from "./treeActions";
 import { onScreen as windowOnScreen } from "../../../workbench/window/onScreen";
 
@@ -46,21 +46,24 @@ export const clearLoadNotice = (): void => {
 
 // Lazy subtrees are keyed by path alone, so a scope switch must drop them (the tree query re-keys itself). Expanded
 // folders are kept: the same paths are still correct.
-watch(workspaceAgent, () => {
-    lazyChildren.value = new Map();
-    lazyHidden.value = new Map();
-    lazyLoading.value = new Set();
-    relistQueued.value.clear();
-    unseenChanges.value.clear();
-    forgetFollowed();
-    // Also clears any load notice: it could still be naming a directory from the scope just dropped.
-    clearLoadNotice();
-});
+watch(
+    () => scopeKey(workspaceView.value),
+    () => {
+        lazyChildren.value = new Map();
+        lazyHidden.value = new Map();
+        lazyLoading.value = new Set();
+        relistQueued.value.clear();
+        unseenChanges.value.clear();
+        forgetFollowed();
+        // Also clears any load notice: it could still be naming a directory from the scope just dropped.
+        clearLoadNotice();
+    },
+);
 
 // One directory's listing, retried once if the request never reached the daemon. A SandboxHttpError (the daemon refused
 // it) is rethrown immediately, not retried.
 const childrenOf = async (path: string): Promise<WorkspaceChildren> => {
-    const request = (): Promise<WorkspaceChildren> => sandboxRpc.workspace.children({ path, agent: workspaceAgent.value });
+    const request = (): Promise<WorkspaceChildren> => sandboxRpc.workspace.children({ path, ...scopeFields(workspaceView.value) });
     try {
         return await request();
     } catch (failure) {
@@ -83,14 +86,14 @@ export const loadChildren = async (path: string): Promise<void> => {
 const fetchChildren = async (path: string): Promise<void> => {
     // Captures the scope before the request: a late answer must not land under a different scope's identical path,
     // whether the checkout or the whole sandbox moved.
-    const asked = workspaceAgent.value;
+    const asked = scopeKey(workspaceView.value);
     const current = sandboxScopeGuard();
     lazyLoading.value.add(path);
     leftThisTurn.add(path);
     queueMicrotask(() => leftThisTurn.delete(path));
     try {
         const body = await childrenOf(path);
-        if (!current() || workspaceAgent.value !== asked) {
+        if (!current() || scopeKey(workspaceView.value) !== asked) {
             return;
         }
         lazyChildren.value.set(path, body.entries);
@@ -105,7 +108,7 @@ const fetchChildren = async (path: string): Promise<void> => {
         }
     } catch (loadError) {
         // A read the user has already navigated away from doesn't get to raise an error for the tree shown now.
-        if (!current() || workspaceAgent.value !== asked) {
+        if (!current() || scopeKey(workspaceView.value) !== asked) {
             return;
         }
         const notice = noticeFrom(loadError, t(`workspace.useWorkspaceTree.couldntOpen`, { path }));
@@ -196,7 +199,7 @@ const awaitingDelta = sandboxValue(
 
 /** Takes a loaded folder's entries from a pushed delta, and keeps following it by deltas; false for one not loaded here. */
 export const patchListing = (path: string, entries: readonly WorkspaceTreeEntry[]): boolean => {
-    if (workspaceAgent.value !== undefined || !lazyChildren.value.has(path)) {
+    if (!isShared(workspaceView.value) || !lazyChildren.value.has(path)) {
         return false;
     }
     lazyChildren.value.set(path, entries);

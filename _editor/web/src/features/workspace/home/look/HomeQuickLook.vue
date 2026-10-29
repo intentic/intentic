@@ -11,7 +11,7 @@ import { sandboxBlob } from "../../../../client/sandbox/sandboxClient";
 import { explorerShows } from "../../explorer/explorerFilter";
 import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { readFileWindow } from "../../../../models/workspace/files/fileWindow";
-import { scopeQuery, workspaceAgent } from "../../../../app/workspaceScope";
+import { scopeQuery, workspaceView } from "../../../../app/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
 import { parentDir } from "@intentic/ui/path";
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
@@ -52,7 +52,7 @@ const decorate = computed(() => {
         return undefined;
     }
     const dir = parentDir(entry.path);
-    return fileLinkDecorator({ dir: dir === `` ? `` : `${dir}/`, agent: workspaceAgent.value });
+    return fileLinkDecorator({ dir: dir === `` ? `` : `${dir}/`, scope: workspaceView.value });
 });
 
 // --- Folder: what the home would show on entering it, so its count agrees with the tiles. ------------------------

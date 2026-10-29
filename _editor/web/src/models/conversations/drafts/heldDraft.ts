@@ -1,7 +1,7 @@
 import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
 import type { ComposerDraft, DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { basename } from "@intentic/ui/path";
-import type { ForkLink, FreshLink } from "../run/turnRequest";
+import type { BranchLink, ForkLink, FreshLink } from "../run/turnRequest";
 
 // THIS BROWSER'S COPY OF ONE UNSENT MESSAGE, and the rules it is kept against the sandbox's by. The sandbox holds the
 // draft (schemas/composer-drafts.ts); this copy is what the composer edits at once, what survives a sandbox nobody can
@@ -21,6 +21,8 @@ export interface DraftWords {
     readonly serves?: QueuedServing | undefined;
     readonly forkOf?: ForkLink | undefined;
     readonly freshOf?: FreshLink | undefined;
+    // This browser's alone: the sandbox's copy of a draft has no place for it yet, so another device opens on the main line.
+    readonly fromBranch?: BranchLink | undefined;
 }
 
 /** The sandbox's copy this one last agreed with. */
@@ -69,6 +71,7 @@ const fromSandbox = (draft: ComposerDraft, previous: HeldDraft | undefined, now:
         serves: draft.serves,
         forkOf: draft.forkOf,
         freshOf: draft.freshOf,
+        fromBranch: previous?.fromBranch,
         since: draft.since,
         editedAt: previous?.editedAt ?? now,
         synced: syncedOf(draft),
@@ -89,6 +92,7 @@ export const joinedWords = (theirs: DraftWords, mine: DraftWords): DraftWords =>
         serves: mine.serves ?? theirs.serves,
         forkOf: mine.forkOf ?? theirs.forkOf,
         freshOf: mine.freshOf ?? theirs.freshOf,
+        fromBranch: mine.fromBranch ?? theirs.fromBranch,
     };
 };
 

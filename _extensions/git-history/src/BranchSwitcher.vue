@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { Button, Icon, Popover, SearchBar, timeAgo, vAction, ui } from "@intentic/extension-ui";
+import { Button, Icon, Popover, SearchBar, timeAgo, ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import { startAgentFrom, viewInWorkspace } from "./branchActions.js";
 import { useBranches } from "./useBranches.js";
 import { t } from "./i18n.js";
 
-// Graph header's branch control: current branch as a pill, a popover to switch, create or delete. Not a bare
-// `<select>`, since a row carries upstream/ahead-behind state and delete needs a confirm step. All git access is one
-// composable call away; this component owns only the popover's local state.
+// Graph header's branch list: the branch the shared workspace stands on as a pill, and a popover of every branch to
+// view in the Workspace or start an agent from, create or delete. Nothing here switches the shared checkout: it stays on
+// its main line. Not a bare `<select>`, since a row carries upstream/ahead-behind state and delete needs a confirm step.
+// All git access is one composable call away; this component owns only the popover's local state.
 
 const { repo } = defineProps<{ repo: string }>();
 const repoRef = computed(() => repo);
-const { groups, current, busy, actionError, checkout, create, remove } = useBranches(repoRef);
+const { groups, current, busy, actionError, create, remove } = useBranches(repoRef);
 
 const popover = ref<InstanceType<typeof Popover>>();
 const filter = ref(``);
@@ -27,17 +29,15 @@ const shown = computed(() => {
     return needle === `` ? groups.value : groups.value.filter((group) => group.name.toLowerCase().includes(needle));
 });
 
-// Checking out a remote-only branch creates the local tracking branch, since plain `git checkout <name>` already does
-// that when exactly one remote matches.
-const pick = async (name: string): Promise<void> => {
-    if (name === current.value?.name) {
-        popover.value?.hide();
-        return;
-    }
-    await checkout(name);
-    if (actionError.value === undefined) {
-        popover.value?.hide();
-    }
+// A row's name is already the short one a view and a start take (groupBranches keys a remote by its branch part), so a
+// remote-only branch needs no folding here: the daemon makes the local one when it is first needed.
+const view = (name: string): void => {
+    popover.value?.hide();
+    viewInWorkspace(repo, name);
+};
+const startFrom = (name: string): void => {
+    popover.value?.hide();
+    startAgentFrom(repo, name);
 };
 
 const toggle = (event: Event): void => {
@@ -51,16 +51,16 @@ const toggle = (event: Event): void => {
 const submitCreate = async (): Promise<void> => {
     const name = newName.value.trim();
     // `create` drops its own re-entry, so a second Enter would otherwise fall straight through to the success branch
-    // and dismiss the popover while the first create is still running.
+    // and close the field while the first create is still running.
     if (name === `` || busy.value) {
         return;
     }
-    // From HEAD, and switch to it: "new branch from here", the gesture people actually mean.
-    await create(name, { checkout: true });
+    // From HEAD, which stays where it is. The list narrows to the new row, so its view and start are the next press.
+    await create(name);
     if (actionError.value === undefined) {
         newName.value = ``;
         creating.value = false;
-        popover.value?.hide();
+        filter.value = name;
     }
 };
 
@@ -99,7 +99,8 @@ const confirmDelete = async (name: string): Promise<void> => {
         </button>
 
         <Popover ref="popover">
-            <div class="flex w-72 flex-col gap-1.5">
+            <div class="flex w-80 flex-col gap-1.5">
+                <p class="text-2xs text-subtle">{{ t(`branchSwitcher.caption`) }}</p>
                 <SearchBar
                     v-model="filter"
                     variant="field"
@@ -114,12 +115,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                     <!-- One row per line of work: `main` and `origin/main` share a row, named once with remote pills after it. -->
                     <template v-for="branch in shown" :key="branch.name">
                         <div class="group/row flex items-center gap-1 rounded transition-colors hover:bg-overlay">
-                            <button
-                                type="button"
-                                class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left"
-                                :disabled="busy"
-                                v-action="() => pick(branch.name)"
-                            >
+                            <div class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1">
                                 <Icon
                                     :name="branch.local?.current ? 'check' : branch.local ? 'code' : 'cloud'"
                                     class="shrink-0 text-3xs"
@@ -146,7 +142,29 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <span v-if="(branch.local?.behind ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.local!.behind }}</span>
                                 <span v-if="(branch.local?.ahead ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↑{{ branch.local!.ahead }}</span>
                                 <span class="shrink-0 text-2xs text-subtle">{{ timeAgo(branch.at) }}</span>
-                            </button>
+                            </div>
+                            <!-- The branch the shared workspace stands on is what the Workspace already shows: named, not offered. -->
+                            <span v-if="branch.local?.current" class="shrink-0 pr-1.5 text-2xs text-subtle">{{ t(`branchSwitcher.workspace`) }}</span>
+                            <template v-else>
+                                <button
+                                    type="button"
+                                    :class="ui.iconButton({ size: `xs`, tone: `subtle` })"
+                                    v-tooltip.top="{ title: t(`branchActions.view`) }"
+                                    :aria-label="t(`branchActions.viewNamed`, { branch: branch.name })"
+                                    @click="view(branch.name)"
+                                >
+                                    <Icon name="eye" class="text-2xs" />
+                                </button>
+                                <button
+                                    type="button"
+                                    :class="ui.iconButton({ size: `xs`, tone: `subtle` })"
+                                    v-tooltip.top="{ title: t(`branchActions.start`) }"
+                                    :aria-label="t(`branchActions.startNamed`, { branch: branch.name })"
+                                    @click="startFrom(branch.name)"
+                                >
+                                    <Icon name="robot" class="text-2xs" />
+                                </button>
+                            </template>
                             <!-- Only a local branch can be deleted here; a remote one belongs to somebody else's repository. -->
                             <button
                                 v-if="branch.local && !branch.local.current"

@@ -1,8 +1,15 @@
 {
+    "branchActions": {
+        "start": "Agent starten",
+        "startNamed": "Agent von {branch} aus starten",
+        "view": "Im Workspace ansehen",
+        "viewNamed": "{branch} im Workspace ansehen"
+    },
     "branchSwitcher": {
         "branch": "Branch",
         "branches": "Branches",
         "cancel": "Abbrechen",
+        "caption": "Der Workspace bleibt auf seiner Hauptlinie. Sehen Sie sich einen anderen Branch an, oder starten Sie einen Agenten davon.",
         "create": "Erstellen",
         "delete": "{name} löschen?",
         "delete2": "Löschen",
@@ -15,7 +22,8 @@
         "newBranchHere": "Neuer Branch von hier",
         "noBranchesMatch": "Keine Branches passen.",
         "unmergedForceDelete": "Nicht gemergt, Löschen erzwingen?",
-        "upstreamBranchDeleted": "Upstream gelöscht"
+        "upstreamBranchDeleted": "Upstream gelöscht",
+        "workspace": "Workspace"
     },
     "extension": {
         "git": "Git",
@@ -33,9 +41,6 @@
         "cancel": "Abbrechen",
         "changed": "{count} geändert",
         "changedFiles": "{count} geänderte Datei | {count} geänderte Dateien",
-        "checkout": "Auschecken…",
-        "checkout2": "Auschecken",
-        "checkout3": "{local} auschecken",
         "cherryPick": "Cherry-Pick…",
         "commit": "Commit",
         "conflicted": "{conflicted} in Konflikt",
@@ -90,8 +95,6 @@
         "dialog": {
             "branch": "Branch erstellen",
             "branchConfirm": "Erstellen",
-            "checkout": "Commit auschecken",
-            "checkoutConfirm": "Auschecken",
             "cherryPick": "Commit mit Cherry-pick übernehmen",
             "cherryPickConfirm": "Cherry-pick",
             "drop": "Commit entfernen",
@@ -108,7 +111,6 @@
             "tagConfirm": "Tag hinzufügen"
         },
         "body": {
-            "checkout": "{sha} direkt auschecken (losgelöster HEAD). Nicht committete Änderungen blockieren dies.",
             "cherryPick": "Die Änderung von {sha} als neuen Commit auf den aktuellen Branch kopieren.",
             "drop": "{sha} aus dem Verlauf entfernen und spätere Commits auf seinem Vorgänger erneut anwenden.",
             "merge": "{sha} in den aktuellen Branch ({branch}) zusammenführen.",
@@ -125,7 +127,6 @@
         "actionFailed": "Aktion fehlgeschlagen."
     },
     "useBranches": {
-        "checkoutFailed": "Auschecken fehlgeschlagen. Committen, stagen oder verwerfen Sie zuerst Ihre Änderungen.",
         "couldntCreate": "Dieser Branch konnte nicht erstellt werden.",
         "couldntDelete": "Dieser Branch konnte nicht gelöscht werden.",
         "couldntPush": "Dieser Branch konnte nicht gepusht werden.",

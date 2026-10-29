@@ -9,6 +9,7 @@ import {
     type RenderedMarkdown,
     type StreamingMarkdown,
 } from "@intentic/ui/markdown";
+import { agentScope, type ViewScope } from "../../app/workspaceScope";
 import { linkifyFileRefs } from "./markdownFileLinks";
 import { type DrawPicture, resolvePictures } from "./markdownImages";
 
@@ -20,7 +21,8 @@ export { markdownParseCount, renderParsedMarkdown, settledEnd } from "@intentic/
 export type { MarkdownPart, ParsedMarkdown, RenderedMarkdown, StreamingMarkdown };
 
 // The app's file-link decorator, handed to the engine directly or as the kit's <Markdown> `decorate` prop. `dir`
-// resolves a relative reference; `agent` scopes links to that conversation's workspace copy. A document with a folder
+// resolves a relative reference; `agent` scopes links to that conversation's workspace copy, `scope` to any copy (a
+// branch the Workspace shows) and wins over it. A document with a folder
 // can also draw the pictures it names relative to it (markdownImages.ts), from what `picture` answers for a workspace
 // path; agent prose has no folder to resolve them in. `scheme` is the app's look, which a `<picture>` offering a dark and
 // a light version picks by.
@@ -28,11 +30,12 @@ export const fileLinkDecorator =
     (options?: {
         readonly dir?: string;
         readonly agent?: string;
+        readonly scope?: ViewScope;
         readonly picture?: DrawPicture;
         readonly scheme?: `light` | `dark`;
     }): MarkdownDecorator =>
     (fragment) => {
-        linkifyFileRefs(fragment, options?.dir, options?.agent);
+        linkifyFileRefs(fragment, options?.dir, options?.scope ?? agentScope(options?.agent));
         if (options?.dir !== undefined && options.picture !== undefined) {
             resolvePictures(fragment, options.dir, options.picture, options.scheme);
         }
@@ -50,4 +53,4 @@ export const parseMarkdownParts = (source: string, agent?: string): ParsedMarkdo
 // One renderer per streaming message, held for its lifetime. `agent` arrives as a getter, not a value, since the
 // renderer outlives any single frame and the conversation's scope can still change before its first turn.
 export const createStreamingMarkdown = (agent: () => string | undefined): StreamingMarkdown =>
-    createEngineStream((fragment) => linkifyFileRefs(fragment, undefined, agent()));
+    createEngineStream((fragment) => linkifyFileRefs(fragment, undefined, agentScope(agent())));

@@ -7,6 +7,8 @@ import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
 import { deleteAgedConversations } from "../conversations/registry/transcript-retention.js";
 import { cacheDirsOf, rawOutputDirsOf, type RetentionDeps, type RetentionKind, type RetentionPass, runRetentionSweep } from "../retention/retention-sweep.js";
 import { orphanCheckoutsChore } from "../conversations/worktrees/orphan-checkouts.js";
+import { branchCheckoutsChore } from "../conversations/worktrees/branches/branch-checkouts.js";
+import { liveBranchStarts } from "../conversations/land/branch/branch-repos.js";
 import { gitGcChore } from "../git/ops/git-gc.js";
 import { gitMaintenanceChore } from "../git/ops/maintenance.js";
 import { clearStaleGitLocks, staleGitLocksChore } from "../git/ops/stale-git-locks.js";
@@ -158,6 +160,7 @@ const choresOf = (phase: BootPhase): Chore[] => {
                       owners: services.conversationUnits.owners,
                       logger,
                   }),
+                  branchCheckoutsChore({ branchCheckouts: services.branchCheckouts, targeted: () => liveBranchStarts(services.agents), logger }),
               ]
             : []),
         ...(role.container ? [dockerPruneChore({ processes: services.processes, conversations: services.conversations, logger })] : []),

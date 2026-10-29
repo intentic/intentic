@@ -66,6 +66,8 @@ import { parentCardOf, writesTo, writeTo } from "../../../models/conversations/p
 import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerLandPill from "../composer/ComposerLandPill.vue";
+import ComposerStartPill from "../composer/ComposerStartPill.vue";
+import { useStartFrom } from "../composer/composerStartFrom";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
 import ComposerSendLater from "../composer/later/ComposerSendLater.vue";
@@ -205,6 +207,7 @@ const {
     end: endLoop,
 } = runThrough;
 const steered = computed(() => pickedWorkflow.value !== undefined);
+const startFrom = useStartFrom(() => props.conversation);
 
 const {
     modelOpen,
@@ -238,6 +241,7 @@ const {
     openFromMore,
 } = useComposerControls({
     conversation: () => props.conversation,
+    startFrom,
     mode,
     provider,
     model,
@@ -735,6 +739,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                                 <Icon name="chevron-down" class="text-2xs text-subtle @max-lg:hidden" />
                                             </button>
 
+                                            <ComposerStartPill :start="startFrom" :conversation="conversation" :ride="inRow.startFrom" :fallback="morePill ?? composerForm" />
                                             <!-- Persona: who the chat is to the outside world. -->
                                             <button
                                                 v-if="inRow.persona"

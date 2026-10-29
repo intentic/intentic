@@ -14,7 +14,7 @@ import { sandboxRawUpload } from "../../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
-import { workspaceAgent } from "../../../../app/workspaceScope";
+import { scopeFields, workspaceView } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../../../../models/workspace/files/provisionalEntries";
 import { encodingFor, multiplexed } from "./uploadLink";
@@ -190,7 +190,7 @@ const warmArchive = (path: string): void => {
     if (tally.value.count > TAR_THRESHOLD || !isBrowsableArchive(basename(path))) {
         return;
     }
-    void sandboxRpc.workspace.children({ path, agent: workspaceAgent.value }).catch(() => undefined);
+    void sandboxRpc.workspace.children({ path, ...scopeFields(workspaceView.value) }).catch(() => undefined);
 };
 
 // The one place a file's status moves, so neither the explorer's placeholder row for it nor the card's counts can

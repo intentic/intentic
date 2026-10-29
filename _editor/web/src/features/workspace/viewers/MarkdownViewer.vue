@@ -7,6 +7,7 @@ import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { openFileRefFromEvent, openWorkspaceRef } from "../../../models/workspace/files/openFileRef";
 import { useViewScope } from "../../../app/workspaceScope";
+import { linkScope } from "../../../lib/markdown/markdownFileLinks";
 import { documentPicture } from "../../../models/workspace/home/thumbnails";
 import type { LineJump } from "../../../models/workspace/tabs/workspaceTabs";
 import CodeView from "./CodeView.vue";
@@ -48,15 +49,15 @@ const editing = computed(() => editable === true && view.value === `document`);
 // Held as a computed so identity is stable and the component re-parses only when the decorator changes; a doc
 // cross-referencing others (README → ARCHITECTURE.md) navigates within the reader's own scope. A picture beside the
 // document is drawn from its own bytes in that scope: the cache is read inside the parse, which redraws when they land.
-const viewAgent = useViewScope();
+const viewScope = useViewScope();
 // A `<picture>` offering a dark and a light version picks by the app's look, so a scheme change re-parses.
 const { scheme } = useTheme();
 const decorate = computed<MarkdownDecorator>(() => {
-    const agent = viewAgent.value;
+    const scope = viewScope.value;
     const links = fileLinkDecorator({
         dir: path.slice(0, path.lastIndexOf(`/`) + 1),
-        agent,
-        picture: (file) => documentPicture(agent, file),
+        scope,
+        picture: (file) => documentPicture(scope, file),
         scheme: scheme.value,
     });
     const tickable = editable === true;
@@ -138,7 +139,7 @@ const onEditingClick = (event: MouseEvent): void => {
     const file = anchor.dataset[`file`];
     if (file !== undefined && file !== ``) {
         const at = Number(anchor.dataset[`line`]);
-        void openWorkspaceRef(file, Number.isInteger(at) && at > 0 ? at : undefined, { agent: anchor.dataset[`agent`] });
+        void openWorkspaceRef(file, Number.isInteger(at) && at > 0 ? at : undefined, linkScope(anchor.dataset));
         return;
     }
     const href = anchor.getAttribute(`href`) ?? ``;

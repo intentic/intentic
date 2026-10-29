@@ -238,6 +238,9 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.freshOf !== undefined) {
         conversation.pendingFreshOf.value = tab.freshOf;
     }
+    if (tab.fromBranch !== undefined) {
+        conversation.pendingFromBranch.value = tab.fromBranch;
+    }
     // Its words are its draft's, in the composer before anything asks whether the tab is an untouched blank.
     seedComposer(conversation, tab);
     return conversation;

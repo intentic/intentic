@@ -20,6 +20,7 @@ import { gitFailureReason } from "./git.js";
 import { createPushRuns } from "./ops/push-run.js";
 import { arrivalLanding } from "./remote/project-arrival.js";
 import { gitImplementer, indexRoutes } from "./index.routes.js";
+import { createOffMainLine, mainLineRoutes } from "./main-line.routes.js";
 import { opt } from "../opt.js";
 
 // How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
@@ -173,6 +174,7 @@ export const createGitRoutes = (services: Services) => {
             }
             return result;
         });
+    const offMainLine = createOffMainLine();
     // Repo dirs the last scan walked; the real driver behind scan latency.
     let scannedRepos = 0;
     // One repo's review row, used both by the workspace scan and by the commit route re-reading the repo it just wrote
@@ -190,7 +192,7 @@ export const createGitRoutes = (services: Services) => {
                     services.git.operationInProgress(dir),
                 ]);
                 const worktree = ownWork(repo, unstaged);
-                const scratch = await targets.scratchRow(repo, dir, worktree);
+                const [scratch, mainBranch] = await Promise.all([targets.scratchRow(repo, dir, worktree), offMainLine(dir, branch)]);
                 // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
@@ -212,7 +214,9 @@ export const createGitRoutes = (services: Services) => {
                     publishable ||
                     // A halted, clean-tree repo is rare but real; it's the only place Abort lives, so it must still
                     // show.
-                    operation !== undefined
+                    operation !== undefined ||
+                    // Off its main line, the way back must show even on a clean tree (main-line-lock.ts).
+                    mainBranch !== undefined
                 ) {
                     const capped = capRepoChanges(conflicted, staged, worktree);
                     // Code-only +/- per row (code-counts.ts), computed here so a badge never moves after it's drawn.
@@ -238,6 +242,7 @@ export const createGitRoutes = (services: Services) => {
                     return {
                         repo,
                         ...(branch !== undefined ? { branch } : {}),
+                        ...opt("mainBranch", mainBranch),
                         conflicted: countedConflicted,
                         ...(operation !== undefined ? { operation } : {}),
                         staged: countedStaged,
@@ -455,15 +460,6 @@ export const createGitRoutes = (services: Services) => {
             await services.git.createTagAt(await repoDir(input.repo), input.name, input.sha);
             return { ok: true } as const;
         }),
-        checkout: i.checkout.handler(({ input }) =>
-            onRepo(input.repo, async (dir) => {
-                await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
-                await services.git.checkoutRef(dir, input.ref);
-                invalidateScan();
-                services.history.notifyUserWrite();
-                return { ok: true } as const;
-            }),
-        ),
         reset: i.reset.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await services.history.snapshot("user", `before reset --${input.mode}`);
@@ -491,6 +487,8 @@ export const createGitRoutes = (services: Services) => {
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         // Stage and commit, the plain routes and the runs (index.routes.ts).
         ...indexRoutes(i, { services, repoDir, onRepo, whileCommitting, invalidateScan, targets, lightChip, scanRepo, identifyOrigins }),
+        // Checkout, branch-and-switch and the way back: the shared checkout stays on its main line (main-line.routes.ts).
+        ...mainLineRoutes(i, { services, repoDir, onRepo, invalidateScan }),
         unstage: i.unstage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await (input.chip === undefined ? targets.unstageTarget(input.repo, dir, input) : clearChip(input.repo, dir, input.chip));
@@ -503,25 +501,6 @@ export const createGitRoutes = (services: Services) => {
             // Two independent read-only sweeps, fetched together since the switcher renders them as a pair.
             const [branches, remotes] = await Promise.all([services.git.listBranches(dir), services.git.listRemoteBranches(dir)]);
             return { branches, remotes };
-        }),
-        // Non-destructive unless it also checks out; checking out moves HEAD and the worktree, so it checkpoints first
-        // like any HEAD-mover.
-        createBranchAt: i.createBranchAt.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            if (input.checkout === true) {
-                await services.history.snapshot("user", `before new branch ${input.name}`);
-            }
-            await services.git.createBranch(dir, input.name, input.start, input.checkout === true);
-            if (input.checkout === true) {
-                invalidateScan();
-                services.history.notifyUserWrite();
-            }
-            return { ok: true } as const;
-        }),
-        // Touches no file; git's unmerged-branch refusal propagates so the UI can offer a forced retry.
-        deleteBranch: i.deleteBranch.handler(async ({ input }) => {
-            await services.git.deleteBranch(await repoDir(input.repo), input.name, input.force === true);
-            return { ok: true } as const;
         }),
         // Each returns a GitActionResult, so "no remote"/"no upstream"/"conflicts with upstream" render as reasons, not
         // 500s; only pull touches the worktree, so only pull checkpoints.

@@ -5,6 +5,7 @@ import { floatingWindowPanel, floatsElsewhere } from "./floating";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 import type { SideInput } from "../side/sideTabs";
+import type { ViewScope } from "../../app/workspaceScope";
 
 // A link pressed in a popped-out panel is handed as an errand (not a navigation) to whichever window with the app in it
 // last had the reader's attention, never to itself; addressed (`to`), not broadcast, so exactly one acts. If none is
@@ -16,7 +17,7 @@ export type MainWindowErrand =
           readonly kind: `file`;
           readonly path: string;
           readonly line: number | undefined;
-          readonly scope: { readonly agent: string | undefined } | undefined;
+          readonly scope: ViewScope | undefined;
           // The Workspace itself, not beside the section there: a peek's "Open in Workspace" pressed in a popped-out
           // chat, which the main window must not turn into a peek of its own.
           readonly home?: boolean;

@@ -3,6 +3,8 @@ import { LandingDeliverySchema } from "./project-delivery.js";
 import { AgentNextSchema } from "./agent-next.js";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema, FreshSessionSchema } from "./agent.js";
+import { FROM_BRANCHES_DESCRIPTION } from "./conversation-links.js";
+import { RepoBranchSchema } from "./shared.js";
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
@@ -398,6 +400,8 @@ export const AgentSummarySchema = z.object({
     fresh: FreshSessionSchema.optional().describe(
         "Set on a conversation started on another conversation's work without its messages (a code review, a test pass, a person's own ask): which one, for what, and when. Absent for every other conversation.",
     ),
+    // Latched by the opening compose (placement.branches): the repositories it works on a branch of, which its land commits onto.
+    branches: z.array(RepoBranchSchema).optional().describe(FROM_BRANCHES_DESCRIPTION),
     // Latched on the opening turn (ids/conversation-ids.ts homeConversationId). Rides the summary because it decides who
     // may see the row at all (auth/fleet-scope.ts visibleTo): its owner, and the sandbox's owner.
     home: z
@@ -524,7 +528,9 @@ export const AgentSummarySchema = z.object({
             code: z
                 .string()
                 .optional()
-                .describe("Which kind of failure it was, when the sandbox could tell: unlinked when its copy lost its link to the workspace. Absent otherwise."),
+                .describe(
+                    "Which kind of failure it was, when the sandbox could tell: unlinked when its copy lost its link to the workspace, off_main_line when the shared workspace was moved off its main line and the work waits until it is back. Absent otherwise.",
+                ),
             at: z.number().describe("When it failed, in milliseconds."),
         })
         .optional()

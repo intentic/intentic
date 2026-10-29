@@ -11,9 +11,9 @@ import { useRefRefresh } from "./useRefRefresh.js";
 // Interval between push-settled reads.
 const PUSH_POLL_MS = 700;
 
-// One repo's local branches for the switcher header; re-keys when `repo` changes. Every write refreshes both the branch
-// list and the log, since both render ref decorations. Checkout no longer resets edit buffers: saves are
-// baseline-guarded daemon-side, and the file viewer offers Reload.
+// One repo's branches for the header's branch list; re-keys when `repo` changes. Every write refreshes both the branch
+// list and the log, since both render ref decorations. Nothing here switches the shared checkout: it stays on its main
+// line, and another branch is viewed in the Workspace or started from (branchActions.ts).
 
 export function useBranches(repo: Ref<string>) {
     const api = host();
@@ -42,15 +42,8 @@ export function useBranches(repo: Ref<string>) {
             queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),
         ]);
 
-    const checkout = (name: string): Promise<void> =>
-        run(async () => {
-            await api.sandbox.rpc.git.checkout({ repo: repo.value, ref: name });
-            await invalidateRefs();
-        }, t(`useBranches.checkoutFailed`));
-
-    // `start` defaults to HEAD daemon-side. `checkout` makes this "new branch from here"; without it the branch is
-    // created and HEAD stays put.
-    const create = (name: string, options: { start?: string; checkout?: boolean } = {}): Promise<void> =>
+    // `start` defaults to HEAD daemon-side. Created, never switched to: the shared checkout refuses that.
+    const create = (name: string, options: { start?: string } = {}): Promise<void> =>
         run(async () => {
             await api.sandbox.rpc.git.createBranchAt({ repo: repo.value, name, ...options });
             await invalidateRefs();
@@ -94,7 +87,6 @@ export function useBranches(repo: Ref<string>) {
         busy,
         actionError,
         refresh: (): Promise<unknown> => invalidateRefs(),
-        checkout,
         create,
         push,
         remove,

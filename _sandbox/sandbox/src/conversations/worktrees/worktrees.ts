@@ -8,6 +8,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
+import { mainLineRev } from "../../git/main-line-tip.js";
 import { reserveCompositionSpace, selectedComposition } from "./composition-space.js";
 import type { HistorySpace } from "../../system/resources/storage/checkout-space.js";
 import type { PerfTracker } from "../../system/resources/perf.js";
@@ -23,9 +24,8 @@ import { addCheckoutOver } from "./checkout-aside.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
-// at <id>/<repo>/, mirroring the /work layout.
-// Worktrees live on /history: they survive container rebuilds and stay outside the /work tree walk, watcher, iq and
-// history scopes; object stores stay shared.
+// at <id>/<repo>/, mirroring the /work layout. Worktrees live on /history: they survive container rebuilds and stay
+// outside the /work tree walk, watcher, iq and history scopes; object stores stay shared.
 // Repos an agent clones inside its own worktree are outside diff and land.
 
 export interface ConversationWorktree {
@@ -235,11 +235,11 @@ export const createAgentWorktrees = (
         }
     };
 
-    // Main's HEAD for a new composition, undefined to leave the repo out: an unborn HEAD has nothing to branch from, and
-    // a repo git cannot read (a `.git` pointer to nothing) must not stop the rest of the workspace's conversation.
+    // Main's line for a new composition (main-line-tip.ts), undefined to leave the repo out: an unborn HEAD has nothing
+    // to branch from, and a repo git cannot read (a `.git` pointer to nothing) must not stop the rest of the workspace's.
     const composableHead = async (repo: string): Promise<string | undefined> => {
         try {
-            const head = await verifiedSha(mainDir(repo), "HEAD");
+            const head = await verifiedSha(mainDir(repo), await mainLineRev(mainDir(repo), git));
             if (head === undefined) {
                 logger.warn({ repo }, "agents: unborn HEAD, repo excluded from worktree composition");
             }

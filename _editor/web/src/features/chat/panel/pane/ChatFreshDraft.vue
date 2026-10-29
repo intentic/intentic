@@ -7,8 +7,9 @@ import { computed, watch } from "vue";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { providerCommands } from "../../../../models/providers/providerCatalog";
-import { refreshFreshDraft, switchFreshKind, unlinkFresh } from "../../../../models/fleet/freshSession";
+import { refreshFreshDraft, switchFreshKind, unlinkFresh,freshKindsOf } from "../../../../models/fleet/freshSession";
 import { useAgents } from "../../../../models/fleet/useAgents";
+import ChatBranchDraft from "./ChatBranchDraft.vue";
 
 /* A fresh session not sent yet (freshSession.ts), said over the composer: whose work it opens on, that it carries none of
    that conversation, what it is for (switching swaps the ask while the reader has not written over it), and the way
@@ -22,7 +23,9 @@ const pending = computed(() => conversation.value.pendingFreshOf.value);
 const origin = computed(() => (pending.value === undefined ? undefined : agentById(pending.value.conversationId)));
 const originTitle = computed(() => (origin.value === undefined ? t(`agents.freshSession.anotherChat`) : agentDisplayTitle(origin.value)));
 
-const options = computed(() => FRESH_KINDS.map((kind) => ({ value: kind, label: t(`agents.freshSession.kind.${kind}`), icon: FRESH_ICONS[kind] })));
+// Only the kinds this work can take: a check needs changes to look at, the reader's own ask takes any copy.
+const kinds = computed(() => (origin.value === undefined ? FRESH_KINDS : freshKindsOf(origin.value)));
+const options = computed(() => kinds.value.map((kind) => ({ value: kind, label: t(`agents.freshSession.kind.${kind}`), icon: FRESH_ICONS[kind] })));
 const kind = computed({
     get: (): FreshKind => pending.value?.kind ?? `ask`,
     set: (next: FreshKind) => void switchFreshKind(conversation.value, origin.value, next),
@@ -38,6 +41,8 @@ watch(provider, (_now, before) => {
 </script>
 
 <template>
+    <!-- A branch start's own strip: the other start a draft can hold, never beside this one. -->
+    <ChatBranchDraft />
     <div
         v-if="pending !== undefined"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted shadow-sm"
@@ -51,7 +56,7 @@ watch(provider, (_now, before) => {
                 </template>
             </i18n-t>
         </span>
-        <SegmentedControl v-model="kind" :options="options" size="xs" class="shrink-0" />
+        <SegmentedControl v-if="options.length > 1" v-model="kind" :options="options" size="xs" class="shrink-0" />
         <button
             type="button"
             class="touch-target flex shrink-0 cursor-pointer items-center rounded-sm text-subtle hover:text-content"

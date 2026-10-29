@@ -5,6 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { type ChatShot, shotName } from "./shots";
 import { downloadOriginal, type Picture, picture } from "../../../../models/workspace/home/thumbnails";
+import { agentScope } from "../../../../app/workspaceScope";
 
 // The conversation's pictures one at a time and large, opened from a strip's tile or a tool card's picture; the arrows
 // walk every turn's strip in order and the filmstrip jumps. It draws the daemon's re-encoded view at once and swaps in
@@ -50,9 +51,9 @@ const index = computed(() =>
     ),
 );
 const shot = computed<ChatShot | undefined>(() => props.shots[index.value]);
-const view = computed(() => (shot.value === undefined ? undefined : picture(props.agent, shot.value.path, `view`)));
+const view = computed(() => (shot.value === undefined ? undefined : picture(agentScope(props.agent), shot.value.path, `view`)));
 // Asked for the picture on screen only; the neighbours fetched ahead are views, so walking past costs no originals.
-const original = computed(() => (shot.value === undefined ? undefined : picture(props.agent, shot.value.path, `original`)));
+const original = computed(() => (shot.value === undefined ? undefined : picture(agentScope(props.agent), shot.value.path, `original`)));
 // The view is the picture at its own size, so it stands in for the original, at fit and at actual size, until the file arrives.
 const drawn = computed(() => (original.value?.url === undefined ? view.value : original.value));
 const name = computed(() => (shot.value === undefined ? `` : shotName(shot.value.path)));
@@ -64,7 +65,7 @@ watch(
     (position) => {
         for (const neighbour of [props.shots[position - 1], props.shots[position + 1]]) {
             if (neighbour !== undefined) {
-                picture(props.agent, neighbour.path, `view`);
+                picture(agentScope(props.agent), neighbour.path, `view`);
             }
         }
     },
@@ -73,7 +74,7 @@ watch(
 
 const download = (): void => {
     if (shot.value !== undefined) {
-        void downloadOriginal(props.agent, shot.value.path);
+        void downloadOriginal(agentScope(props.agent), shot.value.path);
     }
 };
 
@@ -103,7 +104,7 @@ const onKey = (event: KeyboardEvent): void => {
 const groups = computed(() => {
     const out: { turnId: number; items: { shot: ChatShot; index: number; tile: Picture | undefined }[] }[] = [];
     for (const [position, entry] of props.shots.entries()) {
-        const item = { shot: entry, index: position, tile: picture(props.agent, entry.path, `strip`) };
+        const item = { shot: entry, index: position, tile: picture(agentScope(props.agent), entry.path, `strip`) };
         const last = out.at(-1);
         if (last?.turnId === entry.turnId) {
             last.items.push(item);

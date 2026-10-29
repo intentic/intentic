@@ -73,7 +73,7 @@ test("a large owner overlap is a workspace conflict with its count, without per-
     await writeMany(work, COUNT, (i) => `owner ${i}\n`);
     await writeMany(conversation.cwd, COUNT, (i) => `agent ${i}\n`);
     await writeFile(join(conversation.cwd, "app.ts"), "agent edit\n");
-    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", undefined, boundedGit);
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", undefined, undefined, boundedGit);
     expect(result.landed).toBe(false);
     expect(result.conflicts?.[0]?.paths).toEqual(Array.from({ length: COUNT }, (_, i) => ({ path: pathOf(i), reason: "workspace" as const })).sort((a, b) => a.path.localeCompare(b.path)));
     expect(result.conflicts?.[0]?.clean).toBe(1);
@@ -95,7 +95,7 @@ test("one already-present file leaves a remainder past ARG_MAX that lands in bou
         }
         return boundedGit(dir, args, env);
     };
-    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", undefined, pairedGit);
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", undefined, undefined, pairedGit);
     expect(result.landed).toBe(true);
     expect(result.conflicts).toBeUndefined();
     expect(result.diff.files).toBe(COUNT + 2);

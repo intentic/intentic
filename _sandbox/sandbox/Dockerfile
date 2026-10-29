@@ -355,9 +355,11 @@ COPY _sandbox/sandbox/seed-skills /root/.claude/skills
 # command block below).
 COPY --chmod=755 _sandbox/sandbox/bin/tmux-run _sandbox/sandbox/bin/queue-run /usr/local/bin/
 # The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
-# command's PATH (src/workload/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
-# node loads for them instead. Each name is a link to the one wrapper.
-COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims /opt/sandbox/heavy-shims
+# command's PATH (src/workload/heavy-commands.ts heavyEnvPrefix) and a login shell's (the profile line above); node
+# programs are judged by the hook node loads for them instead. Each name is a link to the one wrapper. The `git` guard
+# (bin/guard-shims: the shared checkout stays on its main line) rides the same directory and the same layer, since
+# it needs the same place first on those PATHs and the image has no layer to spare.
+COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims _sandbox/sandbox/bin/guard-shims /opt/sandbox/heavy-shims/
 # The output filter and its cleaner registry come from @intentic/output-cleaners, the same files the Claude Code plugin
 # bundles; plain node-builtin .mjs, so they are copied as written rather than built.
 COPY --chmod=755 _sandbox/output-cleaners/src/agent-output-filter.mjs /usr/local/bin/agent-output-filter

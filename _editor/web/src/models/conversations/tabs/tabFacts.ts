@@ -1,5 +1,5 @@
 import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
-import type { FreshLink } from "../run/turnRequest";
+import type { BranchLink, FreshLink } from "../run/turnRequest";
 import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
 import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agent-status/agentStatus-standing";
 import { clockOffset } from "../../agent-status/sandboxClock";
@@ -54,6 +54,8 @@ export interface TabFacts {
     // The work a fresh session not sent yet opens on (Conversation.pendingFreshOf), so its draft card already hangs under
     // that work's card rather than standing apart until the sandbox files it.
     readonly freshOf?: FreshLink;
+    // The branch a draft starts from (Conversation.pendingFromBranch), so its draft card already says so.
+    readonly fromBranch?: BranchLink;
 }
 
 // A sent turn the registry hasn't filed yet, replaced by the registry's own version once it lands. Zero
@@ -160,6 +162,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         resumeWithdrawn: conversation.failures.resumeWithdrawn.value,
         takingBack: conversation.turn.takingBack.value,
         freshOf: conversation.pendingFreshOf.value,
+        fromBranch: conversation.pendingFromBranch.value,
     };
 };
 

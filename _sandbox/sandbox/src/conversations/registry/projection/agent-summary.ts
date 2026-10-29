@@ -86,7 +86,8 @@ export const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queu
 export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending }: PersistedAgent) => ({
     provider: profile.provider,
     harness: profile.harness,
-    ...(placement.kind === "worktree" ? { branch: placement.branch, ...opt("runner", placement.runner) } : {}),
+    // `branches`: what it was started from and lands onto instead of the main line (land/branch-repos.ts).
+    ...(placement.kind === "worktree" ? { branch: placement.branch, ...opt("runner", placement.runner), ...opt("branches", placement.branches) } : {}),
     ...opt("startIn", identity.startIn),
     ...opt("actsAs", identity.actsAs),
     ...opt("lastActsAs", profile.actsAs),

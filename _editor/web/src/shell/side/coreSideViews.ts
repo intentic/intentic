@@ -26,6 +26,7 @@ import { handOffToMainWindow } from "../../workbench/window/mainWindow";
 import { browsersSlot } from "../../workbench/window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
 import { registerSideView } from "../../workbench/side/sideViews";
+import { agentScope } from "../../app/workspaceScope";
 
 // What a side tab calls its tab of the view before the view has named it (browsersTabNames): the app, server or window
 // read off the key itself. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`.
@@ -99,7 +100,7 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
             // Nothing to move there: a reference that matched no file has no home but this card.
             return parsed === undefined || parsed.missing === true
                 ? undefined
-                : { label: words.value.workspace, open: () => void openInWorkspace(parsed.path, undefined, { agent: parsed.agent }) };
+                : { label: words.value.workspace, open: () => void openInWorkspace(parsed.path, undefined, agentScope(parsed.agent)) };
         },
         component: async () => (await import(`./SideFile.vue`)).default,
     });

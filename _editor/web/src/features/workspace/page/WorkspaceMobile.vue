@@ -61,7 +61,7 @@ import SavePanel from "../changes/save/SavePanel.vue";
 import BringProjectButton from "../explorer/BringProjectButton.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
-import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { isShared, scopeFields, workspaceDir, workspaceView } from "../../../app/workspaceScope";
 import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -107,12 +107,12 @@ const diffId = computed(() => (typeof route.query[`diff`] === `string` ? route.q
 const openDir = (path: string): void => {
     // Browsing a folder leaves any open file; clear the path segment along with the query. The root carries no `?dir=`,
     // whatever it is called, so the address of "where this screen starts" doesn't change when the project does.
-    void router.push({ name: `workspace`, params: { path: [] }, query: path === workspaceDir.value ? {} : { dir: path } });
+    void router.push({ name: `workspace`, params: { path: [] }, query: { ...scopeFields(workspaceView.value), ...(path === workspaceDir.value ? {} : { dir: path }) } });
 };
 // A folder path means nothing under a different project root, so opening or clearing a project starts at its floor.
 watch(workspaceDir, () => {
     if (typeof route.query[`dir`] === `string`) {
-        void router.replace({ name: `workspace`, params: { path: [] }, query: {} });
+        void router.replace({ name: `workspace`, params: { path: [] }, query: scopeFields(workspaceView.value) });
     }
 });
 const openDiffNav = (payload: DiffPayload, mode: OpenMode): void => {
@@ -323,7 +323,7 @@ const onPick = (event: Event): void => {
 
 <template>
     <!-- Whose copy of the workspace this is; same tint the desktop wears, a fact about the view, not the form factor. -->
-    <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-canvas text-content" :class="{ 'ws-scoped': workspaceAgent !== undefined }">
+    <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-canvas text-content" :class="{ 'ws-scoped': !isShared(workspaceView) }">
         <!-- Full-screen viewer: `?file=` (any kind) or `?diff=` (from Changes/History). Back is the OS gesture. -->
         <template v-if="openPath !== undefined || diffTab !== undefined">
             <!-- Same bar the desktop tab and agent review use, with the phone's back arrow in the lead slot. -->

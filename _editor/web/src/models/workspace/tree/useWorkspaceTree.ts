@@ -13,7 +13,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { selfMember } from "../../../client/sandbox/useMembers";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
-import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
+import { editFenceOf, fenceWrites, viewFence, writesSomewhere } from "./editScope";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
@@ -38,7 +38,7 @@ import {
 import { actionError, busy, run } from "./treeActions";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
-import { scopeQuery, workspaceAgent } from "../../../app/workspaceScope";
+import { isShared, scopeFields, scopeQuery, workspaceView } from "../../../app/workspaceScope";
 import { basename, joinPath, parentDir } from "@intentic/ui/path";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "./workspaceTreeKey";
@@ -129,7 +129,7 @@ const readFile = async (path: string): Promise<string | undefined> => {
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
 // Never older than the tree a pushed delta already patched in (useWorkspaceLive's treeRead).
-export const fetchWorkspaceTree = treeRead(() => sandboxRpc.workspace.tree({ agent: workspaceAgent.value }));
+export const fetchWorkspaceTree = treeRead(() => sandboxRpc.workspace.tree(scopeFields(workspaceView.value)));
 
 /*
  * THE ONE PATH EVERY TREE WRITE TAKES. Each item's provisional rows are already on screen (the callers below note
@@ -196,7 +196,7 @@ export function useWorkspaceTree() {
     // The manifest only matters for a writer whose edit names areas; everyone else's answer needs none of it.
     const namesAreas = computed(() => role.value === `writer` && Array.isArray(self.value?.edit));
     const { query: areasQuery } = useSandboxQuery({ ...rpcQuery(`areas.list`), enabled: namesAreas });
-    const editFence = computed(() => editFenceOf(role.value, self.value, areasQuery.data.value?.areas));
+    const editFence = computed(() => viewFence(editFenceOf(role.value, self.value, areasQuery.data.value?.areas), isShared(workspaceView.value)));
     // Whether the member may change `path` (a file, or a folder and what goes in it).
     const canWriteAt = (path: string): boolean => fenceWrites(editFence.value, path);
     // Whether they may change anything at all: what decides a surface's read-only look as a whole.

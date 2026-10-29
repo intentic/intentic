@@ -41,11 +41,32 @@ const switchTo = (repo: Repo, ref: string): void => {
     repo.head = { branch: undefined, detached: sha };
 };
 
-export const checkout = (id: string, ref: string) => {
+// The shared checkout stays on its main line, as the daemon's git/main-line-lock.ts keeps it: every fixture repo's is
+// `main`, and anything else is the daemon's refusal, in its words.
+const MAIN_LINE = `main`;
+const mainLineRefusal = (target: string): string =>
+    `The shared workspace stays on \`${MAIN_LINE}\`, since every agent and every person here starts from it and lands into it. ` +
+    `To work on \`${target}\`, start an agent from it; to look at it, pick it in the Workspace's view menu.`;
+
+export const checkout = (id: string, ref: string): GitActionResult => {
     const repo = graphOf(id);
+    if (ref !== MAIN_LINE) {
+        return { ok: false, reason: mainLineRefusal(ref) };
+    }
     checkpoint(`user`, `before checkout ${ref.slice(0, 12)}`);
     switchTo(repo, ref);
     refsMoved(id);
+    return OK;
+};
+
+// Back onto the main line; a fixture repo is never moved off it, so this is the daemon's "already there".
+export const returnToMainLine = (id: string): GitActionResult => {
+    const repo = graphOf(id);
+    if (repo.head.branch !== MAIN_LINE) {
+        checkpoint(`user`, `before returning to ${MAIN_LINE}`);
+        switchTo(repo, MAIN_LINE);
+        refsMoved(id);
+    }
     return OK;
 };
 
@@ -60,12 +81,9 @@ export const createBranchAt = (id: string, name: string, start: string | undefin
     const repo = graphOf(id);
     const from = start ?? `HEAD`;
     if (andCheckout) {
-        checkpoint(`user`, `before new branch ${name}`);
+        refuse(mainLineRefusal(name), 412);
     }
     newBranch(repo, name, resolved(repo, from), from);
-    if (andCheckout) {
-        repo.head = { branch: name, detached: `` };
-    }
     refsMoved(id);
     return OK;
 };

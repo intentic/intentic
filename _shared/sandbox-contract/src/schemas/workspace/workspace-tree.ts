@@ -1,12 +1,20 @@
 // workspace tree + files
 import { z } from "zod";
 import { ConversationIdSchema } from "../agent.js";
+import { BranchNameSchema } from "../shared.js";
 // Which copy of the workspace a read means: the shared /work tree, or (if `agent` is set) that conversation's own
 // checkout, resolved in one place so the escape guard, denylist and ignore rules apply the same either way.
 export const WorkspaceScopeSchema = z.object({
     agent: ConversationIdSchema.optional().describe(
         "Read a conversation's own private copy of the workspace rather than the shared tree. Leave it out for the shared tree. A conversation that is not working privately resolves back to the shared tree rather than failing, so a link need not know which mode it runs in.",
     ),
+    // A branch the shared checkout is not on (it stays on its main line): read from a checkout the daemon keeps of it,
+    // read-only; inside `repo` from the branch, everywhere else from the shared tree. Never together with `agent`.
+    branch: BranchNameSchema.optional()
+        .describe(
+            "Read a branch of one repository as it stands, without the shared workspace leaving its main line: files inside that repository come from the branch, everything else from the shared tree. Never together with `agent`.",
+        ),
+    repo: z.string().min(1).optional().describe('With `branch`: which repository it is a branch of, "root" or left out for the workspace itself.'),
 });
 export type WorkspaceScope = z.infer<typeof WorkspaceScopeSchema>;
 // path is root-relative with forward slashes, feeding straight into the file routes. The interface is declared by hand:

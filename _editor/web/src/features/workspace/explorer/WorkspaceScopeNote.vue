@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { setProjectScope } from "../../../app/projectScope";
 import { workspaceDir } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
+import WorkspaceViewNote from "./WorkspaceViewNote.vue";
 
 // Opening a project, which creating one does, narrows the whole workspace to it (the files, the agents, the checks),
 // and a chip in the status strip was the only sign: a new user took the narrowed tree for missing files, pressed the
@@ -25,6 +26,7 @@ const hint = computed((): Tip => ({
 </script>
 
 <template>
+    <WorkspaceViewNote />
     <div
         v-if="project"
         class="flex h-6 shrink-0 items-center gap-1.5 border-t border-line px-2.5 text-2xs text-subtle"

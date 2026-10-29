@@ -1,5 +1,6 @@
 import { computed, type ComputedRef, type MaybeRefOrGetter, toValue } from "vue";
 import { fileRefTree } from "../files/fileRefs";
+import { agentScope } from "../../app/workspaceScope";
 import { createStreamingMarkdown, type ParsedMarkdown, parseMarkdownParts, type RenderedMarkdown, renderParsedMarkdown } from "./renderMarkdown";
 
 // Single markdown entry point for chat surfaces, returning a list of parts (rendered prose, figure data). Streaming
@@ -19,7 +20,7 @@ const parses = new Map<string, { readonly tree: unknown; readonly parsed: Parsed
 export const cachedParse = (source: string, agent: string | undefined): ParsedMarkdown => {
     const key = `${agent ?? ``}\u0000${source}`;
     // The tree of the copy these words are about, which is the one their file links resolved against.
-    const tree = fileRefTree({ agent });
+    const tree = fileRefTree(agentScope(agent));
     const hit = parses.get(key);
     if (hit !== undefined && hit.tree === tree) {
         // Least recently used goes first: a hit moves to the back.

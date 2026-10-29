@@ -7,7 +7,8 @@ import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/doors/runner-protocol.js";
 import { MENTION_LIMIT } from "../text/mentions.js";
 import { entryId } from "./internal.js";
-import { FRESH_OF_DESCRIPTION, FreshOfSchema, freshOfIssues } from "./conversation-links.js";
+import { FRESH_OF_DESCRIPTION, FreshOfSchema, FROM_BRANCH_DESCRIPTION, freshOfIssues, fromBranchIssues } from "./conversation-links.js";
+import { RepoBranchSchema } from "./shared.js";
 // Agent runtimes the daemon can serve: native providers have dedicated adapters, `endpoint/<id>` names an installed
 // endpoint capability, anything else is an ACP agent capability id. A bare string, not an enum, so an unknown id is a
 // clean error, not a contract change.
@@ -202,6 +203,7 @@ const AgentTurnFieldsSchema = z.object({
     forkOf: ForkOfSchema.optional().describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
     // A fresh session's origin, on its first turn only; requires an isolated conversationId the registry has never seen.
     freshOf: FreshOfSchema.optional().describe(FRESH_OF_DESCRIPTION),
+    fromBranch: RepoBranchSchema.optional().describe(FROM_BRANCH_DESCRIPTION),
     // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
     model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
     // Audience only, never model routing: `runRole` is what fills a model in. A run somebody pressed and is
@@ -312,6 +314,7 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
         message: 'forkOf.files "then" requires isolated',
     })
     .superRefine(freshOfIssues)
+    .superRefine(fromBranchIssues)
     .refine((turn) => turn.sendAt === undefined || turn.sendAfter === undefined, {
         message: "sendAt and sendAfter are two different holds: name one",
     })

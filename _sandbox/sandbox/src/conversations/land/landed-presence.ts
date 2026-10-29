@@ -5,6 +5,7 @@ import { readOnFeed } from "../../git/feed/checkout-feed.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { checkpointOf } from "./agent-changes.js";
 import type { IsolatedAgent, Remover } from "../registry/agents-store.js";
+import { mainTreeRepos } from "./branch/branch-repos.js";
 import { createPathLists, type ExpiryTracker } from "../registry/expiry.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
@@ -110,7 +111,7 @@ const readingMoved = (before: LandedPresence | undefined, reading: LandedPresenc
     before?.landed !== reading?.landed || before?.present !== reading?.present || removerKey(before?.removedBy) !== removerKey(reading?.removedBy);
 
 // Whose last land reached the main tree: a spawned child's that went into its parent's checkout did not, and the
-// parent's own land is what brings it there (land-target.ts).
+// parent's own land is what brings it there (land-target.ts). Nor does a repo started from a branch (mainTreeRepos).
 const landedInMainTree = (entry: IsolatedAgent): boolean => entry.placement.landedInto === undefined;
 
 // A repo's landing still counted against the main checkout's files: one recorded through the door that records it and
@@ -120,7 +121,7 @@ const unabsorbed = (composed: IsolatedAgent["placement"]["repos"][number]): bool
 
 // Whether a reading of this agent reads the main checkout's files: only a land into the main tree some repo has not
 // absorbed yet. Every other agent's reading is answered by its record and history, which no file changing can move.
-export const presenceReadsFiles = (entry: IsolatedAgent): boolean => landedInMainTree(entry) && entry.placement.repos.some(unabsorbed);
+export const presenceReadsFiles = (entry: IsolatedAgent): boolean => landedInMainTree(entry) && mainTreeRepos(entry.placement).some(unabsorbed);
 
 // The main checkout's uncommitted paths as a landing is counted against them: tracked paths diffed against HEAD (a
 // staged landed path counts, a rename is both its names) and the untracked files beside them. Kept per generation of
@@ -261,7 +262,7 @@ export const createLandedPresences = (
                 // A repo that could not be read this time: its 0/0 would read as "nothing missing" and wipe who removed
                 // the work, which no later reading can recover, so the entry keeps what it read last instead.
                 let unread = false;
-                for (const composed of entry.placement.repos) {
+                for (const composed of mainTreeRepos(entry.placement)) {
                     const share = await tallyRepo(entry.id, composed);
                     if (share === `unread`) {
                         unread = true;

@@ -13,7 +13,7 @@ const { workspaceAgent } = await import("../../app/workspaceScope");
 
 // The explorer's fetch landing for one scope, the shared tree when none is named.
 const seed = (tree: { root: string; tree: unknown[] }, agent?: string): void => {
-    treeCache.setQueryData(workspaceTreeKeyFor(agent), tree);
+    treeCache.setQueryData(workspaceTreeKeyFor({ agent }), tree);
 };
 
 // A tree response holding exactly these files, nested the way the daemon returns them.

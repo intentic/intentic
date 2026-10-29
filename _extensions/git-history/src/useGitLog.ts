@@ -80,7 +80,6 @@ export function useGitLog(repo: Ref<string>) {
         deleteTag: (name: string, remote?: string): Promise<unknown> =>
             after(api.sandbox.rpc.git.deleteTag({ repo: repo.value, name, ...(remote !== undefined ? { remote } : {}) })),
         pushTag: (name: string, remote: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.pushTag({ repo: repo.value, name, remote })),
-        checkout: (ref: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.checkout({ repo: repo.value, ref })),
         cherryPick: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.cherryPick({ repo: repo.value, sha })),
         revert: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.revert({ repo: repo.value, sha })),
         drop: (sha: string): Promise<GitActionResult> => after(api.sandbox.rpc.git.drop({ repo: repo.value, sha })),

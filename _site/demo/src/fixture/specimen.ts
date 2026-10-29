@@ -616,6 +616,8 @@ export const specimenCard = (now: number): AgentSummary => ({
     model: `claude-opus-5-5`,
     account: `acc_claude_demo`,
     branch: `agent/transcript-specimen`,
+    // Started from a branch of the storefront rather than the main line: its card says so, and its land commits there.
+    branches: [{ repo: `web`, branch: `feature/annual-copy` }],
     base: `4f1c8ab`,
     autoLand: false,
     costUsd: 2.41,

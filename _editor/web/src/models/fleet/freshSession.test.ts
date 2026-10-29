@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import { t } from "@intentic/ui/i18n";
 import { NO_ATTENTION } from "../agent-status/agentStatus-lanes";
-import { canStartFresh, checksOf, freshDraft } from "./freshSession";
+import { canStartFresh, checksOf, freshDraft, freshKindsOf } from "./freshSession";
 import type { FleetAgent } from "./useAgents-fleet";
 
 // Pins what a fresh session opens with for each kind and harness, which cards may start one, and what the origin's card
@@ -51,6 +51,16 @@ describe(`which cards a fresh session can start on`, () => {
         expect(canStartFresh(card(`a`, { ...WORK, archivedAt: 5 }))).toBe(false);
         expect(canStartFresh(card(`a`, { ...WORK, sandboxId: `other` }))).toBe(false);
         expect(canStartFresh(card(`a`, { ...WORK, fresh: { of: `o`, kind: `review`, at: 1 } }))).toBe(false);
+    });
+
+    it(`lets the reader's own ask start from any private copy here, with or without changes, a fresh session's own included`, () => {
+        expect(canStartFresh(card(`a`, { ...WORK, diff: { files: 0, insertions: 0, deletions: 0 } }), `ask`)).toBe(true);
+        expect(canStartFresh(card(`a`, { ...WORK, fresh: { of: `o`, kind: `review`, at: 1 } }), `ask`)).toBe(true);
+        expect(freshKindsOf(card(`a`, { ...WORK, diff: undefined }))).toEqual([`ask`]);
+        expect(canStartFresh(card(`a`, { diff: WORK.diff }), `ask`)).toBe(false);
+        expect(canStartFresh(card(`a`, { ...WORK, runner: `laptop` }), `ask`)).toBe(false);
+        expect(canStartFresh(card(`a`, { ...WORK, archivedAt: 5 }), `ask`)).toBe(false);
+        expect(canStartFresh(card(`a`, { ...WORK, sandboxId: `other` }), `ask`)).toBe(false);
     });
 });
 

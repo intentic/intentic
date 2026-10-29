@@ -12,23 +12,25 @@ import { intoOf, type LandTarget, landTargetOf, recordedTargetOf, upstreamOf, un
 import { keepLandFailure, settleParentBooks } from "./turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
 import { settleLandingInBackground, versionCommitsSettled, versionProjectFolders } from "./version-landed.js";
+import { type BranchLines, branchLinesOf } from "./branch/branch-land.js";
+import { mainTreeRepos } from "./branch/branch-repos.js";
 
 // A land a person pressed: the same pre-land rebase an automatic land takes, then the installed tree reconciled behind
 // it, as an automatic land does. Runs inside the conversation's land lease (landByHandLeased takes it). A spawned
 // child's press goes where its turn's own land goes (land-target.ts): into its parent's checkout, under the parent's
 // lease too, with none of the main tree's after-land. The same door is its parent's `merge`, in `merge` mode.
 
-export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns" | "transcripts"> &
+export type LandByHandDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns" | "transcripts"> &
     Parameters<typeof settleLandingInBackground>[0];
 
 // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
 // repo now sits on. A git fault here lands on the old base instead of failing the land.
-const syncedComposition = async (services: LandByHandDeps, entry: IsolatedAgent, target: LandTarget): Promise<RepoRecord[]> => {
+const syncedComposition = async (services: LandByHandDeps, entry: IsolatedAgent, target: LandTarget, lines: BranchLines): Promise<RepoRecord[]> => {
     try {
         return [
             ...(await syncBeforeLand(
                 services.agentWorktrees,
-                { id: entry.id, title: entry.social.title?.text, repos: entry.placement.repos },
+                { id: entry.id, title: entry.social.title?.text, repos: entry.placement.repos, lines },
                 services.agents.recordWorktree,
                 upstreamOf(entry, target),
             )),
@@ -58,12 +60,14 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     const into = intoOf(target);
     // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
     if (into === undefined) {
-        const repos = entry.placement.repos.map(({ repo }) => repo);
+        const repos = mainTreeRepos(entry.placement).map(({ repo }) => repo);
         await versionCommitsSettled(services, repos);
         // What file sync delivered since the turn ended, committed so the rebase below reaches it (version-landed.ts).
         await versionProjectFolders(services, repos);
     }
-    const composition = await syncedComposition(services, entry, target);
+    // A repo started from a branch syncs onto and lands into that branch's checkout instead (branch-land.ts).
+    const lines = await branchLinesOf(services, entry.placement);
+    const composition = await syncedComposition(services, entry, target, lines);
     // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
     const span = composition.map(({ repo, base, landedTip }) => ({
         repo,
@@ -73,7 +77,7 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     // A land that breaks stays on the card until one goes through (recordLandFailure); the press still hears the error.
     const result = await services.perf
         .track("agent.land", { id: entry.id, mode, span: rung }, () =>
-            landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung, into),
+            landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung, into, lines),
         )
         .catch(async (cause: unknown) => {
             await keepLandFailure(services, entry.id, cause);

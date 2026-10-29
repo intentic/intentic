@@ -803,7 +803,7 @@ const grab = (event: PointerEvent): void => {
                     </span>
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                     <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
-                    <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
+                    <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" :from="agent.branches" />
                     <!-- What the branch changed, alongside the other metadata. The count opens the review; red and green mark a live diff. -->
                     <button
                         v-if="diffShown && agent.diff !== undefined"

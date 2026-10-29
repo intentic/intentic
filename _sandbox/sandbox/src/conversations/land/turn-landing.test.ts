@@ -20,6 +20,7 @@ import { conversationEntry, isolatedAgent } from "../registry/agents-store.testi
 import { unlinkedMessage } from "../worktrees/checkout-link.js";
 import { noteLandHeldForWake, takeLandHeldForWake } from "./wake-held.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import type { BranchCheckouts } from "../worktrees/branches/branch-checkouts.js";
 
 const hold: Rule = {
     id: "hold-all",
@@ -183,7 +184,7 @@ describe("a land that breaks", () => {
         await agents.recordWorktree("c", [{ repo: "root", base: "a".repeat(40) }]);
         // The checkout lost its link and could not be re-linked: every land stops at its first step.
         const agentWorktrees = unstubbed<AgentWorktrees>("worktrees", { relink: async () => ["root"] });
-        await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees }, "c");
+        await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees, branchCheckouts: unstubbed<BranchCheckouts>("branchCheckouts", {}) }, "c");
         expect(agents.get("c")?.landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
     });
 });

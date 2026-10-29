@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import { landWord } from "../../../../models/fleet/branches/branchLanding";
 import TourMark from "../../../tour/TourMark.vue";
 import { useCardRequests } from "./cardRequests";
 
@@ -43,7 +44,7 @@ const landable = computed(() => props.agent.status === `ready`);
         <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
         <div class="flex flex-wrap items-center gap-1.5">
             <Button tier="accent" size="small" tone="success" thumb :disabled="landing || busy" class="self-start whitespace-nowrap" @click.stop="emit('land')">
-                <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
+                <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : landWord(agent.branches, words.land) }}
             </Button>
             <!-- Getting started's mark for the first land, beside the press that does it (only while that is the step). -->
             <TourMark v-if="!landing" step="land" place="card" :priority="3" side="bottom" @click.stop />

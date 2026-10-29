@@ -15,7 +15,7 @@ import { opt } from "../../../opt.js";
 import { childActor, parentOfActor } from "../../../auth/principal.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
-import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
+import { type BooksDeps, keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
 import { CheckoutSpaceRefused } from "../../../system/resources/storage/checkout-space.js";
 import type { ReachWatch } from "./turn-reach.js";
 
@@ -235,7 +235,7 @@ export const mainTreePlacement = (body: () => AsyncIterable<AgentEvent>, reach?:
 // A runner child's work, once the runner delivered it to the mirror, goes into its parent's checkout as a local child's
 // does (land-target.ts). Any other runner turn's work waits on its branch for a person's land, as it always has.
 async function* landIntoParent(
-    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    deps: BooksDeps,
     conversationId: string,
     failed: boolean,
     awaiting: boolean,
@@ -270,7 +270,7 @@ async function* landIntoParent(
 // A runner: this sandbox's worktree is a mirror for diff, standing and land, anchored here for a rewind, and settled
 // whatever the remote turn said, since the mirror is what the runner delivered.
 export const runnerPlacement = (
-    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger" | "turnCheckpoints">,
+    deps: BooksDeps & Pick<Services, "turnCheckpoints">,
     turn: { readonly conversationId: string; readonly snapshot: SnapshotTurn; readonly runner: string },
     steps: {
         // Composes the mirror with the same decision a local turn makes.

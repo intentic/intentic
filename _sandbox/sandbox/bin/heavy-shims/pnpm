@@ -2,7 +2,8 @@
 # A thin wrapper for a heavy program that is not a node script, first on an agent's PATH (the daemon puts this directory
 # there, src/agent/tools/agent-terminals.ts). Under the daemon's heavy table and not yet covered, the program is judged
 # by heavy-exec.cjs (@intentic/constants): queued, or offloaded, by the program and arguments it really got. Otherwise,
-# or without node, it is the real program at once. Every name in this directory is this same file.
+# or without node, it is the real program at once. Every name in this directory is this same file, but for `git`,
+# which the image copies in beside them from bin/guard-shims.
 here=$(cd "$(dirname "$0")" && pwd)
 name=$(basename "$0")
 exec_js=${INTENTIC_HEAVY_EXEC:-/opt/sandbox/node_modules/@intentic/constants/src/heavy/heavy-exec.cjs}

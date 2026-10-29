@@ -24,7 +24,7 @@ describe(`groupBranches`, () => {
         expect(groups[0]?.remotes.map((entry) => entry.remote)).toEqual([`origin`, `upstream`]);
     });
 
-    /* A branch that exists only on a remote is the row "somebody pushed something you do not have": the one a checkout would be created from. */
+    /* A branch that exists only on a remote is the row "somebody pushed something you do not have": the one a view or an agent's start makes the local one for. */
     it(`keeps a remote-only branch as a group with no local`, () => {
         const groups = groupBranches([], [remote(`origin/feature/x`)]);
         expect(groups[0]?.name).toBe(`feature/x`);

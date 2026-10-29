@@ -1,0 +1,159 @@
+#!/bin/sh
+# git as a shell in this sandbox meets it: the image copies it in beside the heavy wrappers (/opt/sandbox/heavy-shims),
+# whose place first on a terminal's and an agent's PATH it shares (Dockerfile's profile line, the daemon's
+# workload/heavy-commands.ts), never on the daemon's own. The shared checkout, /work and every repo under it,
+# stays on its main line (the daemon's src/git/main-line-lock.ts, latched as `intentic.mainBranch`), so a checkout,
+# switch or symbolic-ref that would move its HEAD anywhere else is refused here, before git writes a single file.
+# Linked worktrees (an agent's own copy, a branch's view) are theirs to move. Everything else, and every other
+# command, is the real git at once.
+
+case $0 in
+    */*) here=${0%/*} ;;
+    *) here=. ;;
+esac
+
+real=""
+old_ifs=$IFS
+IFS=:
+for dir in $PATH; do
+    if [ -n "$dir" ] && [ "$dir" != "$here" ] && [ -x "$dir/git" ] && [ "$(cd "$dir" 2>/dev/null && pwd)" != "$(cd "$here" 2>/dev/null && pwd)" ]; then
+        real="$dir/git"
+        break
+    fi
+done
+IFS=$old_ifs
+if [ -z "$real" ]; then
+    echo "git: command not found" >&2
+    exit 127
+fi
+
+# git's own options before the verb, read through: `-C` (relative ones stack), and the two that name the repository.
+target=.
+sub=""
+expect=""
+for arg in "$@"; do
+    case $expect in
+        C) case $arg in /*) target=$arg ;; *) target="$target/$arg" ;; esac; expect=""; continue ;;
+        gitdir) GIT_DIR=$arg; export GIT_DIR; expect=""; continue ;;
+        worktree) GIT_WORK_TREE=$arg; export GIT_WORK_TREE; expect=""; continue ;;
+        skip) expect=""; continue ;;
+    esac
+    case $arg in
+        -C) expect=C ;;
+        --git-dir) expect=gitdir ;;
+        --git-dir=*) GIT_DIR=${arg#--git-dir=}; export GIT_DIR ;;
+        --work-tree) expect=worktree ;;
+        --work-tree=*) GIT_WORK_TREE=${arg#--work-tree=}; export GIT_WORK_TREE ;;
+        -c|--namespace|--exec-path|--super-prefix|--config-env) expect=skip ;;
+        -*) ;;
+        *) sub=$arg; break ;;
+    esac
+done
+
+case $sub in
+    checkout|switch|symbolic-ref) ;;
+    *) exec "$real" "$@" ;;
+esac
+
+in_repo() { (cd "$target" 2>/dev/null && "$real" "$@"); }
+
+info=$(in_repo rev-parse --path-format=absolute --git-dir --git-common-dir --show-toplevel 2>/dev/null) || exec "$real" "$@"
+git_dir=$(printf '%s\n' "$info" | sed -n 1p)
+common_dir=$(printf '%s\n' "$info" | sed -n 2p)
+top=$(printf '%s\n' "$info" | sed -n 3p)
+root=${INTENTIC_WORKSPACE_ROOT:-/work}
+# Only the shared checkout itself: a linked worktree's git dir is its own, under the common one.
+[ "$git_dir" = "$common_dir" ] || exec "$real" "$@"
+case $top in
+    "$root"|"$root"/*) ;;
+    *) exec "$real" "$@" ;;
+esac
+
+locked=$(in_repo config --get intentic.mainBranch 2>/dev/null)
+if [ -z "$locked" ]; then
+    in_repo rev-parse -q --verify refs/heads/main >/dev/null 2>&1 && locked=main
+fi
+[ -n "$locked" ] || exec "$real" "$@"
+
+refuse() {
+    echo "git: the shared workspace stays on \`$locked\`, since every agent and every person here starts from it and lands into it." >&2
+    if [ -n "$1" ]; then
+        echo "git: to work on \`$1\`, start an agent from it; to look at it, pick it in the Workspace's view menu." >&2
+    else
+        echo "git: to work on another branch, start an agent from it; to look at one, pick it in the Workspace's view menu." >&2
+    fi
+    echo "git: to restore files instead, use \`git restore <path>\` or \`git checkout -- <path>\`." >&2
+    exit 1
+}
+
+commitish() { in_repo rev-parse -q --verify "$1^{commit}" >/dev/null 2>&1; }
+
+# The arguments after the verb.
+seen=""
+past=""
+for arg in "$@"; do
+    if [ -z "$seen" ]; then
+        [ "$arg" = "$sub" ] && seen=1
+        continue
+    fi
+    past="$past
+$arg"
+done
+
+case $sub in
+    switch)
+        first=""
+        old_ifs=$IFS
+        IFS='
+'
+        for arg in $past; do
+            case $arg in
+                -c|-C|--create|--force-create|--orphan|--detach|-d|--create=*|--force-create=*|--orphan=*|-) IFS=$old_ifs; refuse "" ;;
+                -*) ;;
+                *) [ -z "$first" ] && first=$arg ;;
+            esac
+        done
+        IFS=$old_ifs
+        [ -z "$first" ] || [ "$first" = "$locked" ] || refuse "$first"
+        ;;
+    checkout)
+        first=""
+        old_ifs=$IFS
+        IFS='
+'
+        for arg in $past; do
+            case $arg in
+                --) IFS=$old_ifs; exec "$real" "$@" ;;
+                -b|-B|--orphan|--detach|-) IFS=$old_ifs; refuse "" ;;
+                -p|--patch) IFS=$old_ifs; exec "$real" "$@" ;;
+                -*) ;;
+                *) [ -z "$first" ] && first=$arg ;;
+            esac
+        done
+        IFS=$old_ifs
+        if [ -n "$first" ] && [ "$first" != "$locked" ] && [ "$first" != "refs/heads/$locked" ] && [ "$first" != HEAD ]; then
+            # A name git would switch to: a commit it names, or a remote's branch it would make a local one of.
+            if commitish "$first" || { [ ! -e "$top/$first" ] && in_repo rev-parse -q --verify "refs/remotes/origin/$first" >/dev/null 2>&1; }; then
+                refuse "$first"
+            fi
+        fi
+        ;;
+    symbolic-ref)
+        after_head=""
+        on_head=""
+        old_ifs=$IFS
+        IFS='
+'
+        for arg in $past; do
+            case $arg in
+                -*) ;;
+                HEAD) [ -z "$on_head" ] && on_head=1 ;;
+                *) [ -n "$on_head" ] && [ -z "$after_head" ] && after_head=$arg ;;
+            esac
+        done
+        IFS=$old_ifs
+        [ -z "$after_head" ] || [ "$after_head" = "refs/heads/$locked" ] || refuse "${after_head#refs/heads/}"
+        ;;
+esac
+
+exec "$real" "$@"

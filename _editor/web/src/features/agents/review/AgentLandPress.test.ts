@@ -13,7 +13,7 @@ const mount = async (props: { canShip: boolean; fix?: { count: number; state: `r
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () => h(AgentLandPress, { requested: false, landDisabled: false, requesting: false, landHint: { title: `` }, requestHint: { title: `` }, ...props }),
+        render: () => h(AgentLandPress, { agent: undefined, landDisabled: false, requesting: false, landHint: { title: `` }, requestHint: { title: `` }, ...props }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});

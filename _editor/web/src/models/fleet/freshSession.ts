@@ -1,5 +1,5 @@
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
-import type { FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
 import { t } from "@intentic/ui/i18n";
 import { agentDisplayTitle } from "../agent-status/agentStatus-meta";
 import { turnWorking } from "../agent-status/agentStatus-standing";
@@ -44,18 +44,22 @@ const commandsOf = async (conversation: Conversation): Promise<readonly AgentCom
     return providerCommands.value[provider] ?? [];
 };
 
-// Whether a fresh session can be started on this card's work: its own private copy here (the daemon cuts the new one from
-// it and lands back into it; a runner's copy is on another machine), something in it to look at, not filed away, and not
-// itself a fresh session, so a review of a review never stacks a second level under one card.
+// Whether a fresh session of `kind` can be started on this card's work: its own private copy here (the daemon cuts the new
+// one from it and lands back into it; a runner's copy is on another machine) and not filed away. A check (a review, a test
+// pass) also needs something in it to look at, and never runs on a fresh session itself, so a review of a review never
+// stacks a second level under one card; the reader's own ask is a new agent starting from that copy, which takes any.
 export const canStartFresh = (
     agent: Pick<FleetAgent, "archivedAt" | "fresh" | "branch" | "runner" | "diff" | "sandboxId">,
+    kind: FreshKind = `review`,
 ): boolean =>
     agent.sandboxId === undefined &&
     agent.archivedAt === undefined &&
-    agent.fresh === undefined &&
     agent.branch !== undefined &&
     agent.runner === undefined &&
-    (agent.diff?.files ?? 0) > 0;
+    (kind === `ask` || (agent.fresh === undefined && (agent.diff?.files ?? 0) > 0));
+
+/** Every kind a fresh session on this card's work could be, in the strip's own order. */
+export const freshKindsOf = (agent: Parameters<typeof canStartFresh>[0]): FreshKind[] => FRESH_KINDS.filter((kind) => canStartFresh(agent, kind));
 
 // The title the new chat opens with, so the board names it by what it is for rather than by `/code-review`.
 const freshTitle = (kind: FreshKind, origin: FleetAgent): string | null =>

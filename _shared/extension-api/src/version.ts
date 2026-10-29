@@ -16,4 +16,7 @@
 // 2.39.0 lets a view start an agent the board shows from the press: `api.chat.launchAgent(card, start)` opens the agents
 // board at once with a dashed card standing in for the agent while `start` runs, hands over to the agent's own card when
 // `start` answers with its id, and says a refusal on the card. Additive. The recorded surface grows `chatApi`.
-export const extensionApiVersion = "2.39.0";
+// 2.40.0 lets a view start an agent from a branch while the shared workspace stays on its main line:
+// `api.chat.composeFrom({ repo, branch })` opens a new chat whose private copy is cut from that branch. Additive. The
+// recorded surface grows `chatApi`.
+export const extensionApiVersion = "2.40.0";

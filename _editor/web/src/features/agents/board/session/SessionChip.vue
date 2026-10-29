@@ -5,7 +5,9 @@
 // path of the frequent press/drag was hit by accident constantly.
 // `reveal` is the one exception (the agent's own page, opening its identity panel); its label spelling is abbreviated
 // (shared prefix dropped, overflow loses the middle) with the full name on hover.
+import type { RepoBranch } from "@intentic/sandbox-contract/schemas/shared";
 import { computed } from "vue";
+import { startedFrom } from "../../../../models/fleet/branches/branchLanding";
 import { shortBranch } from "./sessionChip";
 import { useT } from "@intentic/ui/i18n";
 
@@ -13,10 +15,13 @@ const t = useT();
 
 const {
     branch,
+    from,
     reveal = false,
     compact = false,
 } = defineProps<{
     branch: string;
+    // The branches a conversation started from (AgentSummary.branches), said beside its own: where its land commits.
+    from?: readonly RepoBranch[] | undefined;
     // Press to open the identity panel: the agent's own page, the one surface that shows every form of the name.
     reveal?: boolean;
     // Glyph only, for a header row with no width to spare (the detail page on a phone).
@@ -25,6 +30,7 @@ const {
 const emit = defineEmits<{ reveal: [event: MouseEvent] }>();
 
 const shown = computed(() => shortBranch(branch));
+const fromLabel = computed(() => (compact ? undefined : startedFrom(from)));
 
 const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2xs text-subtle`;
 </script>
@@ -47,4 +53,11 @@ const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2x
         <Icon name="git-branch" class="shrink-0 text-2xs" />
         <span class="truncate">{{ shown }}</span>
     </span>
+    <span
+        v-if="fromLabel !== undefined"
+        v-tooltip.top="{ title: t(`agents.branchStart.fromTitle`), note: t(`agents.branchStart.fromNote`) }"
+        :class="[CHROME, `max-w-full shrink`]"
+        data-from-branch
+        >{{ fromLabel }}</span
+    >
 </template>

@@ -10,6 +10,8 @@ import { holdsChildren, intoOf, type LandTarget, landTargetOf, type Upstream, up
 import { landingPaths } from "./landing-paths.js";
 import { noteLandHeldForWake } from "./wake-held.js";
 import { versionCommitsSettled, versionProjectFolders } from "./version-landed.js";
+import { branchLinesOf } from "./branch/branch-land.js";
+import { mainTreeRepos } from "./branch/branch-repos.js";
 import { type IsolatedAgent, isIsolated } from "../registry/agents-store.js";
 import type { Services } from "../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../rules/rules.js";
@@ -86,6 +88,7 @@ export type LandingDeps = Pick<
     | "conversations"
     | "sandboxSettings"
     | "agentWorktrees"
+    | "branchCheckouts"
     | "logger"
     | "perf"
     | "activity"
@@ -96,6 +99,9 @@ export type LandingDeps = Pick<
     | "members"
     | "ownerEmail"
 >;
+
+// What settling a conversation's land books reads: its record, its checkouts, and the branch checkouts it lands onto.
+export type BooksDeps = Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "branchCheckouts" | "logger">;
 
 // The hand-off a land makes that needs the whole daemon, bound by the caller that has it.
 export interface LandingHooks {
@@ -154,9 +160,10 @@ const landUnderLease = async (
 ): Promise<LandOutcome> => {
     const id = turn.conversationId;
     // Another agent's land still waiting on its version commit reads as the owner's uncommitted edits; rebased and
-    // judged after that commit instead, it is history this branch can merge with. A parent's checkout has no such commit.
+    // judged after that commit instead, it is history this branch can merge with. A parent's checkout has no such commit,
+    // nor a branch's, which takes its land committed (branch-land.ts).
     if (target.kind === "main") {
-        const repos = finished.placement.repos.map(({ repo }) => repo);
+        const repos = mainTreeRepos(finished.placement).map(({ repo }) => repo);
         await versionCommitsSettled(deps, repos);
         // What file sync delivered since the turn opened, committed so the rebase below reaches it (version-landed.ts).
         await versionProjectFolders(deps, repos);
@@ -168,8 +175,8 @@ const landUnderLease = async (
     }
     const resynced = deps.agents.entry(id);
     const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
-    const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () =>
-        landAgent(deps.agentWorktrees, landing, mode, "outstanding", intoOf(target)),
+    const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, async () =>
+        landAgent(deps.agentWorktrees, landing, mode, "outstanding", intoOf(target), await branchLinesOf(deps, landing.placement)),
     );
     afterLand(deps, id, outcome);
     return outcome;
@@ -249,7 +256,7 @@ export const askToLandHome = async (deps: Pick<LandingDeps, "agents">, finished:
 // A parent's card reads its branch: what a child just put into its checkout is committed there and measured, as an ended
 // turn's own work is, so a parent at rest reads what it now holds. A parent whose own turn is live does that at its land.
 export const settleParentBooks = async (
-    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    deps: BooksDeps,
     landed: { readonly into?: string | undefined; readonly landed: boolean },
 ): Promise<void> => {
     if (landed.into !== undefined && landed.landed && !deps.conversations.running(landed.into)) {
@@ -347,7 +354,7 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
 // Everything the end-of-turn pass does except land on the main tree, for a turn that skipped that pass: in `measure`
 // mode, and never fatal, since this runs after the turn has already ended.
 export const settleLandBooks = async (
-    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    deps: BooksDeps,
     conversationId: string,
 ): Promise<void> => {
     const entry = deps.agents.entry(conversationId);
@@ -358,8 +365,8 @@ export const settleLandBooks = async (
         // Measured against where its work goes: a child's parent's checkout already holding it is a land, not a hold.
         const into = intoOf(await landTargetOf(deps, entry));
         const measured = await deps.conversations.withLandLease(conversationId, () =>
-            deps.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, () =>
-                landAgent(deps.agentWorktrees, entry, "measure", "outstanding", into),
+            deps.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, async () =>
+                landAgent(deps.agentWorktrees, entry, "measure", "outstanding", into, await branchLinesOf(deps, entry.placement)),
             ),
         );
         afterLand(deps, conversationId, measured);

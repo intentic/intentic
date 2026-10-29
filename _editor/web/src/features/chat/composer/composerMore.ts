@@ -11,13 +11,13 @@ import { builtInPersonaView } from "../../../models/sandbox/personas/builtInPers
 // aren't here since the row places them itself (effort draws nothing at all under Auto).
 
 // When the message goes is not one of them: it is the send's own caret (ChatPane), beside the press it changes.
-export type ComposerControl = `mode` | `placement` | `persona` | `runThrough` | `voice` | `land`;
+export type ComposerControl = `mode` | `placement` | `startFrom` | `persona` | `runThrough` | `voice` | `land`;
 
 /**
  * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. Whether the
  * work lands by itself comes last, beside the Send it follows.
  */
-export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`];
+export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `startFrom`, `persona`, `runThrough`, `voice`, `land`];
 
 export interface ComposerControlSituation {
     /** The posture the next turn starts in, or the running turn's if the agent has moved itself. */
@@ -31,6 +31,15 @@ export interface ComposerControlSituation {
     readonly placementOffered: boolean;
     /** Running somewhere other than this sandbox: on one of its runners, or in another box. */
     readonly placed: boolean;
+    /**
+     * Where a new agent starts is still this chat's to choose: a draft nothing has been sent from, on a private copy in
+     * this sandbox (composerStartFrom.ts). Absent reads as not offered.
+     */
+    readonly startOffered?: boolean;
+    /** It starts from a branch or another agent's copy rather than the main line. */
+    readonly startSet?: boolean;
+    /** The shared workspace's main line by name ("main"), what a new agent starts from by default. */
+    readonly mainLine?: string | undefined;
     readonly persona: string | undefined;
     readonly runThrough: RunThroughState;
     readonly voiceAgent: boolean;
@@ -72,13 +81,14 @@ export type ControlFlags = Readonly<Record<ComposerControl, boolean>>;
 /** Whether the control exists for this chat at all. A control that isn't offered is in neither place. */
 const offeredIn = (situation: ComposerControlSituation) => {
     if (situation.guest === true) {
-        return { mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
+        return { mode: false, placement: false, startFrom: false, persona: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
     }
     // Plain words keep the mode; the rest are a developer's tools and stay out of the menu.
     const developer = situation.plain !== true;
     return {
         mode: true,
         placement: developer && situation.placementOffered,
+        startFrom: developer && situation.startOffered === true,
         persona: developer && situation.personaOffered,
         runThrough: developer,
         voice: developer && situation.voiceOffered,
@@ -91,6 +101,7 @@ const offeredIn = (situation: ComposerControlSituation) => {
 const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => ({
     mode: situation.mode !== situation.startingMode,
     placement: situation.placed,
+    startFrom: situation.startSet === true,
     persona: situation.persona !== undefined,
     runThrough: situation.runThrough !== `idle`,
     voice: situation.voiceAgent,
@@ -104,6 +115,7 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
     return {
         mode: offered.mode && set.mode,
         placement: offered.placement && set.placement,
+        startFrom: offered.startFrom && set.startFrom,
         persona: offered.persona && set.persona,
         runThrough: offered.runThrough && set.runThrough,
         voice: offered.voice && set.voice,
@@ -132,6 +144,15 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 label: t(`chat.words.whereRuns`),
                 value: t(`shared.thisSandbox`),
                 description: t(`chat.composerMore.whereRunsNote`),
+            };
+        // Always the main line here: a start from a branch or a copy has left the menu for a chip that names it.
+        case `startFrom`:
+            return {
+                key: control,
+                icon: `git-branch`,
+                label: t(`chat.composerMore.startFrom`),
+                value: situation.mainLine ?? t(`workspace.workspaceScopeChip.mainLine`),
+                description: t(`chat.composerMore.startFromNote`),
             };
         case `persona`:
             return {

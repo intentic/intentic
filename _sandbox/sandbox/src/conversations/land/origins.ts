@@ -6,7 +6,8 @@ import { mainLineUnder } from "./agent-changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { opt } from "../../opt.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
-import { reposOf } from "../registry/agents-store.js";
+import { reposOf, worktreeOf } from "../registry/agents-store.js";
+import { branchOf } from "./branch/branch-repos.js";
 import { createPathLists, type ExpiryTracker } from "../registry/expiry.js";
 import { derivedChanges, UNDERIVED } from "./rederive.js";
 
@@ -120,12 +121,12 @@ export const createAgentOrigins = (
             .flatMap((id) => {
                 const entry = agents.entry(id);
                 // A child whose last land went into its parent's checkout put nothing in the main tree: its work
-                // reaches it with the parent's own land, and is the parent's claim there.
+                // reaches it with the parent's own land, and is the parent's claim there. Nor did a repo started from a branch.
                 if (entry === undefined || (entry.placement.kind === "worktree" && entry.placement.landedInto !== undefined)) {
                     return [];
                 }
                 const composed = reposOf(entry).find((candidate) => candidate.repo === repo);
-                if (composed?.landedTip === undefined || composed.landedHead === undefined) {
+                if (composed?.landedTip === undefined || composed.landedHead === undefined || branchOf(worktreeOf(entry), repo) !== undefined) {
                     return [];
                 }
                 // Absorbed or unresolvable landings skip all git; a fresh land gets a new, unmarked row.

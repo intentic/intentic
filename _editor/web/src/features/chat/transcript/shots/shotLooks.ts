@@ -2,6 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { lazyByPath } from "../../../../client/sandbox/lazyByPath";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { renditionBlob } from "../../../../models/workspace/home/thumbnails";
+import { agentScope } from "../../../../app/workspaceScope";
 import { lookOf, type ShotLook, UNJUDGED } from "./shotLook";
 
 // Each shot's look (shotLook.ts), read off the daemon's `tile` rendition: the whole picture inside 256 px, a few KB,
@@ -42,7 +43,7 @@ const looks = lazyByPath(async (key: string): Promise<ShotLook> => {
     const [scope, path] = JSON.parse(key) as [string | null, string];
     let blob: Blob;
     try {
-        blob = await renditionBlob(scope ?? undefined, path, `tile`);
+        blob = await renditionBlob(agentScope(scope ?? undefined), path, `tile`);
     } catch (error) {
         if (error instanceof SandboxHttpError && FINAL.has(error.status)) {
             return UNJUDGED;

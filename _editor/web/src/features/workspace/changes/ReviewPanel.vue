@@ -71,6 +71,7 @@ import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../
 import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
+import MainLineBanner from "./MainLineBanner.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
@@ -128,8 +129,7 @@ const layout = useLayout();
 const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCommitKeys`, { keys: COMMIT_KEYS })));
 
 const legend = computed(() => summarizeOrigins(scannable.value));
-// Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels,
-// since it names no ask.
+// Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels, since it names no ask.
 const originFilter = ref<string | undefined>(namedAfter.value);
 // The lit FROM chip sweeps the session card's blade, fresh on each click (selectionBlade.ts).
 const originBlade = useSelectionBlade(() => originFilter.value);
@@ -606,8 +606,7 @@ const writingRepos = computed<ReadonlySet<string>>(
                 ),
         ),
 );
-// Named in the warning; everything else is committable right now, which is why this is scoped per repo, not per
-// workspace.
+// Named in the warning; everything else is committable right now, which is why this is scoped per repo, not per workspace.
 const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
 const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
 
@@ -1036,6 +1035,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
 <template>
     <div ref="panelEl" class="flex min-h-0 flex-1 flex-col">
         <!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
+        <MainLineBanner :repos="changes.repos.value" />
 
         <!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
         <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">

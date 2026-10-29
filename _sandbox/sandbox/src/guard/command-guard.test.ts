@@ -6,6 +6,7 @@ import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
+import { MAIN_LINE_REFUSAL } from "../git/main-line-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 import { PROJECT_INSTALL_RULE, type ProjectInstallGate } from "../agent/providers/project-installs.js";
@@ -937,4 +938,33 @@ test("the owner's action rules refuse a held outbound send before any other tier
     expect(reasonOf(await h.run(send))).toContain(".intentic/config/approvals/");
     expect(await h.run("ls -la")).toEqual({});
     expect(h.events).toEqual([]);
+});
+
+// The shared checkout stays on its main line (git/main-line-lock.ts): a turn working in it is refused a switch before any
+// judge is asked, since no answer of the owner's should move everyone's tree; its own copy stays its own to move.
+describe("command gate: the shared checkout's main line", () => {
+    // SAFETY: the Bash hook only ever answers PreToolUse output, whose decision field is this optional string.
+    const decisionOf = (out: SyncHookJSONOutput): string | undefined => (out.hookSpecificOutput as { permissionDecision?: string } | undefined)?.permissionDecision;
+
+    test("a branch switch in the shared tree is refused outright, with no card and no judge", async () => {
+        const gate = harness({ judge: always("allow") });
+        for (const command of ["git checkout feature", "git -C intentic switch -c topic", "git symbolic-ref HEAD refs/heads/feature"]) {
+            const out = await gate.run(command);
+            expect(decisionOf(out), command).toBe("deny");
+            expect(reasonOf(out)).toBe(MAIN_LINE_REFUSAL);
+        }
+        expect(gate.events.some((event) => event.kind === "permission")).toBe(false);
+        expect(gate.seen).toEqual([]);
+    });
+
+    test("a conversation's own copy is its own to move", async () => {
+        const gate = harness({ judge: always("allow"), ownCheckout: true });
+        expect(decisionOf(await gate.run("git switch -c topic"))).not.toBe("deny");
+    });
+
+    test("restoring files, or a switch only quoted, is not one", async () => {
+        const gate = harness({ judge: always("allow") });
+        expect(decisionOf(await gate.run("git checkout -- src/app.ts"))).not.toBe("deny");
+        expect(decisionOf(await gate.run(`echo "git checkout feature"`))).not.toBe("deny");
+    });
 });

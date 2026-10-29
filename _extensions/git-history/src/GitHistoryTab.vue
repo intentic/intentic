@@ -21,6 +21,7 @@ import type { GitActionResult, GitCommit } from "@intentic/sandbox-contract/sche
 import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
+import { branchMenuItems, shortBranchName } from "./branchActions.js";
 import { host } from "./host.js";
 import { repoAt } from "./repos.js";
 import { useBranches } from "./useBranches.js";
@@ -298,12 +299,12 @@ const copy = (text: string): void =>
         .catch(() => undefined);
 
 // Commit context menu and write actions (VSCode Git Graph parity).
-type ActionKind = "branch" | "tag" | "checkout" | "cherry-pick" | "revert" | "drop" | "merge" | "rebase" | "reset";
+// No checkout: the shared workspace stays on its main line, so a commit is never switched to here.
+type ActionKind = "branch" | "tag" | "cherry-pick" | "revert" | "drop" | "merge" | "rebase" | "reset";
 // Whether the dialog needs a name, and whether it's destructive; header, confirm label and body text are built below.
 const ACTIONS: Record<ActionKind, { needsName?: boolean; placeholder?: string; danger?: boolean }> = {
     branch: { needsName: true, placeholder: `branch-name` },
     tag: { needsName: true, placeholder: `tag-name` },
-    checkout: { danger: true },
     "cherry-pick": { danger: true },
     revert: { danger: true },
     drop: { danger: true },
@@ -316,7 +317,6 @@ const actionWords = (kind: ActionKind): { header: string; confirm: string } =>
     ({
         branch: { header: t(`gitHistoryTab.dialog.branch`), confirm: t(`gitHistoryTab.dialog.branchConfirm`) },
         tag: { header: t(`gitHistoryTab.dialog.tag`), confirm: t(`gitHistoryTab.dialog.tagConfirm`) },
-        checkout: { header: t(`gitHistoryTab.dialog.checkout`), confirm: t(`gitHistoryTab.dialog.checkoutConfirm`) },
         "cherry-pick": { header: t(`gitHistoryTab.dialog.cherryPick`), confirm: t(`gitHistoryTab.dialog.cherryPickConfirm`) },
         revert: { header: t(`gitHistoryTab.dialog.revert`), confirm: t(`gitHistoryTab.dialog.revertConfirm`) },
         drop: { header: t(`gitHistoryTab.dialog.drop`), confirm: t(`gitHistoryTab.dialog.dropConfirm`) },
@@ -372,7 +372,6 @@ const menuItems = computed<MenuItem[]>(() => {
         { label: t(`gitHistoryTab.createBranch`), command: () => start(`branch`) },
         { label: t(`gitHistoryTab.addTag`), command: () => start(`tag`) },
         { separator: true },
-        { label: t(`gitHistoryTab.checkout`), command: () => start(`checkout`) },
         { label: t(`gitHistoryTab.cherryPick`), command: () => start(`cherry-pick`) },
         { label: t(`gitHistoryTab.revert`), command: () => start(`revert`) },
         { label: t(`gitHistoryTab.drop`), command: () => start(`drop`) },
@@ -393,7 +392,10 @@ const refMenu = ref<{ show: (event: Event) => void }>();
 const refTarget = ref<{ decoration: string; commit: GitCommit } | undefined>(undefined);
 const openRefMenu = (event: Event, decoration: string, commit: GitCommit): void => {
     refTarget.value = { decoration, commit };
-    refMenu.value?.show(event);
+    // The workspace's own branch on a remote offers nothing, and an empty menu is worse than none.
+    if (refMenuItems.value.length > 0) {
+        refMenu.value?.show(event);
+    }
 };
 
 // Deduplicated remote names: what a tag can push to, and what tells `origin/main` apart from a slashed branch.
@@ -426,13 +428,13 @@ const refMenuItems = computed<MenuItem[]>(() => {
             })),
         ];
     }
+    // Viewed or started from by its short name, never switched to; the branch the workspace stands on offers neither.
+    const offered = (name: string): MenuItem[] => (name === branch.value ? [] : branchMenuItems(repoRef.value, name));
     if (kind === `remote`) {
-        // `git checkout <branch>` creates the tracking local branch when exactly one remote has that name.
-        const local = target.decoration.slice(target.decoration.indexOf(`/`) + 1);
-        return [{ label: t(`gitHistoryTab.checkout3`, { local }), command: () => void log.checkout(local) }];
+        return offered(shortBranchName(target.decoration, remoteNames.value));
     }
     return [
-        { label: t(`gitHistoryTab.checkout2`), command: () => void log.checkout(label) },
+        ...offered(label),
         { label: t(`gitHistoryTab.newBranchHere`), command: () => start(`branch`, target.commit) },
         { separator: true },
         { label: t(`gitHistoryTab.push`), command: () => void branchState.push(label) },
@@ -447,8 +449,6 @@ const pendingBody = computed<string>(() => {
     }
     const sha = target.commit.short;
     switch (target.kind) {
-        case `checkout`:
-            return t(`gitHistoryTab.body.checkout`, { sha });
         case `cherry-pick`:
             return t(`gitHistoryTab.body.cherryPick`, { sha });
         case `revert`:
@@ -477,8 +477,6 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
             return log.createBranch(commit.sha, name);
         case `tag`:
             return log.createTag(commit.sha, name);
-        case `checkout`:
-            return log.checkout(commit.sha);
         case `cherry-pick`:
             return log.cherryPick(commit.sha);
         case `revert`:
@@ -513,7 +511,7 @@ const runPending = async (): Promise<void> => {
             return; // keep the dialog open with the message
         }
         pending.value = undefined; // success
-        if (kind === `checkout` || kind === `reset` || kind === `rebase` || kind === `drop`) {
+        if (kind === `reset` || kind === `rebase` || kind === `drop`) {
             openSha.value = undefined; // HEAD moved / history rewrote: the open detail may be stale
         }
     } catch (cause) {
@@ -528,7 +526,7 @@ const runPending = async (): Promise<void> => {
     <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
         <!-- Header: checked-out branch and how many commits are drawn; which repo this is lives on the tab. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card pl-1.5 pr-3">
-            <!-- Checked-out branch with its switch/create/delete popover; detached HEAD shows no pill but keeps the switcher. -->
+            <!-- The workspace's branch, with the popover that views, starts from, creates and deletes the others; never a switch. -->
             <BranchSwitcher :repo="repoRef" />
             <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
             <span class="ui-status-pill shrink-0 bg-overlay text-muted">{{

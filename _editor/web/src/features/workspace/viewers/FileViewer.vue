@@ -30,7 +30,7 @@ import { useAudience } from "../../../app/useAudience";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
-import { scopeQuery, useViewScope, type ViewScope } from "../../../app/workspaceScope";
+import { isShared, scopeKey, scopeQuery, useViewScope } from "../../../app/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
@@ -108,9 +108,9 @@ const edit = useEditBuffers();
 const { saveText, run, canWriteAt, entry: entryAt } = useWorkspaceTree();
 // Whether the member may change this file (their tier and edit fence): outside it the file opens read-only.
 const memberWrites = computed(() => canWriteAt(path));
-// Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel).
-const viewAgent = useViewScope();
-const viewScope = computed<ViewScope>(() => ({ agent: viewAgent.value }));
+// Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel); keyed, undefined on the shared tree.
+const viewScope = useViewScope();
+const viewAgent = computed(() => (isShared(viewScope.value) ? undefined : scopeKey(viewScope.value)));
 // Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
@@ -440,7 +440,7 @@ watch(
         if (resolution.kind === `viewer`) {
             const { viewer } = resolution;
             loading.value = true;
-            const content = viewerContentFor(viewer.fetch, currentPath, viewAgent.value);
+            const content = viewerContentFor(viewer.fetch, currentPath, viewScope.value.agent);
             Promise.all([viewer.component(), content]).then(([component, loaded]) => {
                 if (!isLatest()) {
                     return;
@@ -556,14 +556,14 @@ const scopedReadOnly = computed(
 );
 // A look at a file this reader could edit in the Workspace: says where the caret is, rather than leaving it missing.
 const lookReadOnly = computed(() => readOnly && !mobile.value && !scopedReadOnly.value && editableKind.value && !lossy.value);
-const scopeTitle = useScopeTitle(viewAgent);
+const scopeTitle = useScopeTitle(viewScope);
 const words = useVocabulary();
 const readOnlyReason = computed(() =>
     readOnlyTip({
         memberWrites: memberWrites.value,
         inArchive: inArchive.value,
         otherThan: soleDocument !== undefined && !writableHere(path) ? soleDocument : undefined,
-        agentWord: words.value.Agent,
+        agentWord: viewScope.value.branch === undefined ? words.value.Agent : undefined,
         scopeTitle: scopeTitle.value,
     }),
 );
@@ -603,7 +603,7 @@ const openLinked = (target: string): void => {
     if (deliverableKindOf(target) === `html`) {
         setHtmlPreviewed(target, true);
     }
-    void openWorkspaceRef(target, undefined, { agent: viewAgent.value });
+    void openWorkspaceRef(target, undefined, viewScope.value);
 };
 // Offered only while reading code with comments present.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !previewing.value);

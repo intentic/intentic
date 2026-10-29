@@ -17,6 +17,7 @@ import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
 import CommitField from "../commit/CommitField.vue";
+import MainLineBanner from "../MainLineBanner.vue";
 import IndexRunLine from "../commit/IndexRunLine.vue";
 import IndexRunPrompt from "../commit/IndexRunPrompt.vue";
 import { useRunLine } from "../commit/runLine";
@@ -226,6 +227,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
         <Notice v-if="changes.error.value" tone="danger" class="mx-2 mt-2 shrink-0">{{
             t(`workspace.savePanel.couldntReadWhatChanged`, { error: changes.error.value })
         }}</Notice>
+        <MainLineBanner :repos="changes.repos.value" />
 
         <AccessNote v-if="!canShip" :reason="{ kind: `tier`, floor: `maintainer` }" :place="words.changes" class="shrink-0 px-2 py-1.5" />
 

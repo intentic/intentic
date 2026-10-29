@@ -1,3 +1,4 @@
+import { agentScope, branchScope, scopeQuery, type ViewScope } from "../../app/workspaceScope";
 import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "../files/fileRefs";
 
 // File mentions in rendered markdown become clickable: a path is matched against the workspace tree and shown by
@@ -24,10 +25,21 @@ const ownWorkspaceRef = (href: string): string | undefined => {
 };
 
 // The workspace route for a file (`/workspace/src/foo.ts`), a real URL so middle-click, copy-link and the status bar
-// work. `?agent=` rides along for an isolated conversation, since a bare path can't tell that tree from the shared one.
-const workspaceHref = (path: string, agent: string | undefined): string => {
+// work. `?agent=` rides along for an isolated conversation, `?repo=&branch=` for a branch, since a bare path can't tell
+// either tree from the shared one.
+const workspaceHref = (path: string, scope: ViewScope): string => {
     const route = `/workspace/${path.split(`/`).map(encodeURIComponent).join(`/`)}`;
-    return agent === undefined ? route : `${route}?agent=${encodeURIComponent(agent)}`;
+    const query = scopeQuery(new URLSearchParams(), scope).toString();
+    return query === `` ? route : `${route}?${query}`;
+};
+
+/** The copy a marked link names (markFileLink's data attributes); none is the shared tree. */
+export const linkScope = (data: DOMStringMap): ViewScope => {
+    const { agent, repo, branch } = data;
+    if (agent !== undefined && agent !== ``) {
+        return agentScope(agent);
+    }
+    return branch === undefined || branch === `` || repo === undefined ? agentScope(undefined) : branchScope({ repo, branch });
 };
 
 // allow(md-links): `docs/a.md` and `docs/b.md` are an example of the rule, not pages in this repository
@@ -56,8 +68,7 @@ export const resolveIn = (dir: string | undefined, path: string): string => {
 // a model's path is often only the tail. Matched in the copy the words are about (`agent`), never the one on screen: a
 // conversation's new file is in its checkout alone, and another copy's same-named file is a different file. An
 // unmatched reference keeps its literal form, resolved daemon-side on click.
-const linkTarget = (rawPath: string, dir: string | undefined, agent: string | undefined): string | undefined => {
-    const scope = { agent };
+const linkTarget = (rawPath: string, dir: string | undefined, scope: ViewScope): string | undefined => {
     const target = toWorkspacePath(rawPath, scope);
     if (target === undefined || rawPath.startsWith(`/`)) {
         return target;
@@ -75,15 +86,19 @@ const linkLabel = (rawPath: string, line: number | undefined): string => {
 
 // Turn an anchor into a workspace file link. The line rides in a data attribute, read by an in-page click, since a
 // new tab would otherwise land on line 1; the agent scope rides in the href, so a new tab still opens the right tree.
-const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | undefined, agent: string | undefined): void => {
+const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | undefined, scope: ViewScope): void => {
     anchor.classList.add(`md-file-link`);
-    anchor.setAttribute(`href`, workspaceHref(path, agent));
+    anchor.setAttribute(`href`, workspaceHref(path, scope));
     anchor.dataset[`file`] = path;
     if (line !== undefined) {
         anchor.dataset[`line`] = String(line);
     }
-    if (agent !== undefined) {
-        anchor.dataset[`agent`] = agent;
+    if (scope.agent !== undefined) {
+        anchor.dataset[`agent`] = scope.agent;
+    }
+    if (scope.branch !== undefined) {
+        anchor.dataset[`repo`] = scope.repo;
+        anchor.dataset[`branch`] = scope.branch;
     }
     // The link text can be prose (`[the config](src/foo.ts)`), so name the destination on hover.
     anchor.title = line === undefined ? path : `${path}:${line}`;
@@ -91,7 +106,7 @@ const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | un
 
 // An anchor markdown itself produced. A relative target resolves as a file reference (`[label](path#L42)`); an
 // outbound one opens its own tab instead, since navigating in place would tear down the chat's running view.
-const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent: string | undefined): void => {
+const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, scope: ViewScope): void => {
     const href = anchor.getAttribute(`href`);
     if (href === null || href === `` || href.startsWith(`#`)) {
         return;
@@ -104,16 +119,16 @@ const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent
         return;
     }
     const { path, line } = parseRef(own ?? href);
-    const target = linkTarget(path, dir, agent);
+    const target = linkTarget(path, dir, scope);
     if (target === undefined) {
         return;
     }
-    markFileLink(anchor, target, line, agent);
+    markFileLink(anchor, target, line, scope);
 };
 
 // Splits one text node around every file reference in it; left untouched as the original node when nothing maps
 // into the workspace.
-const linkifyText = (node: Text, dir: string | undefined, agent: string | undefined): void => {
+const linkifyText = (node: Text, dir: string | undefined, scope: ViewScope): void => {
     const text = node.data;
     FILE_REF_ALL.lastIndex = 0;
     const parts = document.createDocumentFragment();
@@ -121,7 +136,7 @@ const linkifyText = (node: Text, dir: string | undefined, agent: string | undefi
     let taken = 0;
     for (let match = FILE_REF_ALL.exec(text); match !== null; match = FILE_REF_ALL.exec(text)) {
         const { path, line } = parseRef(match[0]);
-        const target = linkTarget(path, dir, agent);
+        const target = linkTarget(path, dir, scope);
         if (target === undefined) {
             // A path outside the workspace stays plain text.
             continue;
@@ -129,7 +144,7 @@ const linkifyText = (node: Text, dir: string | undefined, agent: string | undefi
         parts.append(text.slice(taken, match.index));
         const anchor = document.createElement(`a`);
         anchor.textContent = linkLabel(path, line);
-        markFileLink(anchor, target, line, agent);
+        markFileLink(anchor, target, line, scope);
         parts.append(anchor);
         taken = match.index + match[0].length;
     }
@@ -140,10 +155,10 @@ const linkifyText = (node: Text, dir: string | undefined, agent: string | undefi
     node.replaceWith(parts);
 };
 
-// Linkify every reference in a sanitized fragment, in place; `dir` resolves relative refs, `agent` scopes the
+// Linkify every reference in a sanitized fragment, in place; `dir` resolves relative refs, `scope` names the
 // workspace copy. Skips <a> (already targeted) and <pre> (still the code placeholder); inline <code> is scanned.
-export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined, agent: string | undefined): void => {
-    fragment.querySelectorAll(`a`).forEach((anchor) => linkifyAnchor(anchor, dir, agent));
+export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined, scope: ViewScope): void => {
+    fragment.querySelectorAll(`a`).forEach((anchor) => linkifyAnchor(anchor, dir, scope));
     // Collected before any rewriting: replacing a node mid-walk invalidates the walker's position.
     const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
     const texts: Text[] = [];
@@ -154,5 +169,5 @@ export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefi
             texts.push(node as Text);
         }
     }
-    texts.forEach((text) => linkifyText(text, dir, agent));
+    texts.forEach((text) => linkifyText(text, dir, scope));
 };

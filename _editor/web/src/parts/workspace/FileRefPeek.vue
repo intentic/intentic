@@ -22,6 +22,7 @@ import { readFileWindow } from "../../models/workspace/files/fileWindow";
 import { createPeekCache, PEEK_SPAN, peekKey, type PeekFile, type PeekIo, peekView, peekWantsMore, readPeek } from "../../models/workspace/files/fileRefQuickLook";
 import { openWorkspaceRef, sharedStatePath } from "../../models/workspace/files/openFileRef";
 import { resolveWorkspaceRef } from "../../models/workspace/files/resolveFileRef";
+import { agentScope } from "../../app/workspaceScope";
 
 // One card per surface, raised by every file link inside `host` through delegated listeners (the links live in v-html,
 // so no link carries a listener of its own). The pointer opens it after a dwell, keyboard focus at once; the pointer
@@ -75,7 +76,7 @@ const failed = ref(false);
 const cache = createPeekCache({ freshFor: 30_000, budget: 4 * 1024 * 1024 });
 
 const ioFor = (agent: string | undefined): PeekIo => {
-    const scope = { agent };
+    const scope = agentScope(agent);
     return {
         resolve: (path) => resolveWorkspaceRef(path, scope),
         read: (path, offset, limit) => readFileWindow(path, { offset, limit, scope }),
@@ -273,7 +274,7 @@ const openTarget = (): void => {
     }
     const path = file.value?.path ?? shown.written;
     hover.hide(release);
-    void openWorkspaceRef(path, shown.line, { agent: shown.agent });
+    void openWorkspaceRef(path, shown.line, agentScope(shown.agent));
 };
 
 // --- What the card draws. -----------------------------------------------------------------------------------------

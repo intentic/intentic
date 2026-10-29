@@ -134,7 +134,8 @@ interface UnsentTab {
 // conversation); `at` 0, since nothing has looked at the work yet.
 const linkedDraft = (tab: TabFacts, card: FleetAgent): FleetAgent => {
     if (tab.freshOf === undefined) {
-        return card;
+        // A branch start not sent yet already says which branch, as the sandbox's card will (`branches`).
+        return tab.fromBranch === undefined ? card : { ...card, branches: [tab.fromBranch] };
     }
     const of = tab.freshOf.conversationId;
     return { ...card, startedBy: `agent:${of}`, fresh: { of, kind: tab.freshOf.kind, at: 0 } };

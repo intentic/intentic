@@ -4,6 +4,7 @@ import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { settleIndex } from "@intentic/base/git";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
+import { branchLinesOf } from "../../../conversations/land/branch/branch-land.js";
 import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
 import { headSha } from "../../../git/changes/changes.js";
 import { followedParent, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
@@ -47,7 +48,7 @@ const upstreamNow = async (deps: Pick<Services, "agents" | "agentWorktrees">, co
 // land already holds them, and every other caller runs it under `underLeases`.
 const rebaser =
     (
-        deps: Pick<Services, "agents" | "perf" | "agentWorktrees">,
+        deps: Pick<Services, "agents" | "perf" | "agentWorktrees" | "branchCheckouts">,
         conversationId: string,
         worktree: ConversationWorktree,
         onto: Map<string, string>,
@@ -57,11 +58,13 @@ const rebaser =
         // Read fresh every call, since a land in between moves `landedTip`, and a sync onto a parent moves `base`.
         const current = deps.agents.entry(conversationId);
         const recorded = new Map((worktreeOf(current)?.repos ?? []).map((composed) => [composed.repo, composed]));
+        // A repo started from a branch follows that branch's checkout, brought to its tip first (branch-land.ts).
+        const lines = await branchLinesOf(deps, worktreeOf(current));
         const synced = await deps.perf.track("agent.sync", { id: conversationId }, () =>
             syncConversation(
                 deps.agentWorktrees,
                 conversationId,
-                worktree.repos.map(({ repo, base }) => ({ repo, base: recorded.get(repo)?.base ?? base, landedTip: recorded.get(repo)?.landedTip })),
+                worktree.repos.map(({ repo, base }) => ({ repo, base: recorded.get(repo)?.base ?? base, landedTip: recorded.get(repo)?.landedTip, line: lines.get(repo)?.dir })),
                 current?.social.title?.text,
                 upstream,
             ),

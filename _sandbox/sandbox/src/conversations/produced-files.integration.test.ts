@@ -41,7 +41,7 @@ const rows: TranscriptRow[] = [
 const deps = (agent: PersistedAgent) => ({
     agents: unstubbed<Services["agents"]>("agents", { entry: (id) => (id === agent.id ? agent : undefined) }),
     transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => rows }),
-    workspaceScope: { main, entry: () => agent, worktreeDir: () => copy },
+    workspaceScope: { main, entry: () => agent, worktreeDir: () => copy, branches: unstubbed<Services["workspaceScope"]["branches"]>("branches", {}) },
 });
 const app = ({ email = guest, role = "guest", agent = entry }: { email?: string; role?: MemberRole; agent?: PersistedAgent } = {}) => {
     const hono = new Hono<AppEnv>();

@@ -6,10 +6,11 @@ import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/archive/workspace-archive-browse.js";
 import { holdsControlPlane, isControlPlanePath, resolveWithin, resolveWorkspacePath } from "../files/workspace-files-paths.js";
+import { branchRegion, branchScopeOf, type BranchViews, branchViewRoot, type ReadScope } from "./branch-view.js";
 
 // Resolves where a read really lands, for every file-serving route; downstream just takes the answer. Two questions in
-// one place: whose copy of the workspace it means, and whether it reads through an archive into that archive's
-// unpacked copy.
+// one place: whose copy of the workspace it means (the shared tree, a conversation's checkout, or a branch the shared
+// tree is not on: branch-view.ts), and whether it reads through an archive into that archive's unpacked copy.
 // Reads only: no write route's schema carries a scope field, so the file API can't write into a checkout mid-turn, and
 // nothing is ever written back into an archive.
 
@@ -18,6 +19,8 @@ export interface WorkspaceScopeDeps {
     readonly main: string;
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly worktreeDir: (id: string) => string;
+    // The checkouts kept of branches the shared tree is not on, for a branch scope.
+    readonly branches: BranchViews;
 }
 
 const present = async (path: string): Promise<boolean> => {
@@ -53,7 +56,13 @@ export const refuseKeptFolder = async (root: string, absPath: string): Promise<v
 
 // A non-isolated conversation resolves to the shared tree rather than failing; /work genuinely is its tree.
 // A retired checkout is the hard stop: archiving keeps the branch but drops the checkout, distinct from a missing file.
-export const workspaceRootFor = async (deps: WorkspaceScopeDeps, agent: string | undefined): Promise<string> => {
+// A branch scope answers with the branch's workspace-shaped checkout, brought to its tip first.
+export const workspaceRootFor = async (deps: WorkspaceScopeDeps, scope: ReadScope): Promise<string> => {
+    const branch = branchScopeOf(scope);
+    if (branch !== undefined) {
+        return branchViewRoot(deps.branches, branch);
+    }
+    const { agent } = scope;
     if (agent === undefined) {
         return deps.main;
     }
@@ -127,13 +136,22 @@ export const childrenForRead = async (root: string, relPath: string, options?: {
 };
 
 // Falls back to the shared tree when the path isn't in the checkout: it mirrors /work's layout but isn't a superset.
-// `shared` reports which tree answered, so the reader is never guessing.
+// `shared` reports which tree answered, so the reader is never guessing. A branch never falls back inside its own
+// repository, where a file it deleted must read as gone, and always does outside it.
 export const scopedTarget = async (
     deps: WorkspaceScopeDeps,
-    agent: string | undefined,
+    scope: ReadScope,
     relPath: string,
 ): Promise<{ readonly target: string; readonly shared: boolean }> => {
-    const root = await workspaceRootFor(deps, agent);
+    const branch = branchScopeOf(scope);
+    if (branch !== undefined) {
+        // Asked whatever the path, so a branch no view may show is refused the same way everywhere.
+        const view = await branchViewRoot(deps.branches, branch);
+        return (await branchRegion(deps.main, branch.repo)).owns(relPath)
+            ? { target: await containedForRead(view, relPath), shared: false }
+            : { target: await containedForRead(deps.main, relPath), shared: true };
+    }
+    const root = await workspaceRootFor(deps, scope);
     const scoped = await containedForRead(root, relPath);
     if (root === deps.main || (await present(scoped))) {
         return { target: scoped, shared: root === deps.main };

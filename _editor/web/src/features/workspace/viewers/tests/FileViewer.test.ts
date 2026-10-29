@@ -118,7 +118,7 @@ const mount = (path: string, options: { readOnly?: true; scope?: string } = {}):
     app = createApp({
         setup: () => {
             if (options.scope !== undefined) {
-                provide(VIEW_SCOPE, ref(options.scope));
+                provide(VIEW_SCOPE, ref({ agent: options.scope }));
             }
             return () => h(FileViewer, { path, readOnly: options.readOnly });
         },

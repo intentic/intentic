@@ -40,7 +40,7 @@ const props = defineProps<{
 // A link in the sealed page to another workspace file.
 const emit = defineEmits<{ open: [path: string] }>();
 
-const viewAgent = useViewScope();
+const viewScope = useViewScope();
 // A daemon that advertises nothing reads as able to mint; one whose mint then fails is previewed sealed instead.
 const mintRefused = ref(false);
 const served = computed(() => canServePreview() && !mintRefused.value);
@@ -61,7 +61,7 @@ const missing = shallowRef<readonly string[]>([]);
 
 const mint = (): void => {
     const isLatest = latest();
-    mintPreview(props.path, { agent: viewAgent.value }, props.unsaved === true ? props.source : undefined).then(
+    mintPreview(props.path, viewScope.value, props.unsaved === true ? props.source : undefined).then(
         (minted) => {
             if (isLatest()) {
                 failed.value = false;
@@ -126,7 +126,7 @@ const build = (): void => {
 const carriedEpochs = computed(() => (built.value?.carried ?? []).map((path) => changeEpochOf(path)).join(","));
 
 watch(
-    [() => props.path, () => props.source, () => props.unsaved, viewAgent, served, carriedEpochs],
+    [() => props.path, () => props.source, () => props.unsaved, viewScope, served, carriedEpochs],
     () => {
         if (served.value) {
             mint();

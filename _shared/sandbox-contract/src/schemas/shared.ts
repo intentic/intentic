@@ -35,3 +35,24 @@ export const RepoParamSchema = object({
             'Which repository. "root" is the workspace itself; anything else is a repository\'s folder relative to the workspace root, URL-encoded.',
         ),
 });
+// A shared checkout's main line (the daemon's git/main-line-lock.ts), named on a repository's changes only when
+// something moved it elsewhere.
+export const MainBranchSchema = string()
+    .optional()
+    .describe(
+        "The branch this shared checkout belongs on, given only when it stands somewhere else: agents' work waits rather than land on the wrong branch until it is back. Absent, the normal case, means it is on its main line.",
+    );
+// One branch of one workspace repository, for what looks at it or starts from it while the shared checkout stays on its
+// main line: the Workspace's per-person view of it, an agent started from it. A remote-only branch is named by its
+// short name; the daemon makes the local one at the remote's tip the first time it is needed.
+export const BranchNameSchema = string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+    .max(200)
+    .describe("The branch, by its short name: `feature/login`, not `refs/heads/feature/login` or `origin/feature/login`.");
+export const RepoBranchSchema = object({
+    repo: string()
+        .min(1)
+        .describe('Which repository. "root" is the workspace itself; anything else is a repository\'s folder relative to the workspace root.'),
+    branch: BranchNameSchema,
+});
+export type RepoBranch = z.infer<typeof RepoBranchSchema>;

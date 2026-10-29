@@ -18,6 +18,7 @@ import { useChat } from "../models/conversations/run/useChat";
 import { accountsOf } from "../models/conversations/accounts/useChat-accounts";
 import { useAgents } from "../models/fleet/useAgents";
 import { startAgent } from "../models/fleet/agentActions";
+import { draftFromBranch } from "../models/fleet/branches/branchStart";
 import { hostLaunchAgent } from "./agentLaunch";
 import { declaredChord } from "../workbench/commands/builtinCommands";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
@@ -62,8 +63,7 @@ export interface HostBindings {
 }
 
 /* WHAT TO CALL A SELECTION, the one place a (provider, model, account, effort) selection is turned into words for an extension. */
-// The account half of that, lifted out so the builder below stays one flat literal: which id was pinned, and
-// what the owner would recognise it as.
+// The account half of that, lifted out so the builder below stays one flat literal: which id was pinned, and what the owner would recognise it as.
 const namedAccount = (provider: AgentProvider, account: string | undefined): Pick<PickedModel, "account" | "accountLabel"> => {
     const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
     return {
@@ -508,12 +508,13 @@ export const createExtensionApi = (
                 startAgent();
                 useChat().active.value.workflowId.value = workflowId;
             },
-            // The loop badge's half of the same handover: a new chat with the loop picked, waiting for the sentence
-            // that becomes its goal.
+            // The loop badge's half of the same handover: a new chat with the loop picked, waiting for the sentence that becomes its goal.
             composeLoop: (loopId) => {
                 startAgent();
                 useChat().active.value.loopId.value = loopId;
             },
+            // The composer's own "Start from" draft (models/fleet/branches/branchStart.ts): the shared workspace stays on its main line.
+            composeFrom: (from) => draftFromBranch({ repo: from.repo, branch: from.branch }),
             launchAgent: hostLaunchAgent,
         },
         // Nothing here is gated on a manifest permission: the extension never learns a credential or reaches a provider

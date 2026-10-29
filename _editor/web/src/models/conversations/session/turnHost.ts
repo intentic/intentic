@@ -15,6 +15,7 @@ export type TurnHost = Pick<
     | "standing"
     | "pendingForkOf"
     | "pendingFreshOf"
+    | "pendingFromBranch"
     | "error"
     | "pickUp"
     | "session"

@@ -2,7 +2,7 @@ import { WORKSPACE_DIMENSIONS_MAX, type WorkspaceTreeEntry } from "@intentic/san
 import { sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { shallowReactive } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { workspaceAgent } from "../../../app/workspaceScope";
+import { scopeFields, scopeKey, workspaceView } from "../../../app/workspaceScope";
 import { thumbnailKind } from "./thumbnails";
 
 // The box each picture and video in the home is shown in, as the gallery lays its rows out from: asked of the daemon a
@@ -28,7 +28,7 @@ const boxes = sandboxShallowRef(() => shallowReactive(new Map<string, MediaBox |
 const asking = sandboxValue(() => new Set<string>());
 
 // A rewritten file (same path, new size or time) may be a different picture.
-const keyOf = (entry: WorkspaceTreeEntry): string => `${workspaceAgent.value ?? ``}\n${entry.path} ${entry.size ?? 0} ${entry.mtime ?? 0}`;
+const keyOf = (entry: WorkspaceTreeEntry): string => `${scopeKey(workspaceView.value)}\n${entry.path} ${entry.size ?? 0} ${entry.mtime ?? 0}`;
 
 const keep = (key: string, box: MediaBox | null, into = boxes.value): void => {
     into.set(key, box);
@@ -56,7 +56,7 @@ const ask = async (batch: readonly { readonly entry: WorkspaceTreeEntry; readonl
     const into = boxes.value;
     const pending = asking.value;
     try {
-        const { items } = await sandboxRpc.workspace.dimensions({ agent: workspaceAgent.value, paths: batch.map(({ entry }) => entry.path) });
+        const { items } = await sandboxRpc.workspace.dimensions({ ...scopeFields(workspaceView.value), paths: batch.map(({ entry }) => entry.path) });
         const byPath = new Map(items.map((item) => [item.path, item]));
         for (const { entry, key } of batch) {
             const item = byPath.get(entry.path);

@@ -249,9 +249,19 @@ export const gitContract = {
             path: "/git/{repo}/checkout",
             summary: "Switch to a branch or commit",
             description:
-                "Moves HEAD to a branch, tag or commit and reshapes the working tree to match. The daemon takes a checkpoint first, so an unexpected result is recoverable. Uncommitted work that would be overwritten is reported instead of being trampled.",
+                "Moves HEAD to a branch, tag or commit and reshapes the working tree to match. The daemon takes a checkpoint first, so an unexpected result is recoverable. Uncommitted work that would be overwritten is reported instead of being trampled. The shared workspace stays on its main line, so anything else is reported as refused: look at another branch in the Workspace's view, or start an agent from it.",
         })
         .input(GitCheckoutSchema)
+        .output(GitActionResultSchema),
+    returnToMainLine: procedure
+        .route({
+            method: "POST",
+            path: "/git/{repo}/main-line",
+            summary: "Put the shared checkout back on its main line",
+            description:
+                "Switches a shared checkout that something moved off its main line back onto it, which is the only switch the shared workspace takes. Uncommitted work that would be overwritten is reported instead of being trampled, and nothing happens when it is already there.",
+        })
+        .input(RepoParamSchema)
         .output(GitActionResultSchema),
     cherryPick: procedure
         .route({
@@ -391,7 +401,7 @@ export const gitContract = {
             path: "/git/{repo}/branches",
             summary: "Create a branch from a starting point",
             description:
-                "Makes a branch at a named start point and optionally switches to it. The branch-switcher counterpart to creating a branch at a specific commit.",
+                "Makes a branch at a named start point and optionally switches to it. The branch-switcher counterpart to creating a branch at a specific commit. Switching is refused in the shared workspace, which stays on its main line.",
         })
         .input(GitBranchCreateAtSchema)
         .output(OkSchema),

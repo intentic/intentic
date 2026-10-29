@@ -3,9 +3,10 @@ import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../app/projectScope";
-import { workspaceAgent } from "../../../app/workspaceScope";
+import { sameScope, scopeKey, workspaceView } from "../../../app/workspaceScope";
+import { queryWithScope, scopeFromQuery } from "./scopeRoute";
 
-// Two-way syncs the open file (and `?agent` scope) between the URL and the tabs singleton, so reload and
+// Two-way syncs the open file (and the `?agent` / `?repo&branch` scope) between the URL and the tabs singleton, so reload and
 // back/forward work; only file tabs are addressable. `route.params.path` is string[] or "" when bare; writes need an
 // array.
 export function useWorkspaceRoute(): void {
@@ -14,20 +15,18 @@ export function useWorkspaceRoute(): void {
     const { activeTab, activeId, openFile } = useWorkspaceTabs();
 
     // URL <-> scope; the route wins at mount, but a scope set from outside (e.g. chat) writes back into the URL.
-    const urlAgent = computed(() => {
-        const agent = route.query[`agent`];
-        return typeof agent === `string` && agent !== `` ? agent : undefined;
-    });
-    workspaceAgent.value = urlAgent.value;
-    watch(urlAgent, (agent) => {
-        workspaceAgent.value = agent;
-    });
-    watch(workspaceAgent, (agent) => {
-        if (agent === urlAgent.value) {
-            return;
+    const urlScope = computed(() => scopeFromQuery(route.query));
+    workspaceView.value = urlScope.value;
+    watch(
+        () => scopeKey(urlScope.value),
+        () => {
+            workspaceView.value = urlScope.value;
+        },
+    );
+    watch(workspaceView, (scope) => {
+        if (!sameScope(scope, urlScope.value)) {
+            void router.replace({ query: queryWithScope(route.query, scope) });
         }
-        const { agent: _dropped, ...rest } = route.query;
-        void router.replace({ query: agent === undefined ? rest : { ...rest, agent } });
     });
 
     const urlPath = computed(() => {

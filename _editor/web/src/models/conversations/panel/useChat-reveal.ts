@@ -266,6 +266,8 @@ export const draftConversation = (): Conversation => {
     // Re-seeds the handed-back draft with current picks, so it matches what a fresh one would have been; safe since the
     // draft is untouched by definition.
     open.selection.apply({ kind: `seed` });
+    // A branch start held by a blank nobody wrote in is no part of the new agent asked for; one that wants it sets it again.
+    open.pendingFromBranch.value = undefined;
     // A blank the panel was only standing on has no board card; a New agent press on it turns it into a chat the user
     // actually started.
     open.standIn.value = false;

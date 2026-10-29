@@ -65,3 +65,28 @@ export const freshOfIssues = (
         ctx.addIssue({ code: "custom", message: "a conversation cannot start fresh on its own work" });
     }
 };
+
+// A conversation started from a branch of one repository rather than from the main line: cut from the branch's tip there,
+// kept on it, and its finished work committed onto it, while the shared checkout never leaves its main line. Latched by
+// the opening turn as the placement's `branches`.
+export const FROM_BRANCH_DESCRIPTION =
+    "Start this conversation from a branch of one repository instead of the main line: its copy of that repository is cut from the branch's tip, kept on it, and its finished work is committed onto that branch rather than landed in the shared workspace. First turn only, only on a private copy here, and never together with `freshOf` or `forkOf`.";
+
+// The turn's own rules for `fromBranch`: a new private copy of its own here, one start at a time.
+export const fromBranchIssues = (
+    turn: { readonly fromBranch?: unknown; readonly conversationId?: string | undefined; readonly isolated?: boolean | undefined; readonly forkOf?: unknown; readonly freshOf?: unknown },
+    ctx: z.RefinementCtx,
+): void => {
+    if (turn.fromBranch === undefined) {
+        return;
+    }
+    if (turn.conversationId === undefined || turn.isolated !== true) {
+        ctx.addIssue({ code: "custom", message: "fromBranch requires an isolated conversationId" });
+    }
+    if (turn.forkOf !== undefined || turn.freshOf !== undefined) {
+        ctx.addIssue({ code: "custom", message: "fromBranch is a start of its own: not together with forkOf or freshOf" });
+    }
+};
+
+export const FROM_BRANCHES_DESCRIPTION =
+    "The branches this conversation was started from, one per repository it works on a branch of: its copy of each is kept on that branch, and its land commits onto it instead of reaching the shared workspace. Absent for a conversation on the main line.";

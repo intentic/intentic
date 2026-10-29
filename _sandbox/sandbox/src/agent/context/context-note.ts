@@ -41,6 +41,22 @@ export const contextNote = (input: ContextNoteInput): TurnNote => {
     return { title: CONTEXT_NOTE_TITLE, text: lines.join("\n") };
 };
 
+// A conversation started from a branch (conversations/land/branch-repos.ts): which of its repositories, and that its land
+// goes onto that branch rather than the main line, which a model would otherwise assume every land reaches. Joined to
+// whatever other note the opening owes, or a note of its own when it owes none.
+const BRANCH_NOTE_TITLE = "Started from a branch";
+
+export const withBranchNote = (note: TurnNote | undefined, started: readonly { readonly repo: string; readonly branch: string }[]): TurnNote | undefined => {
+    if (started.length === 0) {
+        return note;
+    }
+    const said = started.map(
+        ({ repo, branch }) =>
+            `${repo === "root" ? "The workspace repository" : `\`${repo}\``} was started from branch \`${branch}\`; your finished work is committed onto \`${branch}\`, not the main line.`,
+    );
+    return note === undefined ? { title: BRANCH_NOTE_TITLE, text: [`## ${BRANCH_NOTE_TITLE}`, "", ...said].join("\n") } : { ...note, text: [note.text, "", ...said].join("\n") };
+};
+
 // The repositories a conversation that carries everything still cannot have checked out: one with no commit has
 // nothing to branch from, and one git cannot read has nothing to check out. Their folders look like any other in the
 // tree, so a model would write into them and never learn that the work reached no branch. Said with the way out, so a

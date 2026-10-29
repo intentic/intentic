@@ -19,6 +19,7 @@ import type { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
 import { draftInOrigin } from "../../../../models/fleet/freshSession";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import { agentScope } from "../../../../app/workspaceScope";
 
 // What a pane's tool cards can lead to: the chat's own checkout, terminal and browser, the calls a delegation's card
 // holds in the chat's record, navigating in the app's own window, and the roster's word on the subagents its calls
@@ -33,8 +34,8 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         // A guest is fenced out of Files (guestPaths.ts), so its documents open where it reads them.
         resultsInPlace: () => useRole().isGuest.value,
         // The daemon's re-encoded view rather than the file, in the conversation's own scope like `openFile`.
-        imageUrl: (path) => picture(agent(), path, `view`)?.url,
-        openFile: (path, line) => openWorkspaceRef(path, line, { agent: agent() }),
+        imageUrl: (path) => picture(agentScope(agent()), path, `view`)?.url,
+        openFile: (path, line) => openWorkspaceRef(path, line, agentScope(agent())),
         // After what the reader already wrote, never over it.
         draftMessage: (text) => {
             const draft = conversation().draft.value.trim();

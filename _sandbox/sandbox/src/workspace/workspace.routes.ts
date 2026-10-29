@@ -33,7 +33,8 @@ import { moveTargetTaken } from "./files/workspace-files.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { workspaceReads } from "./workspace-reads.js";
-import { childrenForRead, containedForRead, containedIn, insideArchive, refuseKeptFolder, workspaceRootFor } from "./layout/workspace-scope.js";
+import { containedForRead, containedIn, insideArchive, refuseKeptFolder, workspaceRootFor } from "./layout/workspace-scope.js";
+import { scopedChildren, scopedTree } from "./layout/branch-listing.js";
 import {
     fencedChildren,
     fencedClassification,
@@ -118,12 +119,12 @@ export const createWorkspaceRoutes = (services: Services) => {
     };
     return {
         // input.agent picks whose copy to walk, with no fallback; a file the walk misses can still be opened via
-        // `file`.
+        // `file`. A branch is the shared tree with its repository's part walked on the branch (layout/branch-listing.ts).
         // A fenced caller is shown their own folders and the ancestors leading to them, rather than the whole tree
         // with most of it refusing on click.
         tree: i.tree.handler(async ({ input, context }) => {
             refuseUnseenAgent(context, input.agent);
-            const tree = await services.workspaceTree(await workspaceRootFor(scope, input.agent));
+            const tree = await scopedTree(scope, services.workspaceTree, input);
             return fencedTree(await fenceFor(context), tree);
         }),
         // Lazy-loads children of a dir the tree skipped (node_modules, .git, ...), or a bounded subtree for a consumer
@@ -134,15 +135,14 @@ export const createWorkspaceRoutes = (services: Services) => {
             // `finance/reports`, and the listing below is pruned to what leads somewhere.
             const fence = await fenceFor(context);
             refuseUnlistable(fence, input.path);
-            const root = await workspaceRootFor(scope, input.agent);
             const options = input.depth === undefined ? undefined : { depth: input.depth };
-            const listed = (await childrenForRead(root, input.path, options)) ?? (await services.workspaceChildren(root, input.path, options));
+            const listed = await scopedChildren(scope, services.workspaceChildren, input, input.path, options);
             return fencedChildren(fence, listed);
         }),
         // Returns a window of the file with its total size, not the whole file. An absent file is a 200 with
         // present:false, not a 404; scopedTarget still throws on an escape or control-plane path.
         file: i.file.handler(async ({ input, context }) => {
-            const { target, shared } = await scopedRead(context, input.agent, input.path);
+            const { target, shared } = await scopedRead(context, input, input.path);
             const window = await services.files.readWindow(target, input.offset, input.limit);
             return window === undefined
                 ? { present: false as const, path: input.path }
@@ -166,9 +166,10 @@ export const createWorkspaceRoutes = (services: Services) => {
             // The fence applies to the ANSWER, not the question: the input is a fragment somebody wrote, and matching
             // it against the tree is exactly how a fenced caller would learn a path outside their folders exists.
             const fence = await fenceFor(context);
-            const checkout = await workspaceRootFor(scope, input.agent);
+            const checkout = await workspaceRootFor(scope, input);
             // The index knows the shared tree alone: what the conversation created, renamed or deleted comes from its own
-            // change list, or its new files would never resolve and its renamed ones would answer by their old names.
+            // change list, or its new files would never resolve and its renamed ones would answer by their old names. A
+            // branch has no such list: its checkout answers for a name as written, the shared index for a partial one.
             const entry = input.agent === undefined ? undefined : services.agents.entry(input.agent);
             const overlay = checkout === services.workspace.root || entry === undefined || !isIsolated(entry) ? NO_OVERLAY : await overlays.of(entry);
             const resolved = await resolveReference(

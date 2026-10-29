@@ -30,6 +30,7 @@ const GIT_SAMPLES: Samples[`git`] = {
     createBranchAt: { repo: `web`, name: `smoke/branch`, start: `main` },
     deleteBranch: { repo: `web`, name: `smoke/branch` },
     checkout: { repo: `web`, ref: `main` },
+    returnToMainLine: { repo: `web` },
     createTag: { repo: `web`, sha: web(`w7`), name: `smoke-tag` },
     pushTag: { repo: `web`, name: `smoke-tag`, remote: `origin` },
     deleteTag: { repo: `web`, name: `smoke-tag`, remote: `origin` },

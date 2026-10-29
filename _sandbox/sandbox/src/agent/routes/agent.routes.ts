@@ -25,6 +25,7 @@ import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-reque
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
+import { refuseFromBranch } from "./branch-start.js";
 import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
 import { type HomeOpening, homeOpening, refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 
@@ -116,6 +117,7 @@ export const createAgentRoutes = (services: Services) => {
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             drive(context, conversationId);
+            await refuseFromBranch(services, conversationId, input);
             const opening = openingOf(services, context, conversationId, input);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);

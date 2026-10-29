@@ -2,7 +2,7 @@ import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { elementAddress } from "../../../client/endpoint/elementAddress";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
-import type { ViewScope } from "../../../app/workspaceScope";
+import { scopeFields, type ViewScope } from "../../../app/workspaceScope";
 
 // A workspace web page previewed from the daemon's own address for it (GET /workspace/preview/{ticket}/*, the daemon's
 // workspace-preview.ts), so it runs as it would on a static file server: scripts, modules, fetches, workers, the
@@ -25,7 +25,7 @@ export const canServePreview = (): boolean => {
 
 // The address for the page at `path` in `scope`; `source` is its unsaved text, served in place of the file.
 export const mintPreview = async (path: string, scope: ViewScope, source: string | undefined): Promise<PreviewAddress> => {
-    const minted = await sandboxRpc.workspace.previewTicket({ path, agent: scope.agent, source });
+    const minted = await sandboxRpc.workspace.previewTicket({ path, ...scopeFields(scope), source });
     const base = useEndpoint().daemonBase.value ?? ``;
     return { url: elementAddress(`${base}${minted.page}`), root: minted.root };
 };

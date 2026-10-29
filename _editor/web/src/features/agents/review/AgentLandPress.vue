@@ -4,14 +4,16 @@ import { useAudience } from "../../../app/useAudience";
 import { Button, type Tip } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
+import { landWord } from "../../../models/fleet/branches/branchLanding";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // One body for the desktop header and a phone's Changes screen, so the role split (maintainers land, collaborators
 // ask, the daemon enforcing the floor either way) is decided in one template rather than kept in step across two.
 const { block = false } = defineProps<{
     /** A maintainer, whose press lands. */
     canShip: boolean;
-    /** Whether a collaborator has already asked, which turns their press into a fact. */
-    requested: boolean;
+    /** The card: whether a collaborator has already asked (which turns their press into a fact), and where its land goes. */
+    agent: Pick<FleetAgent, "landRequested" | "branches"> | undefined;
     /** Land is pressed out: something else is in flight, or nothing is pending. */
     landDisabled: boolean;
     /** The ask is on its way. */
@@ -68,10 +70,10 @@ const { maker } = useAudience();
             @click="emit(`land`)"
             v-tooltip.bottom="landHint"
         >
-            <Icon name="check" />{{ words.land }}
+            <Icon name="check" />{{ landWord(agent?.branches, words.land) }}
         </Button>
         <!-- The collaborator's copy of the press above; once asked it becomes a fact instead of a press. -->
-        <span v-else-if="requested" class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted" :class="block ? `w-full justify-center py-2` : ``">
+        <span v-else-if="agent?.landRequested !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted" :class="block ? `w-full justify-center py-2` : ``">
             <Icon name="clock" class="text-2xs" />{{ words.landRequested }}
         </span>
         <Button

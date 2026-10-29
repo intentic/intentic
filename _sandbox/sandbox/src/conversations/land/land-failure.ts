@@ -1,15 +1,17 @@
 import { errorMessage } from "@intentic/base/errors";
 import { UnlinkedCheckoutError } from "../worktrees/checkout-link.js";
+import { OffMainLineError } from "../../git/main-line-lock.js";
 
 // The longest a broken land's words run on the card's record; git's own message can carry a whole command line.
 const FAILURE_MAX_CHARS = 1_000;
 
 // A land that threw rather than refused, as the card keeps it (AgentSummary.landFailure): its words, and `unlinked` when
-// the checkout lost its link to the workspace, the one kind the board says in its own words.
+// the checkout lost its link to the workspace or `off_main_line` when the shared checkout was moved off its main line,
+// the kinds the board says in its own words.
 export const landFailureOf = (cause: unknown): { readonly reason: string; readonly code?: string } => {
     const said = errorMessage(cause);
     const reason = said.length > FAILURE_MAX_CHARS ? `${said.slice(0, FAILURE_MAX_CHARS - 1)}…` : said;
-    const code = cause instanceof UnlinkedCheckoutError ? "unlinked" : runnerFailureCode(said);
+    const code = cause instanceof UnlinkedCheckoutError ? "unlinked" : cause instanceof OffMainLineError ? "off_main_line" : runnerFailureCode(said);
     return code === undefined ? { reason } : { reason, code };
 };
 

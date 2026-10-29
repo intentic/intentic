@@ -3,7 +3,7 @@ import { AgentProviderSchema } from "../agent.js";
 import { LandConflictSchema, LandedMessageSchema } from "../agents.js";
 import { CommandRunSchema } from "../ci.js";
 import { RefNameSchema } from "../internal.js";
-import { RepoParamSchema } from "../shared.js";
+import { MainBranchSchema, RepoParamSchema } from "../shared.js";
 
 // Which of the working tree's diffs a row is about; a path can be both staged and edited again, so a side is never
 // defaulted.
@@ -293,8 +293,8 @@ export const IGNORED_OUTPUTS_LISTED = 200;
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
-    // Absent on an unborn HEAD (initialized, never committed).
     branch: z.string().optional().describe("The checked-out branch. Absent in a repository that has no commits yet."),
+    mainBranch: MainBranchSchema,
     // Staging a conflicted path (`git add`) is how you tell git it is resolved.
     conflicted: z
         .array(GitChangeSchema)

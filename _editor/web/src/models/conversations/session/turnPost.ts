@@ -33,16 +33,17 @@ const unheard = (answer: MessageReceipt | SandboxHttpError, sandboxId: string | 
     lastEdgeVerdict(sandboxId) !== `unknown-sandbox`;
 
 // The one door a conversation's words go through to the sandbox (TurnClient). A fresh session's origin
-// (Conversation.pendingFreshOf) rides the first send the daemon takes, sent now or booked, and that one alone: a refusal
-// keeps it for the retry, an answer spends it.
+// (Conversation.pendingFreshOf) and a branch start (Conversation.pendingFromBranch) ride the first send the daemon takes,
+// sent now or booked, and that one alone: a refusal keeps them for the retry, an answer spends them.
 export const postTurn = async (
-    host: Pick<Conversation, "box" | "pendingFreshOf">,
+    host: Pick<Conversation, "box" | "pendingFreshOf" | "pendingFromBranch">,
     body: ProcedureInput<`agent.run`>,
     signal: AbortSignal,
 ): Promise<MessageReceipt | SandboxHttpError> => {
     const freshOf = host.pendingFreshOf.value;
+    const fromBranch = host.pendingFromBranch.value;
     const send = () =>
-        retry(() => orRefusal(sandboxRpc.agent.run({ ...body, freshOf }, { signal, context: { at: host.box.value } })), {
+        retry(() => orRefusal(sandboxRpc.agent.run({ ...body, freshOf, fromBranch }, { signal, context: { at: host.box.value } })), {
             attempts: SEND_ATTEMPTS,
             delayMs: (attempt) => SEND_RETRY_MS * attempt,
             signal,
@@ -61,6 +62,7 @@ export const postTurn = async (
     }
     if (!(receipt instanceof SandboxHttpError)) {
         host.pendingFreshOf.value = undefined;
+        host.pendingFromBranch.value = undefined;
     }
     return receipt;
 };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
@@ -13,6 +14,8 @@ import { openConversationsDb } from "../store/conversations-db.js";
 import { conversationUnits } from "../store/conversation-units.js";
 import { fleetStoreOver, memoryFleet } from "./registry/agents-registry.testing.js";
 import { noIsolation } from "./worktrees/isolation.testing.js";
+import { createBranchCheckouts } from "./worktrees/branches/branch-checkouts.js";
+import { createLogger } from "../logger.js";
 import { parkedCards } from "./actor/parked-cards.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
 import type { ConversationsSlice } from "./conversations-slice.js";
@@ -22,6 +25,9 @@ import { registryDrafts } from "./drafts/composer-drafts.js";
 
 // Never-created path under tmpdir, absent everywhere; naming the real /work would vary by machine.
 const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
+
+// What the branch checkouts below say goes nowhere: no suite reads it.
+const SILENT = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
 // Where a conversation's checkout lives, shared by the worktree fake and the scope composed from it.
 const conversationDir = (id: string): string => `${HISTORY_ROOT}/worktrees/${id}`;
@@ -63,6 +69,18 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
     const conversationsDb = openConversationsDb(IN_MEMORY);
     const units = conversationUnits(context.historyRoot, { ...sqliteAgentsStore(conversationsDb), recreated: false });
     const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units));
+    // Real checkouts of branches, of whatever workspace the suite's services name (read at each call), so a suite on a
+    // real repository reads a branch the way the daemon does. Under a history root of these services' own, never
+    // written until a branch is checked out: the default test history root is every suite's, and a checkout another
+    // suite left there under the same names would answer for this one's repository. No lock to queue on.
+    const branchCheckouts = createBranchCheckouts({
+        historyRoot: join(context.historyRoot, "branch-checkouts", randomUUID()),
+        worktrees: {
+            withRepoLock: (_repo, task) => task(),
+            mainDir: (repo) => (repo === "root" ? context.self().workspace.root : join(context.self().workspace.root, repo)),
+        },
+        logger: SILENT,
+    });
     return {
         agents,
         conversations,
@@ -81,6 +99,7 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
             clearFire: async () => {},
         },
         agentWorktrees: absentWorktrees(),
+        branchCheckouts,
         // The real store under the suite's own history root, telling the same registry as the daemon's does.
         drafts: registryDrafts(context.historyRoot, agents, (error) => {
             throw error;
@@ -93,6 +112,10 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
             },
             entry: (id) => context.self().agents.entry(id),
             worktreeDir: conversationDir,
+            // Through the finished services too, so a suite that stands in its own checkouts is read through them.
+            get branches() {
+                return context.self().branchCheckouts;
+            },
         },
         // Namespace isolation off, what a container without CAP_SYS_ADMIN gets: turns run straight in the worktree
         // path. isolation.integration.test.ts covers the plan when it IS available.

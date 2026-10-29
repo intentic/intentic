@@ -9,6 +9,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import type { PersistedAgent, IsolatedAgent, RepoRecord } from "./registry/agents-store.js";
+import { branchOf } from "./land/branch/branch-repos.js";
 import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { resolveWorkspacePath } from "../workspace/files/workspace-files-paths.js";
 import { contentTypeForPath } from "../workspace/files/workspace-files-download.js";
@@ -84,7 +85,7 @@ const placesOf = async (services: Pick<Services, "workspaceScope">, entry: Persi
     }
     const checkout = services.workspaceScope.worktreeDir(entry.id);
     const composed = repoHolding(entry.placement.repos, path);
-    if (composed?.landedTip === undefined || entry.placement.landedInto !== undefined) {
+    if (composed?.landedTip === undefined || entry.placement.landedInto !== undefined || branchOf(entry.placement, composed.repo) !== undefined) {
         return [checkout];
     }
     const nested = composed.repo === "root" ? "" : composed.repo;

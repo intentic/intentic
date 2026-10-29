@@ -45,7 +45,7 @@ afterEach(async () => {
 
 test("cached reviews refresh ignored deliverables without a checkout event and tracked rows with a generation change", async () => {
     const { work, worktrees, conversation } = await setup({ ".gitignore": "out/\n" });
-    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    const deps = { agentWorktrees: worktrees, branchCheckouts: unstubbed<Services["branchCheckouts"]>("branchCheckouts", {}), agents: unstubbed<Services["agents"]>("agents", {}), logger };
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     let generation = 1;
     useCheckoutFeed({ generation: async () => generation });
@@ -239,7 +239,7 @@ test("a rebase after the accept leaves the answer where it was: nothing outstand
 
 // The review as the route serves it, row by row: which paths it lists and which of them it calls landed.
 const served = async (worktrees: AgentWorktrees, entry: ReturnType<typeof isolatedAgent>): Promise<{ rows: string[]; landed: string[] }> => {
-    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    const deps = { agentWorktrees: worktrees, branchCheckouts: unstubbed<Services["branchCheckouts"]>("branchCheckouts", {}), agents: unstubbed<Services["agents"]>("agents", {}), logger };
     const changes = (await reviewOf(deps, entry)).repos.flatMap((row) => row.changes);
     return {
         rows: changes.map((change) => change.path).sort(),
@@ -365,7 +365,7 @@ test("a retired copy's new dependencies are read off its branch, the same answer
 
 test("the review's row carries the new dependencies, and says nothing of them when there are none", async () => {
     const { worktrees, conversation } = await setup(DEPENDENCY_BASELINE);
-    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    const deps = { agentWorktrees: worktrees, branchCheckouts: unstubbed<Services["branchCheckouts"]>("branchCheckouts", {}), agents: unstubbed<Services["agents"]>("agents", {}), logger };
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
 
     const quiet = await reviewOf(deps, isolatedAgent(conversation.repos));
@@ -380,7 +380,7 @@ test("the review's row carries the new dependencies, and says nothing of them wh
 // names it apart, judged against the main tree as it stands.
 test("an ignored file the conversation wrote never lands, and the review lists it apart until main holds it", async () => {
     const { work, worktrees, conversation } = await setup({ ".gitignore": "out/\nnode_modules/\n" });
-    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    const deps = { agentWorktrees: worktrees, branchCheckouts: unstubbed<Services["branchCheckouts"]>("branchCheckouts", {}), agents: unstubbed<Services["agents"]>("agents", {}), logger };
     await writeTree(conversation.cwd, {
         "out/film.mp4": "render",
         "out/poster.png": "poster",

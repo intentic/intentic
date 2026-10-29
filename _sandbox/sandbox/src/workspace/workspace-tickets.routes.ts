@@ -26,7 +26,7 @@ export const createWorkspaceTicketRoutes = (services: Services) => {
     return {
         // Binds the resolved file, not its shared-tree namesake.
         mediaTicket: i.mediaTicket.handler(async ({ input, context }) => {
-            const { target } = await scopedRead(context, input.agent, input.path);
+            const { target } = await scopedRead(context, input, input.path);
             if ((await services.files.size(target)) === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
@@ -38,11 +38,11 @@ export const createWorkspaceTicketRoutes = (services: Services) => {
             const { names, filename } = nameSelection(input.paths, "workspace");
             const items: DownloadItem[] = [];
             for (const [path, name] of names) {
-                const { target, shared } = await scopedRead(context, input.agent, path);
+                const { target, shared } = await scopedRead(context, input, path);
                 if (!(await pathExists(target))) {
                     throw new ORPCError("NOT_FOUND", { message: `${path} is not there any more` });
                 }
-                items.push({ target, name, root: shared ? scope.main : await workspaceRootFor(scope, input.agent) });
+                items.push({ target, name, root: shared ? scope.main : await workspaceRootFor(scope, input) });
             }
             const plan: DownloadPlan = { items, filename };
             return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS, context.identity?.email), filename };
@@ -50,12 +50,12 @@ export const createWorkspaceTicketRoutes = (services: Services) => {
         // The page resolved in the copy asked for, and the folder it may read, the caller's fence and the page's unsaved
         // text fixed now (files/workspace-preview.ts).
         previewTicket: i.previewTicket.handler(async ({ input, context }) => {
-            const { target, shared } = await scopedRead(context, input.agent, input.path);
+            const { target, shared } = await scopedRead(context, input, input.path);
             if (input.source === undefined && !(await pathExists(target))) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
             const plan = await previewPlan({
-                scope: shared ? scope.main : await workspaceRootFor(scope, input.agent),
+                scope: shared ? scope.main : await workspaceRootFor(scope, input),
                 entry: target,
                 fence: await fenceFor(context),
                 source: input.source,
