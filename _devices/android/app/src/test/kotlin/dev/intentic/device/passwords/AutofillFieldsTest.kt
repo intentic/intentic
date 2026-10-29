@@ -35,6 +35,7 @@ class AutofillFieldsTest {
             "pw" to hint(
                 autofillHints = listOf("password"),
                 inputType = InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                webDomain = null,
                 packageName = "com.example.app",
             ),
         )
