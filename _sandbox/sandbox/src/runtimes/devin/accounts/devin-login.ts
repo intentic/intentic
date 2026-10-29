@@ -53,6 +53,9 @@ interface Attempt {
     landing?: DevinLanding;
     // Set once a code or a landing is being redeemed, so a paste and a caught landing never redeem one sign-in twice.
     finishing: boolean;
+    // What the CLI last said when the attempt was ended from outside (a cancel, its window running out), read before
+    // it is killed: once killed, its last words are only the terminal's own goodbye.
+    endedSaying?: string;
 }
 
 // Handshake id to attempt; in memory, so a daemon restart drops any sign-in in flight (and the CLI reads end-of-file).
@@ -153,6 +156,7 @@ const forget = async (handshake: string): Promise<void> => {
     const attempt = pending.get(handshake);
     pending.delete(handshake);
     if (attempt !== undefined) {
+        attempt.endedSaying ??= lastWords(attempt.output);
         attempt.child.kill("SIGTERM");
         await rm(attempt.dir, { recursive: true, force: true });
     }
@@ -291,6 +295,19 @@ const replayTarget = (landing: DevinLanding, address: string): string => {
     return `http://127.0.0.1:${landing.port}${landing.path}${url.search}`;
 };
 
+const saying = (said: string): string => (said === "" ? "" : ` (it last said: ${said})`);
+
+// Throws when the CLI never got to say how the redeem went: still at it past the wait, or ended from outside (a cancel)
+// while it was, where the reason is what it was doing rather than the kill. Its last words name where it stuck.
+const unfinished = (attempt: Attempt, exit: number | null | "slow"): void => {
+    if (exit === "slow") {
+        throw new Error(`Devin's CLI did not finish signing in in time${saying(lastWords(attempt.output))}. Start the sign-in again.`);
+    }
+    if (attempt.endedSaying !== undefined) {
+        throw new Error(`The sign-in was cancelled while Devin's CLI was still finishing it${saying(attempt.endedSaying)}.`);
+    }
+};
+
 // Hands the CLI what the person brought back (the manual page's code, or the browser page's landing), waits for it to
 // redeem it, and takes the key it wrote. Once the CLI has heard it the attempt is gone whatever happened: a refused code
 // or landing means starting again, as either is single-use.
@@ -320,9 +337,7 @@ export const finishDevinLogin = async (handshake: string, grant: string): Promis
             await response.body?.cancel();
         }
         const exit = await within(attempt.exited, REDEEM_WAIT_MS, "slow" as const);
-        if (exit === "slow") {
-            throw new Error("Devin's CLI did not finish signing in in time. Start the sign-in again.");
-        }
+        unfinished(attempt, exit);
         const toml = (await readFile(join(attempt.dir, "data", "devin", "credentials.toml"), "utf8").catch(undefinedIfMissing)) ?? "";
         const apiKey = toml === "" ? undefined : keyOf(toml);
         if (exit !== 0 || apiKey === undefined) {

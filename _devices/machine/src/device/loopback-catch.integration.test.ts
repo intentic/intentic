@@ -31,6 +31,23 @@ test("hands back the whole landing address and thanks the tab, then stops listen
     await expect(fetch(`http://127.0.0.1:${port}/callback`)).rejects.toThrow();
 });
 
+test("a catch ended the moment its landing arrives still delivers the thank-you page", async () => {
+    const port = await freePort();
+    const abort = new AbortController();
+    const stream = catchLoopback(specFor(port), abort.signal, () => {});
+    expect(await next(stream)).toEqual({ type: "listening" });
+    const landing = fetch(`http://127.0.0.1:${port}/callback?code=abc&state=xyz`);
+    expect(await next(stream)).toEqual({ type: "landed", url: `http://localhost:${port}/callback?code=abc&state=xyz` });
+    // As the sandbox does: the watch is dropped as soon as the landing is in hand, before the tab has read its page.
+    abort.abort();
+    const ended = stream.next();
+    const page = await landing;
+    expect(page.headers.get("connection")).toBe("close");
+    expect(await page.text()).toContain("Signed in to Claude");
+    expect(await ended).toEqual({ done: true, value: undefined });
+    await expect(fetch(`http://127.0.0.1:${port}/callback`)).rejects.toThrow();
+});
+
 test("answers anything off the path with a 404 and passes nothing up", async () => {
     const port = await freePort();
     const abort = new AbortController();

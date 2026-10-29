@@ -31,6 +31,12 @@ const listen = (server: Server, port: number, address: string): Promise<{ ok: tr
 
 type Bound = { readonly ok: true; readonly close: () => Promise<void> } | { readonly ok: false; readonly reason: string };
 
+// How long a closing catch lets a connection still carrying its answer finish before cutting it. The sandbox ends the
+// watch the moment a landing arrives, often within milliseconds of the page being written; cut then, the thank-you page
+// can be lost on its way out, most of all through a relay such as WSL's localhost forwarding, and the tab dead-ends on
+// a reset although the sign-in was caught.
+const CLOSE_GRACE_MS = 2_000;
+
 // 127.0.0.1 always; ::1 as well for a `localhost` redirect, since a browser may resolve that name to either and one
 // that picks ::1 would otherwise dead-end on a machine where nothing else answers there. ::1 is best-effort: a machine
 // without IPv6 loopback still catches on 127.0.0.1.
@@ -38,11 +44,21 @@ const bind = async (spec: LoopbackCatch, onRequest: (request: IncomingMessage, r
     const addresses = spec.host === "localhost" ? ["127.0.0.1", "::1"] : ["127.0.0.1"];
     const servers: Server[] = [];
     const sockets = new Set<Socket>();
+    // Stops accepting at once and drops idle keep-alive sockets (a browser's spare preconnect), but lets a connection
+    // still sending its answer end by itself; whatever is left after the grace is cut, so the port is always released.
     const close = async (): Promise<void> => {
-        for (const socket of sockets) {
-            socket.destroy();
+        const closed = Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+        for (const server of servers) {
+            server.closeIdleConnections();
         }
-        await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+        const grace = setTimeout(() => {
+            for (const socket of sockets) {
+                socket.destroy();
+            }
+        }, CLOSE_GRACE_MS);
+        grace.unref();
+        await closed;
+        clearTimeout(grace);
     };
     for (const [index, address] of addresses.entries()) {
         const server = createServer(onRequest);
@@ -84,9 +100,15 @@ export async function* catchLoopback(spec: LoopbackCatch, signal: AbortSignal | 
             return;
         }
         watch.push({ type: "landed", url: url.toString() });
-        // No referrer: the address carries the grant, and nothing this page links to needs it.
+        // No referrer: the address carries the grant, and nothing this page links to needs it. The connection closes
+        // once the page is sent, so a catch that ends right after never has a kept-alive socket to wait for.
         response
-            .writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" })
+            .writeHead(200, {
+                "content-type": "text/html; charset=utf-8",
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                connection: "close",
+            })
             .end(landedPage(spec.title));
     });
     if (!bound.ok) {
