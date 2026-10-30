@@ -171,16 +171,30 @@ export const swapBegan = (record: SwapRecord | undefined, since: number | undefi
     record?.phase === undefined ? since : (record.at ?? since ?? now);
 
 // What the watcher has seen of one sandbox around a swap: when it first saw the cutover done (`settledFrom`), when its
-// poll last got an answer (`answeredAt`), and whether its polls are failing right now (`silent`).
+// poll last got an answer (`answeredAt`), and since when its polls have been failing, if they are right now
+// (`silentSince`).
 export interface SwapSight {
     readonly settledFrom?: number | undefined;
     readonly answeredAt?: number | undefined;
-    readonly silent: boolean;
+    readonly silentSince?: number | undefined;
 }
 
+// (2026-10-30) HOW LONG A SANDBOX ON PROBATION MUST BE SILENT BEFORE IT READS AS DOWN AGAIN. The rule below is for a new
+// version that keeps crashing, and a crash loop is silent for minutes. It used to fire on the first failed poll: one
+// ports read that timed out (a loopback daemon slow for ten seconds) paused and resumed file sync and logged "being
+// swapped" with no swap anywhere, five times in one day on rog (shinobi-society). A minute is several polls, and still
+// well inside any crash loop the probation watch answers.
+export const PROBATION_SILENCE_MS = 60_000;
+
+// Whether ic is still watching a swap's new version: a record that names a phase, with its probation not yet over. A
+// record past `probationUntil` stands only until the probation watch settles it, and an ic that cannot run its watch
+// (rog, 2026-10-29: "run ic sandbox fix") leaves it standing for good: it says nothing about the sandbox now.
+const stillWatched = (record: SwapRecord | undefined, now: number): boolean =>
+    record?.phase !== undefined && (record.probationUntil === undefined || now < record.probationUntil);
+
 // Whether a swap holds file sync still: the whole cutover, then until the sandbox answers a poll made after the cutover
-// was seen done, and again while ic still watches the swap and the sandbox is silent. A phase this agent does not know is
-// read as probation.
+// was seen done, and again while ic still watches the swap and the sandbox has been silent for PROBATION_SILENCE_MS. A
+// phase this agent does not know is read as probation.
 export const holdsSync = (record: SwapRecord | undefined, since: number | undefined, now: number, sight: SwapSight): boolean => {
     if (record?.phase === "cutover") {
         return true;
@@ -188,7 +202,7 @@ export const holdsSync = (record: SwapRecord | undefined, since: number | undefi
     if (swapBegan(record, since, now) === undefined) {
         return false;
     }
-    if (record?.phase !== undefined && sight.silent) {
+    if (stillWatched(record, now) && sight.silentSince !== undefined && now - sight.silentSince >= PROBATION_SILENCE_MS) {
         return true;
     }
     const { settledFrom, answeredAt } = sight;

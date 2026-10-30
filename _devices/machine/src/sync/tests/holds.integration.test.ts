@@ -17,6 +17,7 @@ const {
     holdSessions,
     holdsSync,
     markOwnerPausesAdopted,
+    PROBATION_SILENCE_MS,
     recordOf,
     RELEASE_FORWARDS_MS,
     settledFromStep,
@@ -177,7 +178,10 @@ describe("a swap", () => {
             expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, probation))]).toEqual([]);
             await answer(seen);
         }
-        const silent = new Map([[SANDBOX, { since: Date.now(), lastTried: Date.now() }]]);
+        // A poll that just failed is a blip; a minute of them is the crash loop the probation watch answers.
+        const blip = new Map([[SANDBOX, { since: Date.now(), lastTried: Date.now() }]]);
+        expect([...(await holdSyncDuringSwaps(await pairings(), blip, seen, quiet, probation))]).toEqual([]);
+        const silent = new Map([[SANDBOX, { since: Date.now() - PROBATION_SILENCE_MS, lastTried: Date.now() }]]);
         expect([...(await holdSyncDuringSwaps(await pairings(), silent, seen, quiet, probation))]).toHaveLength(1);
         await answer(seen);
         expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, probation))]).toEqual([]);
@@ -423,7 +427,7 @@ test("a pairing is known to this machine's ic by its hostname's first label, or 
 });
 
 test("sync holds through the cutover, then until an answer after the cutover was seen done, and while ic watches a silent sandbox", () => {
-    const sight = (settledFrom?: number, answeredAt?: number, silent = false) => ({ settledFrom, answeredAt, silent });
+    const sight = (settledFrom?: number, answeredAt?: number, silentSince?: number) => ({ settledFrom, answeredAt, silentSince });
     expect(holdsSync(undefined, undefined, NOW, sight())).toBe(false);
     expect(holdsSync({ slug: "s" }, undefined, NOW, sight())).toBe(false);
     // The cutover holds whatever was answered.
@@ -433,7 +437,7 @@ test("sync holds through the cutover, then until an answer after the cutover was
     // An answer from before the cutover was seen done is the old version's.
     expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 20))).toBe(true);
     expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 5))).toBe(false);
-    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 5, true))).toBe(true);
+    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 5, NOW - PROBATION_SILENCE_MS))).toBe(true);
     // A phase a newer ic adds is read as probation.
     expect(holdsSync({ slug: "s", phase: "verifying", at: NOW - 60_000 }, undefined, NOW, sight(NOW - 10, NOW - 5))).toBe(false);
 });
@@ -442,9 +446,25 @@ test("sync holds through the cutover, then until an answer after the cutover was
 // start keeps the hold until the answer. Silence with no record is the outage rule's (an hour), not this one's.
 test("the hold outlives ic's record of the swap until the sandbox answers", () => {
     const began = NOW - 40_000;
-    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, silent: false })).toBe(true);
-    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5, silent: false })).toBe(false);
-    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5, silent: true })).toBe(false);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10 })).toBe(true);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5 })).toBe(false);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5, silentSince: NOW - 3_600_000 })).toBe(false);
+});
+
+// shinobi-society on rog (2026-10-30): one ports read that timed out, with ic's record of a day-old swap still standing,
+// logged "being swapped" and paused file sync five times in a day. A probation sandbox reads as down only once it has
+// been silent for a while, and only while its probation runs.
+test("on probation, a failed poll or two is no swap, and a probation that is over holds nothing", () => {
+    const settled = { settledFrom: NOW - 3_600_000, answeredAt: NOW - 6_000 };
+    const proving = { slug: "s", phase: "probation", at: NOW - 3_600_000, probationUntil: NOW + 3_600_000 };
+    expect(holdsSync(proving, undefined, NOW, { ...settled, silentSince: NOW - 1_000 })).toBe(false);
+    expect(holdsSync(proving, undefined, NOW, { ...settled, silentSince: NOW - PROBATION_SILENCE_MS + 1 })).toBe(false);
+    expect(holdsSync(proving, undefined, NOW, { ...settled, silentSince: NOW - PROBATION_SILENCE_MS })).toBe(true);
+    // ic's watch could not settle it, so the record outlived its day: silence of any length is the outage rule's.
+    const lapsed = { ...proving, probationUntil: NOW - 1 };
+    expect(holdsSync(lapsed, undefined, NOW, { ...settled, silentSince: NOW - 10 * PROBATION_SILENCE_MS })).toBe(false);
+    // The cutover itself holds whatever the clock says.
+    expect(holdsSync({ ...lapsed, phase: "cutover" }, undefined, NOW, settled)).toBe(true);
 });
 
 test("the cutover is seen done once, and seen again only after another cutover", () => {

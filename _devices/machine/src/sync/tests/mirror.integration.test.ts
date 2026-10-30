@@ -274,6 +274,27 @@ describe("reconcileForwards (minimal-touch)", () => {
         expect(terminated).toEqual([4321]); // only the stale-clear before creating the new one
     });
 
+    // shinobi-society on rog (2026-10-30): "mutagen forward exited with code 1" failed the whole pass, so the sandbox
+    // counted as not answering and the forwards made before it went unrecorded, to be torn down by the next pass.
+    it("keeps the forwards it made when another one's create fails, and leaves that port for the next pass", async () => {
+        const { executor, created } = fakeExecutor();
+        const failing: ForwardExecutor = {
+            ...executor,
+            create: async (summary) => {
+                if (summary.port === 7878) {
+                    throw new Error("mutagen forward exited with code 1");
+                }
+                await executor.create(summary);
+            },
+        };
+        const lines: string[] = [];
+        const say = (line: string): void => void lines.push(line);
+        const next = await reconcileForwards(failing, [], [ws(5173), ws(7878), ws(7979)], unclaimed, nothingIgnored, nothingHeld(), say);
+        expect(next.map((forward) => forward.port)).toEqual([5173, 7979]);
+        expect(created).toEqual([5173, 7979]);
+        expect(lines).toContain("  localhost:7878: forward not made this pass, trying again next pass: mutagen forward exited with code 1");
+    });
+
     it("terminates a port that stopped listening", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [

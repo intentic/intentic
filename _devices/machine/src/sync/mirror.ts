@@ -290,9 +290,19 @@ export const reconcileForwards = async (
         if (!(await mayTake(executor, summary, holds, log))) {
             continue;
         }
-        // a handful of ports, and each create dials the
-        // sandbox over this process's own transport; sequencing keeps the log readable
-        await executor.create(summary);
+        // (2026-10-30) A CREATE THAT FAILS COSTS ITS OWN PORT, NOT THE PASS. Thrown out of here it failed the whole pass:
+        // the forwards made before it this pass went unrecorded, so the next pass took them for a crashed run's leftovers
+        // and terminated them (cutting what they carried), and the sandbox, whose ports poll had just answered, counted
+        // as not answering, which with a probation record standing read as a swap (shinobi-society on rog: "mutagen
+        // forward exited with code 1", then "being swapped"). Left out of `next`, the port is tried again next pass.
+        try {
+            // a handful of ports, and each create dials the
+            // sandbox over this process's own transport; sequencing keeps the log readable
+            await executor.create(summary);
+        } catch (error) {
+            log(`  localhost:${summary.port}: forward not made this pass, trying again next pass: ${errorMessage(error)}`);
+            continue;
+        }
         // Only once the forward exists: a create that failed leaves the grace served, so the next pass tries at once.
         holds.freeSince.delete(summary.port);
         next.push({ port: summary.port, host: summary.host, command: summary.command });
@@ -841,7 +851,7 @@ export const holdSyncDuringSwaps = async (
         const holds = holdsSync(swap, pairing.swapSince, now, {
             settledFrom,
             answeredAt: watch.answeredAt.get(pairing.sandboxId),
-            silent: unreachable.has(pairing.sandboxId),
+            silentSince: unreachable.get(pairing.sandboxId)?.since,
         });
         if (holds) {
             held.add(pairing.sandboxId);

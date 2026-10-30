@@ -609,7 +609,11 @@ whose it is.
   pairing's local slug is the first label of its sandbox's public hostname (what ic names a sandbox with one) or the
   id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still while ic's record
   says a cutover is in flight, and after that until the sandbox answers a poll the watcher made once it saw the cutover
-  done; while ic still watches the swap, a sandbox that stops answering holds it again until its next answer. The swap
+  done; while ic still watches the swap (its probation not yet over), a sandbox silent for a minute holds it again until
+  its next answer. (2026-10-30: one failed poll used to be enough, and a probation record ic's watch could not settle
+  outlived its day, so on rog every ports read that timed out logged "being swapped" and paused sync with no swap
+  anywhere. A port forward that fails to be made no longer counts as the sandbox not answering either: it skips that
+  port for the pass.) The swap
   is kept on the pairing (`swapSince`), so the hold outlives ic's record of a swap that leaves none (the dev loop) until
   that answer. (2026-10-26: the hold used to last a quarter hour from the cutover whatever happened, so a dev-loop
   rebuild serving again within a minute left the owner's folder fourteen minutes behind. The old and new containers
