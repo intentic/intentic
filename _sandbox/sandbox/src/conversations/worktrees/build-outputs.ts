@@ -4,7 +4,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit } from "@intentic/base/git";
 
 // BUILD OUTPUT IN QUIET CHECKOUTS (2026-10-21). A checkout lives until its conversation is archived (agentRetentionDays,
-// 3 by default) or its held work is reclaimed (heldCheckoutDays, 14), and every build it ran leaves its output behind
+// 3 by default) or its held work is reclaimed (heldCheckoutDays, 7), and every build it ran leaves its output behind
 // in it: measured that day, 38 GB across the finished checkouts, a Tauri `target/` of 9-14 GB in each conversation that
 // built the desktop app. All of it is regenerable and none of it is the conversation's work, so once a checkout has
 // sat quiet for a while its build output goes and the checkout itself stays. A conversation picked up again rebuilds

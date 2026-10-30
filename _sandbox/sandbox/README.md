@@ -777,7 +777,7 @@ flowchart LR
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
   containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
 - Held conversations (`ready`, `error`, `interrupted`, `conflict`) release their checkout and overlay after
-  `heldCheckoutDays` quiet days (14 by default, zero disables), on the hourly archive pass. Work is committed first;
+  `heldCheckoutDays` quiet days (7 by default, zero disables), on the hourly archive pass. Work is committed first;
   the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,
   running turns, queued messages and unsent drafts prevent reclaim.
 - Build output leaves a checkout that has sat settled for 6 hours (`conversations/worktrees/build-outputs.ts`,

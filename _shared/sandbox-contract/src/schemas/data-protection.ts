@@ -20,7 +20,7 @@ export const HeldCheckoutDaysSchema = z
     .int()
     .min(0)
     .max(365)
-    .default(14)
+    .default(7)
     .describe(
         "How many quiet days a held conversation keeps its checkout and dependency overlay. Each held card is a real working copy on disk. After that its work is committed to its branch and the working copy is freed; the conversation stays, and its next turn brings the copy back. Zero means never.",
     );

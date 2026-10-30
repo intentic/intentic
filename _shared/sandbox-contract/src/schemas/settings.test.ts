@@ -211,7 +211,7 @@ describe(`per-job model lists`, () => {
 test("disk retention defaults bound checkouts and restore points while preserving explicit zero", () => {
     const defaults = SandboxSettingsSchema.parse({});
     expect(defaults.agentRetentionDays).toBe(3);
-    expect(defaults.heldCheckoutDays).toBe(14);
+    expect(defaults.heldCheckoutDays).toBe(7);
     expect(defaults.retention.restorePointKeepDays).toBe(30);
     const existing = SandboxSettingsSchema.parse({ heldCheckoutDays: 0, retention: { restorePointKeepDays: 0 } });
     expect(existing.heldCheckoutDays).toBe(0);

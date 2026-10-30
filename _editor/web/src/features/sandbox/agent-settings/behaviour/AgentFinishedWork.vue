@@ -103,7 +103,7 @@ const HELD_RETENTION_OPTIONS = computed(() => [
         <Row icon="box" :title="t(`sandbox.agentFinishedWork.heldCheckout`)" :description="t(`sandbox.agentFinishedWork.heldCheckoutNote`)">
             <template #control>
                 <SegmentedControl
-                    :model-value="String(settings?.heldCheckoutDays ?? 14)"
+                    :model-value="String(settings?.heldCheckoutDays ?? 7)"
                     :options="HELD_RETENTION_OPTIONS"
                     @update:model-value="(days: string) => patch({ heldCheckoutDays: Number(days) })"
                 />
