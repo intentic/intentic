@@ -1,5 +1,5 @@
-import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
-import type { CodexTurn, JsonValue } from "./codex-app-server.js";
+import { namespaceTargetOf, nsenterArgv } from "../../../workload/namespace-entry.js";
+import type { CodexTurn, JsonValue } from "../codex-app-server.js";
 
 const isConfigTable = (value: JsonValue): value is { readonly [key: string]: JsonValue } =>
     value !== null && typeof value === "object" && !Array.isArray(value);

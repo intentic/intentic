@@ -1,11 +1,12 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { parse } from "smol-toml";
-import type { CodexTurn } from "./codex-app-server.js";
+import type { CodexTurn } from "../codex-app-server.js";
 import { codexAppServerArgv } from "./codex-cli-config.js";
 
 const turn = (provider: Pick<CodexTurn, "modelProvider" | "config">): CodexTurn => ({
     prompt: "hello",
     env: { CODEX_HOME: "/codex" },
-    options: { workingDirectory: "/work", sandboxMode: "danger-full-access", approvalPolicy: "never" },
+    options: { workingDirectory: WORKSPACE_ROOT, sandboxMode: "danger-full-access", approvalPolicy: "never" },
     signal: new AbortController().signal,
     ...provider,
 });

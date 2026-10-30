@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { sleep, whenAborted } from "@intentic/base/async";
 import type { NamespaceEntryReference } from "../../workload/namespace-entry.js";
-import { codexAppServerArgv } from "./codex-cli-config.js";
+import { codexAppServerArgv } from "./startup/codex-cli-config.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
