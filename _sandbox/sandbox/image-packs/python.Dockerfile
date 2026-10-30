@@ -2,8 +2,8 @@
 # Keep uv interpreter downloads enabled for project Python pins; UV_LINK_MODE=copy avoids cross-filesystem hardlink warnings.
 # Pin tools with CI/catalog updates. pyright's outputjson is parsed as a wire format; incompatible output must report could-not-check.
 ENV UV_LINK_MODE=copy
-RUN version=0.13.5 \
-    && ruff_version=0.17.2 \
+RUN version=0.13.6 \
+    && ruff_version=0.17.3 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \
