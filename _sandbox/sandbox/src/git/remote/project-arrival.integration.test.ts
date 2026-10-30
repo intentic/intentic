@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { ARRIVAL_WINDOW_MS, arrivalLanding, arrivalOpen, commitArrival, followProjectArrival } from "./project-arrival.js";
@@ -110,23 +111,20 @@ test("following the arrival commits once the folder goes quiet, and only on batc
     try {
         // Subscribed once the arrival is read open; the start's own quiet finds nothing to commit.
         await armed;
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        // The callback follows the Git work, which can outlast the quiet timer on a busy runner.
+        await waitFor(() => expect(landings).toBe(1), SETTLES);
         // The start's quiet ran and found nothing: the folder is not landing, and the review reads it as it stands.
         expect(arrivalLanding(NAME)).toBe(false);
         const landingsBefore = landings;
         await deliver(project);
         // Another folder's batch moves nothing.
         announce(["elsewhere/file.txt"]);
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        expect(await git(project, "status", "--porcelain")).not.toBe("");
         expect(arrivalLanding(NAME)).toBe(false);
+        expect(await git(project, "status", "--porcelain")).not.toBe("");
         announce([`${NAME}/package.json`, `${NAME}/src/index.ts`]);
         // Mid-copy: the review leaves the folder out until the quiet commit has filed it.
         expect(arrivalLanding(NAME)).toBe(true);
-        const deadline = Date.now() + 2000;
-        while (arrivalLanding(NAME) && Date.now() < deadline) {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-        }
+        await waitFor(() => expect(landings).toBe(landingsBefore + 1), SETTLES);
         expect(arrivalLanding(NAME)).toBe(false);
         expect(landings).toBe(landingsBefore + 1);
         expect(await git(project, "status", "--porcelain")).toBe("");
