@@ -40,7 +40,7 @@ test("a root daemon counts the filesystem's reserved blocks as free, any other w
     // Separate statfs readings can change under concurrent writes; pin a volume with a distinct reserve instead.
     const readVolume = async (root: string) => {
         expect(root).toBe("/history");
-        return { type: 0xef53, bsize: 4096, blocks: 100, bfree: 20, bavail: 5, files: 100, ffree: 80 };
+        return { type: 0xef53, bsize: 4096, frsize: 4096, blocks: 100, bfree: 20, bavail: 5, files: 100, ffree: 80 };
     };
     expect(await readHistorySpace("/history", true, readVolume)).toEqual({ freeBytes: 81920, totalBytes: 409600 });
     expect(await readHistorySpace("/history", false, readVolume)).toEqual({ freeBytes: 20480, totalBytes: 409600 });
