@@ -1,9 +1,14 @@
+import type { StatsFs } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { checkoutSpace, CheckoutSpaceRefused, type HistorySpace } from "./checkout-space.js";
 
 // Root's writes may fill the reserved blocks an unprivileged writer is kept out of (checkout-space.ts).
-export const readHistorySpace = async (root: string, privileged = process.geteuid?.() === 0): Promise<HistorySpace> => {
-    const volume = await statfs(root);
+export const readHistorySpace = async (
+    root: string,
+    privileged = process.geteuid?.() === 0,
+    readVolume: (root: string) => Promise<StatsFs> = statfs,
+): Promise<HistorySpace> => {
+    const volume = await readVolume(root);
     return { freeBytes: (privileged ? volume.bfree : volume.bavail) * volume.bsize, totalBytes: volume.blocks * volume.bsize };
 };
 
