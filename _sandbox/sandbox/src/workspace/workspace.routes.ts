@@ -11,6 +11,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { freeGitDirFor } from "./layout/git-dir-owners.js";
 import { repoGitDir, syncRootExcludes } from "./layout/git-layout.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -100,6 +101,15 @@ export const createWorkspaceRoutes = (services: Services) => {
     const scope = services.workspaceScope;
     // Each conversation's change list, held briefly so a hover's peek and the click after it ask git once.
     const overlays = createCheckoutOverlays({ changesOf: cumulativeChanges(services), logger: services.logger });
+    // A git dir an earlier folder of this name left on /history: trashed when nothing leads to it any more (a clone
+    // would refuse it, an init would adopt its history), a refusal naming the checkout that still uses it otherwise.
+    const freeGitDirName = async (name: string): Promise<void> => {
+        const deps = { workspaceRoot: services.workspace.root, historyRoot: services.config.historyRoot, logger: services.logger };
+        const user = await freeGitDirFor(deps, await discoverRepos(services.workspace.root), name);
+        if (user !== undefined) {
+            throw new ORPCError("CONFLICT", { message: `an earlier "${name}" is still checked out at "${user}"; pick another name` });
+        }
+    };
     // Whose copy, and whether this caller may look there: shared with the tickets (workspace-tickets.routes.ts).
     const { fenceFor, refuseUnseenAgent, scopedRead } = workspaceReads(services);
     // Zone and sandbox id used to build per-app preview URLs (preview-<panel>-<id>.<zone>).
@@ -340,6 +350,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             if (existsSync(join(services.workspace.root, input.name))) {
                 throw new ORPCError("CONFLICT", { message: `"${input.name}" already exists in the workspace` });
             }
+            await freeGitDirName(input.name);
             await services.git.clone(services.workspace.root, input.name, input.cloneUrl, {
                 ...(input.branch !== undefined ? { branch: input.branch } : {}),
                 separateGitDir: repoGitDir(services.config.historyRoot, input.name),
@@ -358,6 +369,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             if (existsSync(dir)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.name}" already exists in the workspace` });
             }
+            await freeGitDirName(input.name);
             await mkdir(dir, { recursive: true });
             await services.git.init(dir, repoGitDir(services.config.historyRoot, input.name));
             await writeFile(join(dir, "README.md"), `# ${input.name}\n`);

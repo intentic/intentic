@@ -1,6 +1,6 @@
 import { Delayer, serialLock } from "@intentic/base/async";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
@@ -11,12 +11,12 @@ import {
     SnapshotTriggerSchema,
     type SnapshotTrigger,
 } from "@intentic/sandbox-contract/schemas/history";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
 import { checkoutGeneration } from "../git/feed/checkout-feed.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
-import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
+import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
+import { createGitDirReaper } from "./git-dir-reaper.js";
 import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
 import { collectScopes, cutScopes, retentionBases } from "./restore-point-retention.js";
 import { defaultRunner, type HistoryGitRunner, type WorkspaceHistoryOptions } from "./history-git.js";
@@ -70,13 +70,6 @@ const scopeEnv = (scope: Scope): Record<string, string> => ({
     GIT_INDEX_FILE: join(scope.gitDir, "snapshot.index"),
 });
 
-// Cheap gate before deletionState: ignored entries (node_modules, dist, .git pointer) survive a real delete, so
-// emptiness alone doesn't prove one.
-const looksEmptied = async (worktree: string): Promise<boolean> => {
-    const entries = await readdir(worktree, { withFileTypes: true }).catch(() => []);
-    return entries.every((entry) => entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name));
-};
-
 // One side of a checkpoint's file diff, as fileAt reports it.
 interface CheckpointSide {
     readonly content?: string;
@@ -119,82 +112,14 @@ export const createWorkspaceHistory = (
         }
     };
 
-    // Moves a deleted repo's git dir to <historyRoot>/trash (not erased, may hold unpushed commits) so nothing
-    // re-adopts a same-named dir later. The scope stays listable, diffable and restorable; it is never reaped.
-    const reapGitDir = async (entry: string, reason: string): Promise<void> => {
-        const trashRoot = join(historyRoot, "trash");
-        await mkdir(trashRoot, { recursive: true });
-        await rename(join(historyRoot, "gits", entry), join(trashRoot, `${entry}-${Date.now()}`));
-        logger.info({ repo: decodeURIComponent(entry), reason }, "history: reaped a deleted repo's git dir");
-    };
-
-    // "deleted" means the index names files and none exist on disk; an empty index is "fresh", not deleted. Exits early
-    // on the first file found on disk.
-    const deletionState = async (gitDir: string, worktree: string): Promise<"live" | "fresh" | "deleted"> => {
-        const { stdout } = await git(["ls-files", "-z"], { cwd: worktree, env: { GIT_DIR: gitDir, GIT_WORK_TREE: worktree } });
-        const paths = stdout.split("\0").filter((path) => path !== "");
-        if (paths.length === 0) {
-            return "fresh";
-        }
-        for (const path of paths) {
-            if (await pathExists(join(worktree, path))) {
-                return "live";
-            }
-        }
-        return "deleted";
-    };
-
-    // Deletion with a pointer still in place waits a grace period before reaping: a big clone can be briefly empty.
-    const emptySince = new Map<string, number>();
-    const REAP_GRACE_MS = SNAPSHOT_INTERVAL_MS * 1.5;
-
-    // Pre-discovery heal for daemon-created repos (/history/gits/*) whose .git the agent deleted; a worktree that is
-    // gone or holds none of its tracked files is a deletion, reaped rather than healed.
-    const healGitPointers = async (): Promise<void> => {
-        for (const entry of await readdir(join(historyRoot, "gits")).catch(() => [])) {
-            const id = decodeURIComponent(entry);
-            if (id === "root") {
-                continue;
-            }
-            // Skips non-repo-id entries: other tools can drop state here, and it must not be treated as a deleted repo.
-            if (!isValidRepoId(id)) {
-                continue;
-            }
-            const worktree = join(workspace.root, id);
-            const gitDir = join(historyRoot, "gits", entry);
-            try {
-                if (!(await pathExists(worktree))) {
-                    emptySince.delete(entry);
-                    await reapGitDir(entry, "worktree deleted");
-                    continue;
-                }
-                const hasPointer = await hasGitEntry(worktree);
-                if (!(await looksEmptied(worktree)) || (await deletionState(gitDir, worktree)) !== "deleted") {
-                    emptySince.delete(entry);
-                    if (!hasPointer) {
-                        await writeFile(join(worktree, ".git"), `gitdir: ${gitDir}\n`);
-                    }
-                    continue;
-                }
-                // Deleted: reap now if the pointer is gone; else wait a grace cycle, then reap and drop the pointer
-                // too.
-                if (!hasPointer) {
-                    emptySince.delete(entry);
-                    await reapGitDir(entry, "worktree emptied");
-                    continue;
-                }
-                const since = emptySince.get(entry);
-                if (since === undefined) {
-                    emptySince.set(entry, Date.now());
-                } else if (Date.now() - since >= REAP_GRACE_MS) {
-                    emptySince.delete(entry);
-                    await reapGitDir(entry, "worktree emptied");
-                    await rm(join(worktree, ".git"), { force: true });
-                }
-            } catch (error) {
-                logger.warn({ err: error, repo: id }, "history: git-dir heal failed");
-            }
-        }
+    // Heals deleted pointers and reaps deleted repos' git dirs, going by which checkouts lead into each
+    // (git-dir-reaper.ts). An emptied checkout whose pointer survives waits a grace cycle: a big clone can be briefly
+    // empty.
+    const gitDirs = createGitDirReaper({ workspaceRoot: workspace.root, historyRoot, logger, git, graceMs: SNAPSHOT_INTERVAL_MS * 1.5 });
+    // The repos after this cycle's heal: discovered again only when it wrote or removed a pointer.
+    const healedRepos = async (): Promise<string[]> => {
+        const found = await discoverRepos(workspace.root);
+        return (await gitDirs.heal(found)) ? discoverRepos(workspace.root) : found;
     };
 
     const revParse = async (scope: Scope, rev: string): Promise<string | undefined> => {
@@ -413,10 +338,9 @@ export const createWorkspaceHistory = (
     const snapshotAll = async (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => {
         await mkdir(scopesRoot, { recursive: true });
         // Heal, discover, sync excludes, then snapshot, so excludes are never staler than this cycle's repo set.
-        await healGitPointers();
+        const repoIds = await healedRepos();
         const rootScope = scopeOf("root");
         await ensureScope(rootScope);
-        const repoIds = await discoverRepos(workspace.root);
         await syncRootExcludes(historyRoot, repoIds);
         const id = randomUUID();
         const cleanLabel = label !== undefined ? sanitizeLabel(label) : undefined;

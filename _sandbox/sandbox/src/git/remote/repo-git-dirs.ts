@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
+import { freeGitDirFor } from "../../workspace/layout/git-dir-owners.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
@@ -58,15 +59,17 @@ export const ignoreFileMode = async (repoDir: string, git: GitRunner = defaultGi
     await git(repoDir, ["config", "--local", "core.fileMode", "false"]);
 };
 
-const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot: string, logger: Logger, git: GitRunner): Promise<void> => {
+const relocateOne = async (repo: string, repos: readonly string[], workspace: WorkspacePaths, historyRoot: string, logger: Logger, git: GitRunner): Promise<void> => {
     const repoDir = join(workspace.root, repo);
     if ((await gitEntryKind(repoDir)) !== "dir") {
         return;
     }
     const target = repoGitDir(historyRoot, repo);
-    if ((await lstat(target).catch(undefinedIfMissing)) !== undefined) {
-        // Target already has a git dir; moving would destroy one of them, so this repo just keeps its in-tree git dir.
-        logger.warn({ repo, target }, "git dirs: target already occupied, repo left with an in-tree git dir");
+    // A dir an earlier folder of this name left (the repo was deleted and cloned again) goes to the trash when nothing
+    // leads to it any more; one another checkout still uses stays, and this repo keeps its in-tree git dir.
+    const user = await freeGitDirFor({ workspaceRoot: workspace.root, historyRoot, logger }, repos, repo);
+    if (user !== undefined || (await lstat(target).catch(undefinedIfMissing)) !== undefined) {
+        logger.warn({ repo, target, user }, "git dirs: target already occupied, repo left with an in-tree git dir");
         return;
     }
     // Copies then swaps, not renames, since /work and /history are separate mounts (rename would fail EXDEV). A crash
@@ -93,8 +96,9 @@ export const ensureRepoGitDirs = async (
     logger: Logger,
     git: GitRunner = defaultGit,
 ): Promise<void> => {
-    for (const repo of await discoverRepos(workspace.root)) {
-        await relocateOne(repo, workspace, historyRoot, logger, git).catch((error: unknown) =>
+    const repos = await discoverRepos(workspace.root);
+    for (const repo of repos) {
+        await relocateOne(repo, repos, workspace, historyRoot, logger, git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: relocation failed, repo keeps its in-tree git dir"),
         );
         await unpinWorktree(join(workspace.root, repo), git).catch((error: unknown) =>

@@ -2055,20 +2055,12 @@
         "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/history/history.ts": {
-        "count": 618,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#lines": {
-        "count": 527,
+        "count": 458,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/history/history.ts#fileDiff#cognitive": {
         "count": 23,
-        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
-    },
-    "_sandbox/sandbox/src/history/history.ts#healGitPointers#cognitive": {
-        "count": 29,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/history/history.ts#snapshotAll#cognitive": {

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -107,14 +107,31 @@ test("a git dir that calls itself bare gets its main checkout back", async () =>
     expect(await git(repo, "status", "--porcelain")).toBe("");
 });
 
-test("an occupied target leaves the repo working rather than clobbering either git dir", async () => {
+test("a target another checkout still uses leaves the repo working rather than clobbering either git dir", async () => {
     const { root, historyRoot, repo } = await workspace();
-    await mkdir(join(repoGitDir(historyRoot, "app"), "refs"), { recursive: true });
+    const held = repoGitDir(historyRoot, "app");
+    await mkdir(join(held, "refs"), { recursive: true });
+    // A copy of an earlier "app" whose pointer still leads to that name.
+    await mkdir(join(root, "app-copy"), { recursive: true });
+    await writeFile(join(root, "app-copy", ".git"), `gitdir: ${held}\n`);
 
     await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
 
     expect((await lstat(join(repo, ".git"))).isDirectory()).toBe(true);
     expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+    expect((await lstat(join(held, "refs"))).isDirectory()).toBe(true);
+});
+
+test("a target an earlier folder of that name left behind goes to the trash, and the repo moves in", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    // The folder was deleted and cloned again before the history cycle reaped its git dir.
+    await mkdir(join(repoGitDir(historyRoot, "app"), "refs"), { recursive: true });
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    expect(await readFile(join(repo, ".git"), "utf8")).toBe(`gitdir: ${repoGitDir(historyRoot, "app")}\n`);
+    expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+    expect((await readdir(join(historyRoot, "trash"))).some((entry) => entry.startsWith("app-"))).toBe(true);
 });
 
 test("a synced executable bit reads as no edit to a terminal's git, as it already does to the daemon's", async () => {
