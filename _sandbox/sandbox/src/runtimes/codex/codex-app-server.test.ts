@@ -751,7 +751,23 @@ test("stdio entry uses the issued namespace reference and refuses stale or recon
         try {
             expect(spawn).toHaveBeenCalledWith(
                 "nsenter",
-                ["--mount=/proc/62005/ns/mnt", "--wdns=/work/project", "--", "env", "-u", "PWD", "-u", "OLDPWD", "/usr/local/bin/codex", "app-server", "--stdio"],
+                [
+                    "--mount=/proc/62005/ns/mnt",
+                    "--wdns=/work/project",
+                    "--",
+                    "env",
+                    "-u",
+                    "PWD",
+                    "-u",
+                    "OLDPWD",
+                    "/usr/local/bin/codex",
+                    "app-server",
+                    "--stdio",
+                    "-c",
+                    'model_provider="translator"',
+                    "-c",
+                    'model_providers.translator={ "name" = "translator", "base_url" = "http://127.0.0.1:8788/v1", "wire_api" = "responses", "env_key" = "CODEX_API_KEY", "http_headers" = { "x-openai-actor-authorization" = "intentic" }, "supports_websockets" = false }',
+                ],
                 { CODEX_HOME: "/codex" },
                 2,
             );
