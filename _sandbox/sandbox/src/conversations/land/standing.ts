@@ -40,17 +40,18 @@ export interface LandStandings {
     // Which causes of a refused land still hold, in report order; empty for every standing but `conflict`.
     readonly causesOf: (id: string) => readonly LandConflictReason[];
     // An archived agent keeps whatever it was probed at while live, so refreshing a fleet of them costs nothing.
-    // Branch-backed only: a workspace conversation owns no ref, so it rests at `idle`.
-    readonly refresh: (entries: readonly IsolatedAgent[]) => Promise<boolean>;
+    // Branch-backed only: a workspace conversation owns no ref, so it rests at `idle`. `missing` says whose landed work
+    // has since left the main tree (landed-presence.ts): what a refused Land again is about (awayRefused).
+    readonly refresh: (entries: readonly IsolatedAgent[], missing?: (id: string) => boolean) => Promise<boolean>;
     readonly forget: (ids: readonly string[]) => void;
 }
 
 // Every input to the verdict, not just the two shas: a land moves only `landedTip`, not HEAD or the tip, so keying on
 // shas alone re-served a stale verdict right after a land. The refusal is keyed by what still stands, not by the stored
 // report's presence: a `workspace` blocker the user has since cleared moves no sha, so nothing else here would notice.
-const keyOf = (refusal: Refusal, repos: readonly RepoShas[]): string =>
+const keyOf = (refusal: Refusal, away: boolean, repos: readonly RepoShas[]): string =>
     [
-        refusal.stands ? `refused:${refusal.causes.join("+")}` : "-",
+        refusal.stands ? `refused:${refusal.causes.join("+")}${away ? ":away" : ""}` : "-",
         ...repos.map(({ composed, head, tip }) => `${composed.repo}@${head ?? "-"}:${tip ?? "-"}:${composed.landedTip ?? "-"}:${composed.base}`),
     ].join("|");
 
@@ -168,6 +169,13 @@ const deltaOf = async (
     return { outstanding, produced };
 };
 
+// A refusal with nothing outstanding past the last land, over landed work that has since left the main tree: the
+// verdict of a Land again (the `cumulative` span, from base), which a moved main line refused. Measured from the last
+// land's tip the branch owes nothing, so without this the refusal sat on a Finished card offering the same Land again,
+// and never the Resolve that clears it: the agent's rebase moves its tip off the landed one, and the next land carries
+// the whole of it again. Ends as its premise does: the work back in the tree, or a land that runs to a new verdict.
+const awayRefused = (refusal: Refusal, away: boolean): boolean => refusal.stands && away;
+
 // Agents probed at once: each is a handful of short git reads, and a board after a restart probes every live one.
 const PROBES = 8;
 
@@ -181,7 +189,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 cache.delete(id);
             }
         },
-        refresh: async (entries) => {
+        refresh: async (entries, missing = () => false) => {
             const { headOf, tipOf, dirtyAt } = passReaders(worktrees, git);
             let moved = false;
             await mapPool(entries, PROBES, async (entry) => {
@@ -194,14 +202,16 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                     })),
                 );
                 const refusal = await refusalOf(entry, dirtyAt);
-                const key = keyOf(refusal, shas);
+                const away = missing(entry.id);
+                const key = keyOf(refusal, away, shas);
                 const cached = cache.get(entry.id);
                 if (cached?.key === key) {
                     return;
                 }
-                const { outstanding, produced } = await deltaOf(worktrees, entry.placement, shas, git, refusal.stands);
+                const delta = await deltaOf(worktrees, entry.placement, shas, git, refusal.stands);
+                const outstanding = delta.outstanding || awayRefused(refusal, away);
                 // The report explains a refusal, it does not create one: nothing outstanding, nothing to be about.
-                const standing: LandStanding = outstanding ? (refusal.stands ? "conflict" : "ready") : produced ? "landed" : "idle";
+                const standing: LandStanding = outstanding ? (refusal.stands ? "conflict" : "ready") : delta.produced ? "landed" : "idle";
                 // Causes ride only their own verdict: a report that outlived its delta says nothing about the card.
                 const causes = standing === "conflict" ? refusal.causes : [];
                 moved ||= cached?.standing !== standing || cached.causes.join("+") !== causes.join("+");

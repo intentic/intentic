@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -192,6 +192,64 @@ test("a refused land arms the conflict against the same shas", async () => {
 
     expect(await standings.refresh([isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } })])).toBe(true);
     expect(standings.of("c1")).toBe("conflict");
+});
+
+// 2026-10-30: work landed, was discarded, another session's land moved main over the same lines, and Land again was
+// refused. Nothing is outstanding past the landed tip, so the refusal sat on a Finished card offering the same Land again.
+test("a refused Land again over discarded work is a conflict while that work is still missing", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(landed.landed).toBe(true);
+
+    await sh(work, "checkout", "--", "app.ts");
+    await writeFile(join(work, "app.ts"), "line one THEIRS\nline two\nline three\n");
+    await sh(work, "add", "-A");
+    await commit(work, "another session");
+    const refused = await landAgent(worktrees, isolatedAgent(landed.repos), "check", "cumulative");
+    expect(refused.landed).toBe(false);
+    const entry = isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } });
+
+    await standings.refresh([entry], () => true);
+    expect(standings.of("c1")).toBe("conflict");
+    expect(standings.causesOf("c1")).toEqual(["diverged"]);
+
+    // The work back in the tree ends the premise; the same report then explains nothing.
+    expect(await standings.refresh([entry], () => false)).toBe(true);
+    expect(standings.of("c1")).toBe("landed");
+});
+
+// What the conflict's Resolve asks for: the agent rebases onto main, and the land that follows its turn (the default
+// span) carries the whole of the work again, not only what the rebase added.
+test("after the agent rebases a refused Land again, the next land puts the whole of it back", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "extra.ts"), "agent's own file\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    await sh(work, "checkout", "--", "app.ts");
+    await rm(join(work, "extra.ts"));
+    await writeFile(join(work, "app.ts"), "line one THEIRS\nline two\nline three\n");
+    await sh(work, "add", "-A");
+    await commit(work, "another session");
+    const refused = await landAgent(worktrees, isolatedAgent(landed.repos), "check", "cumulative");
+    expect(refused.landed).toBe(false);
+
+    const main = await sh(work, "rev-parse", "--abbrev-ref", "HEAD");
+    await exec("git", ["-C", conversation.cwd, "rebase", main]).catch(() => undefined);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one THEIRS EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await exec("git", ["-C", conversation.cwd, "-c", "core.editor=true", "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "--continue"]);
+
+    const resolved = isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } });
+    const again = await landAgent(worktrees, resolved);
+    expect(again.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one THEIRS EDITED\nline two\nline three\n");
+    expect(await readFile(join(work, "extra.ts"), "utf8")).toBe("agent's own file\n");
 });
 
 // The one refusal whose premise this file's header could not cover: `workspace` is caused by the user's own uncommitted

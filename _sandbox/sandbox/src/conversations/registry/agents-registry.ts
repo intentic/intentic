@@ -561,8 +561,9 @@ export const createFleet = (
     let probedInputs = ``;
     let probedFiles = true;
 
-    // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
-    // never throw: a settle waits on this. `allSettled`, so a failing half costs only its own reading.
+    // Two best-effort readings (landed presence, then standing) that must never throw: a settle waits on this.
+    // `allSettled`, so a failing half costs only its own reading. Chained, since a refused Land again is a conflict only
+    // while the landed work it would put back is still missing (standing.ts awayRefused).
     const probeFleet = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         probed.taken();
@@ -571,7 +572,9 @@ export const createFleet = (
         // Who worked in the main tree since the last probe, read before this one moves the mark.
         const writers = mainTreeWriters(entries, conversations, probedAt);
         probedAt = Date.now();
-        const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live, writers)]);
+        const [presence] = await Promise.allSettled([presences.refresh(live, writers)]);
+        const [standing] = await Promise.allSettled([standings.refresh(live, (id) => presences.of(id) !== undefined)]);
+        const probes = [standing, presence];
         if (probes.some((probe) => probe.status === "rejected")) {
             probed.changed();
         }
