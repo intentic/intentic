@@ -1,7 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { sleep, whenAborted } from "@intentic/base/async";
-import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
+import type { NamespaceEntryReference } from "../../workload/namespace-entry.js";
+import { codexAppServerArgv } from "./startup/codex-cli-config.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
@@ -543,11 +544,7 @@ export const stdioConnector =
         if (binary === undefined) {
             throw new Error(CODEX_BINARY_MISSING);
         }
-        // nsenter execs app-server into the turn's anchor, staying a direct child; its cwd wins over workingDirectory.
-        const argv =
-            turn.namespace === undefined
-                ? { command: binary, args: ["app-server", "--stdio"] }
-                : nsenterArgv(namespaceTargetOf(turn.namespace), turn.namespace.cwd, binary, ["app-server", "--stdio"]);
+        const argv = codexAppServerArgv(binary, turn);
         const child = spawnProcess(argv.command, argv.args, turn.env, turn.spawnDepth ?? 0);
         const messages = new AsyncQueue<AppServerMessage>();
         const pending = new Map<number, { readonly resolve: (value: unknown) => void; readonly reject: (error: unknown) => void }>();

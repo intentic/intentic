@@ -549,7 +549,7 @@ flowchart LR
 - Where a model is reached is separate from which loop drives it: `agent/providers/routes/model-routes.ts` answers
   (provider, account, model, loop) with the wire, the URL and bearer, the model id, whose account and allowance the
   turn spends, and which provider the privacy shield keys on. The Claude Code harness's routed credentials, Codex's
-  hosted providers (each its own per-thread provider block) and OpenCode's hosted entries all come from it; Grok's own
+  hosted providers (each selected and defined at app-server startup as well as per thread) and OpenCode's hosted entries all come from it; Grok's own
   xAI sign-in and Google's fixed entry on OpenCode keep their own planners. Where providers on one runtime can differ in
   readiness, the health sweep files each pair under `pairHealthKey(runtime, provider)` beside the runtime's answer.
 - The translator lists Google models from its built-in catalog, not per account, so it can list a model Google does

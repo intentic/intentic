@@ -32,7 +32,7 @@ const mount = (editable: boolean, source = `# Notes\n\nFirst line.`): HTMLElemen
 };
 
 const settle = async (): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The document mounts synchronously; wait for Vue's watchers, without yielding to unrelated timer work.
     await nextTick();
 };
 
