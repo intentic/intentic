@@ -106,12 +106,90 @@ fn is_face(label: &str) -> bool {
 /// The frame's own icon, which the taskbar button and the dock tile show: the open sandbox's logo, or the app's.
 fn window_icon_now(app: &AppHandle, window: &Window) {
     let logo = app.state::<Badge>().0.lock().unwrap().window.clone();
+    taskbar_icon_now(window, logo.clone());
     let Some(icon) = logo.or_else(|| app.default_window_icon().cloned().map(Image::to_owned))
     else {
         return;
     };
     if let Err(error) = window.set_icon(icon) {
         eprintln!("intentic: the window's icon could not be set: {error}");
+    }
+}
+
+/// Windows' taskbar button draws the window's big icon, and Tauri's `set_icon` sets only the small one (the title bar,
+/// Alt+Tab), so without this the button kept the executable's icon while the tray showed the sandbox's logo. No logo
+/// takes the big icon off again, and the button goes back to the executable's, at every size it carries.
+#[cfg(windows)]
+fn taskbar_icon_now(window: &Window, logo: Option<Image<'static>>) {
+    let frame = window.clone();
+    if let Err(error) = window.run_on_main_thread(move || big_icon::put(&frame, logo.as_ref())) {
+        eprintln!("intentic: the taskbar button's icon could not be set: {error}");
+    }
+}
+
+#[cfg(not(windows))]
+fn taskbar_icon_now(_window: &Window, _logo: Option<Image<'static>>) {}
+
+/// The frame's `ICON_BIG`, made and owned here: Windows keeps the handle, not a copy, so the one put up last lives
+/// until the next replaces it.
+#[cfg(windows)]
+mod big_icon {
+    use std::sync::atomic::{AtomicIsize, Ordering};
+
+    use tauri::image::Image;
+    use tauri::Window;
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateIcon, DestroyIcon, SendMessageW, HICON, ICON_BIG, WM_SETICON,
+    };
+
+    /// The handle this module last put up, or 0. Only ever touched on the main thread.
+    static PUT: AtomicIsize = AtomicIsize::new(0);
+
+    pub fn put(window: &Window, logo: Option<&Image<'_>>) {
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        let raw = logo.and_then(icon_of).map_or(0, |icon| icon.0 as isize);
+        // SAFETY: the frame's own window, given a handle made just above or none; the one it replaces is ours and is
+        // no longer the window's once the message returns, so it is freed after.
+        unsafe {
+            SendMessageW(
+                hwnd,
+                WM_SETICON,
+                Some(WPARAM(ICON_BIG as usize)),
+                Some(LPARAM(raw)),
+            );
+            let before = PUT.swap(raw, Ordering::Relaxed);
+            if before != 0 {
+                let _ = DestroyIcon(HICON(before as *mut _));
+            }
+        }
+    }
+
+    /// An icon of the image's RGBA, its alpha kept: a 32-bit colour plane in BGRA order, and an AND mask of nothing,
+    /// one bit a pixel in rows padded to 16 bits, which Windows ignores where the colour has alpha.
+    fn icon_of(image: &Image<'_>) -> Option<HICON> {
+        let (width, height) = (image.width(), image.height());
+        let bgra: Vec<u8> = image
+            .rgba()
+            .chunks_exact(4)
+            .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], pixel[3]])
+            .collect();
+        let mask = vec![0u8; (width as usize).div_ceil(16) * 2 * height as usize];
+        // SAFETY: both planes are sized for width × height as CreateIcon reads them, and outlive the call.
+        unsafe {
+            CreateIcon(
+                None,
+                width as i32,
+                height as i32,
+                1,
+                32,
+                mask.as_ptr(),
+                bgra.as_ptr(),
+            )
+        }
+        .ok()
     }
 }
 
