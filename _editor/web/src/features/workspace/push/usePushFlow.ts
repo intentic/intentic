@@ -188,10 +188,10 @@ const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQue
 /* WHICH PUSH RUNS THE MOMENT IS ABOUT: the ones a send in flight is writing, or the ones a refusal filed. Only. */
 const runsInQuestion = (): readonly ReturnType<typeof usePushRun>[] => {
     if (sending.value) {
-        return (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo, undefined, pending.value?.view));
+        return (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo, pending.value?.view));
     }
     const refused = refusedRuns.value.length > 0 ? refusedRuns.value : (standing.value?.runs ?? []);
-    return refused.map((run) => usePushRun(run.repo, undefined, (pending.value ?? standing.value?.push)?.view));
+    return refused.map((run) => usePushRun(run.repo, (pending.value ?? standing.value?.push)?.view));
 };
 
 // The terminal of the push in question, while it runs and for as long as its refusal stands.

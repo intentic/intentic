@@ -15,9 +15,9 @@ interface Observation {
     readonly at: number;
 }
 
-// One slot per sandbox: the background polls of every other box in the fleet (fleetAcross, devicesAcross,
-// changesAcross) pass through the same fetch, and with a single slot their answers overwrote the active box's verdict
-// just before the connection machine read it, so a box the edge had called detached was diagnosed as a network fault.
+// One slot per sandbox: the background polls of every other box in the fleet (fleetAcross, devicesAcross) pass through
+// the same fetch, and with a single slot their answers overwrote the active box's verdict just before the connection
+// machine read it, so a box the edge had called detached was diagnosed as a network fault.
 const seen = new Map<string | undefined, Observation>();
 
 // Records whatever the last response carried, INCLUDING nothing: a response with no verdict is a response from behind

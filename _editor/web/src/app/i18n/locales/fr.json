@@ -503,7 +503,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
-            "allSandboxes": "Tous les sandboxes",
             "archive": "Archiver",
             "archiveAll": "Tout archiver",
             "archiveEmptiedFinishedAgents": "Archive vidée. Les agents terminés s'y accumuleront de nouveau tout seuls après quelques jours calmes.",
@@ -947,11 +946,8 @@
             "otherStaged": "Vous avez {count} autre changement indexé, et enregistrer ces réglages le committerait aussi. Committez-le ou retirez-le de l'index dans Changements, puis réessayez. | Vous avez {count} autres changements indexés, et enregistrer ces réglages les committerait aussi. Committez-les ou retirez-les de l'index dans Changements, puis réessayez."
         },
         "agentsTile": {
-            "countingEverySandbox": "Comptage de tous les sandboxes",
-            "countingExcept": "Comptage de tous les sandboxes sauf {names}, qui ne répond pas | Comptage de tous les sandboxes sauf {names}, qui ne répondent pas",
             "needYou": "{count} a besoin de vous | {count} ont besoin de vous",
-            "needYouOutside": "{owed} ({outside} hors de {project})",
-            "owedElsewhere": "{owed}, {elsewhere} ailleurs"
+            "needYouOutside": "{owed} ({outside} hors de {project})"
         },
         "laneDrop": {
             "agentsRaiseFlags": "Les agents signalent eux-mêmes qu'ils ont besoin d'attention",
@@ -997,11 +993,6 @@
             "openIn": "Ouvrir dans {name}",
             "openInItsSandbox": "Ouvrir dans son sandbox",
             "stopWatchingCount": "Arrêter la surveillance ({count})"
-        },
-        "fleetScope": {
-            "leftOut": "Ce tableau le laisse de côté jusqu'à ce qu'il réponde. | Ce tableau les laisse de côté jusqu'à ce qu'ils répondent.",
-            "namesAndMore": "{names} et {count} autres",
-            "notAnswering": "{names} ne répond pas | {names} ne répondent pas"
         },
         "synthesizeSessions": {
             "alreadyPreparing": "Une synthèse est déjà en préparation.",
@@ -11806,7 +11797,6 @@
             "sidePanel": "Panneau latéral"
         },
         "desktopSignal": {
-            "elsewhere": "{line} · dans {sandbox}",
             "finished": "Tour terminé",
             "heldLine": "Une automatisation attend votre approbation.",
             "heldTitle": "Une automatisation doit être approuvée",
@@ -13018,30 +13008,6 @@
             "startTyping": "Commencez à taper.",
             "viewMarkdownSource": "Voir la source"
         },
-        "otherSandboxChanges": {
-            "checksRunThere": "Vérifications faites là-bas",
-            "inOtherSandboxes": "Dans d'autres sandboxes",
-            "neverPublished": "jamais publié",
-            "notAnswering": "{names} ne répond pas | {names} ne répondent pas",
-            "open": "Ouvrir {sandboxName}",
-            "publish": "Publier",
-            "push": "Pousser",
-            "toPush": "{count} à pousser",
-            "uncommitted": "{count} non committé(s)",
-            "unpublishedWork": "travail non publié",
-            "unpushed": "{count} non poussé | {count} non poussés",
-            "unreadable": "git n'a pas pu lire ce dépôt",
-            "asleep": "{name} est en veille",
-            "asleepComputerOff": "{name} est en veille et son ordinateur est hors ligne",
-            "asleepMachineOff": "{name} est en veille sur {machine}, qui est hors ligne",
-            "starting": "{name} démarre",
-            "waking": "Réveil de {name}…",
-            "wake": "Réveiller",
-            "didNotWake": "{name} ne répond toujours pas après son réveil : son ordinateur est peut-être encore en train de le démarrer.",
-            "asleepRow": "en veille",
-            "asleepRowNote": "Chiffres d’avant la veille",
-            "asleepTitle": "En veille"
-        },
         "proseDiffView": {
             "nothingInTextChanged": "Rien n'a changé dans le texte ; seuls l'espacement ou les sauts de ligne.",
             "unchangedParagraphs": "{count} paragraphe inchangé | {count} paragraphes inchangés"
@@ -13548,10 +13514,6 @@
             "closingWindowDiscardsUnsaved": "Fermer cette fenêtre abandonne leurs modifications non enregistrées. C'est irréversible.",
             "openAnyway": "Ouvrir quand même",
             "openingFolderDiscardsUnsaved": "Ouvrir un autre dossier ici abandonne leurs modifications non enregistrées. C'est irréversible."
-        },
-        "changesAcross": {
-            "pushFailed": "Ce push n'a pas fonctionné.",
-            "pushRefused": "Ce push a été refusé."
         },
         "scopeTitle": {
             "anAgent": "un agent"

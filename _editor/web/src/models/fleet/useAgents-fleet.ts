@@ -464,8 +464,8 @@ export const finishedLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
 // Newest news first.
 export const attentionLaneOrder = (a: FleetAgent, b: FleetAgent): number => b.updatedAt - a.updatedAt || byId(a, b);
 
-// Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
-// the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
+// Splits a flat list into the board's three lanes, factored out of `fleet` so a narrowed board (a project, an owner) can
+// apply the same rule to its own list without duplicating the sort.
 export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
     for (const agent of agents) {

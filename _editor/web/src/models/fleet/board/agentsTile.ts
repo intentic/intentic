@@ -1,76 +1,38 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
-import { computed, onUnmounted, watch } from "vue";
+import { computed } from "vue";
 import { projectScope } from "../../../app/projectScope";
 import { useAuth } from "../../../client/auth/useAuth";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { subscribe as watchOtherBoxes, silentBoxes } from "../../sandbox/live/fleetAcross";
-import { acrossAttention, listNames, readingAcross, watchRemoteSeen } from "../fleetScope";
+import { watchRemoteSeen } from "../fleetScope";
 import { useAgents } from "../useAgents";
 import { attentionOutsideProject, trackScopeInputs } from "./attentionOutside";
 
-// What the agents tile shows, wherever it is drawn (the desktop rail's tile, the phone rail's): the Attention lane's count follows the
-// board's sandbox scope, and the cross-sandbox sum exists only while the reader has opted into it.
+// What the agents tile shows, wherever it is drawn (the desktop rail's tile, the phone rail's): this sandbox's Attention
+// count. What other sandboxes need is Home's to show.
 
-// Attention cards and automation wakes held at the door, everywhere the board is currently reading.
-export const agentsAttention = computed<number>(() => useAgents().attention.value + (readingAcross.value ? acrossAttention.value : 0));
+// Attention cards and automation wakes held at the door.
+export const agentsAttention = computed<number>(() => useAgents().attention.value);
 
-// Whether the count spans every sandbox, and whether some didn't answer, said in words since the badge is one digit.
-// Undefined while the board is about this box alone.
-export const agentsScopeNote = computed<string | undefined>(() => {
-    if (!readingAcross.value) {
-        return undefined;
-    }
-    const names = silentBoxes.value.map((box) => box.sandbox.name);
-    return names.length === 0
-        ? t(`agents.agentsTile.countingEverySandbox`)
-        : t(`agents.agentsTile.countingExcept`, { names: listNames(names), count: names.length }, names.length);
-});
-
-// The badge shown by every rail tile and tab; the tooltip splits off the count elsewhere since that decides whether to
-// open the board or cross to that box.
+// The badge shown by every rail tile and tab.
 export const agentsBadge = computed<ViewBadge | undefined>(() => {
     const total = agentsAttention.value;
     if (total <= 0) {
         return undefined;
     }
-    const elsewhere = readingAcross.value ? acrossAttention.value : 0;
     const needYou = t(`agents.agentsTile.needYou`, { count: total }, total);
     // The count is the sandbox's; the board shows the open project. Saying how many sit outside it is what keeps a badge
     // over a quiet board from reading as a bug.
     const outside = attentionOutsideProject.value;
-    const owed = outside > 0 && projectScope.value !== undefined ? t(`agents.agentsTile.needYouOutside`, { owed: needYou, outside, project: projectScope.value }) : needYou;
-    return { count: total, tooltip: elsewhere > 0 ? t(`agents.agentsTile.owedElsewhere`, { owed, elsewhere }) : owed };
+    const tooltip = outside > 0 && projectScope.value !== undefined ? t(`agents.agentsTile.needYouOutside`, { owed: needYou, outside, project: projectScope.value }) : needYou;
+    return { count: total, tooltip };
 });
-
-// Keeps other sandboxes live in fleetAcross while the scope is wide, releasing the moment it narrows or the caller
-// unmounts. The shell's tile holds one such read and the board its own.
-export const followOtherBoxes = (): void => {
-    let release: (() => void) | undefined;
-    const stop = watch(
-        readingAcross,
-        (across) => {
-            if (across) {
-                release ??= watchOtherBoxes();
-                return;
-            }
-            release?.();
-            release = undefined;
-        },
-        { immediate: true },
-    );
-    onUnmounted(() => {
-        stop();
-        release?.();
-        release = undefined;
-    });
-};
 
 // The tile's own watch, called once from the shared shell so desktop and mobile share one subscription.
 export const watchAgentsScope = (): void => {
-    // Marks a remote chat read while it's open in front of the user, or it would count toward this number forever.
+    // Marks a chat placed in another sandbox read while it's open in front of the user, as that sandbox's own board
+    // would.
     watchRemoteSeen();
-    followOtherBoxes();
     const { personas } = usePersonas();
     const { user } = useAuth();
     trackScopeInputs(

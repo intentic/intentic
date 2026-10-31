@@ -192,13 +192,9 @@ describe(`the board's scope`, () => {
         expect(ownerFilter.value).toBeUndefined();
     });
 
-    it(`offers a chip per colleague holding work here, and the two scopes by name`, () => {
+    it(`offers a chip per colleague holding work here`, () => {
         const { scope } = scopeOf([inShop, elsewhere]);
         expect(scope.ownerOptions.value.map((option) => option.value)).toEqual([`everyone`, ME, ADA]);
-        expect(scope.scopeOptions.value).toEqual([
-            { label: t(`shared.thisSandbox`), value: `box` },
-            { label: t(`agents.agentsView.allSandboxes`), value: `all` },
-        ]);
     });
 
     it(`drops the owner filter once nobody else can hold work here`, async () => {

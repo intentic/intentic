@@ -154,8 +154,7 @@ test(`cancel asks the daemon to stop and keeps a refusal as the error line`, asy
     expect(stubborn.error.value).toBe(`no such run`);
 });
 
-// A run on another box has no panel here to open (usePushRun.ts aims the ledger's pushes at that box): the
-// source says so by answering no words, and the watcher follows the run without touching the panel.
+// A run with no panel here to open: the source says so by answering no words, and the watcher follows the run without touching the panel.
 test(`a source with no panel to open follows the run and reveals nothing`, async () => {
     const { source } = scripted([running(`job-push`), passed]);
     const watcher = createRunWatcher({ ...source, reveal: () => undefined });

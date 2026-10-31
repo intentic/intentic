@@ -13,7 +13,7 @@ jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sa
 jest.mock("../../../client/sandbox/reachability", () => ({ noteUnreachable: jest.fn() }));
 jest.mock("../../../workbench/window/onScreen", () => ({ onScreen: ref(true) }));
 
-const { awaitAnswer, createAcrossStore } = await import("./acrossSandboxes");
+const { createAcrossStore } = await import("./acrossSandboxes");
 
 const seen = `2026-10-29T09:00:00.000Z`;
 const awake = (id: string): SandboxSummary => sandboxSummary({ id, lastSeenAt: seen, sleep: null });
@@ -91,27 +91,5 @@ describe(`a sandbox the list says sleeps`, () => {
         await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(reads));
         expect(read.mock.calls.slice(reads).map(([sandbox]) => sandbox.id)).toEqual([`desk`]);
         release();
-    });
-});
-
-describe(`awaitAnswer`, () => {
-    it(`reads a waking sandbox until it answers`, async () => {
-        let tries = 0;
-        const store = storeWith(async () => {
-            tries += 1;
-            if (tries < 3) {
-                throw new Error(`still starting`);
-            }
-            return {};
-        });
-        expect(await awaitAnswer(store, `laptop`, { everyMs: 1, withinMs: 1_000 })).toBe(true);
-        expect(tries).toBe(3);
-    });
-
-    it(`gives up once its patience is spent`, async () => {
-        const store = storeWith(async () => {
-            throw new Error(`asleep`);
-        });
-        expect(await awaitAnswer(store, `laptop`, { everyMs: 5, withinMs: 12 })).toBe(false);
     });
 });

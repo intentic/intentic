@@ -442,7 +442,7 @@ const syncAll = (targets: readonly SyncTarget[], view: ViewScope = SHARED_SCOPE)
                 if (target.push) {
                     // Followed as a run (usePushRun), not one request, since the pre-push hook can take minutes;
                     // failures carry the run.
-                    const pushed = await usePushRun(target.repo, undefined, view).start();
+                    const pushed = await usePushRun(target.repo, view).start();
                     if (pushed.status !== `passed`) {
                         throw new PushRefused(pushed);
                     }

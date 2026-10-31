@@ -1,7 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 
-/* WHY ANOTHER SANDBOX IS QUIET, in one place. Every view of the account's other sandboxes (the Changes panel's ledger,
- * the switcher's rows, the agents board, the unreachable telemetry) read only the hosted machine's state, which a
+/* WHY ANOTHER SANDBOX IS QUIET, in one place. Every view of the account's other sandboxes (the switcher's rows, the
+ * chat's placement menu, the unreachable telemetry) read only the hosted machine's state, which a
  * sandbox on the owner's own computer does not have, so one its machine had put to sleep was said to be "not answering"
  * in warning ink, beside the ones that really were broken (2026-10-29). Pure, so the table is pinned by a test. */
 

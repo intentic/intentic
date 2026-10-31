@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { createReachabilityTelemetry, retrySandboxRead } from "../reachability";
+import { createReachabilityTelemetry } from "../reachability";
 
 const sandbox = (hosted: SandboxSummary["hosted"]): SandboxSummary => ({
     id: "box",
@@ -18,39 +18,6 @@ const sandbox = (hosted: SandboxSummary["hosted"]): SandboxSummary => ({
     role: "owner",
     providedAddress: false,
     localHostname: null,
-});
-
-test("hosted Retry waits for the platform wake, then re-reads", async () => {
-    const calls: string[] = [];
-    let finish = () => {};
-    const wake = jest.fn(
-        () =>
-            new Promise<void>((resolve) => {
-                finish = resolve;
-                calls.push("wake");
-            }),
-    );
-    const read = () => {
-        calls.push("read");
-    };
-    const pending = retrySandboxRead(sandbox({ region: "iad", warm: true, state: "asleep" }), wake, read);
-    expect(calls).toEqual(["wake"]);
-    finish();
-    await pending;
-    expect(wake).toHaveBeenCalledWith("box", "retry");
-    expect(calls).toEqual(["wake", "read"]);
-});
-
-test("a local Retry reads without waking another machine; a refused hosted wake remains visible", async () => {
-    const wake = jest.fn(async () => {
-        throw new Error("hours used up");
-    });
-    const read = jest.fn();
-    await retrySandboxRead(sandbox(null), wake, read);
-    expect(wake).toHaveBeenCalledTimes(0);
-    expect(read).toHaveBeenCalledTimes(1);
-    await expect(retrySandboxRead(sandbox({ region: "iad", warm: true }), wake, read)).rejects.toThrow("hours used up");
-    expect(read).toHaveBeenCalledTimes(1);
 });
 
 test("unreachable telemetry names the cause and is shared once per sandbox in a session", () => {

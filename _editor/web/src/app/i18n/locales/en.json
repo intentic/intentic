@@ -503,7 +503,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Have the agent resolve the conflict?",
-            "allSandboxes": "All sandboxes",
             "archive": "Archive",
             "archiveAll": "Archive all",
             "archiveEmptiedFinishedAgents": "Archive emptied. Finished agents will collect here again on their own after a few quiet days.",
@@ -947,11 +946,8 @@
             "otherStaged": "You have {count} other change staged, and saving these settings would commit it too. Commit or unstage it in Changes first, then try again. | You have {count} other changes staged, and saving these settings would commit them too. Commit or unstage them in Changes first, then try again."
         },
         "agentsTile": {
-            "countingEverySandbox": "Counting every sandbox",
-            "countingExcept": "Counting every sandbox except {names}, which isn't answering | Counting every sandbox except {names}, which aren't answering",
             "needYou": "{count} needs you | {count} need you",
-            "needYouOutside": "{owed} ({outside} outside {project})",
-            "owedElsewhere": "{owed}, {elsewhere} elsewhere"
+            "needYouOutside": "{owed} ({outside} outside {project})"
         },
         "laneDrop": {
             "agentsRaiseFlags": "Agents raise their own attention flags",
@@ -997,11 +993,6 @@
             "openIn": "Open in {name}",
             "openInItsSandbox": "Open in its sandbox",
             "stopWatchingCount": "Stop watching ({count})"
-        },
-        "fleetScope": {
-            "leftOut": "This board leaves it out until it does. | This board leaves them out until they do.",
-            "namesAndMore": "{names} and {count} more",
-            "notAnswering": "{names} isn't answering | {names} aren't answering"
         },
         "synthesizeSessions": {
             "alreadyPreparing": "A synthesis is already being prepared.",
@@ -11806,7 +11797,6 @@
             "sidePanel": "Side Panel"
         },
         "desktopSignal": {
-            "elsewhere": "{line} · in {sandbox}",
             "finished": "Turn finished",
             "heldLine": "An automation is waiting for your approval.",
             "heldTitle": "Automation needs approval",
@@ -13018,30 +13008,6 @@
             "startTyping": "Start typing.",
             "viewMarkdownSource": "View source"
         },
-        "otherSandboxChanges": {
-            "checksRunThere": "Checks run there",
-            "inOtherSandboxes": "In other sandboxes",
-            "neverPublished": "never published",
-            "notAnswering": "{names} isn't answering | {names} aren't answering",
-            "open": "Open {sandboxName}",
-            "publish": "Publish",
-            "push": "Push",
-            "toPush": "{count} to push",
-            "uncommitted": "{count} uncommitted",
-            "unpublishedWork": "unpublished work",
-            "unpushed": "{count} unpushed | {count} unpushed",
-            "unreadable": "git couldn't read this repo",
-            "asleep": "{name} is asleep",
-            "asleepComputerOff": "{name} is asleep and its computer is offline",
-            "asleepMachineOff": "{name} is asleep on {machine}, which is offline",
-            "starting": "{name} is starting",
-            "waking": "Waking {name}…",
-            "wake": "Wake",
-            "didNotWake": "{name} still isn't answering after waking: its computer may still be starting it.",
-            "asleepRow": "asleep",
-            "asleepRowNote": "Numbers from before it slept",
-            "asleepTitle": "Asleep"
-        },
         "proseDiffView": {
             "nothingInTextChanged": "Nothing in the text changed; only spacing or line breaks did.",
             "unchangedParagraphs": "{count} unchanged paragraph | {count} unchanged paragraphs"
@@ -13548,10 +13514,6 @@
             "closingWindowDiscardsUnsaved": "Closing this window discards their unsaved edits. This can't be undone.",
             "openAnyway": "Open anyway",
             "openingFolderDiscardsUnsaved": "Opening another folder here discards their unsaved edits. This can't be undone."
-        },
-        "changesAcross": {
-            "pushFailed": "That push didn't work.",
-            "pushRefused": "That push was refused."
         },
         "scopeTitle": {
             "anAgent": "an agent"

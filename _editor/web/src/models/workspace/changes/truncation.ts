@@ -2,8 +2,7 @@ import type { GitDiffSide, RepoChanges } from "@intentic/sandbox-contract/schema
 
 // The daemon caps rows per repo (MAX_REPO_CHANGES); a repo past that ships a short list plus a per-side count.
 // Verbs act on the daemon's full scope, not the shown rows, so every displayed count must add the truncated
-// remainder back. One module for the arithmetic since three surfaces (badge, commit box, cross-sandbox ledger) must
-// agree.
+// remainder back. One module for the arithmetic since both surfaces (badge, commit box) must agree.
 
 export const truncatedOn = (repo: RepoChanges, side: GitDiffSide): number =>
     side === `staged` ? (repo.truncated?.staged ?? 0) : side === `unstaged` ? (repo.truncated?.unstaged ?? 0) : 0;

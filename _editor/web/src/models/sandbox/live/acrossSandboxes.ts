@@ -1,6 +1,5 @@
 import { noteUnreachable } from "../../../client/sandbox/reachability";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { sleep } from "@intentic/base/async";
 import { usePoll } from "@intentic/ui/async";
 import { computed, type ComputedRef, effectScope, type EffectScope, shallowRef, watch } from "vue";
 import { onScreen } from "../../../workbench/window/onScreen";
@@ -8,16 +7,16 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { sleepOfSandbox } from "../../../client/sandbox/wake/sandboxAnswer";
 import { connectedSandboxes } from "./roster";
 
-// Reads every sandbox but the active one (the fleet board's All-sandboxes scope, the changes ledger) by polling,
-// never streaming, and never wakes a machine. Runs only while subscribed, paused off-screen, and never reports a
-// failed read as `0`: `readAt === undefined` means unknown.
+// Reads every sandbox but the active one (the switcher's rows, a chat placed elsewhere, the recovery panel's machines)
+// by polling, never streaming, and never wakes a machine. Runs only while subscribed, paused off-screen, and never
+// reports a failed read as `0`: `readAt === undefined` means unknown.
 //
 // A SLEEPING SANDBOX IS NOT POLLED (2026-10-29). Nothing changes in a stopped sandbox, so its last answer stays true
 // until it wakes, and every read of it only failed: a request down a tunnel that is not there, then a list refresh, every
 // tick. Once the list says it sleeps (client/sandbox/wake/sandboxAnswer.ts) and its last read here did not answer, the poll leaves it alone
 // and asks the platform's list instead, once a tick while any sleeps, and reads it again when the list says it woke.
 // A box that comes back into the targets (switched away from) is read whatever the list says, and so is one a caller
-// asks for by name (`readOne`, `awaitAnswer`: a Wake press).
+// asks for by name (`readOne`).
 export interface AcrossRecord {
     readonly sandbox: SandboxSummary;
     // When this box last answered, ever; undefined means nothing here has been true yet.
@@ -96,26 +95,6 @@ const watchAcross = ({ pollMs, targets, resting, tick, readAll, readEntered }: W
     );
     // A sleeper the list now says woke is read at once rather than at the next tick.
     watch(() => targets.value.filter(resting).map((box) => box.id).join(`,`), () => readAll(false));
-};
-
-// Reads one box every `everyMs` until it answers or `withinMs` has passed: a sandbox just asked to wake. True once it
-// answered; false for one that did not in time, or is no longer one the store reads.
-export const awaitAnswer = async <T extends AcrossRecord>(
-    store: Pick<AcrossStore<T>, `readOne` | `get`>,
-    sandboxId: string,
-    { everyMs, withinMs }: { readonly everyMs: number; readonly withinMs: number },
-): Promise<boolean> => {
-    const until = Date.now() + withinMs;
-    for (;;) {
-        await store.readOne(sandboxId);
-        if (store.get(sandboxId)?.answered === true) {
-            return true;
-        }
-        if (Date.now() + everyMs > until) {
-            return false;
-        }
-        await sleep(everyMs);
-    }
 };
 
 export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions<T>): AcrossStore<T> => {

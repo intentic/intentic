@@ -503,7 +503,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
-            "allSandboxes": "Wszystkie sandboxy",
             "archive": "Archiwum",
             "archiveAll": "Zarchiwizuj wszystkie",
             "archiveEmptiedFinishedAgents": "Archiwum opróżnione. Skończone agenty zbiorą się tu znowu same po kilku spokojnych dniach.",
@@ -947,11 +946,8 @@
             "otherStaged": "Masz {count} inną zmianę przygotowaną do commita, a zapisanie tych ustawień zacommitowałoby ją razem z nimi. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
         },
         "agentsTile": {
-            "countingEverySandbox": "Liczone ze wszystkich sandboxów",
-            "countingExcept": "Liczone ze wszystkich sandboxów poza tym, który nie odpowiada: {names} | Liczone ze wszystkich sandboxów poza tymi, które nie odpowiadają: {names} | Liczone ze wszystkich sandboxów poza tymi, które nie odpowiadają: {names}",
             "needYou": "{count} sprawa czeka na Ciebie | {count} sprawy czekają na Ciebie | {count} spraw czeka na Ciebie",
-            "needYouOutside": "{owed} ({outside} poza {project})",
-            "owedElsewhere": "{owed}, {elsewhere} gdzie indziej"
+            "needYouOutside": "{owed} ({outside} poza {project})"
         },
         "laneDrop": {
             "agentsRaiseFlags": "Agenci sami zgłaszają, że potrzebują uwagi",
@@ -997,11 +993,6 @@
             "openIn": "Otwórz w {name}",
             "openInItsSandbox": "Otwórz w jego sandboxie",
             "stopWatchingCount": "Przestań obserwować ({count})"
-        },
-        "fleetScope": {
-            "leftOut": "Ta tablica pomija go, dopóki nie odpowie. | Ta tablica pomija je, dopóki nie odpowiedzą. | Ta tablica pomija je, dopóki nie odpowiedzą.",
-            "namesAndMore": "{names} i {count} więcej",
-            "notAnswering": "{names} nie odpowiada | {names} nie odpowiadają | {names} nie odpowiadają"
         },
         "synthesizeSessions": {
             "alreadyPreparing": "Podsumowanie jest już przygotowywane.",
@@ -11197,7 +11188,6 @@
             "signOut2": "Wyloguj się"
         },
         "desktopSignal": {
-            "elsewhere": "{line} · w {sandbox}",
             "finished": "Tura się skończyła",
             "heldLine": "Automatyzacja czeka na Twoje zatwierdzenie.",
             "heldTitle": "Automatyzacja czeka na zatwierdzenie",
@@ -12403,30 +12393,6 @@
             "startTyping": "Zacznij pisać.",
             "viewMarkdownSource": "Pokaż źródło"
         },
-        "otherSandboxChanges": {
-            "checksRunThere": "Sprawdzenia działają tam",
-            "inOtherSandboxes": "W innych sandboxach",
-            "neverPublished": "nigdy nieopublikowane",
-            "notAnswering": "{names} nie odpowiada | {names} nie odpowiadają | {names} nie odpowiadają",
-            "open": "Otwórz {sandboxName}",
-            "publish": "Opublikuj",
-            "push": "Wypchnij",
-            "toPush": "{count} do wypchnięcia",
-            "uncommitted": "{count} bez commita",
-            "unpublishedWork": "nieopublikowana praca",
-            "unpushed": "{count} niewypchnięty | {count} niewypchnięte | {count} niewypchniętych",
-            "unreadable": "git nie mógł odczytać tego repozytorium",
-            "asleep": "{name} śpi",
-            "asleepComputerOff": "{name} śpi, a komputer, na którym działa, jest offline",
-            "asleepMachineOff": "{name} śpi na {machine}, który jest offline",
-            "starting": "{name} się uruchamia",
-            "waking": "Wybudzanie {name}…",
-            "wake": "Wybudź",
-            "didNotWake": "{name} wciąż nie odpowiada po wybudzeniu: uruchamianie może jeszcze trwać.",
-            "asleepRow": "śpi",
-            "asleepRowNote": "Liczby sprzed uśpienia",
-            "asleepTitle": "Śpi"
-        },
         "proseDiffView": {
             "nothingInTextChanged": "W tekście nic się nie zmieniło; zmieniły się tylko odstępy albo łamanie linii.",
             "unchangedParagraphs": "{count} niezmieniony akapit | {count} niezmienione akapity | {count} niezmienionych akapitów"
@@ -12951,10 +12917,6 @@
             "closingWindowDiscardsUnsaved": "Zamknięcie tego okna odrzuci ich niezapisane zmiany. Tego nie można cofnąć.",
             "openAnyway": "Otwórz mimo to",
             "openingFolderDiscardsUnsaved": "Otwarcie tu innego folderu odrzuci ich niezapisane zmiany. Tego nie można cofnąć."
-        },
-        "changesAcross": {
-            "pushFailed": "To wypchnięcie się nie udało.",
-            "pushRefused": "To wypchnięcie zostało odrzucone."
         },
         "scopeTitle": {
             "anAgent": "agent"

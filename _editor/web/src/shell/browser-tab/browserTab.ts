@@ -3,13 +3,11 @@ import { attentionCalls, type CallerStanding, laneOf } from "../../models/agent-
 import { type AgentStanding, turnWorking } from "../../models/agent-status/agentStatus-standing";
 import { agentsAttention } from "../../models/fleet/board/agentsTile";
 import { parentOf } from "../../models/agent-status/ownership";
-import { readingAcross } from "../../models/fleet/fleetScope";
 import { type FleetAgent, fleet } from "../../models/fleet/useAgents-fleet";
 import { heldHeard, heldWakes, rosterHeard } from "../../models/fleet/useAgents-registry";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";
-import { otherBoxes } from "../../models/sandbox/live/fleetAcross";
 import { floatingWindowPanel } from "../../workbench/window/floating";
 import { type Chime, ringOnce } from "../../workbench/browser-tab/chimes";
 import { showDesktopBadge } from "./desktopBadge";
@@ -57,19 +55,10 @@ const turnsOf = (sandbox: string, agents: readonly FleetAgent[]): Pick<TabFrame,
     };
 };
 
-// The other sandboxes count only while the Agents tile counts them, so a chime never rings for a number not shown.
-const askedAcross = (): readonly (readonly [string, ReadonlySet<string>])[] =>
-    readingAcross.value
-        ? otherBoxes.value.flatMap((box) =>
-              box.readAt === undefined
-                  ? []
-                  : [[box.sandbox.id, askKeys(box.agents)] as const, [`${box.sandbox.id}#held`, new Set(box.held.map((wake) => wake.id))] as const],
-          )
-        : [];
-
+// Only the sandbox in front of the reader rings: what other sandboxes need is Home's to show.
 const frameOf = (): TabFrame => {
     const sandbox = activeSandboxId.value;
-    const asks = new Map<string, ReadonlySet<string>>(askedAcross());
+    const asks = new Map<string, ReadonlySet<string>>();
     if (sandbox === undefined) {
         return { asks, working: new Set(), settled: new Set() };
     }

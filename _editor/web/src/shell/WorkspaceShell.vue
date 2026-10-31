@@ -58,7 +58,7 @@ const { mobile } = useDevice();
 useExtensionHost();
 // A guest is kept to the screens the daemon answers it on.
 useGuestFence();
-// Keeps other sandboxes live while the board's scope is wide; shared so both chromes need only one poll.
+// The agents tile's inputs and a placed-elsewhere chat's read marker; shared so both chromes need only one watch.
 watchAgentsScope();
 // Answers an agent update's wait once the machine is read back on its new agent, whichever screen is open by then.
 watchDeviceReturns();

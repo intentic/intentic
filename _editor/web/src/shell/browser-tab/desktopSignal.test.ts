@@ -57,11 +57,6 @@ describe(`the notifications for a reading's news`, () => {
         // The first that makes it up is the one with the sound, whichever kind it is.
         expect(noticesFor(items, fleetNames, { ...all, asks: false })[0]?.silent).toBe(false);
     });
-
-    it(`names the sandbox when it is not the one in front of the reader`, () => {
-        const elsewhere = { ask: (): NoticeSubject => subject(`a`, { elsewhere: `Work box` }), finish: fleetNames.finish };
-        expect(noticesFor({ asked: asked(`a`), finished: [] }, elsewhere, all)[0]?.body).toBe(`Needs you · Question · in Work box`);
-    });
 });
 
 const frame = (asks: Record<string, readonly string[]>): TabFrame => ({

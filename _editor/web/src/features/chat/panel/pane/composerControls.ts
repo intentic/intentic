@@ -3,7 +3,7 @@ import { isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
-import { boxNameOf, scopeOffered } from "../../../../models/fleet/fleetScope";
+import { boxNameOf, sandboxesElsewhere } from "../../../../models/fleet/fleetScope";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRunners } from "../../../../models/sandbox/devices/useRunners";
 import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
@@ -116,9 +116,9 @@ export const useComposerControls = (host: ControlsHost) => {
     );
     const { runners: pairedRunners } = useRunners();
     const { agentById } = useAgents();
-    // Offered where there is somewhere else to run, or once the chat is placed; `scopeOffered` is the board's test.
+    // Offered where there is somewhere else to run, or once the chat is placed.
     const placementShown = computed(
-        () => pairedRunners.value.length > 0 || scopeOffered.value || conversation().runner.value !== undefined || remote.value,
+        () => pairedRunners.value.length > 0 || sandboxesElsewhere.value || conversation().runner.value !== undefined || remote.value,
     );
     // Writing as the agent needs a registry entry to place into, which the chat has from its first turn on.
     const placeable = computed(() => conversation().registered.value || agentById(conversation().conversationId) !== undefined);

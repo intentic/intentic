@@ -39,7 +39,7 @@ export interface LaneGroup {
 }
 
 // WHICH GROUPS ARE FOLDED: this browser's, like a layout, and the same on every visit, as a folded tray stays folded.
-// One set for every board in the window, so the all-sandboxes board folds what this one did.
+// One set for every board in the window.
 const KEY = deviceKey(`intentic.board.activeFolds`);
 
 const isPhase = (value: string): value is ActivePhase => ACTIVE_PHASES.some((phase) => phase === value);

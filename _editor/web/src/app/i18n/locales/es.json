@@ -503,7 +503,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
-            "allSandboxes": "Todos los sandboxes",
             "archive": "Archivo",
             "archiveAll": "Archivar todos",
             "archiveEmptiedFinishedAgents": "Archivo vaciado. Los agentes terminados volverán a acumularse aquí solos tras unos días tranquilos.",
@@ -947,11 +946,8 @@
             "otherStaged": "Tienes {count} cambio más en el stage, y guardar estos ajustes también haría commit de él. Haz commit o sácalo del stage en Cambios primero y vuelve a intentarlo. | Tienes {count} cambios más en el stage, y guardar estos ajustes también haría commit de ellos. Haz commit o sácalos del stage en Cambios primero y vuelve a intentarlo."
         },
         "agentsTile": {
-            "countingEverySandbox": "Contando todos los sandboxes",
-            "countingExcept": "Contando todos los sandboxes menos {names}, que no responde | Contando todos los sandboxes menos {names}, que no responden",
             "needYou": "{count} te necesita | {count} te necesitan",
-            "needYouOutside": "{owed} ({outside} fuera de {project})",
-            "owedElsewhere": "{owed}, {elsewhere} en otro lugar"
+            "needYouOutside": "{owed} ({outside} fuera de {project})"
         },
         "laneDrop": {
             "agentsRaiseFlags": "Los agentes levantan sus propios avisos de atención",
@@ -997,11 +993,6 @@
             "openIn": "Abrir en {name}",
             "openInItsSandbox": "Abrir en su sandbox",
             "stopWatchingCount": "Dejar de vigilar ({count})"
-        },
-        "fleetScope": {
-            "leftOut": "Este tablero lo deja fuera hasta que responda. | Este tablero los deja fuera hasta que respondan.",
-            "namesAndMore": "{names} y {count} más",
-            "notAnswering": "{names} no responde | {names} no responden"
         },
         "synthesizeSessions": {
             "alreadyPreparing": "Ya se está preparando una síntesis.",
@@ -11806,7 +11797,6 @@
             "sidePanel": "Panel lateral"
         },
         "desktopSignal": {
-            "elsewhere": "{line} · en {sandbox}",
             "finished": "Turno terminado",
             "heldLine": "Una automatización espera tu aprobación.",
             "heldTitle": "Una automatización necesita aprobación",
@@ -13018,30 +13008,6 @@
             "startTyping": "Empieza a escribir.",
             "viewMarkdownSource": "Ver código fuente"
         },
-        "otherSandboxChanges": {
-            "checksRunThere": "Las comprobaciones corren allí",
-            "inOtherSandboxes": "En otros sandboxes",
-            "neverPublished": "nunca publicado",
-            "notAnswering": "{names} no responde | {names} no responden",
-            "open": "Abrir {sandboxName}",
-            "publish": "Publicar",
-            "push": "Push",
-            "toPush": "{count} por hacer push",
-            "uncommitted": "{count} sin commit",
-            "unpublishedWork": "trabajo sin publicar",
-            "unpushed": "{count} sin push | {count} sin push",
-            "unreadable": "git no pudo leer este repo",
-            "asleep": "{name} está en reposo",
-            "asleepComputerOff": "{name} está en reposo y su ordenador está desconectado",
-            "asleepMachineOff": "{name} está en reposo en {machine}, que está desconectado",
-            "starting": "{name} se está iniciando",
-            "waking": "Despertando {name}…",
-            "wake": "Despertar",
-            "didNotWake": "{name} sigue sin responder tras despertarlo: puede que su ordenador aún lo esté iniciando.",
-            "asleepRow": "en reposo",
-            "asleepRowNote": "Cifras de antes de dormirse",
-            "asleepTitle": "En reposo"
-        },
         "proseDiffView": {
             "nothingInTextChanged": "Nada del texto cambió; solo el espaciado o los saltos de línea.",
             "unchangedParagraphs": "{count} párrafo sin cambios | {count} párrafos sin cambios"
@@ -13548,10 +13514,6 @@
             "closingWindowDiscardsUnsaved": "Cerrar esta ventana descarta sus cambios sin guardar. No se puede deshacer.",
             "openAnyway": "Abrir de todos modos",
             "openingFolderDiscardsUnsaved": "Abrir otra carpeta aquí descarta sus cambios sin guardar. No se puede deshacer."
-        },
-        "changesAcross": {
-            "pushFailed": "Ese push no ha funcionado.",
-            "pushRefused": "Ese push ha sido rechazado."
         },
         "scopeTitle": {
             "anAgent": "un agente"

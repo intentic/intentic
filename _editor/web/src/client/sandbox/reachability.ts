@@ -22,7 +22,7 @@ export const createReachabilityTelemetry = (
         later: (run, ms) => void setTimeout(run, ms),
     },
 ) => {
-    // Every reader shares this session ledger: the switcher and changes list can fail on the same box together. A box is in
+    // Every reader shares this session ledger: the switcher and the agents' placement menu can fail on the same box together. A box is in
     // it from its first failure, so a second one while the first waits out SETTLE_MS is not a second report.
     const reported = new Set<string>();
     return (sandbox: SandboxSummary): void => {
@@ -44,15 +44,3 @@ export const createReachabilityTelemetry = (
     };
 };
 export const noteUnreachable = createReachabilityTelemetry(track);
-
-// Only a deliberate press wakes a background sandbox. Polls remain reads, so browsing the fleet costs no boot.
-export const retrySandboxRead = async (
-    sandbox: SandboxSummary,
-    wake: (sandboxId: string, source: `retry`) => Promise<void>,
-    read: () => void | Promise<void>,
-): Promise<void> => {
-    if (sandbox.hosted !== null) {
-        await wake(sandbox.id, `retry`);
-    }
-    await read();
-};

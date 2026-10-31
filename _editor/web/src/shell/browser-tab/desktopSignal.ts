@@ -5,7 +5,6 @@ import type { AgentStanding } from "../../models/agent-status/agentStatus-standi
 import { fleet } from "../../models/fleet/useAgents-fleet";
 import { heldWakes } from "../../models/fleet/useAgents-registry";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
-import { otherBoxes } from "../../models/sandbox/live/fleetAcross";
 import { clearDesktopNotices, type DesktopNotice, desktopNotices, postDesktopNotice, withdrawDesktopNotice } from "../../app/environments/desktopNotices";
 import { CHIME_GAP_MS } from "../../workbench/browser-tab/chimes";
 import { noticeAsks, noticeFinished } from "../../workbench/browser-tab/tabPreferences";
@@ -31,8 +30,6 @@ export interface NoticeSubject {
     readonly title: string;
     // The line under the title: what it needs, or that it finished.
     readonly line: string;
-    // The sandbox it is in, when that is not the one in front of the reader.
-    readonly elsewhere?: string;
     readonly path: string;
 }
 
@@ -44,8 +41,6 @@ export interface NoticeChoice {
     // Whether the system's sound may play now, outside the gap since the last one.
     readonly sound: boolean;
 }
-
-const bodyOf = (subject: NoticeSubject): string => (subject.elsewhere === undefined ? subject.line : t(`shell.desktopSignal.elsewhere`, { line: subject.line, sandbox: subject.elsewhere }));
 
 // The notifications for one reading's news, in the order they go up: what needs the reader first.
 export const noticesFor = (
@@ -60,7 +55,7 @@ export const noticesFor = (
             return;
         }
         for (const [key, subject] of keyed) {
-            notices.push({ key, kind, title: subject.title, body: bodyOf(subject), path: subject.path });
+            notices.push({ key, kind, title: subject.title, body: subject.line, path: subject.path });
         }
     };
     if (choice.asks) {
@@ -109,22 +104,23 @@ const askLine = (agent: AgentStanding): string => {
 const describeAsk = (source: string, key: string): NoticeSubject | undefined => {
     const held = source.endsWith(HELD);
     const sandbox = held ? source.slice(0, -HELD.length) : source;
-    const box = sandbox === activeSandboxId.value ? undefined : otherBoxes.value.find((entry) => entry.sandbox.id === sandbox);
-    const elsewhere = box?.sandbox.name;
+    // Only the sandbox in front of the reader has its asks read (browserTab.ts); other sandboxes' are Home's to show.
+    if (sandbox !== activeSandboxId.value) {
+        return undefined;
+    }
     if (held) {
-        const wake = (box === undefined ? heldWakes.value : box.held).find((entry) => entry.id === key);
+        const wake = heldWakes.value.find((entry) => entry.id === key);
         if (wake === undefined) {
             return undefined;
         }
         return {
             title: t(`shell.desktopSignal.heldTitle`),
             line: wake.title ?? t(`shell.desktopSignal.heldLine`),
-            elsewhere,
             path: `/agents?${new URLSearchParams({ sandbox }).toString()}`,
         };
     }
-    const agent = (box === undefined ? fleet.value : box.agents).find((entry) => entry.id === key);
-    return agent === undefined ? undefined : { title: agentDisplayTitle(agent), line: askLine(agent), elsewhere, path: conversationPath(sandbox, key) };
+    const agent = fleet.value.find((entry) => entry.id === key);
+    return agent === undefined ? undefined : { title: agentDisplayTitle(agent), line: askLine(agent), path: conversationPath(sandbox, key) };
 };
 
 // A finished turn's frame key is `<sandbox>/<agent>`, and only the sandbox in front of the reader has its turns read.

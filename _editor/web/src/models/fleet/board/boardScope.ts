@@ -2,24 +2,19 @@ import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/auto
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
-import { computed, onUnmounted, type Ref, watch } from "vue";
+import { computed, type Ref, watch } from "vue";
 import { projectScope } from "../../../app/projectScope";
-import { hold } from "../../../workbench/notifications/notifications";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
-import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import type { FleetLane } from "../../agent-status/agentStatus-lanes";
-import { otherFleet, partialAnswer, readingAcross } from "../fleetScope";
 import { type FleetAgent, laneGroups } from "../useAgents-fleet";
 import { insideRun, runIdsInLedger } from "../useWorkflowRuns";
-import { followOtherBoxes } from "./agentsTile";
 import { boardOwners, type OwnerLook, ownerFilter } from "../../agent-status/ownership";
 import { heldWakeInProject, runInProject } from "./projectMembership";
 import { attentionHidden, scopeFleet } from "./scopeFleet";
 import { type ChildFold, foldChildren, steadyFold } from "./childFold";
 
-// Which of the fleet the board covers: the open project, whose work it is, and whether every other sandbox's roster
-// joins this one's. Lanes group by one rule (laneGroups) either way, so no scope orders a column differently; a sandbox
-// is never a column or a sort key, which would rebuild the very problem the wide board exists to solve.
+// Which of this sandbox's fleet the board covers: the open project, and whose work it is. Lanes group by one rule
+// (laneGroups) either way, so no scope orders a column differently. Other sandboxes' fleets are Home's to show.
 
 export { scopeFleet } from "./scopeFleet";
 
@@ -34,7 +29,7 @@ export const withoutSteps = (lanes: Record<FleetLane, FleetAgent[]>, ledger: Rea
 };
 
 // What the project put out of sight, said on its chip so a quiet board is never mistaken for an empty fleet. Rows, not
-// conversations: a hidden run's steps hide with it and count once, as the run does on the wide board, and a hidden
+// conversations: a hidden run's steps hide with it and count once, as the run does on the board, and a hidden
 // parent's children count with it, riding under its card as they would (childFold).
 export const hiddenByProject = (board: {
     readonly project: string | undefined;
@@ -92,20 +87,20 @@ export interface ScopeHost {
 // The board's cards, held wakes and runs as the scope leaves them, and the header's controls that choose it.
 export const useBoardScope = (host: ScopeHost) => {
     const { agents, personas } = host;
-    const boxFleet = computed<readonly FleetAgent[]>(() => (readingAcross.value ? [...agents.fleet.value, ...otherFleet.value] : agents.fleet.value));
+    const fleet = agents.fleet;
     const scopedFleet = computed(() =>
-        scopeFleet(boxFleet.value, { project: projectScope.value, owner: ownerFilter.value, me: host.me.value, personas: personas.value }),
+        scopeFleet(fleet.value, { project: projectScope.value, owner: ownerFilter.value, me: host.me.value, personas: personas.value }),
     );
     // Held wakes and runs narrow by the project's evidence alone, since nobody owns them yet.
     const scopedHeld = computed<readonly AutomationApproval[]>(() => {
         const project = projectScope.value;
         return project === undefined
             ? agents.heldWakes.value
-            : agents.heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, boxFleet.value));
+            : agents.heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, fleet.value));
     });
     const scopedRuns = computed<readonly WorkflowRun[]>(() => {
         const project = projectScope.value;
-        return project === undefined ? host.runs.value : host.runs.value.filter((run) => runInProject(run, project, personas.value, boxFleet.value));
+        return project === undefined ? host.runs.value : host.runs.value.filter((run) => runInProject(run, project, personas.value, fleet.value));
     });
     // An archived run is off the board like an archived agent, in Finished's archive instead.
     const boardRunRows = computed(() => scopedRuns.value.filter((run) => run.archivedAt === undefined));
@@ -115,7 +110,7 @@ export const useBoardScope = (host: ScopeHost) => {
     const projectHidden = computed(() =>
         hiddenByProject({
             project: projectScope.value,
-            fleet: boxFleet.value,
+            fleet: fleet.value,
             kept: scopedFleet.value,
             ledger: ledgerRunIds.value,
             runs: host.runs.value,
@@ -130,7 +125,7 @@ export const useBoardScope = (host: ScopeHost) => {
     );
     // The store's own grouping while nothing narrows the board.
     const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
-        readingAcross.value || projectScope.value !== undefined || ownerFilter.value !== undefined
+        projectScope.value !== undefined || ownerFilter.value !== undefined
             ? laneGroups(scopedFleet.value)
             : agents.lanes.value,
     );
@@ -149,7 +144,7 @@ export const useBoardScope = (host: ScopeHost) => {
     });
     // The board's own roster, not the sandbox's member list: a colleague with nothing here has nothing to filter to.
     const ownerOptions = computed(() =>
-        ownerSegments(host.me.value, boardOwners(boxFleet.value, host.me.value, presenceOthers.value, ownerFilter.value)),
+        ownerSegments(host.me.value, boardOwners(fleet.value, host.me.value, presenceOthers.value, ownerFilter.value)),
     );
     const ownerScope = computed<string>({
         get: () => ownerFilter.value ?? EVERYONE,
@@ -157,10 +152,6 @@ export const useBoardScope = (host: ScopeHost) => {
             ownerFilter.value = value === EVERYONE ? undefined : value;
         },
     });
-    const scopeOptions = computed(() => [
-        { label: t(`shared.thisSandbox`), value: `box` as const },
-        { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
-    ]);
     return {
         scopedHeld,
         boardRunRows,
@@ -175,26 +166,5 @@ export const useBoardScope = (host: ScopeHost) => {
         boardFamilies,
         ownerOptions,
         ownerScope,
-        scopeOptions,
     };
-};
-
-// While the board reads across sandboxes: keeps the others live, and says in the Attention lane when some have not
-// answered, since an empty lane is otherwise a false claim that nothing needs the reader.
-export const followAcross = (): void => {
-    followOtherBoxes();
-    // A condition, not a strip: true only while it holds, gone the moment it resolves, nothing owed.
-    const releaseNotice = hold(`fleet-partial`, () => {
-        const partial = partialAnswer.value;
-        return partial === undefined
-            ? undefined
-            : {
-                  kind: `condition`,
-                  tone: `warning`,
-                  title: partial.title,
-                  detail: partial.detail,
-                  actions: [{ label: t(`ui.action.tryAgain`), tier: `boring` as const, run: refreshAcross }],
-              };
-    });
-    onUnmounted(releaseNotice);
 };

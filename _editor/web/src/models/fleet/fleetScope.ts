@@ -1,7 +1,5 @@
-import { t } from "@intentic/ui/i18n";
-import { definePreference } from "@intentic/ui/preference";
-import { computed, type Ref, watch } from "vue";
-import { boxAttention, markSeenAcross, otherBoxes, silentBoxes } from "../sandbox/live/fleetAcross";
+import { computed, watch } from "vue";
+import { markSeenAcross, otherBoxes } from "../sandbox/live/fleetAcross";
 import { onScreen } from "../../workbench/window/onScreen";
 import { connectedSandboxes } from "../sandbox/live/roster";
 import { landOnAfterSwitch } from "../sandbox/sandboxScreen";
@@ -12,34 +10,16 @@ import { endedHere, overlaid } from "./useAgents-provisional";
 import { useChat } from "../conversations/run/useChat";
 import { chatStrip } from "../conversations/panel/useChat-strip";
 
-// How much of the account the fleet board covers: the sandbox you're in, or all of them. A scope on the existing board
-// rather than a second one, since the cards, lanes, drops and review panel are the same regardless of source. An
-// account-level preference, like the terminal panel's switches, since which fleet you want is a property of how you
-// work, not of the box you're standing in.
-
-export type FleetScope = "box" | "all";
-
-const STORAGE_KEY = `ui-fleet-scope`;
-
-export const fleetScope: Ref<FleetScope> = definePreference<FleetScope>({
-    key: STORAGE_KEY,
-    // Defaults to this box: the wider board costs a request per sandbox while open, and a single-sandbox account must
-    // never see a control with only one answer.
-    read: (raw) => (raw === `all` ? `all` : `box`),
-    write: (value) => value,
-});
+// Other sandboxes' conversations as this sandbox's editor knows them: the ones a chat placed elsewhere (the composer's
+// placement menu) runs, read from their own box's roster. The board covers this sandbox alone; the account-wide view
+// of every sandbox is Home's.
 
 const { sandboxes, activeSandboxId } = useSandbox();
 
-// Whether the control is drawn at all: one connected sandbox is not a fleet, and a switch with nowhere else to look
-// would offer two settings that produce the same screen.
-export const scopeOffered = computed(() => connectedSandboxes(sandboxes.value).length > 1);
+// Whether there is another sandbox to place a conversation in: one connected sandbox is not a fleet.
+export const sandboxesElsewhere = computed(() => connectedSandboxes(sandboxes.value).length > 1);
 
-// Is the board actually reading across sandboxes now: the preference and somewhere to read it, so an account that drops
-// to one sandbox keeps its stored `all` but behaves as `box` until there's a second again.
-export const readingAcross = computed(() => fleetScope.value === `all` && scopeOffered.value);
-
-// Every other box's agents as board cards: the parts only a conversation can answer (`open`, `unsent`) are read from
+// Every other box's agents in card shape, for a conversation placed there (its detail page, a drag, a parent's mark): the parts only a conversation can answer (`open`, `unsent`) are read from
 // this browser's tabs or are false, never guessed. `unread` is derived the same way the local fleet derives it.
 // (id, sandbox) as one string, since that pair is an agent's identity across boxes and a Map wants one key.
 const cardKey = (sandboxId: string, agentId: string): string => `${sandboxId}/${agentId}`;
@@ -106,31 +86,6 @@ export const boxNameOf = computed<ReadonlyMap<string, string>>(
 export const boxImageOf = computed<ReadonlyMap<string, string>>(
     () => new Map(sandboxes.value.flatMap((sandbox) => (sandbox.image === null ? [] : [[sandbox.id, sandbox.image] as const]))),
 );
-
-// The line the board owes when its answer is partial: an empty Attention lane built on a request that never came back
-// would read as "nothing there", so this names which boxes, by name, rather than a count.
-export const partialAnswer = computed<{ readonly title: string; readonly detail: string } | undefined>(() => {
-    if (!readingAcross.value) {
-        return undefined;
-    }
-    const silent = silentBoxes.value;
-    if (silent.length === 0) {
-        return undefined;
-    }
-    const names = silent.map((box) => box.sandbox.name);
-    return {
-        title: t(`agents.fleetScope.notAnswering`, { names: listNames(names), count: names.length }, names.length),
-        detail: t(`agents.fleetScope.leftOut`, names.length),
-    };
-});
-
-// Names for a reader, not a count: three is where a list stops being read and starts being skimmed.
-export const listNames = (names: readonly string[]): string =>
-    names.length <= 3 ? names.join(`, `) : t(`agents.fleetScope.namesAndMore`, { names: names.slice(0, 3).join(`, `), count: names.length - 3 });
-
-// The sum of what every other box says it needs, the half of the rail badge that only exists while the scope is wide; a
-// box that hasn't answered contributes nothing rather than blocking the sum.
-export const acrossAttention = computed<number>(() => otherBoxes.value.reduce((total, box) => total + (boxAttention(box) ?? 0), 0));
 
 // Is this card's agent in a sandbox this browser isn't pointed at? `undefined` and the active sandbox must never be
 // told apart by accident.

@@ -17,7 +17,6 @@ import { projectScope } from "../../app/projectScope";
 import { ensureProjectPersona, projectPersonaId } from "../sandbox/personas/projectPersona";
 import { navigation } from "../../workbench/navigation/navigation";
 import { otherBoxes, refreshAcross } from "../sandbox/live/fleetAcross";
-import { refreshChangesAcross } from "../workspace/changes/changesAcross";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../conversations/review/conflictResolution";
 import { type AgentStanding, awaitingUser, turnInFlight } from "../agent-status/agentStatus-standing";
@@ -431,8 +430,6 @@ export const stopAgent = (id: string, at: AgentReach = undefined, options: { rea
 export const invalidateAgentAction = async (id: string, at: AgentReach = undefined): Promise<void> => {
     if (at !== undefined) {
         refreshAcross();
-        // ...and the changes ledger too: landing into another box's /work is exactly what moves its uncommitted count.
-        refreshChangesAcross();
     }
     await Promise.all(
         [...agentReviewKeys(id, at), ...workingReviewKeys, rpcPrefix(`history.list`)].map((queryKey) => queryClient.invalidateQueries({ queryKey })),

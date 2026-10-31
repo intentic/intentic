@@ -71,7 +71,6 @@ import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGr
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
 import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
-import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import MainLineBanner from "./MainLineBanner.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -1618,9 +1617,6 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     </p>
                 </div>
             </div>
-
-            <!-- Other sandboxes' changes remain a separate read-only ledger. -->
-            <OtherSandboxChanges />
         </div>
 
         <!-- Tracked and untracked discard outcomes are reported separately. -->

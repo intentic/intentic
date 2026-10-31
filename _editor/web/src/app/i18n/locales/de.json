@@ -503,7 +503,6 @@
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
-            "allSandboxes": "Alle Sandboxes",
             "archive": "Archiv",
             "archiveAll": "Alle archivieren",
             "archiveEmptiedFinishedAgents": "Archiv geleert. Fertige Agenten sammeln sich nach ein paar ruhigen Tagen von selbst wieder hier.",
@@ -947,11 +946,8 @@
             "otherStaged": "Sie haben {count} weitere Änderung gestaged, und das Speichern dieser Einstellungen würde sie mitcommitten. Committen Sie sie oder nehmen Sie sie unter „Änderungen“ aus dem Staging, dann versuchen Sie es erneut. | Sie haben {count} weitere Änderungen gestaged, und das Speichern dieser Einstellungen würde sie mitcommitten. Committen Sie sie oder nehmen Sie sie unter „Änderungen“ aus dem Staging, dann versuchen Sie es erneut."
         },
         "agentsTile": {
-            "countingEverySandbox": "Alle Sandboxes werden gezählt",
-            "countingExcept": "Alle Sandboxes außer {names} werden gezählt, das nicht antwortet | Alle Sandboxes außer {names} werden gezählt, die nicht antworten",
             "needYou": "{count} braucht Sie | {count} brauchen Sie",
-            "needYouOutside": "{owed} ({outside} außerhalb von {project})",
-            "owedElsewhere": "{owed}, {elsewhere} woanders"
+            "needYouOutside": "{owed} ({outside} außerhalb von {project})"
         },
         "laneDrop": {
             "agentsRaiseFlags": "Agenten setzen ihre Aufmerksamkeitsmarkierungen selbst",
@@ -997,11 +993,6 @@
             "openIn": "In {name} öffnen",
             "openInItsSandbox": "In seiner Sandbox öffnen",
             "stopWatchingCount": "Beobachten beenden ({count})"
-        },
-        "fleetScope": {
-            "leftOut": "Dieses Board lässt sie aus, bis sie es tut. | Dieses Board lässt sie aus, bis sie es tun.",
-            "namesAndMore": "{names} und {count} weitere",
-            "notAnswering": "{names} antwortet nicht | {names} antworten nicht"
         },
         "synthesizeSessions": {
             "alreadyPreparing": "Eine Synthese wird bereits vorbereitet.",
@@ -11806,7 +11797,6 @@
             "sidePanel": "Seitenleiste"
         },
         "desktopSignal": {
-            "elsewhere": "{line} · in {sandbox}",
             "finished": "Durchlauf fertig",
             "heldLine": "Eine Automation wartet auf deine Freigabe.",
             "heldTitle": "Automation braucht Freigabe",
@@ -13018,30 +13008,6 @@
             "startTyping": "Fangen Sie an zu tippen.",
             "viewMarkdownSource": "Quelltext zeigen"
         },
-        "otherSandboxChanges": {
-            "checksRunThere": "Prüfungen laufen dort",
-            "inOtherSandboxes": "In anderen Sandboxes",
-            "neverPublished": "nie veröffentlicht",
-            "notAnswering": "{names} antwortet nicht | {names} antworten nicht",
-            "open": "{sandboxName} öffnen",
-            "publish": "Veröffentlichen",
-            "push": "Pushen",
-            "toPush": "{count} zu pushen",
-            "uncommitted": "{count} nicht committet",
-            "unpublishedWork": "unveröffentlichte Arbeit",
-            "unpushed": "{count} nicht gepusht | {count} nicht gepusht",
-            "unreadable": "git konnte dieses Repository nicht lesen",
-            "asleep": "{name} ist im Ruhezustand",
-            "asleepComputerOff": "{name} ist im Ruhezustand und sein Rechner ist offline",
-            "asleepMachineOff": "{name} ist im Ruhezustand auf {machine}, das offline ist",
-            "starting": "{name} startet",
-            "waking": "{name} wird geweckt…",
-            "wake": "Wecken",
-            "didNotWake": "{name} antwortet nach dem Wecken noch nicht: sein Rechner startet es vielleicht noch.",
-            "asleepRow": "im Ruhezustand",
-            "asleepRowNote": "Zahlen von vor dem Einschlafen",
-            "asleepTitle": "Im Ruhezustand"
-        },
         "proseDiffView": {
             "nothingInTextChanged": "Am Text hat sich nichts geändert; nur Abstände oder Zeilenumbrüche.",
             "unchangedParagraphs": "{count} unveränderter Absatz | {count} unveränderte Absätze"
@@ -13548,10 +13514,6 @@
             "closingWindowDiscardsUnsaved": "Wenn Sie dieses Fenster schließen, gehen ihre ungespeicherten Änderungen verloren. Das lässt sich nicht rückgängig machen.",
             "openAnyway": "Trotzdem öffnen",
             "openingFolderDiscardsUnsaved": "Wenn Sie hier einen anderen Ordner öffnen, gehen ihre ungespeicherten Änderungen verloren. Das lässt sich nicht rückgängig machen."
-        },
-        "changesAcross": {
-            "pushFailed": "Dieser Push hat nicht geklappt.",
-            "pushRefused": "Dieser Push wurde abgelehnt."
         },
         "scopeTitle": {
             "anAgent": "ein Agent"

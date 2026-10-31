@@ -10,7 +10,7 @@ import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useChanges } from "../../models/changes/useChanges";
 import { usePanels } from "../../models/extensions/usePanels";
-import { agentsBadge, agentsScopeNote } from "../../models/fleet/board/agentsTile";
+import { agentsBadge } from "../../models/fleet/board/agentsTile";
 import { DEVICES_PATH } from "../../models/sandbox/devices/deviceLinks";
 import { useSyncHealth } from "../../models/sandbox/devices/useDevices";
 import { outgoingMark, outgoingSummary } from "../../models/workspace/push/outgoingWork";
@@ -126,14 +126,11 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
     const workspaceBadge = useWorkspaceBadge();
     const devicesTile = useDevicesTile();
     const tiles = computed<readonly SectionTile[]>(() => {
-        // Both from agentsTile.ts; the note names the scope when it's wide. RailIcon draws by section identity; these
+        // The badge from agentsTile.ts. RailIcon draws by section identity; these
         // generic names remain the fallback vocabulary.
         let agents: SectionTile = { id: `agents`, to: `/agents`, label: words.value.agents, icon: `robot` };
         if (agentsBadge.value !== undefined) {
             agents = { ...agents, badge: agentsBadge.value };
-        }
-        if (agentsScopeNote.value !== undefined) {
-            agents = { ...agents, note: { icon: `boxes`, text: agentsScopeNote.value } };
         }
         const workspace: SectionTile = { id: `workspace`, to: `/workspace`, label: words.value.workspace, icon: `file-tree` };
         return (

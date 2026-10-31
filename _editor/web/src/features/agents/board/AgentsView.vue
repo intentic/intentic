@@ -33,7 +33,6 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { listedViewMissing, WORKFLOWS } from "../../../workbench/views/listedViews";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { pendingOn } from "../../../models/fleet/useAgents-provisional";
-import { fleetScope, scopeOffered } from "../../../models/fleet/fleetScope";
 import { useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../../../models/fleet/subagentRoster";
 import { chatWide, showParkedChat } from "../../../models/conversations/panel/chatPanelLayout";
@@ -62,7 +61,7 @@ import { usePhoneLanes } from "./view/phoneLanes";
 import { useBoardLaunches } from "./view/boardLaunches";
 import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
-import { followAcross, useBoardScope } from "../../../models/fleet/board/boardScope";
+import { useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
 import { PAIRED_PLACE, useBoardGrid } from "./view/boardGrid";
 import { useCardMenu } from "./view/cardMenu";
@@ -108,8 +107,7 @@ const { personas } = usePersonas();
 const { user } = useAuth();
 const { sharedAccess } = useSandboxSharedAccess();
 const scope = useBoardScope({ agents, runs: workflows.runs, personas, me: computed(() => user.value?.email), sharedAccess });
-const { scopeOptions, ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
-followAcross();
+const { ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
 const { highlightId, inPane, peeked } = ring;
 // The subagent this window's chat is stepped into, while its parent's column is still what the chat shows. The view is
@@ -295,8 +293,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <!-- Size the groups by their controls so the header wraps before they overlap the search field. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
-                <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
-                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="scopeOptions" wrap class="max-w-full" />
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"

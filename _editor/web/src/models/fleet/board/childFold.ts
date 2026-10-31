@@ -44,7 +44,7 @@ export const BOARD_RULES: FoldRules = { alone: standsAlone, calls: callsOwner, r
 // until a card is restored and so nothing is asking.
 export const ARCHIVE_RULES: FoldRules = { alone: () => false, calls: () => false, runCalls: () => false };
 
-// A card's key across boxes: an id is one daemon's, and the all-sandboxes board holds several daemons' cards. A parent
+// A card's key across boxes: an id is one daemon's, and a chat placed in another sandbox puts that daemon's card here. A parent
 // always lives in its child's own box, so the child's box is the one its parent's id is read in.
 const keyOf = (id: string, sandboxId: string | undefined): string => (sandboxId === undefined ? id : `${sandboxId}\u0000${id}`);
 export const cardKey = (agent: Pick<FleetAgent, `id` | `sandboxId`>): string => keyOf(agent.id, agent.sandboxId);

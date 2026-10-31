@@ -48,11 +48,12 @@ state, not a label on the agent.
 Agents have no tags, labels, colors or stars, and personas have no icon or color. What exists instead:
 
 - **Rename** with a convention (a project or ticket prefix): the board's search matches titles.
-- The board's filters: **This sandbox** / **All sandboxes** (with more than one sandbox), **Everyone** / **Mine** /
-  one chip per person (when others share the sandbox), the project filter chip, and the search box **Filter by
-  your messages or id…**, which matches a title or either side's messages, archived agents included. There is no
+- The board's filters: **Everyone** / **Mine** / one chip per person (when others share the sandbox), the project
+  filter chip, and the search box **Filter by your messages or id…**, which matches a title or either side's messages, archived agents included. There is no
   filter by status, provider, model, persona or reaction; the lanes are fixed: **Attention**, **Active**,
   **Finished**.
+- The board covers this sandbox only. Which of the owner's other sandboxes have agents that need them
+  is on **Home**, one tile per sandbox.
 - The chat list is one list of every open chat in those same lanes. It is not grouped or filtered by persona: a
   persona is a posture a chat wears, shown and changed on its composer's **Acts as** pill.
 - **Reactions**, as above.
