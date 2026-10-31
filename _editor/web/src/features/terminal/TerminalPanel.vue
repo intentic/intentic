@@ -195,7 +195,10 @@ watch(
 </script>
 
 <template>
+    <!-- Docked, a floor of the notification lane (laneSeat.ts): toasts stand on its top edge, never over the output being
+         read, and ride up and down with it as it opens, closes or is dragged. -->
     <div
+        :data-lane-floor="resizable ? `` : undefined"
         class="term relative flex min-h-0 shrink-0 border-t border-line"
         :class="[vertical ? 'flex-row' : 'flex-col', { 'h-full': !resizable }]"
         :style="resizable ? { height: `${height}px` } : undefined"

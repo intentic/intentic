@@ -24,7 +24,7 @@ it(`ignores a floor beside its column`, () => {
     expect(laneSeat([RAIL], [STATUS_BAR, composer], VIEWPORT, 352).bottom).toBe(29 + LANE_GAP_PX);
 });
 
-it(`ignores a floor in the upper half, a wall in the right half, and anything with no box`, () => {
+it(`ignores a floor wholly in the upper half, a wall in the right half, and anything with no box`, () => {
     const header: LaneBox = { left: 56, right: 1440, top: 0, bottom: 40 };
     const rightColumn: LaneBox = { left: 1100, right: 1440, top: 0, bottom: 900 };
     const hidden: LaneBox = { left: 0, right: 0, top: 0, bottom: 0 };
@@ -32,4 +32,10 @@ it(`ignores a floor in the upper half, a wall in the right half, and anything wi
         left: 56 + LANE_GAP_PX,
         bottom: 29 + LANE_GAP_PX,
     });
+});
+
+// A docked terminal is a floor: the lane stands on its top edge, however tall it is dragged.
+it(`stands on a docked terminal's top edge, even one reaching into the upper half`, () => {
+    const terminal: LaneBox = { left: 56, right: 1440, top: 300, bottom: 871 };
+    expect(laneSeat([RAIL], [STATUS_BAR, terminal], VIEWPORT, 352).bottom).toBe(900 - 300 + LANE_GAP_PX);
 });

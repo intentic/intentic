@@ -114,7 +114,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
         :class="
             mobile
                 ? `inset-x-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-1.5rem)] items-end`
-                : `bottom-3 left-3 max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] items-start`
+                : `lane-seat bottom-3 left-3 max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] items-start`
         "
         :style="seatStyle"
     >
@@ -191,6 +191,14 @@ const press = (entry: Notification, action: NotificationAction): void => {
 </template>
 
 <style scoped>
+/* The lane glides to a new floor (a docked terminal opening, closing, or dragged) rather than jumping, so a standing
+   card reads as the same card moving with what it stands on. */
+.lane-seat {
+    transition: bottom 150ms ease;
+}
+:root[data-motion="reduced"] .lane-seat {
+    transition: none;
+}
 /* Same direction in and out, so an expiring card and a dismissed one read as the same object leaving. */
 .lane-enter-active,
 .lane-leave-active {
