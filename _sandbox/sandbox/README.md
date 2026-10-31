@@ -323,6 +323,9 @@ flowchart LR
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps
   the queue for execution. Stop sends `turn/interrupt`, with a process kill after three seconds if it does not settle.
+- A Claude SDK exit that repeats an already reported refusal keeps that refusal's classification and recovery hold
+  (`agent/run/harness/sdk-failure-stream.ts`). A rotated OAuth token is renewed and the interrupted turn resumes
+  automatically; a different failure still surfaces, and a credential that cannot be renewed asks for reconnection.
 - What a runtime's in-process extensions put on screen reaches the chat through the contract's agent UI lane (a
   status entry, a notice). Pi's extension UI (`runtimes/pi/pi-extension-ui.ts`): `notify` is a notice, `setStatus` and
   `setWidget` are status entries, and `select`, `confirm` and `input` park on the same question card Codex's questions

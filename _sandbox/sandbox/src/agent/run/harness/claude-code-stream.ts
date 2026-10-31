@@ -30,6 +30,7 @@ import { PageDrafts } from "../../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../../pages/page-names.js";
 import type { ChecklistSeed } from "../task-store.js";
 import { SdkCallFrames, type ToolUseBlock } from "../../../sessions/vocabulary/sdk-call-frames.js";
+import { drainSdkMessages, SdkFailures } from "./sdk-failure-stream.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.
@@ -446,6 +447,7 @@ class TurnFold {
     readonly tally: MessageTally;
     // Whether this turn already said its session outgrew the window; the result's ending repeats the assistant's error.
     private overflowed = false;
+    readonly failures = new SdkFailures();
     // Where a turn the safety classifier stops can resume from, and whether it has stopped: said once, and the interrupted
     // result after it is that same ending, not another.
     private readonly fork = new RefusalFork();
@@ -474,6 +476,7 @@ class TurnFold {
         this.fork.note(message);
         // Frames produced inside a subagent (Task tool) carry its id so the UI can group them.
         const parent = (message as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? undefined;
+        this.failures.note(message, parent);
         switch (message.type) {
             case "stream_event":
                 yield* this.onStreamEvent(message, parent);
@@ -616,6 +619,7 @@ class TurnFold {
     private async *onFailure(message: SDKAssistantMessage): AsyncGenerator<AgentEvent> {
         const failure = await errorFrame(message, this.args.allowance, this.args.trial);
         this.overflowed ||= failure.code === "context-overflow";
+        this.failures.report(failure.message);
         yield failure;
     }
 
@@ -939,7 +943,7 @@ class TurnFold {
             return repeated ? undefined : contextOverflowFrame(`agent stopped: the session no longer fits the model's context window (${message.terminal_reason})`);
         }
         // A turn the classifier stopped was interrupted on purpose: its ending is the flag already said.
-        if (this.overflowed || this.flagged || message.subtype === "success") {
+        if (this.overflowed || this.flagged || message.subtype === "success" || this.failures.repeatsResult(message)) {
             return undefined;
         }
         return {
@@ -976,6 +980,7 @@ class TurnFold {
         }
         const ending = this.endingFrame(message);
         if (ending !== undefined) {
+            this.failures.clear();
             yield ending;
         }
         // The account's headroom is re-read after the turn has settled, off this stream (run/frames/settled-usage.ts).
@@ -987,18 +992,5 @@ class TurnFold {
 export async function* streamSdk(args: StreamSdkArgs): AsyncGenerator<AgentEvent> {
     const session = args.queryFn({ prompt: args.prompt, options: args.options });
     const fold = new TurnFold(args, session);
-    for await (const message of sdkTurns(session, args.steering, args.redeliver)) {
-        const ended = yield* fold.onMessage(message);
-        if (ended) {
-            yield* fold.tally.owedFrames();
-            // The stream ends on a retry the CLI is still sleeping out (onApiRetry), so the close in sdkTurns would sit
-            // out the SDK's whole 2 s stdin-close grace before its SIGTERM, with the chat's loader still up under the
-            // refusal it already shows. Interrupted first, the CLI drops the backoff and exits in tens of ms.
-            // allow(silent-catch): a CLI that cannot take the interrupt is still ended by the close, only later.
-            await session.interrupt?.().catch(() => undefined);
-            return;
-        }
-    }
-    // A stream with no result for its last requests (one cut off mid-retry above, a CLI that died) still owes what they spent.
-    yield* fold.tally.owedFrames();
+    yield* drainSdkMessages(sdkTurns(session, args.steering, args.redeliver), fold, session);
 }
