@@ -167,7 +167,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/actions/pnpm-setup
-      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/e2e exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       - run: pnpm e2e:compat
         env:
           DEBUG: testcontainers
@@ -302,8 +313,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           docker-host: ${{ env.JOB_DOCKER_HOST }}
       - uses: ./.github/actions/pnpm-setup
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
         working-directory: _tools/onboarding
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       # musl/static, so the same binary runs wherever this tier puts it. IC_BIN is named HERE rather than in
       # the job's `env:` block, and the difference is not style: `${{ github.workspace }}` expands to the
       # RUNNER HOST's path to the workspace even inside a container job, so the job pointed the CLI lane at a

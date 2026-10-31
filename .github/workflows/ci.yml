@@ -683,7 +683,18 @@ jobs:
             node _search/iq-engine/scripts/fetch-model.mjs .image-out/iq-models
             touch .image-out/.iq-models-complete
           fi
-      - run: pnpm --filter @intentic/webq exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/webq exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       # On a branch named `main`, because the suite hands the checkout's own branch to the generator as the ref it
       # clones.
       - name: The canonical template checkout
@@ -761,7 +772,18 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/e2e exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       - run: pnpm e2e:local
       - uses: ./.github/actions/upload-artifact-retry
         if: failure()
@@ -1210,7 +1232,18 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/e2e exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       # Builds the web first (turbo.json `e2e:signin` depends on `@intentic/web#build`), so the tier serves this commit.
       - run: pnpm e2e:signin
       - uses: ./.github/actions/upload-artifact-retry
@@ -1263,7 +1296,18 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/e2e exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       # Builds the web first (turbo.json `e2e:compat` depends on `@intentic/web#build`), so the tier serves this commit.
       - run: pnpm e2e:compat
         env:
@@ -1697,8 +1741,19 @@ jobs:
       # It is a real browser because it has to be: the same request answers 200 to curl and 400 to Chromium
       # (smoke-signin.mjs has the evidence), so an HTTP probe would have passed throughout the outage.
       # That is the whole cost justification for installing a browser in a deploy job.
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
         working-directory: _tools/e2e
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       - run: pnpm smoke:signin "${WEB_ORIGIN}"
         working-directory: _tools/e2e
         env:

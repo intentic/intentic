@@ -56,7 +56,18 @@ jobs:
       - if: ${{ inputs.track != 'browser' }}
         run: pnpm perf:instr --jobs 4 --update
       - if: ${{ inputs.track != 'instr' }}
-        run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
+        name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/perf exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       # Three fresh contexts that must agree, so a nondeterministic count is refused rather than recorded.
       - if: ${{ inputs.track != 'instr' }}
         run: pnpm perf:browser --runs 3 --update
