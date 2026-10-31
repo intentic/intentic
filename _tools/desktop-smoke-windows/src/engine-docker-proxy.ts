@@ -1,7 +1,8 @@
 // The move tier uses the real Docker Desktop daemon through a fixture-only inventory. Its isolated ic home may
 // switch engines; the Windows runner's own sandboxes must never be selected, even legacy ones without a keeper stamp.
-import { createServer, request, type IncomingMessage, type RequestOptions, type ServerResponse } from "node:http";
+import { createServer, request, type ClientRequest, type IncomingMessage, type RequestOptions, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { openEngineDockerStream } from "./engine-docker-stream.js";
 import { sandboxContainerName } from "./parse.js";
 import { ENGINE_SANDBOX_HOSTNAME } from "./engine.js";
@@ -60,6 +61,7 @@ const readJson = (boundary: Boundary, path: string, body: Buffer): Buffer => {
 };
 
 const transfer = (boundary: Boundary, path: string, upstream: IncomingMessage, downstream: ServerResponse): void => {
+    upstream.once("error", () => downstream.destroy());
     const capture = upstream.statusCode === 200 || upstream.statusCode === 201;
     if (!capture || !/(?:\/containers\/json|\/containers\/create|\/containers\/[^/]+\/(?:json|exec))$/.test(path)) {
         downstream.writeHead(upstream.statusCode ?? 502, upstream.headers);
@@ -87,6 +89,8 @@ const transfer = (boundary: Boundary, path: string, upstream: IncomingMessage, d
 export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<{ host: string; close: () => Promise<void> }> => {
     const boundary: Boundary = { containers: new Set(), execs: new Set() };
     const sockets = new Set<Socket>();
+    const requests = new Set<ClientRequest>();
+    const bridges = new Set<Duplex>();
     const server = createServer((incoming, outgoing) => {
         const url = new URL(incoming.url ?? "/", "http://docker.local");
         if (!allowed(boundary, url)) {
@@ -96,7 +100,16 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
         const forwarded = request({ ...upstream, path: incoming.url, method: incoming.method, headers: incoming.headers }, (response) => {
             transfer(boundary, url.pathname, response, outgoing);
         });
-        forwarded.on("error", () => outgoing.writeHead(502).end("Docker Desktop did not answer"));
+        requests.add(forwarded);
+        forwarded.once("close", () => requests.delete(forwarded));
+        // A cancelled wait/events client must release the daemon stream too, or its pipe keeps Node alive forever.
+        outgoing.once("close", () => forwarded.destroy());
+        incoming.once("aborted", () => forwarded.destroy());
+        forwarded.on("error", () => {
+            if (outgoing.destroyed) { return; }
+            if (outgoing.headersSent) { outgoing.destroy(); return; }
+            outgoing.writeHead(502).end("Docker Desktop did not answer");
+        });
         if (incoming.headers["content-type"]?.startsWith("application/json")) {
             // Docker Desktop's Windows pipe rejects a create body streamed separately from its HTTP headers.
             // Metadata is small; send it with end(body), while archives and other bulk streams keep piping.
@@ -116,6 +129,8 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
         // and Docker versions use both 101 and a hijacked 200 response for the resulting stream.
         void openEngineDockerStream(upstream).then((peer) => {
             if (socket.destroyed || peer.destroyed) { socket.destroy(); peer.destroy(); return; }
+            bridges.add(peer);
+            peer.once("close", () => bridges.delete(peer));
             peer.write(`${incoming.method} ${incoming.url} HTTP/1.1\r\n`);
             for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
                 peer.write(`${incoming.rawHeaders[index]}: ${incoming.rawHeaders[index + 1]}\r\n`);
@@ -135,6 +150,8 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
         host: `tcp://127.0.0.1:${address.port}`,
         close: async () => {
             for (const socket of sockets) { socket.destroy(); }
+            for (const pending of requests) { pending.destroy(); }
+            for (const bridge of bridges) { bridge.destroy(); }
             await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
         },
     };

@@ -15,12 +15,15 @@ let sockets: Set<Socket>;
 let finishWait: (() => void) | undefined;
 let createdBody: string;
 let replyAfterInput: boolean;
+let waitClosed: Promise<void>;
+let recordWaitClosed: () => void;
 
 beforeEach(async () => {
     reached = [];
     finishWait = undefined;
     createdBody = "";
     replyAfterInput = false;
+    waitClosed = new Promise((resolve) => { recordWaitClosed = resolve; });
     sockets = new Set();
     upstream = createServer((incoming, outgoing) => {
         const path = incoming.url ?? "";
@@ -33,6 +36,7 @@ beforeEach(async () => {
         } else if (path.includes("/wait?")) {
             outgoing.writeHead(200);
             outgoing.flushHeaders();
+            outgoing.once("close", () => recordWaitClosed());
             finishWait = () => outgoing.end(JSON.stringify({ StatusCode: 0 }));
         } else if (path.endsWith("/containers/create")) {
             incoming.on("data", (chunk: Buffer) => { createdBody += chunk.toString(); });
@@ -165,4 +169,21 @@ test("closing attached input still delivers the container's final output", async
         client.on("error", reject);
     });
     expect(echoed).toBe("input-complete");
+});
+
+test("disconnecting a Docker client closes its upstream streaming request", async () => {
+    const response = await fetch(`${base}/v1.45/containers/${fixture}/wait?condition=removed`, { method: "POST" });
+    expect(response.status).toBe(200);
+    await response.body?.cancel();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        await Promise.race([
+            waitClosed,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error("the proxy retained Docker's wait connection")), 10_000);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
 });
