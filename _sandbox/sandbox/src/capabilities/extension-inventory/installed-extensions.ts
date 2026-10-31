@@ -65,7 +65,11 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
     }
     let names: string[];
     try {
-        names = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+        // Directory order varies by filesystem; keep the inventory and contribution precedence stable.
+        names = (await readdir(root, { withFileTypes: true }))
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name)
+            .toSorted();
     } catch (error) {
         // Only an absent root is "none": an unlistable one read as empty would stop every extension it holds.
         if (isMissing(error)) {
