@@ -41,8 +41,8 @@ flowchart LR
   fixture has a separate ic home, and its encryption key is checked before, across and after the move, so recovery
   from Docker Desktop's mounted key is exercised. The `desktop-windows` choice also builds the app and runs the
   desktop and sandbox tiers.
-  The move requires a test host holding only these tiers' sandbox fixtures: it refuses unrelated sandboxes instead
-  of moving them under its temporary home. Cleanup preserves that home and the test distro if another container
+  The move refuses unrelated Windows or unstamped legacy sandboxes instead of moving them under its temporary home.
+  Sandboxes owned by another WSL environment stay on Docker Desktop, as the mover promises. Cleanup preserves that home and the test distro if another container
   still mounts files there, including a stopped container whose encryption key must survive.
 - Each assertion polls to its own deadline, a failure does not stop the run, and the exit code is the failure
   count. `parse.ts` keeps what the machine answers pure, so it is tested off Windows.

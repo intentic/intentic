@@ -27,3 +27,18 @@ test(`the root itself counts, sibling paths and named volumes do not`, () => {
         { Name: `/intentic-sandbox-winengine`, Mounts: [{ Type: `bind`, Source: `${root}/home/key` }] },
     ], root)).toEqual({ unexpected: [], homeUsers: [`at-root`] });
 });
+
+test(`WSL keepers stay on Docker Desktop, but Windows and legacy sandboxes block the move`, () => {
+    expect(engineIsolationOf([
+        { Name: `/intentic-sandbox-runner-omen`, Mounts: [], HostPlatform: `linux` },
+        { Name: `/intentic-sandbox-windows`, Mounts: [], HostPlatform: `WINDOWS` },
+        { Name: `/intentic-sandbox-legacy`, Mounts: [] },
+        { Name: `/intentic-sandbox-unstamped`, Mounts: [], HostPlatform: `` },
+    ], root)).toEqual({ unexpected: [`intentic-sandbox-windows`, `intentic-sandbox-legacy`, `intentic-sandbox-unstamped`], homeUsers: [] });
+});
+
+test(`a WSL keeper still blocks cleanup when its key is under the temporary home`, () => {
+    expect(engineIsolationOf([{
+        Name: `/intentic-sandbox-runner-omen`, HostPlatform: `linux`, Mounts: [{ Type: `bind`, Source: `${root}/home/key` }],
+    }], root)).toEqual({ unexpected: [], homeUsers: [`intentic-sandbox-runner-omen`] });
+});

@@ -84,6 +84,9 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 180
     env:
+      # Cold setup allows 20 min and the overlay build 15 min. Bun can buffer a parallel worker's output
+      # until its file finishes, so the default 10 min silence detector must allow those explicit budgets.
+      SUITES_SILENCE_MS: "1800000"
       # SANDBOX_E2E_IMAGE is deliberately UNSET — the image build step below says why.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       DISCORD_E2E_BOT_TOKEN: ${{ secrets.DISCORD_E2E_BOT_TOKEN }}

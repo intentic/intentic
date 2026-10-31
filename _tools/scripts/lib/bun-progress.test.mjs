@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 import { test } from "node:test";
-import { cpuTicks, createProgress, decide, explainExit, hookLines, observe, unreported, watchProgress } from "./bun-progress.mjs";
+import { cpuTicks, createProgress, decide, explainExit, hookLines, observe, stallFloorMs, unreported, watchProgress } from "./bun-progress.mjs";
 
 const T0 = 1_000_000;
 const MIN = 60_000;
@@ -76,6 +76,20 @@ test("the limit is three per-test timeouts when that is longer than ten minutes"
     const progress = fed(["a.test.ts", "b.test.ts"], ["a.test.ts:"]);
     assert.equal(decide(progress, { now: T0 + 11 * MIN, timeoutMs: 5 * MIN, idle: true }), undefined);
     assert.equal(decide(progress, { now: T0 + 15 * MIN, timeoutMs: 5 * MIN, idle: true })?.status, 1);
+});
+
+test("a live image build gets its job's explicit silence allowance and still fails when it expires", () => {
+    const progress = fed(["sandbox.e2e.test.ts"], []);
+    const floorMs = stallFloorMs("1800000");
+    assert.equal(decide(progress, { now: T0 + 21 * MIN, timeoutMs: 2 * MIN, floorMs, idle: true }), undefined);
+    assert.equal(decide(progress, { now: T0 + 30 * MIN, timeoutMs: 2 * MIN, floorMs, idle: true })?.status, 1);
+    assert.equal(decide(progress, { now: T0 + 11 * MIN, timeoutMs: 2 * MIN, idle: true })?.status, 1);
+});
+
+test("an invalid silence allowance cannot disable the watchdog", () => {
+    for (const value of ["", "0", "-1", "long", "Infinity"]) {
+        assert.throws(() => stallFloorMs(value), /SUITES_SILENCE_MS must be a positive number/u);
+    }
 });
 
 test("CPU ticks are zero for a process that no longer exists", () => {
