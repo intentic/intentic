@@ -158,13 +158,11 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: windows-artifacts
 
-      # THE MACHINE TO ITSELF for deep runs. This box also hosts the Linux fleet's workers in WSL2.
-      # Pause them before the desktop tiers too: run 40428670601 failed tier 1 before it could reach
-      # this pause, with window probes repeatedly hitting their 15s PowerShell deadline.
+      # This box also hosts the Linux fleet's workers in WSL2. Every Windows smoke run needs them drained:
+      # release run 41071974841 exceeded the cold setup's 120s bound and a window listing's 15s deadline
+      # while release smoke still skipped the pause that protected the deep tiers.
       # wsl-workers.sh drains current jobs and arms a failsafe to restore the workers if this job disappears.
-      # Ordinary push/release smoke still skips this pause; only the deep and engine runs wait on the fleet.
       - name: Pause the fleet's workers on this machine
-        if: ${{ inputs.deep || inputs.engine-only || inputs.engine-move }}
         # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
         # the tiers still run, on a busy machine, rather than being skipped.
         continue-on-error: true
@@ -259,7 +257,7 @@ jobs:
       # else, so it runs even when the build never did; resume is a no-op on a fleet that was never paused, and the timer
       # the pause armed covers the one case this step cannot, a runner that is gone before it runs.
       - name: Give the fleet's workers back
-        if: ${{ always() && (inputs.deep || inputs.engine-only || inputs.engine-move) }}
+        if: ${{ always() }}
         shell: pwsh
         run: |
           if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) { exit 0 }
