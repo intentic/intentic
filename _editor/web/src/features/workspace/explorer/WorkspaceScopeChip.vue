@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, ResponsiveOverlay, type Tip, toneWash, ui, useDevice } from "@intentic/ui";
+import { Button, Icon, ResponsiveOverlay, type Tip, toneInk, ui, useDevice } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useScopeTitle } from "../health/scopeTitle";
@@ -15,8 +15,8 @@ import WorkspaceScopePicker from "../../../parts/workspace/scope/WorkspaceScopeP
 const t = useT();
 
 // Shows which copy of the workspace is open, the shared one included: the tree and files look the same whichever it is.
-// A chip in the existing bar rather than a banner, since the scope is a persistent mode, not a one-off alert. On the
-// shared tree it names the main line the shared checkout stays on ("main"), quietly; on anything else it is lit. A press
+// A control in the existing bar, since the scope is a persistent mode. On the shared tree it names the main line the
+// shared checkout stays on ("main"), quietly; on anything else it is accented. A press
 // opens the switcher (WorkspaceScopePicker): a searchable list of branches and conversations' copies, not a menu, since a
 // busy sandbox has dozens. A per-person view: nothing changes on disk, and nobody else's Workspace moves.
 // Scoped, it is joined by the way to change what is on screen: a new agent started from that copy or that branch.
@@ -90,7 +90,7 @@ const startHere = (): void => {
     <button
         ref="anchor"
         type="button"
-        :class="ui.chip({ on: !shared && !broken, size: `sm` }, `shrink-0`, broken && toneWash(`warning`))"
+        :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0 px-2`, broken ? toneInk(`warning`) : !shared && toneInk(`primary`))"
         aria-haspopup="listbox"
         :aria-expanded="open"
         :aria-label="ariaLabel"
