@@ -21,6 +21,7 @@ import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { decodedBody } from "../../http/request-body.js";
 import { createPreviewRoute } from "./workspace-preview.js";
+import { mediaSourceFor } from "./media/workspace-playable.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -230,7 +231,8 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     },
 
     // GET /workspace/media: range-streamed reads for a `<video>`, unlike /workspace/raw's whole-file answer; no byte
-    // cap since nothing is buffered.
+    // cap since nothing is buffered. `playable` streams a recording the browser couldn't decode as AAC instead, rendered
+    // once by ffmpeg (workspace-playable.ts); 415 where there is no such rendition to make.
     // Auth is a query-string ticket (minted via workspace.mediaTicket, bound to one path) since a media element can't
     // send a bearer; loopback has none.
     media: async (c: Context<AppEnv>): Promise<Response> => {
@@ -247,10 +249,12 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", target)) {
             return c.json({ error: "unauthorized" }, 401);
         }
-        const size = await services.files.size(target);
-        if (size === undefined) {
-            return c.json({ error: "not found" }, 404);
+        const wantsPlayable = c.req.query("playable") !== undefined;
+        const source = await mediaSourceFor(services.workspace.root, target, wantsPlayable, (file) => services.files.size(file));
+        if ("error" in source) {
+            return c.json({ error: source.error }, source.status);
         }
+        const size = source.size;
         const range = parseByteRange(c.req.header("range"), size);
         if (range === "unsatisfiable") {
             // Must report the real size, or the element retries the same window forever.
@@ -258,7 +262,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         }
         const length = size === 0 ? 0 : range.end - range.start + 1;
         const headers: Record<string, string> = {
-            "Content-Type": contentTypeForPath(target),
+            "Content-Type": source.type,
             "Content-Length": String(length),
             // Without this the element downloads linearly instead of issuing Range requests.
             "Accept-Ranges": "bytes",
@@ -276,7 +280,7 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         if (length === 0) {
             return c.body(null, 200, headers);
         }
-        return c.body(openWorkspaceFileRange(target, range.start, range.end), range.partial ? 206 : 200, headers);
+        return c.body(openWorkspaceFileRange(source.path, range.start, range.end), range.partial ? 206 : 200, headers);
     },
 
     // GET /workspace/download: several files and folders as one ZIP, streamed as it is read so the browser's download

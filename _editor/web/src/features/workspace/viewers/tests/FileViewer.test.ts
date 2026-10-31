@@ -72,6 +72,7 @@ const { VIEW_SCOPE, workspaceAgent } = await import("../../../../app/workspaceSc
 const { useEditBuffers } = await import("../../../../models/workspace/files/useEditBuffers");
 const { markWorkspaceChanged } = await import("../../../../models/workspace/changes/useWorkspaceLive");
 const { signalConnection } = await import("../../../../client/sandbox/useSandbox");
+const { extensionHostStarted, extensionsLoaded } = await import("../../../../workbench/views/extensionStatuses");
 
 // The sandbox answering, as the connection driver says it: a frame on an open stream. Every test starts there; the ones
 // about a sandbox that does not answer take it away.
@@ -167,6 +168,8 @@ afterEach(() => {
         disposables.pop()?.dispose();
     }
     window.__INTENTIC_LOCAL__ = undefined;
+    extensionHostStarted.value = false;
+    extensionsLoaded.value = false;
     workspaceAgent.value = undefined;
     reportUnsaved?.(false);
     reportUnsaved = undefined;
@@ -210,6 +213,35 @@ describe(`a viewer that registers after the tab opened`, () => {
         await settle();
         expect(element.querySelector(`.fake-viewer`)?.textContent).toContain(`viewer of report.pdf`);
         expect(element.textContent).not.toContain(`Preview isn't available`);
+    });
+});
+
+// A recording opened on a fresh load went to its text and a Download button: the viewers extension hadn't activated yet.
+describe(`a file opened while the extension host is still activating`, () => {
+    it(`waits on a spinner, then opens in the viewer that registers, never deriving its text`, async () => {
+        extensionHostStarted.value = true;
+        const element = mount(`take.wav`);
+        await settle();
+        await pastReveal();
+        expect(waitDrawn(element)).toBe(true);
+        expect(element.querySelector(`.derived-text`)).toBeNull();
+
+        register([`wav`], `blob`);
+        extensionsLoaded.value = true;
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)?.textContent).toContain(`viewer of take.wav`);
+        expect(element.querySelector(`.derived-text`)).toBeNull();
+    });
+
+    it(`falls back to the file's text once the pass ends with no viewer for it`, async () => {
+        extensionHostStarted.value = true;
+        const element = mount(`bundle.zip`);
+        await settle();
+        expect(element.querySelector(`.derived-text`)).toBeNull();
+
+        extensionsLoaded.value = true;
+        await settle();
+        expect(element.querySelector(`.derived-text`)?.textContent).toBe(`text of bundle.zip`);
     });
 });
 

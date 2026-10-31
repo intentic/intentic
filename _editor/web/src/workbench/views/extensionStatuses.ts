@@ -31,3 +31,11 @@ export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 // may simply not have activated yet, not be gone (the rail's tiles, ExtensionHost's "nothing here").
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionsLoaded = shallowRef(false);
+
+// Whether this window runs an extension host at all, set once it boots (useExtensionHost). A window without one (a test,
+// a surface mounted on its own) has no pass to wait for, so nothing in it is ever "not activated yet".
+// allow(module-state): set once per page by the host's boot, like the load record above
+export const extensionHostStarted = shallowRef(false);
+
+/** Whether a viewer missing now may still register: the host has booted and its pass over the list hasn't finished. */
+export const extensionsSettling = (): boolean => extensionHostStarted.value && !extensionsLoaded.value;

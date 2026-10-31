@@ -2,7 +2,8 @@ import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-s
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { registerViewer, renderViewerForExtension } from "../../../../workbench/views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../../../../models/workspace/tree/fileType";
-import { resolveOpenFile } from "../openFile";
+import { extensionHostStarted, extensionsLoaded } from "../../../../workbench/views/extensionStatuses";
+import { claimOf, resolveOpenFile } from "../openFile";
 
 // Order between the core's text resolver and the extensions' viewer registry: FileViewer itself has no per-format
 // branches. Registrations are made/disposed per test against the real registry, a module-level singleton (no-Pinia).
@@ -30,6 +31,8 @@ const register = (
     );
 };
 afterEach(() => {
+    extensionHostStarted.value = false;
+    extensionsLoaded.value = false;
     while (disposables.length > 0) {
         disposables.pop()?.dispose();
     }
@@ -41,6 +44,29 @@ describe(`resolveOpenFile without any viewer extension`, () => {
         expect(resolveOpenFile(`README.md`, 1000)).toEqual({ kind: `markdown`, lang: `markdown` });
         expect(resolveOpenFile(`clip.mp4`, 1000)).toEqual({ kind: `binary` });
         expect(resolveOpenFile(`logo.png`, 1000)).toEqual({ kind: `binary` });
+    });
+});
+
+// A recording opened before the viewers extension activated (a fresh load, a restored tab, a language change) went to
+// the download floor and had its text derived, though a player was a second away.
+describe(`resolveOpenFile while the extension host is still activating`, () => {
+    it(`holds a file only a viewer could draw, and nothing the core draws itself`, () => {
+        extensionHostStarted.value = true;
+        expect(resolveOpenFile(`take.wav`, 1000)).toEqual({ kind: `pending` });
+        expect(resolveOpenFile(`clip.mp4`, RAW_MAX_BYTES * 2)).toEqual({ kind: `pending` });
+        expect(claimOf(`take.wav`, 1000)).toBe(`pending`);
+        expect(resolveOpenFile(`src/app.ts`, 1000)).toEqual({ kind: `code`, lang: `typescript` });
+        expect(resolveOpenFile(`take.wav`, 0)).toEqual({ kind: `empty` });
+    });
+
+    it(`answers the viewer the moment it registers, and bytes once the pass ends without one`, () => {
+        extensionHostStarted.value = true;
+        register(`media`, [`wav`], `url`);
+        expect(resolveOpenFile(`take.wav`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `media` } });
+        expect(resolveOpenFile(`bundle.zip`, 1000)).toEqual({ kind: `pending` });
+        extensionsLoaded.value = true;
+        expect(resolveOpenFile(`bundle.zip`, 1000)).toEqual({ kind: `binary` });
+        expect(claimOf(`bundle.zip`, 1000)).toBeUndefined();
     });
 });
 

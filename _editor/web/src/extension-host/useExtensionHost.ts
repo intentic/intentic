@@ -5,6 +5,7 @@ import { usePanels } from "../models/extensions/usePanels";
 import { activeSandboxId } from "../app/storage/activeSandbox";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import type { HostBindings } from "./apiImpl";
+import { extensionHostStarted } from "../workbench/views/extensionStatuses";
 import { loadExtensions, retireExtensions } from "./loader";
 
 let started = false;
@@ -30,6 +31,7 @@ export function useExtensionHost(): void {
         return;
     }
     started = true;
+    extensionHostStarted.value = true;
     const { reachable } = useSandbox();
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();

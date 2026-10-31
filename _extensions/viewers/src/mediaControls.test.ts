@@ -1,7 +1,7 @@
 // Through the door the viewer imports it by: the clock itself lives in the kit, since the chat composer's audio chip
 // draws the same one and two players disagreeing about "0:59" is the bug this shares to avoid.
 import { formatDuration } from "@intentic/extension-ui/format";
-import { seekTargets, SPEEDS } from "./mediaControls";
+import { playableSource, seekTargets, SPEEDS } from "./mediaControls";
 
 describe(`formatDuration`, () => {
     it(`drops the hours field below an hour`, () => {
@@ -44,5 +44,18 @@ describe(`the transport's shared tables`, () => {
         expect(SPEEDS).toEqual(SPEEDS.toSorted((a, b) => a - b));
         expect(new Set(SPEEDS).size).toBe(SPEEDS.length);
         expect(SPEEDS).toContain(1);
+    });
+});
+
+// A recording the browser can't decode (AIFF, CAF, WMA, an ADPCM WAV) is asked for once more, as the daemon's AAC rendering.
+describe(`playableSource`, () => {
+    it(`asks a streamed address for its rendition, once`, () => {
+        const src = `https://box.example/workspace/media?path=take.aiff&ticket=t1`;
+        expect(playableSource(src)).toBe(`${src}&playable=1`);
+        expect(playableSource(`${src}&playable=1`)).toBeUndefined();
+    });
+
+    it(`has nothing to ask of bytes the page already holds`, () => {
+        expect(playableSource(`blob:https://box.example/5c1e`)).toBeUndefined();
     });
 });

@@ -24,7 +24,8 @@ const NOTEBOOK = /\.ipynb$/i;
 /** Whether a derived reading of this file is worth offering at all. A folder on this computer is offered it too: the
  * desktop app's sidecar renders the same shadow on request (app/environments/local.ts). */
 export const mayHaveDerivedText = (path: string, kind: OpenFile["kind"]): boolean => {
-    if (kind === `empty` || kind === `locked`) {
+    // Pending is a viewer still activating: offering (or deriving) text for it would be answering before it does.
+    if (kind === `empty` || kind === `locked` || kind === `pending`) {
         return false;
     }
     return kind === `code` || kind === `markdown` || kind === `big-text` ? NOTEBOOK.test(path) : true;

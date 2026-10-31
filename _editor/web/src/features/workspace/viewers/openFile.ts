@@ -2,6 +2,7 @@ import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspac
 import { extensionOf } from "@intentic/ui/file-format";
 import type { RegisteredViewer } from "../../../workbench/views/viewerRegistry";
 import { viewerForExtension } from "../../../workbench/views/viewerRegistry";
+import { extensionsSettling } from "../../../workbench/views/extensionStatuses";
 import { RAW_MAX_BYTES, resolveFile } from "../../../models/workspace/tree/fileType";
 
 // Which surface opens a file: an extension that claims its extension wins, fileType.ts's answer is the fallback. Text
@@ -9,13 +10,14 @@ import { RAW_MAX_BYTES, resolveFile } from "../../../models/workspace/tree/fileT
 // because viewerForExtension reads reactive registry state, unlike that pure function.
 
 // What determines what the surface is handed; `empty`, `binary`, `too-large` and `locked` all mean nothing is fetched,
-// each for a different reason.
+// each for a different reason. `pending` is a file only a viewer could draw, opened before the extension host has
+// finished activating: drawn as loading, and resolved again once the pass ends (FileViewer's `claimed`).
 export type OpenFile =
     // `big-text` is never resolved directly; the viewer switches to it once the daemon reports an oversize file.
     | { readonly kind: "code" | "markdown" | "big-text"; readonly lang: string | undefined }
     // An extension viewer claimed this extension; `viewer.fetch` decides text / blob / streaming URL / path only.
     | { readonly kind: "viewer"; readonly viewer: RegisteredViewer }
-    | { readonly kind: "empty" | "binary" | "too-large" | "locked" };
+    | { readonly kind: "empty" | "binary" | "too-large" | "locked" | "pending" };
 
 // Only a `blob` viewer can be defeated by size: /workspace/raw holds the whole answer in memory and 413s past the cap;
 // `url` and `text` viewers stream or window their reads instead, and a `path` viewer reads nothing through the host.
@@ -38,5 +40,24 @@ export const resolveOpenFile = (path: string, size: number | undefined): OpenFil
         return oversizeForViewer(viewer, size) ? { kind: `too-large` } : { kind: `viewer`, viewer };
     }
     const { mode, lang } = resolveFile(path, size);
-    return mode === `code` || mode === `markdown` ? { kind: mode, lang } : { kind: mode };
+    if (mode === `code` || mode === `markdown`) {
+        return { kind: mode, lang };
+    }
+    // Calling it bytes now would put a recording, a picture or a PDF on the download floor (and start deriving its text)
+    // for as long as the viewers extension takes to activate: on a fresh load, a restored tab, a language change.
+    if (mode === `binary` && extensionsSettling()) {
+        return { kind: `pending` };
+    }
+    return { kind: mode };
+};
+
+// What claims `path`, as the key FileViewer's watch re-resolves the tab on: the viewer by what identifies it rather than by
+// its registration object, which every activation builds anew (an extension activated again on a language change is the
+// same viewer, and must not reload every tab it draws), `pending` while a viewer may still register, else nothing.
+export const claimOf = (path: string, size: number | undefined): string | undefined => {
+    const viewer = viewerForExtension(extensionOf(path));
+    if (viewer === undefined) {
+        return resolveOpenFile(path, size).kind === `pending` ? `pending` : undefined;
+    }
+    return JSON.stringify([viewer.owner, viewer.id, viewer.fetch, viewer.edit]);
 };

@@ -5,7 +5,6 @@ import { useLoaded } from "@intentic/extension-api";
 import { Await, Button, CopyButton, EmptyState, Notice, ui, useDevice } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
-import { extensionOf } from "@intentic/ui/file-format";
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { localFace } from "../../../app/environments/local";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
@@ -44,13 +43,13 @@ import { highlightLangFor } from "@intentic/code-read";
 import { TEXT_EDIT_MAX_BYTES } from "../../../models/workspace/tree/fileType";
 import type { LineJump } from "../../../models/workspace/tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
-import { resolveOpenFile, type OpenFile } from "./openFile";
+import { claimOf, resolveOpenFile, type OpenFile } from "./openFile";
 import HtmlPreview from "../../../parts/workspace/HtmlPreview.vue";
 import { printRendered } from "../../../parts/workspace/printRendered";
 import { MAX_FILE_BYTES } from "../../../models/workspace/viewers/htmlDocument";
 import { htmlPreviewed, setHtmlPreviewed } from "../../../models/workspace/viewers/htmlPreviewed";
 import { openWorkspaceRef } from "../../../models/workspace/files/openFileRef";
-import { type RegisteredViewer, viewerForExtension } from "../../../workbench/views/viewerRegistry";
+import type { RegisteredViewer } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
@@ -283,15 +282,9 @@ const refreshLook = (currentPath: string): void => {
     );
 };
 
-// Which viewer claims this file's extension, read where the watch below tracks it: resolveOpenFile reads the registry
-// inside the callback, where nothing is tracked, so a viewer registering after the tab opened (an extension activating
-// late, a restored tab, a local window's one document) would otherwise leave it on "no preview" for good. Named by what
-// identifies a claim rather than by its registration object, which every activation builds anew: an extension
-// activated again (a language change) is the same viewer, and must not reload every tab it draws.
-const claimed = computed(() => {
-    const viewer = viewerForExtension(extensionOf(path));
-    return viewer === undefined ? undefined : JSON.stringify([viewer.owner, viewer.id, viewer.fetch, viewer.edit]);
-});
+// Which viewer claims this file, read where the watch below tracks it (claimOf, openFile.ts): a viewer registering after
+// the tab opened (an extension activating late, a restored tab, a local window's one document) re-resolves it.
+const claimed = computed(() => claimOf(path, meta?.size));
 
 type Trigger = readonly [string, unknown, string | undefined, string | undefined, boolean];
 // Whether a refire is the same file in the same scope, claimed by the same viewer, changing on disk, rather than another
@@ -350,7 +343,7 @@ const resetFor = (currentPath: string): OpenFile => {
    file keeps it. */
 const { reachable } = useSandbox();
 // The surfaces that need a read; the rest (binary, too large, empty, locked) open from the tree's entry alone.
-const reads = (file: OpenFile): boolean => file.kind === `code` || file.kind === `markdown` || file.kind === `viewer`;
+const reads = (file: OpenFile): boolean => file.kind === `code` || file.kind === `markdown` || file.kind === `viewer` || file.kind === `pending`;
 // Whether the tab draws something of its file: its text, a viewer, or a surface that needed no read.
 const drawn = (): boolean => text.value !== null || viewerComponent.value !== undefined || (!loading.value && error.value === null && !reads(open.value));
 // Set while a tab waits for the sandbox having read nothing, so the answer reads it from scratch.
@@ -453,7 +446,9 @@ watch(
             }, fail);
             return;
         }
-        // binary/too-large/empty/locked: nothing fetched; locked is a refusal, not an inability, no request made.
+        // Pending draws as loading until the host's pass ends and `claimed` moves; binary/too-large/empty/locked fetch
+        // nothing, and locked is a refusal, not an inability, so no request is made.
+        loading.value = resolution.kind === `pending`;
     },
     { immediate: true },
 );

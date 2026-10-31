@@ -2,7 +2,7 @@
 import { Button, Icon, type IconName, vAction } from "@intentic/extension-ui";
 import { formatDuration } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { seekTargets, SPEEDS } from "./mediaControls";
+import { KEYS, playableSource, seekTargets, SPEEDS, type Transport } from "./mediaControls";
 import { t } from "./i18n.js";
 
 // Audio and video share one component, always a `<video>` element; layout follows `videoWidth > 0` once metadata loads.
@@ -17,6 +17,9 @@ const stage = ref<HTMLElement>();
 const playing = ref(false);
 const waiting = ref(false);
 const failed = ref(false);
+// What the element plays: `src`, or once that failed to decode, the daemon's rendering of it, spun over while it's made.
+const source = ref(src);
+const rendering = ref(false);
 // Set in `loadedmetadata`; 0 means audio-only regardless of container.
 const videoWidth = ref(0);
 const duration = ref(0);
@@ -46,7 +49,8 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
 // Hides only while video is playing and the pointer is idle; paused or audio always shows controls.
 const controlsVisible = computed(() => !hasVideo.value || !playing.value || !idle.value || speedOpen.value);
 
-const el = (): HTMLVideoElement | undefined => media.value;
+// A template ref is null, not undefined, once unmounted, and the element's queued events can still land after that.
+const el = (): HTMLVideoElement | undefined => media.value ?? undefined;
 
 // Transport controls.
 const togglePlay = (): void => {
@@ -136,9 +140,18 @@ const onLoadedMetadata = (): void => {
     if (node === undefined) {
         return;
     }
+    rendering.value = false;
     videoWidth.value = node.videoWidth;
     duration.value = node.duration;
     node.playbackRate = rate.value;
+};
+
+// A file this browser can't decode is asked for once more as the daemon's AAC rendering; only that failing is a failure.
+const onError = (): void => {
+    const next = playableSource(source.value);
+    rendering.value = next !== undefined;
+    failed.value = next === undefined;
+    source.value = next ?? source.value;
 };
 
 const onTimeUpdate = (): void => {
@@ -265,22 +278,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
     event.preventDefault();
 };
 
-// The transport's buttons, in row order: one shape, so the row is a list rather than nine copies of it. `press`
-// is bound with `v-action`, which locks the button for as long as an async toggle runs and no-ops on a sync one.
-interface Transport {
-    readonly key: string;
-    readonly icon: IconName;
-    /** Screen-reader name; the tooltip carries the keyboard shortcut instead. */
-    readonly label: string;
-    /** A word or two, and the shortcut as a key cap (v-tooltip's `Tip`) when there is one. */
-    readonly hint: string | { readonly title: string; readonly keys: string };
-    readonly active?: boolean;
-    readonly press: () => unknown;
-}
-
-// The shortcuts the key handler below answers, as the key caps the tooltips draw.
-const KEYS = { play: `K`, back: `J`, forward: `L`, mute: `M`, pip: `P`, fullscreen: `F`, speed: `, .` } as const;
-
+// The transport's buttons, in row order (Transport, mediaControls.ts).
 const leadControls = computed((): readonly Transport[] => [
     {
         key: `play`,
@@ -367,6 +365,8 @@ onBeforeUnmount(() => {
 watch(
     () => src,
     () => {
+        source.value = src;
+        rendering.value = false;
         playing.value = false;
         failed.value = false;
         videoWidth.value = 0;
@@ -393,7 +393,7 @@ watch(
         <!-- Always a `<video>` element; layout adapts to it, not the reverse. -->
         <video
             ref="media"
-            :src="src"
+            :src="source"
             preload="metadata"
             :loop="looping"
             class="min-h-0"
@@ -408,12 +408,12 @@ watch(
             @playing="waiting = false"
             @canplay="waiting = false"
             @ratechange="rate = media?.playbackRate ?? rate"
-            @error="failed = true"
+            @error="onError"
             @click="togglePlay"
             @dblclick="toggleFullscreen"
         ></video>
 
-        <!-- Unsupported containers (Matroska, AVI, WMV) fall back to a download link. -->
+        <!-- What neither the browser nor the daemon's rendering plays (a video it can't decode, a damaged file) falls back to a download. -->
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">{{ t(`mediaViewer.formatCantPlayedIn`) }}</p>
@@ -428,9 +428,9 @@ watch(
             <p class="max-w-md truncate text-center text-sm text-content">{{ filename }}</p>
         </div>
 
-        <!-- Buffering spinner; shown for video only, audio's transport already indicates it. -->
-        <div v-if="waiting && hasVideo && !failed" class="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <Icon name="spinner" class="text-3xl text-white/80" spin />
+        <!-- Buffering a video (audio's transport already says so), or rendering a recording this browser can't decode. -->
+        <div v-if="((waiting && hasVideo) || rendering) && !failed" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <Icon name="spinner" class="text-3xl" :class="hasVideo ? `text-white/80` : `text-subtle`" spin />
         </div>
 
         <!-- Large play button shown over a stopped, non-buffering video frame. -->
