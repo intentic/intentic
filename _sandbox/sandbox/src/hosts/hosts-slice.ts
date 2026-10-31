@@ -9,6 +9,8 @@ import { type RedeemCodes, redeemCodes } from "../peers/redeem-codes.js";
 import { defineSlice } from "../seams/slice.js";
 import { createRunGrants, type RunGrants } from "./device-door.js";
 import { createDeviceTunnels, type DeviceTunnels } from "./device-tunnels.js";
+import { callTool } from "./device-reports.js";
+import { createDeviceRuns, type DeviceRuns } from "./runs/device-runs.js";
 import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./host-peer.js";
 import { hostDeviceReach, type HostDeviceReach } from "./self-host.js";
 
@@ -34,6 +36,8 @@ export interface HostsSlice {
     readonly deviceTunnels: DeviceTunnels;
     // What lets a run the owner started from the editor act on its one computer (device-door.ts).
     readonly runGrants: RunGrants;
+    // The programs a device run left running on a computer: their state, output and Stop (device-runs.ts).
+    readonly deviceRuns: DeviceRuns;
 }
 
 export const hostsSlice = defineSlice<HostsSlice>({
@@ -49,5 +53,10 @@ export const hostsSlice = defineSlice<HostsSlice>({
         enrollTokens: pairings(),
         deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
         runGrants: createRunGrants(),
+        deviceRuns: createDeviceRuns({
+            call: (device, tool, args, timeoutMs) => callTool(whole(), device, tool, { ...args }, AbortSignal.timeout(timeoutMs)),
+            tunnels: () => whole().deviceTunnels,
+            logger,
+        }),
     }),
 });

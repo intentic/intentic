@@ -31,7 +31,8 @@ connected computer, then each target is one row with one Run.
   several run side by side; its name is lowercase letters, digits and dashes. An `env` value `{previewUrl:<target>}` is
   a sibling's preview address, which is how a web app finds its API. A Node repo installs first.
 - **`artifact`: runs on one of the owner's computers**: `build` here, carry the artifact, start it there (the device
-  skill; `devices run <target>` is the same run an agent types).
+  skill; `devices run <target>` is the same run an agent types). Running it again stops the run already going there;
+  the Run dialog shows its state with Stop, Restart and its log, and `devices stop <target>` ends it from a shell.
 - A target with both runs in either place.
 
 Write a target whenever the owner should be able to run something with one press. Once the file has a sandbox target,

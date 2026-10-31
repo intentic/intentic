@@ -111,3 +111,59 @@ export type RunStart = z.infer<typeof RunStartSchema>;
 
 // The terminal session the run is in, for the editor to open.
 export const RunStartedSchema = z.object({ session: z.string() });
+
+// A PROGRAM RUNNING ON ONE OF THE OWNER'S COMPUTERS, as the computer itself reports it (its app_status), whoever started
+// it: the Run dialog, `devices run` or `devices start` in a shell, or an agent's app_start. `name` is the target's name
+// for a run started from a run-targets file, which is how the dialog finds a target's run.
+export const DeviceRunStateSchema = z.enum(["running", "ended", "unknown"]);
+export type DeviceRunState = z.infer<typeof DeviceRunStateSchema>;
+
+export const DeviceRunSchema = z.object({
+    device: z.string(),
+    // The run id the computer's app_status, app_logs and app_stop take.
+    id: z.string(),
+    name: z.string(),
+    // `unknown`: its process is alive but the computer cannot tell whether it is still this run, so it will not stop it.
+    state: DeviceRunStateSchema,
+    // The computer's own words for it: "running, pid 4120", "exited with code 101", "stopped by the agent".
+    said: z.string(),
+    // How it ended, when it exited by itself with a code.
+    exitCode: z.int().optional(),
+    startedAt: z.string(),
+    endedAt: z.string().optional(),
+    // The repository whose run-targets file it was started from, when this sandbox started it so since its last restart.
+    repo: z.string().optional(),
+    // The computer's ports the sandbox reaches for it (the target's `reach`), open while it runs, closed when it stops.
+    ports: z.array(z.int().min(1).max(65535)),
+});
+export type DeviceRun = z.infer<typeof DeviceRunSchema>;
+
+export const DeviceRunsQuerySchema = z.object({ device: z.string().min(1).max(100) });
+export const DeviceRunsSchema = z.object({ runs: z.array(DeviceRunSchema) });
+
+// Stop a target's run on one computer: the terminal it is being built or followed in, and the program itself (by `id`,
+// else every running program the target's name is on).
+export const RunStopSchema = RunStartSchema.extend({ id: z.string().min(1).max(200).optional() });
+export type RunStop = z.input<typeof RunStopSchema>;
+export const RunStoppedSchema = z.object({
+    // The computer's own sentence for each program stopped; empty when nothing of the target's was running there.
+    stopped: z.array(z.object({ id: z.string(), text: z.string() })),
+});
+
+// A run's output, from its log on the computer. Without `since`, its last `lines`; with `since` (the `total` an earlier
+// read answered), only what it printed after that read.
+export const RunOutputQuerySchema = z.object({
+    device: z.string().min(1).max(100),
+    id: z.string().min(1).max(200),
+    // Coerced: a GET's input arrives as query text.
+    since: z.coerce.number().int().nonnegative().optional(),
+    lines: z.coerce.number().int().positive().max(2000).default(200),
+});
+export type RunOutputQuery = z.input<typeof RunOutputQuerySchema>;
+export const RunOutputSchema = z.object({
+    run: DeviceRunSchema.optional(),
+    // The log's size in bytes when read: the `since` of the next read.
+    total: z.int().nonnegative(),
+    lines: z.array(z.string()),
+});
+export type RunOutput = z.infer<typeof RunOutputSchema>;

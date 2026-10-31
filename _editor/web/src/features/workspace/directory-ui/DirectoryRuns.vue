@@ -13,7 +13,8 @@ import { openPreviewBeside } from "../../../workbench/browsers/browsersSurface";
 import { stateOf, tintOf } from "../../preview/targetWords";
 import { usePreviewTargets } from "../../preview/usePreviewTargets";
 import { defaultPlace, type RunRow, runRowsOf, runsAt, SANDBOX } from "./runRows";
-import { useRunPresses, useRunTargets } from "../../../models/runs/useRunTargets";
+import { useDeviceRuns, useRunLog, useRunPresses, useRunTargets } from "../../../models/runs/useRunTargets";
+import type { DeviceRun } from "@intentic/sandbox-contract/schemas/run-targets";
 
 const t = useT();
 
@@ -21,7 +22,8 @@ const t = useT();
    the list, the sandbox first and then every computer with whether it can take a run now; each target the repository's
    run-targets file declares (and, when that file says nothing for the sandbox, what Start finds in its own files) is
    then one row with one Run button. In the sandbox a run gets its own preview in Browsers, which opens on it; on a
-   computer it opens the terminal it happens in. */
+   computer it opens the terminal it happens in, and the row then says what the computer reports of it (running, or
+   how it ended) with its Stop, Restart and log. */
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -36,7 +38,7 @@ const visible = computed({
 
 const router = useRouter();
 const { repos, devices } = useRunTargets();
-const { pending, failure, run } = useRunPresses();
+const { pending, failure, run, stop: stopRun, stopping } = useRunPresses();
 const { allPanels } = usePanels();
 const { targets: live, start: startLive, stop: stopLive } = usePreviewTargets(visible);
 const { openFile } = useWorkspaceTabs();
@@ -154,10 +156,68 @@ const stopInSandbox = async (row: RunRow): Promise<void> => {
 const isPending = (row: RunRow): boolean =>
     entry.value !== undefined && chosen.value !== undefined && pending(entry.value.repo, row.name, chosen.value.id);
 
+// Run again while it runs is Restart: the daemon ends the last run's terminal, and the new run stops its program.
 const runOnComputer = (row: RunRow): void => {
     if (entry.value !== undefined && chosen.value !== undefined) {
         run(entry.value.repo, row.name, chosen.value.id);
     }
+};
+
+// What the chosen computer runs: each row's newest run there, by the target's name.
+const { runOf } = useDeviceRuns(
+    computed(() => chosen.value?.id),
+    computed(() => visible.value && chosen.value !== undefined && chosenBlocked.value === undefined),
+);
+const deviceRun = (row: RunRow): DeviceRun | undefined => (inSandbox.value || !row.computers ? undefined : runOf(row.name));
+const isRunning = (row: RunRow): boolean => deviceRun(row)?.state === `running`;
+
+const isStopping = (row: RunRow): boolean =>
+    entry.value !== undefined && chosen.value !== undefined && stopping(entry.value.repo, row.name, chosen.value.id);
+
+const stopOnComputer = (row: RunRow): void => {
+    if (entry.value !== undefined && chosen.value !== undefined) {
+        stopRun(entry.value.repo, row.name, chosen.value.id, deviceRun(row)?.id);
+    }
+};
+
+// A run's state beside its name, in words and a tone: running, perhaps running, or how it ended.
+const stateWords = (row: RunRow): string => {
+    const current = deviceRun(row);
+    if (current === undefined) {
+        return ``;
+    }
+    if (current.state === `running`) {
+        return t(`workspace.directoryRuns.running`);
+    }
+    return current.state === `unknown` ? t(`workspace.directoryRuns.mayBeRunning`) : current.said;
+};
+const stateTone = (row: RunRow): string => {
+    const current = deviceRun(row);
+    if (current?.state === `running`) {
+        return `text-success`;
+    }
+    if (current?.state === `unknown`) {
+        return `text-warning`;
+    }
+    return current?.exitCode !== undefined && current.exitCode !== 0 ? `text-danger` : `text-muted`;
+};
+
+// One log open at a time, the row's by its key; it follows that row's newest run.
+const logRow = ref<string | undefined>(undefined);
+watch([dir, place], () => {
+    logRow.value = undefined;
+});
+const logRun = computed(() => {
+    const row = rows.value.find((candidate) => candidate.key === logRow.value);
+    return row === undefined ? undefined : deviceRun(row);
+});
+const { lines: logLines, failure: logFailure } = useRunLog(
+    computed(() => chosen.value?.id),
+    computed(() => logRun.value?.id),
+    computed(() => visible.value && logRun.value !== undefined),
+);
+const toggleLog = (row: RunRow): void => {
+    logRow.value = logRow.value === row.key ? undefined : row.key;
 };
 
 /* ---- Nothing to run yet ------------------------------------------------------------------------------------------ */
@@ -210,13 +270,7 @@ const placeClass = (id: string, online: boolean): string[] => [
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         <span id="directory-runs-where" class="text-xs text-subtle">{{ t(`workspace.directoryRuns.where`) }}</span>
                         <div role="radiogroup" aria-labelledby="directory-runs-where" class="flex flex-wrap items-center gap-1">
-                            <button
-                                type="button"
-                                role="radio"
-                                :aria-checked="inSandbox"
-                                :class="placeClass(SANDBOX, true)"
-                                @click="picked = SANDBOX"
-                            >
+                            <button type="button" role="radio" :aria-checked="inSandbox" :class="placeClass(SANDBOX, true)" @click="picked = SANDBOX">
                                 <span :class="toneDot(`success`, DOT)" aria-hidden="true" />
                                 {{ t(`workspace.directoryRuns.sandbox`) }}
                             </button>
@@ -234,7 +288,11 @@ const placeClass = (id: string, online: boolean): string[] => [
                             </button>
                         </div>
                     </div>
-                    <p v-if="chosen !== undefined && chosenBlocked !== undefined" class="text-xs" :class="chosen.online ? `text-warning` : `text-muted`">
+                    <p
+                        v-if="chosen !== undefined && chosenBlocked !== undefined"
+                        class="text-xs"
+                        :class="chosen.online ? `text-warning` : `text-muted`"
+                    >
                         {{ chosenBlocked }}
                         <RouterLink v-if="chosen.online" :to="`/capabilities/${chosen.id}`" class="ml-1 text-link hover:underline">{{
                             t(`workspace.directoryRuns.openCard`)
@@ -242,7 +300,9 @@ const placeClass = (id: string, online: boolean): string[] => [
                     </p>
                     <p v-else-if="!inSandbox && sorted.length === 0" class="text-xs text-muted">
                         {{ t(`workspace.directoryRuns.noComputers`) }}
-                        <RouterLink to="/capabilities" class="ml-1 text-link hover:underline">{{ t(`workspace.directoryRuns.connectOne`) }}</RouterLink>
+                        <RouterLink to="/capabilities" class="ml-1 text-link hover:underline">{{
+                            t(`workspace.directoryRuns.connectOne`)
+                        }}</RouterLink>
                     </p>
                 </div>
 
@@ -250,58 +310,109 @@ const placeClass = (id: string, online: boolean): string[] => [
 
                 <!-- What: the targets, flat on the dialog's own surface, one Run each where the place takes it. -->
                 <ul class="flex flex-col divide-y divide-line-subtle border-t border-line-subtle">
-                    <li v-for="row in rows" :key="row.key" class="flex items-center gap-4 py-3">
-                        <div class="flex min-w-0 flex-1 flex-col gap-1" :class="runsAt(row, place) ? `` : `opacity-60`">
-                            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                                <span class="font-mono text-sm text-content">{{ row.name }}</span>
-                                <span v-if="inSandbox && row.sandbox !== undefined && row.sandbox.running" class="inline-flex items-center gap-1 text-2xs" :class="tintOf(row.sandbox)">
-                                    <Icon name="circle" class="text-[0.5rem]" />{{ stateOf(row.sandbox) }}
-                                </span>
-                                <span v-if="!inSandbox && row.isolated" class="inline-flex items-center gap-1 text-2xs text-subtle">
-                                    <Icon name="shield" />{{ t(`workspace.directoryRuns.isolated`) }}
-                                </span>
+                    <li v-for="row in rows" :key="row.key" class="flex flex-col gap-2 py-3">
+                        <div class="flex items-center gap-4">
+                            <div class="flex min-w-0 flex-1 flex-col gap-1" :class="runsAt(row, place) ? `` : `opacity-60`">
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                                    <span class="font-mono text-sm text-content">{{ row.name }}</span>
+                                    <span
+                                        v-if="inSandbox && row.sandbox !== undefined && row.sandbox.running"
+                                        class="inline-flex items-center gap-1 text-2xs"
+                                        :class="tintOf(row.sandbox)"
+                                    >
+                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateOf(row.sandbox) }}
+                                    </span>
+                                    <span v-if="deviceRun(row) !== undefined" class="inline-flex items-center gap-1 text-2xs" :class="stateTone(row)">
+                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateWords(row) }}
+                                    </span>
+                                    <span v-if="!inSandbox && row.isolated" class="inline-flex items-center gap-1 text-2xs text-subtle">
+                                        <Icon name="shield" />{{ t(`workspace.directoryRuns.isolated`) }}
+                                    </span>
+                                </div>
+                                <p v-if="descriptionOf(row) !== undefined" class="text-xs leading-relaxed text-muted">{{ descriptionOf(row) }}</p>
+                                <p v-if="!runsAt(row, place)" class="text-2xs text-subtle">{{ elsewhere(row) }}</p>
                             </div>
-                            <p v-if="descriptionOf(row) !== undefined" class="text-xs leading-relaxed text-muted">{{ descriptionOf(row) }}</p>
-                            <p v-if="!runsAt(row, place)" class="text-2xs text-subtle">{{ elsewhere(row) }}</p>
-                        </div>
 
-                        <!-- In the sandbox: Run, or once it runs, Open and Stop. -->
-                        <template v-if="inSandbox && runsAt(row, place)">
-                            <div v-if="row.sandbox?.running === true" class="flex shrink-0 items-center gap-1.5">
-                                <Button :label="t(`ui.action.stop`)" tier="quiet" size="small" @click="stopInSandbox(row)" />
-                                <Button :label="t(`ui.action.open`)" tier="boring" size="small" @click="show(row)">
-                                    <template #icon><Icon name="eye" class="mr-1.5 text-2xs" /></template>
+                            <!-- In the sandbox: Run, or once it runs, Open and Stop. -->
+                            <template v-if="inSandbox && runsAt(row, place)">
+                                <div v-if="row.sandbox?.running === true" class="flex shrink-0 items-center gap-1.5">
+                                    <Button :label="t(`ui.action.stop`)" tier="quiet" size="small" @click="stopInSandbox(row)" />
+                                    <Button :label="t(`ui.action.open`)" tier="boring" size="small" @click="show(row)">
+                                        <template #icon><Icon name="eye" class="mr-1.5 text-2xs" /></template>
+                                    </Button>
+                                </div>
+                                <Button
+                                    v-else
+                                    class="shrink-0"
+                                    :label="t(`workspace.directoryRuns.run`)"
+                                    :aria-label="t(`workspace.directoryRuns.runInSandbox`, { target: row.name })"
+                                    :title="t(`workspace.directoryRuns.runTipSandbox`)"
+                                    tier="boring"
+                                    size="small"
+                                    :disabled="row.sandbox === undefined || starting !== undefined"
+                                    :loading="starting === row.key || row.sandbox === undefined"
+                                    @click="runInSandbox(row)"
+                                >
+                                    <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
+                                </Button>
+                            </template>
+                            <!-- On a computer: Run, or once it runs there, Stop and Restart; its log once it has run. -->
+                            <div v-else class="flex shrink-0 items-center gap-1.5">
+                                <Button
+                                    v-if="deviceRun(row) !== undefined"
+                                    :label="logRow === row.key ? t(`workspace.directoryRuns.hideLog`) : t(`workspace.directoryRuns.log`)"
+                                    :aria-expanded="logRow === row.key"
+                                    tier="quiet"
+                                    size="small"
+                                    @click="toggleLog(row)"
+                                />
+                                <Button
+                                    v-if="isRunning(row) && chosen !== undefined"
+                                    :label="t(`ui.action.stop`)"
+                                    :aria-label="t(`workspace.directoryRuns.stopOn`, { target: row.name, device: chosen.id })"
+                                    :title="t(`workspace.directoryRuns.stopTip`, { device: chosen.id })"
+                                    tier="quiet"
+                                    size="small"
+                                    :disabled="chosenBlocked !== undefined"
+                                    :loading="isStopping(row)"
+                                    @click="stopOnComputer(row)"
+                                >
+                                    <template #icon><Icon name="stop" class="mr-1.5 text-2xs" /></template>
+                                </Button>
+                                <Button
+                                    :label="isRunning(row) ? t(`workspace.directoryRuns.restart`) : t(`workspace.directoryRuns.run`)"
+                                    :aria-label="
+                                        chosen === undefined
+                                            ? undefined
+                                            : isRunning(row)
+                                              ? t(`workspace.directoryRuns.restartOn`, { target: row.name, device: chosen.id })
+                                              : t(`workspace.directoryRuns.runOn`, { target: row.name, device: chosen.id })
+                                    "
+                                    :title="
+                                        chosen === undefined
+                                            ? undefined
+                                            : isRunning(row)
+                                              ? t(`workspace.directoryRuns.restartTip`, { device: chosen.id })
+                                              : t(`workspace.directoryRuns.runTip`, { device: chosen.id })
+                                    "
+                                    tier="boring"
+                                    size="small"
+                                    :disabled="!runsAt(row, place) || chosen === undefined || chosenBlocked !== undefined || isStopping(row)"
+                                    :loading="isPending(row)"
+                                    @click="runOnComputer(row)"
+                                >
+                                    <template #icon><Icon :name="isRunning(row) ? `refresh` : `play`" class="mr-1.5 text-2xs" /></template>
                                 </Button>
                             </div>
-                            <Button
-                                v-else
-                                class="shrink-0"
-                                :label="t(`workspace.directoryRuns.run`)"
-                                :aria-label="t(`workspace.directoryRuns.runInSandbox`, { target: row.name })"
-                                :title="t(`workspace.directoryRuns.runTipSandbox`)"
-                                tier="boring"
-                                size="small"
-                                :disabled="row.sandbox === undefined || starting !== undefined"
-                                :loading="starting === row.key || row.sandbox === undefined"
-                                @click="runInSandbox(row)"
-                            >
-                                <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
-                            </Button>
-                        </template>
-                        <Button
-                            v-else
-                            class="shrink-0"
-                            :label="t(`workspace.directoryRuns.run`)"
-                            :aria-label="chosen === undefined ? undefined : t(`workspace.directoryRuns.runOn`, { target: row.name, device: chosen.id })"
-                            :title="chosen === undefined ? undefined : t(`workspace.directoryRuns.runTip`, { device: chosen.id })"
-                            tier="boring"
-                            size="small"
-                            :disabled="!runsAt(row, place) || chosen === undefined || chosenBlocked !== undefined"
-                            :loading="isPending(row)"
-                            @click="runOnComputer(row)"
-                        >
-                            <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
-                        </Button>
+                        </div>
+                        <!-- The run's log on the computer, followed while it is open. -->
+                        <div v-if="logRow === row.key && deviceRun(row) !== undefined" class="flex flex-col gap-1">
+                            <pre
+                                class="max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content"
+                                aria-live="polite"
+                                >{{ logLines.length === 0 ? t(`workspace.directoryRuns.logEmpty`) : logLines.join(`\n`) }}</pre>
+                            <p v-if="logFailure !== undefined" class="text-2xs text-danger">{{ logFailure }}</p>
+                        </div>
                     </li>
                 </ul>
                 <p v-if="inSandbox && sandboxFailure !== undefined" class="text-xs text-danger">{{ sandboxFailure }}</p>
@@ -321,7 +432,13 @@ const placeClass = (id: string, online: boolean): string[] => [
 
         <template #footer>
             <!-- The file is the source of truth and lives in the repository; the switches a run needs live on the cards. -->
-            <button v-if="entry !== undefined" type="button" :class="ui.textButton({ tone: `quiet` })" :title="entry.path" @click="editFile(entry.path)">
+            <button
+                v-if="entry !== undefined"
+                type="button"
+                :class="ui.textButton({ tone: `quiet` })"
+                :title="entry.path"
+                @click="editFile(entry.path)"
+            >
                 <Icon name="file-edit" class="text-2xs" />{{ t(`workspace.directoryRuns.editFile`, { file: fileName }) }}
             </button>
             <RouterLink to="/capabilities" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">

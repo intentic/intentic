@@ -35,7 +35,7 @@ import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
 import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
-import { createRunsRoutes } from "./hosts/runs.routes.js";
+import { createRunsRoutes } from "./hosts/runs/runs.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createPublicRoutes } from "./public/public.routes.js";
 import { createPagesRoutes } from "./agent/pages/pages.routes.js";

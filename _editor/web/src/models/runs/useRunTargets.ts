@@ -1,7 +1,10 @@
-import type { RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import type { DeviceRun, RunOutputQuery, RunStop, RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
+import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { rpcPrefix } from "../../lib/queryKeys";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { useOperations } from "../../workbench/operations/operations";
@@ -37,6 +40,8 @@ const runKey = (repo: string, target: string, device: string): string => `${repo
 export function useRunPresses() {
     const { openFocused } = useTerminalPanel();
     const starts = useOperations(RUN_STARTS);
+    const queryClient = useQueryClient();
+    const relist = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcPrefix(`runs.active`) });
 
     return {
         // Whether this target's run on this computer is being started, so only its button goes quiet.
@@ -55,8 +60,111 @@ export function useRunPresses() {
                 task: async () => {
                     const { session } = await sandboxRpc.runs.start({ repo, target, device });
                     openFocused(session, { title: `${target} on ${device}` });
+                    await relist();
+                },
+            });
+        },
+        // Whether this target's run on this computer is being stopped.
+        stopping: (repo: string, target: string, device: string): boolean => starts.at(stopKey(repo, target, device))?.state === `running`,
+        // Stops the target's terminal and its program there (by id when known), with the ports opened for it.
+        stop: (repo: string, target: string, device: string, id?: string): void => {
+            void starts.run(stopKey(repo, target, device), {
+                what: t(`workspace.directoryRuns.stopOn`, { target, device }),
+                failed: t(`workspace.directoryRuns.couldntStop`, { target, device }),
+                task: async () => {
+                    const input: RunStop = { repo, target, device };
+                    if (id !== undefined) {
+                        input.id = id;
+                    }
+                    await sandboxRpc.runs.stop(input);
+                    await relist();
                 },
             });
         },
     };
+}
+
+const stopKey = (repo: string, target: string, device: string): string => `stop:${runKey(repo, target, device)}`;
+
+// How often what runs on the chosen computer is asked again while the Run dialog shows it, and a log open there.
+const RUNS_POLL_MS = 4000;
+const LOG_POLL_MS = 1500;
+// The most of a log kept on screen.
+const LOG_KEEP_LINES = 500;
+
+// What runs on one computer (the programs this sandbox started there, running and ended), while `active`. Asked again on
+// a clock: a program ending on the computer says so to nobody.
+export function useDeviceRuns(device: Ref<string | undefined>, active: Ref<boolean>) {
+    const { query } = useSandboxQuery({
+        ...rpcQuery(`runs.active`, () => ({ device: device.value ?? `` })),
+        enabled: computed(() => active.value && device.value !== undefined),
+        refetchInterval: RUNS_POLL_MS,
+    });
+    const runs = computed<readonly DeviceRun[]>(() => query.data.value?.runs ?? []);
+    return {
+        runs,
+        // A target's newest run there: the machine lists newest first.
+        runOf: (name: string): DeviceRun | undefined => runs.value.find((run) => run.name === name),
+    };
+}
+
+// One run's output while `open`: its last lines, then what it prints after them, read every so often.
+export function useRunLog(device: Ref<string | undefined>, id: Ref<string | undefined>, open: Ref<boolean>) {
+    const lines = ref<string[]>([]);
+    const failure = ref<string | undefined>(undefined);
+    let since: number | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let generation = 0;
+
+    const read = async (mine: number): Promise<void> => {
+        const where = device.value;
+        const run = id.value;
+        if (where === undefined || run === undefined) {
+            return;
+        }
+        try {
+            const ask: RunOutputQuery = { device: where, id: run, lines: 200 };
+            if (since !== undefined) {
+                ask.since = since;
+            }
+            const output = await sandboxRpc.runs.output(ask);
+            if (mine !== generation) {
+                return;
+            }
+            failure.value = undefined;
+            since = output.total;
+            lines.value = [...lines.value, ...output.lines].slice(-LOG_KEEP_LINES);
+            if (output.run?.state === `ended`) {
+                return;
+            }
+        } catch (error) {
+            if (mine !== generation) {
+                return;
+            }
+            failure.value = errorMessage(error);
+        }
+        timer = setTimeout(() => void read(mine), LOG_POLL_MS);
+    };
+
+    const stop = (): void => {
+        generation += 1;
+        clearTimeout(timer);
+    };
+
+    watch(
+        [device, id, open],
+        () => {
+            stop();
+            lines.value = [];
+            failure.value = undefined;
+            since = undefined;
+            if (open.value) {
+                void read(generation);
+            }
+        },
+        { immediate: true },
+    );
+    onScopeDispose(stop);
+
+    return { lines, failure };
 }

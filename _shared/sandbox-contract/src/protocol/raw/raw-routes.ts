@@ -174,6 +174,11 @@ export const RAW_ROUTES = {
     // The rest of the `devices` command, held to the same rule (hosts/device-door.routes.ts): the device's app_start for a
     // shell, and its loopback ports reached from the sandbox (hosts/device-tunnels.ts).
     "POST /devices/{name}/apps": { agent: true, control: "never" },
+    // What a program started there is doing, and the Stop that ends it with the ports opened for it (hosts/runs/device-runs.ts).
+    "GET /devices/{name}/apps": { agent: true, control: "never" },
+    "POST /devices/{name}/apps/stop": { agent: true, control: "never" },
+    "GET /devices/{name}/apps/{id}/output": { agent: true, control: "never" },
+    "GET /devices/runs": { agent: true },
     "POST /devices/{name}/tunnels": { agent: true, control: "never" },
     "DELETE /devices/{name}/tunnels/{port}": { agent: true, control: "never" },
     "GET /devices/tunnels": { agent: true },

@@ -225,8 +225,12 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
 
 When the repository has a \`${RUN_TARGETS_FILE}\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
 its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
-the sandbox needs, the start. The owner's Run dialog (the ▷ on the repository's row in the file tree), with this
-computer picked, runs the very same command. A new target is a few lines in that file (\`devices --help\`): an
+the sandbox needs, the start. It first stops the target's run already going here (the new one would only fail on its
+port), and prints the run id; \`devices stop <run id or target> --device \${id}\` ends it and closes the ports opened for
+it. In your shell it returns once the program has started (\`--attach\` stays and prints what it prints instead). The
+owner's Run dialog (the ▷ on the repository's row in the file tree), with this computer picked, runs the very same
+command attached in a terminal (Ctrl+C there stops the program) and shows each target's state here with Stop, Restart
+and its log. A new target is a few lines in that file (\`devices --help\`): an
 \`artifact\` makes it run here, a \`command\` makes it run in the sandbox too; write one when you will run a program here
 more than once.
 
