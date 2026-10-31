@@ -4,6 +4,7 @@
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, h } from "vue";
+import mermaid from "mermaid";
 
 // jsdom gaps, none the code's fault. `matchMedia`/`ResizeObserver` are filled package-wide by bun.setup.ts. The SVG
 // metrics below are what mermaid lays a diagram out with (it measures labels by rendering and asking their box); jsdom
@@ -43,19 +44,11 @@ const settled = (host: HTMLElement, selector: string, timeout = 10_000): Promise
         { timeout },
     );
 
-// The cold import's own budget, above the unit run's 20 s per hook: on a CI runner sharing its cores with the rest of
-// the suite, loading and initialising mermaid from cold has taken 25 s while it takes 2 s idle.
-const COLD_IMPORT_MS = 60_000;
+// Load Mermaid and its lazy flowchart module before the assertion clock starts. Cold filesystem reads and module
+// compilation are setup, not rendering latency; the component still uses the real renderer in every assertion.
+await mermaid.parse('flowchart LR\n    warm["Warm"] --> up["Up"]');
 
 describe(`<Markdown> with a mermaid fence`, () => {
-    // One throwaway diagram, drawn before anything is asserted, purely to pay for mermaid's import cost once for the
-    // file rather than charging it to whichever test happens to mount first. Torn down so no assertion can see it.
-    beforeAll(async () => {
-        const host = render('```mermaid\nflowchart LR\n    warm["Warm"] --> up["Up"]\n```');
-        await settled(host, `.md-mermaid svg`, COLD_IMPORT_MS - 10_000);
-        host.remove();
-    }, COLD_IMPORT_MS);
-
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
         const host = render(`Before.\n\n\`\`\`mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n\`\`\`\n\nAfter.`);
         await settled(host, `.md-mermaid svg`);

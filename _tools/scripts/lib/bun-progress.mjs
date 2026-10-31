@@ -24,6 +24,18 @@ const ANSI = /\u001b\[[0-9;]*m/gu;
 export const GRACE_PAD_MS = 30_000;
 // Silence that ends a run whatever it has reported: ten minutes, or three per-test timeouts if that is longer.
 export const STALL_FLOOR_MS = 10 * 60_000;
+// A live e2e job can have a cold image build longer than the normal silence limit. Its caller names that bound;
+// per-test/hook timeouts still apply. Reject a typo rather than silently disabling the watchdog with NaN.
+export const stallFloorMs = (value = process.env.SUITES_SILENCE_MS) => {
+    if (value === undefined) {
+        return STALL_FLOOR_MS;
+    }
+    const ms = Number(value);
+    if (!Number.isFinite(ms) || ms <= 0) {
+        throw new Error("SUITES_SILENCE_MS must be a positive number of milliseconds");
+    }
+    return ms;
+};
 // How often the watch looks, and the CPU a tree may burn in that time and still read as idle (in clock ticks, 100 a
 // second on Linux: 50 is half a second of one core in ten).
 export const CHECK_MS = 10_000;
@@ -148,7 +160,7 @@ export const watchProgress = (
         timeoutMs,
         checkMs = CHECK_MS,
         padMs,
-        floorMs,
+        floorMs = stallFloorMs(),
         procRoot = "/proc",
         log = (text) => process.stderr.write(text),
         out = process.stdout,

@@ -54,14 +54,17 @@ const listFiles = (): string[] =>
         cwd: REPO_ROOT,
         encoding: "utf8",
         maxBuffer: 256 * 1024 * 1024,
+        timeout: 60_000,
     })
         .split("\0")
         .filter((path) => path.length > 0 && SCANNED.has(path.slice(path.lastIndexOf("."))))
         .map((path) => join(REPO_ROOT, path))
         .filter((file) => existsSync(file));
 
+// Discover the checkout once during module setup; cold index and directory reads are not assertion latency.
+const files = listFiles();
+
 test("every module a comment names still exists under that name", async () => {
-    const files = listFiles();
     const basenames = new Set(files.map((file) => file.slice(file.lastIndexOf("/") + 1)));
     const stems = new Set([...basenames].map((name) => name.slice(0, name.indexOf("."))));
 
@@ -102,5 +105,5 @@ test("every module a comment names still exists under that name", async () => {
         [...new Set(dead)].toSorted(),
         "These comments name a file that does not exist: point them at the current name, or reword so the name is not a claim about this tree.",
     ).toEqual([]);
-    // 20s budget: this suite reads every source file in the repo, slower than a per-test default allows for.
-}, 20_000);
+    // The integration budget covers the checkout-wide source scan, including cold disk reads on a busy runner.
+});

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Regenerates the authoring schema from the built dist. Run as `pnpm --filter @intentic/extension-manifest schema`;
 // writes both the package copy and the site's public copy, checked against a fresh generation by
-// manifest-schema.test.ts.
+// manifest-schema.integration.test.ts.
 import { writeFileSync } from "node:fs";
 import { manifestJsonSchema, serializeManifestJsonSchema } from "../dist/json-schema.js";
 

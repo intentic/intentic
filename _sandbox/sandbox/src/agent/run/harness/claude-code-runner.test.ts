@@ -2061,13 +2061,13 @@ const cliStop = (toolUseId: string, taskId: string) => [
 ];
 
 // The job's exit status once the stop the fold set off has written it, waited out briefly; undefined if none came.
-const statusOf = async (conversationId: string, id: string): Promise<string | undefined> => {
+const statusOf = async (conversationId: string, id: string, waitMs = 1_000): Promise<string | undefined> => {
     const dir = backgroundJobOf(actors, conversationId, id)?.dir;
     if (dir === undefined) {
         return undefined;
     }
     const status = join(dir, "status");
-    const deadline = Date.now() + 1_000;
+    const deadline = Date.now() + waitMs;
     while (!existsSync(status) && Date.now() < deadline) {
         // the stop is not awaited by the fold, so this waits it out
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -2077,12 +2077,16 @@ const statusOf = async (conversationId: string, id: string): Promise<string | un
 
 test("a background command the CLI stopped mid-turn is ended for real", async () => {
     const job = finishedJob("c-cli-stop", "tu-cli-stop");
-    await collect(
-        { ...request, spec: { ...request.spec, conversationId: "c-cli-stop" } },
-        fakeQuery(...cliStop("tu-cli-stop", "bsh-cli-stop"), { type: "result", subtype: "success" }),
-    );
-    expect(await statusOf("c-cli-stop", job.id)).toBe("143");
-    job.remove();
+    try {
+        await collect(
+            { ...request, spec: { ...request.spec, conversationId: "c-cli-stop" } },
+            fakeQuery(...cliStop("tu-cli-stop", "bsh-cli-stop"), { type: "result", subtype: "success" }),
+        );
+        // Process discovery precedes the runner's own two-second grace; a one-second assertion races that cleanup.
+        expect(await statusOf("c-cli-stop", job.id, 10_000)).toBe("143");
+    } finally {
+        job.remove();
+    }
 });
 
 test("a stop the CLI makes once the turn's input has ended is its winding down, and leaves the job to the turn's ending", async () => {
