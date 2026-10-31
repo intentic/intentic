@@ -112,9 +112,19 @@
 /* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with no slab under it, this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
         --card-rest: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
     }
-/* Canvas lies a full step below `--color-card`, so a card on it needs no step of its own. `initial` sends `--card-fill` back to its fallback: a canvas ground nested inside a card one (the tab list's dropdown inside the chat panel) would otherwise inherit the step. */
+/* Canvas lies a full step below `--color-card`, so a card on it needs no step of its own. `initial` sends `--card-fill` back to its fallback: a canvas ground nested inside a card one would otherwise inherit the step. */
     .ground-canvas {
         --card-rest: initial;
+    }
+/* How far apart a rail's cards stand (RailLane, ChatRowList): a card's own edge separates it, so they breathe. */
+    :root {
+        --rail-row-gap: 0.875rem;
+    }
+/* A MENU'S GROUND: the docked chat switcher's sheet, which is already a raised surface. A card resting on it would be a box
+   in a box, so its rows rest on nothing and close up like a menu's; the cards themselves are flattened below. */
+    .ground-menu {
+        --card-rest: transparent;
+        --rail-row-gap: 2px;
     }
 
 /* Agent cards, workflow rows, and chat rail cards share one session-card surface. */
@@ -244,7 +254,7 @@
         border-color var(--motion-hover),
         box-shadow var(--motion-hover);
 }
-/* Canvas ground — the fleet board and the docked chat sheet: a hair toward canvas at the low stop. */
+/* Canvas ground — the fleet board: a hair toward canvas at the low stop. */
 .agents-board .session-card,
 .ground-canvas .session-card {
     --session-card-fill-hi: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
@@ -289,4 +299,23 @@
 }
 [data-skin="sanctum"] :is(.agents-board, .ground-card, .ground-canvas) .session-card {
     background-image: var(--session-card-paint);
+}
+/* SESSION CARDS AS MENU ROWS (`ground-menu`, the docked switcher's sheet): no paint, ledge or drop at rest, a row's radius
+   and padding, so they read as the Past chats rows under them. Unlayered, like the grounds above, so a skin's card paint
+   (Sanctum's tooth, Silver's glint) does not come back. The fill is still `--card-fill`, so the pointer's wash and the
+   press work as on any card; the selection keeps its tint and edge, over a step of fill since a row has no edge of its
+   own to set it apart. */
+.ground-menu .session-card {
+    border-radius: 10px;
+    padding: 0.5rem 0.625rem;
+    /* The paint itself, not the property: the panel the sheet hangs in is a card ground, whose (and Sanctum's) rules
+       draw `--session-card-paint` with more specificity than this one has. */
+    --session-card-paint: linear-gradient(var(--card-tint), var(--card-tint));
+    background-image: var(--session-card-paint);
+    --card-ledge: inset 0 0 #0000;
+    --card-lift: 0 0 #0000;
+    --card-drop: 0 0 #0000;
+}
+.ground-menu .session-card.session-card-on {
+    background-color: color-mix(in oklab, var(--color-overlay) 55%, transparent);
 }

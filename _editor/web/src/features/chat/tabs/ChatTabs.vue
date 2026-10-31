@@ -469,10 +469,14 @@ onBeforeUnmount(() => {
         </div>
 
 
-        <!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
+        <!-- A MENU, AND IT LOOKS LIKE ONE: the skin's own overlay surface (opaque, with the drop every menu wears), so it stands
+             above the transcript instead of reading as a darker hole cut into it, and its open chats are rows on it
+             (`ground-menu`, styles.css), not cards boxed inside a box. Hung from the switcher's left edge at a menu's
+             width rather than stretched across a wide column, where a title and its status ended up a screen apart;
+             capped in height so the transcript is never fully covered. -->
         <div
             v-if="listOpen && !vertical"
-            class="ground-canvas absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
+            class="ui-anchored-surface ground-menu absolute left-1.5 top-full z-30 mt-1 max-h-[60vh] w-[min(40rem,calc(100%-0.75rem))] rounded-xl p-1.5"
         >
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
                 <template #after>

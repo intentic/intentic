@@ -62,7 +62,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-3.5">
+    <div class="flex min-w-0 flex-col gap-(--rail-row-gap)">
         <!-- Each card with the tray of agents it started hung from it (ChildRows), read the way the board's cards read, and sliding as one when a tray above opens or shuts (ChatTabList's useFoldFlip). -->
         <!-- `data-chat-row` names the card's chat for a lane's Clear, which plays out exactly the cards it closes (ChatTabList). -->
         <div

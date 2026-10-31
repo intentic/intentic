@@ -306,7 +306,7 @@ defineExpose({ beginRename: actions.beginRename });
                     </button>
                     <template v-else>
                         <!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
-                        <div v-if="part.runs.length > 0" class="flex min-w-0 flex-col gap-3.5">
+                        <div v-if="part.runs.length > 0" class="flex min-w-0 flex-col gap-(--rail-row-gap)">
                             <RailCard
                                 v-for="run in part.runs"
                                 :key="run.runId"
