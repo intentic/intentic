@@ -200,6 +200,7 @@
                 // Points the sandbox-daemon tier at a published image instead of a source build (e2e:browser
                 // passes the same variable through for the same reason).
                 "SANDBOX_E2E_IMAGE",
+                "SUITES_SILENCE_MS",
                 // How many jobs share the runner host: `suites` sizes its bun fan-out against it, and strict
                 // envMode would otherwise drop it before the tier ever forks a worker.
                 "CI_HOST_JOBS"
