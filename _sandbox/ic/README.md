@@ -509,6 +509,14 @@ flowchart LR
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.
+  - **A disk that is never sparse (2026-10-30).** `.wslconfig`'s `sparseVhd=true` makes every VHDX WSL creates sparse,
+    the engine's included, and a sparse VHDX turns each block the guest trims into a hole in the NTFS file whose refill
+    takes a fragment of its own. Under a sandbox's churn rog's 909 GB disk reached 1.08 million fragments, NTFS refused
+    the writes that fill a hole, and after a WSL restart the engine could neither mount its disk
+    (`ERROR_FILE_CORRUPT`) nor replay its journal. The import, and every start of a stopped engine, turn the disk back
+    with `wsl --manage <distro> --set-sparse false`: a dynamic VHDX that is not sparse reuses what a trim frees inside
+    itself and fragments only as it grows, at the cost of no longer handing that space back to Windows. One that
+    cannot be changed (the distro already running, a disk too fragmented to fill its holes) starts as it is, with a note.
   - **A network of its own.** WSL's distros share one network namespace, and Docker Desktop keeps its engine in its
     own; since rootfs 1.1.0 ours does too. The keeper (written into the distro by every start, from
     [engine/rootfs/](engine/rootfs/)) runs dockerd in the namespace `intentic`, with pasta for the way out, a

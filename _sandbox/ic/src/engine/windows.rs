@@ -204,6 +204,12 @@ fn start_internal(quiet: bool) -> Result<(), String> {
     if !quiet {
         ui::detail("starting the intentic engine");
     }
+    // Before anything below boots the distro, while its disk can still be changed.
+    if let Err(problem) = keep_disk_dense(&record.distro) {
+        ui::note(&format!(
+            "the engine's disk stays sparse for now ({problem}); starting it as it is."
+        ));
+    }
     // An engine from an older ic is brought up to this one's docker as it starts: it is down already, so nothing that
     // runs on it is interrupted for it. One that cannot be (offline) starts as it is, and is tried again next time.
     if record.version != pins::ENGINE_VERSION {
@@ -501,6 +507,48 @@ fn import_distro(distro: &str) -> Result<(), String> {
     )?;
     if code != 0 {
         return Err(stderr);
+    }
+    if let Err(problem) = keep_disk_dense(distro) {
+        ui::note(&format!(
+            "the engine's disk stays sparse for now ({problem}); its next start tries again."
+        ));
+    }
+    Ok(())
+}
+
+/// The engine's disk is never sparse, whatever `.wslconfig`'s `sparseVhd` made it (2026-10-30). A sparse VHDX hands every
+/// block the guest trims back to NTFS as a hole, and the write that later fills it takes a fragment of its own: under a
+/// sandbox's churn rog's 909 GB disk reached 1.08 million, NTFS refused the writes that fill a hole, and after a WSL
+/// restart the engine could neither mount its disk (`ERROR_FILE_CORRUPT`) nor replay its journal. A dynamic VHDX that
+/// is not sparse reuses what a trim frees inside itself, so it fragments only as it grows; what it gives up is handing
+/// the space back to Windows. Only a stopped distro's disk can be changed, so a running one waits for its next start.
+fn keep_disk_dense(distro: &str) -> Result<(), String> {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x200;
+    let Some(disk) = paths::wsl_store_for(distro).map(|store| store.join("ext4.vhdx")) else {
+        return Ok(());
+    };
+    let sparse = std::fs::metadata(&disk)
+        .is_ok_and(|meta| meta.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0);
+    if !sparse
+        || wsl::running_distros()
+            .iter()
+            .any(|running| running == distro)
+    {
+        return Ok(());
+    }
+    let (code, stdout, stderr) = wsl::run_wsl(
+        &["--manage", distro, "--set-sparse", "false"],
+        Duration::from_secs(600),
+    )?;
+    if code != 0 {
+        return Err(if stderr.trim().is_empty() {
+            stdout
+        } else {
+            stderr
+        }
+        .trim()
+        .to_string());
     }
     Ok(())
 }
