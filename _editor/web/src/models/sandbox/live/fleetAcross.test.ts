@@ -139,5 +139,3 @@ describe("a box older than `next`", () => {
         release();
     });
 });
-
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));

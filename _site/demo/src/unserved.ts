@@ -38,7 +38,12 @@ export const UNSERVED = {
     "GET /children": NOT_THE_EDITORS,
     "GET /children/links": NOT_THE_EDITORS,
     "GET /children/providers": NOT_THE_EDITORS,
+    // The agent's `devices apps` and `devices runs`: what a program it started there is doing, its log, its Stop. The
+    // editor's Run dialog reads the same runs through the `runs` procedures instead.
+    "GET /devices/runs": NOT_THE_EDITORS,
     "GET /devices/tunnels": NOT_THE_EDITORS,
+    "GET /devices/{name}/apps": NOT_THE_EDITORS,
+    "GET /devices/{name}/apps/{id}/output": NOT_THE_EDITORS,
     "GET /extension/events": NOT_THE_EDITORS,
     // What an extension's own backend or process asks about itself (its settings, what moved); the editor never does.
     "GET /extension/settings": NOT_THE_EDITORS,
@@ -87,6 +92,7 @@ export const UNSERVED = {
     // The rest of the agent's `devices` command (a shell's app_start, a device port reached from the sandbox), and where
     // the device dials back with a tunnel's ticket.
     "POST /devices/{name}/apps": NOT_THE_EDITORS,
+    "POST /devices/{name}/apps/stop": NOT_THE_EDITORS,
     "POST /devices/{name}/artifacts": NOT_THE_EDITORS,
     "POST /devices/{name}/tunnels": NOT_THE_EDITORS,
     "POST /enroll": NOT_THE_EDITORS,
