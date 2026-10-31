@@ -60,7 +60,13 @@ describe(`the Test`, () => {
         await test.runProbe();
 
         expect(probe.mock.calls).toEqual([
-            [{ id: `Ops-Box`, kind: `ssh`, config: { host: `ops.acme.dev`, port: `22`, user: `ada`, auth: `key`, privateKey: `KEY` } }],
+            [
+                {
+                    id: `Ops-Box`,
+                    kind: `ssh`,
+                    config: { host: `ops.acme.dev`, port: `22`, user: `ada`, auth: `key`, privateKey: `KEY`, adminPasswordOf: `user` },
+                },
+            ],
         ]);
         expect(form.probeResult.value).toEqual({ checked: true, ok: false, message: `Permission denied (publickey).` });
         expect(test.probing.value).toBe(false);

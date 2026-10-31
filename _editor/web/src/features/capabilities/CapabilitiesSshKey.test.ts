@@ -140,7 +140,14 @@ it(`generates the key in the sandbox by default, shows the public half and the c
 
     const input = await submitted(el);
     expect(input?.kind).toBe(`ssh`);
-    expect(input?.config).toEqual({ host: `box.example.com`, port: `22`, user: `deploy`, auth: `generated`, privateKey: stashedMarker(TOKEN) });
+    expect(input?.config).toEqual({
+        host: `box.example.com`,
+        port: `22`,
+        user: `deploy`,
+        auth: `generated`,
+        privateKey: stashedMarker(TOKEN),
+        adminPasswordOf: `user`,
+    });
 });
 
 it(`refuses to save before a key exists, and says to generate one`, async () => {
@@ -164,6 +171,7 @@ it(`still takes a private key pasted by hand`, async () => {
         user: `deploy`,
         auth: `key`,
         privateKey: `-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blbg==\n-----END OPENSSH PRIVATE KEY-----`,
+        adminPasswordOf: `user`,
     });
     expect(generateSshKey).not.toHaveBeenCalled();
 });
@@ -175,7 +183,14 @@ it(`still signs in with a password`, async () => {
     await type(boxFor(el, `Password`), `s3cret`);
 
     const input = await submitted(el);
-    expect(input?.config).toEqual({ host: `box.example.com`, port: `22`, user: `deploy`, auth: `password`, password: `s3cret` });
+    expect(input?.config).toEqual({
+        host: `box.example.com`,
+        port: `22`,
+        user: `deploy`,
+        auth: `password`,
+        password: `s3cret`,
+        adminPasswordOf: `user`,
+    });
 });
 
 // Both answer the same key: a marker left behind would show up in the paste box as text, and would be sent as a key.
@@ -208,7 +223,14 @@ it(`editing a generated connection shows its public key again, and saving keeps 
     expect(buttonNamed(el, `Generate a new key`)).toBeInstanceOf(HTMLButtonElement);
 
     const input = await submitted(el);
-    expect(input?.config).toEqual({ host: `box.example.com`, port: `22`, user: `deploy`, auth: `generated`, privateKey: VAULTED });
+    expect(input?.config).toEqual({
+        host: `box.example.com`,
+        port: `22`,
+        user: `deploy`,
+        auth: `generated`,
+        privateKey: VAULTED,
+        adminPasswordOf: `user`,
+    });
     expect(generateSshKey).not.toHaveBeenCalled();
 });
 

@@ -155,7 +155,7 @@ describe(`an add`, () => {
         expect(add.mock.calls[0]?.[0]).toEqual({
             id: `Ops-Box`,
             kind: `ssh`,
-            config: { host: `ops.acme.dev`, port: `22`, user: `ada`, auth: `key`, privateKey: `KEY` },
+            config: { host: `ops.acme.dev`, port: `22`, user: `ada`, auth: `key`, privateKey: `KEY`, adminPasswordOf: `user` },
         });
         expect(useTerminalPanel().requested.value).toEqual({ name: `install-Ops-Box` });
         // Where the walk goes was decided against the queue before the add took the tile out of it.
