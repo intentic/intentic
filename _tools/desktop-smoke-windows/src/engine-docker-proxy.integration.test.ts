@@ -12,9 +12,13 @@ let proxy: Awaited<ReturnType<typeof startEngineDockerProxy>>;
 let base: string;
 let reached: string[];
 let sockets: Set<Socket>;
+let finishWait: (() => void) | undefined;
+let createdBody: string;
 
 beforeEach(async () => {
     reached = [];
+    finishWait = undefined;
+    createdBody = "";
     sockets = new Set();
     upstream = createServer((incoming, outgoing) => {
         const path = incoming.url ?? "";
@@ -24,6 +28,13 @@ beforeEach(async () => {
             outgoing.end(JSON.stringify([
                 { Id: fixtureId, Names: [`/${fixture}`] }, { Id: legacyId, Names: [`/${legacy}`] },
             ]));
+        } else if (path.includes("/wait?")) {
+            outgoing.writeHead(200);
+            outgoing.flushHeaders();
+            finishWait = () => outgoing.end(JSON.stringify({ StatusCode: 0 }));
+        } else if (path.endsWith("/containers/create")) {
+            incoming.on("data", (chunk: Buffer) => { createdBody += chunk.toString(); });
+            incoming.on("end", () => outgoing.writeHead(201).end(JSON.stringify({ Id: fixtureId })));
         } else if (path.endsWith("/exec")) { outgoing.writeHead(201).end(JSON.stringify({ Id: execId })); }
         else { outgoing.end(JSON.stringify({ Id: fixtureId })); }
     });
@@ -72,7 +83,7 @@ test("direct requests cannot inspect, stop, rename, remove or commit another san
 test("a fixture's parked name and anonymous volume helper remain usable, while unknown exec IDs are refused", async () => {
     expect((await fetch(`${base}/v1.45/containers/${fixture}/rename?name=${fixture}.moved`, { method: "POST" })).status).toBe(200);
     expect((await fetch(`${base}/v1.45/containers/${fixture}.moved/json`)).status).toBe(200);
-    expect((await fetch(`${base}/v1.45/containers/create`, { method: "POST", body: "{}" })).status).toBe(200);
+    expect((await fetch(`${base}/v1.45/containers/create`, { method: "POST", body: "{}" })).status).toBe(201);
     expect((await fetch(`${base}/v1.45/exec/${legacyId}/start`, { method: "POST" })).status).toBe(403);
 });
 
@@ -102,4 +113,23 @@ test("docker exec forwards the upgraded byte stream only for an exec created on 
     });
     expect(echoed).toBe(body);
     expect(reached).toEqual([`/v1.45/containers/${fixture}/exec`, `/v1.45/exec/${execId}/start`]);
+});
+
+test("Docker receives wait headers before the container has exited", async () => {
+    const response = await fetch(`${base}/v1.45/containers/${fixture}/wait?condition=removed`, {
+        method: "POST", signal: AbortSignal.timeout(5_000),
+    });
+    expect(response.status).toBe(200);
+    finishWait?.();
+    expect(await response.json()).toEqual({ StatusCode: 0 });
+});
+
+test("container creation preserves the JSON request body", async () => {
+    const body = JSON.stringify({ Image: "sandbox", HostConfig: { Binds: ["workspace:/work"] } });
+    const response = await fetch(`${base}/v1.45/containers/create`, {
+        method: "POST", headers: { "content-type": "application/json" }, body,
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({ Id: fixtureId });
+    expect(createdBody).toBe(body);
 });
