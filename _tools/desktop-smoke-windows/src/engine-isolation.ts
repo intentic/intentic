@@ -38,8 +38,8 @@ export const engineIsolationOf = (containers: readonly Container[], root: string
 };
 
 /** Read stopped containers too: their keys must survive cleanup even while nothing is running. Throws on uncertainty. */
-export const readEngineIsolation = async (root: string): Promise<ReturnType<typeof engineIsolationOf>> => {
-    const listed = await run(`docker`, [`ps`, `-aq`], { timeoutMs: 30_000 });
+export const readEngineIsolation = async (root: string, env: Record<string, string> = {}): Promise<ReturnType<typeof engineIsolationOf>> => {
+    const listed = await run(`docker`, [`ps`, `-aq`], { env, timeoutMs: 30_000 });
     if (listed.code !== 0) {
         throw new Error(`could not check which containers use the engine tier's ${STATE_DIR} home: ${listed.stderr}`);
     }
@@ -49,7 +49,7 @@ export const readEngineIsolation = async (root: string): Promise<ReturnType<type
     }
     // Read only the keeper's platform out of Config.Env, never credentials held beside it.
     const format = `{{$platform := ""}}{{range .Config.Env}}{{if eq (index (split . "=") 0) "HOST_PLATFORM"}}{{$platform = index (split . "=") 1}}{{end}}{{end}}{"Name":{{json .Name}},"Mounts":{{json .Mounts}},"HostPlatform":{{json $platform}}}`;
-    const inspected = await run(`docker`, [`inspect`, `--format`, format, ...ids], { timeoutMs: 30_000 });
+    const inspected = await run(`docker`, [`inspect`, `--format`, format, ...ids], { env, timeoutMs: 30_000 });
     if (inspected.code !== 0) {
         throw new Error(`could not read the engine tier's isolation boundary: ${inspected.stderr}`);
     }
