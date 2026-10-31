@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DaemonClient, GatewayCtx } from "@intentic/connector-runtime";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Connection } from "../google/accounts.js";
 import type { Session } from "../google/session.js";
 import { startWatcher } from "./poller.js";
@@ -57,12 +58,13 @@ test("a mail poll slower than its interval is never overlapped by the next tick"
     const watcher = startWatcher(ctx, connection, session, () => {}, { mailIntervalMs: 5, calendarIntervalMs: 3_600_000 });
     try {
         // Twenty intervals pass while the first history call hangs: each tick joins it instead of starting another.
+        await waitFor(() => expect(historyCalls).toBe(1), SETTLES);
         await new Promise((resolve) => setTimeout(resolve, 100));
         expect(historyCalls).toBe(1);
         releaseHistory(json({ history: [], historyId: "101" }));
-        // Once it settles, the next tick polls again.
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        expect(historyCalls).toBe(2);
+        // Once it settles, the next tick polls again. Waited for rather than slept on: a loaded CI runner took
+        // longer than a fixed 50 ms to run the tick (run 41212535094).
+        await waitFor(() => expect(historyCalls).toBe(2), SETTLES);
     } finally {
         watcher.stop();
         releaseHistory(json({ history: [], historyId: "102" }));

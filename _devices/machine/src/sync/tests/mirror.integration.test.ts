@@ -8,7 +8,7 @@ import { pidFileBody } from "@intentic/local-agent";
 import { WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { unstubbed } from "@intentic/testing";
-import { stubGlobal } from "@intentic/testing/bun";
+import { SETTLES, stubGlobal, waitFor } from "@intentic/testing/bun";
 import type { MirroredPort, Pairing, SkippedPort } from "../config.js";
 import type { ForwardExecutor, LocalHolds } from "../mirror.js";
 
@@ -797,17 +797,17 @@ describe("the sync loop's heartbeat", () => {
     it("stamps as the loop moves, at most once per beat, and goes when the loop ends on purpose", async () => {
         let now = 1_000_000;
         const heartbeat = createHeartbeat(() => now);
+        // A stamp the beat owes is waited for, not slept on: the atomic write outlasted a fixed 50 ms on a loaded
+        // CI runner (run 41212535094). Only the beat it must NOT write is judged after a plain settle.
         heartbeat.moved();
-        await settle();
-        expect(await stamped()).toBe("1000000");
+        await waitFor(async () => expect(await stamped()).toBe("1000000"), SETTLES);
         now += 1_000;
         heartbeat.moved();
         await settle();
         expect(await stamped()).toBe("1000000");
         now += 5_000;
         heartbeat.moved();
-        await settle();
-        expect(await stamped()).toBe("1006000");
+        await waitFor(async () => expect(await stamped()).toBe("1006000"), SETTLES);
         await stopHeartbeat();
         expect(await stamped()).toBeUndefined();
         // Nothing there to remove is no failure.
