@@ -90,7 +90,7 @@ const startHere = (): void => {
     <button
         ref="anchor"
         type="button"
-        :class="ui.chip({ on: !shared && !broken }, `shrink-0`, broken && toneWash(`warning`))"
+        :class="ui.chip({ on: !shared && !broken, size: `sm` }, `shrink-0`, broken && toneWash(`warning`))"
         aria-haspopup="listbox"
         :aria-expanded="open"
         :aria-label="ariaLabel"
