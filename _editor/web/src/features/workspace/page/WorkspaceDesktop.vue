@@ -308,6 +308,9 @@ const runDirs = computed(() => {
     return counts;
 });
 
+// The workspace root's own count, for the toolbar's ▷: the root has no row to carry it.
+const rootRuns = computed(() => runDirs.value.get(`root`) ?? 0);
+
 // What each directory row offers beside its name (documents, personas, checks, management). Composed here, where the
 // openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
@@ -767,6 +770,18 @@ const homeTooltip = computed((): Tip => ({
                             @click="openHealth('root')"
                         >
                             <Icon name="wave-pulse" class="text-xs" />
+                        </button>
+                        <!-- Running the root's own project: root is a repo with no tree row, so its ▷ lives here, shown once its
+                             .intentic/run.json or its own files (a Procfile, a dev script) give it something to run. -->
+                        <button
+                            v-if="rootRuns > 0"
+                            type="button"
+                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
+                            v-tooltip.bottom="t(`workspace.workspaceDesktop.runWorkspace`)"
+                            :aria-label="t(`workspace.workspaceDesktop.runWorkspace`)"
+                            @click="openRunDialog('root')"
+                        >
+                            <Icon name="play" class="text-xs" />
                         </button>
                         <!-- Collapse every open folder; tree scope only, inert while a filter forces matches open or nothing is open. -->
                         <button

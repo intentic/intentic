@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { DEVICE_FEATURE_PROGRAMS, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import { RUN_TARGETS_FILE, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
@@ -8,7 +7,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { createTerminalRunner, type TerminalRunner } from "../terminal/terminal-run.js";
-import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { discoverRepos, ROOT_REPO, repoDirOf } from "../workspace/layout/repo-discovery.js";
 import { readRunFile } from "../workspace/layout/run-file.js";
 
 // THE EDITOR'S "RUN ON <DEVICE>" (contracts/runs.contract.ts). A repository's targets are read off its own
@@ -18,10 +17,8 @@ import { readRunFile } from "../workspace/layout/run-file.js";
 
 type RunsServices = Pick<Services, "capabilities" | "hostHub" | "runGrants" | "workspace" | "logger">;
 
-const repoDir = (root: string, repo: string): string => (repo === "root" ? root : join(root, repo));
-
 export const readRunTargets = async (root: string): Promise<RunTargetsList["repos"]> => {
-    const repos = ["root", ...(await discoverRepos(root))];
+    const repos = [ROOT_REPO, ...(await discoverRepos(root))];
     const read = await Promise.all(repos.map((repo) => readRunFile(root, repo)));
     return read.filter((entry) => entry !== undefined);
 };
@@ -76,7 +73,7 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             const started = new Promise<void>((done) => {
                 void runner
                     .tryRun(session, command, {
-                        cwd: repoDir(services.workspace.root, input.repo),
+                        cwd: repoDirOf(services.workspace.root, input.repo),
                         window: input.target,
                         env: { INTENTIC_RUN_GRANT: grant },
                         onStarted: done,

@@ -37,6 +37,12 @@ connected computer, then each target is one row with one Run.
 Write a target whenever the owner should be able to run something with one press. Once the file has a sandbox target,
 Browsers shows those targets instead of the repository's own Start.
 
+A project kept at the workspace root itself (`/work` is its repository, with no repository folder around it) keeps its
+file at `/work/.intentic/run.json`, beside the sandbox's own state. Its commands run from `/work`. The editor calls that
+repository `root`: its ▷ is on the Files toolbar, since the root has no row in the tree, and its targets show in Browsers
+as `root--<name>`. The root repository tracks this one file, so an agent's edit lands like code. Don't move the file
+into a subfolder: a folder that isn't a repository of its own is never offered a Run.
+
 ## What Start finds without one
 
 With no sandbox target in `.intentic/run.json`, the repository's own Start runs the first of these it has (the daemon's `/opt/sandbox/dist/panels/run-plan.js`, in every sandbox;

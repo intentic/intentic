@@ -3,7 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { convergedExclude, projectExcludes, syncProjectExcludes } from "./git-layout.js";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
+import { STATE_DIR } from "@intentic/constants";
+import { convergedExclude, projectExcludes, rootExcludes, syncProjectExcludes } from "./git-layout.js";
 
 const NOTE = "# intentic: heavy dependency dirs excluded by default to keep the Changes panel fast.";
 
@@ -29,6 +31,17 @@ const tempWorkspace = async (): Promise<{ root: string; repo: string }> => {
     await sh(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
     return { root, repo };
 };
+
+test("the root repo tracks a root project's run targets but none of the sandbox's own state beside them", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-root-"));
+    tempDirs.push(root);
+    await sh(root, "init", "-q", "--initial-branch=main");
+    await writeFile(join(root, ".git", "info", "exclude"), `${rootExcludes([]).join("\n")}\n`);
+    await mkdir(join(root, STATE_DIR, "local"), { recursive: true });
+    await writeFile(join(root, RUN_TARGETS_FILE), `{"targets":[{"name":"play","command":"cargo run"}]}\n`);
+    await writeFile(join(root, STATE_DIR, "local", "cache.json"), "{}\n");
+    expect(await sh(root, "status", "--porcelain", "--untracked-files=all")).toBe(`?? ${RUN_TARGETS_FILE}`);
+});
 
 test("projectExcludes returns an any-depth directory pattern for the IGNORED_DIRS entries no project versions", () => {
     const excludes = projectExcludes();

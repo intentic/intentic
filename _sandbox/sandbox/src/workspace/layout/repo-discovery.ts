@@ -17,6 +17,12 @@ const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_DEPTH = 4;
 const MAX_DIRS = 10_000;
 
+// The wire {repo} id of the workspace's own repository, the one whose files sit at the workspace root.
+export const ROOT_REPO = "root";
+
+// Where a wire {repo} id's files are: the workspace root for ROOT_REPO, the folder of that name for every other.
+export const repoDirOf = (root: string, repo: string): string => (repo === ROOT_REPO ? root : join(root, repo));
+
 // A top-level name for a daemon-created repo (clone, monorepo capability); reserved names stay unclaimable.
 export const isValidRepoName = (name: string): boolean => SEGMENT.test(name) && !RESERVED.has(name);
 

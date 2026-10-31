@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { RUN_TARGETS_FILE, type RepoRunTargets, RunTargetsFileSchema, type RunTarget } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { AppPreview } from "./app-previews.js";
+import { ROOT_REPO, repoDirOf } from "./repo-discovery.js";
 
 /* A REPOSITORY'S `.intentic/run.json`, read the one way every reader takes it: the Run dialog's list (runs.targets), a
    run on a computer (runs.start), and the targets that run in the sandbox, which are served as the repository's apps
    (`<repo>--<target>`, each with its own preview address, Start and Stop). Read fresh every time: a commit or an agent
    can change the file between two reads. */
 
-// `root` is the workspace's own repository, whose file sits at the workspace root.
-const repoDir = (root: string, repo: string): string => (repo === "root" ? root : join(root, repo));
-const filePath = (repo: string): string => (repo === "root" ? RUN_TARGETS_FILE : `${repo}/${RUN_TARGETS_FILE}`);
+// The workspace's own repository (ROOT_REPO) keeps its file at the workspace root.
+const filePath = (repo: string): string => (repo === ROOT_REPO ? RUN_TARGETS_FILE : `${repo}/${RUN_TARGETS_FILE}`);
 
 const parsed = (repo: string, text: string): RepoRunTargets => {
     try {
@@ -26,7 +26,7 @@ const parsed = (repo: string, text: string): RepoRunTargets => {
 export const readRunFile = async (root: string, repo: string): Promise<RepoRunTargets | undefined> => {
     let text: string | undefined;
     try {
-        text = await readFile(join(repoDir(root, repo), RUN_TARGETS_FILE), "utf8").catch(undefinedIfMissing);
+        text = await readFile(join(repoDirOf(root, repo), RUN_TARGETS_FILE), "utf8").catch(undefinedIfMissing);
     } catch (error) {
         return { repo, path: filePath(repo), targets: [], error: `the file could not be read (${errnoCode(error) ?? errorMessage(error)})` };
     }

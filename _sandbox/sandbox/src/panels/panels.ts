@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import type { ProgramWindow } from "../desktop/program-windows.js";
 import type { ListeningPort } from "../ports/port-scan.js";
-import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { discoverRepos, ROOT_REPO, repoDirOf } from "../workspace/layout/repo-discovery.js";
+import { sandboxTargetsAt } from "../workspace/layout/run-file.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { type RunPlan, runPlanOf } from "./run-plan.js";
 
@@ -22,17 +23,22 @@ export const panelKey = (id: string): string | undefined => {
     return /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(key) ? key : undefined;
 };
 
-// Every repo in the workspace, sorted, each with what Start would run for it.
+// Every repo in the workspace, sorted, each with what Start would run for it. The workspace's own repository (ROOT_REPO)
+// leads the list only when it has something to run, a project kept at the workspace root: a Procfile or the like, or a
+// target its .intentic/run.json runs in the sandbox. Every other workspace root is a folder of repositories, nothing to
+// offer a Start for.
 export const discoverPanels = async (workspace: WorkspacePaths): Promise<DiscoveredPanel[]> => {
     const repos = await discoverRepos(workspace.root);
-    return Promise.all(repos.map(async (repo) => ({ repo, plan: await runPlanOf(join(workspace.root, repo)) })));
+    const [rootPlan, ...plans] = await Promise.all([workspace.root, ...repos.map((repo) => join(workspace.root, repo))].map(runPlanOf));
+    const found = repos.map((repo, index) => ({ repo, plan: plans[index] }));
+    return rootPlan !== undefined || sandboxTargetsAt(workspace.root).length > 0 ? [{ repo: ROOT_REPO, plan: rootPlan }, ...found] : found;
 };
 
 // The repo a directory belongs to: the most specific one holding it, so a repo nested in another claims its own files.
 // Undefined outside every repo.
 const repoOfDir = (workspaceRoot: string, repos: readonly string[]): ((cwd: string) => string | undefined) => {
     // Longest dir first, so the first match is the most specific repo rather than whichever came back first.
-    const dirs = repos.map((repo) => ({ repo, dir: join(workspaceRoot, repo) })).toSorted((a, b) => b.dir.length - a.dir.length);
+    const dirs = repos.map((repo) => ({ repo, dir: repoDirOf(workspaceRoot, repo) })).toSorted((a, b) => b.dir.length - a.dir.length);
     return (cwd) => dirs.find(({ dir }) => cwd === dir || cwd.startsWith(`${dir}/`))?.repo;
 };
 
@@ -76,7 +82,7 @@ export const windowsByRepo = (
 // Which package inside the repo bound a listener (e.g. `_editor/web`), the one thing telling several dev servers apart;
 // undefined at the repo root or with no readable cwd.
 export const listenerDir = (listener: ListeningPort, workspaceRoot: string, repo: string): string | undefined => {
-    const root = join(workspaceRoot, repo);
+    const root = repoDirOf(workspaceRoot, repo);
     return listener.cwd === undefined || listener.cwd === root ? undefined : listener.cwd.slice(root.length + 1);
 };
 

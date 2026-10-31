@@ -1,5 +1,6 @@
 import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
+import { ROOT_PROJECT_PATHS } from "../schemas/run-targets.js";
 import type { StateFile } from "./state-portability.js";
 
 // Declares which workspace file backs which browser view, imported by both the daemon (builds store paths from
@@ -539,10 +540,9 @@ const STATE_FILES = [
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
 
-// Entries the root repo tracks, in declaration order; history.ts turns this into the negations that carve them out
-// of the wholesale `.intentic` exclusion. Derived here rather than duplicated beside the git rule, so marking an
-// entry `versioned` is the only change needed.
-export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
+// Entries the root repo tracks, which history.ts carves out of the `.intentic` exclusion; a root project's run targets too.
+const versionedFiles = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
+export const VERSIONED_STATE_PATHS: readonly string[] = [...versionedFiles, ...ROOT_PROJECT_PATHS];
 
 // What a workspace search may surface: `versioned` config plus `authored` content (approvals, staged docs,
 // workspace extensions). Everything else under `.intentic` is machine state, denied by default. `auth/`, where

@@ -22,7 +22,7 @@ import { readModules } from "./deps/modules.js";
 import { readWorkspaceManifests } from "./deps/package-graph.js";
 import { readPackageModules } from "./deps/package-modules.js";
 import { readUsedPackageGraph } from "./deps/package-usage.js";
-import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-discovery.js";
+import { discoverRepos, isValidRepoId, isValidRepoName, ROOT_REPO } from "./layout/repo-discovery.js";
 import { resolveReference } from "./files/resolve-reference.js";
 import { createCheckoutOverlays, NO_OVERLAY, overlaidView } from "./files/checkout-overlay.js";
 import { type IsolatedAgent, isIsolated, type RepoRecord } from "../conversations/registry/agents-store.js";
@@ -124,6 +124,16 @@ export const createWorkspaceRoutes = (services: Services) => {
         }
         refuseFenced(await fenceFor(context), repo);
         return repo;
+    };
+    // The same for the routes that run a repository's apps, which also take the workspace's own repository (ROOT_REPO):
+    // a project kept at the workspace root declares its targets in /work/.intentic/run.json. Answers where its files are.
+    const runnableRepoOf = async (context: OrpcContext, repo: string): Promise<{ readonly repo: string; readonly dir: string }> => {
+        if (repo === ROOT_REPO) {
+            refuseFenced(await fenceFor(context), "");
+            return { repo, dir: services.workspace.root };
+        }
+        const named = await monorepoOf(context, repo);
+        return { repo: named, dir: join(services.workspace.root, named) };
     };
     // Every file write below ends here: history hears of it, and the resident tree is asked to re-list what it touched
     // as the write is answered rather than after the watcher's next batch, so the delta confirming it follows at once.
@@ -402,8 +412,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // preview's targets: the targets its .intentic/run.json runs in the sandbox, then `_apps/`'s scaffolded instances
         // and dev-server packages.
         appsList: i.appsList.handler(async ({ input, context }) => {
-            const repo = await monorepoOf(context, input.repo);
-            const repoDir = join(services.workspace.root, repo);
+            const { repo, dir: repoDir } = await runnableRepoOf(context, input.repo);
             const manifest = await loadManifest(services);
             // Apps install at their monorepo's root, so one read of node_modules answers for every row.
             const installed = existsSync(join(repoDir, "node_modules"));
@@ -446,8 +455,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Starts one app instance's dev server: its own process, port and preview-<repo>--<app>-<id>.<zone> host.
         startApp: i.startApp.handler(async ({ input, context }) => {
-            const repo = await monorepoOf(context, input.repo);
-            const repoDir = join(services.workspace.root, repo);
+            const { repo, dir: repoDir } = await runnableRepoOf(context, input.repo);
             const manifest = await loadManifest(services);
             const found = repoApps(repoDir, manifest, runFileApps(repoDir)).find(({ app }) => app === input.app);
             if (found === undefined) {
@@ -460,7 +468,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         stopApp: i.stopApp.handler(async ({ input, context }) => {
-            const repo = await monorepoOf(context, input.repo);
+            const { repo } = await runnableRepoOf(context, input.repo);
             services.processes.stop(appPanelKey(repo, input.app));
             return { ok: true } as const;
         }),

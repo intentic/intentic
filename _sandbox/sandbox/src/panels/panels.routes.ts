@@ -18,6 +18,7 @@ import { panelSession } from "@intentic/sandbox-contract/session-names";
 import { publicAddressOf } from "../env.config.js";
 import { testRunnerOf } from "../workspace/layout/test-runner.js";
 import { sandboxTargetsAt } from "../workspace/layout/run-file.js";
+import { ROOT_REPO, repoDirOf } from "../workspace/layout/repo-discovery.js";
 
 // Per-repository panel routes. `list` reports each repo's runtime status and the content facts extensions detect on
 // (role, marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
@@ -85,6 +86,16 @@ const contentFacts = (dir: string) => ({
     docs: existsSync(join(dir, ARCHITECTURE_DIR)),
 });
 
+const NO_CONTENT: ReturnType<typeof contentFacts> = {
+    deployConfig: false,
+    desiredState: false,
+    directoryUi: false,
+    monorepo: false,
+    tests: false,
+    userStories: false,
+    docs: false,
+};
+
 // The summary's fields that apply only sometimes, each one there only when it does; optional on the wire.
 const presentFacts = (facts: {
     readonly repo: string;
@@ -130,12 +141,12 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWi
             const repos = discovered.map(({ repo }) => repo);
             const attributed = listenersByRepo(listeners, services.workspace.root, repos);
             const windowsOf = windowsByRepo(windows, services.workspace.root, repos);
-            const dirs = discovered.map(({ repo }) => join(services.workspace.root, repo));
+            const dirs = discovered.map(({ repo }) => repoDirOf(services.workspace.root, repo));
             const panels = await Promise.all(
                 discovered.map(async ({ repo, plan }) => {
                     const key = panelKey(repo);
                     const port = key !== undefined ? services.processes.portOf(key) : undefined;
-                    const dir = join(services.workspace.root, repo);
+                    const dir = repoDirOf(services.workspace.root, repo);
                     // The panel the daemon runs, if any: its assigned port and the terminal the daemon put it in.
                     const panel = key !== undefined && port !== undefined ? { port, session: panelSession(key) } : undefined;
                     // Passed alongside the URL: forwarding needs the port number, not a localhost address, when several
@@ -168,7 +179,9 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWi
                             servers,
                             // Nothing runnable means nothing to install for.
                             installed: plan?.installed ?? true,
-                            ...contentFacts(dir),
+                            // The workspace root is listed to be run, never as a folder extensions act on: their routes
+                            // name a repository's folder, which the root has none of.
+                            ...(repo === ROOT_REPO ? NO_CONTENT : contentFacts(dir)),
                         },
                         presentFacts({ repo, plan, opened, launch, port, url }),
                         // Its run.json's sandbox targets are its apps; said only when it has some.

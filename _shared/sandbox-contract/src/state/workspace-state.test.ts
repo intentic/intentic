@@ -1,5 +1,6 @@
 import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
+import { ROOT_PROJECT_PATHS } from "../schemas/run-targets.js";
 import {
     BACKED_UP_STATE_PATHS,
     isLockedWorkspacePath,
@@ -412,6 +413,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/templates.json`,
             `${STATE_DIR}/config/workflows.json`,
             `${STATE_DIR}/config/workspace-extensions/`,
+            // A project kept at the workspace root declares its run targets here, as any repository does in its own
+            // `.intentic/`: the project's file, not the sandbox's, landed and committed like code.
+            `${STATE_DIR}/run.json`,
         ]);
     });
 
@@ -463,7 +467,8 @@ describe(`state groups`, () => {
     it(`agrees with the two lists that were derived before it`, () => {
         // The git exclude reads versioned; the search floor reads versioned||authored. Both must land inside config.
         const written = stateGroupPaths(`config`);
-        for (const path of VERSIONED_STATE_PATHS) {
+        // Less a root project's run targets: tracked, but the project's own file rather than any of the sandbox's state.
+        for (const path of VERSIONED_STATE_PATHS.filter((tracked) => !ROOT_PROJECT_PATHS.includes(tracked))) {
             expect([path, written.includes(path)]).toEqual([path, true]);
         }
         expect(SEARCHABLE_STATE_PATHS.toSorted()).toEqual(written.toSorted());

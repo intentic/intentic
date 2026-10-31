@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, windowsByRepo } from "./panels.js";
@@ -77,6 +78,31 @@ test("a repo is a panel when its ROOT has a dev script (a scaffolded app is its 
     const plans = new Map((await discoverPanels(workspace)).map(({ repo, plan }) => [repo, plan]));
     expect(plans.get("shop")?.cwd).toBe(join(workspace.root, "shop"));
     expect(plans.get("notes")).toBeUndefined();
+});
+
+test("the workspace root leads the list only when it has something to run: a Procfile, or a sandbox target in run.json", async () => {
+    const workspace = setup([{ name: "app", devScript: true }]);
+    expect((await discoverPanels(workspace)).map(({ repo }) => repo)).toEqual(["app"]);
+
+    writeFileSync(join(workspace.root, "Procfile"), "game: cargo run\n");
+    const [first] = await discoverPanels(workspace);
+    expect(first?.repo).toBe("root");
+    expect(first?.plan?.cwd).toBe(workspace.root);
+
+    const declared = setup([]);
+    mkdirSync(join(declared.root, STATE_DIR));
+    writeFileSync(join(declared.root, RUN_TARGETS_FILE), JSON.stringify({ targets: [{ name: "play", command: "cargo run" }] }));
+    expect(await runnable(declared)).toEqual([{ repo: "root", hasPanel: false }]);
+});
+
+test("a server the root project started is the root's, unless a repo inside it is nearer", () => {
+    const found = listenersByRepo([listener(7878, `${WORKSPACE_ROOT}/integra`), listener(5173, `${WORKSPACE_ROOT}/web`)], WORKSPACE_ROOT, [
+        "root",
+        "web",
+    ]);
+    expect(found.get("root")?.map(({ port }) => port)).toEqual([7878]);
+    expect(found.get("web")?.map(({ port }) => port)).toEqual([5173]);
+    expect(listenerDir(listener(7878, `${WORKSPACE_ROOT}/integra`), WORKSPACE_ROOT, "root")).toBe("integra");
 });
 
 test("operator/ is preferred over the repo root when both are runnable", async () => {

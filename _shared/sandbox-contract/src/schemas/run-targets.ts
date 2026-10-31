@@ -14,6 +14,11 @@ import { ArtifactNameSchema } from "./device-artifacts.js";
 
 export const RUN_TARGETS_FILE = `${STATE_DIR}/run.json`;
 
+// The files under the workspace root's `.intentic/` that are the project's rather than the sandbox's, which no store of
+// the daemon's owns: a project kept at the workspace root declares its targets there, as any repository does in its own.
+// The root repo tracks them (VERSIONED_STATE_PATHS in state/workspace-state.ts), so an agent's edit lands like code.
+export const ROOT_PROJECT_PATHS: readonly string[] = [RUN_TARGETS_FILE];
+
 const RepoPathSchema = z
     .string()
     .min(1)
