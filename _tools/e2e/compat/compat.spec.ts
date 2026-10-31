@@ -157,8 +157,9 @@ const signIn = async (context: BrowserContext, person: Person): Promise<Page> =>
 // spared is the exchange (`POST /system/session`), which a daemon that verifies nobody refuses, and which the sign-in
 // tier and the daemon's own suites cover. Far enough out that the editor never asks to renew it.
 const SESSION_DAYS = 30;
-const keepSandboxSession = async (context: BrowserContext, person: Person): Promise<void> => {
-    await context.addInitScript(
+const keepSandboxSession = async (page: Page, person: Person): Promise<void> => {
+    // All visits share this origin's storage. Seed it here, where storage is available, rather than in each blank tab.
+    await page.evaluate(
         ({ key, session }) => localStorage.setItem(key, JSON.stringify(session)),
         { key: `intentic.session.${SANDBOX_ID}`, session: { token: `compat`, expiresAt: Date.now() + SESSION_DAYS * 86_400_000, email: person.email } },
     );
@@ -168,10 +169,12 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
     const daemon = daemonUnderTest();
     test.info().annotations.push({ type: `daemon`, description: `${daemon.version} at ${daemon.url}` });
     const person = newPerson(`compat`);
-    const context = await browser.newContext({ locale: `en-US`, viewport: { width: 1280, height: 800 } });
+    // Each visit must load this build from the server. The offline worker can intercept startup chunks (and bypass
+    // Playwright's Google routes); its cache is outside the editor/daemon compatibility this tier measures.
+    const context = await browser.newContext({ locale: `en-US`, viewport: { width: 1280, height: 800 }, serviceWorkers: `block` });
     const signInPage = await signIn(context, person);
     await giveSandbox(person, daemon);
-    await keepSandboxSession(context, person);
+    await keepSandboxSession(signInPage, person);
     await signInPage.close();
 
     const visits: Watch[] = [];
