@@ -65,15 +65,18 @@ const repoManifests = (dir = repoRoot(import.meta.url), depth = 4): string[] => 
     });
 };
 
+// The checkout walk is shared by all assertions. Discover once during module loading, outside assertion budgets.
+const manifests = repoManifests();
+
 test(`the walk finds the manifests at all`, () => {
     // An empty result would pass the two checks below trivially; assert the walk actually found manifests.
-    expect(repoManifests().length).toBeGreaterThan(20);
+    expect(manifests.length).toBeGreaterThan(20);
 });
 
 test(`every manifest in the repo points at the published schema`, () => {
     // $schema must be the published URL, not a relative path: manifests get copied (e.g. the seed template) into repos
     // where a relative path resolves to nothing.
-    const missing = repoManifests().filter((file) => {
+    const missing = manifests.filter((file) => {
         const manifest: { $schema?: string } = JSON.parse(readFileSync(file, `utf8`));
         return manifest.$schema !== MANIFEST_SCHEMA_URL;
     });
@@ -83,7 +86,7 @@ test(`every manifest in the repo points at the published schema`, () => {
 test(`no manifest in the repo has a key the schema drops`, () => {
     // zod silently strips keys it doesn't declare, so a misspelt or renamed field parses fine and does nothing.
     // Round-tripping (parse, compare against raw bytes) surfaces anything the schema quietly dropped.
-    for (const file of repoManifests()) {
+    for (const file of manifests) {
         const raw: unknown = JSON.parse(readFileSync(file, `utf8`));
         expect<unknown>(ExtensionManifestSchema.parse(raw), `${file} declares something the manifest schema does not`).toEqual(raw);
     }

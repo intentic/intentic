@@ -1,4 +1,4 @@
-import { opendir, readFile, stat } from "node:fs/promises";
+import { opendir, readFile } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
@@ -122,24 +122,19 @@ const lockedVersionsOf = (text: string): LockedVersions => {
     return importers;
 };
 
-// Keyed by the lockfile's size and mtime: it changes a few times a day and is read on every status check.
-const lockCache = new Map<string, { readonly stamp: string; readonly versions: LockedVersions }>();
+// Reuse the parsed importer table when the bytes agree. Same-size rewrites can share a filesystem timestamp.
+const lockCache = new Map<string, { readonly text: string; readonly versions: LockedVersions }>();
 
 const lockedVersions = async (projectDir: string): Promise<LockedVersions> => {
     const lockfile = join(projectDir, "pnpm-lock.yaml");
-    const stats = await stat(lockfile).catch(() => undefined);
-    if (stats === undefined) {
-        return new Map();
-    }
-    const stamp = `${stats.size}:${stats.mtimeMs}`;
-    const cached = lockCache.get(lockfile);
-    if (cached?.stamp === stamp) {
-        return cached.versions;
-    }
-    // Removed since the stat: nothing to cache. Any other read failure propagates, never cached as "no versions".
+    // Missing says nothing about versions; other failures propagate rather than being cached as no dependencies.
     const text = await readFile(lockfile, "utf8").catch(undefinedIfMissing);
     if (text === undefined) {
         return new Map();
+    }
+    const cached = lockCache.get(lockfile);
+    if (cached?.text === text) {
+        return cached.versions;
     }
     let versions: LockedVersions;
     try {
@@ -151,7 +146,7 @@ const lockedVersions = async (projectDir: string): Promise<LockedVersions> => {
         }
         versions = new Map();
     }
-    lockCache.set(lockfile, { stamp, versions });
+    lockCache.set(lockfile, { text, versions });
     return versions;
 };
 

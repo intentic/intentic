@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { modulesNear, outdatedDependencies, outdatedSummary, unresolvedDependencies, unresolvedSummary } from "./dependency-drift.js";
@@ -218,13 +218,16 @@ test("no lockfile, or one mid-merge, makes no version claim", async () => {
     expect(await outdatedDependencies(root)).toEqual([]);
 });
 
-// A rewritten lockfile is read again, not served from the cache the previous version filled.
+// A same-size rewrite with the same timestamp still invalidates the parsed lockfile cache.
 test("a lockfile rewritten after a read is read again", async () => {
     const root = await project();
+    const timestamp = new Date("2026-01-01T00:00:00Z");
     await write(root, "pnpm-lock.yaml", LOCKFILE);
+    await utimes(join(root, "pnpm-lock.yaml"), timestamp, timestamp);
     await installedAt(root, "packages/api", "@openai/codex-sdk", "0.156.1");
     expect(await outdatedDependencies(root)).toEqual([]);
     await write(root, "pnpm-lock.yaml", LOCKFILE.replaceAll("0.156.1", "0.157.0"));
+    await utimes(join(root, "pnpm-lock.yaml"), timestamp, timestamp);
     expect(await outdatedDependencies(root)).toEqual([{ dir: "packages/api", name: "@openai/codex-sdk", installed: "0.156.1", locked: "0.157.0" }]);
 });
 

@@ -12,7 +12,7 @@ flowchart LR
 
 - `seed/` is a complete standalone project with its own `package.json` and `pnpm-workspace.yaml`. It is not a
   workspace package here, so this monorepo never installs, builds or tests it.
-- The monorepo still reads it: `_editor/web`'s `manifest-schema.test.ts` validates its manifest against the current
+- The monorepo still reads it: `_editor/web`'s `manifest-schema.integration.test.ts` validates its manifest against the current
   schema, and the `vue-templates` and `contract-paths` checks hold its source to the same rules as the app's.
 - Its links are written for the copy, so the `md-links` check skips them. [seed/README.md](seed/README.md) is
   written for the extension author.
