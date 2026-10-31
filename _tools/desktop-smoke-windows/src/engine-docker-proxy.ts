@@ -62,6 +62,8 @@ const transfer = (boundary: Boundary, path: string, upstream: IncomingMessage, d
     const capture = upstream.statusCode === 200 || upstream.statusCode === 201;
     if (!capture || !/(?:\/containers\/json|\/containers\/create|\/containers\/[^/]+\/(?:json|exec))$/.test(path)) {
         downstream.writeHead(upstream.statusCode ?? 502, upstream.headers);
+        // Docker waits for these headers before starting an attached container; the body arrives after it exits.
+        downstream.flushHeaders();
         upstream.pipe(downstream);
         return;
     }
@@ -94,7 +96,15 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
             transfer(boundary, url.pathname, response, outgoing);
         });
         forwarded.on("error", () => outgoing.writeHead(502).end("Docker Desktop did not answer"));
-        incoming.pipe(forwarded);
+        if (incoming.headers["content-type"]?.startsWith("application/json")) {
+            // Docker Desktop's Windows pipe rejects a create body streamed separately from its HTTP headers.
+            // Metadata is small; send it with end(body), while archives and other bulk streams keep piping.
+            const chunks: Buffer[] = [];
+            incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+            incoming.on("end", () => forwarded.end(Buffer.concat(chunks)));
+        } else {
+            incoming.pipe(forwarded);
+        }
     });
     // docker exec/attach use an HTTP upgrade for their byte stream. Enforce the same container/exec boundary first.
     server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
