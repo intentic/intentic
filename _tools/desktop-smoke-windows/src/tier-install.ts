@@ -82,11 +82,14 @@ const DUPLICATE_SETTLE_MS = 3_000;
 /* ONE LINK, ONE QUESTION — the row neither smoke tier had, and the reason a duplicate shipped on Linux. */
 const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => {
     await delay(DUPLICATE_SETTLE_MS);
-    let own: WindowInfo[];
-    try {
+    let own: WindowInfo[] = [];
+    // Retry a failed listing, keeping the first successful snapshot for the exact count below.
+    // Polling for a count of one instead could hide a duplicate confirmation that went away between listings.
+    const counted = await harness.untilTrue(30, `the confirmations could be counted`, async () => {
         own = await appWindows(app);
-    } catch (error) {
-        harness.fail(`the confirmations could not be counted`, errorMessage(error).split(`\n`)[0]!.trim());
+        return true;
+    });
+    if (!counted) {
         return;
     }
     const asked = own.filter((window) => window.title.includes(CONFIRM_TITLE)).length;
