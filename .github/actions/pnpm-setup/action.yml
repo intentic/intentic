@@ -78,10 +78,12 @@ runs:
       run: |
         # Bun's fallback installer renames its temporary download into node_modules. runner.temp is a
         # separate Actions mount, so put install scratch space on the destination filesystem (EXDEV otherwise).
+        # bun's install.js picks RUNNER_TEMP before os.tmpdir(), so TMPDIR alone left it on /__w/_temp
+        # (run 41209017574): both have to point here. The override lives only in this step's shell.
         mkdir -p node_modules
         install_tmp="$(mktemp -d "$PWD/node_modules/.install-tmp.XXXXXX")"
         trap 'rm -rf -- "$install_tmp"' EXIT
-        export TMPDIR="$install_tmp"
+        export TMPDIR="$install_tmp" RUNNER_TEMP="$install_tmp"
         # Remove pnpm's state shortcut so injected workspace copies are refreshed after checkout replaces source inodes.
         # Source-consumed packages have no build script to resync them; unchanged manifests/lockfile otherwise leave stale code in the store.
         # Even --force can take that shortcut. Persistent node_modules needs this invalidation before every install.
