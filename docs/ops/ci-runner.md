@@ -100,7 +100,7 @@ Copy-Item <checkout>\_tools\scripts\ci\wsl-maintenance.ps1 C:\ProgramData\wsl-ma
 
 ## A Linux host
 
-A machine running Debian or Ubuntu natively takes runners with [`setup-linux-runner.sh`](../../_tools/scripts/ci/setup-linux-runner.sh), run as root next to `fleet-janitor.sh`. It installs Docker Engine from download.docker.com, creates `/ci-cache`, registers the instances as systemd services under one account, and installs the janitor's timer as on omen. Re-running it changes nothing that is already in place, so it doubles as the repair. A new instance needs a registration token (Settings > Actions > Runners, or `POST /repos/intentic/intentic/actions/runners/registration-token`):
+A machine running Debian or Ubuntu natively takes runners with [`setup-linux-runner.sh`](../../_tools/scripts/ci/setup-linux-runner.sh), run as root next to `fleet-janitor.sh`. It installs Docker Engine from download.docker.com, creates `/ci-cache`, registers the instances as systemd services under one account, and installs the janitor's timer as on omen. If its `daemon.json` changes while a job is running, docker is restarted at the next prune pass with no job running. Re-running it changes nothing that is already in place, so it doubles as the repair. A new instance needs a registration token (Settings > Actions > Runners, or `POST /repos/intentic/intentic/actions/runners/registration-token`):
 
 ```sh
 sudo RUNNER_TOKEN=<token> ./setup-linux-runner.sh --name z440 --workers 3 --light 1 --user radarsu --test-slots 9
@@ -108,11 +108,13 @@ sudo RUNNER_TOKEN=<token> ./setup-linux-runner.sh --name z440 --workers 3 --ligh
 
 A native host differs from the WSL fleet in three ways:
 
-- **No Windows tasks.** Docker is a systemd service, so the docker watchdog and the job-started hook are not needed. Without `wsl-maintenance.ps1`, `intentic-ci-docker-prune.timer` removes unused images older than two days, stopped containers older than one, anonymous volumes and build cache older than three days. It runs hourly and skips any pass while a job is running.
+- **No Windows tasks.** Docker is a systemd service, so the docker watchdog and the job-started hook are not needed. Where `wsl-maintenance.ps1` keeps omen's Docker small, two things do it here:
+  - `/etc/docker/daemon.json` caps what grows continuously. Each container's log rotates at 20 MB × 3. The default builder's cache stays under 40 GB, and dockerd prunes it further once less than 100 GB is free. `live-restore` keeps job containers running through a docker upgrade.
+  - [`linux-host-prune.sh`](../../_tools/scripts/ci/linux-host-prune.sh), every 15 minutes (`intentic-ci-prune.timer`). Every pass removes stopped containers and unused networks older than a day, untagged images, build cache above 40 GB, runner `_diag` logs older than 14 days and superseded runner tarballs. Unused tagged images older than two days and unused volumes (named ones included) go only in a pass with no job running, because a job pulls its image a moment before it creates the container. A host busy for 24 hours straight gets that pass anyway. Once `/` is 80% full, a pass runs at once, removes every unused image and all build cache, and starts the janitor if that was not enough. `PRUNE_DRY_RUN=1` reports without removing anything.
 - **A smaller test-memory pool.** Every workflow sets `TEST_SLOTS: "16"`, which is sized for omen's 26 GB VM. `--test-slots N` installs `intentic-ci-test-slots.service`, which holds the flocks on slots N+1 to 16 for good, so jobs on this host can take only the first N. The gate band (slots 1 to 6) stays whole. z440 has 15 GB of RAM and keeps 9.
 - **Cold caches.** `/ci-cache` is per machine. The first jobs on a new host build turbo, cargo and tsbuildinfo from scratch.
 
-z440 (`radarsu-ops-01`, 192.168.0.227: 8 cores, 15 GB RAM, 15 GB swap, 922 GB on `/`) runs `z440-worker-1..3` and `z440-light-1` from `~radarsu/actions-runner-*`. `systemctl list-units 'actions.runner.*' 'intentic-ci-*'` lists them, and `journalctl -u intentic-ci-janitor -u intentic-ci-docker-prune` has every pass.
+z440 (`radarsu-ops-01`, 192.168.0.227: 8 cores, 15 GB RAM, 15 GB swap, 922 GB on `/`) runs `z440-worker-1..3` and `z440-light-1` from `~radarsu/actions-runner-*`. `systemctl list-units 'actions.runner.*' 'intentic-ci-*'` lists them, and `journalctl -u intentic-ci-janitor -u intentic-ci-prune` has every pass. The journal is capped at 2 GB.
 
 ## When jobs sit queued
 
