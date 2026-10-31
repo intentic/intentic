@@ -1859,6 +1859,17 @@
                     }
                 },
                 "fields": {
+                    "adminPassword": {
+                        "hint": "Lässt den Agenten auf diesem Rechner Befehle als root ausführen. Leer lassen, wenn er das nie braucht.",
+                        "label": "Admin-Passwort"
+                    },
+                    "adminPasswordOf": {
+                        "label": "Das Admin-Passwort ist",
+                        "options": {
+                            "root": "Das Passwort des root-Kontos (su)",
+                            "user": "Das eigene Passwort dieses Benutzers (sudo)"
+                        }
+                    },
                     "auth": {
                         "label": "Authentifizierung",
                         "options": {

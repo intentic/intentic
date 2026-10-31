@@ -21,6 +21,11 @@ export const hostConfPath = (alias: string): string => join(hostsDir(), `${alias
 // The public half the config's IdentityFile names: with IdentitiesOnly, ssh offers exactly this key from the agent.
 export const hostPublicKeyPath = (alias: string): string => join(hostsDir(), `${alias}.pub`);
 export const hostPassPath = (alias: string): string => join(hostsDir(), `${alias}.pass`);
+// Whose admin password the machine's card holds ("user" or "root"), read by as-admin; no secret, the password stays in
+// the vault. Absent when the card has none.
+export const hostAdminPath = (alias: string): string => join(hostsDir(), `${alias}.admin`);
+// The helper that runs a command as root on any alias with an admin password (handlers/ssh-as-admin.ts).
+export const asAdminPath = (): string => join(hostsDir(), "as-admin");
 // A private key as a file beside its alias: only ever one with a passphrase, which the agent could never sign with and
 // which the passphrase protects where it sits. Every other key lives in the key store; an older build wrote those here
 // too, and adoptLegacySshKeys moves them.
@@ -113,12 +118,13 @@ export const writeHostKeyFile = async (alias: string, privateKey: string): Promi
     await writeFileAtomic(hostKeyFilePath(alias), privateKey.endsWith("\n") ? privateKey : `${privateKey}\n`, 0o600);
 };
 
-// Drops an alias's config, its public key, password and key files; missing files are fine. The key store's copy is the
+// Drops an alias's config, its public key, password, admin and key files; missing files are fine. The key store's copy is the
 // caller's to drop, since it owns the store.
 export const removeSshHost = async (alias: string): Promise<void> => {
     await rm(hostConfPath(alias), { force: true });
     await rm(hostPublicKeyPath(alias), { force: true });
     await rm(hostPassPath(alias), { force: true });
+    await rm(hostAdminPath(alias), { force: true });
     await rm(hostKeyFilePath(alias), { force: true });
     await rm(`${hostKeyFilePath(alias)}.pub`, { force: true });
 };

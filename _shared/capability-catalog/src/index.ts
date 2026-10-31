@@ -12,6 +12,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
 import type { ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
+import { SSH_ENTRY } from "./ssh.js";
 
 // BINARY gigabytes, written "GB", because every number this feature prints is a memory quantity compared against a
 // machine's RAM, and RAM is sold and reported in powers of two. Decimal made the one figure a reader can check against
@@ -423,42 +424,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         ],
         hint: "One-time rebuild: the sandbox gets its own isolated Docker Engine.",
     },
-    {
-        id: "ssh",
-        name: "SSH",
-        kind: "ssh",
-        category: "servers",
-        icon: "server",
-        description: "Operate a remote machine over SSH.",
-        fields: [
-            { key: "host", label: "Host", placeholder: "1.2.3.4 or box.example.com" },
-            { key: "port", label: "Port", default: "22" },
-            { key: "user", label: "User", placeholder: "root" },
-            // The default is the one that never puts a private key in the browser: the sandbox generates the pair.
-            {
-                key: "auth",
-                label: "Authentication",
-                default: "generated",
-                options: [
-                    { value: "generated", label: "Generate a key for me" },
-                    { value: "key", label: "Paste my own key" },
-                    { value: "password", label: "Password" },
-                ],
-            },
-            // Answered by the form's key generator, not typed: it holds the token for a key the sandbox keeps.
-            { key: "privateKey", label: "Key", secret: true, when: "auth == 'generated'" },
-            { key: "privateKey", label: "Private key", secret: true, multiline: true, when: "auth == 'key'" },
-            { key: "password", label: "Password", secret: true, when: "auth == 'password'" },
-        ],
-        hint: 'The name is the alias the agent uses (ssh <name> "…").',
-        guide: {
-            steps: [
-                "Keep `Generate a key for me`: the sandbox makes the key pair and keeps its private half. Only the public half is shown.",
-                "Run the command shown on the server, signed in as the user above, to add the key to its `authorized_keys`.",
-                "Already have a key for it? Pick `Paste my own key` and paste the unencrypted private key, or switch to `Password`.",
-            ],
-        },
-    },
+    SSH_ENTRY,
     {
         id: "vpn",
         name: "VPN",

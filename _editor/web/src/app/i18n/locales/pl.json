@@ -1808,6 +1808,17 @@
                     }
                 },
                 "fields": {
+                    "adminPassword": {
+                        "hint": "Pozwala agentowi uruchamiać polecenia jako root na tej maszynie. Zostaw puste, jeśli nigdy nie będzie to potrzebne.",
+                        "label": "Hasło administratora"
+                    },
+                    "adminPasswordOf": {
+                        "label": "Hasło administratora to",
+                        "options": {
+                            "root": "Hasło konta root (su)",
+                            "user": "Własne hasło tego użytkownika (sudo)"
+                        }
+                    },
                     "auth": {
                         "label": "Uwierzytelnianie",
                         "options": {

@@ -201,9 +201,22 @@ describe("the ssh tile", () => {
 
     it("asks for the one credential each sign-in's schema arm requires, as a secret", () => {
         const credentialOf = (choice: string): string[] =>
-            tile.fields.filter((field) => field.secret === true && fieldApplies(field, { auth: choice })).map((field) => field.key);
+            tile.fields
+                .filter((field) => field.secret === true && field.optional !== true && fieldApplies(field, { auth: choice }))
+                .map((field) => field.key);
         expect(credentialOf("generated")).toEqual(["privateKey"]);
         expect(credentialOf("key")).toEqual(["privateKey"]);
         expect(credentialOf("password")).toEqual(["password"]);
+    });
+
+    // Root rights are an extra on top of any sign-in, never a requirement of one.
+    it("offers an optional admin password, and whose it is, on every sign-in the schema accepts", () => {
+        const admin = tile.fields.find((field) => field.key === "adminPassword");
+        expect(admin?.secret === true && admin.optional === true && admin.when === undefined).toBe(true);
+        const whose = tile.fields.find((field) => field.key === "adminPasswordOf");
+        for (const arm of SshConfigSchema.options) {
+            expect(Object.keys(arm.shape)).toEqual(expect.arrayContaining(["adminPassword", "adminPasswordOf"]));
+            expect(whose?.options?.map((option) => option.value).toSorted()).toEqual([...arm.shape.adminPasswordOf.unwrap().options].toSorted());
+        }
     });
 });

@@ -6,6 +6,7 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../.
 import type { CapabilityCtx } from "../capability.js";
 import { generateSshKey } from "../credentials/ssh-keys.js";
 import { fileSshKeyStore, type SshKeyStore } from "../ssh-key-store.js";
+import { secretFieldsOf } from "../credentials/secret-fields.js";
 import { sshHandler } from "./ssh.handler.js";
 
 // A ctx exposing only what sshHandler touches (files + workspace.root + capabilities.list + the key store), over a fresh
@@ -146,4 +147,32 @@ test("remove deletes the shared skill when the last ssh machine goes", async () 
     await drain(sshHandler.apply(ctx, "box", box.config));
     await sshHandler.remove!(ctx, "box", box.config);
     expect(await readWorkspaceFile(skillPath(root))).toBeUndefined();
+});
+
+// The admin password is a reference the agent spends through as-admin, so no file beside the alias may hold it: only
+// whose it is, which decides whether as-admin types it to sudo or su.
+test("an admin password stays in the vault: only whose it is lands beside the alias, and as-admin is written", async () => {
+    const admin: Capability = {
+        id: "z440",
+        kind: "ssh",
+        config: { auth: "password", host: "10.0.0.2", port: 22, user: "ops", password: "login", adminPassword: "rootpw", adminPasswordOf: "root" },
+    };
+    const { ctx, root, home } = tempCtx([admin]);
+    expect(secretFieldsOf(admin, new Map())).toEqual(["password", "adminPassword"]);
+    await drain(sshHandler.apply(ctx, "z440", admin.config));
+    expect(readFileSync(hostsPath(home, "z440.admin"), "utf8")).toBe("root\n");
+    for (const file of ["z440.conf", "z440.pass", "z440.admin"]) {
+        expect(readFileSync(hostsPath(home, file), "utf8")).not.toContain("rootpw");
+    }
+    expect(statSync(hostsPath(home, "as-admin")).mode & 0o777).toBe(0o755);
+    expect(await readWorkspaceFile(skillPath(root))).toContain("{{secret:<alias>/adminPassword}}");
+
+    // Whose it is defaults to the user's own (sudo), and a card without one has no admin file at all.
+    await drain(sshHandler.apply(ctx, "z440", { ...admin.config, adminPasswordOf: undefined }));
+    expect(readFileSync(hostsPath(home, "z440.admin"), "utf8")).toBe("user\n");
+    await drain(sshHandler.apply(ctx, "z440", { auth: "password", host: "10.0.0.2", port: 22, user: "ops", password: "login" }));
+    expect(existsSync(hostsPath(home, "z440.admin"))).toBe(false);
+
+    await sshHandler.remove!(ctx, "z440", admin.config);
+    expect(existsSync(hostsPath(home, "as-admin"))).toBe(false);
 });

@@ -111,6 +111,21 @@ export const ExtensionConfigSchema = z.object({
             "Which registry this install came from, which is what update checks and security advisories are read against. Absent falls back to the official one.",
         ),
 });
+// What lets the agent act as an administrator on the machine, the same for every way of signing in. Optional: most
+// machines are reached as a user who needs no more. The password is vaulted like the login one (it is not echoed), so
+// the agent spends it as `{{secret:<alias>/adminPassword}}` and never reads it; `adminPasswordOf` says whose it is,
+// which is what decides how it is typed (sudo takes the user's own, su takes root's).
+const sshAdminFields = {
+    adminPassword: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("The password that gives admin (root) rights on the machine. Optional. Stored, never echoed back."),
+    adminPasswordOf: z
+        .enum(["user", "root"])
+        .optional()
+        .describe("Whose password `adminPassword` is: the signed-in user's own, typed to sudo (the default), or the root account's, typed to su."),
+};
 // A remote machine the agent reaches over SSH; one capability per machine, the id is its ssh-config Host alias. Writes
 // a config block and a 0600 key/password file, unlike `cli`, so nothing is injected into the agent's env and machines
 // never collide.
@@ -121,6 +136,7 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         port: z.coerce.number().default(22).describe("Which port it listens on."),
         user: z.string().min(1).describe("Which user to connect as."),
         privateKey: z.string().min(1).describe("The private key, whole. Stored with tight permissions and never echoed back."),
+        ...sshAdminFields,
     }),
     // The sandbox made this key itself (capabilities.sshKey), so its private half never crossed the wire; stored and
     // written exactly like a pasted one.
@@ -130,6 +146,7 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         port: z.coerce.number().default(22).describe("Which port it listens on."),
         user: z.string().min(1).describe("Which user to connect as."),
         privateKey: z.string().min(1).describe("The private half of the generated key. Stored with tight permissions and never echoed back."),
+        ...sshAdminFields,
     }),
     z.object({
         auth: z.literal("password").describe("Sign in with a password."),
@@ -137,6 +154,7 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         port: z.coerce.number().default(22).describe("Which port it listens on."),
         user: z.string().min(1).describe("Which user to connect as."),
         password: z.string().min(1).describe("The password. Stored, never echoed back."),
+        ...sshAdminFields,
     }),
 ]);
 // What a form sends where a generated key's private half goes: the token capabilities.sshKey answered with, which the

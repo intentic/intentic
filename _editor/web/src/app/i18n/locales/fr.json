@@ -1859,6 +1859,17 @@
                     }
                 },
                 "fields": {
+                    "adminPassword": {
+                        "hint": "Permet à l'agent d'exécuter des commandes en root sur cette machine. Laissez vide s'il n'en a jamais besoin.",
+                        "label": "Mot de passe administrateur"
+                    },
+                    "adminPasswordOf": {
+                        "label": "Le mot de passe administrateur est",
+                        "options": {
+                            "root": "Le mot de passe du compte root (su)",
+                            "user": "Le mot de passe de cet utilisateur (sudo)"
+                        }
+                    },
                     "auth": {
                         "label": "Authentification",
                         "options": {

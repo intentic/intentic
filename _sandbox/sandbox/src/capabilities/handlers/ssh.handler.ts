@@ -1,9 +1,12 @@
 import type { SshConfig } from "@intentic/sandbox-contract/schemas/capabilities";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { publicKeyOf, publicLineOf } from "../credentials/ssh-keys.js";
+import { AS_ADMIN_SCRIPT } from "./ssh-as-admin.js";
 import {
+    asAdminPath,
+    hostAdminPath,
     hostConfPath,
     hostKeyFilePath,
     hostPassPath,
@@ -24,6 +27,9 @@ import {
 //     it where it sits.
 //   - a password: a 0600 file sshpass reads. Nothing can sign for a password, so the agent does hold this one; the
 //     Secrets view says so.
+// An admin password, on any of the three, is NOT written out: it stays in the vault and the agent spends it as
+// `{{secret:<id>/adminPassword}}` through the as-admin helper (ssh-as-admin.ts), so it is masked, gated and ledgered like
+// any reference. Only whose it is (`<id>.admin`) lands beside the alias.
 // Unlike `cli`, nothing rides the agent's env but the agent socket, so many machines never collide. One shared skill
 // (below) covers them all.
 
@@ -50,6 +56,18 @@ says "agent refused operation": do not retry, say what you left undone.
 If a machine uses password auth, a \`~/.ssh/intentic-hosts/<alias>.pass\` file exists: prefix the command with
 \`sshpass -f ~/.ssh/intentic-hosts/<alias>.pass\`, e.g. \`sshpass -f ~/.ssh/intentic-hosts/<alias>.pass ssh <alias> "uptime"\`.
 
+## Admin (root) commands
+
+A machine whose card holds an admin password has a \`~/.ssh/intentic-hosts/<alias>.admin\` file. Run a command as root
+there with \`as-admin\`, piping the password in by reference so it is filled in at execution and never read:
+
+\`printf '%s\\n' '{{secret:<alias>/adminPassword}}' | ~/.ssh/intentic-hosts/as-admin <alias> 'apt-get install -y htop'\`
+
+It types the password to sudo or su, whichever the card says, and answers with the command's output and exit code. A
+machine with no \`.admin\` file has no admin password: ask the owner to add one on its SSH card (Admin password)
+rather than looking for another way in, and do not hand out lasting root access (a NOPASSWD sudoers line, an added
+key for root) unless the owner asked for it.
+
 Notes: first connect to a machine auto-accepts its host key (accept-new). \`<alias>\` is the name the machine was
 connected under.
 `;
@@ -73,10 +91,13 @@ export const sshHandler: CapabilityHandler = {
     secret: (config) => ((config as SshConfig).auth === "password" ? "password" : "privateKey"),
     echo: (config) => {
         const ssh = config as SshConfig;
-        const echoed = { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth };
+        // Whose admin password it is says nothing secret, so it echoes; the password itself is vaulted like the login one.
+        const echoed = { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth, adminPasswordOf: ssh.adminPasswordOf };
         // The public half, read off the key, so an edit form can show what to authorize on a server again.
         const publicKey = ssh.auth === "password" ? undefined : publicKeyOf(ssh.privateKey);
-        return publicKey === undefined ? echoed : { ...echoed, publicKey };
+        const shown = publicKey === undefined ? echoed : { ...echoed, publicKey };
+        // An unset field is not echoed as `undefined`, which would also count it as echoed and so never vaulted.
+        return Object.fromEntries(Object.entries(shown).filter((entry): entry is [string, string | number] => entry[1] !== undefined));
     },
     // The id IS the ssh-config alias, so the re-apply writes the new machine block and this drops the old one,
     // otherwise `ssh <old-name>` would go on working, which is a second machine as far as anyone reading the
@@ -100,6 +121,11 @@ export const sshHandler: CapabilityHandler = {
             const identityFile = await keyPlacement(ctx, id, ssh.privateKey);
             await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, identityFile });
         }
+        // The admin password stays in the vault, spent by reference; this file only tells as-admin how to type it.
+        if (ssh.adminPassword !== undefined) {
+            await writeFile(hostAdminPath(id), `${ssh.adminPasswordOf ?? "user"}\n`, { mode: 0o600 });
+        }
+        await writeFile(asAdminPath(), AS_ADMIN_SCRIPT, { mode: 0o755 });
         await writeLoadedSkill(ctx.files, ctx.workspace.root, "ssh", SSH_SKILL, "ssh");
         yield { kind: "log", message: `Connected ${id}. The agent can reach it next turn via \`ssh ${id}\`.` };
     },
@@ -113,6 +139,7 @@ export const sshHandler: CapabilityHandler = {
         const sshCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "ssh").length;
         if (sshCount <= 1) {
             await removeLoadedSkill(ctx.files, ctx.workspace.root, "ssh");
+            await rm(asAdminPath(), { force: true });
         }
     },
 };

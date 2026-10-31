@@ -1859,6 +1859,17 @@
                     }
                 },
                 "fields": {
+                    "adminPassword": {
+                        "hint": "Lets the agent run commands as root on this machine. Leave it empty if it never needs to.",
+                        "label": "Admin password"
+                    },
+                    "adminPasswordOf": {
+                        "label": "Admin password is",
+                        "options": {
+                            "root": "The root account's password (su)",
+                            "user": "This user's own password (sudo)"
+                        }
+                    },
                     "auth": {
                         "label": "Authentication",
                         "options": {

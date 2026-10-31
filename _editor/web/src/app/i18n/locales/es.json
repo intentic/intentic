@@ -1859,6 +1859,17 @@
                     }
                 },
                 "fields": {
+                    "adminPassword": {
+                        "hint": "Permite al agente ejecutar comandos como root en esta máquina. Déjalo vacío si nunca lo necesita.",
+                        "label": "Contraseña de administrador"
+                    },
+                    "adminPasswordOf": {
+                        "label": "La contraseña de administrador es",
+                        "options": {
+                            "root": "La contraseña de la cuenta root (su)",
+                            "user": "La contraseña propia de este usuario (sudo)"
+                        }
+                    },
                     "auth": {
                         "label": "Autenticación",
                         "options": {
