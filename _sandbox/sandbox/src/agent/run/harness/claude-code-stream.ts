@@ -13,7 +13,7 @@ import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract
 import { browserServerOfTool } from "../../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../../providers/agent-commands.js";
 import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
-import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "../frames/error-frames.js";
+import { apiErrorMessage, contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "../frames/error-frames.js";
 import { isSafeguardRefusal, RefusalFork } from "../refusal-fork.js";
 import { InformationalLines } from "../informational.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../../providers/routed-refusal.js";
@@ -619,7 +619,8 @@ class TurnFold {
     private async *onFailure(message: SDKAssistantMessage): AsyncGenerator<AgentEvent> {
         const failure = await errorFrame(message, this.args.allowance, this.args.trial);
         this.overflowed ||= failure.code === "context-overflow";
-        this.failures.report(failure.message);
+        // The provider's own sentence, which the SDK repeats on exit: a frame may reword it (a rate limit, a trial turn).
+        this.failures.report(apiErrorMessage(message));
         yield failure;
     }
 

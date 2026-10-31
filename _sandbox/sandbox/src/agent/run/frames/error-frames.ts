@@ -38,8 +38,9 @@ export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_l
 
 // The SDK's `error` field is a category (SDKAssistantMessageError: `authentication_failed` for a 401/403,
 // `oauth_org_not_allowed`, `billing_error`, `invalid_request` for most 400s, `unknown` for the API errors the CLI does
-// not sort); the sentence is in the assistant message's text block, when present.
-const apiErrorMessage = (message: SDKAssistantMessage): string => {
+// not sort); the sentence is in the assistant message's text block, when present. Exported for the stream's repeat check
+// (harness/sdk-failure-stream.ts): the SDK repeats this sentence on exit, not the frame a case may have reworded.
+export const apiErrorMessage = (message: SDKAssistantMessage): string => {
     const content = message.message.content as ReadonlyArray<{ type: string; text?: string }>;
     const explained = content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
     return explained ?? `agent error: ${message.error}`;

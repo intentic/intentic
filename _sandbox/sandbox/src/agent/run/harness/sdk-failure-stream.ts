@@ -11,7 +11,7 @@ export class SdkFailures {
     private reported: string | undefined;
 
     report(message: string): void {
-        this.reported = message;
+        this.reported = message.trim();
     }
 
     clear(): void {
@@ -37,7 +37,7 @@ export class SdkFailures {
 
     repeats(error: Error): boolean {
         // allow(dependency-text): Claude Agent SDK's Query.readMessages wraps the result in this exact prefix; any unmatched error is rethrown.
-        return this.reported !== undefined && error.message === `Claude Code returned an error result: ${this.reported}`;
+        return this.reported !== undefined && error.message.trim() === `Claude Code returned an error result: ${this.reported}`;
     }
 }
 

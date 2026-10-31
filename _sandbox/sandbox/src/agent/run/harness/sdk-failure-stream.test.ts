@@ -32,7 +32,7 @@ const query = (messages: readonly SDKMessage[], exit?: Error): QueryFn =>
         return stream;
     };
 
-const collect = async (queryFn: QueryFn, frames: AgentEvent[] = []): Promise<AgentEvent[]> => {
+const collect = async (queryFn: QueryFn, frames: AgentEvent[] = [], trial = false): Promise<AgentEvent[]> => {
     for await (const frame of streamSdk({
         queryFn,
         prompt: "finish the work",
@@ -44,7 +44,7 @@ const collect = async (queryFn: QueryFn, frames: AgentEvent[] = []): Promise<Age
         redeliver: undefined,
         allowance: undefined,
         routed: undefined,
-        trial: false,
+        trial,
         subagents: undefined,
         checklistSeed: undefined,
         carriedCostUsd: 0,
@@ -64,13 +64,26 @@ const result = (subtype: "success" | "error_during_execution", message = refused
     return { type: "result", subtype, is_error: true, errors: [message] } as SDKMessage;
 };
 
-test.each([undefined, "success", "error_during_execution"] as const)(
+// The SDK rewrites its exit error only after a result, so every repeat follows one.
+test.each(["success", "error_during_execution"] as const)(
     "a refused credential keeps its classified failure when the SDK repeats it on exit after %s",
     async (subtype) => {
-        const messages = subtype === undefined ? [assistant] : [assistant, result(subtype)];
-        expect(await collect(query(messages, repeated))).toEqual(opening);
+        expect(await collect(query([assistant, result(subtype)], repeated))).toEqual(opening);
     },
 );
+
+// A rate limit and a trial turn reword the provider's sentence in their frame; the SDK still repeats the sentence.
+test.each([
+    ["a rate limit", false, "rate_limit", "rate_limit"],
+    ["a trial turn", true, "authentication_failed", "trial-model-unavailable"],
+] as const)("%s keeps its reworded classified failure when the SDK repeats the provider's sentence", async (_case, trial, error, code) => {
+    const said = "API Error: request refused upstream";
+    // SAFETY: The shared refusal fixture with another category and sentence; still every assistant field the fold reads.
+    const reworded = { ...assistant, error, message: { content: [{ type: "text", text: said }] } } as SDKMessage;
+    const frames = await collect(query([reworded, result("error_during_execution", said)], new Error(`Claude Code returned an error result: ${said}`)), [], trial);
+    expect(frames).toEqual([{ kind: "session", sessionId: "session" }, expect.objectContaining({ kind: "error", code })]);
+    expect(frames[1]).not.toEqual(expect.objectContaining({ message: said }));
+});
 
 test("a result repeating the refusal keeps the same failure without needing an exit exception", async () => {
     expect(await collect(query([assistant, result("error_during_execution")]))).toEqual(opening);
