@@ -22,7 +22,8 @@ export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 // Code's /code-review in a forked subagent, Codex's /review in a thread of its own) so it judges the diff rather than
 // the reasoning that produced it. Its first turn names the origin; the daemon then treats it as the origin's child: cut
 // from its current work, its edits going back into it, folded under its card. It is still a person's chat, never woken
-// for nor waking its origin: findings reach the origin only when a person sends them.
+// for its origin; a review or a test pass reports each turn's ending to its origin, which fixes what it left open (the
+// person opened it so the work could land), while a person's own ask reports to nobody.
 export const FRESH_KINDS = ["review", "test", "ask"] as const;
 export const FreshKindSchema = z.enum(FRESH_KINDS);
 export type FreshKind = z.infer<typeof FreshKindSchema>;

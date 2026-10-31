@@ -84,6 +84,16 @@ const KIND_LINE = {
     ask: undefined,
 } as const satisfies { readonly [K in FreshKind]: string | undefined };
 
+// Where a session a person opened sends what it finds: a review or a test pass reports each turn's ending to the work's own
+// conversation, which fixes what is left open (child-report.ts reportsTo); a person's own ask stays in its chat.
+const personSessionLine = (kind: FreshKind): string =>
+    kind === "ask"
+        ? "Edits made here go back into that conversation's work, not straight into the workspace. Nothing found here reaches that " +
+          "conversation unless the person you are working with sends it there, so report what you find plainly in this chat."
+        : "Edits made here go back into that conversation's work, not straight into the workspace. When each turn here ends, your closing " +
+          "report goes to that conversation, which fixes what you leave open so the work can land: fix what you can here, and end with " +
+          "a plain verdict and every finding still open, each with where it is and why it matters.";
+
 /** The note a fresh session's opening turn carries, and the turn after a compaction, since history cannot then. */
 export const freshNote = (scope: FreshScope): TurnNote => {
     const lines = [FRESH_NOTE_HEADER, ""];
@@ -115,8 +125,7 @@ export const freshNote = (scope: FreshScope): TurnNote => {
         ...(kind === undefined || scope.ranges.length === 0 ? [] : ["", kind]),
         "",
         scope.by === undefined
-            ? "Edits made here go back into that conversation's work, not straight into the workspace. Nothing found here reaches that " +
-                  "conversation unless the person you are working with sends it there, so report what you find plainly in this chat."
+            ? personSessionLine(scope.kind)
             : `Edits made here go back into that conversation's work, not straight into the workspace. Your report goes to \`${scope.by}\`, ` +
                   "the agent that opened this session and decides what becomes of that work: end with a plain verdict and every finding, " +
                   "each with where it is and why it matters.",

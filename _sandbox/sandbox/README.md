@@ -362,8 +362,10 @@ flowchart LR
 - Fresh sessions (2026-10-19): a person can open a conversation on another conversation's work with none of its
   messages, for a code review, a test pass or an ask of their own (`freshOf` on the first turn). It is that
   conversation's child in every way the daemon keeps (cut from its current work, landing back into it, folded under its
-  card) but it stays the person's: it is never woken for its origin and never reports to it, so findings reach the
-  origin only when the person sends them. Its opening turn is told the work as exact `git diff <from>...HEAD` ranges per
+  card) but it stays the person's chat, never woken for its origin. A review or a test pass reports every turn's ending
+  to its origin as a child reports to its parent (`agent/subagents/child-report.ts reportsTo`), whoever started the
+  turn: the person opened it so the work could land, so the origin is asked to fix what it left open, and its own edits
+  have already landed into that work. A person's own ask reports to nobody. Its opening turn is told the work as exact `git diff <from>...HEAD` ranges per
   changed repo, and a bare `/review` on Codex reviews those ranges (`agent/context/fresh-session.ts`). An agent can
   open one too, on the work of a subagent it spawned (spawn with `freshOf`): the session still hangs under that work,
   but it reports to the agent that opened it (`FreshSession.by`, `auth/principal.ts supervisorOf`).

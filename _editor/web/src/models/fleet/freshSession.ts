@@ -17,7 +17,8 @@ import { CHECK_KINDS, type CheckKind } from "./freshKinds";
 // that produced it (schemas/agent.ts FreshOfSchema). It is how a review or a test judges the work rather than the
 // reasoning behind it, which is how each harness's own reviewer runs (Claude Code's /code-review in a forked subagent,
 // Codex's /review in a thread of its own). The daemon hangs it under the origin's card and lands its edits back into the
-// origin's work; its findings reach the origin only when the reader sends them (ChatReviewCard's Fix).
+// origin's work; a review's or a test pass's closing report reaches the origin by itself at each turn's end, which fixes
+// what it left open (child-report.ts reportsTo), and ChatReviewCard's Fix sends a chosen finding there again by hand.
 //
 // The ask goes into a composer, never straight out: the reader picks the model, a review level or a target, or writes
 // their own ask, and presses Send.

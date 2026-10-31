@@ -1,4 +1,4 @@
-import { agentWordsOf } from "@intentic/sandbox-contract/events/agent-words";
+import { agentWordsOf, agentWordsRow } from "@intentic/sandbox-contract/events/agent-words";
 import { pino } from "pino";
 import { childActor } from "../../../auth/principal.js";
 import { opt } from "../../../opt.js";
@@ -24,12 +24,12 @@ const doorsOf = (
         live?: boolean;
         busy?: number;
         parentArchived?: boolean;
-        entries?: Record<string, { startedBy?: string; title?: string; fresh?: boolean }>;
+        entries?: Record<string, { startedBy?: string; title?: string; fresh?: { of: string; kind: "review" | "test" | "ask" } }>;
         killNote?: ChildReportDeps["killNote"];
         landingOf?: ChildReportDeps["landingOf"];
     } = {},
 ): Doors => {
-    const entries: Record<string, { startedBy?: string; title?: string; fresh?: boolean }> = {
+    const entries: Record<string, { startedBy?: string; title?: string; fresh?: { of: string; kind: "review" | "test" | "ask" } }> = {
         "parent-1": { title: "Refactor the parser" },
         "sub-1": { startedBy: childActor("parent-1"), title: "Port the tests" },
         ...over.entries,
@@ -215,13 +215,32 @@ describe("a spawned child's report", () => {
         expect(doors.started).toHaveLength(1);
     });
 
-    // A review or test a person opened on the parent's work hangs under it like a child, yet is the person's: even a turn
-    // the sandbox re-runs by itself wakes nobody, and its findings reach the parent only when that person sends them.
-    it("stays quiet for a fresh session on the parent's work, whoever started its turn", async () => {
-        const doors = doorsOf({ entries: { "sub-1": { startedBy: childActor("parent-1"), title: "Code review", fresh: true } } });
-        await reportChildTurn(doors.deps, settledOf({ actor: undefined }));
+    // A review or test a person opened on the parent's work hangs under it like a child: they opened it so the work could
+    // land, so its findings go to the parent to fix, from the person's own turn in its chat as from one the sandbox re-ran.
+    it.each([
+        ["review", "Report from a code review opened on your work: `sub-1` (\"Code review\") finished.", "Code review"],
+        ["test", "Report from a test pass opened on your work: `sub-1` (\"Code review\") finished.", "Test pass"],
+    ] as const)("reports a %s a person opened on the parent's work to it, whoever started its turn", async (kind, opening, who) => {
+        const doors = doorsOf({ entries: { "sub-1": { title: "Code review", fresh: { of: "parent-1", kind } } } });
         await reportChildTurn(doors.deps, settledOf({ actor: "owner@example.com" }));
-        expect(doors.started).toEqual([]);
+        await reportChildTurn(doors.deps, settledOf({ actor: undefined, run: "run-2" }));
+        expect(doors.started.map((started) => started.conversationId)).toEqual(["parent-1", "parent-1"]);
+        const prompt = doors.started[0]?.prompt ?? "";
+        expect(prompt.split("\n", 1)[0]).toBe(opening);
+        expect(prompt).toContain("Ported all 12 tests; they pass.");
+        expect(prompt).toContain("fix every finding it left open that holds");
+        expect(prompt).not.toContain("subagents tools");
+        expect(agentWordsOf(prompt)).toMatchObject({ kind: "child", from: "sub-1", review: kind });
+        expect(agentWordsRow(prompt)?.text).toBe(`${who} "Code review" (sub-1) finished.`);
+    });
+
+    it("stays quiet for a person's own ask on the parent's work, and for a review whose origin is gone", async () => {
+        const ask = doorsOf({ entries: { "sub-1": { title: "My question", fresh: { of: "parent-1", kind: "ask" } } } });
+        await reportChildTurn(ask.deps, settledOf({ actor: "owner@example.com" }));
+        expect(ask.started).toEqual([]);
+        const orphan = doorsOf({ entries: { "sub-1": { title: "Code review", fresh: { of: "gone-1", kind: "review" } } } });
+        await reportChildTurn(orphan.deps, settledOf({ actor: "owner@example.com" }));
+        expect(orphan.started).toEqual([]);
     });
 
     it("stays quiet for a conversation nobody spawned, and for a parent filed away", async () => {

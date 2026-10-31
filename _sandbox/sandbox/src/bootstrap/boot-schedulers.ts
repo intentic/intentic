@@ -39,14 +39,15 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     logger,
     conversations: services.conversations,
     // A review or test an agent opened on its subagent's work reports to that agent, its supervisor (agents-store.ts
-    // supervisorOf); one a person opened reports to nobody.
+    // supervisorOf); one a person opened reports to the conversation whose work it judges (child-report.ts reportsTo).
     entryOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);
         if (entry === undefined) {
             return undefined;
         }
         const supervisor = supervisorOf(entry.identity);
-        return { ...opt("startedBy", supervisor === undefined ? undefined : childActor(supervisor)), title: entry.social.title?.text, fresh: entry.identity.fresh !== undefined && entry.identity.fresh.by === undefined };
+        const fresh = entry.identity.fresh;
+        return { ...opt("startedBy", supervisor === undefined ? undefined : childActor(supervisor)), title: entry.social.title?.text, ...opt("fresh", fresh === undefined || fresh.by !== undefined ? undefined : { of: fresh.of, kind: fresh.kind }) };
     },
     profileOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);

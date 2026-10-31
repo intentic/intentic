@@ -240,6 +240,10 @@ export const TranscriptAgentWordsSchema = z.object({
     title: z.string().optional().describe("The sender's title, when it had one."),
     failed: z.boolean().optional().describe("A child's report on a turn that failed rather than finished."),
     machine: z.string().optional().describe("The runner a child's turn ran on; absent for a child that ran in this sandbox."),
+    review: z
+        .enum(["review", "test"])
+        .optional()
+        .describe("A child's report from a code review or test pass a person opened on this conversation's work, not a subagent it spawned."),
     sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
 });
 export type TranscriptAgentWords = z.infer<typeof TranscriptAgentWordsSchema>;

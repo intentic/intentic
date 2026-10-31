@@ -51,14 +51,21 @@ describe("what a fresh session is told", () => {
         expect(rangeCommand({ repo: "intentic", from: "fedcba0987654321fedc" })).toBe("git -C intentic diff fedcba098765...HEAD");
     });
 
-    it("names the origin and the ranges, says what the changes mean here, and that findings go back only when sent", () => {
+    it("names the origin and the ranges, says what the changes mean here, and that its report goes to the origin", () => {
         const { text } = freshNote(scope);
         expect(text).toContain('`origin-1` ("Add rate limits")');
         expect(text).toContain("- `git diff 1234567890ab...HEAD` (the workspace root)");
         expect(text).toContain("- `git -C intentic diff fedcba098765...HEAD`");
         expect(text).toContain("not `@{upstream}`");
         expect(text).toContain("review these ranges and nothing else");
+        expect(text).toContain("your closing report goes to that conversation");
+        expect(text).not.toContain("unless the person you are working with sends it there");
+    });
+
+    it("keeps a person's own ask in its chat", () => {
+        const { text } = freshNote({ ...scope, kind: "ask" });
         expect(text).toContain("unless the person you are working with sends it there");
+        expect(text).not.toContain("your closing report goes to that conversation");
     });
 
     it("tells a session an agent opened that its report goes to that agent, with a verdict and every finding", () => {
@@ -66,6 +73,7 @@ describe("what a fresh session is told", () => {
         expect(text).toContain("Your report goes to `home-1`");
         expect(text).toContain("plain verdict");
         expect(text).not.toContain("unless the person you are working with sends it there");
+        expect(text).not.toContain("your closing report goes to that conversation");
     });
 
     // The note rides the preamble ahead of the person's words, so a `/code-review` typed after it still reads as the

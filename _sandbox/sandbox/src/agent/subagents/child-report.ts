@@ -1,5 +1,5 @@
-import { childReportPrompt, type ChildReportFields } from "@intentic/sandbox-contract/events/agent-words";
-import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import { childReportPrompt, type ChildReportFields, type ReviewKind } from "@intentic/sandbox-contract/events/agent-words";
+import type { FreshKind, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
@@ -22,11 +22,15 @@ export interface ChildReportDeps {
     // Where the child's roster record, its verification ledger and a report still queued for its parent are held, and
     // where a report on its way marks its parent (owedReports).
     readonly conversations: Pick<ConversationActors, "holdings" | "send">;
-    // A child's entry names its parent in `startedBy`; `fresh` marks a person's session on that parent's work, which
-    // never reports to it.
-    readonly entryOf: (
-        conversationId: string,
-    ) => { readonly startedBy?: string | undefined; readonly title?: string | undefined; readonly fresh?: boolean | undefined } | undefined;
+    // A child's entry names its parent in `startedBy`; `fresh` marks a session a person opened on another conversation's
+    // work (`of`), which a review or test pass reports to and a person's own ask does not.
+    readonly entryOf: (conversationId: string) =>
+        | {
+              readonly startedBy?: string | undefined;
+              readonly title?: string | undefined;
+              readonly fresh?: { readonly of: string; readonly kind: FreshKind } | undefined;
+          }
+        | undefined;
     // What the parent runs as now, which the report's turn continues.
     readonly profileOf: (conversationId: string) => TurnProfile | undefined;
     // The ending a parent reads for a child whose runtime was killed under it; undefined for a failure of its own.
@@ -64,36 +68,43 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     return [...(rerun === undefined ? [] : [rerun]), answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
+interface ReportTarget {
+    readonly parent: string;
+    readonly review?: ReviewKind;
+}
+
 // The parent a child's turn reports to, by who the child is and who asked for the turn: nobody when a person started it
-// in the child's own chat, the child moves itself onto a fallback or is a workflow's worker, or the parent is gone; nor
-// ever for a fresh session (a review or test a person opened on the parent's work), whose findings reach the parent
-// only when that person sends them, so a re-run the sandbox fires itself wakes nobody either.
-const reportsTo = (deps: ChildReportDeps, childId: string, actor: string | undefined): string | undefined => {
+// in the child's own chat, the child moves itself onto a fallback or is a workflow's worker, or the parent is gone. A
+// review or test pass a person opened on another conversation's work reports to that work's conversation whoever started
+// its turn, the person in its own chat above all: they opened it so the work could land, which its origin fixes for. A
+// person's own ask on that work stays theirs and reports to nobody.
+const reportsTo = (deps: ChildReportDeps, childId: string, actor: string | undefined): ReportTarget | undefined => {
     const entry = deps.entryOf(childId);
-    const parent = parentOfActor(entry?.startedBy);
-    if (
-        parent === undefined ||
-        entry?.fresh === true ||
-        (actor !== undefined && parentOfActor(actor) !== parent) ||
-        deps.movingOn?.(childId) === true ||
-        deps.worker?.(childId) === true
-    ) {
+    if (deps.movingOn?.(childId) === true || deps.worker?.(childId) === true) {
         return undefined;
     }
-    return deps.entryOf(parent) === undefined ? undefined : parent;
+    if (entry?.fresh !== undefined) {
+        const { of, kind } = entry.fresh;
+        return kind === "ask" || deps.entryOf(of) === undefined ? undefined : { parent: of, review: kind };
+    }
+    const parent = parentOfActor(entry?.startedBy);
+    if (parent === undefined || (actor !== undefined && parentOfActor(actor) !== parent)) {
+        return undefined;
+    }
+    return deps.entryOf(parent) === undefined ? undefined : { parent };
 };
 
 // The same, and nobody either once a wait already took the ending.
 const parentToTell = (
     deps: ChildReportDeps,
     settled: DomainEventMap["run.settled"],
-): { readonly parent: string; readonly profile: TurnProfile; readonly title: string | undefined } | undefined => {
-    const parent = reportsTo(deps, settled.conversationId, settled.actor);
-    if (parent === undefined || subagentEndingReported(deps.conversations, settled.conversationId)) {
+): (ReportTarget & { readonly profile: TurnProfile; readonly title: string | undefined }) | undefined => {
+    const target = reportsTo(deps, settled.conversationId, settled.actor);
+    if (target === undefined || subagentEndingReported(deps.conversations, settled.conversationId)) {
         return undefined;
     }
-    const profile = deps.profileOf(parent);
-    return profile === undefined ? undefined : { parent, profile, title: deps.entryOf(settled.conversationId)?.title };
+    const profile = deps.profileOf(target.parent);
+    return profile === undefined ? undefined : { ...target, profile, title: deps.entryOf(settled.conversationId)?.title };
 };
 
 const owedKey = (child: string, run: string): string => `${child}\u0000${run}`;
@@ -121,7 +132,7 @@ export const owedReports = (deps: ChildReportDeps): OwedReports => {
         const actor = asked.get(conversationId);
         asked.delete(conversationId);
         const run = before.journal?.run;
-        const parent = run === undefined ? undefined : reportsTo(deps, conversationId, actor);
+        const parent = run === undefined ? undefined : reportsTo(deps, conversationId, actor)?.parent;
         if (run !== undefined && parent !== undefined && !familyEnded(deps.conversations, parent, Date.now())) {
             owed.set(owedKey(conversationId, run), expectTurn(deps.conversations, parent, "child-report", conversationId));
         }
@@ -169,6 +180,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             verification: childVerification(deps.conversations, settled.conversationId),
             landing: deps.landingOf(settled.conversationId),
             machine: deps.machineOf?.(settled.conversationId),
+            review: target.review,
             // A turn that failed or was stopped hands nothing back, which its ending already says.
             result: settled.failure === undefined && settled.stopped !== true ? deps.resultOf?.(settled.conversationId, settled.closing) : undefined,
         });
