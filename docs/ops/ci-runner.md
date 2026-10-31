@@ -1,6 +1,6 @@
 # The CI runner fleet
 
-Eight self-hosted GitHub Actions runners, living in one WSL2 distribution on one machine, run almost every CI, release and nightly job inside containers on the host's Docker. Six share the work; two are kept for the pipeline's first two jobs.
+Self-hosted GitHub Actions runners on two machines run almost every CI, release and nightly job inside containers on their host's Docker. Eight live in one WSL2 distribution on omen: six share the work and two are kept for the pipeline's first two jobs. Four more run natively on z440, a Debian box ([A Linux host](#a-linux-host)): three share the work and one takes the first two jobs. Each machine has its own Docker, `/ci-cache` and test-memory pool, so a job landing on z440 starts from z440's caches.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
     task -.-> sock
 ```
 
-- Six Linux instances (`radarsu-worker-N`) carry the labels `intentic` and `desktop`; jobs ask for `[self-hosted, intentic]` or `[self-hosted, intentic, desktop]`. Two more (`radarsu-light-N`) carry only `intentic-light`, which only `changes` and `preflight` ask for. Those two jobs start every pipeline and take seconds, but on the shared runners they waited behind the previous push's long jobs, up to 7.5 minutes, and every other job of the push, including the ones whose start cancels a superseded push, waited with them. [`.github/actionlint.yaml`](../../.github/actionlint.yaml) declares the labels, so a job asking for one no runner carries fails the lint. The Windows machine carries only `windows-desktop` ([ci-runner-windows.md](ci-runner-windows.md)).
+- Six Linux instances on omen (`radarsu-worker-N`) and three on z440 (`z440-worker-N`) carry the labels `intentic` and `desktop`; jobs ask for `[self-hosted, intentic]` or `[self-hosted, intentic, desktop]`. Two more on omen (`radarsu-light-N`) and one on z440 (`z440-light-1`) carry only `intentic-light`, which only `changes` and `preflight` ask for. Those two jobs start every pipeline and take seconds, but on the shared runners they waited behind the previous push's long jobs, up to 7.5 minutes, and every other job of the push, including the ones whose start cancels a superseded push, waited with them. [`.github/actionlint.yaml`](../../.github/actionlint.yaml) declares the labels, so a job asking for one no runner carries fails the lint. The Windows machine carries only `windows-desktop` ([ci-runner-windows.md](ci-runner-windows.md)).
 - Jobs run in `ghcr.io/intentic/ci-base` or `ci-desktop` and mount `/ci-cache` and, where they drive Docker, the host docker socket. `/ci-cache` sits on the same filesystem as the runners' work directories so pnpm can hard-link from its store.
 - One job, `verify-machine`, starts its container `--privileged` with a tmpfs at `/history`: the worktree-isolation suites need `unshare --mount` and an overlay mount, as a sandbox has them. It needs nothing of the host beyond what Docker Desktop grants any privileged container, and a job mounting the docker socket already holds as much.
 - Nothing inside a container can see that six jobs share the box. The test suites size their workers from a pool every job draws from: `TEST_SLOTS: "16"` one-GiB slots in `TEST_SLOTS_DIR: /ci-cache/test-slots`, held by flock ([`test-memory-pool.mjs`](../../_tools/scripts/lib/test-memory-pool.mjs)), set in `ci.yml`, `verify.yml` and nightly's `verify-clocks`. A run takes at most three quarters of what is free. The first `TEST_SLOTS_RESERVED: "6"` are only for the verify groups (`TEST_SLOTS_PRIORITY: gate` in `verify.yml`), whose suites the release and the platform deploy wait on, and nightly's `verify-clocks`, which gates nothing, holds at most `TEST_SLOTS_CAP: "6"`. A suite that wants three workers or more and finds less than half of them free waits up to `TEST_SLOTS_WAIT: "90"` seconds for room, then runs with what it holds, one worker at least. Without the band, the web suite once ran on one worker for 14.6 minutes instead of 4.3 on four. 16 is what the 26 GB WSL VM leaves after typechecks, builds and Docker: change it with the VM's `memory=`. What still sizes by division (the e2e tiers, `nightly.yml`) reads `CI_HOST_JOBS: "6"`, which [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs) divides memory by. Change it with the fleet.
@@ -97,6 +97,22 @@ Copy-Item <checkout>\_tools\scripts\ci\wsl-maintenance.ps1 C:\ProgramData\wsl-ma
 2. Settings > Actions > Runners > New self-hosted runner (Linux x64) gives a token. In a new directory per instance (`~/actions-runner-<n>`, which the janitor's glob covers): `./config.sh --url https://github.com/intentic/intentic --token <token> --name <host>-<n> --labels intentic,desktop --unattended`. A light-lane instance is `--name <host>-light-<n> --labels intentic-light`, nothing else: a runner that also carried `intentic` would be handed any job and be busy when a pipeline's first job needs it.
 3. `sudo ./svc.sh install && sudo ./svc.sh start`.
 4. On Windows, from an ordinary PowerShell, run [`setup-wsl-fleet.ps1`](../../_tools/scripts/ci/setup-wsl-fleet.ps1). The first time add `-Restart`, which applies `vmIdleTimeout=-1`. It also points each runner's `.env` at the job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED`) and restarts that runner once it is idle.
+
+## A Linux host
+
+A machine running Debian or Ubuntu natively takes runners with [`setup-linux-runner.sh`](../../_tools/scripts/ci/setup-linux-runner.sh), run as root next to `fleet-janitor.sh`. It installs Docker Engine from download.docker.com, creates `/ci-cache`, registers the instances as systemd services under one account, and installs the janitor's timer as on omen. Re-running it changes nothing that is already in place, so it doubles as the repair. A new instance needs a registration token (Settings > Actions > Runners, or `POST /repos/intentic/intentic/actions/runners/registration-token`):
+
+```sh
+sudo RUNNER_TOKEN=<token> ./setup-linux-runner.sh --name z440 --workers 3 --light 1 --user radarsu --test-slots 9
+```
+
+A native host differs from the WSL fleet in three ways:
+
+- **No Windows tasks.** Docker is a systemd service, so the docker watchdog and the job-started hook are not needed. Without `wsl-maintenance.ps1`, `intentic-ci-docker-prune.timer` removes unused images older than two days, stopped containers older than one, anonymous volumes and build cache older than three days. It runs hourly and skips any pass while a job is running.
+- **A smaller test-memory pool.** Every workflow sets `TEST_SLOTS: "16"`, which is sized for omen's 26 GB VM. `--test-slots N` installs `intentic-ci-test-slots.service`, which holds the flocks on slots N+1 to 16 for good, so jobs on this host can take only the first N. The gate band (slots 1 to 6) stays whole. z440 has 15 GB of RAM and keeps 9.
+- **Cold caches.** `/ci-cache` is per machine. The first jobs on a new host build turbo, cargo and tsbuildinfo from scratch.
+
+z440 (`radarsu-ops-01`, 192.168.0.227: 8 cores, 15 GB RAM, 15 GB swap, 922 GB on `/`) runs `z440-worker-1..3` and `z440-light-1` from `~radarsu/actions-runner-*`. `systemctl list-units 'actions.runner.*' 'intentic-ci-*'` lists them, and `journalctl -u intentic-ci-janitor -u intentic-ci-docker-prune` has every pass.
 
 ## When jobs sit queued
 
