@@ -1,7 +1,8 @@
 // The move tier uses the real Docker Desktop daemon through a fixture-only inventory. Its isolated ic home may
 // switch engines; the Windows runner's own sandboxes must never be selected, even legacy ones without a keeper stamp.
 import { createServer, request, type IncomingMessage, type RequestOptions, type ServerResponse } from "node:http";
-import { connect, type AddressInfo, type Socket } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
+import { openEngineDockerStream } from "./engine-docker-stream.js";
 import { sandboxContainerName } from "./parse.js";
 import { ENGINE_SANDBOX_HOSTNAME } from "./engine.js";
 
@@ -113,12 +114,8 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
         if (!allowed(boundary, url)) { socket.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
         // Forward the HTTP handshake as bytes too: exec-start may carry a body before the daemon upgrades,
         // and Docker versions use both 101 and a hijacked 200 response for the resulting stream.
-        const peer = upstream.socketPath === undefined
-            ? connect({ host: upstream.hostname ?? "127.0.0.1", port: Number(upstream.port) })
-            : connect(upstream.socketPath);
-        peer.setTimeout(30_000, () => peer.destroy());
-        peer.once("connect", () => {
-            peer.setTimeout(0);
+        void openEngineDockerStream(upstream).then((peer) => {
+            if (socket.destroyed || peer.destroyed) { socket.destroy(); peer.destroy(); return; }
             peer.write(`${incoming.method} ${incoming.url} HTTP/1.1\r\n`);
             for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
                 peer.write(`${incoming.rawHeaders[index]}: ${incoming.rawHeaders[index + 1]}\r\n`);
@@ -126,10 +123,10 @@ export const startEngineDockerProxy = async (upstream: RequestOptions): Promise<
             peer.write("\r\n");
             peer.write(head);
             socket.pipe(peer).pipe(socket);
-        });
-        socket.on("error", () => peer.destroy());
-        socket.once("close", () => peer.destroy());
-        peer.on("error", () => socket.destroy());
+            socket.on("error", () => peer.destroy());
+            socket.once("close", () => peer.destroy());
+            peer.on("error", () => socket.destroy());
+        }).catch(() => socket.destroy());
     });
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     // SAFETY: listen above has completed on an ephemeral TCP port, never on a Unix socket.

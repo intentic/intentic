@@ -14,11 +14,13 @@ let reached: string[];
 let sockets: Set<Socket>;
 let finishWait: (() => void) | undefined;
 let createdBody: string;
+let replyAfterInput: boolean;
 
 beforeEach(async () => {
     reached = [];
     finishWait = undefined;
     createdBody = "";
+    replyAfterInput = false;
     sockets = new Set();
     upstream = createServer((incoming, outgoing) => {
         const path = incoming.url ?? "";
@@ -42,8 +44,14 @@ beforeEach(async () => {
     upstream.on("upgrade", (incoming, socket, head) => {
         reached.push(incoming.url ?? "");
         socket.write("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n");
-        socket.write(head);
-        socket.pipe(socket);
+        if (replyAfterInput) {
+            const chunks: Buffer[] = [head];
+            socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+            socket.on("end", () => socket.end(Buffer.concat([...chunks, Buffer.from("complete")])));
+        } else {
+            socket.write(head);
+            socket.pipe(socket);
+        }
     });
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
     // SAFETY: the awaited listen above names a TCP port.
@@ -132,4 +140,29 @@ test("container creation preserves the JSON request body", async () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ Id: fixtureId });
     expect(createdBody).toBe(body);
+});
+
+test("closing attached input still delivers the container's final output", async () => {
+    replyAfterInput = true;
+    const echoed = await new Promise<string>((resolve, reject) => {
+        const url = new URL(base);
+        const client = connect({ host: url.hostname, port: Number(url.port), allowHalfOpen: true });
+        client.setTimeout(5_000, () => client.destroy(new Error("Docker did not return its final output")));
+        let output = "";
+        let upgraded = false;
+        client.on("connect", () => client.write(`POST /v1.45/containers/${fixture}/attach?stdin=1 HTTP/1.1\r\nHost: docker.local\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n`));
+        client.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+            if (!upgraded) {
+                const end = output.indexOf("\r\n\r\n");
+                if (end === -1) { return; }
+                upgraded = true;
+                output = output.slice(end + 4);
+                client.end("input-");
+            }
+        });
+        client.on("end", () => { client.destroy(); resolve(output); });
+        client.on("error", reject);
+    });
+    expect(echoed).toBe("input-complete");
 });

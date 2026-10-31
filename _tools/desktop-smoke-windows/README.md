@@ -43,7 +43,8 @@ flowchart LR
   desktop and sandbox tiers.
   The move uses a Docker context under its temporary home, backed by a local proxy to the real Docker Desktop daemon.
   Its inventory exposes only the `winengine` fixture and its companions; direct requests against unrelated containers
-  are refused. Existing sandboxes, including unstamped legacy containers, stay on Docker Desktop. Cleanup preserves that home and the test distro if another container
+  are refused. Existing sandboxes, including unstamped legacy containers, stay on Docker Desktop. Attached streams
+  use Docker's `system dial-stdio` bridge so stdin EOF preserves the Windows pipe's remaining output. Cleanup preserves that home and the test distro if another container
   still mounts files there, including a stopped container whose encryption key must survive.
 - Each assertion polls to its own deadline, a failure does not stop the run, and the exit code is the failure
   count. `parse.ts` keeps what the machine answers pure, so it is tested off Windows.
