@@ -207,15 +207,18 @@ describe("the one list of promised wakes", () => {
         expect(await nextPromisedWake(promising({ holds: [asking] }), "idle-stop")).toBeUndefined();
     });
 
+    // Several real cron evaluations share one instant even if the runner pauses between readers. CI has exceeded
+    // the unit budget here without an assertion failure; 120 s bounds a hang rather than measuring cron latency.
     it("a cron is included in both hosted and local alarms and the automatic update's restart", async () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(new Date("2026-01-01T12:00:00Z"));
         const services = promising({ automations: [nightly("nightly")] });
-        const cronAt = await nextPromisedWake(services, "restart");
+        const cronAt = Date.parse("2026-01-02T03:00:00Z");
+        expect(await nextPromisedWake(services, "restart")).toBe(cronAt);
         expect(await nextPromisedWake(services, "idle-stop")).toBe(cronAt);
-        expect(cronAt).toBeGreaterThan(Date.now());
-        expect(cronAt).toBeLessThanOrEqual(Date.now() + 24 * 3_600_000);
         expect(await nextPromisedWake(services, "sleep")).toBe(cronAt);
-        expect(await quietProbes(services).nextWakeAt()).toBe(cronAt ?? -1);
-    });
+        expect(await quietProbes(services).nextWakeAt()).toBe(cronAt);
+    }, 120_000);
 
     it("keeps an idle machine up through the moment an approved post is due, which only the executor's clock sends", async () => {
         jest.useFakeTimers();
