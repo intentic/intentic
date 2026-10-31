@@ -35,9 +35,10 @@ flowchart LR
   through testcontainers, so it runs in a CI job container as the sign-in tier does. A new person signs in, is given a
   sandbox row pointing at that daemon, and walks the agent board, the files, a chat and the Sandbox page. It fails on a
   call the daemon refused, a read that failed, an uncaught error, any gate left standing, or the "too old" page. The
-  daemon runs with its auth off, so its session is seeded in the browser rather than exchanged, which the sign-in tier
-  and the daemon's own suites cover. CI runs it as `e2e-compat` before the platform deploys and nightly as
-  `compat-stable`. The daemon's template source is a local git fixture copied into its container, so opening the
+  daemon runs with its auth off, so its session is seeded once in the signed-in page's storage rather than exchanged,
+  which the sign-in tier and the daemon's own suites cover. Service workers are blocked in this tier so every visit
+  loads the server's build directly and Google's fixture remains under Playwright's routing. CI runs it as `e2e-compat`
+  before the platform deploys and nightly as `compat-stable`. The daemon's template source is a local git fixture copied into its container, so opening the
   starter site's apps uses the released daemon's own manifest parser without fetching the moving canonical repository.
   - 2026-10-15: written after the editor on main called `org.policy` on every released daemon, none of which had it.
     Pointed at 1.248.0 it stops on the too-old page; with the `org.policy` gate taken out it fails on twelve 404s.
