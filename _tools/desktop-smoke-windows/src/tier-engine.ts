@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { INGRESS_URL, PLATFORM_URL_UNREACHABLE, SANDBOX_GRANT } from "./constants.js";
 import { ENGINE_CONNECT_TOKEN, ENGINE_SANDBOX_HOSTNAME, engineDockerOf, engineStatusOf, isolatedEnv, moveLines } from "./engine.js";
 import { readEngineIsolation } from "./engine-isolation.js";
+import { engineDockerContext } from "./engine-docker-context.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
 import { dockerReachable, sandboxHealth } from "./probe.js";
@@ -53,9 +54,9 @@ const httpStatus = async (url: string): Promise<number | undefined> => {
     }
 };
 
-const engineTierIsolated = async (harness: Harness, move: boolean): Promise<boolean> => {
+const engineTierIsolated = async (harness: Harness, move: boolean, env: Record<string, string> = {}): Promise<boolean> => {
     try {
-        const isolation = await readEngineIsolation(ENGINE_ROOT);
+        const isolation = await readEngineIsolation(ENGINE_ROOT, env);
         if (isolation.homeUsers.length > 0 || (move && isolation.unexpected.length > 0)) {
             harness.fail(`the engine tier needs an isolated Windows test host`,
                 `Other sandboxes: ${isolation.unexpected.join(`, `)}. Containers using its temporary home: ${isolation.homeUsers.join(`, `)}. Preserve their original keys and use a clean test host.`);
@@ -80,7 +81,9 @@ const engineInputsReady = async (harness: Harness, options: EngineTierOptions): 
         }
     }
     harness.pass(`ic.exe and the engine's rootfs from this checkout are here`);
-    return engineTierIsolated(harness, options.move);
+    // Check every real container's mounts before creating or removing the temporary home. The move's inventory
+    // is checked again through its fixture-only Docker context below.
+    return engineTierIsolated(harness, false);
 };
 
 export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
@@ -90,6 +93,17 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     rmSync(ENGINE_ROOT, { recursive: true, force: true });
     mkdirSync(ENGINE_ROOT, { recursive: true });
     const env = isolatedEnv(ENGINE_ROOT, options.tarball);
+    if (!options.move) { await exerciseEngine(harness, options, env); return; }
+    const context = await engineDockerContext(ENGINE_ROOT);
+    try {
+        const scoped = { ...env, ...context.env };
+        if (await engineTierIsolated(harness, true, scoped)) {
+            await exerciseEngine(harness, options, scoped);
+        }
+    } finally { await context.close(); }
+};
+
+const exerciseEngine = async (harness: Harness, options: EngineTierOptions, env: Record<string, string>): Promise<void> => {
     // The PC this tier stands in for: one whose sandboxes run on Docker Desktop, which keeps them there until they are
     // moved (choice.rs). Its isolated home holds no record of them, so the steps that set up that PC say so (a new
     // setup elsewhere goes onto Intentic's engine); the moves themselves run without it.
