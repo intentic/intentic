@@ -12825,9 +12825,12 @@
             "runTipSandbox": "Starts in the sandbox and opens it in Browsers",
             "running": "Running",
             "sandbox": "Sandbox",
+            "starting": "Starting",
             "stopOn": "Stop {target} on {device}",
             "stopTip": "Stops it on {device} with everything it started, and closes the ports opened for it",
             "switchOff": "\"Run programs this sandbox sends\" is off for {device}.",
+            "terminal": "Terminal",
+            "terminalTip": "Opens the terminal it is being built and followed in; Ctrl+C there stops it",
             "where": "Where",
             "yourComputers": "Your computers"
         },

@@ -38,7 +38,7 @@ const visible = computed({
 
 const router = useRouter();
 const { repos, devices } = useRunTargets();
-const { pending, failure, run, stop: stopRun, stopping } = useRunPresses();
+const { pending, failure, run, stop: stopRun, stopping, reopen } = useRunPresses();
 const { allPanels } = usePanels();
 const { targets: live, start: startLive, stop: stopLive } = usePreviewTargets(visible);
 const { openFile } = useWorkspaceTabs();
@@ -164,12 +164,26 @@ const runOnComputer = (row: RunRow): void => {
 };
 
 // What the chosen computer runs: each row's newest run there, by the target's name.
-const { runOf } = useDeviceRuns(
+const { runOf, terminalOf } = useDeviceRuns(
     computed(() => chosen.value?.id),
     computed(() => visible.value && chosen.value !== undefined && chosenBlocked.value === undefined),
 );
 const deviceRun = (row: RunRow): DeviceRun | undefined => (inSandbox.value || !row.computers ? undefined : runOf(row.name));
 const isRunning = (row: RunRow): boolean => deviceRun(row)?.state === `running`;
+
+// The terminal the row's run is still in (building, pushing, or following its program), which a tab switch can have
+// taken off the panel's strip.
+const runTerminal = (row: RunRow): string | undefined =>
+    inSandbox.value || entry.value === undefined || !row.computers ? undefined : terminalOf(entry.value.repo, row.name)?.session;
+// Something of the row's to stop: its program running there, or its terminal still building it.
+const isStoppable = (row: RunRow): boolean => isRunning(row) || runTerminal(row) !== undefined;
+
+const openTerminal = (row: RunRow): void => {
+    const session = runTerminal(row);
+    if (session !== undefined && chosen.value !== undefined) {
+        reopen(session, row.name, chosen.value.id);
+    }
+};
 
 const isStopping = (row: RunRow): boolean =>
     entry.value !== undefined && chosen.value !== undefined && stopping(entry.value.repo, row.name, chosen.value.id);
@@ -183,6 +197,9 @@ const stopOnComputer = (row: RunRow): void => {
 // A run's state beside its name, in words and a tone: running, perhaps running, or how it ended.
 const stateWords = (row: RunRow): string => {
     const current = deviceRun(row);
+    if (current?.state !== `running` && runTerminal(row) !== undefined) {
+        return t(`workspace.directoryRuns.starting`);
+    }
     if (current === undefined) {
         return ``;
     }
@@ -193,6 +210,9 @@ const stateWords = (row: RunRow): string => {
 };
 const stateTone = (row: RunRow): string => {
     const current = deviceRun(row);
+    if (current?.state !== `running` && runTerminal(row) !== undefined) {
+        return `text-warning`;
+    }
     if (current?.state === `running`) {
         return `text-success`;
     }
@@ -322,7 +342,7 @@ const placeClass = (id: string, online: boolean): string[] => [
                                     >
                                         <Icon name="circle" class="text-[0.5rem]" />{{ stateOf(row.sandbox) }}
                                     </span>
-                                    <span v-if="deviceRun(row) !== undefined" class="inline-flex items-center gap-1 text-2xs" :class="stateTone(row)">
+                                    <span v-if="stateWords(row) !== ``" class="inline-flex items-center gap-1 text-2xs" :class="stateTone(row)">
                                         <Icon name="circle" class="text-[0.5rem]" />{{ stateWords(row) }}
                                     </span>
                                     <span v-if="!inSandbox && row.isolated" class="inline-flex items-center gap-1 text-2xs text-subtle">
@@ -356,8 +376,19 @@ const placeClass = (id: string, online: boolean): string[] => [
                                     <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
                                 </Button>
                             </template>
-                            <!-- On a computer: Run, or once it runs there, Stop and Restart; its log once it has run. -->
+                            <!-- On a computer: Run, or once it runs there, Stop and Restart; its terminal while that is open, its log once it
+                                 has run. -->
                             <div v-else class="flex shrink-0 items-center gap-1.5">
+                                <Button
+                                    v-if="runTerminal(row) !== undefined"
+                                    :label="t(`workspace.directoryRuns.terminal`)"
+                                    :title="t(`workspace.directoryRuns.terminalTip`)"
+                                    tier="quiet"
+                                    size="small"
+                                    @click="openTerminal(row)"
+                                >
+                                    <template #icon><Icon name="terminal" class="mr-1.5 text-2xs" /></template>
+                                </Button>
                                 <Button
                                     v-if="deviceRun(row) !== undefined"
                                     :label="logRow === row.key ? t(`workspace.directoryRuns.hideLog`) : t(`workspace.directoryRuns.log`)"
@@ -367,7 +398,7 @@ const placeClass = (id: string, online: boolean): string[] => [
                                     @click="toggleLog(row)"
                                 />
                                 <Button
-                                    v-if="isRunning(row) && chosen !== undefined"
+                                    v-if="isStoppable(row) && chosen !== undefined"
                                     :label="t(`ui.action.stop`)"
                                     :aria-label="t(`workspace.directoryRuns.stopOn`, { target: row.name, device: chosen.id })"
                                     :title="t(`workspace.directoryRuns.stopTip`, { device: chosen.id })"

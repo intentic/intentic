@@ -1,4 +1,4 @@
-import type { DeviceRun, RunOutputQuery, RunStop, RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import type { DeviceRun, RunOutputQuery, RunStop, RunTargetsList, RunTerminal } from "@intentic/sandbox-contract/schemas/run-targets";
 import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -64,6 +64,8 @@ export function useRunPresses() {
                 },
             });
         },
+        // Brings a run's terminal back into the panel, focused.
+        reopen: (session: string, target: string, device: string): void => openFocused(session, { title: `${target} on ${device}` }),
         // Whether this target's run on this computer is being stopped.
         stopping: (repo: string, target: string, device: string): boolean => starts.at(stopKey(repo, target, device))?.state === `running`,
         // Stops the target's terminal and its program there (by id when known), with the ports opened for it.
@@ -101,10 +103,14 @@ export function useDeviceRuns(device: Ref<string | undefined>, active: Ref<boole
         refetchInterval: RUNS_POLL_MS,
     });
     const runs = computed<readonly DeviceRun[]>(() => query.data.value?.runs ?? []);
+    const terminals = computed<readonly RunTerminal[]>(() => query.data.value?.terminals ?? []);
     return {
         runs,
         // A target's newest run there: the machine lists newest first.
         runOf: (name: string): DeviceRun | undefined => runs.value.find((run) => run.name === name),
+        // The terminal a repository's target is still building, pushing or following in there.
+        terminalOf: (repo: string, target: string): RunTerminal | undefined =>
+            terminals.value.find((terminal) => terminal.repo === repo && terminal.target === target),
     };
 }
 

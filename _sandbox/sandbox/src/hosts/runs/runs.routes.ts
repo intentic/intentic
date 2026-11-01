@@ -1,12 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
 import { DEVICE_FEATURE_PROGRAMS, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
-import { RUN_TARGETS_FILE, type RunStart, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import { RUN_TARGETS_FILE, type RunStart, type RunTargetsList, type RunTerminal } from "@intentic/sandbox-contract/schemas/run-targets";
 import { runsContract } from "@intentic/sandbox-contract/contracts/runs.contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { createTerminalRunner, type TerminalRunner } from "../../terminal/terminal-run.js";
+import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { discoverRepos, ROOT_REPO, repoDirOf } from "../../workspace/layout/repo-discovery.js";
 import { readRunFile } from "../../workspace/layout/run-file.js";
 
@@ -15,10 +15,11 @@ import { readRunFile } from "../../workspace/layout/run-file.js";
 // is the `devices run` command an agent would type, started in a terminal the owner watches; what lets that terminal act
 // on the one computer it was started for is a grant minted for that computer, which ends with the run (device-door.ts).
 
-type RunsServices = Pick<Services, "capabilities" | "hostHub" | "runGrants" | "deviceRuns" | "workspace" | "logger">;
+type RunsServices = Pick<Services, "capabilities" | "hostHub" | "runGrants" | "deviceRuns" | "workspace" | "logger" | "terminalRun">;
 
-// A run's terminal while it lasts: what ends it (Stop, or Run pressed again), and its end.
+// A run's terminal while it lasts: what it runs, what ends it (Stop, or Run pressed again), and its end.
 interface LiveRun {
+    readonly input: RunStart;
     readonly abort: AbortController;
     readonly ended: Promise<void>;
 }
@@ -99,15 +100,23 @@ const createRunTerminals = (services: RunsServices, runner: TerminalRunner) => {
                     }
                     done();
                 });
-            live.set(session, { abort, ended });
+            live.set(session, { input, abort, ended });
         });
         return session;
     };
 
-    return { start, end };
+    // The terminals still open for one computer's runs, for the Run dialog to reopen.
+    const on = (device: string): RunTerminal[] =>
+        [...live.entries()]
+            .filter(([, held]) => held.input.device === device)
+            .map(([session, held]) => ({ repo: held.input.repo, target: held.input.target, session }));
+
+    return { start, end, on };
 };
 
-export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner = createTerminalRunner()) => {
+// The daemon's one runner by default: the terminals list reads it to say a job terminal still runs (so the editor keeps
+// its tab), and the job reaper to keep it.
+export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner = services.terminalRun) => {
     const i = implement(runsContract).$context<OrpcContext>();
     const terminals = createRunTerminals(services, runner);
 
@@ -144,17 +153,18 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             return { session: await terminals.start(input) };
         }),
         active: i.active.handler(async ({ input }) => {
+            const open = terminals.on(input.device);
             const state = services.hostHub.state(input.device);
             if (!state.online || !deviceSupports(state.facts, DEVICE_FEATURE_PROGRAMS)) {
-                return { runs: [] };
+                return { runs: [], terminals: open };
             }
             try {
-                return { runs: await services.deviceRuns.list(input.device) };
+                return { runs: await services.deviceRuns.list(input.device), terminals: open };
             } catch (error) {
                 // A computer whose switches refuse the listing has nothing of ours to show; the Run dialog says why
                 // from its card.
                 services.logger.warn({ err: errorMessage(error), device: input.device }, "runs on device: the computer did not list them");
-                return { runs: [] };
+                return { runs: [], terminals: open };
             }
         }),
         stop: i.stop.handler(async ({ input }) => {

@@ -12825,9 +12825,12 @@
             "runTipSandbox": "Le démarre dans le sandbox et l'ouvre dans Navigateurs",
             "running": "En cours",
             "sandbox": "Sandbox",
+            "starting": "Démarrage",
             "stopOn": "Arrêter {target} sur {device}",
             "stopTip": "L'arrête sur {device} avec tout ce qu'il a lancé et ferme les ports ouverts pour lui",
             "switchOff": "« Exécuter les programmes envoyés par ce sandbox » est désactivé pour {device}.",
+            "terminal": "Terminal",
+            "terminalTip": "Ouvre le terminal où il est compilé et suivi ; Ctrl+C dans ce terminal l'arrête",
             "where": "Où",
             "yourComputers": "Vos ordinateurs"
         },

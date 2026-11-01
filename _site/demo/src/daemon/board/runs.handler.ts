@@ -43,7 +43,11 @@ const DEMO_LOG = [
 export const runsDoors = {
     targets: () => DEMO_RUN_TARGETS,
     start: ({ repo, target, device }) => ({ session: `run-${repo}-${target}-${device}`.replaceAll(/[^a-zA-Z0-9_-]/gu, `-`) }),
-    active: ({ device }) => ({ runs: demoRuns().filter((run) => run.device === device) }),
+    // desktop-isolated is being built again in its terminal, so its row offers that terminal and a Stop.
+    active: ({ device }) => ({
+        runs: demoRuns().filter((run) => run.device === device),
+        terminals: device === `ada-pc` ? [{ repo: `web`, target: `desktop-isolated`, session: `job-run-web-desktop-isolated-ada-pc` }] : [],
+    }),
     stop: ({ target, id }) => ({ stopped: [{ id: id ?? `${target}-4f1c2a`, text: `Stopped ${id ?? target}, with everything it started.` }] }),
     output: ({ id, since }) => {
         const run = demoRuns().find((entry) => entry.id === id);

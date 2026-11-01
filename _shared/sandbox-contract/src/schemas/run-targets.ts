@@ -139,7 +139,15 @@ export const DeviceRunSchema = z.object({
 export type DeviceRun = z.infer<typeof DeviceRunSchema>;
 
 export const DeviceRunsQuerySchema = z.object({ device: z.string().min(1).max(100) });
-export const DeviceRunsSchema = z.object({ runs: z.array(DeviceRunSchema) });
+// A run's terminal still open (building, pushing, or following its program): the job session the editor reopens.
+export const RunTerminalSchema = z.object({ repo: z.string(), target: z.string(), session: z.string() });
+export type RunTerminal = z.infer<typeof RunTerminalSchema>;
+
+export const DeviceRunsSchema = z.object({
+    runs: z.array(DeviceRunSchema),
+    // The Run dialog's terminals for this computer that are still open.
+    terminals: z.array(RunTerminalSchema),
+});
 
 // Stop a target's run on one computer: the terminal it is being built or followed in, and the program itself (by `id`,
 // else every running program the target's name is on).

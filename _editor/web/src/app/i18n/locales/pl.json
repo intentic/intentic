@@ -12142,9 +12142,12 @@
             "runTipSandbox": "Uruchamia w sandboxie i otwiera w „Przeglądarkach”",
             "running": "Działa",
             "sandbox": "Sandbox",
+            "starting": "Uruchamianie",
             "stopOn": "Zatrzymaj {target} na {device}",
             "stopTip": "Zatrzymuje go na {device} razem ze wszystkim, co uruchomił, i zamyka otwarte dla niego porty",
             "switchOff": "„Uruchamiaj programy wysłane z sandboxa” jest wyłączone dla {device}.",
+            "terminal": "Terminal",
+            "terminalTip": "Otwiera terminal, w którym jest budowany i śledzony; Ctrl+C w nim go zatrzymuje",
             "where": "Gdzie",
             "yourComputers": "Twoje komputery"
         },

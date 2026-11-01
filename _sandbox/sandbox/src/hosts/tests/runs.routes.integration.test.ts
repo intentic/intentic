@@ -75,13 +75,15 @@ const routes = (
     root: string,
     online: boolean,
     features: string[],
-    terminal: TerminalRunner,
+    terminal: TerminalRunner | undefined,
     grants = createRunGrants(),
     deviceRuns: Partial<DeviceRuns> = {},
+    terminalRun?: TerminalRunner,
 ) =>
     createRunsRoutes(
         {
             workspace: { root },
+            terminalRun,
             logger: { warn: () => {} },
             runGrants: grants,
             deviceRuns,
@@ -92,7 +94,7 @@ const routes = (
                 ],
             },
             hostHub: { state: (id: string) => ({ online: online && id === "rog", facts: { features } }) },
-        } as unknown as Pick<Services, "capabilities" | "hostHub" | "runGrants" | "deviceRuns" | "workspace" | "logger">,
+        } as unknown as Pick<Services, "capabilities" | "hostHub" | "runGrants" | "deviceRuns" | "workspace" | "logger" | "terminalRun">,
         terminal,
     );
 
@@ -197,6 +199,31 @@ test("what runs on a computer that cannot answer is nothing, never an error", as
             throw new Error("Run programs is off");
         },
     };
-    expect(await call(routes(workspace(), true, ["programs"], fake, createRunGrants(), failing).active, { device: "rog" })).toEqual({ runs: [] });
-    expect(await call(routes(workspace(), false, ["programs"], fake).active, { device: "rog" })).toEqual({ runs: [] });
+    expect(await call(routes(workspace(), true, ["programs"], fake, createRunGrants(), failing).active, { device: "rog" })).toEqual({ runs: [], terminals: [] });
+    expect(await call(routes(workspace(), false, ["programs"], fake).active, { device: "rog" })).toEqual({ runs: [], terminals: [] });
+});
+
+test("a run's terminal is the daemon's own runner's, so the terminals list keeps it as running; the Run dialog lists it", async () => {
+    // The runner the terminals list and the job reaper read (services.terminalRun): a run on a runner of its own read
+    // as finished there, and the editor took its tab off the strip on the first tab switch.
+    const { fake } = runner();
+    let inFlight = 0;
+    const shared: TerminalRunner = {
+        visible: false,
+        run: fake.run,
+        tryRun: async (...args: Parameters<TerminalRunner["tryRun"]>) => {
+            inFlight += 1;
+            try {
+                return await fake.tryRun(...args);
+            } finally {
+                inFlight -= 1;
+            }
+        },
+        running: () => inFlight > 0,
+    };
+    const runs = routes(workspace(), true, ["programs"], undefined, createRunGrants(), { list: async () => [] }, shared);
+    const { session } = await call<{ session: string }>(runs.start, { repo: "app", target: "desktop", device: "rog" });
+    expect(shared.running(session)).toBe(true);
+    expect(await call(runs.active, { device: "rog" })).toEqual({ runs: [], terminals: [{ repo: "app", target: "desktop", session }] });
+    expect(await call(runs.active, { device: "omen" })).toMatchObject({ terminals: [] });
 });

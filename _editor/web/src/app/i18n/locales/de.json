@@ -12825,9 +12825,12 @@
             "runTipSandbox": "Startet in der Sandbox und öffnet es unter Browser",
             "running": "Läuft",
             "sandbox": "Sandbox",
+            "starting": "Startet",
             "stopOn": "{target} auf {device} stoppen",
             "stopTip": "Stoppt es auf {device} mit allem, was es gestartet hat, und schließt die dafür geöffneten Ports",
             "switchOff": "„Programme ausführen, die diese Sandbox sendet“ ist für {device} aus.",
+            "terminal": "Terminal",
+            "terminalTip": "Öffnet das Terminal, in dem es gebaut und verfolgt wird; Strg+C dort stoppt es",
             "where": "Wo",
             "yourComputers": "Ihre Computer"
         },
