@@ -11,6 +11,9 @@ import ChatForkCut from "../../transcript/ChatForkCut.vue";
 import ChatForkLine from "../../transcript/ChatForkLine.vue";
 import ChatFreshLine from "../../transcript/ChatFreshLine.vue";
 import ChatMessageView from "../../transcript/ChatMessageView.vue";
+import ChatJobRow from "../../transcript/ChatJobRow.vue";
+import ChatJobGroup from "../../transcript/jobs/ChatJobGroup.vue";
+import { jobGroupsOf } from "../../transcript/jobs/jobGroups";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../../models/conversations/transcript/transcriptWait";
 import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
@@ -108,6 +111,8 @@ const showsPrompt = computed(() => !conversation.value.transcript.historyMore.va
 // reads it out (ChatSystemPrompt) and that message draws no paperclip of its own.
 const opening = computed(() => (showsPrompt.value ? messages.value.find((message) => message.role === `user`) : undefined));
 const doomed = computed(() => conversation.value.transcript.doomed.value);
+const jobGroups = computed(() => jobGroupsOf(shownTurns.value, cutsAbove.value, doomed.value));
+const backgroundJobs = computed(() => agentById(conversation.value.conversationId)?.jobs);
 // This window's own error line: what the transcript cannot say (a send the sandbox refused, a stream that broke, where to
 // install an engine). A turn's failure is never on it: the daemon's notice row is the one place that says one
 // (turnFailures.ts), so the two can no longer say the same failure twice, or say it raw.
@@ -196,15 +201,28 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             checklistViews.get(message.id),
                             heldRow === message.id,
                             opening?.id === message.id,
+                            jobGroups.heads.get(message.id),
+                            jobGroups.folded.has(message.id),
+                            jobGroups.heads.has(message.id) ? backgroundJobs : undefined,
                         ]"
                         class="chat-row contents"
                         :class="cutsAbove.get(message.id) !== undefined && !props.subagent && `chat-cut-row`"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                         <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined && !props.subagent" :cut="cutsAbove.get(message.id)!" />
+                        <ChatJobGroup
+                            v-if="jobGroups.heads.has(message.id)"
+                            :jobs="jobGroups.heads.get(message.id)!"
+                            :live="backgroundJobs"
+                            :class="{ 'chat-doomed': doomed.has(message.id) }"
+                        >
+                            <template #default="{ jobs, inspect }">
+                                <ChatJobRow v-for="job in jobs" :key="job.id" :job="job" unfolded @inspect="inspect" />
+                            </template>
+                        </ChatJobGroup>
                         <!-- A row folded into the incident drawn after it is not drawn (chatIncidents.ts). -->
                         <ChatMessageView
-                            v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
+                            v-else-if="!jobGroups.folded.has(message.id) && (!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
                             :message="message"
                             :incident="incidents.drawn.get(message.id)"
                             :streaming="isStreaming(message)"

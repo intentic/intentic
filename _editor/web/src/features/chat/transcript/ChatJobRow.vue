@@ -25,7 +25,10 @@ const t = useT();
 
 const props = defineProps<{
     job: TranscriptBackgroundJob;
+    // An adjacent group owns the one disclosure for all its jobs.
+    unfolded?: boolean;
 }>();
+const emit = defineEmits<{ inspect: [] }>();
 
 const { conversation } = usePaneView();
 const { agentById } = useAgents();
@@ -105,10 +108,16 @@ const status = computed(() => {
 const terminal = computed(() => (phase.value.kind === `running` && surface.watchTerminal !== undefined ? phase.value.session : undefined));
 
 const commandOpen = ref(false);
+const toggleCommand = (): void => {
+    commandOpen.value = !commandOpen.value;
+    if (commandOpen.value) {
+        emit(`inspect`);
+    }
+};
 
 // Folded once it is over and the reader keeps tool calls hidden. A job the card no longer tracks is over too: it ran in a
 // turn that is gone, and is most of what an old transcript holds.
-const folds = computed(() => !showToolCalls.value && phase.value.kind !== `running`);
+const folds = computed(() => !props.unfolded && !showToolCalls.value && phase.value.kind !== `running`);
 const failed = computed(() => phase.value.kind === `failed`);
 const open = ref(false);
 // Opening and shutting holds the band's place on screen, as a run's figure does (useStickToBottom's hold).
@@ -150,7 +159,7 @@ const tip = computed((): TooltipValue => ({ title: shownLabel.value, note: statu
                     class="flex min-w-0 items-center gap-2 self-stretch transition-colors hover:text-content"
                     :aria-expanded="commandOpen"
                     v-tooltip.top="commandOpen ? t(`chat.chatJobRow.hideCommand`) : t(`chat.chatJobRow.showCommand`)"
-                    @click="commandOpen = !commandOpen"
+                    @click="toggleCommand"
                 >
                     <span class="chat-mark"><Icon :name="glyph.name" :spin="glyph.spin" class="text-xs" :class="glyph.tone" /></span>
                     <span class="truncate">{{ shownLabel }}</span>
