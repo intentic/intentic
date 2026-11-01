@@ -216,6 +216,7 @@ type RecordAnswer =
 // reading the record whole.
 const readRecord = async (conversation: Conversation, current: () => boolean, whole: boolean): Promise<RecordAnswer> => {
     const cursor = whole ? undefined : conversation.transcript.cursor();
+    const phase = conversation.turn.phase.value;
     const transcript = await fetchAgentTranscript(conversation, current, cursor);
     if (transcript === undefined) {
         return { kind: `unanswered` };
@@ -239,7 +240,10 @@ const readRecord = async (conversation: Conversation, current: () => boolean, wh
     if (!conversation.transcript.mergeRecorded(transcript.messages, cursor)) {
         return readRecord(conversation, current, true);
     }
-    conversation.failures.adoptEnding(transcript.ending);
+    // A turn that started here while the read was out owns its ending, even if it has already settled.
+    if (current() && conversation.turn.phase.value === phase) {
+        conversation.failures.adoptEnding(transcript.ending);
+    }
     return { kind: `merged`, read: answeredWith(transcript) };
 };
 
@@ -248,6 +252,7 @@ const readRecord = async (conversation: Conversation, current: () => boolean, wh
 // that there's nothing to show. Asked for every provider now. A pass no longer the tab's newest (`current`) never says
 // the read failed; any answer still paints, since the sandbox answered.
 const replayStoredSession = async (conversation: Conversation, current: () => boolean): Promise<RecordRead> => {
+    const phase = conversation.turn.phase.value;
     // Fleet conversations resolve by identity, not session id; adopt whatever session supplied it.
     let restored: TranscriptRow[] | undefined;
     // Position of these rows in the daemon's record; absent for the SDK-session fallback, which has none.
@@ -287,9 +292,11 @@ const replayStoredSession = async (conversation: Conversation, current: () => bo
     if (restored.length > 0 && !conversation.turn.streaming.value) {
         conversation.transcript.restoreMessages(restored, page);
     }
-    // Applied last, over a painted transcript rather than the blank interim pane. Handed the verdict, not gated
-    // on it: adoptEnding itself refuses a live turn, an empty transcript, or an already-armed pick-up.
-    conversation.failures.adoptEnding(transcript?.ending);
+    // Applied last, over a painted transcript. A newer local turn owns its ending; a session-store fallback has no
+    // verdict about the conversation's hold. An actual record with no ending clears an obsolete offer.
+    if (transcript !== undefined && current() && conversation.turn.phase.value === phase) {
+        conversation.failures.adoptEnding(transcript.ending);
+    }
     return answeredWith(transcript);
 };
 

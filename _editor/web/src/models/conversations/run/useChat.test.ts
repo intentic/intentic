@@ -2769,6 +2769,86 @@ describe(`opening a session whose last turn stopped short`, () => {
         expect(conversation.pickUp.value).toBeUndefined();
     });
 
+    for (const forward of [false, true]) {
+        it(`clears the limit offer after a scheduled continuation finished unseen, reading ${forward ? `forward` : `the whole page`}`, async () => {
+            const heldRows = STOPPED.messages.map((row, index) => ({ ...row, rowId: `held-${index}` }));
+            const finishedRows = [{ role: `assistant`, text: `Reconcile engine finished and verified.`, rowId: `finished` }];
+            let finished = false;
+            daemonAnswers((procedure) => {
+                if (procedure !== `agents.transcript`) {
+                    return undefined;
+                }
+                if (finished) {
+                    const page = { messages: forward ? finishedRows : [...heldRows, ...finishedRows], from: forward ? 2 : 0, more: forward };
+                    return Promise.resolve(forward ? { ...page, through: 3, continuous: true } : page);
+                }
+                const page = {
+                    messages: forward ? heldRows : STOPPED.messages,
+                    from: 0,
+                    more: false,
+                    ending: { reason: `limit`, resetsAt: 9_000, nextAt: 9_000, held: { ran: true }, scheduled: true },
+                };
+                return Promise.resolve(forward ? { ...page, through: 2 } : page);
+            });
+
+            const conversation = openAgentConversation({ id: `finished-after-limit-${forward}`, provider: `codex`, harness: `native` });
+            hydrateOnce(conversation);
+            await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 9_000_000, nextAt: 9_000_000, booked: true, held: { ran: true } }));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            // The browser slept through the entire resumed run: no attach ever cleared the old offer.
+            finished = true;
+            refreshAfterSleep(conversation);
+            await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([...STOPPED.messages.map((row) => row.text), finishedRows[0]!.text]));
+            expect(conversation.pickUp.value).toBeUndefined();
+            expect(conversation.turn.streaming.value).toBe(false);
+            expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.resume` || procedure === `agent.run`)).toEqual([]);
+        });
+
+        it(`keeps a newer local turn's limit when an older ${forward ? `forward read` : `page read`} answers without an ending`, async () => {
+            const rows = STOPPED.messages.map((row, index) => ({ ...row, rowId: `row-${index}` }));
+            const answer = Promise.withResolvers<unknown>();
+            let reads = 0;
+            daemonAnswers((procedure) => {
+                if (procedure !== `agents.transcript`) {
+                    return undefined;
+                }
+                reads += 1;
+                if (reads > 1) {
+                    return answer.promise;
+                }
+                const page = { ...STOPPED, messages: forward ? rows : STOPPED.messages };
+                return Promise.resolve(forward ? { ...page, through: 2 } : page);
+            });
+            const conversation = openAgentConversation({ id: `newer-limit-${forward}`, provider: `codex`, harness: `native` });
+            hydrateOnce(conversation);
+            await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            refreshAfterSleep(conversation);
+            await waitFor(() => expect(reads).toBe(2));
+            runningTurn(conversation.turn);
+            conversation.failures.apply({ kind: `error`, code: `rate_limit`, message: `Usage limit reached.`, resetsAt: 12_000, held: { ran: true } });
+            conversation.turn.phase.value = { kind: `idle`, accepted: true };
+            const page = { messages: forward ? [] : rows, from: forward ? 2 : 0, more: forward };
+            answer.resolve(forward ? { ...page, through: 2, continuous: true } : page);
+
+            await waitFor(() => expect(conversation.transcript.refresh.value).toBeUndefined());
+            expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 12_000_000, held: { ran: true } });
+        });
+    }
+
+    it(`keeps the limit offer when only the SDK session store answered`, async () => {
+        daemonAnswers((procedure) => (procedure === `sessions.get` ? Promise.resolve({ messages: STOPPED.messages }) : undefined));
+        const conversation = openAgentConversation({ id: `sdk-session-fallback`, provider: `codex`, harness: `native` });
+        conversation.session.value = { id: `sdk-session`, provider: `codex`, harness: `native`, account: undefined };
+        conversation.pickUp.value = { reason: `limit`, held: { ran: true } };
+
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: true } });
+    });
+
     // A pickUp the stream already armed outranks the record: it knows the turn is held and the reset instant, which a
     // flattened `stopped` would lose.
     it(`keeps what the stream armed instead of flattening it to a bare stop`, async () => {

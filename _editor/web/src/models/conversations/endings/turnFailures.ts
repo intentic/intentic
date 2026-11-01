@@ -394,15 +394,21 @@ export class TurnFailures {
         }
     }
 
-    // How the last turn ended, as the daemon has it (AgentTranscriptSchema.ending), for a tab that never watched it
-    // happen; arms the same pick-up a watching window would, down to the countdown and what the press does. Refused
-    // when the record shows no ending, a turn is already live, a pick-up is already held, or the transcript is empty.
+    // How the last turn ended, as the daemon has it (AgentTranscriptSchema.ending). No ending clears a hold whose
+    // resumed run this window missed. A stated ending fills an unarmed offer; an existing stream's richer details win.
+    // Only a read of the conversation's record calls this: an SDK-session fallback says nothing about its hold.
     adoptEnding(ending: PickUp | undefined): void {
         const { turn, pickUp, transcript } = this.host;
-        if (ending === undefined || turn.streaming.value || pickUp.value !== undefined || transcript.messages.value.length === 0) {
+        if (turn.streaming.value || transcript.messages.value.length === 0) {
             return;
         }
-        pickUp.value = ending;
+        if (ending === undefined) {
+            pickUp.value = undefined;
+            this.cancelProbe();
+            this.clear();
+        } else if (pickUp.value === undefined) {
+            pickUp.value = ending;
+        }
     }
 
     // Called on a send or on losing the tab/sandbox; the daemon's own resume still fires independently and
