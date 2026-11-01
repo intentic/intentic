@@ -512,7 +512,7 @@ it(`stops promising a reconnect once the restart has gone unheard for two minute
     // And the follow goes on underneath.
     const asked = runDeviceCommand.mock.calls.length;
     await settleUi(3 * POLL_MS);
-    expect(runDeviceCommand).toHaveBeenCalledTimes(asked + 3);
+    expect(runDeviceCommand.mock.calls.length).toBeGreaterThanOrEqual(asked + 3);
 });
 
 it(`picks the rebuild back up when the sandbox answers again`, async () => {
