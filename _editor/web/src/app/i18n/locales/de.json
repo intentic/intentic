@@ -5100,6 +5100,8 @@
         "shareAccounts": {
             "title": "Aus Ihren anderen Sandboxes",
             "explain": "Nichts muss zweimal angemeldet werden. Kopieren: Ein Schlüssel, der sich nicht ändert, wird hierher kopiert. Leihen: Eine Claude-Anmeldung bleibt in der anderen Sandbox, die sie hier Zug um Zug verleiht.",
+            "open": "{count} Konto in Ihren anderen Sandboxes | {count} Konten in Ihren anderen Sandboxes",
+            "openNone": "Ihre anderen Sandboxes",
             "endpoint": "Modell-Endpunkt",
             "modeCopy": "Schlüssel kopieren",
             "modeLend": "Zug um Zug leihen",

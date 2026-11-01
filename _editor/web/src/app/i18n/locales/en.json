@@ -5100,6 +5100,8 @@
         "shareAccounts": {
             "title": "From your other sandboxes",
             "explain": "Nothing to sign in to twice. Copy: a key that does not change is copied here. Borrow: a Claude sign-in stays on the other sandbox, which lends it here turn by turn.",
+            "open": "{count} account on your other sandboxes | {count} accounts on your other sandboxes",
+            "openNone": "Your other sandboxes",
             "endpoint": "Model endpoint",
             "modeCopy": "Copy its key",
             "modeLend": "Borrow turn by turn",

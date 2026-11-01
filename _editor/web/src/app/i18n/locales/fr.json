@@ -5100,6 +5100,8 @@
         "shareAccounts": {
             "title": "Depuis vos autres sandboxes",
             "explain": "Rien à reconnecter deux fois. Copier : une clé qui ne change pas est copiée ici. Emprunter : une connexion Claude reste sur l'autre sandbox, qui la prête ici tour par tour.",
+            "open": "{count} compte sur vos autres sandboxes | {count} comptes sur vos autres sandboxes",
+            "openNone": "Vos autres sandboxes",
             "endpoint": "Point de terminaison de modèle",
             "modeCopy": "Copier sa clé",
             "modeLend": "Emprunter tour par tour",

@@ -5100,6 +5100,8 @@
         "shareAccounts": {
             "title": "Desde tus otros sandboxes",
             "explain": "Nada que iniciar dos veces. Copiar: una clave que no cambia se copia aquí. Tomar prestada: un inicio de sesión de Claude se queda en el otro sandbox, que lo presta aquí turno a turno.",
+            "open": "{count} cuenta en tus otros sandboxes | {count} cuentas en tus otros sandboxes",
+            "openNone": "Tus otros sandboxes",
             "endpoint": "Endpoint de modelo",
             "modeCopy": "Copiar su clave",
             "modeLend": "Tomar prestada turno a turno",

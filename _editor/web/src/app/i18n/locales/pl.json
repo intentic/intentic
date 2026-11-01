@@ -5100,6 +5100,8 @@
         "shareAccounts": {
             "title": "Z innych Twoich sandboxów",
             "explain": "Bez ponownego logowania. Kopia: klucz, który się nie zmienia, zostaje skopiowany tutaj. Pożyczenie: logowanie do Claude zostaje w drugim sandboxie, który użycza go tutaj tura po turze.",
+            "open": "{count} konto w innych Twoich sandboxach | {count} konta w innych Twoich sandboxach | {count} kont w innych Twoich sandboxach",
+            "openNone": "Twoje inne sandboxy",
             "endpoint": "Punkt końcowy modelu",
             "modeCopy": "Skopiuj klucz",
             "modeLend": "Pożycz tura po turze",

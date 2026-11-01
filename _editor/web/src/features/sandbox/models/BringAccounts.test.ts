@@ -1,6 +1,6 @@
-// Sandbox ▸ Models' "From your other sandboxes": every other sandbox of the owner's is read without being asked, what
-// they hold that this one does not is listed with where it is, and one or all of it is brought in; a sandbox it could not
-// see into is named with why, so the section never just vanishes. The far and near calls are the fakes below; the press's
+// Sandbox ▸ Models' "From your other sandboxes": every other sandbox of the owner's is read without being asked, and once
+// they hold something this one does not, a quiet door on the page names how much; behind it, a dialog lists each with
+// where it is, brings one or all of it in, and names a sandbox it could not see into with why. The far and near calls are the fakes below; the press's
 // own order of them is shareAccounts.test.ts's to check.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
@@ -96,6 +96,14 @@ const mount = async (): Promise<void> => {
     app.mount(el);
     await settle();
 };
+// The door on the page, once there is something behind it, and the dialog it opens.
+const door = (): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll<HTMLButtonElement>(`button[aria-haspopup="dialog"]`)][0];
+const openDoor = async (): Promise<void> => {
+    await waitFor(() => expect(door()).toBeInstanceOf(HTMLButtonElement));
+    door()?.click();
+    await settle();
+};
 const settle = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
@@ -130,10 +138,14 @@ afterEach(() => {
 
 it(`reads every other sandbox the owner may make a link on, without a pick, and says where each account is`, async () => {
     await mount();
-    expect(shown()).toContain(`From your other sandboxes`);
     // Only the laptop: this sandbox is not asked, and a guest's sandbox is not the reader's to make a link on.
     expect(shareableAt.mock.calls.map(([id]) => id)).toEqual([LAPTOP.id]);
-    await waitFor(() => expect(shown()).toContain(`Claude Max`));
+    // On the page, only the door, naming what can come; the list is behind it.
+    await waitFor(() => expect(door()?.textContent?.trim()).toBe(`3 accounts on your other sandboxes`));
+    expect(shown()).not.toContain(`Claude Max`);
+    await openDoor();
+    expect(shown()).toContain(`From your other sandboxes`);
+    expect(shown()).toContain(`Claude Max`);
     // The way each comes first on its line, then where it is, then whose it is.
     expect(shown()).toContain(`Borrow turn by turn · on ada-laptop · ada@acme.dev`);
     expect(shown()).toContain(`Copy its key · on ada-laptop · Cursor · ada@acme.dev`);
@@ -152,6 +164,7 @@ it(`leaves out what is already here, and lists an account two sandboxes hold onc
     sandboxes.value = [HERE, LAPTOP, DESK];
     held.value = { cursor: [{ id: `cur_here`, label: `Work`, email: `ADA@acme.dev`, connectedAt: 1 }] };
     await mount();
+    await openDoor();
     await waitFor(() => expect(shown()).toContain(`Devin`));
     expect(shown()).not.toContain(`Work`);
     expect(shown()).not.toContain(`It is borrowed from ada-laptop`);
@@ -162,6 +175,7 @@ it(`leaves out what is already here, and lists an account two sandboxes hold onc
 it(`brings every account that can come in one press, a link on each sandbox they come from, and shows what became of each`, async () => {
     sandboxes.value = [HERE, LAPTOP, DESK];
     await mount();
+    await openDoor();
     await waitFor(() => expect(buttons(`Bring all`)).toHaveLength(1));
     buttons(`Bring all`)[0]?.click();
 
@@ -189,37 +203,61 @@ it(`brings every account that can come in one press, a link on each sandbox they
     expect(shown()).toContain(`That key has expired on ada-laptop · on ada-laptop · Cursor`);
     expect(buttons(`Bring`)).toHaveLength(1);
     expect(buttons(`Bring all`)).toHaveLength(0);
+    // The door now names only what is still waiting: the one that failed.
+    expect(door()?.textContent?.trim()).toBe(`1 account on your other sandboxes`);
     const again = rowAround(buttons(`Bring`)[0], `Work`)?.textContent ?? ``;
     expect(again).toContain(`That key has expired on ada-laptop`);
     expect(again).not.toContain(`Claude Max`);
 });
 
-it(`names the sandboxes it could not see into, and why, rather than leaving them out`, async () => {
-    sandboxes.value = [HERE, LAPTOP, DESK, ASLEEP];
+it(`names, beside the accounts it lists, the sandboxes it could not see into and why`, async () => {
+    const OLD = { id: `sbx-old`, name: `ada-older`, daemonUrl: `https://older.example`, role: `owner`, removedAt: null };
+    sandboxes.value = [HERE, LAPTOP, DESK, OLD, ASLEEP];
     shareableAt.mockImplementation(async (id: string) => {
-        throw id === LAPTOP.id ? new SandboxHttpError(404, `Not found`) : new Error(`Failed to fetch`);
+        if (id === OLD.id) {
+            throw new SandboxHttpError(404, `Not found`);
+        }
+        if (id === DESK.id) {
+            throw new Error(`Failed to fetch`);
+        }
+        return LISTING;
     });
     try {
         await mount();
-        await waitFor(() => expect(shown()).toContain(`ada-laptop runs a build too old to share accounts.`));
+        await openDoor();
+        await waitFor(() => expect(shown()).toContain(`ada-older runs a build too old to share accounts.`));
         expect(shown()).toContain(`Couldn't reach ada-desk, so its accounts aren't listed.`);
         expect(shown()).toContain(`ada-old isn't running.`);
-        expect(buttons(`Bring`)).toHaveLength(0);
-        expect(shown()).not.toContain(`already here`);
+        expect(shown()).toContain(`Claude Max`);
     } finally {
         shareableAt.mockImplementation(async (id: string) => (id === DESK.id ? DESK_LISTING : LISTING));
     }
 });
 
-it(`says when everything the other sandboxes hold is already here`, async () => {
+it(`puts no door on the page when no other sandbox could be read, rather than a button onto nothing`, async () => {
+    sandboxes.value = [HERE, LAPTOP, ASLEEP];
+    shareableAt.mockImplementationOnce(async () => {
+        throw new Error(`Failed to fetch`);
+    });
+    await mount();
+    await settle();
+    expect(door()).toBeUndefined();
+    expect(shown()).toBe(``);
+});
+
+it(`puts no door on the page when everything the other sandboxes hold is already here`, async () => {
     shareableAt.mockImplementationOnce(async () => ({ sandbox: `ada-laptop`, accounts: [] }));
     await mount();
-    await waitFor(() => expect(shown()).toContain(`Everything your other sandboxes hold is already here.`));
+    await waitFor(() => expect(shareableAt).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(door()).toBeUndefined();
 });
 
 it(`says this sandbox needs an update to bring accounts in, rather than drawing nothing`, async () => {
     borrowSupported.value = false;
     await mount();
+    expect(door()?.textContent?.trim()).toBe(`Your other sandboxes`);
+    await openDoor();
     expect(shown()).toContain(`Update needed: Accounts your other sandboxes hold can be brought here`);
     expect(shareableAt).not.toHaveBeenCalled();
 });
@@ -227,5 +265,6 @@ it(`says this sandbox needs an update to bring accounts in, rather than drawing 
 it(`draws nothing when the owner has no other sandbox to bring from`, async () => {
     sandboxes.value = [HERE];
     await mount();
-    expect(shown()).not.toContain(`From your other sandboxes`);
+    expect(door()).toBeUndefined();
+    expect(shown()).toBe(``);
 });

@@ -442,11 +442,15 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
 <template>
     <!-- `@container`: the docked chat can leave this pane a third of the window, and the grid reflows against it. -->
     <div class="@container flex flex-col gap-6">
-        <p class="flex items-center gap-1.5 text-xs text-muted">
-            <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
-            <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
-            <TourMark step="models" place="models" :priority="3" side="bottom" />
-        </p>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p class="flex min-w-0 grow basis-64 items-center gap-1.5 text-xs text-muted">
+                <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
+                <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
+                <TourMark step="models" place="models" :priority="3" side="bottom" />
+            </p>
+            <!-- What the owner's other sandboxes hold, behind a quiet door: brought in without signing in again, or signed in here instead. -->
+            <BringAccounts :busy="starting !== undefined" @sign-in="(provider) => void connect(provider)" />
+        </div>
 
         <Notice
             v-if="!accessKnown && !reachable"
@@ -510,9 +514,6 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
             </Row>
         </RowGroup>
         <Notice v-if="keyNotice" :of="keyNotice" />
-
-        <!-- What the owner's other sandboxes hold: brought in here without signing in again, or signed in here instead. -->
-        <BringAccounts :busy="starting !== undefined" @sign-in="(provider) => void connect(provider)" />
 
         <!-- The grid: every way in, always the same tiles in the same places. -->
         <div role="group" :aria-label="t(`shared.models`)" class="flex flex-wrap gap-1">
