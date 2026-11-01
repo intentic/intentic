@@ -30,6 +30,11 @@ export type TranscriptAgentNotice = z.infer<typeof TranscriptAgentNoticeSchema>;
 // (the sandbox's agent/run/turn-checks.ts): a reader draws that row as the checks' own, its findings behind it.
 export const TURN_CHECKS_SOURCE = "turn checks";
 
+// Who said the notice a turn's transcript carries where, as it was about to stop, its branch was found not to rebase onto
+// a main line that moved under it, and the model was asked to resolve that before ending (the sandbox's
+// agent/run/main-catch-up.ts).
+export const MAIN_MOVED_SOURCE = "main moved";
+
 // The two frames, as members of AgentEventSchema.
 export const agentStatusEvent = {
     kind: z.literal("agent_status"),

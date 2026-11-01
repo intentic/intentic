@@ -200,4 +200,6 @@ export const harnessHooks = (deps: HarnessHooksDeps, context: TurnContext, fileE
         }),
     // The rebase the cards take back while the user is answering them; isolated turns only.
     ...opt("resync", context.resync),
+    // The main line another conversation moves, taken in as the turn runs and checked once at its Stop.
+    ...opt("catchUp", context.catchUp),
 });

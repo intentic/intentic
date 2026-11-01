@@ -65,6 +65,7 @@ import { commandNotesHooks, commandWire } from "../command-turn.js";
 import { PINNED_ENV } from "./pinned-env.js";
 import { reviewHooks } from "./review-findings.js";
 import { turnCheckHooks } from "../turn-checks.js";
+import { catchUpHooks, stopCatchUp } from "../main-catch-up.js";
 import { settingsHookChangeHooks } from "./settings-hook-gate.js";
 import { checklistSeedOf } from "../task-store.js";
 import { carriedCostOf } from "../carried-cost.js";
@@ -84,23 +85,27 @@ import { storedPromptTitle } from "../../../sessions/vocabulary/prompt-envelope.
 // container's own credential.
 export type HarnessRequest = AgentRequest<HarnessCredential>;
 
-// Rebases only when quiet, skipped if the turn's shell or a subagent is still writing, which leaves the branch exactly
-// where it was; answers the frame it pushed, if the branch moved.
+// Whether nothing of the turn is writing to its checkout right now: no subagent in the parent's tree and no busy shell.
+// What every rebase under a live turn waits for; a no leaves the branch exactly where it was, for the next quiet point.
+const turnQuiet =
+    (conversations: Pick<ConversationActors, "holdings">, request: AgentRequest, shell: { sessionId: string | undefined }) =>
+    async (): Promise<boolean> => {
+        if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
+            return false;
+        }
+        // allow(silent-catch): a shell tmux could not be asked about counts as busy, so this optional rebase waits for the
+        // next quiet point instead of running under a shell that may be writing; nothing on this path has a logger.
+        return shell.sessionId === undefined || !(await agentShellBusy(shell.sessionId).catch(() => true));
+    };
+
+// Rebases only when quiet (turnQuiet); answers the frame it pushed, if the branch moved.
 const quietResync = async (
     conversations: Pick<ConversationActors, "holdings">,
     request: AgentRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
 ): Promise<AgentEvent | undefined> => {
-    if (request.hooks.resync === undefined) {
-        return undefined;
-    }
-    if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
-        return undefined;
-    }
-    // allow(silent-catch): a shell tmux could not be asked about counts as busy, so this optional rebase waits for the
-    // next quiet point instead of running under a shell that may be writing; nothing on this path has a logger.
-    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId).catch(() => true))) {
+    if (request.hooks.resync === undefined || !(await turnQuiet(conversations, request, shell)())) {
         return undefined;
     }
     // Swallowed here so a rebase fault can't fail what called it; resync owns its own logging.
@@ -447,6 +452,15 @@ const sessionHooks = (spec: HarnessRequest["spec"], children: HarnessRequest["ho
     commandNotesHooks(commandWire(spec).notes),
 ];
 
+// What keeps an isolated turn's work landable as it runs. After a tool call, a main line another conversation moved is
+// taken in where nothing it moved is this turn's (main-catch-up.ts). Once, as the turn is about to stop: first the land's
+// rebase run early, so a branch that no longer rebases is resolved in this turn; then the repositories' own `turn`
+// checks, whose findings are said back for the model to fix or say why not. Nothing waits on either.
+const landableHooks = (request: HarnessRequest, push: (event: AgentEvent) => void, quiet: () => Promise<boolean>) => [
+    turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push, stopCatchUp(request.hooks.catchUp, push)),
+    catchUpHooks(request.hooks.catchUp, quiet, push),
+];
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: HarnessRequest,
@@ -457,6 +471,8 @@ const baseOptions = (
     subagents: SubagentTurn | undefined,
     // Turn's event sink; the command gate uses it to park the turn on a card without ever calling canUseTool.
     push: (event: AgentEvent) => void,
+    // Whether nothing of the turn is writing to its checkout (turnQuiet), for the mid-turn catch-up.
+    quiet: () => Promise<boolean>,
 ): OauthRecoveryOptions => {
     // This turn's outside-content bit, set once here; the wrap hook sets it, the gate reads it per command.
     const taint = createTurnTaint(request.policy.outsideWake);
@@ -533,9 +549,8 @@ const baseOptions = (
                 installSteeringHooks(),
                 ...policyBoundaryHooks(request.policy),
                 ...sessionHooks(request.spec, request.hooks.children),
-                // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
-                // change is said back, and the model fixes it or says why not. Nothing waits on them.
-                turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push),
+                // What keeps an isolated turn's work landable: the main line caught up, the repositories' `turn` checks.
+                ...landableHooks(request, push, quiet),
                 // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
                 settingsHookChangeHooks(request),
                 // Apply worktree redirection only when no anchor already resolves paths.
@@ -911,7 +926,7 @@ export async function* runAgent(
     const writing = new Map<string, RequestDocument>();
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, turnQuiet(conversations, request, shell)),
         // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
         // omitted.
         systemPrompt,

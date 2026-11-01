@@ -225,6 +225,10 @@ async function* recordLand(
     const reconciled = landed.landed ? await deps.dependencies.reconcileLand(origin) : undefined;
     yield landedFrame(landed, reconciled, land);
     if (!landed.landed) {
+        // Counted beside the turn's own catch-up (agent.catchup, agent.stop-sync): the clashes that still reached a land.
+        if (books.outcome === "conflict") {
+            deps.perf.record("agent.land-conflict", 0, { id, resolveTurn: isLandConflict(turn.prompt) });
+        }
         // A resolve turn's own clash is not sent back: recognised by its prompt, whoever sent it.
         if (books.outcome === "conflict" && finished.identity.home === true && !isLandConflict(turn.prompt)) {
             hooks.resolveConflict(id, landed.conflicts);

@@ -34,6 +34,7 @@ import type { TurnRelay } from "../../runtimes/daemon-tools/turn-relay.js";
 import type { BackgroundJobSeed } from "../tools/jobs/background-jobs.js";
 import type { EditReviewer } from "../verification/agent-diagnostics.js";
 import type { TurnChecks } from "../run/turn-checks.js";
+import type { MainCatchUp } from "../run/main-catch-up.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
@@ -314,6 +315,9 @@ export interface TurnHooks {
     readonly rememberSafetyFailed?: CommandGuardOptions["rememberFailed"];
     // Rebases onto main when the turn parks for a person. Absent off-harness or main-tree.
     readonly resync?: () => Promise<AgentEvent | undefined>;
+    // Keeps the turn on a main line that moves under it: after a tool call where that is clear, and once at its Stop
+    // (run/main-catch-up.ts). Absent off-harness or main-tree.
+    readonly catchUp?: MainCatchUp;
     // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
     readonly children?: ChildSupervisor;
     // Where a spawned child its parent gave a result schema hands its value, for runtimes that mount the `result` tool as

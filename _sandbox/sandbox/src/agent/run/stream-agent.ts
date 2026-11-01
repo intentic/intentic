@@ -592,6 +592,7 @@ const preflight = async (
         steering,
         settings,
         ...opt("resync", worktree?.resync),
+        ...opt("catchUp", worktree?.catchUp),
         ...opt("children", childrenOf(services, input, localCwd)),
         ...opt("workflows", workflowsOf(services, input, localCwd)),
     };

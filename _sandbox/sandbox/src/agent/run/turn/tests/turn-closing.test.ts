@@ -1,4 +1,5 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { MAIN_MOVED_SOURCE } from "@intentic/sandbox-contract/events/agent-ui";
 import { TURN_CHECKS_SOURCE } from "../../turn-checks.js";
 import { closingOf } from "../turn-closing.js";
 
@@ -22,4 +23,11 @@ test("a turn nothing was said back to reports its last prose, as before", () => 
 test("an answer missing on either side of the notice leaves the side there is", () => {
     expect(closingOf([said("WS3 done."), checked])).toBe("WS3 done.");
     expect(closingOf([checked, said("fixed two of them")])).toBe("fixed two of them");
+});
+
+test("a turn asked at its Stop to resolve a main line that moved reports first, then each answer in order", () => {
+    const moved: TranscriptRow = { role: "notice", text: "main moved", agentNotice: { level: "info", source: MAIN_MOVED_SOURCE } };
+    expect(closingOf([said("Done: two files."), moved, said("Rebased; kept both sides in app.ts."), checked, said("No findings are mine.")])).toBe(
+        "Done: two files.\n\nOn the main line that moved: Rebased; kept both sides in app.ts.\n\nOn the end-of-turn checks: No findings are mine.",
+    );
 });

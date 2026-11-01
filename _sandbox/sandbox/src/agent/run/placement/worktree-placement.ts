@@ -2,8 +2,11 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
-import { settleIndex } from "@intentic/base/git";
-import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
+import { defaultGit, settleIndex } from "@intentic/base/git";
+import { type RepoSync, type SyncGate, syncConversation, syncMoved } from "../../../conversations/land/sync.js";
+import { mainLineSha } from "../../../git/main-line-tip.js";
+import type { MainCatchUp } from "../main-catch-up.js";
+import { opt } from "../../../opt.js";
 import { branchLinesOf } from "../../../conversations/land/branch/branch-land.js";
 import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
 import { headSha } from "../../../git/changes/changes.js";
@@ -20,7 +23,8 @@ import { anchorIsolatedTurn, type Placement, worktreeFrame } from "./turn-placem
 import type { ReachWatch } from "./turn-reach.js";
 
 // An isolated conversation's own worktree: composed and rebased onto today's main line before the model reads it,
-// rebased again whenever a parked card settles and once more before the land, and announced each time it moves. A
+// rebased again whenever a parked card settles, after a tool call where the main line moved nothing it changed and at
+// its Stop (main-catch-up.ts), and once more before the land, and announced each time it moves. A
 // spawned child cut from its parent's checkout is rebased onto that checkout instead (land-target.ts).
 
 // The worktree a turn runs in, as the turn's body is handed it.
@@ -32,6 +36,8 @@ export interface WorktreeRun {
     readonly synced: readonly RepoSync[];
     // Re-syncs after a settled card, answering the frame to restate where the branch stands, or nothing if it didn't move.
     readonly resync: () => Promise<AgentEvent | undefined>;
+    // Keeps the running turn on a main line that moves under it (main-catch-up.ts); absent for a pinned or fenced turn.
+    readonly catchUp?: MainCatchUp;
 }
 
 const MAIN_LINE: Upstream = { kind: "main" };
@@ -54,7 +60,7 @@ const rebaser =
         onto: Map<string, string>,
         books: LandBooks,
     ) =>
-    async (upstream: Upstream): Promise<RepoSync[]> => {
+    async (upstream: Upstream, gate: SyncGate = "always"): Promise<RepoSync[]> => {
         // Read fresh every call, since a land in between moves `landedTip`, and a sync onto a parent moves `base`.
         const current = deps.agents.entry(conversationId);
         const recorded = new Map((worktreeOf(current)?.repos ?? []).map((composed) => [composed.repo, composed]));
@@ -67,9 +73,11 @@ const rebaser =
                 worktree.repos.map(({ repo, base }) => ({ repo, base: recorded.get(repo)?.base ?? base, landedTip: recorded.get(repo)?.landedTip, line: lines.get(repo)?.dir })),
                 current?.social.title?.text,
                 upstream,
+                defaultGit,
+                gate,
             ),
         );
-        const moved = synced.filter((repo) => repo.blocked !== true);
+        const moved = synced.filter(syncMoved);
         if (moved.length === 0) {
             return synced;
         }
@@ -145,6 +153,88 @@ const carryStray = async (deps: LandingDeps, conversationId: string, repos: Conv
     }
 };
 
+// Where each repo's main line stood when the turn last looked: a main line that has not moved since is not asked again.
+type MainHeads = ReadonlyMap<string, string | undefined>;
+
+const mainHeadsOf = async (deps: Pick<Services, "agentWorktrees">, worktree: ConversationWorktree): Promise<MainHeads> =>
+    new Map(
+        await Promise.all(
+            worktree.repos.map(async ({ repo }) => {
+                // allow(silent-catch): a main line git cannot read is not known to have moved, so nothing is asked; the
+                // land's own rebase still reads it, and reports what it finds.
+                const head = await mainLineSha(deps.agentWorktrees.mainDir(repo)).catch(() => undefined);
+                return [repo, head] as const;
+            }),
+        ),
+    );
+
+// What a catch-up came to, as perf.jsonl and the log file it (agent.catchup, agent.stop-sync): enough to count how often
+// a turn was kept on the main line, held back from it, or asked to resolve a clash in the turn instead of a later one.
+const catchUpOutcome = (synced: readonly RepoSync[]): "rebased" | "held" | "conflict" | "current" => {
+    if (synced.some((repo) => repo.blocked === true)) {
+        return "conflict";
+    }
+    if (synced.some(syncMoved)) {
+        return "rebased";
+    }
+    return synced.length > 0 ? "held" : "current";
+};
+
+// The running turn's catch-up with the main line (main-catch-up.ts), under the conversation's land lease as every
+// rebase outside the land. Never a pinned step, which stays on its snapshot, nor a fenced checkout, which has no git
+// to resolve a clash in. Main-line conversations only: a child follows its parent's checkout, which moves with work in
+// flight rather than with lands, and a branch's line is that branch's.
+const mainCatchUp = (
+    deps: LandingDeps,
+    conversationId: string,
+    worktree: ConversationWorktree,
+    rebase: (upstream: Upstream, gate?: SyncGate) => Promise<RepoSync[]>,
+    frame: (moved: readonly RepoSync[]) => AgentEvent,
+): MainCatchUp => {
+    // Seeded as the turn opens, just after its own rebase: what it opened on is the main line it already holds.
+    let seen: Promise<MainHeads> = mainHeadsOf(deps, worktree);
+    const timed = async (op: string, gate: SyncGate, upstream: Upstream): Promise<RepoSync[]> => {
+        const started = performance.now();
+        const synced = await underLeases(deps.conversations, conversationId, undefined, () => rebase(upstream, gate));
+        const outcome = catchUpOutcome(synced);
+        deps.perf.record(op, performance.now() - started, { id: conversationId, outcome });
+        if (outcome !== "current") {
+            const repos = synced.map(({ repo, commits, overlap }) => ({ repo, commits, overlap: overlap.length }));
+            deps.logger.info({ id: conversationId, op, outcome, repos }, "agents: caught a running turn up with the main line");
+        }
+        return synced;
+    };
+    return {
+        midTurn: async (quiet) => {
+            const before = await seen;
+            const now = await mainHeadsOf(deps, worktree);
+            if ([...now].every(([repo, head]) => head === undefined || head === before.get(repo))) {
+                return undefined;
+            }
+            const upstream = await upstreamNow(deps, conversationId);
+            if (upstream.kind === "main" && !(await quiet())) {
+                return undefined; // Busy: asked again after the next call, the main line still unseen.
+            }
+            // Seen now, whatever comes of it: a repo held back stays held until the main line moves again.
+            seen = Promise.resolve(now);
+            if (upstream.kind !== "main") {
+                return undefined;
+            }
+            const moved = (await timed("agent.catchup", "clear", upstream)).filter(syncMoved);
+            return moved.length === 0 ? undefined : frame(moved);
+        },
+        atStop: async () => {
+            const upstream = await upstreamNow(deps, conversationId);
+            if (upstream.kind !== "main") {
+                return [];
+            }
+            seen = mainHeadsOf(deps, worktree);
+            const synced = await timed("agent.stop-sync", "always", upstream);
+            return synced.filter((repo) => repo.blocked === true).map(({ repo, onto, overlap }) => ({ repo, onto, overlap }));
+        },
+    };
+};
+
 export interface WorktreeSteps extends LandingHooks {
     // Creates the conversation's worktree on its first turn or repairs its composition, with the repos it carries
     // decided once and handed back on every later turn.
@@ -186,7 +276,7 @@ export const worktreePlacement = (
     // Workflow steps stay on the run's snapshot; rebasing would reintroduce the removed race.
     const pinned = input.worktreeBase !== undefined;
     // Nothing to rebase until the worktree is composed, and never for a pinned step.
-    let rebase = async (_upstream: Upstream): Promise<RepoSync[]> => [];
+    let rebase = async (_upstream: Upstream, _gate?: SyncGate): Promise<RepoSync[]> => [];
     // A rebase outside the land, under the leases of every checkout it reads and writes (land-target.ts).
     const rebaseLeased = async (): Promise<RepoSync[]> => {
         const upstream = await upstreamNow(deps, conversationId);
@@ -255,7 +345,8 @@ export const worktreePlacement = (
                     return undefined;
                 }
             };
-            return steps.run({ id: conversationId, cwd: worktree.cwd, fence: worktree.fence, synced, resync });
+            const catchUp = pinned || worktree.fence !== undefined ? undefined : mainCatchUp(deps, conversationId, worktree, rebase, (moved) => worktreeFrame(worktree, onto, enforced, moved));
+            return steps.run({ id: conversationId, cwd: worktree.cwd, fence: worktree.fence, synced, resync, ...opt("catchUp", catchUp) });
         },
         async *land(failed, awaiting) {
             await carryOnce();

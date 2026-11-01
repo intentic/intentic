@@ -454,3 +454,56 @@ test("a checkout that cannot be re-linked stops the sync and the land with a pla
     await expect(sync(worktrees)).rejects.toThrow("This agent's copy of the workspace lost its link to your workspace");
     await expect(landAgent(worktrees, entryOf(base))).rejects.toThrow("Pressing Continue will stop here again.");
 });
+
+// The mid-turn catch-up (agent/run/main-catch-up.ts): a main line that moved is taken in only where nothing it moved
+// is a file the turn changed, uncommitted edits included, so the rebase cannot conflict or rewrite what the agent wrote.
+const clearSync = (worktrees: AgentWorktrees): ReturnType<typeof syncConversation> =>
+    syncConversation(worktrees, "c1", [{ repo: "root" }], "fix the thing", { kind: "main" }, undefined, "clear");
+
+test("a clear sync takes in a main line that moved only files the turn has not touched", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+    await writeFile(join(work, "other.ts"), "moved\n");
+    await sh(work, "add", "-A");
+    await commit(work, "another conversation landed");
+
+    const [root] = await clearSync(worktrees);
+    expect(root).toMatchObject({ moved: ["other.ts"], overlap: [] });
+    expect(root?.held).toBeUndefined();
+    expect(root?.blocked).toBeUndefined();
+    expect(await readFile(join(worktree, "other.ts"), "utf8")).toBe("moved\n");
+    expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT\n");
+});
+
+test("a clear sync holds back, touching nothing, when the main line moved a file the turn is still editing", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const tip = await sh(worktree, "rev-parse", "HEAD");
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+    await writeFile(join(work, "app.ts"), "USER\ntwo\nthree\nfour\nfive\n");
+    await writeFile(join(work, "other.ts"), "moved\n");
+    await sh(work, "add", "-A");
+    await commit(work, "another conversation landed");
+
+    const [root] = await clearSync(worktrees);
+    expect(root).toMatchObject({ held: true, overlap: ["app.ts"] });
+    // Not even the remainder committed: the checkout is exactly as the agent left it.
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(tip);
+    expect(await sh(worktree, "status", "--porcelain")).toBe("M app.ts");
+    expect(await readFile(join(worktree, "other.ts"), "utf8")).toBe("untouched\n");
+});
+
+test("a clear sync leaves a branch that follows a parent alone", async () => {
+    const { worktrees } = await setup();
+    expect(await syncConversation(worktrees, "c1", [{ repo: "root" }], "t", { kind: "parent", parent: "p1" }, undefined, "clear")).toEqual([]);
+});
+
+test("the overlap a sync reports counts the turn's uncommitted edits too", async () => {
+    const { work, worktree, worktrees } = await setup();
+    await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+    await writeFile(join(work, "app.ts"), "USER\ntwo\nthree\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+
+    const [root] = await sync(worktrees);
+    expect(root?.overlap).toEqual(["app.ts"]);
+});

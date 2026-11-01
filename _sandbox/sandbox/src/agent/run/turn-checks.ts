@@ -125,11 +125,22 @@ export const turnChecksNotice = (reports: readonly TurnCheckReport[], sent = tur
     return { kind: "agent_notice", level: "info", source: TURN_CHECKS_SOURCE, text: line, sent };
 };
 
+// What the SDK allows a Stop's first step (main-catch-up.ts): a rebase onto the main line, the land's own pre-sync.
+const FIRST_STEP_SECONDS = 120;
+
 /** The repositories' `turn` checks as a Stop matcher (agent.ts mergeHooks), beside the checklist note (checklist-close.ts).
- *  Wires nothing for a turn in the shared tree, whose working tree carries everyone's uncommitted work, or for one no
- *  adopted repository declares a `turn` check for. `say` puts the notice row in the turn's transcript. */
-export const turnCheckHooks = (checks: TurnChecks | undefined, isolated: boolean, say?: (event: AgentEvent) => void): TurnCheckHooks => {
-    if (checks === undefined || !isolated || checks.rules.length === 0) {
+ *  Wires no checks for a turn in the shared tree, whose working tree carries everyone's uncommitted work, or for one no
+ *  adopted repository declares a `turn` check for. `say` puts the notice row in the turn's transcript. `first` runs
+ *  before the checks in the same callback, since the SDK runs a Stop's hooks side by side and it may rebase the tree the
+ *  checks read: a reason it answers keeps the turn going, and the checks wait for the Stop that follows. */
+export const turnCheckHooks = (
+    checks: TurnChecks | undefined,
+    isolated: boolean,
+    say?: (event: AgentEvent) => void,
+    first?: () => Promise<string | undefined>,
+): TurnCheckHooks => {
+    const checking = checks !== undefined && isolated && checks.rules.length > 0;
+    if (!checking && first === undefined) {
         return {};
     }
     // Once per turn, whatever was found: a second Stop is the model's answer to the first, and asking again would turn
@@ -140,10 +151,17 @@ export const turnCheckHooks = (checks: TurnChecks | undefined, isolated: boolean
             {
                 // Sized to the checks' own ceilings, so a slow check is reported as one that could not run before the SDK
                 // abandons the hook that waits on it.
-                timeout: Math.ceil((checks.rules.length * TURN_CHECK_CEILING_MS) / 1000) + HOOK_SLACK_SECONDS,
+                timeout: (checking ? Math.ceil((checks.rules.length * TURN_CHECK_CEILING_MS) / 1000) : 0) + HOOK_SLACK_SECONDS + (first === undefined ? 0 : FIRST_STEP_SECONDS),
                 hooks: [
                     async (input) => {
-                        if (input.hook_event_name !== "Stop" || ran) {
+                        if (input.hook_event_name !== "Stop") {
+                            return {};
+                        }
+                        const reason = await first?.();
+                        if (reason !== undefined) {
+                            return { decision: "block", reason };
+                        }
+                        if (!checking || ran) {
                             return {};
                         }
                         ran = true;

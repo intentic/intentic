@@ -7,6 +7,7 @@ import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/setting
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
+import type { MainCatchUp } from "../run/main-catch-up.js";
 import { opt } from "../../opt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { ScriptRunDoor } from "../subagents/workflows/script-runs.js";
@@ -129,6 +130,8 @@ export interface TurnContext {
     // Re-takes the pre-turn rebase while parked on a card; isolated, harness-only turns, since only the harness's cards
     // park long enough to need it.
     readonly resync?: () => Promise<AgentEvent | undefined>;
+    // Keeps the turn on a main line that moves under it (run/main-catch-up.ts); isolated, harness-only turns like `resync`.
+    readonly catchUp?: MainCatchUp;
     // Child-agent supervision, injected by agent.routes like `resync`; absent for a conversationless turn or a focused
     // caller with no route.
     readonly children?: ChildSupervisor;

@@ -27,17 +27,36 @@ export interface RepoSync {
     readonly commits: number;
     // Paths those commits touched.
     readonly moved: readonly string[];
-    // Moved paths this agent also edited; the actionable subset to recheck.
+    // Moved paths this agent also edited, committed or not; the actionable subset to recheck.
     readonly overlap: readonly string[];
     // The rebase did not apply and was rolled back; the branch is still on its old base.
     readonly blocked?: true;
+    // Not tried: a `clear` sync found the main line moved a path this branch changed, committed or not (`overlap`).
+    readonly held?: true;
 }
+
+// How far a sync may go. `always` rebases whatever moved, as every sync before a turn, after a card and before a land.
+// `clear` is the mid-turn catch-up's (agent/run/main-catch-up.ts): main-line repos only, and only where nothing the
+// main line moved is a file this branch changed, so the rebase cannot conflict and rewrites no line the agent wrote.
+export type SyncGate = "always" | "clear";
+
+// Whether a sync moved the branch: neither refused by git nor held back by the gate.
+export const syncMoved = (repo: RepoSync): boolean => repo.blocked !== true && repo.held !== true;
 
 // Paths a span touched, `--no-renames`: `moved` and `mine` below are intersected by path, and a collapsed rename would
 // never match on its source side.
 const pathsOf = async (dir: string, args: readonly string[], git: GitRunner): Promise<string[]> => {
     const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args]);
     return stdout.split("\0").filter((path) => path !== "");
+};
+
+// Paths the checkout holds uncommitted, tracked or not: the rest of what `clear` counts as this branch's own.
+const dirtyPathsOf = async (dir: string, git: GitRunner): Promise<string[]> => {
+    const [tracked, untracked] = await Promise.all([
+        pathsOf(dir, ["HEAD"], git),
+        git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]).then(({ stdout }) => stdout.split("\0").filter((path) => path !== "")),
+    ]);
+    return [...tracked, ...untracked];
 };
 
 // The newest commit both share, or "" for unrelated histories.
@@ -130,6 +149,7 @@ const syncOne = async (
     landedTip: string | undefined,
     title: string | undefined,
     git: GitRunner,
+    gate: SyncGate,
 ): Promise<RepoSync | undefined> => {
     const worktree = worktrees.worktreeDir(id, repo);
     // An archived, not yet re-attached checkout has no worktree; skipping is safe, the next attached turn syncs it.
@@ -157,9 +177,17 @@ const syncOne = async (
     // Main-line movement since divergence (three-dot), or since `base` when main was rewritten; read before the rebase moves `tip`.
     const moved = await pathsOf(worktree, since === undefined ? [`${tip}...${head}`] : [since, head], git);
     const mine = new Set(await pathsOf(worktree, since === undefined ? [`${head}...${tip}`] : [since, tip], git));
+    // What the agent has written and not yet committed is its own work too: mid-turn the likeliest to be open, and at a
+    // Stop the files a refused rebase will stop on (agent/run/main-catch-up.ts).
+    for (const path of await dirtyPathsOf(worktree, git)) {
+        mine.add(path);
+    }
     const overlap = moved.filter((path) => mine.has(path));
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap };
+    if (gate === "clear" && overlap.length > 0) {
+        return { ...behind, held: true };
+    }
     // Commits the dirty remainder first; `git rebase` refuses to start on a dirty tree.
     await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), worktrees.mainDir("root"), git);
     const rebased = since === undefined ? await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git) : await rebaseSince(worktree, head, since, AGENT_GIT_AUTHOR, git);
@@ -250,8 +278,10 @@ export const syncConversation = async (
     title: string | undefined,
     upstream: Upstream = MAIN_LINE,
     git: GitRunner = defaultGit,
+    gate: SyncGate = "always",
 ): Promise<RepoSync[]> => {
-    if (upstream.kind === "none") {
+    // `clear` follows the main line alone: a parent's checkout or a branch's moves with work in flight, not lands.
+    if (upstream.kind === "none" || (gate === "clear" && upstream.kind !== "main")) {
         return [];
     }
     // A checkout that stopped sharing main's objects would make every range below a raw `bad object`.
@@ -259,11 +289,11 @@ export const syncConversation = async (
     const results = await Promise.all(
         repos.map((composed) => {
             if (composed.line !== undefined) {
-                return syncOntoCheckout(worktrees, id, composed.line, composed, title, git);
+                return gate === "clear" ? undefined : syncOntoCheckout(worktrees, id, composed.line, composed, title, git);
             }
             return upstream.kind === "parent"
                 ? syncOntoParent(worktrees, id, upstream.parent, composed, title, git)
-                : syncOne(worktrees, id, composed.repo, composed.base, composed.landedTip, title, git);
+                : syncOne(worktrees, id, composed.repo, composed.base, composed.landedTip, title, git, gate);
         }),
     );
     return results.filter((result) => result !== undefined);
@@ -290,7 +320,7 @@ export const syncBeforeLand = async <Repo extends ComposedRepo>(
         upstream,
         git,
     );
-    const onto = new Map(synced.filter((repo) => repo.blocked !== true).map((repo) => [repo.repo, repo.onto]));
+    const onto = new Map(synced.filter(syncMoved).map((repo) => [repo.repo, repo.onto]));
     if (onto.size === 0) {
         return entry.repos;
     }
