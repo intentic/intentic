@@ -223,7 +223,9 @@ mod taskbar_identity {
         PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT,
     };
     use windows::Win32::System::Variant::VT_LPWSTR;
-    use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+    use windows::Win32::UI::Shell::PropertiesSystem::{
+        IPropertyStore, SHGetPropertyStoreForWindow,
+    };
 
     /// `PKEY_AppUserModel_*` (propkey.h), named here rather than through the `Win32_Storage_EnhancedStorage` feature.
     const fn key(pid: u32) -> PROPERTYKEY {
@@ -241,7 +243,14 @@ mod taskbar_identity {
     fn text(value: &str) -> windows::core::Result<PROPVARIANT> {
         let mut wide = PROPVARIANT::default();
         // SAFETY: both are valid PROPVARIANTs; the converted copy owns its own string, freed when it drops.
-        unsafe { PropVariantChangeType(&mut wide, &PROPVARIANT::from(value), PVCHF_DEFAULT, VT_LPWSTR)? };
+        unsafe {
+            PropVariantChangeType(
+                &mut wide,
+                &PROPVARIANT::from(value),
+                PVCHF_DEFAULT,
+                VT_LPWSTR,
+            )?
+        };
         Ok(wide)
     }
 
