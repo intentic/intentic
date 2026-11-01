@@ -97,9 +97,8 @@ watch(
     (drawn) => keepSubagentWhileShown(drawn),
 );
 
-// Which subscriptions still have room, in the width panes can't use (rule: chatCapacity's railFitsBeside). Shown
-// in the panel's own window or when docked to the main icons rail (/chat full-window slot) — every other surface
-// already has the Usage tab and the picker a click away.
+// Which subscriptions still have room, in the width panes can't use (rule: chatCapacity's railFitsBeside),
+// including a docked column the reader has widened far enough.
 // Measured off the panel's real width, watched; zero until measured so it can't flash on before the first read.
 const panelWidth = ref(0);
 let panelObserver: ResizeObserver | undefined;
@@ -128,17 +127,17 @@ onBeforeUnmount(stopMeasuring);
 // Only reserved with something in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
 // non-empty only where the rail last had figures (capacityMemory.ts), so the transcript doesn't reflow when they land
 // and a sandbox with nothing connected never draws skeletons for figures that aren't coming. Keyed on capacity alone, never on the chat's checklist,
-// so picking up a first task can't reflow the panel mid-turn. Shown when floating in its own window or when docked
-// to the main icons rail (chatWide without floating, i.e. /chat full-window view).
+// so picking up a first task can't reflow the panel mid-turn. A docked panel's tabs sit above the pane, so they
+// take no width; without tabs, the balancing space takes the place of the chat list's left rail.
 const capacityRail = useCapacityRail();
 const showsRail = computed(
     () =>
-        (floating.value || chatWide.value) &&
+        !bar &&
         !mobile.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
-        shownSideTabs.value.length === 0 &&
+        (!chatWide.value || shownSideTabs.value.length === 0) &&
         capacityRail.value &&
-        railFitsBeside(panelWidth.value, tabs ? railWidth.value : CAPACITY_RAIL_PX, shown.value.length),
+        railFitsBeside(panelWidth.value, tabs ? (chatWide.value ? railWidth.value : 0) : CAPACITY_RAIL_PX, shown.value.length),
 );
 // Beside one chat, the rail's marked row is that chat's allowance, so its composer chip gives the figure to the rail.
 provideRailCarries(() => showsRail.value && !split.value);
@@ -271,7 +270,7 @@ watch(
             <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">
+        <div class="relative flex min-h-0 min-w-0 flex-1 flex-col pt-(--window-band)">
             <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
             <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
@@ -344,10 +343,9 @@ watch(
                     />
                 </template>
             </div>
+            <!-- Below docked tabs, beside wide tabs: the focused chat's checklist and remaining usage. -->
+            <ChatSideRail v-if="showsRail" :conversation="only" />
         </div>
-
-        <!-- The focused chat's checklist and what the reader can run next, in room the panes have no use for. -->
-        <ChatSideRail v-if="showsRail" :conversation="only" />
     </div>
 </template>
 
