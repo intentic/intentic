@@ -637,11 +637,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/terminal/useTerminal.ts": {
-        "count": 671,
+        "count": 667,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/terminal/useTerminal.ts#createTerminalTabs#lines": {
-        "count": 541,
+        "count": 538,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/workspace/changes/changeOrigins.ts#stepRow#cognitive": {

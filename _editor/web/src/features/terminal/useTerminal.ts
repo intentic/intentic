@@ -20,6 +20,7 @@ import { useTextSize } from "@intentic/ui/text-size";
 import { useTheme } from "@intentic/ui/theme";
 import { useSkin } from "../../skins/useSkin";
 import { optionIsMeta } from "./terminalEditKeys";
+import { createTerminalReveals } from "./terminalReveals";
 import { onScreen } from "../../workbench/window/onScreen";
 
 // Multi-tab terminal state for the terminal panel: an instance per surface over one shared session cache. `kind` gates
@@ -133,8 +134,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const processes = ref<TerminalTab[]>([]);
     // Process sessions the user opened a log view for; the only `process` sessions that appear in `order`.
     const viewedProcesses = new Set<string>();
-    // Work sessions revealed by an explicit open; lasts this surface's lifetime only.
-    const revealed = new Set<string>();
+    // Work sessions revealed by an explicit open, kept while the panel is closed (terminalReveals.ts).
+    const revealed = createTerminalReveals(() => `ui-${storageKey}-terminal-revealed.${activeSandboxId.value ?? `local`}`);
     // Session an open request is still waiting to see listed; a second request supersedes the first.
     const pending = ref<string | undefined>(undefined);
     const activeName = ref<string | undefined>(undefined);
@@ -175,14 +176,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Drops a revealed session's reveal once it finishes, unless it's the active tab or not yet on the strip (spares an
-    // unseen reveal).
-    const retireFinished = (tabs: TerminalTab[]): void => {
+    // unseen reveal); says whether any went.
+    const retireFinished = (tabs: TerminalTab[]): boolean => {
         const onStrip = new Set(order.value.map((tab) => tab.name));
-        for (const tab of tabs) {
-            if (isWork(tab) && !tab.running && onStrip.has(tab.name) && tab.name !== activeName.value) {
-                revealed.delete(tab.name);
-            }
-        }
+        const done = tabs.filter((tab) => isWork(tab) && !tab.running && onStrip.has(tab.name) && tab.name !== activeName.value);
+        return done.map((tab) => revealed.delete(tab.name)).includes(true);
     };
 
     // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind.
@@ -268,6 +266,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         answered = ticket;
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
         processes.value = listed.filter((tab) => KINDS[tab.kind].logs);
+        revealed.forgetGone(listed, pending.value);
         // Before the filter, so a session that just finished loses its reveal in time for this same list.
         retireFinished(listed);
         const tabs = listed.filter((tab) => !hiddenFromStrip(tab));
@@ -378,6 +377,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         // Nothing asked of this daemon yet, ahead of the relist, so no frame can claim it has no terminals.
         answer.value = `waiting`;
         viewedProcesses.clear();
+        revealed.reload();
         // The wait was for a session on the old daemon; nothing here will ever answer it.
         pending.value = undefined;
         activeName.value = undefined;
@@ -501,9 +501,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // only if that changed anything.
     const switchTab = (name: string): void => {
         mount(name);
-        const held = revealed.size;
-        retireFinished(order.value);
-        if (revealed.size !== held) {
+        if (retireFinished(order.value)) {
             void refresh().catch(() => undefined);
         }
     };

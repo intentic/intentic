@@ -124,6 +124,35 @@ test("a job tabs while it is being watched and lets go once it has finished and 
     await waitFor(() => expect(names()).toEqual([`web-1`]));
 });
 
+// Minimizing tears the panel down (a v-if), and a run followed on another computer must not drop off the strip for it.
+test("a job still running comes back on the strip when the panel is closed and opened again", async () => {
+    const first = panel([shell(`web-1`), job(`run-game-omen`, true)]);
+    await first.attach();
+    await first.tabs.focus(`job-run-game-omen`);
+    first.tabs.switchTab(`web-1`);
+    first.tabs.detach();
+
+    const reopened = panel([shell(`web-1`), job(`run-game-omen`, true)]);
+    await reopened.attach();
+
+    expect(reopened.names()).toEqual([`web-1`, `job-run-game-omen`]);
+});
+
+test("a job that ended while the panel was closed does not come back with it", async () => {
+    const first = panel([shell(`web-1`), job(`run-game-omen`, true)]);
+    await first.attach();
+    await first.tabs.focus(`job-run-game-omen`);
+    first.tabs.detach();
+
+    const reopened = panel([shell(`web-1`)]);
+    await reopened.attach();
+    // The same name started again later is a new run nobody has opened.
+    reopened.daemonLists([shell(`web-1`), job(`run-game-omen`, true)]);
+    await reopened.tabs.refresh();
+
+    expect(reopened.names()).toEqual([`web-1`]);
+});
+
 // Reveal and the first list carrying the session land in the same pass, so retiring then would leave the click doing
 // nothing.
 test("opening an ALREADY-finished terminal from the chat's Bash card still tabs and focuses it", async () => {
