@@ -193,6 +193,78 @@ mod big_icon {
     }
 }
 
+/// The frame's own taskbar identity, set before it is first shown. An installed copy's Start menu shortcut carries the
+/// app's id (tauri-bundler's `SetLnkAppUserModelId`), which toasts need (notice.rs), and Windows draws the button of a
+/// window it can match to that shortcut with the shortcut's icon, whatever `ICON_BIG` says: the sandbox's logo never
+/// showed in an installed app, only in a copy run from the build tree, which has no shortcut. An id of the window's own
+/// unhooks the button from the shortcut, so it draws the window's icon; toasts still go out under the shortcut's id. The
+/// relaunch properties keep a pin made from the running button opening the app, under its name and icon.
+#[cfg(windows)]
+pub fn own_taskbar_button(app: &AppHandle, window: &Window) {
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let exe = std::env::current_exe().ok();
+    let id = format!("{}.window", app.config().identifier);
+    if let Err(error) = taskbar_identity::put(hwnd, &id, exe.as_deref()) {
+        eprintln!("intentic: the taskbar button could not be given the window's own id: {error}");
+    }
+}
+
+#[cfg(not(windows))]
+pub fn own_taskbar_button(_app: &AppHandle, _window: &Window) {}
+
+#[cfg(windows)]
+mod taskbar_identity {
+    use std::path::Path;
+
+    use windows::Win32::Foundation::{HWND, PROPERTYKEY};
+    use windows::Win32::System::Com::StructuredStorage::{
+        PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT,
+    };
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+
+    /// `PKEY_AppUserModel_*` (propkey.h), named here rather than through the `Win32_Storage_EnhancedStorage` feature.
+    const fn key(pid: u32) -> PROPERTYKEY {
+        PROPERTYKEY {
+            fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3),
+            pid,
+        }
+    }
+    const RELAUNCH_COMMAND: PROPERTYKEY = key(2);
+    const RELAUNCH_ICON: PROPERTYKEY = key(3);
+    const RELAUNCH_NAME: PROPERTYKEY = key(4);
+    const ID: PROPERTYKEY = key(5);
+
+    /// The shell reads these properties as `VT_LPWSTR`; `PROPVARIANT::from(&str)` is a `VT_BSTR`.
+    fn text(value: &str) -> windows::core::Result<PROPVARIANT> {
+        let mut wide = PROPVARIANT::default();
+        // SAFETY: both are valid PROPVARIANTs; the converted copy owns its own string, freed when it drops.
+        unsafe { PropVariantChangeType(&mut wide, &PROPVARIANT::from(value), PVCHF_DEFAULT, VT_LPWSTR)? };
+        Ok(wide)
+    }
+
+    pub fn put(hwnd: HWND, id: &str, exe: Option<&Path>) -> windows::core::Result<()> {
+        // SAFETY: the frame's own window, on the thread that made it.
+        let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(hwnd)? };
+        let mut values = Vec::with_capacity(4);
+        // The relaunch properties count only beside an id, and the command only with its name, so all or none.
+        if let Some(exe) = exe.map(Path::display) {
+            values.push((RELAUNCH_COMMAND, text(&format!("\"{exe}\""))?));
+            values.push((RELAUNCH_NAME, text("Intentic")?));
+            values.push((RELAUNCH_ICON, text(&format!("{exe},0"))?));
+        }
+        values.push((ID, text(id)?));
+        for (key, value) in &values {
+            // SAFETY: a key and a value that outlive the call; the store copies what it keeps.
+            unsafe { store.SetValue(key, value)? };
+        }
+        // SAFETY: as above.
+        unsafe { store.Commit() }
+    }
+}
+
 /// The overlay on the frame's taskbar button, as the badge stands. A hidden frame has no button to mark, and gets its
 /// mark when it is shown again ([`window_shown`]).
 #[cfg(windows)]

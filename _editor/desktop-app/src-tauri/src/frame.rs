@@ -127,6 +127,8 @@ fn build(app: &AppHandle) -> Option<Window> {
     // On Windows this is what attaches the resize borders of a frameless window, which Tauri does by itself only for a
     // window built with its webview (tauri-runtime-wry's `undecorated_resizing`).
     let _ = frame.set_resizable(true);
+    // Before it is first shown: the taskbar reads a window's id when it makes the window's button.
+    crate::badge::own_taskbar_button(app, &frame);
     crate::windows::mode::settle_background(&frame, mode);
     watch(app, &frame);
     if let Some(screen) = screen {

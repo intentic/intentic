@@ -34,7 +34,8 @@ flowchart LR
 - **The app's icon and the system's notifications.** `badge.rs` puts the workspace tab's mark on the tray icon, the
   Windows taskbar button's overlay (put back each time a face is shown, since Windows drops it with the button) and a
   Linux dock's count, and the open sandbox's logo as the frame's icon (on Windows its big icon too, which is the one
-  the taskbar button draws); `notice.rs` puts up, withdraws and clears the notifications the page asks for (WinRT toasts with
+  the taskbar button draws, and an app id of the frame's own, without which the button draws the Start menu shortcut's
+  icon instead); `notice.rs` puts up, withdraws and clears the notifications the page asks for (WinRT toasts with
   protocol activation, or `org.freedesktop.Notifications` over `zbus`), on one thread of their own, and answers a
   press with the workspace at the notification's route. Both take the page's word for what to show
   (`intentic://badge`, `intentic://notice`) and decide nothing about it.
