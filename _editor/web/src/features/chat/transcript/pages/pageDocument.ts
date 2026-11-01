@@ -39,10 +39,18 @@ export const pageSource = (path: string): Promise<string> => {
 // allow(silent-catch): a file the page names that cannot be read draws as missing, as a broken link does on the web.
 const loadAsset = (path: string): Promise<Blob | undefined> => readShared(path).catch(() => undefined);
 
+// How far a page may draw past its own edges, in px. Pages lay cards flush with their edges and mark the chosen one with
+// a ring outside its box (an outline with an offset, a `0 0 0 3px` shadow, a focus ring), which a frame exactly the
+// column's size cut off on the outer side. So the page's root is inset by this much on every side and the frame is that
+// much wider than the column (ChatPageFrame), so the content still lines up with the prose and a ring has room to show.
+// `:root` rather than `html`, so a page's own `html,body{padding:0}` reset does not take the room away.
+export const PAGE_BLEED = 6;
+const BLEED_CSS = `<style id="intentic-bleed">:root{padding:${PAGE_BLEED}px}</style>`;
+
 // The page, sealed and themed, for the frame's `srcdoc`; for an MCP server's app, the call it shows as well.
 export const buildPageDocument = async (page: Page, theme: PageTheme): Promise<{ readonly html: string; readonly app?: McpAppData }> => {
     const source = await pageSource(page.path);
-    const built = await buildPreviewDocument(source, page.source ?? page.path, loadAsset, pageHead(theme));
+    const built = await buildPreviewDocument(source, page.source ?? page.path, loadAsset, pageHead(theme) + BLEED_CSS);
     const app = page.app === undefined ? undefined : readMcpAppData(source);
     return app === undefined ? { html: built.html } : { html: built.html, app };
 };

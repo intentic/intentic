@@ -15,7 +15,7 @@ import { useChatSurface } from "../../../../models/conversations/tools/chatToolS
 import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
-import { buildPageDocument } from "./pageDocument";
+import { buildPageDocument, PAGE_BLEED } from "./pageDocument";
 import { usePageTheme } from "./pageTheme";
 
 // One page the agent showed, drawn in the chat: its stored file, sealed (no network, an opaque origin, no reach into
@@ -44,12 +44,18 @@ const emit = defineEmits<{ fault: [errors: readonly string[], told: boolean] }>(
 const surface = useChatSurface();
 const theme = usePageTheme();
 
-// Before the page says how tall it is: the height the sandbox measured, else a modest box.
+// Before the page says how tall it is: the height the sandbox measured (laid out without the bleed's inset above and
+// below, so that is added), else a modest box.
 const PLACEHOLDER = 200;
 const MIN_HEIGHT = 32;
 const cap = computed(() => props.page.height ?? PAGE_MAX_HEIGHT);
 const reported = ref<number>();
-const height = computed(() => Math.min(cap.value, Math.max(MIN_HEIGHT, reported.value ?? props.page.measured ?? PLACEHOLDER)));
+const measured = computed(() => (props.page.measured === undefined ? undefined : props.page.measured + 2 * PAGE_BLEED));
+const height = computed(() => Math.min(cap.value, Math.max(MIN_HEIGHT, reported.value ?? measured.value ?? PLACEHOLDER)));
+// The frame reaches PAGE_BLEED past the column on either side, where the page's own inset leaves room for what it draws
+// outside its edges (pageDocument.ts); above and below, that inset is part of the box's height instead, so the frame
+// never lies over the words before or after it.
+const bleed = { left: `-${PAGE_BLEED}px`, width: `calc(100% + ${2 * PAGE_BLEED}px)` };
 
 const box = useTemplateRef<HTMLElement>(`box`);
 const frame = useTemplateRef<HTMLIFrameElement>(`frame`);
@@ -317,9 +323,9 @@ onBeforeUnmount(() => {
             :title="page.title"
             sandbox="allow-scripts allow-forms"
             referrerpolicy="no-referrer"
-            class="block size-full border-0 transition-opacity duration-150"
+            class="absolute top-0 block h-full max-w-none border-0 transition-opacity duration-150"
             :class="loaded ? `opacity-100` : `opacity-0`"
-            :style="{ colorScheme: loaded ? theme.appearance : `light` }"
+            :style="{ ...bleed, colorScheme: loaded ? theme.appearance : `light` }"
             @load="onLoad"
         />
         <p v-else-if="failed" class="flex size-full items-center justify-center text-2xs text-subtle">{{ t(`chat.chatPages.unavailable`) }}</p>
