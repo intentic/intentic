@@ -47,8 +47,8 @@ import { useBringOther, useOtherAccounts } from "./useOtherAccounts";
 
 // ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
 // one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
-// while it runs, under the accounts it is adding to. There is no other door to a provider's sign-in on the page: the
-// grid picks the provider, this panel connects it.
+// while it runs, at the top of the list where that button was pressed. There is no other door to a provider's sign-in on
+// the page: the grid picks the provider, this panel connects it.
 //
 // Empty, the card is the explanation and the Connect button, as an empty persona list is its own Add button; once it holds
 // an account, adding another moves to the group's header, where every list in the app keeps its "add one".
@@ -457,6 +457,39 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
         </RowNote>
 
+        <!-- With accounts already here, a provider sold under several plans asks which one the next account is on: under
+             the Add button it is asked for, not after the list. -->
+        <RowNote v-if="rows.length > 0 && offersEstates && attempt === undefined" variant="block">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
+                <EstatePicker v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
+            </div>
+        </RowNote>
+
+        <!-- The sign-in takes the place of the press that started it: first under the header, its own button (Open Google)
+             right below where Add stood. At the foot of the list it opened a screen away from the press, after every row. -->
+        <RowNote v-if="attempt" variant="block">
+            <ConnectAttempt
+                ref="attemptBlock"
+                :provider="provider"
+                :phase="attempt.phase"
+                :kind="attempt.kind"
+                :problem="attempt.problem"
+                :finishing="finishing"
+                @cancel="emit(`cancel`)"
+                @retry="emit(`retry`)"
+                @dismiss="emit(`dismiss`)"
+            />
+        </RowNote>
+
+        <!-- One sign-in at a time: said before the press that would end the other one, with the way back to it. -->
+        <RowNote v-else-if="otherLive" variant="note" icon="info-circle">
+            <span>{{ t(`connect.providerPanel.otherLive`, { other: otherName, provider: providerName }) }}</span>
+            <button type="button" :class="ui.textButton(`ml-2`)" @click="emit(`show`, otherLive)">
+                {{ t(`connect.providerPanel.showOther`, { other: otherName }) }}
+            </button>
+        </RowNote>
+
         <ConnectionRow
             v-for="row in shownRows"
             :key="row.key"
@@ -557,35 +590,5 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             </div>
         </RowNote>
 
-        <!-- With accounts already here, a provider sold under several plans asks which one the next account is on. -->
-        <RowNote v-else-if="offersEstates && !signingInHere && attempt === undefined" variant="block">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
-                <EstatePicker v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
-            </div>
-        </RowNote>
-
-        <!-- The sign-in, under the accounts it is adding to. -->
-        <RowNote v-if="attempt" variant="block">
-            <ConnectAttempt
-                ref="attemptBlock"
-                :provider="provider"
-                :phase="attempt.phase"
-                :kind="attempt.kind"
-                :problem="attempt.problem"
-                :finishing="finishing"
-                @cancel="emit(`cancel`)"
-                @retry="emit(`retry`)"
-                @dismiss="emit(`dismiss`)"
-            />
-        </RowNote>
-
-        <!-- One sign-in at a time: said before the press that would end the other one, with the way back to it. -->
-        <RowNote v-else-if="otherLive" variant="note" icon="info-circle">
-            <span>{{ t(`connect.providerPanel.otherLive`, { other: otherName, provider: providerName }) }}</span>
-            <button type="button" :class="ui.textButton(`ml-2`)" @click="emit(`show`, otherLive)">
-                {{ t(`connect.providerPanel.showOther`, { other: otherName }) }}
-            </button>
-        </RowNote>
     </RowGroup>
 </template>
