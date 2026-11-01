@@ -361,11 +361,13 @@ onBeforeUnmount(() => {
                 @blur="edit.blurCommit()"
                 @vue:mounted="edit.focusInput"
             />
+            <!-- Only as wide as its title: the rest of the bar stays bare background, which drags the window on desktop
+                 (windowGesture.ts) and opens the bar's own menu on right-click. -->
             <button
                 v-else
                 type="button"
                 data-chat-switcher
-                class="chat-tab group flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-2xs"
+                class="chat-tab group mr-auto flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-2xs"
                 :class="{ 'chat-tab-on': listOpen }"
                 :aria-expanded="listOpen"
                 aria-haspopup="dialog"
@@ -381,8 +383,8 @@ onBeforeUnmount(() => {
                 <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
-                                <span
-                    class="min-w-0 flex-1 truncate text-left font-medium"
+                <span
+                    class="min-w-0 truncate text-left font-medium"
                     :class="statusTabClass(active.status.value)"
                     v-tooltip.bottom.overflow="tabLabel(active)"
                     >{{ tabLabel(active) }}</span
