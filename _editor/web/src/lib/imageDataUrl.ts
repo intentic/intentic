@@ -28,3 +28,13 @@ export const fileToSquareDataUrl = async (file: File, fit: `cover` | `contain`):
     bitmap.close();
     return canvas.toDataURL(`image/webp`, 0.8);
 };
+
+// An SVG stays as a vector data URL instead of being rasterised to WebP: the preset logos are already SVG data URLs
+// through the whole pipeline, so nothing downstream is surprised, and the vector scales to any display density. Rendered
+// via <img>, which does not execute scripts, load external resources, or fire event handlers in SVGs.
+const SVG_PREFIX = `data:image/svg+xml,`;
+
+export const fileToSvgDataUrl = async (file: File): Promise<string> => {
+    const text = await file.text();
+    return `${SVG_PREFIX}${encodeURIComponent(text)}`;
+};

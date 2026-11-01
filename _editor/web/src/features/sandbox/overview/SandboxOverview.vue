@@ -17,7 +17,7 @@ import { messageOr } from "@intentic/ui/async";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { computed, ref } from "vue";
-import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
+import { fileToSquareDataUrl, fileToSvgDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { sandboxHoursLine } from "../../../models/hosted-plan/hostedHours";
@@ -175,11 +175,11 @@ const pickFile = async (event: Event): Promise<void> => {
         return;
     }
     logoError.value = undefined;
-    // Contained, not cropped, since a centre slice of a wordmark loses it; a failed read is a file error, not a save
-    // error.
+    // SVGs stay as vector data URLs; everything else is downscaled to a WebP square. Contained, not cropped, since a
+    // centre slice of a wordmark loses it; a failed read is a file error, not a save error.
     let square: string;
     try {
-        square = await fileToSquareDataUrl(file, `contain`);
+        square = file.type === `image/svg+xml` ? await fileToSvgDataUrl(file) : await fileToSquareDataUrl(file, `contain`);
     } catch {
         logoError.value = t(`sandbox.sandboxOverview.couldntReadImage`);
         return;

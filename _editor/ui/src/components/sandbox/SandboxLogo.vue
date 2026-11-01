@@ -32,7 +32,7 @@ const box = computed(() =>
         :style="{ width: box.width, height: box.height, ...(box.fontSize === undefined ? {} : { fontSize: box.fontSize }) }"
         aria-hidden="true"
     >
-        <img v-if="image" :src="image" alt="" class="h-full w-full object-cover" draggable="false" />
+        <img v-if="image" :src="image" alt="" class="h-full w-full object-contain" draggable="false" />
         <span v-else-if="letter !== undefined" class="font-semibold uppercase leading-none text-content">{{ letter }}</span>
         <Icon v-else name="server" :style="{ fontSize: size === undefined ? `1.125rem` : `${size * 0.55}px` }" />
     </span>

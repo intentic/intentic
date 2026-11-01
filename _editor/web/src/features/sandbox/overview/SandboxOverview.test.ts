@@ -61,7 +61,8 @@ jest.mock(`./manifest/SandboxManifestCard.vue`, () => ({ default: defineComponen
 jest.mock(`./SandboxSleepRow.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // jsdom has no 2d canvas context; stubs the resize and asserts only which fit (`contain`) was requested.
 const fileToSquareDataUrl = jest.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
-jest.mock(`../../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
+const fileToSvgDataUrl = jest.fn<(file: File) => Promise<string>>().mockResolvedValue(`data:image/svg+xml,%3Csvg%3E%3C%2Fsvg%3E`);
+jest.mock(`../../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl, fileToSvgDataUrl }));
 
 const { default: SandboxOverview } = await import("./SandboxOverview.vue");
 
@@ -127,6 +128,7 @@ beforeEach(() => {
     updateAvailable.value = false;
     update.mockClear();
     fileToSquareDataUrl.mockClear();
+    fileToSvgDataUrl.mockClear();
 });
 
 afterEach(() => {
@@ -224,6 +226,16 @@ it(`saves the picked file on its own, fitted rather than cropped`, async () => {
     await pickFile(el);
     expect(fileToSquareDataUrl).toHaveBeenCalledWith(expect.any(File), `contain`);
     expect(update).toHaveBeenCalledWith(`s1`, { image: `data:image/webp;base64,NEW` });
+});
+
+it(`keeps an SVG as a vector data URL instead of rasterising it`, async () => {
+    const el = mount(sandboxRow());
+    const field = fileField(el);
+    Object.defineProperty(field, `files`, { value: [new File([`<svg></svg>`], `logo.svg`, { type: `image/svg+xml` })], configurable: true });
+    field.dispatchEvent(new Event(`change`));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(fileToSvgDataUrl).toHaveBeenCalledWith(expect.any(File));
+    expect(fileToSquareDataUrl).not.toHaveBeenCalled();
 });
 
 it(`sends the logo without the name`, async () => {
