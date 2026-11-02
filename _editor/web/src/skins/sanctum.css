@@ -743,9 +743,6 @@
 [data-skin="sanctum"] .icon-rail-tile.ui-row-select-on {
     background: rgba(201, 160, 92, 0.15) !important;
 }
-[data-skin="sanctum"] .icon-rail {
-    --icon-rail-pick: var(--sanctum-gold);
-}
 [data-skin="sanctum"] .icon-rail-tile:focus-visible {
     outline: 2px solid var(--sanctum-gold);
     outline-offset: -2px;

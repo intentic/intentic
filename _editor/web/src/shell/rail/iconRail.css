@@ -31,9 +31,6 @@
 /* The one unbounded run (one tile per extension), so it's the one that scrolls; everything else stays anchored. */
 .icon-rail-nav {
     flex-shrink: 1;
-    /* The rail's full width, not the tiles': the scroller clips sideways too, and the picked tile's pill sits in the
-       gutter beside the tile. The tiles stay centred by the column's own items-center. */
-    align-self: stretch;
     min-height: 0;
     gap: var(--icon-rail-gap);
     /* Scrollbar hidden (.scrollbar-none): in a 44px column it would eat a quarter of it. */
@@ -59,27 +56,6 @@
 .icon-rail-tile:focus-visible {
     outline: 2px solid var(--color-primary-500);
     outline-offset: -2px;
-}
-
-/* THE PICKED TILE WEARS A PILL on the rail's left edge, besides its tint. A tint alone could not be told apart: a
-   sandbox logo with a backing of its own fills the tile with a square just like it, and a hovered tile is washed nearly
-   as strongly. Nothing else on the rail draws at its edge, so the pill names the one tile. It sits outside the tile, in
-   the gutter between it and the rail's edge (the rail's border off the width); with no rail around the tile the offset
-   falls to zero. A skin re-inks it with `--icon-rail-pick`. */
-.icon-rail-tile.ui-row-select-on {
-    position: relative;
-}
-.icon-rail-tile.ui-row-select-on::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: calc((var(--icon-rail-tile-size, 0px) - var(--icon-rail-width, var(--icon-rail-tile-size, 0px)) + 1px) / 2);
-    width: 0.25rem;
-    height: 45%;
-    transform: translateY(-50%);
-    border-radius: 0 9999px 9999px 0;
-    background: var(--icon-rail-pick, var(--color-primary-500));
-    pointer-events: none;
 }
 
 .icon-rail-divider {

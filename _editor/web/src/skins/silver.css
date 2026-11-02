@@ -527,7 +527,6 @@
    from the file tree by tone alone without sinking to the canvas's near-black, and its tiles light by washes. */
 [data-skin="silver"] .icon-rail {
     --ui-tile-ground: var(--silver-rail);
-    --icon-rail-pick: var(--silver-heading-ink);
     background-image:
         linear-gradient(var(--silver-veil-rail), var(--silver-veil-rail)),
         var(--silver-ground);

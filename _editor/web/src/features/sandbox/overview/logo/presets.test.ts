@@ -6,6 +6,7 @@ it.each([...LOGO_ICONS])(`stores and restores %s through the existing sandbox im
     const image = logoStyleImage(style);
     expect(ImageDataUrlSchema.parse(image)).toBe(image);
     expect(readLogoStyle(image)).toEqual(style);
+    expect(decodeURIComponent(image)).not.toContain(`<rect`);
 });
 
 it.each([

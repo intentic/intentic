@@ -15,10 +15,11 @@ export interface LogoStyle {
 const PREFIX = `data:image/svg+xml,`;
 
 // A normal sandbox image, so the existing API and every logo surface can use it unchanged. The marker lets this
-// picker recover its choices when reopened; an uploaded image remains an uploaded image.
+// picker recover its choices when reopened; an uploaded image remains an uploaded image. The glyph alone, with no tinted
+// square behind it: on the rail a square read as the picked tile's own tint. Logos saved before carry that square, and
+// SandboxLogo drops it when it draws them.
 export const logoStyleImage = ({ icon, color }: LogoStyle): string => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" data-intentic-logo="${icon}:${color}">
-        <rect width="64" height="64" rx="14" fill="${color}" fill-opacity=".14"/>
         <g transform="translate(12 12) scale(1.666667)" color="${color}">${glyphBody(ICONS[icon])}</g>
     </svg>`;
     return `${PREFIX}${encodeURIComponent(svg)}`;
