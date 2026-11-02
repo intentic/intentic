@@ -335,6 +335,8 @@ const {
     continueStrip,
     continueOffer,
     continueAtReopen,
+    continueLaterOffered,
+    continueLater,
     pickUpPressable,
     spentUntil,
     atReopen,
@@ -392,12 +394,12 @@ const hasWays = computed(() => ways.value && staged.value);
 // is the send itself, booked for it, so no pill beside the send repeats the time and no second press confirms it. The
 // press shows a time only when the words came back with one (Edit on a booked message, a typed token), and then its
 // press books it again, and the menu's Send now sends it now. The caret stands once there is something to send, as the
-// ways do: on an empty box the press is the strip's (continue now, or at the reopen), which a time picked there would
-// only fight.
+// ways do; on an empty box the press is the strip's (continue now, or at the reopen), and the caret then books that same
+// Continue for later instead (continueLater), so a paused chat can be picked up at a time of the reader's choosing.
 const sendCaret = ref<HTMLElement>();
 // A booking replaces only a send that opens or joins a turn: never words placed as the agent's, an edit, or plan notes.
 const laterShown = computed(() => laterOffered.value && intent.value !== `place` && intent.value !== `edit` && intent.value !== `plan`);
-const caretShown = computed(() => connected.value && sendShown.value && staged.value && (laterShown.value || hasWays.value));
+const caretShown = computed(() => connected.value && sendShown.value && (staged.value ? laterShown.value || hasWays.value : laterShown.value && continueLaterOffered.value));
 // A caret that leaves takes its menu with it, so nothing floats over a composer gone back to a plain Send.
 watch(caretShown, (shown) => {
     if (!shown) {
@@ -405,8 +407,12 @@ watch(caretShown, (shown) => {
     }
 });
 const sendAt = (later: SendLater): void => {
-    props.conversation.sendLater.value = later;
     laterOpen.value = false;
+    if (!staged.value && continueLaterOffered.value) {
+        continueLater(later);
+        return;
+    }
+    props.conversation.sendLater.value = later;
     submit();
 };
 const sendNow = (): void => {

@@ -43,6 +43,7 @@ import { invalidateAgentTranscript } from "../../../../models/conversations/tran
 import { type ChatAttachment, type ChatMessage, continuationFor } from "../../../../models/conversations/transcript/transcript";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { useFreshAgentSend } from "./freshAgentSend";
+import { useContinueLater } from "./continueLater";
 import { spentUntilOf } from "../../../../models/conversations/accounts/runServing";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
@@ -407,6 +408,7 @@ export const useComposerSend = (host: SendHost) => {
     };
 
     const continueAtReopen = reopenContinuation(host, spentUntil, reopenPress);
+    const { continueLaterOffered, continueLater } = useContinueLater(host, pickUp, continueOffer, reopenPress);
     // The two things a bare press over a stopped turn does (barePressOf).
     const bareWays = { now: continueTurn, reopen: continueAtReopen };
 
@@ -552,6 +554,8 @@ export const useComposerSend = (host: SendHost) => {
         canSend,
         continueTurn,
         continueAtReopen,
+        continueLaterOffered,
+        continueLater,
         // The strip says what happened; the offer is the press, sharing one predicate.
         continueStrip: computed(() => continueVisible(situation.value)),
         // When the account the press runs on reopens (ms), while it reads spent: the wall the strip names beside its ending.
