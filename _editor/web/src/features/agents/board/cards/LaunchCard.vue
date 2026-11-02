@@ -82,9 +82,21 @@ const back = computed(() => {
             >
             <span v-if="refused" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`danger`)">{{ t(`agents.launchCard.notStarted`) }}</span>
         </div>
-        <p v-if="!refused" class="pl-8 text-2xs text-subtle tabular-nums">{{ line }}</p>
+        <!-- THE AGENT CARD'S OWN BODY, BLANKED: the model line as skeleton bars and the wait in the clock's seat at the right of
+             the summary line, laid out with AgentCard's own classes, so the card that replaces this one lands at the height,
+             and with its lines in the places, this one held for it. -->
+        <div v-if="!refused" :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
+            <div class="flex h-4 min-w-0 items-center gap-x-3" aria-hidden="true">
+                <span class="skeleton block h-2 w-20" />
+                <span class="skeleton block h-2 w-14" />
+                <span v-if="!dense" class="skeleton block h-2 w-24" />
+            </div>
+            <div class="flex min-w-0 items-center justify-end gap-1.5 text-2xs text-subtle" :class="dense ? 'min-w-32 flex-1' : ''">
+                <span class="min-w-0 truncate tabular-nums">{{ line }}</span>
+            </div>
+        </div>
         <template v-else>
-            <p class="select-text break-words pl-8 text-xs text-content">{{ launch.failure }}</p>
+            <p class="select-text break-words text-xs text-content">{{ launch.failure }}</p>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <Button v-if="back !== undefined" size="small" tier="quiet" thumb :label="back.label" @click="emit(`back`, back.path)">
                     <template #icon><Icon name="arrow-left" /></template>
