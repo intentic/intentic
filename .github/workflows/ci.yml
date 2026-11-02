@@ -683,13 +683,13 @@ jobs:
             node _search/iq-engine/scripts/fetch-model.mjs .image-out/iq-models
             touch .image-out/.iq-models-complete
           fi
-      - name: Install Chromium and its system dependencies
+      - name: Install Chromium
         shell: bash
         run: |
-          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
-          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          # ci-base carries the system libraries and proves Chromium launches during its build. Only the
+          # browser download belongs here; apt's mirrors need not be reachable from the job container.
           for attempt in 1 2 3; do
-            if pnpm --filter @intentic/webq exec playwright install --with-deps chromium; then
+            if pnpm --filter @intentic/webq exec playwright install chromium; then
               exit 0
             fi
             [ "$attempt" -lt 3 ] || exit 1
