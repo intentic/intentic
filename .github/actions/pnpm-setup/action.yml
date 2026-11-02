@@ -27,12 +27,9 @@ runs:
     - name: Drop a stray Playwright browser cache
       shell: bash
       run: |
-        # A BROWSER UNDER $HOME IS ALWAYS A TRAP HERE, because ci-base ships none of Chromium's shared
-        # libraries — a binary that exists and cannot start is strictly worse than no binary at all. The
-        # sandbox's browser suites gate on `existsSync(chromium.executablePath())` and stand down where the
-        # image has no Chromium; a leftover download turns that gate into a false positive and the launch then
-        # dies on `libglib-2.0.so.0: cannot open shared object file`, reporting a browser bug that is really a
-        # poisoned cache.
+        # Ordinary jobs carry no Chromium binary and their browser suites stand down. Keep that choice
+        # explicit: a browser left under $HOME by another job must not silently enable those suites. Browser
+        # jobs set PLAYWRIGHT_BROWSERS_PATH instead; ci-base carries their system libraries.
         #
         # It got poisoned the way any cache under $HOME does here: $HOME is /github/home, which the runner
         # process keeps between jobs, so `images-platform` installing a browser for the sign-in smoke handed one

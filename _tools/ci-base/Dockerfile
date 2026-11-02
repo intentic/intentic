@@ -22,6 +22,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
     && rm -rf /var/lib/apt/lists/*
 
+# Browser jobs must not need apt's mirrors after the image is built: a missing route left an empty
+# package index and failed verify-machine before its suites ran. Keep this pin with the Playwright catalog
+# and browser pack. Launch once during the build, then remove the browser so ordinary jobs still stand down.
+ARG PLAYWRIGHT_VERSION=1.64.1
+RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
+    && npx --yes playwright@${PLAYWRIGHT_VERSION} screenshot --browser chromium about:blank /tmp/ci-chromium.png \
+    && rm -rf /root/.cache/ms-playwright /root/.npm/_npx /var/lib/apt/lists/* /tmp/ci-chromium.png
+
 # Git's ownership check, switched off for every repository this image is handed. The runner's workspace belongs
 # to the host's runner user and a job container runs as root, so git calls the checkout "dubious ownership" and
 # refuses it — exit 128, before it reads a single object. actions/checkout hides this rather than hitting it:
