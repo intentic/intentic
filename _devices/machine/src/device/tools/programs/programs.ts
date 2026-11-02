@@ -2,7 +2,6 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { within } from "@intentic/base/async";
 import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
@@ -12,7 +11,7 @@ import { commandLineOf } from "@intentic/sandbox-contract/policy/device-programs
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
-import { waitForEnd } from "./app-wait.js";
+import { waitForEarlyExit, waitForEnd } from "./app-wait.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { descendantsOf, processRows, signalTree, snapshotTree } from "./process-tree.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
@@ -349,7 +348,7 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
     holdEnding(id, exited);
     child.unref();
     // A program that falls over at once is answered as such, with what it said, rather than as started.
-    const early = await within(exited.then(() => true), EARLY_EXIT_MS, false);
+    const early = await waitForEarlyExit(exit, exited, EARLY_EXIT_MS);
     if (early) {
         const final = (await readRuns(sandboxUrl)).find((entry) => entry.id === id) ?? run;
         const { text } = await tailLines(log, 40);

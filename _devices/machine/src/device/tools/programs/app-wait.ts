@@ -1,3 +1,4 @@
+import { within } from "@intentic/base/async";
 import { onFileChange } from "./file-changes.js";
 
 // WAITING ON A PROGRAM app_start STARTED, SO AN AGENT ASKS ONCE INSTEAD OF CALLING app_logs AGAIN AND AGAIN (2026-10-20).
@@ -10,6 +11,16 @@ export const LOG_FALLBACK_MS = 2_000;
 // How often a run this agent holds no handle for (started by an earlier agent, or inside Windows Sandbox) is looked at:
 // a stranger's exit raises no event here, so this check is the only way to see it.
 const END_FALLBACK_MS = 500;
+
+// The startup window measures the process's exit, not the time its registry write takes. Once it exits inside that
+// window, wait for the record too so the answer includes its exit code even on a busy disk.
+export const waitForEarlyExit = async (exit: Promise<unknown>, recorded: Promise<unknown>, timeoutMs: number): Promise<boolean> => {
+    if (!(await within(exit.then(() => true), timeoutMs, false))) {
+        return false;
+    }
+    await recorded;
+    return true;
+};
 
 export type LogWaitOutcome = "matched" | "ended" | "timeout";
 
