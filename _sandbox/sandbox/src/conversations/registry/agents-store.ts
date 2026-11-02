@@ -256,6 +256,10 @@ export const PersistedAgentSchema = z.object({
     totals: TotalsSchema,
     createdAt: z.number(),
     updatedAt: z.number(),
+    // When its model provider last answered it (TurnRuntime.answeredAt), written only by a settle that ran a turn: the
+    // instant a card dates itself by, which a land, a rename or a failure the sandbox records does not move.
+    // Added 2026-11-02, optional: a row from before it falls back to its turn's end or `updatedAt` on the card.
+    answeredAt: z.number().optional(),
     // When archived: off the board, checkout retired, branch kept. The record itself survives untouched.
     archivedAt: z.number().optional(),
     // What waits for its next turn, as its actor last wrote it (conversation-queue.ts); a restart keeps every word of it.

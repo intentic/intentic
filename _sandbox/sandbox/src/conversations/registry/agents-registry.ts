@@ -213,6 +213,9 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         // Replaced by every turn that ran, a turn whose work all stayed on its branch clearing it; a settle with no turn
         // (a manual land) leaves it standing.
         ...opt("reach", flush.ranTurn ? flush.reach : entry.reach),
+        // Only the provider's answer moves it: a land, a conflict, a failure the sandbox records on its own leave the
+        // card's "how long since it last worked" alone, which is what the reader times a cold cache by.
+        ...opt("answeredAt", flush.answeredAt ?? entry.answeredAt),
         ending: flush.failure ?? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }),
         totals: {
             costUsd: entry.totals.costUsd + flush.usage.costUsd,
@@ -791,6 +794,7 @@ export const createFleet = (
             id: entry.id,
             status,
             updatedAt: state !== undefined && activityLive(state) ? Math.max(entry.updatedAt, state.turn.lastAt ?? 0) : entry.updatedAt,
+            ...opt("answeredAt", state?.turn.answeredAt ?? entry.answeredAt),
             attention: {
                 plan: parked.includes("plan"),
                 // A page asked to be answered on is a question in another form: it waits on the same person.

@@ -4,6 +4,7 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { ref, watch } from "vue";
 import { useAgents } from "../../../models/fleet/useAgents";
+import { answeredAt } from "../../../models/agent-status/answeredAt";
 import { statusIcon } from "../models/catalog";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
@@ -43,7 +44,7 @@ const twinFact = (c: Conversation): string | undefined => {
     }
     const agent = agentById(c.conversationId);
     const model = modelOrProvider({ conversation: c, agent });
-    return agent === undefined || agent.updatedAt === 0 ? model : `${model} · ${timeAgo(agent.updatedAt, { days: true })}`;
+    return agent === undefined || agent.updatedAt === 0 ? model : `${model} · ${timeAgo(answeredAt(agent), { days: true })}`;
 };
 
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent

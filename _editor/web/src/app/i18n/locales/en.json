@@ -151,6 +151,8 @@
             "cost": "Cost",
             "exactId": "Exact id",
             "focusAgent": "Focus agent: {displayTitle}",
+            "lastAnswered": "Model last answered {when}",
+            "lastAnsweredNote": "Lands and failures don't reset it",
             "lastOpened": "Last opened",
             "machine": "Machine",
             "newActivity": "New activity",

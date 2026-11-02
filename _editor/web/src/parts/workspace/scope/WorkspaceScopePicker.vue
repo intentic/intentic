@@ -9,6 +9,7 @@ import { agentScope, branchScope, isShared, SHARED_SCOPE, sameScope, scopeKey, t
 import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
 import { agentDisplayTitle, agentStandingMeta } from "../../../models/agent-status/agentStatus-meta";
 import { sandboxNow } from "../../../models/agent-status/sandboxClock";
+import { answeredAt } from "../../../models/agent-status/answeredAt";
 import { canStartFresh } from "../../../models/fleet/freshSession";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { useAgents } from "../../../models/fleet/useAgents";
@@ -86,7 +87,7 @@ const groups = computed(() =>
             title: agentDisplayTitle(agent),
             standing: agentStandingMeta(agent),
             diff: (agent.diff?.files ?? 0) > 0 ? agent.diff : undefined,
-            age: ageOf(agent.updatedAt),
+            age: ageOf(answeredAt(agent)),
         })),
     })),
 );

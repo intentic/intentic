@@ -8,6 +8,7 @@ import { attentionReason } from "../../agent-status/agentStatus-attention";
 import { laneOf } from "../../agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStatusMeta, subagentStatusMeta } from "../../agent-status/agentStatus-meta";
 import { limited, onlyOwnerCanAnswer, turnWorking, watching } from "../../agent-status/agentStatus-standing";
+import { answeredAt } from "../../agent-status/answeredAt";
 import { subagentLive } from "../subagentRoster";
 import { modelLabelFor } from "../../providers/providerCatalog";
 import { providerAccounts } from "../../providers/providerAccounts";
@@ -205,7 +206,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider, account?: s
         working: turnWorking(child),
         since: child.startedAt,
         doing: activityLine(child) ?? t(`ui.status.working`),
-        at: child.updatedAt,
+        at: answeredAt(child),
         run: runLook(child.provider, child.model, child.effort, child.thinking, child.account),
         runner: child.runner,
         fresh: freshLook(child),

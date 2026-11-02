@@ -5,6 +5,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
 import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
 import { awaitingUser, blocked, type ClientAgentStatus, goesBySelf, heardByParent, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
+import { answeredAt } from "../agent-status/answeredAt";
 import { draftFacts, type DraftFacts, sandboxKeepsDrafts } from "../conversations/drafts/composerDrafts";
 import { type TabFacts, unasked } from "../conversations/tabs/tabFacts";
 import { rememberedProviderFor } from "../conversations/run/turnDefaults";
@@ -265,7 +266,7 @@ export const fleet = computed<FleetAgent[]>(() => {
             const card: FleetAgent = {
                 ...agent,
                 open: openIds.has(agent.id),
-                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+                unread: !turnInFlight(agent) && answeredAt(agent) > (agent.seenAt ?? 0),
                 unsent: tab !== undefined,
                 draftAt: tab?.at,
             };

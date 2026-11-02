@@ -151,6 +151,8 @@
             "cost": "Coste",
             "exactId": "Id exacto",
             "focusAgent": "Enfocar el agente: {displayTitle}",
+            "lastAnswered": "Última respuesta del modelo: {when}",
+            "lastAnsweredNote": "Integrar o fallar no la reinicia",
             "lastOpened": "Última apertura",
             "machine": "Máquina",
             "newActivity": "Actividad nueva",

@@ -151,6 +151,8 @@
             "cost": "Coût",
             "exactId": "Id exact",
             "focusAgent": "Mettre l'agent au premier plan : {displayTitle}",
+            "lastAnswered": "Dernière réponse du modèle : {when}",
+            "lastAnsweredNote": "Ni intégration ni échec ne la remettent à zéro",
             "lastOpened": "Dernière ouverture",
             "machine": "Machine",
             "newActivity": "Nouvelle activité",

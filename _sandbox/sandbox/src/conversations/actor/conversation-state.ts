@@ -60,6 +60,9 @@ export interface TurnActivity {
 export interface TurnRuntime {
     // When the last frame arrived; a live card's recency, never a settled one's.
     readonly lastAt: number | undefined;
+    // When the model provider last answered this turn: any frame but a failure or a person's reply to a card. Unlike
+    // `lastAt` the turn's start does not stamp it, so a turn refused before the provider said anything leaves it unset.
+    readonly answeredAt: number | undefined;
     readonly activity: TurnActivity | undefined;
     readonly contextTokens: number | undefined;
     readonly contextWindow: number | undefined;
@@ -182,6 +185,7 @@ export const NO_USAGE: TurnUsage = { costUsd: 0, inputTokens: 0, outputTokens: 0
 
 export const freshRuntime = (): TurnRuntime => ({
     lastAt: undefined,
+    answeredAt: undefined,
     activity: undefined,
     contextTokens: undefined,
     contextWindow: undefined,

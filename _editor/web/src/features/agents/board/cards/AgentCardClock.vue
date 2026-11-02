@@ -9,6 +9,7 @@ import { sandboxNow } from "../../../../models/agent-status/sandboxClock";
 import { activityIcon } from "../../../../models/agent-status/agentStatus-meta";
 import { turnInFlight, watching } from "../../../../models/agent-status/agentStatus-standing";
 import { promptLine, selfStart, selfStartTicks, watchLine } from "../../../../models/agent-status/agentStatus-clock";
+import { answeredAt } from "../../../../models/agent-status/answeredAt";
 import { cacheCooling, cacheWarm, warmMark } from "../../../../models/fleet/promptCache";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import AgentCardDate from "../../../../parts/fleet/AgentCardDate.vue";
@@ -106,6 +107,15 @@ const warm = computed(() => (watch.value !== undefined || holding.value || props
 const warmTip = computed((): Tip | undefined =>
     warm.value === undefined ? undefined : { ...warm.value.hint, note: t(`agents.promptCache.clickToChange`) },
 );
+// The settled date: when the model last answered, never when a land or a failure last touched the card, so the reader
+// can tell how cold its cache has gone. The hover says which instant it is, since "Updated" would read as anything.
+const answered = computed(() => answeredAt(props.agent));
+const answeredTip = computed(
+    (): Tip => ({
+        title: t(`agents.agentCard.lastAnswered`, { when: formatWhen(answered.value, now.value) }),
+        note: t(`agents.agentCard.lastAnsweredNote`),
+    }),
+);
 const coolingTip = computed((): Tip | undefined =>
     cooling.value === undefined ? undefined : { ...cooling.value.hint, note: t(`agents.promptCache.clickToKeepWarm`) },
 );
@@ -145,8 +155,8 @@ const coolingTip = computed((): Tip | undefined =>
         <Icon name="bolt" class="shrink-0 text-2xs" />
         {{ cooling.text }}<span class="tabular-nums">{{ cooling.countdown }}</span>
     </button>
-    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">
-        <AgentCardDate :at="agent.updatedAt" />
+    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0" v-tooltip.top="answeredTip">
+        <AgentCardDate :at="answered" />
     </span>
 
     <!-- A watch whose command sits at a prompt: what is waiting and for how long, in the watch's slot, with the press that

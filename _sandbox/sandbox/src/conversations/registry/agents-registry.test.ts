@@ -426,6 +426,22 @@ describe("agents registry", () => {
         expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
     });
 
+    // The card dates itself by `answeredAt`: a land pressed hours later (a settle with no turn, as land-by-hand sends)
+    // must leave the reader's "how long has it sat" alone, though it moves `updatedAt`.
+    it("dates the provider's last answer, which a later settle with no turn under it does not move", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
+        conversations.send("c1", { kind: "frame", frame: { kind: "delta", text: "done" } }, 1_200);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "limit" } }, 1_300);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+        expect(registry.entry("c1")?.answeredAt).toBe(1_200);
+
+        await conversations.send("c1", { kind: "settle" }, 9_000_000).settled;
+        expect(registry.entry("c1")).toMatchObject({ answeredAt: 1_200, updatedAt: 9_000_000 });
+        expect(registry.list().find((agent) => agent.id === "c1")?.answeredAt).toBe(1_200);
+    });
+
     it("a conversation that ran here never picks up a runner from a later request", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

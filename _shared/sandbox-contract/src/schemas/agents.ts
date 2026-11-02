@@ -489,6 +489,14 @@ export const AgentSummarySchema = z.object({
         "Messages waiting for its next turn, and whether they are held. Absent for a conversation nothing has ever waited for.",
     ),
     updatedAt: z.number().describe("When it last did something, in milliseconds. Reading it does not count."),
+    // What a card dates itself by, apart from `updatedAt`, which a land, a conflict or a failure the sandbox records
+    // moves to the moment of the press and so hides how long the conversation has really sat (its cache cooling).
+    answeredAt: z
+        .number()
+        .optional()
+        .describe(
+            "When its model provider last answered it, in milliseconds. A land, a rename, a reply to a card or a failure the sandbox records does not move it. Absent for a conversation no provider has answered since this was added.",
+        ),
     // Daemon-side, not browser-side: read state is a fact about the work, so clearing site data or switching devices
     // can't resurrect a badge.
     seenAt: z

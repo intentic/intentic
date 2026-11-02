@@ -5,6 +5,7 @@ import { connectedSandboxes } from "../sandbox/live/roster";
 import { landOnAfterSwitch } from "../sandbox/sandboxScreen";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { turnInFlight } from "../agent-status/agentStatus-standing";
+import { answeredAt } from "../agent-status/answeredAt";
 import type { FleetAgent } from "./useAgents-fleet";
 import { endedHere, overlaid } from "./useAgents-provisional";
 import { useChat } from "../conversations/run/useChat";
@@ -40,7 +41,7 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
                 // Unsent words exist in exactly one place, the composer in front of the user, so this is read from the
                 // tab or is false.
                 unsent: tab?.unsent ?? false,
-                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+                unread: !turnInFlight(agent) && answeredAt(agent) > (agent.seenAt ?? 0),
             };
             // A press on this card from here draws at once; this box is polled, so its roster is the slow half.
             const shown = overlaid(card, agent, box.sandbox.id);

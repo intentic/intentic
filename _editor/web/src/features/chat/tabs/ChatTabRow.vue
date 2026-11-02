@@ -5,6 +5,7 @@ import ChildCount from "../../../parts/fleet/ChildCount.vue";
 import { boxNameOf } from "../../../models/fleet/fleetScope";
 import { editsRefusal } from "../../../models/agent-status/agentStatus-attention";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
+import { answeredAt } from "../../../models/agent-status/answeredAt";
 import { settingsChip, useSettingsRefusal } from "../../../models/conversations/review/settingsRefusal";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import OriginMark from "../../../parts/fleet/OriginMark.vue";
@@ -179,7 +180,7 @@ const closeRow = (event: Event): void => {
             <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
             <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
-                timeAgo(props.agent.updatedAt, { days: true })
+                timeAgo(answeredAt(props.agent), { days: true })
             }}</span>
             <!-- Where its last turn's work went besides its branch, the board card's line on a row of its own: the worst of it, every place in the hover. -->
             <span

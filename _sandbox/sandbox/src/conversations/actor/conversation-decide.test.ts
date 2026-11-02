@@ -249,7 +249,7 @@ const rows: readonly Row[] = [
         name: "a card raised on a live turn parks it",
         from: running(),
         event: frame(QUESTION),
-        to: running({ parked: [{ requestId: "q-1", kind: "question" }] }, { lastAt: NOW }),
+        to: running({ parked: [{ requestId: "q-1", kind: "question" }] }, { lastAt: NOW, answeredAt: NOW }),
         effects: BROADCAST,
     },
     {
@@ -269,14 +269,14 @@ const rows: readonly Row[] = [
                 dailyCapUsd: "5.00",
             },
         }),
-        to: running({ parked: [{ requestId: "pay-1", kind: "payment_offer" }] }, { lastAt: NOW }),
+        to: running({ parked: [{ requestId: "pay-1", kind: "payment_offer" }] }, { lastAt: NOW, answeredAt: NOW }),
         effects: BROADCAST,
     },
     {
         name: "a permission parks with its one line, the runtime's sentence on one line",
         from: running(),
         event: frame({ kind: "permission", requestId: "p-1", toolName: "Bash", displayName: "Run command", title: "Run\n  `rm -rf dist`?" }),
-        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: "Run `rm -rf dist`?" }] }, { lastAt: NOW }),
+        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: "Run `rm -rf dist`?" }] }, { lastAt: NOW, answeredAt: NOW }),
         effects: BROADCAST,
     },
     {
@@ -300,7 +300,7 @@ const rows: readonly Row[] = [
                     },
                 ],
             },
-            { lastAt: NOW },
+            { lastAt: NOW, answeredAt: NOW },
         ),
         effects: BROADCAST,
     },
@@ -315,7 +315,7 @@ const rows: readonly Row[] = [
                     { requestId: "p-2", kind: "permission", ask: "WebFetch" },
                 ],
             },
-            { lastAt: NOW },
+            { lastAt: NOW, answeredAt: NOW },
         ),
         effects: BROADCAST,
     },
@@ -323,7 +323,7 @@ const rows: readonly Row[] = [
         name: "a permission's line is cut to the card's length",
         from: running(),
         event: frame({ kind: "permission", requestId: "p-1", toolName: "Bash", title: "x".repeat(ASK_MAX_CHARS + 50) }),
-        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: `${"x".repeat(ASK_MAX_CHARS - 1)}…` }] }, { lastAt: NOW }),
+        to: running({ parked: [{ requestId: "p-1", kind: "permission", ask: `${"x".repeat(ASK_MAX_CHARS - 1)}…` }] }, { lastAt: NOW, answeredAt: NOW }),
         effects: BROADCAST,
     },
     {
@@ -342,7 +342,7 @@ const rows: readonly Row[] = [
                     { requestId: "r-2", kind: "permission" },
                 ],
             },
-            { lastAt: NOW },
+            { lastAt: NOW, answeredAt: NOW },
         ),
         effects: [{ kind: "title-planned", text: "no heading" }, { kind: "broadcast" }],
     },
@@ -350,7 +350,7 @@ const rows: readonly Row[] = [
         name: "a plan raised behind a stop names the job but parks nothing and publishes nothing",
         from: running({ stopping: "stopped" }),
         event: frame(PLAN),
-        to: running({ stopping: "stopped" }, { lastAt: NOW }),
+        to: running({ stopping: "stopped" }, { lastAt: NOW, answeredAt: NOW }),
         effects: [{ kind: "title-planned", text: "# Ship the parser\n1. go" }],
     },
     { name: "a card raised with no turn live has nowhere to park", from: idle(), event: frame(QUESTION), to: idle({ lastAt: NOW }), effects: [] },
@@ -372,7 +372,7 @@ const rows: readonly Row[] = [
         name: "the session frame binds the session and files the prompt waiting for it, without a broadcast",
         from: running({}, { promptToFile: "Fix it" }),
         event: frame({ kind: "session", sessionId: "s-1", account: "acct" }),
-        to: running({}, { lastAt: NOW, sessionId: "s-1" }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, sessionId: "s-1" }),
         effects: [
             { kind: "session-bound", sessionId: "s-1", account: "acct" },
             { kind: "session-prompt", sessionId: "s-1", prompt: "Fix it" },
@@ -382,28 +382,28 @@ const rows: readonly Row[] = [
         name: "usage accumulates onto the turn's books",
         from: running({}, { usage: { ...NO_USAGE, costUsd: 0.5, inputTokens: 10 } }),
         event: frame({ kind: "usage", costUsd: 0.25, inputTokens: 5, outputTokens: 7 }),
-        to: running({}, { lastAt: NOW, usage: { ...NO_USAGE, costUsd: 0.75, inputTokens: 15, outputTokens: 7 } }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, usage: { ...NO_USAGE, costUsd: 0.75, inputTokens: 15, outputTokens: 7 } }),
         effects: PROGRESS,
     },
     {
         name: "half a cache pair names no deadline, so the last one stands",
         from: running({}, { promptCache: { at: 1, ttlMs: 300_000 } }),
         event: frame({ kind: "context_usage", tokens: 9_000, contextWindow: 200_000, cachedAt: 7 }),
-        to: running({}, { lastAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 1, ttlMs: 300_000 } }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 1, ttlMs: 300_000 } }),
         effects: PROGRESS,
     },
     {
         name: "a whole cache pair replaces the deadline",
         from: running(),
         event: frame({ kind: "context_usage", tokens: 9_000, contextWindow: 200_000, cachedAt: 7, cacheTtlMs: 3_600_000 }),
-        to: running({}, { lastAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 7, ttlMs: 3_600_000 } }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 7, ttlMs: 3_600_000 } }),
         effects: PROGRESS,
     },
     {
         name: "a tool call counts, and keeps the checklist step the card is showing",
         from: running({}, { activity: { tool: "Read", todo: "write tests" } }),
         event: frame({ kind: "tool_call", id: "t", name: "Edit", category: "edit", status: "in_progress", target: "src/a.ts" }),
-        to: running({}, { lastAt: NOW, activity: { tool: "Edit", target: "src/a.ts", todo: "write tests" }, usage: { ...NO_USAGE, toolUses: 1 } }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, activity: { tool: "Edit", target: "src/a.ts", todo: "write tests" }, usage: { ...NO_USAGE, toolUses: 1 } }),
         effects: PROGRESS,
     },
     {
@@ -419,7 +419,7 @@ const rows: readonly Row[] = [
         to: running(
             {},
             {
-                lastAt: NOW,
+                lastAt: NOW, answeredAt: NOW,
                 activity: { todo: "b" },
                 checklist: [
                     { content: "a", status: "completed" },
@@ -433,35 +433,35 @@ const rows: readonly Row[] = [
         name: "a checklist with nothing in progress still leaves an activity, empty",
         from: running(),
         event: frame({ kind: "todos", items: [] }),
-        to: running({}, { lastAt: NOW, activity: {}, checklist: [] }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, activity: {}, checklist: [] }),
         effects: PROGRESS,
     },
     {
         name: "a child's birth is counted",
         from: running(),
         event: frame({ kind: "subagent", id: "k", subagentKind: "spawned" }),
-        to: running({}, { lastAt: NOW, usage: { ...NO_USAGE, subagents: 1 } }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW, usage: { ...NO_USAGE, subagents: 1 } }),
         effects: PROGRESS,
     },
     {
         name: "a child's progress publishes nothing",
         from: running(),
         event: frame({ kind: "subagent_update", id: "k" }),
-        to: running({}, { lastAt: NOW }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW }),
         effects: [],
     },
     {
         name: "a child's status change publishes",
         from: running(),
         event: frame({ kind: "subagent_update", id: "k", status: "completed" }),
-        to: running({}, { lastAt: NOW }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW }),
         effects: PROGRESS,
     },
     {
         name: "a compaction is filed, not published",
         from: running(),
         event: frame({ kind: "compact", trigger: "auto" }),
-        to: running({}, { lastAt: NOW }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW }),
         effects: [{ kind: "compacted" }],
     },
     {
@@ -515,7 +515,7 @@ const rows: readonly Row[] = [
         name: "a delta moves only the card's recency",
         from: running(),
         event: frame({ kind: "delta", text: "hi" }),
-        to: running({}, { lastAt: NOW }),
+        to: running({}, { lastAt: NOW, answeredAt: NOW }),
         effects: [],
     },
     {
@@ -1025,9 +1025,9 @@ describe("the settle", () => {
     };
 
     test("a clean turn goes idle, hands its books to the entry and zeroes them, keeping what the card still shows", () => {
-        const decision = decide(running({}, { ...books, activity: { tool: "Edit" }, landing: true }), { kind: "settle" }, NOW, ENTRY);
-        expect(decision.state).toStrictEqual({ ...idle({ lastAt: 1_000, checklist: books.checklist, activity: { tool: "Edit" }, landing: true }) });
-        expect(flushOf(decision)).toStrictEqual({ ranTurn: true, stopped: undefined, ending: "clean", failure: undefined, ...books });
+        const decision = decide(running({}, { ...books, answeredAt: 1_500, activity: { tool: "Edit" }, landing: true }), { kind: "settle" }, NOW, ENTRY);
+        expect(decision.state).toStrictEqual({ ...idle({ lastAt: 1_000, answeredAt: 1_500, checklist: books.checklist, activity: { tool: "Edit" }, landing: true }) });
+        expect(flushOf(decision)).toStrictEqual({ ranTurn: true, answeredAt: 1_500, stopped: undefined, ending: "clean", failure: undefined, ...books });
         expect(decision.effects.map((effect) => effect.kind)).toEqual(["entry-settled", "persist", "reprobe", "broadcast"]);
     });
 
@@ -1047,6 +1047,7 @@ describe("the settle", () => {
         const decision = decide(idle({ resuming: true }), { kind: "settle" }, NOW, ENTRY);
         expect(flushOf(decision)).toStrictEqual({
             ranTurn: false,
+            answeredAt: undefined,
             stopped: undefined,
             ending: "none",
             failure: undefined,
@@ -1058,6 +1059,19 @@ describe("the settle", () => {
             review: undefined,
         });
         expect(decision.state).toStrictEqual(idle({ resuming: true }));
+    });
+
+    test("a settle with no turn under it carries no answer, whatever the last turn's runtime still holds", () => {
+        const decision = decide(idle({ answeredAt: 500 }), { kind: "settle" }, NOW, ENTRY);
+        expect(flushOf(decision)?.answeredAt).toBeUndefined();
+    });
+
+    test("only the provider's frames date the answer: a failure or a person's reply to a card leaves it", () => {
+        const answered = decide(running({}, { answeredAt: 500 }), { kind: "frame", frame: { kind: "delta", text: "hi" } }, NOW, ENTRY);
+        expect(answered.state.turn.answeredAt).toBe(NOW);
+        const failed = decide(running({}, { answeredAt: 500 }), { kind: "frame", frame: { kind: "error", message: "limit" } }, NOW, ENTRY);
+        expect(failed.state.turn.answeredAt).toBe(500);
+        expect(failed.state.turn.lastAt).toBe(NOW);
     });
 
     test("a settle under a rewind leaves the rewind holding the conversation", () => {

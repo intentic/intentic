@@ -151,6 +151,8 @@
             "cost": "Koszt",
             "exactId": "Dokładne id",
             "focusAgent": "Skup się na agencie: {displayTitle}",
+            "lastAnswered": "Ostatnia odpowiedź modelu: {when}",
+            "lastAnsweredNote": "Scalanie ani błąd jej nie zerują",
             "lastOpened": "Ostatnio otwarte",
             "machine": "Maszyna",
             "newActivity": "Nowa aktywność",

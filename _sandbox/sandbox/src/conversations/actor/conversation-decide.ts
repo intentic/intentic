@@ -93,6 +93,9 @@ export type TurnCompletion = "clean" | "cut" | "none";
 export interface SettleFlush {
     // Whether a turn was live, so a manual land's settle does not count one.
     readonly ranTurn: boolean;
+    // When the provider last answered the settling turn (TurnRuntime.answeredAt); absent for a settle with no turn, or
+    // a turn the provider never answered, which leaves the entry's own standing.
+    readonly answeredAt: number | undefined;
     readonly stopped: StopEnding | undefined;
     readonly ending: TurnCompletion;
     readonly failure: FailedEnding | undefined;
@@ -441,8 +444,14 @@ const FRAMES: { readonly [K in AgentEvent["kind"]]?: FrameHandler<K> } = {
     error: onError,
 };
 
+// Frames that are not the provider answering: a failure (a spent allowance, an outage) and a person's reply to a card.
+const UNANSWERED: ReadonlySet<AgentEvent["kind"]> = new Set(["error", "resolved"]);
+
+// A stray frame with no turn live answered nothing either.
+const answers = (state: ConversationState, frame: AgentEvent): boolean => state.phase.kind === "running" && !UNANSWERED.has(frame.kind);
+
 const onFrame = (state: ConversationState, frame: AgentEvent, now: number): Decision<undefined> => {
-    const turn: TurnRuntime = { ...state.turn, lastAt: now };
+    const turn: TurnRuntime = { ...state.turn, lastAt: now, answeredAt: answers(state, frame) ? now : state.turn.answeredAt };
     const handler = FRAMES[frame.kind] as FrameHandler<AgentEvent["kind"]> | undefined;
     return handler === undefined ? unchanged({ ...state, turn }, undefined) : handler(state, turn, frame);
 };
@@ -517,6 +526,7 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
     const { turn } = state;
     const flush: SettleFlush = {
         ranTurn: running !== undefined,
+        answeredAt: running === undefined ? undefined : turn.answeredAt,
         stopped: running?.stopping,
         ending: running === undefined ? "none" : turn.failure !== undefined || running.stopping !== undefined ? "cut" : "clean",
         failure: turn.failure,
