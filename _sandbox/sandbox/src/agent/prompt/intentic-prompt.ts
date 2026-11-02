@@ -12,7 +12,6 @@ const CUT_LINES: readonly string[] = [
     "You are a Claude agent,",
     "You are an agent working with the user",
     "IMPORTANT: Assist with",
-    "Write code that reads like the surrounding code",
     "When you use a pronoun",
 ];
 
