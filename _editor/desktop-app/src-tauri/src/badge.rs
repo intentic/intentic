@@ -198,7 +198,9 @@ mod big_icon {
 /// window it can match to that shortcut with the shortcut's icon, whatever `ICON_BIG` says: the sandbox's logo never
 /// showed in an installed app, only in a copy run from the build tree, which has no shortcut. An id of the window's own
 /// unhooks the button from the shortcut, so it draws the window's icon; toasts still go out under the shortcut's id. The
-/// relaunch properties keep a pin made from the running button opening the app, under its name and icon.
+/// relaunch command and name keep a pin made from the running button opening the app, under its name. No relaunch icon:
+/// Windows draws a button whose window names one with that icon rather than the window's, so `exe,0` put the lotus back
+/// on the button whatever logo the frame wore (seen on Windows 11, 2026-11-02).
 #[cfg(windows)]
 pub fn own_taskbar_button(app: &AppHandle, window: &Window) {
     let Ok(hwnd) = window.hwnd() else {
@@ -235,7 +237,6 @@ mod taskbar_identity {
         }
     }
     const RELAUNCH_COMMAND: PROPERTYKEY = key(2);
-    const RELAUNCH_ICON: PROPERTYKEY = key(3);
     const RELAUNCH_NAME: PROPERTYKEY = key(4);
     const ID: PROPERTYKEY = key(5);
 
@@ -257,12 +258,11 @@ mod taskbar_identity {
     pub fn put(hwnd: HWND, id: &str, exe: Option<&Path>) -> windows::core::Result<()> {
         // SAFETY: the frame's own window, on the thread that made it.
         let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(hwnd)? };
-        let mut values = Vec::with_capacity(4);
-        // The relaunch properties count only beside an id, and the command only with its name, so all or none.
+        let mut values = Vec::with_capacity(3);
+        // The relaunch properties count only beside an id, and the command only with its name, so both or neither.
         if let Some(exe) = exe.map(Path::display) {
             values.push((RELAUNCH_COMMAND, text(&format!("\"{exe}\""))?));
             values.push((RELAUNCH_NAME, text("Intentic")?));
-            values.push((RELAUNCH_ICON, text(&format!("{exe},0"))?));
         }
         values.push((ID, text(id)?));
         for (key, value) in &values {
