@@ -12,6 +12,8 @@ const { conversation, editing, draft, attachments, messages } = view;
 
 // How many bubbles the send replaces, the same set the turns strike through.
 const dropped = computed(() => conversation.value.transcript.doomed.value.size);
+// A prompt that never started a turn (only refused attempts under it) is simply edited: nothing to fork a copy of.
+const answered = computed(() => conversation.value.transcript.editAnswered.value);
 
 // Forks "now" at the edited prompt, taking the half-written replacement along; this pane gets back what the pencil displaced.
 const keepBoth = (): void => {
@@ -40,12 +42,16 @@ const keepBoth = (): void => {
         <!-- A floor, not `min-w-0`: the presses beside it are a thumb's size on a phone, and squeezed between them the line
              was a column of single words; past the floor they take a row of their own under it. -->
         <span class="min-w-[12rem] flex-1">
-            {{ t(`chat.chatPane.editingMessage`) }}
-            <template v-if="dropped > 1">{{ t(`chat.chatPane.belowReplacedSend`, { editDropped: dropped - 1 }) }}</template>
-            <template v-else>{{ t(`chat.chatPane.replacedSend`) }}</template>
+            <template v-if="!answered">{{ t(`chat.chatPane.editingUnanswered`) }}</template>
+            <template v-else>
+                {{ t(`chat.chatPane.editingMessage`) }}
+                <template v-if="dropped > 1">{{ t(`chat.chatPane.belowReplacedSend`, { editDropped: dropped - 1 }) }}</template>
+                <template v-else>{{ t(`chat.chatPane.replacedSend`) }}</template>
+            </template>
         </span>
         <!-- The keep-answer action precedes Cancel so the answer is read first. -->
         <Button
+            v-if="answered"
             size="small"
             thumb
             tier="quiet"

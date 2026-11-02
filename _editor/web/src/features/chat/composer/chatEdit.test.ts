@@ -264,3 +264,23 @@ it(`hands the half-typed replacement to a fork instead, keeping this chat whole`
     expect(conversation.transcript.messages.value).toHaveLength(4);
     expect(conversation.transcript.editing.value).toBeUndefined();
 });
+
+// A prompt that never started a turn, every attempt refused: the edit is just an edit, offering no fork of a chat that
+// has nothing in it to keep (2026-11-02).
+it(`edits a never-answered prompt plainly, with no fork to keep both`, async () => {
+    const conversation = useChat().active.value;
+    conversation.transcript.restoreMessages([
+        { role: `user`, text: `fix the bug`, checkpointId: `cp-0`, rewindIndex: 0 },
+        { role: `notice`, text: `Switched to the other account.` },
+        { role: `notice`, text: `Claude usage limit reached.` },
+    ]);
+    await mountPanel();
+
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
+    await settle();
+
+    expect(paneText()).toContain(`It never got an answer`);
+    expect(paneText()).not.toContain(`below it are replaced`);
+    expect(button(`Keep both instead`)).toBeUndefined();
+    expect(button(`Cancel`)).toBeInstanceOf(HTMLButtonElement);
+});

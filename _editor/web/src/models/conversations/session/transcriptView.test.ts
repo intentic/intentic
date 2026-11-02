@@ -185,6 +185,30 @@ describe(`an edit`, () => {
         expect(host.turn.say.mock.calls).toEqual([[`first, better`, [], undefined]]);
     });
 
+    // A prompt every attempt at which was refused never ran a turn: its edit is the words changed in place, with no
+    // answer to name as replaced and no files to say were restored (2026-11-02).
+    it(`of a prompt that only ever got refusals is plain, and says nothing of what it dropped`, async () => {
+        const { host, view, row, texts } = viewOf([
+            { id: 1, role: `user`, text: `first`, sentAt: 1, messageId: `m-1`, rewindIndex: 0 },
+            { id: 2, role: `notice`, text: `Switched to another account` },
+            { id: 3, role: `notice`, text: `Claude usage limit reached.` },
+        ]);
+        view.beginEdit(row(1));
+        expect(view.editAnswered.value).toBe(false);
+
+        expect(await view.submitEdit(`first, better`)).toBe(true);
+        expect(texts()).toEqual([]);
+        expect(host.turn.say.mock.calls).toEqual([[`first, better`, [], undefined]]);
+    });
+
+    it(`of a prompt with a reply or a later prompt under it takes that back`, () => {
+        const { view, row } = viewOf();
+        view.beginEdit(row(1));
+        expect(view.editAnswered.value).toBe(true);
+        view.beginEdit(row(4));
+        expect(view.editAnswered.value).toBe(true);
+    });
+
     it(`ends when the prompt it aimed at left the transcript`, async () => {
         const { host, view, row } = viewOf();
         view.beginEdit(row(4));

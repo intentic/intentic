@@ -3420,6 +3420,7 @@
             "closePane": "Bereich schließen",
             "editing": "Bearbeitung",
             "editingMessage": "Diese Nachricht wird bearbeitet:",
+            "editingUnanswered": "Diese Nachricht wird bearbeitet. Sie wurde nie beantwortet, daher ersetzt Senden nur ihren Text.",
             "enterRunsCommand": "Enter führt /{name} aus",
             "enterToContinue": "Enter zum Fortfahren",
             "escToStop": "Esc zum Stoppen",

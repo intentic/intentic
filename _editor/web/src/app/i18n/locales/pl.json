@@ -3420,6 +3420,7 @@
             "closePane": "Zamknij panel",
             "editing": "Edycja",
             "editingMessage": "Edytujesz tę wiadomość:",
+            "editingUnanswered": "Edytujesz tę wiadomość. Nie dostała odpowiedzi, więc wysłanie po prostu zmieni jej treść.",
             "enterRunsCommand": "Enter uruchamia /{name}",
             "enterToContinue": "Enter, aby kontynuować",
             "escToStop": "Esc, aby zatrzymać",

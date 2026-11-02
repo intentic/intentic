@@ -3420,6 +3420,7 @@
             "closePane": "Fermer le panneau",
             "editing": "Modification",
             "editingMessage": "Modification de ce message :",
+            "editingUnanswered": "Modification de ce message. Il n’a jamais reçu de réponse : l’envoi remplace simplement son texte.",
             "enterRunsCommand": "Entrée lance /{name}",
             "enterToContinue": "Entrée pour continuer",
             "escToStop": "Échap pour arrêter",

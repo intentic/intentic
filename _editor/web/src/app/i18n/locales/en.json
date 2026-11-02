@@ -3420,6 +3420,7 @@
             "closePane": "Close pane",
             "editing": "Editing",
             "editingMessage": "Editing this message:",
+            "editingUnanswered": "Editing this message. It never got an answer, so sending just puts the new words in its place.",
             "enterRunsCommand": "Enter runs /{name}",
             "enterToContinue": "Enter to continue",
             "escToStop": "Esc to stop",

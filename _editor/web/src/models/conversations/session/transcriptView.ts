@@ -59,6 +59,9 @@ const standingAs = (message: ChatMessage, standing: NoticeStanding | undefined):
 
 const NOTHING_DOOMED: ReadonlySet<number> = new Set();
 
+// Whether anything but notices follows the row at `index`: a notice says what happened to a turn, never that one ran.
+const answeredBelow = (messages: readonly ChatMessage[], index: number): boolean => messages.slice(index + 1).some((message) => message.role !== `notice`);
+
 export class TranscriptView extends TranscriptClock {
     // True while a transcript read is in flight and nothing is painted, so the panel shows loading instead.
     readonly loading = ref(false);
@@ -100,6 +103,15 @@ export class TranscriptView extends TranscriptClock {
         const id = this.editing.value?.id;
         const from = id === undefined ? -1 : this.messages.value.findIndex((message) => message.id === id);
         return from < 0 ? NOTHING_DOOMED : new Set(this.messages.value.slice(from).map((message) => message.id));
+    });
+
+    // Whether the armed edit takes back anything the prompt got: a reply, a card, a later prompt. Only notices under it
+    // (a refused attempt, a switched account) is a prompt that never started a turn, so the send is a plain edit of it,
+    // with no answer to keep a copy of and nothing to name as replaced.
+    readonly editAnswered = computed(() => {
+        const id = this.editing.value?.id;
+        const from = id === undefined ? -1 : this.messages.value.findIndex((message) => message.id === id);
+        return from >= 0 && answeredBelow(this.messages.value, from);
     });
 
     // `applied` hears every entry after its rows landed, in arrival order (TranscriptClock).
@@ -270,17 +282,22 @@ export class TranscriptView extends TranscriptClock {
             return false;
         }
         const dropped = this.messages.value.length - bubble;
+        // An edit of a prompt that never got a turn changed no files and dropped no answer: the new words simply stand
+        // where the old ones were, with nothing to say about it.
+        const plainEdit = reason === `edit` && !answeredBelow(this.messages.value, bubble);
         // The rebuild renumbers every bubble from zero, so an edit armed on one points elsewhere; disarmed here.
         this.editing.value = undefined;
         this.rebuild(this.messages.value.slice(0, bubble));
         // Says what happened to the files, since a rewind changes the workspace with nothing else on screen showing it.
         // An edit says so in its own words, naming what the prompt replaced; a plain rewind keeps its own wording.
-        this.notice(
-            reason === `edit`
-                ? t(`chat.transcriptView.editedDropped`, { count: dropped }, dropped)
-                : t(`chat.transcriptView.wentBackDropped`, { count: dropped }, dropped),
-            `happened`,
-        );
+        if (!plainEdit) {
+            this.notice(
+                reason === `edit`
+                    ? t(`chat.transcriptView.editedDropped`, { count: dropped }, dropped)
+                    : t(`chat.transcriptView.wentBackDropped`, { count: dropped }, dropped),
+                `happened`,
+            );
+        }
         this.host.session.value = undefined;
         this.host.error.value = null;
         this.host.failures.crashed.value = false;

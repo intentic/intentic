@@ -312,7 +312,8 @@ const composerSend = useComposerSend({
     words: computed(() => ({
         provider: providerName.value,
         onTrial: onTrial.value,
-        editDropped: props.conversation.transcript.doomed.value.size,
+        // A never-answered prompt's edit replaces only itself, whatever notices of refused attempts sit under it.
+        editDropped: props.conversation.transcript.editAnswered.value ? props.conversation.transcript.doomed.value.size : 1,
         plain: plainWords.value,
     })),
     pin,
