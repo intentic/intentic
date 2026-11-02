@@ -34,16 +34,21 @@ it(`offers every way of getting code in`, () => {
     expect(el.querySelectorAll(`button`).length).toBeGreaterThanOrEqual(3);
 });
 
-it(`opens the clone field in place, and refuses to submit an empty address`, async () => {
+it(`shows the clone field immediately, and enables submission only for a nonempty address`, async () => {
     const el = mount();
-
-    buttonSaying(el, `Clone a repository`)!.click();
-    await nextTick();
 
     const field = el.querySelector<HTMLInputElement>(`#clone-url`);
     expect(field).not.toBeNull();
     expect(field!.value).toBe(``);
     expect(buttonSaying(el, `Clone`)!.disabled).toBe(true);
+
+    for (const [address, disabled] of [[`   `, true], [`https://github.com/owner/repo`, false], [``, true]] as const) {
+        field!.value = address;
+        field!.dispatchEvent(new Event(`input`, { bubbles: true }));
+        await nextTick();
+
+        expect(buttonSaying(el, `Clone`)!.disabled).toBe(disabled);
+    }
 });
 
 // Last, since answering is remembered for the rest of this file's module: the card is the newcomer's one question.
