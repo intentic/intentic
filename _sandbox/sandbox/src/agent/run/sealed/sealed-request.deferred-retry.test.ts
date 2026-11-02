@@ -11,7 +11,7 @@ import type { QueryFn } from "../harness/claude-code-stream.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { runSealedRequest, type SealedAsk } from "./sealed-request.js";
-import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 // A sealed request on the real Claude Code loop (runAgent) whose provider defers its retry past the helper's patience.
 // Closing runAgent's frames waits for its pump, which ends only once the SDK is aborted, so the attempt must be stopped
@@ -88,22 +88,8 @@ const build = () => {
     return { seen, services, caller, ask };
 };
 
-test("a deferred provider retry on the real Claude loop fails fast, naming the retry, and stops the SDK", async () => {
-    const { seen, services, ask } = build();
-    const startedAt = Date.now();
-    const pending = runSealedRequest(services, ask).then(
-        (value) => ({ settled: "resolved" as const, value, at: Date.now() }),
-        (error: unknown) => ({ settled: "rejected" as const, message: (error as Error).message, at: Date.now() }),
-    );
-    const early = await Promise.race([pending, new Promise<"still pending">((resolve) => setTimeout(() => resolve("still pending"), 2_000))]);
-    expect(seen.retryAt).toBeDefined();
-    expect(early).toMatchObject({ settled: "rejected", message: expect.stringMatching(/retry deferred 60s/) });
-    expect(seen.sdkAbortedAt).toBeDefined();
-    expect((seen.sdkAbortedAt ?? Number.POSITIVE_INFINITY) - startedAt).toBeLessThan(2_000);
-});
-
 test("left alone on a fake clock, the deferred retry is said long before the deadline, and as the retry", async () => {
-    const { services, ask } = build();
+    const { seen, services, caller, ask } = build();
     jest.useFakeTimers();
     try {
         const pending = runSealedRequest(services, ask).then(
@@ -114,9 +100,12 @@ test("left alone on a fake clock, the deferred retry is said long before the dea
         void pending.then((value) => {
             outcome = value;
         });
-        await advanceTimersByTimeAsync(1_000);
-        expect(outcome).toBe("the model did not answer (retry deferred 60s)");
+        // The loop prepares asynchronously; no deadline or retry timer advances while it prepares and refuses.
+        await waitFor(() => expect(outcome).toBe("the model did not answer (retry deferred 60s)"), SETTLES);
+        expect(seen.retryAt).toEqual(expect.any(Number));
+        expect(seen.sdkAbortedAt).toEqual(expect.any(Number));
     } finally {
+        caller.abort();
         jest.useRealTimers();
     }
 });

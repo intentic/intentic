@@ -1,3 +1,4 @@
+import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import { decodeQuotedPrintable, extractCodes, fetchEmailCode, type ImapRead, extractLinks, imapSince, mailboxOf, matchesSite, parseSearch, siteToken } from "./email-codes.js";
 
 // Pure parsing and extraction logic between the curl transport and the tool's answer; no network, no mocks needed.
@@ -117,12 +118,16 @@ const box = { host: "imap.example.com", port: "993", username: "me", password: "
 const codeMail = (code: string, date: Date): FakeMail => ({ from: "Reddit <noreply@redditmail.com>", subject: `Your code ${code}`, date, body: `Your verification code is ${code}.` });
 
 describe("fetchEmailCode waiting for the mail", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
     it("holds until a mail from the site arrives after the call, passing over the older code and other senders", async () => {
         const now = new Date();
         const mailbox = fakeMailbox({ 7: codeMail("111111", new Date(now.getTime() - 10 * 60_000)) });
         setTimeout(() => mailbox.deliver(8, { from: "news@example.com", subject: "Weekly 222222", date: new Date(), body: "" }), 30);
         setTimeout(() => mailbox.deliver(9, codeMail("333333", new Date())), 120);
-        const found = await fetchEmailCode(box, "www.reddit.com", { now, waitMs: 5_000, pollMs: 20, read: mailbox.read });
+        const finding = fetchEmailCode(box, "www.reddit.com", { now, waitMs: 5_000, pollMs: 20, read: mailbox.read });
+        await advanceTimersByTimeAsync(140);
+        const found = await finding;
         expect(found).toMatchObject({ arrived: "after-call", codes: ["333333"] });
         // Every search after the first asks only past the highest UID it had seen.
         expect(mailbox.searches.slice(1).every((search) => /^UID SEARCH UID (8|9|10):\*$/.test(search))).toBe(true);
@@ -131,28 +136,37 @@ describe("fetchEmailCode waiting for the mail", () => {
     it("answers at once with a mail that landed just before the call", async () => {
         const now = new Date();
         const mailbox = fakeMailbox({ 4: codeMail("444444", new Date(now.getTime() - 20_000)) });
-        const started = performance.now();
         const found = await fetchEmailCode(box, "reddit", { now, waitMs: 5_000, pollMs: 20, read: mailbox.read });
         expect(found).toMatchObject({ arrived: "just-before", codes: ["444444"] });
-        expect(performance.now() - started).toBeLessThan(500);
         expect(mailbox.searches).toHaveLength(1);
     });
 
     it("falls back to the newest in the window, said as older, when nothing new comes in time", async () => {
         const now = new Date();
         const mailbox = fakeMailbox({ 5: codeMail("555555", new Date(now.getTime() - 5 * 60_000)) });
-        expect(await fetchEmailCode(box, "reddit", { now, waitMs: 100, pollMs: 20, read: mailbox.read })).toMatchObject({ arrived: "earlier", codes: ["555555"] });
+        const earlier = fetchEmailCode(box, "reddit", { now, waitMs: 100, pollMs: 20, read: mailbox.read });
+        await advanceTimersByTimeAsync(100);
+        expect(await earlier).toMatchObject({ arrived: "earlier", codes: ["555555"] });
         // Nothing older than the half-hour window, and nothing at all, is no answer.
         const stale = fakeMailbox({ 3: codeMail("999999", new Date(now.getTime() - 45 * 60_000)) });
-        expect(await fetchEmailCode(box, "reddit", { now, waitMs: 50, pollMs: 20, read: stale.read })).toBeUndefined();
+        const expired = fetchEmailCode(box, "reddit", { now, waitMs: 50, pollMs: 20, read: stale.read });
+        await advanceTimersByTimeAsync(60);
+        expect(await expired).toBeUndefined();
         expect(await fetchEmailCode(box, "reddit", { now, waitMs: 0, read: fakeMailbox({}).read })).toBeUndefined();
     });
 
     it("lets the turn stop the wait", async () => {
         const stop = new AbortController();
-        setTimeout(() => stop.abort(), 50);
-        const started = performance.now();
-        expect(await fetchEmailCode(box, "reddit", { now: new Date(), waitMs: 60_000, pollMs: 1_000, signal: stop.signal, read: fakeMailbox({}).read })).toBeUndefined();
-        expect(performance.now() - started).toBeLessThan(1_000);
+        let answered = false;
+        const finding = fetchEmailCode(box, "reddit", { now: new Date(), waitMs: 60_000, pollMs: 1_000, signal: stop.signal, read: fakeMailbox({}).read }).then((found) => {
+            answered = true;
+            return found;
+        });
+        await realYield();
+        expect(answered).toBe(false);
+        const beforeAbort = Date.now();
+        stop.abort();
+        expect(await finding).toBeUndefined();
+        expect(Date.now()).toBe(beforeAbort);
     });
 });

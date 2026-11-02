@@ -3,7 +3,7 @@
 // two kinds cannot share it: unit suites get a hang detector, `*.integration.test.*` and `*.e2e.test.*` get the
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
@@ -119,6 +119,9 @@ const chosen = (() => {
 
 // Set by a gate that reads failures back as units (failure-units.mjs); each run then also writes a JUnit report there.
 const junitDir = process.env.SUITES_JUNIT_DIR;
+if (junitDir !== undefined && junitDir !== "") {
+    mkdirSync(junitDir, { recursive: true });
+}
 const report = (kind) =>
     junitDir === undefined || junitDir === ""
         ? []

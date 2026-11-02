@@ -29,11 +29,10 @@ export const testUnitParts = (unit, task) => {
 
 // Whether a unit passed its re-run: its case ran and passed, or its whole file ran with nothing failing this time.
 export const passedAgain = (parts, cases, errors) =>
-    parts.unhandled
-        ? cases.some(({ file }) => file === parts.file) &&
-          !cases.some(({ file, failed }) => file === parts.file && failed) &&
-          !errors.some(({ file }) => file === parts.file)
-        : cases.some(({ file, name, failed }) => file === parts.file && name === parts.name && !failed);
+    !errors.some(({ file }) => file === parts.file) &&
+    (parts.unhandled
+        ? cases.some(({ file, skipped }) => file === parts.file && !skipped) && !cases.some(({ file, failed }) => file === parts.file && failed)
+        : cases.some(({ file, name, failed, skipped }) => file === parts.file && name === parts.name && !failed && !skipped));
 
 const readOr = (path) => {
     try {
@@ -68,7 +67,10 @@ const rerun = (root, directory, kind, files) => {
             ],
             { cwd: join(root, directory), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
         );
-        return { cases: junitCases(readOr(report)), errors: unhandledErrors(`${run.stdout ?? ""}${run.stderr ?? ""}`) };
+        return {
+            cases: run.signal === null && run.status !== null ? junitCases(readOr(report)) : [],
+            errors: unhandledErrors(`${run.stdout ?? ""}${run.stderr ?? ""}`),
+        };
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }

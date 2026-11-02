@@ -25,6 +25,35 @@ compatibility checks still protect real boundaries. A test's lack of recorded fa
 not proof that it is useless; the available history is incomplete. The [review record](../ops/test-pruning-2026-10-21.md)
 states the evidence and decision for each removed test.
 
+## Flake evidence and removal criteria
+
+The 2026-11-02 CI repair review found real regressions alongside stale fixtures, host-speed assertions, asynchronous
+setup races, check violations and runner failures. A failed job is not a failed test: one cause can fail several jobs,
+and several runs can still be testing a commit from before its repair. Classify by the first failing assertion or
+operation and the tested commit, not by the repair agent's description or the number of failing jobs.
+
+Before removing a test, identify the product contract it protects and the evidence against its current form:
+
+1. Keep a test that reproduces incorrect product behavior. Where practical, show that it fails on the implementation
+   before the fix. A race in production remains a regression even if it only fails intermittently.
+2. Repair a test that depends on scheduling: wait for a registered listener, a completed write or another explicit
+   readiness signal before triggering the next step. Release every fixture and settle its pending work on exit.
+3. Test timer boundaries with a controlled clock. For a file or process event, freeze the fallback timer and prove
+   the event completes the wait. Real-clock limits are generous hang detectors; latency budgets belong in the perf
+   lane. Bun's fake timers do not control `performance.now()` here: control that clock explicitly when it is used.
+4. Remove an assertion or test only when it measures host speed, source spelling, copied fixture data, obsolete
+   behavior, a dependency's own implementation, or behavior already protected by an identified retained test.
+   State the removed claim and where any useful behavior remains covered in the change's `Test-Note:`.
+5. A passing retry, a low failure count or an overloaded runner alone does not justify deletion, a skip, a wider
+   matcher or a larger retry count. An unmet machine requirement belongs in `requires`, with its CI lane, rather
+   than a silent skip. Infrastructure failures are investigated separately from test failures.
+
+CI's core and platform verify groups retain JUnit reports as `test-results-<group>-<attempt>` artifacts for 30 days,
+including failed runs. Reports identify which tests actually ran; a turbo cache hit does not execute tests or produce
+a new report. Upload failure does not change the test verdict. Local `pnpm verify` reruns are recorded by
+[`flakes.mjs`](../../_tools/scripts/verify/flakes.mjs); that ledger is not a history of CI's direct turbo runs.
+A skipped rerun, a killed rerun or a same-file error outside the test cannot clear the original failure.
+
 ## Tiers
 
 | Tier | What it needs | Where it runs |

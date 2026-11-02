@@ -1,4 +1,4 @@
-import { waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type DueAt, nudgedPass } from "./nudged-pass.js";
 
 // A pass that records when it ran and can be held open, for the nudges and timers around it.
@@ -32,6 +32,9 @@ const failed = (error: Error): never => {
     throw error;
 };
 
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
+
 test("a nudge runs one pass soon, however many came before it ran", async () => {
     const counter = counted();
     const passes = nudgedPass(counter.pass, { backstopMs: 60_000, settleMs: 10, failed });
@@ -40,8 +43,11 @@ test("a nudge runs one pass soon, however many came before it ran", async () => 
         passes.nudge();
         passes.nudge();
         passes.nudge();
-        await waitFor(() => expect(counter.runs).toHaveLength(1), { timeout: 1_000, interval: 5 });
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await advanceTimersByTimeAsync(9);
+        expect(counter.runs).toEqual([]);
+        await advanceTimersByTimeAsync(1);
+        expect(counter.runs).toHaveLength(1);
+        await advanceTimersByTimeAsync(50);
         expect(counter.runs).toHaveLength(1);
     } finally {
         passes.stop();
@@ -60,8 +66,10 @@ test("a nudge heard while a pass runs runs once more after it", async () => {
         passes.nudge();
         counter.release();
         await first;
-        await waitFor(() => expect(counter.runs).toHaveLength(2), { timeout: 1_000, interval: 5 });
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(counter.runs).toHaveLength(1);
+        await advanceTimersByTimeAsync(10);
+        expect(counter.runs).toHaveLength(2);
+        await advanceTimersByTimeAsync(50);
         expect(counter.runs).toHaveLength(2);
     } finally {
         passes.stop();
@@ -82,9 +90,12 @@ test("a pass runs again at the soonest instant the last one reported, not at the
     try {
         const before = Date.now();
         await passes.run();
-        await waitFor(() => expect(counter.runs).toHaveLength(2), { timeout: 2_000, interval: 5 });
-        expect(Date.now() - before).toBeGreaterThanOrEqual(140);
-        expect(Date.now() - before).toBeLessThan(400);
+        await advanceTimersByTimeAsync(149);
+        expect(counter.runs).toEqual([before]);
+        await advanceTimersByTimeAsync(1);
+        expect(counter.runs).toEqual([before, before + 150]);
+        await advanceTimersByTimeAsync(250);
+        expect(counter.runs).toHaveLength(2);
     } finally {
         passes.stop();
     }
@@ -96,12 +107,13 @@ test("an instant already past waits the floor, and a stopped pass arms nothing",
     const passes = nudgedPass(counter.pass, { backstopMs: 60_000, floorMs: 200, failed });
     passes.start();
     await passes.run();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await advanceTimersByTimeAsync(199);
     expect(counter.runs).toHaveLength(1);
-    await waitFor(() => expect(counter.runs).toHaveLength(2), { timeout: 1_000, interval: 5 });
+    await advanceTimersByTimeAsync(1);
+    expect(counter.runs).toHaveLength(2);
     passes.stop();
     const stopped = counter.runs.length;
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await advanceTimersByTimeAsync(300);
     expect(counter.runs).toHaveLength(stopped);
 });
 
@@ -118,10 +130,13 @@ test("an instant that falls due while its pass still runs is run soon after, not
     try {
         counter.holdNext();
         const first = passes.run();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await advanceTimersByTimeAsync(80);
         counter.release();
         await first;
-        await waitFor(() => expect(counter.runs).toHaveLength(2), { timeout: 1_000, interval: 5 });
+        await advanceTimersByTimeAsync(9);
+        expect(counter.runs).toHaveLength(1);
+        await advanceTimersByTimeAsync(1);
+        expect(counter.runs).toHaveLength(2);
         expect(counter.runs[1]).toBeGreaterThanOrEqual(reported[0] ?? Number.POSITIVE_INFINITY);
     } finally {
         passes.stop();
@@ -132,7 +147,7 @@ test("a pass not started runs only when asked, with the clock it is given", asyn
     const counter = counted((due) => due(Date.now() + 10));
     const passes = nudgedPass(counter.pass, { backstopMs: 20, failed });
     await passes.run(1_234);
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await advanceTimersByTimeAsync(80);
     expect(counter.runs).toEqual([1_234]);
 });
 
@@ -140,6 +155,6 @@ test("a pass not started hears no nudge", async () => {
     const counter = counted();
     const passes = nudgedPass(counter.pass, { backstopMs: 60_000, settleMs: 5, failed });
     passes.nudge();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await advanceTimersByTimeAsync(50);
     expect(counter.runs).toEqual([]);
 });

@@ -8,6 +8,7 @@ import {
     failedTasks,
     failureLines,
     junitFailures,
+    junitCases,
     junitFile,
     logTail,
     rerunCommand,
@@ -55,6 +56,16 @@ test("a JUnit report yields its failing cases with the describe path, skipping p
     assert.deepEqual(junitFailures(JUNIT), [
         { file: "src/a.test.ts", name: 'outer > a > b "quoted" > raw' },
         { file: "src/a.test.ts", name: "top-level fails" },
+    ]);
+});
+
+test("JUnit distinguishes a skipped test from one that ran and passed", () => {
+    const cases = junitCases(JUNIT);
+    assert.deepEqual(cases.map(({ failed, skipped }) => ({ failed, skipped })), [
+        { failed: false, skipped: false },
+        { failed: true, skipped: false },
+        { failed: false, skipped: true },
+        { failed: true, skipped: false },
     ]);
 });
 

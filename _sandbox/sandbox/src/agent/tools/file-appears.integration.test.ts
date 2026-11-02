@@ -1,8 +1,8 @@
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { waitFor } from "@intentic/testing/bun";
-import { whenFileAppears } from "./file-appears.js";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
+import { untilFileAppears, whenFileAppears } from "./file-appears.js";
 
 const dirs: string[] = [];
 const scratch = (): string => {
@@ -49,4 +49,31 @@ test("a stopped watch never fires", async () => {
 
 test("answers undefined for a directory it cannot watch, leaving the caller's clock to notice", () => {
     expect(whenFileAppears(join(tmpdir(), "file-appears-missing-dir", "status"), () => undefined)).toBeUndefined();
+});
+
+
+describe("waiting for a published status", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    test("an atomic publish ends the wait while its timeout is frozen", async () => {
+        const dir = scratch();
+        let finished = false;
+        const waiting = untilFileAppears(join(dir, "status"), 2_000).then(() => { finished = true; });
+        writeFileSync(join(dir, "status.part"), "7\n");
+        renameSync(join(dir, "status.part"), join(dir, "status"));
+        await waitFor(() => expect(finished).toBe(true), SETTLES);
+        await waiting;
+    });
+
+    test("an absent status waits until the exact timeout boundary", async () => {
+        const dir = scratch();
+        let finished = false;
+        const waiting = untilFileAppears(join(dir, "status"), 2_000).then(() => { finished = true; });
+        await advanceTimersByTimeAsync(1_999);
+        expect(finished).toBe(false);
+        await advanceTimersByTimeAsync(1);
+        await waiting;
+        expect(finished).toBe(true);
+    });
 });

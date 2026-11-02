@@ -1,4 +1,5 @@
 import { askRoom, type MemoryReading } from "@intentic/constants/memory-room";
+import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import { type Admission, type AdmitRequest, createResourceBudget, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
 
 const GIB = 1024 ** 3;
@@ -298,17 +299,19 @@ test.each([
 // Held work is woken by events, not only by its interval (2026-10-20): each of these would otherwise wait a minute.
 describe("held work wakes on events", () => {
     const quiet = { sampleMs: 0, waitIntervalMs: 60_000, waitDeadlineMs: 600_000, holderCheckMs: 0 };
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
 
     test("`changed` lets held work look again at once", async () => {
         let reading = box(16, 15.5);
         const budget = createResourceBudget({ ...quiet, read: async () => reading });
         const started = Date.now();
         const admitted = budget.admit({ ...background("a"), wait: {} });
-        await Bun.sleep(5);
+        await realYield();
         reading = box(16, 4);
         budget.changed();
         expect((await admitted).verdict).toBe("run");
-        expect(Date.now() - started).toBeLessThan(1_000);
+        expect(Date.now()).toBe(started);
         budget.stop();
     });
 
@@ -317,8 +320,9 @@ describe("held work wakes on events", () => {
         const budget = createResourceBudget({ ...quiet, holderCheckMs: 10, read: async () => box(16, 13.5), alive: (pid) => running.has(pid) });
         expect((await budget.admit({ ...background("holder"), pid: 4242 })).verdict).toBe("run");
         const admitted = budget.admit({ ...background("next"), wait: {} });
-        await Bun.sleep(5);
+        await realYield();
         running.delete(4242);
+        await advanceTimersByTimeAsync(10);
         expect((await admitted).verdict).toBe("run");
         budget.stop();
     });
@@ -327,8 +331,9 @@ describe("held work wakes on events", () => {
         let reading = box(16, 15.5);
         const budget = createResourceBudget({ ...quiet, sampleMs: 10, read: async () => reading });
         const admitted = budget.admit({ ...background("a"), wait: {} });
-        await Bun.sleep(5);
+        await realYield();
         reading = box(16, 4);
+        await advanceTimersByTimeAsync(1_000);
         expect((await admitted).verdict).toBe("run");
         budget.stop();
     });
@@ -339,10 +344,11 @@ describe("held work wakes on events", () => {
         const later = new AbortController();
         // The first asks with a minute between looks; the second looks every millisecond and would win a race of timers.
         const first = budget.admit({ ...background("first"), wait: {} });
-        await Bun.sleep(2);
+        await realYield();
         const second = budget.admit({ ...background("second"), wait: { intervalMs: 1, signal: later.signal } });
-        await Bun.sleep(5);
+        await realYield();
         reading = box(16, 13.5);
+        await advanceTimersByTimeAsync(1_000);
         expect((await first).verdict).toBe("run");
         later.abort();
         expect((await second).verdict).toBe("refuse");

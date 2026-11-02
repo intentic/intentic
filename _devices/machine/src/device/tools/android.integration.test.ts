@@ -563,15 +563,23 @@ test("a program past its deadline is stopped and said to have timed out", async 
 });
 
 test("something the program left running with its pipes does not hold the answer", async () => {
-    const started = Date.now();
     const output = await run(
         [
             "-e",
-            "require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 4000)'], { stdio: 'inherit', detached: true }).unref(); console.log('answered')",
+            "const child = require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'inherit', detached: true }); child.unref(); console.log(child.pid)",
         ],
         20_000,
     );
-    expect(output.stdout.toString("utf8")).toBe("answered\n");
-    expect(output.code).toBe(0);
-    expect(Date.now() - started).toBeLessThan(3_500);
+    const pid = Number(output.stdout.toString("utf8").trim());
+    try {
+        expect(output.code).toBe(0);
+        expect(output.timedOut).toBe(false);
+        expect(pid).toBeGreaterThan(0);
+        // The answer arrived with the pipe holder still running; no scheduler-speed assertion is needed.
+        expect(() => process.kill(pid, 0)).not.toThrow();
+    } finally {
+        if (Number.isInteger(pid) && pid > 0) {
+            process.kill(pid, "SIGKILL");
+        }
+    }
 });

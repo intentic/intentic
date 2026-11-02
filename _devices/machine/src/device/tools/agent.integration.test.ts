@@ -1,6 +1,7 @@
 import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import { followLog, type LogFollowTiming } from "./agent.js";
 
 /* FOLLOWING THE DETACHED RUN'S LOG (2026-10-20): its lines are read as they land (fs.watch), and once its pid is gone the
@@ -8,51 +9,70 @@ import { followLog, type LogFollowTiming } from "./agent.js";
 
 const FAST: LogFollowTiming = { aliveCheckMs: 10, drainQuietMs: 60, drainMaxMs: 400, fallbackReadMs: 5_000, timeoutMs: 5_000 };
 
-test("lines are handed on as they land, only those after `from`, and the follow ends soon after the run is gone", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-log-"));
-    try {
-        const log = join(dir, "agent.log");
-        await writeFile(log, "old line\n");
-        const lines: { line: string; at: number }[] = [];
-        let alive = true;
-        const started = performance.now();
-        setTimeout(() => void appendFile(log, "downloading\n"), 50);
-        setTimeout(() => void appendFile(log, "installed\n"), 150);
-        setTimeout(() => {
-            alive = false;
-        }, 200);
-        await followLog({ path: log, from: "old line\n".length, isAlive: () => alive, onLine: (line) => lines.push({ line, at: performance.now() - started }), timing: FAST });
-        expect(lines.map((entry) => entry.line)).toEqual(["downloading", "installed"]);
-        // Heard by the watch, not the 5 s fallback read.
-        expect(lines[0]?.at ?? Infinity).toBeLessThan(1_000);
-        // Gone at 200 ms, quiet for 60: well before the drain cap would have ended it.
-        expect(performance.now() - started).toBeLessThan(200 + FAST.drainMaxMs);
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+describe("log wake and drain boundaries", () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        jest.spyOn(performance, "now").mockImplementation(Date.now);
+    });
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
 
-test("a log that keeps being written (the new agent) is cut off at the drain cap", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-log-"));
-    try {
-        const log = join(dir, "agent.log");
-        await writeFile(log, "");
-        // Isolate the cap from the quiet exit: under load, even this writer can pause for FAST.drainQuietMs.
-        // A quiet threshold at the asserted upper bound makes only the cap able to end the follow in time.
-        const timing = { ...FAST, drainQuietMs: FAST.drainMaxMs + 500 };
-        const writer = setInterval(() => void appendFile(log, "tick\n"), 15);
+    test("file events deliver new lines and a quiet log ends after the run exits", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "agent-log-"));
         try {
-            const started = performance.now();
-            await followLog({ path: log, from: 0, isAlive: () => false, onLine: () => undefined, timing });
-            const took = performance.now() - started;
-            expect(took).toBeGreaterThanOrEqual(FAST.drainMaxMs);
-            expect(took).toBeLessThan(FAST.drainMaxMs + 500);
+            const log = join(dir, "agent.log");
+            await writeFile(log, "old line\n");
+            const lines: string[] = [];
+            let alive = true;
+            let looks = 0;
+            let finished = false;
+            const following = followLog({ path: log, from: Buffer.byteLength("old line\n"), isAlive: () => { looks += 1; return alive; }, onLine: (line) => lines.push(line), timing: FAST }).then(() => { finished = true; });
+            await advanceTimersByTimeAsync(10);
+            await waitFor(() => expect(looks).toBe(1), SETTLES);
+            await appendFile(log, "downloading\n");
+            // No clock advances: the watch must deliver this without the 5 s fallback.
+            await waitFor(() => expect(lines).toEqual(["downloading"]), SETTLES);
+            await advanceTimersByTimeAsync(20);
+            await appendFile(log, "installed\n");
+            await waitFor(() => expect(lines).toEqual(["downloading", "installed"]), SETTLES);
+            alive = false;
+            await advanceTimersByTimeAsync(10);
+            await waitFor(() => expect(looks).toBe(4), SETTLES);
+            await advanceTimersByTimeAsync(FAST.drainQuietMs - 1);
+            expect(finished).toBe(false);
+            await advanceTimersByTimeAsync(1);
+            await following;
+            expect(finished).toBe(true);
         } finally {
-            clearInterval(writer);
+            await rm(dir, { recursive: true, force: true });
         }
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
+    });
+
+    test("the drain cap ends a follow even when the log has not gone quiet", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "agent-log-"));
+        try {
+            const log = join(dir, "agent.log");
+            await writeFile(log, "");
+            const lines: string[] = [];
+            let looks = 0;
+            let finished = false;
+            const timing = { ...FAST, drainQuietMs: FAST.drainMaxMs + 500 };
+            const following = followLog({ path: log, from: 0, isAlive: () => { looks += 1; return false; }, onLine: (line) => lines.push(line), timing }).then(() => { finished = true; });
+            await advanceTimersByTimeAsync(10);
+            await waitFor(() => expect(looks).toBe(1), SETTLES);
+            await advanceTimersByTimeAsync(FAST.drainMaxMs - 1);
+            await appendFile(log, "still writing\n");
+            await waitFor(() => expect(lines).toEqual(["still writing"]), SETTLES);
+            expect(finished).toBe(false);
+            await advanceTimersByTimeAsync(1);
+            await following;
+            expect(finished).toBe(true);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 test("a log rotated before the run started is read from its start", async () => {
@@ -74,11 +94,11 @@ test("a line written in pieces is handed on whole", async () => {
         const log = join(dir, "agent.log");
         await writeFile(log, "error: The agent was not up");
         const lines: string[] = [];
-        const writing = new Promise<void>((resolve, reject) => {
-            setTimeout(() => void appendFile(log, "dated.\n").then(resolve, reject), 40);
-        });
-        await followLog({ path: log, from: 0, isAlive: () => false, onLine: (line) => lines.push(line), timing: FAST });
-        await writing;
+        let alive = true;
+        const following = followLog({ path: log, from: 0, isAlive: () => alive, onLine: (line) => lines.push(line), timing: FAST });
+        await appendFile(log, "dated.\n");
+        alive = false;
+        await following;
         expect(lines).toEqual(["error: The agent was not updated."]);
     } finally {
         await rm(dir, { recursive: true, force: true });

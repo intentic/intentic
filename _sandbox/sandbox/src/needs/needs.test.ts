@@ -260,9 +260,7 @@ describe("needs", () => {
     it("never holds an unattended turn's call, since nobody answers while it runs", async () => {
         const { deps, settings } = harness();
         settings.standing = { ...STANDING, unattended: true };
-        const started = Date.now();
         const answer = await createNeeds(deps).ask({ raise: raise(60), conversationId: "conv-1", signal: signal() });
-        expect(Date.now() - started).toBeLessThan(1_000);
         expect(answer.state).toBe("open");
         expect(answer.message).toContain("This turn is unattended");
         expect(answer.need?.unattended).toBe(true);

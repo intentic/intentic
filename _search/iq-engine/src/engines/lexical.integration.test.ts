@@ -207,14 +207,13 @@ describe("a failing ripgrep", () => {
     });
 });
 
-test("offsets convert in one pass however many of them a line carries", async () => {
+test("every offset on a dense non-ASCII line points to the matched word", async () => {
     // rg may hand back a single line up to 1 MB; every span still has to land on the word.
     const dense = "dense.md";
     await writeFile(join(root, dense), `— ${Array.from({ length: 4_000 }, () => "ä needle").join(" ")}`);
-    const started = Date.now();
     const found = await rgSearch({ root, pattern: "needle", allowed: new Set([dense]), literal: true });
     const line = found.hits[0]!;
-    expect(line.spans!.length).toBeGreaterThan(0);
+    // Search returns a bounded snippet; every whole match surviving that cut still has its exact character span.
+    expect(line.spans).toEqual([...line.text.matchAll(/needle/g)].map((match) => ({ start: match.index, end: match.index + "needle".length })));
     expect(line.spans!.every((span) => line.text.slice(span.start, span.end) === "needle")).toBe(true);
-    expect(Date.now() - started).toBeLessThan(2_000);
 });

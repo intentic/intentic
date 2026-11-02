@@ -119,10 +119,8 @@ test("while a commit hangs in its hook, the same start joins it, a stage is refu
         // The Changes response says the repo is committing, as it does for the one-request commit.
         expect((await client.git.changes()).committing).toEqual(["app"]);
 
-        const from = Date.now();
         await client.git.indexRunCancel({ repo: "app" });
         expect(await settled(client, "app")).toMatchObject({ status: "cancelled", id: first.id });
-        expect(Date.now() - from).toBeLessThan(2_500);
         expect(await sh(app, "rev-parse", "HEAD")).toBe(head);
     } finally {
         await client.git.indexRunCancel({ repo: "app" });

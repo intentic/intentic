@@ -38,6 +38,18 @@ test("flakes rank by how often they recur", () => {
     ]);
 });
 
+test("a skipped case or an error outside the case cannot clear its earlier failure", () => {
+    const named = { file: "src/a.test.ts", name: "works", unhandled: false };
+    const wholeFile = { file: named.file, unhandled: true };
+    const skipped = [{ file: named.file, name: named.name, failed: false, skipped: true }];
+    assert.equal(passedAgain(named, skipped, []), false);
+    assert.equal(passedAgain(wholeFile, skipped, []), false);
+    const passed = [{ ...skipped[0], skipped: false }];
+    const errors = [{ file: named.file, message: "afterAll threw" }];
+    assert.equal(passedAgain(named, passed, errors), false);
+    assert.equal(passedAgain(wholeFile, passed, errors), false);
+});
+
 test("a test that fails once and passes alone is flaky, and one that keeps failing is not", () => {
     const root = mkdtempSync(join(tmpdir(), "flake-root-"));
     try {

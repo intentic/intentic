@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { unstubbed } from "@intentic/testing";
 import { depsTools, type DepsToolDeps, installTool, statusTool } from "./deps-tools.js";
 import type { ProjectSetupStatus, SetupState } from "../layout/workspace-setup.js";
@@ -68,23 +69,23 @@ describe("woken by the install's end", () => {
                 resolve(true);
             }
         };
-        return { dependencies, end, reads: () => reads };
+        return { dependencies, end, reads: () => reads, waiting: () => waiting.length };
     };
 
     test("answers the moment the install ends, with one scan before and one after", async () => {
         const daemon = ending("ready");
-        const started = Date.now();
         const answer = install(deps(daemon.dependencies, { pollMs: 60_000, waitMs: 120_000 }), ["app"]);
-        setTimeout(daemon.end, 20);
+        await waitFor(() => expect(daemon.waiting()).toBe(1), SETTLES);
+        daemon.end();
         expect(await answer).toBe("app: installed. Its checks mean what they say now.");
-        expect(Date.now() - started).toBeLessThan(1_000);
         expect(daemon.reads()).toBe(2);
     });
 
     test("an install reported ended that left the project behind says so, though it was never seen installing", async () => {
         const daemon = ending("stale");
         const answer = install(deps(daemon.dependencies, { pollMs: 60_000, waitMs: 120_000 }), ["app"]);
-        setTimeout(daemon.end, 20);
+        await waitFor(() => expect(daemon.waiting()).toBe(1), SETTLES);
+        daemon.end();
         expect(await answer).toContain("app: the daemon's install finished, but");
     });
 });

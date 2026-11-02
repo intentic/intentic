@@ -63,15 +63,14 @@ const runAsJob = (command: string, env: Record<string, string>): Promise<string>
     });
 
 test("several Procfile entries run together: only `web` gets the port, and when it ends the rest end with it", async () => {
+    const ready = join(repo({}), "worker-ready");
     const command = procfileCommand([
-        { name: "worker", command: `echo "worker:\${PORT:-none}"; sleep 30; echo late` },
-        { name: "web", command: `sleep 0.3; echo "web:$PORT"` },
+        { name: "worker", command: `echo "worker:\${PORT:-none}"; touch '${ready}'; sleep 30; echo late` },
+        { name: "web", command: `until [ -f '${ready}' ]; do sleep 0.01; done; echo "web:$PORT"` },
     ]);
-    const started = Date.now();
     const out = await runAsJob(command, { PORT: "4321" });
     expect(out.split("\n").filter(Boolean).toSorted()).toEqual(["web:4321", "worker:none"]);
-    // The worker's 30-second sleep did not hold the run open.
-    expect(Date.now() - started).toBeLessThan(10_000);
+    // runAsJob's hang bound is below the worker's sleep: a survivor cannot keep the run open.
 });
 
 test("operator/ beats the root, the root's dev beats its start, and start is enough on its own", async () => {

@@ -205,16 +205,16 @@ test("an install pane's end wakes the coordinator at once, and installEnded repo
         installMaxMs: 120_000,
     });
     await deps.status();
-    await waitFor(() => expect(enders.length).toBeGreaterThan(0));
-    const reported = deps.installEnded("app");
-    const started = Date.now();
+    await waitFor(() => expect(enders.length).toBeGreaterThan(0), SETTLES);
+    let ended = false;
+    const reported = deps.installEnded("app").then((result) => { ended = true; return result; });
     await mkdir(join(root, "app", "node_modules", "left-pad"), { recursive: true });
     running = false;
     for (const resolve of enders.splice(0)) {
         resolve();
     }
+    await waitFor(() => expect(ended).toBe(true), SETTLES);
     expect(await reported).toBe(true);
-    expect(Date.now() - started).toBeLessThan(1_000);
     expect((await deps.status()).find((project) => project.dir === "app")?.state).toBe("ready");
 });
 

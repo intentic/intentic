@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
+import { waitFor } from "@intentic/testing/bun";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, type RemoveAsk, removeSandboxThroughFleet, slugOf } from "./fleet-gate.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../guard/held-cards.js";
@@ -74,9 +75,7 @@ const ask = (over: Partial<CreateAsk> = {}): CreateAsk => ({
 
 // The requestId only exists inside the pushed frame: wait for it, then answer as POST /agent/reply would.
 const answerCard = async (frames: AgentEvent[], label: string | undefined): Promise<void> => {
-    while (frames.length === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 1));
-    }
+    await waitFor(() => expect(frames).toHaveLength(1));
     const raised = frames[0]!;
     if (raised.kind !== "question") {
         throw new Error(`expected a question frame, got ${raised.kind}`);
@@ -179,9 +178,7 @@ it("a dismissed card is not a yes, and says so as its own refusal", async () => 
 it("a card nobody answered before the turn ended creates nothing", async () => {
     const { deps, provision, frames, endTurn } = fake();
     const pending = createSandboxThroughFleet(deps, ask());
-    while (frames.length === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 1));
-    }
+    await waitFor(() => expect(frames).toHaveLength(1));
     endTurn();
     const answer = await pending;
     expect(answer.status).toBe(408);

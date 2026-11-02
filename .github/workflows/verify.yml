@@ -12,6 +12,10 @@ name: verify
 on:
   workflow_call:
     inputs:
+      report-name:
+        description: Unique name for this verify group's test reports.
+        required: true
+        type: string
       filters:
         description: The turbo --filter flags naming this group's closure.
         required: true
@@ -104,3 +108,13 @@ jobs:
         if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}
+          SUITES_JUNIT_DIR: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+      - name: Keep test results
+        continue-on-error: true
+        if: ${{ always() }}
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: test-results-${{ inputs.report-name }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+          if-no-files-found: ignore
+          retention-days: '30'

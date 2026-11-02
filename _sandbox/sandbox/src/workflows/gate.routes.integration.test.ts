@@ -6,6 +6,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
 import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
@@ -253,30 +254,27 @@ test("a caller that hangs up stops the run it started", async () => {
     const response = await post(appFor(services, judgingAfter(root, "pass", 5_000), 20), "wf-hangup");
     await response.body?.cancel();
 
-    const deadline = Date.now() + 2_000;
-    let state = (await services.workflowRuns.list())[0]?.state;
-    while (state === "running" && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        state = (await services.workflowRuns.list())[0]?.state;
-    }
-    expect(state).toBe("stopped");
+    await waitFor(async () => expect((await services.workflowRuns.list())[0]?.state).toBe("stopped"), SETTLES);
 });
 
 test("a run that outlasts the deadline is stopped and answers blocked", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     await services.workflows.save(gated("wf-slow"), true);
+    const finish = Promise.withResolvers<void>();
+    let finished = false;
     const slow: TurnStarter["stream"] = async function* () {
-        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        await finish.promise;
+        finished = true;
         yield { kind: "done" } as AgentEvent;
     };
-
-    const startedAt = Date.now();
-    const response = await post(appFor(services, slow), "wf-slow", `token=${await token("wf-slow")}&wait=0.05`);
-    const elapsed = Date.now() - startedAt;
-
-    expect((await response.json()).outcome).toBe("blocked");
-    expect(elapsed).toBeLessThan(2_000);
+    try {
+        const response = await post(appFor(services, slow), "wf-slow", `token=${await token("wf-slow")}&wait=0.05`);
+        expect((await response.json()).outcome).toBe("blocked");
+        expect(finished).toBe(false);
+    } finally {
+        finish.resolve();
+    }
 });
 
 // The deadline runs up to three hours; the race used to leave its timer armed that long behind a run that settled in

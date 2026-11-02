@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { LINK_MAX_HOPS } from "@intentic/sandbox-contract/schemas/links";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
@@ -207,29 +208,44 @@ test("a linked turn's ending is its report; a task its asker stopped stays stopp
     await noteLinkTurnSettled(deps, { conversationId: "brave-otter-1", run: "run-3", actor: undefined, speaker: undefined, failure: undefined, closing: "x" });
 });
 
-test("a held status read answers the moment the task moves, not on its next timed look", async () => {
-    const { deps, link } = await setup();
-    const status = ok(await askTask(deps, link, asked("r1")));
-    const started = Date.now();
-    const held = statusAfter(deps, link, status.conversationId, status.version, 20, new AbortController().signal);
-    await noteLinkTurnSettled(deps, { conversationId: status.conversationId, run: "run-4", actor: undefined, speaker: undefined, failure: undefined, closing: "done" });
-    expect(await held).toMatchObject({ state: "finished", report: "done" });
-    // The fallback look is five seconds away; only the move's own nudge answers this soon.
-    expect(Date.now() - started).toBeLessThan(2_000);
-});
+describe("held status reads", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
 
-test("a held status read answers the moment the run parks on a card, which stores no move", async () => {
-    const { deps, link, parkIn } = await setup();
-    const status = ok(await askTask(deps, link, asked("r1")));
-    const started = Date.now();
-    const held = statusAfter(deps, link, status.conversationId, status.version, 20, new AbortController().signal);
-    // Let the read take its first look; the nudge count covers a park landing between that look and the wait.
-    await new Promise((resolve) => setImmediate(resolve));
-    const question = { requestId: "q1", status: "pending" as const, questions: [] };
-    parkIn(status.conversationId, [{ role: "assistant", text: "", question }]);
-    noteLinkTurnAwaiting({ conversationId: status.conversationId, awaiting: "question" });
-    expect(await held).toMatchObject({ state: "blocked", question: { requestId: "q1" } });
-    expect(Date.now() - started).toBeLessThan(2_000);
+    test("a task's move wakes its held status read with the fallback clock frozen", async () => {
+        const { deps, link } = await setup();
+        const status = ok(await askTask(deps, link, asked("r1")));
+        const gone = new AbortController();
+        let finished = false;
+        const held = statusAfter(deps, link, status.conversationId, status.version, 20, gone.signal).then((result) => { finished = true; return result; });
+        try {
+            await noteLinkTurnSettled(deps, { conversationId: status.conversationId, run: "run-4", actor: undefined, speaker: undefined, failure: undefined, closing: "done" });
+            await waitFor(() => expect(finished).toBe(true), SETTLES);
+            expect(await held).toMatchObject({ state: "finished", report: "done" });
+        } finally {
+            gone.abort();
+            await held;
+        }
+    });
+
+    test("a run parking on a card wakes the read even though it stores no move", async () => {
+        const { deps, link, parkIn } = await setup();
+        const status = ok(await askTask(deps, link, asked("r1")));
+        const gone = new AbortController();
+        let finished = false;
+        const held = statusAfter(deps, link, status.conversationId, status.version, 20, gone.signal).then((result) => { finished = true; return result; });
+        try {
+            await new Promise((resolve) => setImmediate(resolve));
+            const question = { requestId: "q1", status: "pending" as const, questions: [] };
+            parkIn(status.conversationId, [{ role: "assistant", text: "", question }]);
+            noteLinkTurnAwaiting({ conversationId: status.conversationId, awaiting: "question" });
+            await waitFor(() => expect(finished).toBe(true), SETTLES);
+            expect(await held).toMatchObject({ state: "blocked", question: { requestId: "q1" } });
+        } finally {
+            gone.abort();
+            await held;
+        }
+    });
 });
 
 test("a link reaches only its own tasks, by the store's own key", async () => {

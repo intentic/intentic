@@ -2,10 +2,10 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 // Exercises real processes and a real flock, not the pure policy (tested elsewhere): what happens to a slot when a
-// process doesn't exit politely. Timings are coarse; assertions are on order and count, never on latency, but for the
-// one about how soon a waiter is woken, whose bound is generous.
+// process doesn't exit politely. Assertions are on order, count and lock ownership; readiness bounds detect hangs.
 
 const QUEUE_RUN = join(import.meta.dirname, "../../../bin/queue-run");
 
@@ -224,42 +224,51 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
     }
 });
 
-// 2026-10-20: a waiter learned of a free slot at its next poll; it is woken by the kernel now, the instant the holder's
-// lock goes. The poll interval is set long here so a wait that still polled could not pass, and the second holder
-// outlives the first by seven seconds so a wait that missed the first slot freed could not either; between those, the
-// bound is generous (a loaded CI runner took 1.9 s to start bash after the holder's exit, run 40398276864).
-test("a waiter starts the moment the holder exits, not at its next poll, and holds the slot it was granted", async () => {
+// Observe the real blocking flock calls before freeing a slot. Holders wait on stdin so process scheduling cannot
+// free either slot before the waiter is registered, and no elapsed-time threshold decides whether it woke correctly.
+test("a waiter blocks in the kernel, takes the first freed slot, and keeps its lock", async () => {
     const queue = await dir();
-    const ended = join(queue, "ended");
-    // Both slots taken, by commands that end seven seconds apart; the waiter must take the first to free.
-    const first = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", `sleep 1; date +%s%N > ${ended}`], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
-    });
-    const second = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", "sleep 8"], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const waiter = await new Promise<Run>((resolve) => {
-        const child = spawn(
-            "bash",
-            [QUEUE_RUN, "--pool", "p", "--limit", "2", "--wait", "30", "--", "bash", "-c", "date +%s%N; readlink /proc/$$/fd/9"],
-            {
-                env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "10" },
-            },
-        );
-        let stdout = "";
-        let stderr = "";
-        child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-        child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-        child.on("close", (code) => resolve({ code, stdout, stderr }));
-    });
-    const [startedAt, slot] = waiter.stdout.trim().split("\n");
-    const freedAt = Number((await readFile(ended, "utf8")).trim());
-    expect(waiter.stderr).toContain("slot free after");
-    expect((Number(startedAt) - freedAt) / 1e6).toBeLessThan(4_000);
-    expect(slot).toMatch(/\/p\/slot\.[12]$/);
-    first.kill("SIGKILL");
-    second.kill("SIGKILL");
+    const bin = join(queue, "bin");
+    const waiting = join(queue, "blocking-locks");
+    await mkdir(bin);
+    await writeFile(waiting, "");
+    await writeFile(
+        join(bin, "flock"),
+        `#!/usr/bin/env bash
+if [ "$1" = "-w" ]; then printf '%s\n' "$3" >> '${waiting}'; fi
+PATH="\${PATH#*:}" exec flock "$@"
+`,
+        { mode: 0o755 },
+    );
+    const holder = (name: string) => spawn(
+        "bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", `readlink /proc/$$/fd/9 > '${join(queue, name)}'; read -r _`],
+        { env: { ...process.env, INTENTIC_QUEUE_DIR: queue } },
+    );
+    const first = holder("first");
+    const second = holder("second");
+    let waiter: Promise<Run> | undefined;
+    try {
+        const firstSlot = await waitFor(async () => {
+            const slot = (await readFile(join(queue, "first"), "utf8")).trim();
+            expect(slot).toMatch(/\/p\/slot\.[12]$/);
+            return slot;
+        }, SETTLES);
+        await waitFor(async () => expect((await readFile(join(queue, "second"), "utf8")).trim()).toMatch(/\/p\/slot\.[12]$/), SETTLES);
+        waiter = queueRun(queue, ["--pool", "p", "--limit", "2", "--wait", "30"],
+            `if flock -n '${firstSlot}' true; then echo unlocked; fi; readlink /proc/$$/fd/9`, bin);
+        await waitFor(async () => expect((await readFile(waiting, "utf8")).trim().split("\n").toSorted()).toEqual(["21", "22"]), SETTLES);
+        first.stdin.end("release\n");
+        const ran = await waiter;
+        expect(ran.code).toBe(0);
+        expect(ran.stderr).toContain("slot free after");
+        expect(ran.stdout.trim()).toBe(firstSlot);
+    } finally {
+        first.stdin.end();
+        second.stdin.end();
+        first.kill("SIGKILL");
+        second.kill("SIGKILL");
+        await waiter;
+    }
 });
 
 test("says in the pane that it is waiting, then that it started", async () => {

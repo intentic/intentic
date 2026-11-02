@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve, type ServerType } from "@hono/node-server";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
@@ -188,24 +189,29 @@ test("a task handed over runs there, its report comes back as the parent's wake,
 });
 
 test("a follower backing off from a far side that stopped answering asks again the moment another call on the link is answered", async () => {
-    let down = false;
-    const status: LinkWire["status"] = async (...args) =>
-        down ? { ok: false, status: 0, message: "it is not online" } : await linkStatus(...args);
-    dev = devSandbox(await cardFor(), undefined, { status });
-    down = true;
-    const handed = await dev.linked.delegate(PARENT, { to: "ops", task: "Count the open incidents." });
-    if (!handed.ok) {
-        throw new Error(handed.message);
+    jest.useFakeTimers();
+    try {
+        let down = false;
+        const status: LinkWire["status"] = async (...args) =>
+            down ? { ok: false, status: 0, message: "it is not online" } : await linkStatus(...args);
+        dev = devSandbox(await cardFor(), undefined, { status });
+        down = true;
+        const handed = await dev.linked.delegate(PARENT, { to: "ops", task: "Count the open incidents." });
+        if (!handed.ok) {
+            throw new Error(handed.message);
+        }
+        await waitFor(() => expect(dev?.roster()[0]?.summary).toContain("did not answer"), SETTLES);
+        const remote = ops.said[0]?.turn.conversationId ?? "";
+        await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, run: "run-2", actor: undefined, speaker: undefined, failure: undefined, closing: "Seven." });
+        down = false;
+        // The agent listing its links is an answered call on this one: the follower's five-second backoff ends there.
+        expect(await dev.linked.links(PARENT.conversationId)).toEqual([expect.objectContaining({ to: "ops", online: true })]);
+        // The five-second retry timer stays frozen throughout the HTTP round trips.
+        await waitFor(() => expect(dev?.roster()[0]?.status).toBe("completed"), SETTLES);
+    } finally {
+        dev?.linked.close();
+        jest.useRealTimers();
     }
-    await until("the follower misses", () => dev?.roster()[0]?.summary?.includes("did not answer") === true);
-    const remote = ops.said[0]?.turn.conversationId ?? "";
-    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, run: "run-2", actor: undefined, speaker: undefined, failure: undefined, closing: "Seven." });
-    down = false;
-    // The agent listing its links is an answered call on this one: the follower's five-second backoff ends there.
-    const started = Date.now();
-    expect(await dev.linked.links(PARENT.conversationId)).toEqual([expect.objectContaining({ to: "ops", online: true })]);
-    await until("the child settles", () => dev?.roster()[0]?.status === "completed", 4_000);
-    expect(Date.now() - started).toBeLessThan(3_000);
 });
 
 test("a task the owner over there must allow waits as pending; their yes starts it there", async () => {

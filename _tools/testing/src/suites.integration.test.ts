@@ -17,8 +17,10 @@ const STALE = (name: string): string =>
 let root = "";
 let traceDir = "";
 let trace = "";
+let reports = "";
 
 beforeEach(() => {
+    reports = "";
     root = mkdtempSync(join(tmpdir(), "suites-discovery-"));
     // Outside the package, so the trace is no file of the run's own.
     traceDir = mkdtempSync(join(tmpdir(), "suites-trace-"));
@@ -51,7 +53,7 @@ const suites = (...args: string[]) => {
     const result = spawnSync("node", [SUITES, ...args], {
         cwd: root,
         encoding: "utf8",
-        env: { ...process.env, SUITES_TEST_TRACE: trace, TEST_WORKERS: "1", SUITES_JUNIT_DIR: "" },
+        env: { ...process.env, SUITES_TEST_TRACE: trace, TEST_WORKERS: "1", SUITES_JUNIT_DIR: reports },
     });
     const ran = readFileSync(trace, "utf8")
         .split("\n")
@@ -75,4 +77,15 @@ test("a path filter chooses among the same files: one that names only stale outp
 test("a path filter that names source runs it, still past the stale copies beside it", () => {
     const { status, ran } = suites("kept");
     expect({ status, ran }).toEqual({ status: 0, ran: ["kept", "kept.integration"] });
+});
+
+test("reports both kinds in a new directory and keeps a failing test's exit status", () => {
+    reports = join(traceDir, "reports", "nested");
+    writeFileSync(join(root, "src/fails.test.ts"), `test("fails", () => expect("broken").toBe("working"));\n`);
+    const { status } = suites();
+    expect(status).toBe(1);
+    const unit = readFileSync(join(reports, "_example_pkg.unit.xml"), "utf8");
+    expect(unit).toContain('name="fails"');
+    expect(unit).toContain("<failure");
+    expect(readFileSync(join(reports, "_example_pkg.integration.xml"), "utf8")).toContain('name="kept.integration"');
 });

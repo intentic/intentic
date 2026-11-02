@@ -1,6 +1,6 @@
 import { createHash, createHmac, generateKeyPairSync } from "node:crypto";
 import type { HostReportInput } from "@intentic/api-contract";
-import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { call as callProcedure } from "@orpc/server";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
@@ -623,20 +623,28 @@ describe(`POST /host-report/wakes`, () => {
         });
 
         it(`answers nothing, held, once its wait is up, having read once and cleared nothing`, async () => {
-            const hub = localWakeSignals();
-            const { sandbox, prisma } = sleeperTable();
-            const startedAt = performance.now();
-            const res = await askWakes(prisma, { asks, waitMs: 150 }, { hub });
-            expect(await res.json()).toEqual({ wake: [], held: true });
-            expect(performance.now() - startedAt).toBeGreaterThanOrEqual(140);
-            // Every sleeper named is read, request or none, since the keys of all of them are what the hold waits on.
-            expect(sandbox.findMany).toHaveBeenCalledTimes(1);
-            expect(sandbox.findMany).toHaveBeenCalledWith({
-                where: { tunnelId: { in: [TUNNEL_ID] }, hosted: null, removedAt: null },
-                select: WAKES_SELECT,
-            });
-            expect(sandbox.updateMany).not.toHaveBeenCalled();
-            expect(hub.waiting()).toBe(0);
+            jest.useFakeTimers();
+            try {
+                const hub = localWakeSignals();
+                const { sandbox, prisma } = sleeperTable();
+                let answered = false;
+                const asking = Promise.resolve(askWakes(prisma, { asks, waitMs: 150 }, { hub })).then((res) => { answered = true; return res; });
+                await advanceTimersByTimeAsync(149);
+                expect(answered).toBe(false);
+                await advanceTimersByTimeAsync(1);
+                const res = await asking;
+                expect(await res.json()).toEqual({ wake: [], held: true });
+                // Every sleeper named is read, request or none, since the keys of all of them are what the hold waits on.
+                expect(sandbox.findMany).toHaveBeenCalledTimes(1);
+                expect(sandbox.findMany).toHaveBeenCalledWith({
+                    where: { tunnelId: { in: [TUNNEL_ID] }, hosted: null, removedAt: null },
+                    select: WAKES_SELECT,
+                });
+                expect(sandbox.updateMany).not.toHaveBeenCalled();
+                expect(hub.waiting()).toBe(0);
+            } finally {
+                jest.useRealTimers();
+            }
         });
 
         it(`answers a wake requested while it is held within milliseconds, not at its deadline`, async () => {
@@ -679,16 +687,21 @@ describe(`POST /host-report/wakes`, () => {
         });
 
         it(`lets go of a machine that went away, at once`, async () => {
-            const hub = localWakeSignals();
-            const { prisma } = sleeperTable();
-            const gone = new AbortController();
-            const asked = askWakes(prisma, { asks, waitMs: 5000 }, { hub, signal: gone.signal });
-            await waitFor(() => expect(hub.waiting()).toBe(1));
-            const goneAt = performance.now();
-            gone.abort();
-            await asked;
-            expect(performance.now() - goneAt).toBeLessThan(2500);
-            expect(hub.waiting()).toBe(0);
+            jest.useFakeTimers();
+            try {
+                const hub = localWakeSignals();
+                const { prisma } = sleeperTable();
+                const gone = new AbortController();
+                const asked = askWakes(prisma, { asks, waitMs: 5000 }, { hub, signal: gone.signal });
+                await waitFor(() => expect(hub.waiting()).toBe(1));
+                const beforeAbort = Date.now();
+                gone.abort();
+                await asked;
+                expect(Date.now()).toBe(beforeAbort);
+                expect(hub.waiting()).toBe(0);
+            } finally {
+                jest.useRealTimers();
+            }
         });
 
         it(`hands nothing to a machine that went away while it looked, and leaves the request for the next ask`, async () => {

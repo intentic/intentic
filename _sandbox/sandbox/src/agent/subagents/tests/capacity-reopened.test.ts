@@ -1,4 +1,5 @@
 import { pino } from "pino";
+import { waitFor } from "@intentic/testing/bun";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { fakeTurns } from "../../../seams/turn-starter.testing.js";
 import { capacityNoticer } from "../capacity-reopened.js";
@@ -31,10 +32,11 @@ test("tells a parent waiting with a child failed on the provider, once per accou
     const tell = noticer(turns);
     tell(back);
     tell(back);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(turns.steers).toHaveLength(1));
     expect(turns.steers).toHaveLength(1);
     expect(turns.steers[0]?.text).toContain("Capacity is back on claude");
     expect(turns.steers[0]?.text).toContain("`sub-1`");
+    settleSpawnedChild(actors, "sub-2", { status: "completed", report: "done" });
     await parked;
 });
 
@@ -47,6 +49,5 @@ test("tells nobody when no parent is waiting, or none has a child out on that pr
     );
     settleSpawnedChild(actors, "sub-1", { status: "failed", report: "", error: "limit" });
     noticer(turns)(back);
-    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(turns.steers).toEqual([]);
 });

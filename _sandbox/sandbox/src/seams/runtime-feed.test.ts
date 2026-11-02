@@ -1,4 +1,15 @@
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { onRuntimeChange, publishRuntimeChange, publishRuntimeChangeTo, publishRuntimeMilestone, runtimeGeneration } from "./runtime-feed.js";
+
+beforeEach(() => {
+    jest.useFakeTimers();
+    // Bun advances Date.now with fake timers but leaves performance.now on the real clock.
+    jest.spyOn(performance, "now").mockImplementation(Date.now);
+});
+afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+});
 
 // One /events connection whose listener throws must not cost every other connection its frames.
 test("a listener that throws is reported to its own logger, and the listeners after it still hear the change", async () => {
@@ -15,7 +26,7 @@ test("a listener that throws is reported to its own logger, and the listeners af
     ];
     try {
         publishRuntimeChange("terminals");
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await advanceTimersByTimeAsync(1);
         expect(heard).toEqual([["terminals"]]);
         expect(reported).toEqual([{ err: new Error("a closed stream"), domains: ["terminals"] }]);
     } finally {
@@ -26,32 +37,35 @@ test("a listener that throws is reported to its own logger, and the listeners af
 });
 
 // Progress ticks fold under the subagents window; a child ending, the change they led up to, does not wait it out.
-test("a milestone goes out within a quarter second inside the window chatter is folded under", async () => {
+test("a milestone bypasses the chatter window, then starts a new window", async () => {
     const heard: { readonly at: number; readonly domains: string[] }[] = [];
     const started = performance.now();
     const stop = onRuntimeChange((domains) => heard.push({ at: performance.now() - started, domains: [...domains] }));
     try {
         publishRuntimeChange("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await advanceTimersByTimeAsync(1);
         // Chatter inside the window waits for its end, a second away.
         publishRuntimeChange("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await advanceTimersByTimeAsync(100);
         expect(heard).toHaveLength(1);
         publishRuntimeMilestone("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await advanceTimersByTimeAsync(149);
+        expect(heard).toHaveLength(1);
+        await advanceTimersByTimeAsync(1);
         expect(heard).toHaveLength(2);
-        expect(heard[1]?.at).toBeLessThan(500);
+        expect(heard[1]?.at).toBe((heard[0]?.at ?? 0) + 250);
         // The window restarts from the milestone's frame: chatter after it folds again.
         publishRuntimeChange("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await advanceTimersByTimeAsync(999);
         expect(heard).toHaveLength(2);
+        await advanceTimersByTimeAsync(1);
+        expect(heard).toHaveLength(3);
     } finally {
         stop();
     }
 });
 
-// The wall clock stepping back (an NTP or WSL resync) must not hold a frame until it catches up: the windows run on the
-// monotonic clock. setSystemTime outside fake timers pins Date.now a minute in the past while real timers keep running.
+// Move only the wall clock so a window measured with Date.now would keep rearming after its timer fires.
 test("a wall clock stepped back inside a window still lets the milestone out", async () => {
     let heard = 0;
     const stop = onRuntimeChange(() => {
@@ -59,14 +73,15 @@ test("a wall clock stepped back inside a window still lets the milestone out", a
     });
     try {
         publishRuntimeChange("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await advanceTimersByTimeAsync(1);
         expect(heard).toBe(1);
-        jest.setSystemTime(Date.now() - 60_000);
+        const wallClock = Date.now;
+        jest.spyOn(Date, "now").mockImplementation(() => wallClock() - 60_000);
         publishRuntimeMilestone("subagents");
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await advanceTimersByTimeAsync(250);
         expect(heard).toBe(2);
     } finally {
-        jest.setSystemTime();
+        jest.restoreAllMocks();
         stop();
     }
 });
@@ -81,18 +96,18 @@ test("a change published to people goes out once, naming them; one for everyone 
     });
     try {
         publishRuntimeChangeTo("ada@example.test", "drafts");
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await advanceTimersByTimeAsync(1);
         expect(heard).toEqual([{ domains: ["drafts"], audience: ["ada@example.test"] }]);
 
         // Inside the window: two people's moves fold into one frame naming both.
         publishRuntimeChangeTo("bob@example.test", "drafts");
         publishRuntimeChangeTo("ada@example.test", "drafts");
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await advanceTimersByTimeAsync(250);
         expect(heard[1]).toEqual({ domains: ["drafts"], audience: ["ada@example.test", "bob@example.test"] });
 
         publishRuntimeChangeTo("ada@example.test", "drafts");
         publishRuntimeChange("drafts");
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await advanceTimersByTimeAsync(250);
         expect(heard[2]).toEqual({ domains: ["drafts"], audience: undefined });
     } finally {
         stop();

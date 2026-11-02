@@ -76,6 +76,7 @@ export const junitCases = (xml) =>
             file: read.file ?? "",
             name: read.classname ? `${read.classname} > ${read.name}` : (read.name ?? ""),
             failed: body !== undefined && /<(failure|error)\b/.test(body),
+            skipped: body !== undefined && /<skipped\b/.test(body),
         };
     });
 

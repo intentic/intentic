@@ -52,11 +52,16 @@ const family = async () => {
     const ended = new Promise<void>((resolve) => {
         finish = resolve;
     });
+    const preflight = Promise.withResolvers<void>();
+    const running = Promise.withResolvers<void>();
+    const finished = Promise.withResolvers<void>();
     const parentTurn: TurnStarter["stream"] = async function* () {
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await preflight.promise;
         await beginTurn(fleet.conversations, turn({}), 3_000);
+        running.resolve();
         await ended;
         await fleet.conversations.send("parent-1", { kind: "settle" }, 4_000).settled;
+        finished.resolve();
         yield { kind: "done" };
     };
     const deps: ChildReportDeps = {
@@ -88,28 +93,40 @@ const family = async () => {
     }).settled;
     const frames: AgentSummary[][] = [];
     fleet.agents.subscribe((agents) => frames.push(agents));
-    return { fleet, deps: { ...deps, owed }, frames, finish };
+    return { fleet, deps: { ...deps, owed }, frames, preflight, running: running.promise, finished: finished.promise, finish };
 };
 
 const statusOf = (frame: readonly AgentSummary[], id: string): string | undefined => frame.find((agent) => agent.id === id)?.status;
 
 describe("a child's report on its way to an idle parent", () => {
     it("keeps the family out of Attention through every roster the hand-off sends, from the child's failure to the parent's turn", async () => {
-        const { fleet, deps, frames, finish } = await family();
+        const { fleet, deps, frames, preflight, running, finished, finish } = await family();
 
-        await fleet.conversations.send("sub-1", { kind: "frame", frame: { kind: "error", message: "Provider refused." } }).settled;
-        await fleet.conversations.send("sub-1", { kind: "settle" }, 2_000).settled;
-        await reportChildTurn(deps, settledOf());
-        // Any card's change goes out whole, so a roster can fall anywhere in the parent's preflight.
-        await fleet.conversations.send("parent-1", { kind: "watches-shown", watches: [] }).settled;
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        let started = false;
+        try {
+            await fleet.conversations.send("sub-1", { kind: "frame", frame: { kind: "error", message: "Provider refused." } }).settled;
+            await fleet.conversations.send("sub-1", { kind: "settle" }, 2_000).settled;
+            await reportChildTurn(deps, settledOf());
+            started = true;
+            // Any card's change goes out whole, so a roster can fall anywhere in the parent's preflight.
+            await fleet.conversations.send("parent-1", { kind: "watches-shown", watches: [] }).settled;
+            expect(statusOf(frames.at(-1) ?? [], "parent-1")).toBe("resuming");
+            preflight.resolve();
+            await running;
 
-        const sent = frames.slice(1);
-        expect(sent.map((frame) => [statusOf(frame, "parent-1"), statusOf(frame, "sub-1")])).toContainEqual(["resuming", "error"]);
-        expect(statusOf(sent.at(-1) ?? [], "parent-1")).toBe("running");
-        expect(sent.map((frame) => attentionCards(frame))).toEqual(sent.map(() => 0));
-        expect(sent.map((frame) => laneOf(frame.find((agent) => agent.id === "parent-1")!))).not.toContain("finished");
-        finish();
+            const sent = frames.slice(1);
+            expect(sent.map((frame) => [statusOf(frame, "parent-1"), statusOf(frame, "sub-1")])).toContainEqual(["resuming", "error"]);
+            expect(statusOf(sent.at(-1) ?? [], "parent-1")).toBe("running");
+            expect(sent.map((frame) => attentionCards(frame))).toEqual(sent.map(() => 0));
+            expect(sent.map((frame) => laneOf(frame.find((agent) => agent.id === "parent-1")!))).not.toContain("finished");
+            finish();
+        } finally {
+            preflight.resolve();
+            finish();
+            if (started) {
+                await finished;
+            }
+        }
     });
 
     it("gives the parent back its own ending, told again, when the report goes nowhere", async () => {
