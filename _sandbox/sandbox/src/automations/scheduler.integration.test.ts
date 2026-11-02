@@ -1362,8 +1362,11 @@ test("a thread beyond automationThreadsAtOnce is told it is queued, and starts o
         fireAutomation(drivenBy(services, wake), record, inThread("busy-channel", "t2")),
         fireAutomation(drivenBy(services, wake), record, inThread("busy-channel", "t3", { stream: hearing(heard) })),
     ];
-    await waitFor(() => expect(heard).toEqual(["queued"]), SETTLES);
-    expect(started.toSorted()).toEqual(["a-busy-channel-t1", "a-busy-channel-t2"]);
+    // The third is told it queues as soon as both slots are held, which can be before either holder's turn has begun.
+    await waitFor(() => {
+        expect(heard).toEqual(["queued"]);
+        expect(started.toSorted()).toEqual(["a-busy-channel-t1", "a-busy-channel-t2"]);
+    }, SETTLES);
 
     release("a-busy-channel-t2");
     await waitFor(() => expect(started).toContain("a-busy-channel-t3"), SETTLES);

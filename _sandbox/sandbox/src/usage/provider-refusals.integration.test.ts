@@ -14,8 +14,10 @@ const tempStore = () => {
 };
 
 const DAY = 24 * 60 * 60_000;
+// A second in the past: a refusal stamped "now" reads as filed in the future (and is re-stamped, scoped()) when the
+// runner's wall clock steps back between filing and reading, as CI's did by 90 ms (run 41428384869).
 const refusal = (over: Partial<ProviderRefusal> = {}): ProviderRefusal => ({
-    at: Date.now(),
+    at: Date.now() - 1_000,
     kind: "limit",
     message: "You've reached your usage limit for this billing cycle.",
     ...over,

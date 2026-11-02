@@ -112,7 +112,10 @@ test("a stop ends what the program started even when the program itself closed f
     const child = Number(/child (\d+)/.exec(await appLogs(id, 10, undefined, programs, SANDBOX))?.[1]);
     expect(child).toBeGreaterThan(0);
     expect(await appStop(id, false, programs, SANDBOX)).toContain(`Stopped ${id}`);
-    expect(() => process.kill(child, 0)).toThrow();
+    // Ended: gone, or a zombie nothing reaps (a container whose first process reaps no orphans, as CI's), which
+    // kill(pid, 0) still answers for.
+    const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(child)]).stdout.toString().trim();
+    expect(state === "" || state.startsWith("Z")).toBe(true);
 }, 30_000);
 
 test("a survivor is the same process the tree held: on Windows under the same parent, elsewhere the same pid", () => {
