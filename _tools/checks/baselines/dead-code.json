@@ -260,7 +260,6 @@
     "_editor/web/src/features/workspace/explorer/transfer/useEntryDrag.ts": "standing when the check arrived (2026-10-16)",
     "_editor/web/src/features/workspace/explorer/tree/fileVerbs.ts": "standing when the check arrived (2026-10-16)",
     "_editor/web/src/features/workspace/explorer/tree/useTreeDelete.ts": "standing when the check arrived (2026-10-16)",
-    "_editor/web/src/features/workspace/explorer/useAddRepo.ts": "standing when the check arrived (2026-10-16)",
     "_editor/web/src/features/workspace/viewers/proseDiff.ts": "standing when the check arrived (2026-10-16)",
     "_editor/web/src/lib/markdown/renderMarkdown.ts": {
         "count": 2,

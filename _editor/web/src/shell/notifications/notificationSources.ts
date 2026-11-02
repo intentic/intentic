@@ -9,6 +9,7 @@ import type { Evidence } from "../../features/sandbox/diagnosis/diagnose";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { holdReadAloudNotice } from "../../features/chat/voice/readAloud";
 import { holdFileOperationNotice } from "../../models/workspace/tree/fileOperations";
+import { holdCloneNotice } from "../../features/workspace/explorer/useAddRepo";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
@@ -352,6 +353,9 @@ export const startNotificationSources = (): void => {
 
     // A move, copy, delete or restore of many entries: how far it has got, and a Stop.
     holdFileOperationNotice();
+
+    // A repository cloning into the workspace: what, from where and for how long, and the way back to a failed address.
+    holdCloneNotice();
 
     holdTransportNotice(activeSandboxId);
 

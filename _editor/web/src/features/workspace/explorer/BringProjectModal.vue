@@ -1,5 +1,6 @@
 <!-- "Bring a project in": the empty workspace's choices (BringProjectChoices) as a dialog, for a workspace that already
-     has files, where that pane is the home and the choices are not on screen. -->
+     has files, where that pane is the home and the choices are not on screen. It only starts things: a clone goes on in
+     the notification lane, so the dialog closes on the press rather than holding the reader while it runs. -->
 <script setup lang="ts">
 import { Modal } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -19,7 +20,7 @@ const pick = (): void => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="t(`workspace.bringProject.title`)" :description="t(`workspace.bringProject.description`)">
-        <BringProjectChoices @pick="pick" @done="open = false" />
+    <Modal v-model:open="open" size="md" :header="t(`workspace.bringProject.title`)">
+        <BringProjectChoices autofocus @pick="pick" @done="open = false" />
     </Modal>
 </template>

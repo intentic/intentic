@@ -12685,26 +12685,23 @@
             "undoFileChange": "Cofnij zmianę plików"
         },
         "bringProject": {
-            "connectAccount": "Połącz konto",
-            "description": "Sklonuj repozytorium, wgraj pliki albo poproś agenta, żeby je pobrał.",
-            "privateNeedsAccount": "Prywatne repozytorium GitHub lub GitLab wymaga wcześniej połączonego konta, z tokenem umożliwiającym odczyt repozytorium (wystarczy dostęp tylko do odczytu).",
-            "publicNeedsNoAccount": "Publiczne repozytorium nie wymaga konta: wklej tylko jego adres.",
+            "connectAccount": "Najpierw połącz konto",
             "tip": "Dodaj projekt",
             "title": "Dodaj projekt",
-            "cloningWhat": "Pobieranie {name} do przestrzeni roboczej. Duże repozytorium może zająć kilka minut, a pobieranie trwa dalej, nawet jeśli opuścisz ten ekran."
+            "privateRepository": "Prywatne repozytorium?",
+            "or": "lub",
+            "uploadFiles": "Wgraj pliki",
+            "dropTitle": "Przeciągnij i upuść",
+            "dropNote": "Upuść pliki w dowolnym miejscu",
+            "askAgent": "Poproś agenta",
+            "agentTitle": "Z innego miejsca",
+            "agentNote": "Prywatny host, serwer, archiwum"
         },
         "workspaceEmptyState": {
-            "askAgentToFetch": "Poproś agenta, żeby to pobrał",
             "clone": "Sklonuj",
-            "cloneRepository": "Sklonuj repozytorium",
-            "cloning": "Klonowanie…",
-            "codeSomewhereElsePrivate": "Dla kodu gdzie indziej: prywatny host, serwer, archiwum.",
-            "dragAnywhereOntoPanel": "Albo przeciągnij je w dowolne miejsce tego panelu.",
             "filesStayOnSandbox": "Pliki zostają na maszynie Twojego sandboxa — nigdzie indziej",
             "getCodeIn": "Wnieś swój kod",
-            "pasteGitAddressGithub": "Wklej adres Git: GitHub, GitLab, skądkolwiek da się klonować.",
             "repositoryAddress": "Adres repozytorium",
-            "uploadFilesFolder": "Wgraj pliki albo folder",
             "workspaceAgentsReadEdit": "To jest przestrzeń robocza, którą Twoje agenty czytają i edytują. Wnieś do niej coś, a będą miały nad czym pracować."
         },
         "workspaceMobile": {
@@ -12939,7 +12936,11 @@
             "cloneFailed": "Nie udało się sklonować tego repozytorium.",
             "cloned": "Sklonowano {name} do przestrzeni roboczej",
             "cloning": "Klonowanie {name}",
-            "notAnAddress": "To nie wygląda na adres repozytorium."
+            "notAnAddress": "To nie wygląda na adres repozytorium.",
+            "alreadyCloning": "{name} jest już klonowane.",
+            "cloningMany": "Klonowanie {count} repozytorium | Klonowanie {count} repozytoriów | Klonowanie {count} repozytoriów",
+            "cloneFailedNamed": "Nie udało się sklonować {name}",
+            "editAddress": "Edytuj adres"
         },
         "uploadQueue": {
             "installFailed": "Nie udało się uruchomić instalacji.",

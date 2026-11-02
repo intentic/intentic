@@ -13297,26 +13297,23 @@
             "undoFileChange": "Deshacer cambio de archivos"
         },
         "bringProject": {
-            "connectAccount": "Conectar una cuenta",
-            "description": "Clona un repositorio, sube archivos o pide a un agente que lo busque.",
-            "privateNeedsAccount": "Un repositorio privado de GitHub o GitLab necesita antes esa cuenta conectada, con un token que pueda leer el repositorio (basta con acceso de solo lectura).",
-            "publicNeedsNoAccount": "Un repositorio público no necesita cuenta: pega solo su dirección.",
+            "connectAccount": "Conecta antes una cuenta",
             "tip": "Traer proyecto",
             "title": "Trae un proyecto",
-            "cloningWhat": "Descargando {name} en el espacio de trabajo. Un repositorio grande puede tardar varios minutos, y sigue aunque salgas de esta pantalla."
+            "privateRepository": "¿Repositorio privado?",
+            "or": "o",
+            "uploadFiles": "Subir archivos",
+            "dropTitle": "Arrastrar y soltar",
+            "dropNote": "Suelta archivos en cualquier parte",
+            "askAgent": "Pedir a un agente",
+            "agentTitle": "Desde otro sitio",
+            "agentNote": "Host privado, servidor, archivo"
         },
         "workspaceEmptyState": {
-            "askAgentToFetch": "Pedir a un agente que lo traiga",
             "clone": "Clonar",
-            "cloneRepository": "Clonar un repositorio",
-            "cloning": "Clonando…",
-            "codeSomewhereElsePrivate": "Para código en otro sitio: un host privado, un servidor, un archivo comprimido.",
-            "dragAnywhereOntoPanel": "O arrástralos a cualquier parte de este panel.",
             "filesStayOnSandbox": "Los archivos se quedan en la máquina de tu sandbox: en ningún otro sitio",
             "getCodeIn": "Trae tu código",
-            "pasteGitAddressGithub": "Pega una dirección de Git: GitHub, GitLab, de donde sea que puedas clonar.",
             "repositoryAddress": "Dirección del repositorio",
-            "uploadFilesFolder": "Subir archivos o una carpeta",
             "workspaceAgentsReadEdit": "Este es el espacio de trabajo que tus agentes leen y editan. Trae algo y tendrán con qué trabajar."
         },
         "workspaceMobile": {
@@ -13536,7 +13533,11 @@
             "cloneFailed": "No se ha podido clonar ese repositorio.",
             "cloned": "Se ha clonado {name} en el espacio de trabajo",
             "cloning": "Clonando {name}",
-            "notAnAddress": "Eso no parece una dirección de repositorio."
+            "notAnAddress": "Eso no parece una dirección de repositorio.",
+            "alreadyCloning": "{name} ya se está clonando.",
+            "cloningMany": "Clonando {count} repositorio | Clonando {count} repositorios",
+            "cloneFailedNamed": "No se pudo clonar {name}",
+            "editAddress": "Editar dirección"
         },
         "uploadQueue": {
             "installFailed": "No se ha podido iniciar la instalación.",

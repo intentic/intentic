@@ -13297,26 +13297,23 @@
             "undoFileChange": "Undo File Change"
         },
         "bringProject": {
-            "connectAccount": "Connect an account",
-            "description": "Clone a repository, upload files, or ask an agent to fetch it.",
-            "privateNeedsAccount": "A private GitHub or GitLab repository needs that account connected first, with a token that can read the repository (read-only is enough).",
-            "publicNeedsNoAccount": "A public repository needs no account: just paste its address.",
+            "connectAccount": "Connect an account first",
             "tip": "Bring in",
             "title": "Bring a project in",
-            "cloningWhat": "Downloading {name} into the workspace. A large repository can take several minutes, and it keeps going if you leave this screen."
+            "privateRepository": "Private repository?",
+            "or": "or",
+            "uploadFiles": "Upload files",
+            "dropTitle": "Drag and drop",
+            "dropNote": "Drop files anywhere here",
+            "askAgent": "Ask an agent",
+            "agentTitle": "Anywhere else",
+            "agentNote": "Private host, server, archive"
         },
         "workspaceEmptyState": {
-            "askAgentToFetch": "Ask an agent to fetch it",
             "clone": "Clone",
-            "cloneRepository": "Clone a repository",
-            "cloning": "Cloning…",
-            "codeSomewhereElsePrivate": "For code somewhere else: a private host, a server, an archive.",
-            "dragAnywhereOntoPanel": "Or drag them anywhere onto this panel.",
             "filesStayOnSandbox": "Files stay on your sandbox machine: nowhere else",
             "getCodeIn": "Get your code in",
-            "pasteGitAddressGithub": "Paste a Git address: GitHub, GitLab, anywhere you can clone from.",
             "repositoryAddress": "Repository address",
-            "uploadFilesFolder": "Upload files or a folder",
             "workspaceAgentsReadEdit": "This is the workspace your agents read and edit. Bring something in and they have something to work on."
         },
         "workspaceMobile": {
@@ -13536,7 +13533,11 @@
             "cloneFailed": "Couldn't clone that repository.",
             "cloned": "Cloned {name} into the workspace",
             "cloning": "Cloning {name}",
-            "notAnAddress": "That doesn't look like a repository address."
+            "notAnAddress": "That doesn't look like a repository address.",
+            "alreadyCloning": "{name} is already being cloned.",
+            "cloningMany": "Cloning {count} repository | Cloning {count} repositories",
+            "cloneFailedNamed": "Couldn't clone {name}",
+            "editAddress": "Edit address"
         },
         "uploadQueue": {
             "installFailed": "Couldn't start the install.",

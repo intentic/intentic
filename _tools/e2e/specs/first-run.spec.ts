@@ -49,14 +49,13 @@ test(`a workspace with nothing in it offers every way of getting code in, reposi
     await page.goto(`/workspace`);
 
     await expect(page.getByText(`Get your code in`)).toBeVisible();
-    const doors = [`Clone a repository`, `Upload files or a folder`, `Ask an agent to fetch it`];
-    for (const door of doors) {
-        await expect(page.getByRole(`button`, { name: new RegExp(door) })).toBeVisible();
+    // The address field is open from the start; the other two ways in are buttons beside each other under it.
+    const url = page.getByLabel(`Repository address`);
+    await expect(url).toBeVisible();
+    for (const door of [`Upload files`, `Ask an agent`]) {
+        await expect(page.getByRole(`button`, { name: door, exact: true })).toBeVisible();
     }
 
-    await page.getByRole(`button`, { name: /Clone a repository/ }).click();
-    const url = page.getByLabel(`Repository address`);
-    await expect(url).toBeFocused();
     await expect(page.getByRole(`button`, { name: `Clone` })).toBeDisabled();
     await url.fill(`https://github.com/owner/repo.git`);
     await expect(page.getByRole(`button`, { name: `Clone` })).toBeEnabled();

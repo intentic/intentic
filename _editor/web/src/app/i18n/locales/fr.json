@@ -13297,26 +13297,23 @@
             "undoFileChange": "Annuler la modification de fichiers"
         },
         "bringProject": {
-            "connectAccount": "Connecter un compte",
-            "description": "Clonez un dépôt, importez des fichiers ou demandez à un agent de le récupérer.",
-            "privateNeedsAccount": "Un dépôt privé GitHub ou GitLab exige d'abord de connecter ce compte, avec un jeton capable de lire le dépôt (un accès en lecture seule suffit).",
-            "publicNeedsNoAccount": "Un dépôt public n'exige aucun compte : collez simplement son adresse.",
+            "connectAccount": "Connectez d'abord un compte",
             "tip": "Apporter",
             "title": "Apporter un projet",
-            "cloningWhat": "Téléchargement de {name} dans l'espace de travail. Un gros dépôt peut prendre plusieurs minutes, et cela continue si vous quittez cet écran."
+            "privateRepository": "Dépôt privé ?",
+            "or": "ou",
+            "uploadFiles": "Envoyer des fichiers",
+            "dropTitle": "Glisser-déposer",
+            "dropNote": "Déposez les fichiers n'importe où",
+            "askAgent": "Demander à un agent",
+            "agentTitle": "Depuis ailleurs",
+            "agentNote": "Hôte privé, serveur, archive"
         },
         "workspaceEmptyState": {
-            "askAgentToFetch": "Demander à un agent d'aller le chercher",
             "clone": "Cloner",
-            "cloneRepository": "Cloner un dépôt",
-            "cloning": "Clonage…",
-            "codeSomewhereElsePrivate": "Pour du code ailleurs : un hébergeur privé, un serveur, une archive.",
-            "dragAnywhereOntoPanel": "Ou glissez-les n'importe où sur ce panneau.",
             "filesStayOnSandbox": "Les fichiers restent sur la machine de votre sandbox : nulle part ailleurs",
             "getCodeIn": "Faites entrer votre code",
-            "pasteGitAddressGithub": "Collez une adresse Git : GitHub, GitLab, partout d'où vous pouvez cloner.",
             "repositoryAddress": "Adresse du dépôt",
-            "uploadFilesFolder": "Envoyer des fichiers ou un dossier",
             "workspaceAgentsReadEdit": "C'est l'espace de travail que vos agents lisent et modifient. Faites-y entrer quelque chose et ils auront de quoi travailler."
         },
         "workspaceMobile": {
@@ -13536,7 +13533,11 @@
             "cloneFailed": "Impossible de cloner ce dépôt.",
             "cloned": "{name} cloné dans l'espace de travail",
             "cloning": "Clonage de {name}",
-            "notAnAddress": "Cela ne ressemble pas à une adresse de dépôt."
+            "notAnAddress": "Cela ne ressemble pas à une adresse de dépôt.",
+            "alreadyCloning": "{name} est déjà en cours de clonage.",
+            "cloningMany": "Clonage de {count} dépôt | Clonage de {count} dépôts",
+            "cloneFailedNamed": "Impossible de cloner {name}",
+            "editAddress": "Modifier l'adresse"
         },
         "uploadQueue": {
             "installFailed": "Impossible de lancer l'installation.",

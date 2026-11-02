@@ -13297,26 +13297,23 @@
             "undoFileChange": "Dateiänderung rückgängig machen"
         },
         "bringProject": {
-            "connectAccount": "Konto verbinden",
-            "description": "Ein Repository klonen, Dateien hochladen oder einen Agenten bitten, es zu holen.",
-            "privateNeedsAccount": "Ein privates GitHub- oder GitLab-Repository setzt voraus, dass dieses Konto zuerst verbunden wird, mit einem Token, das das Repository lesen darf (nur Lesezugriff genügt).",
-            "publicNeedsNoAccount": "Ein öffentliches Repository braucht kein Konto: Fügen Sie einfach seine Adresse ein.",
+            "connectAccount": "Erst ein Konto verbinden",
             "tip": "Hereinholen",
             "title": "Projekt hereinholen",
-            "cloningWhat": "{name} wird in den Workspace heruntergeladen. Ein großes Repository kann einige Minuten dauern, und es läuft weiter, wenn Sie diese Ansicht verlassen."
+            "privateRepository": "Privates Repository?",
+            "or": "oder",
+            "uploadFiles": "Dateien hochladen",
+            "dropTitle": "Ziehen und ablegen",
+            "dropNote": "Dateien einfach hier ablegen",
+            "askAgent": "Einen Agenten fragen",
+            "agentTitle": "Von anderswo",
+            "agentNote": "Privater Host, Server, Archiv"
         },
         "workspaceEmptyState": {
-            "askAgentToFetch": "Einen Agenten bitten, es zu holen",
             "clone": "Klonen",
-            "cloneRepository": "Ein Repository klonen",
-            "cloning": "Wird geklont…",
-            "codeSomewhereElsePrivate": "Für Code woanders: ein privater Host, ein Server, ein Archiv.",
-            "dragAnywhereOntoPanel": "Oder ziehen Sie sie irgendwohin auf dieses Panel.",
             "filesStayOnSandbox": "Dateien bleiben auf Ihrer Sandbox-Maschine — sonst nirgends",
             "getCodeIn": "Bringen Sie Ihren Code herein",
-            "pasteGitAddressGithub": "Fügen Sie eine Git-Adresse ein: GitHub, GitLab, überall, woher Sie klonen können.",
             "repositoryAddress": "Repository-Adresse",
-            "uploadFilesFolder": "Dateien oder einen Ordner hochladen",
             "workspaceAgentsReadEdit": "Das ist der Workspace, den Ihre Agenten lesen und bearbeiten. Bringen Sie etwas herein, und sie haben etwas zu tun."
         },
         "workspaceMobile": {
@@ -13536,7 +13533,11 @@
             "cloneFailed": "Das Repository ließ sich nicht klonen.",
             "cloned": "{name} in den Workspace geklont",
             "cloning": "{name} wird geklont",
-            "notAnAddress": "Das sieht nicht nach einer Repository-Adresse aus."
+            "notAnAddress": "Das sieht nicht nach einer Repository-Adresse aus.",
+            "alreadyCloning": "{name} wird bereits geklont.",
+            "cloningMany": "{count} Repository wird geklont | {count} Repositorys werden geklont",
+            "cloneFailedNamed": "{name} ließ sich nicht klonen",
+            "editAddress": "Adresse bearbeiten"
         },
         "uploadQueue": {
             "installFailed": "Die Installation ließ sich nicht starten.",
