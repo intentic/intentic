@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
@@ -146,8 +147,7 @@ describe("a turn held to a tool list", () => {
     test("a hook the daemon cannot answer refuses a live turn's call, and only a live turn's", async () => {
         const { hooks, dir } = await started();
         hooks.register(turn({ allowedTools: LIST }));
-        await new Promise((settle) => setTimeout(settle, 50));
-        expect(JSON.parse(readFileSync(join(dir, "intentic-live-turns.json"), "utf8"))).toEqual(["agent-1"]);
+        await waitFor(() => expect(JSON.parse(readFileSync(join(dir, "intentic-live-turns.json"), "utf8"))).toEqual(["agent-1"]), SETTLES);
         rmSync(join(dir, "command-guard.sock"));
         const refused = await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Write", tool_input: { file_path: "/x" } });
         expect(refused).toMatchObject({ permission: "deny", agent_message: expect.stringContaining("could not be reached") });
