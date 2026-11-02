@@ -184,9 +184,17 @@ useWorkspaceRoute();
 const emptyWorkspace = computed(() => hasSnapshot.value && tree.value.length === 0);
 // The home (features/workspace/home): what is under the tabs. Showing it unsets the main pane's active tab and closes
 // nothing, so the strip is a click away from where it was.
-const { selected, pick, cover } = useHome();
+const { selected, pick, cover, homeDir } = useHome();
 const homeCovered = computed(() => !emptyWorkspace.value && strip.value.main.active !== null);
 const showHome = (): void => deselect(`main`);
+// Collapse all is "back to the top": the tree folds shut and the home returns to the scope root's tiles, so the
+// main view matches the tree it sits beside instead of staying in a folder the tree no longer shows open.
+const atTop = computed(() => expanded.value.size === 0 && homeDir.value === workspaceDir.value && !homeCovered.value);
+const collapseToTop = (): void => {
+    collapseAll();
+    pick(workspaceDir.value, `dir`);
+    showHome();
+};
 
 // Below ~40rem the tree becomes a drawer over the viewer instead of a column. `drawerOpen` is separate from the
 // persisted `sidebarCollapsed`, so a chat-narrowed session can't leave the explorer hidden on a later wide one.
@@ -783,15 +791,16 @@ const homeTooltip = computed((): Tip => ({
                         >
                             <Icon name="play" class="text-xs" />
                         </button>
-                        <!-- Collapse every open folder; tree scope only, inert while a filter forces matches open or nothing is open. -->
+                        <!-- Collapse every open folder and take the home back to the root's tiles; inert while a filter forces
+                             matches open, or when already there. -->
                         <button
                             v-if="!contentMode"
                             type="button"
                             :class="ui.iconButton({ size: `xs` }, `shrink-0 hover:bg-transparent`)"
-                            :disabled="filter.trim() !== '' || expanded.size === 0"
+                            :disabled="filter.trim() !== '' || atTop"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAll`)"
                             :aria-label="t(`workspace.workspaceDesktop.collapseAllFolders`)"
-                            @click="collapseAll"
+                            @click="collapseToTop"
                         >
                             <Icon name="collapse-all" class="text-xs" />
                         </button>
