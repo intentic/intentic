@@ -4,6 +4,7 @@ import type { GroupSamples } from "./context.ts";
 export const runsSamples: GroupSamples<`runs`> = () => ({
     targets: undefined,
     start: { repo: `web`, target: `desktop`, device: `ada-pc` },
+    attach: { repo: `web`, target: `desktop`, device: `ada-pc`, id: `desktop-4f1c2a` },
     active: { device: `ada-pc` },
     stop: { repo: `web`, target: `desktop`, device: `ada-pc`, id: `desktop-4f1c2a` },
     output: { device: `ada-pc`, id: `desktop-4f1c2a` },

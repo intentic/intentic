@@ -528,7 +528,7 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
         }
         shown = text
             .split("\n")
-            .filter((line) => pattern.test(line))
+            .filter((entry) => pattern.test(entry))
             .slice(-lines)
             .join("\n");
     }

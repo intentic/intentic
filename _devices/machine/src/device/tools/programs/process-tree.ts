@@ -40,8 +40,15 @@ export const processRows = async (): Promise<[number, number][]> => {
         );
         return parseRows(stdout);
     }
-    const { stdout } = await execBounded("ps", ["-A", "-o", "pid=,ppid="], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 });
-    return parseRows(stdout);
+    // A zombie has already ended and holds nothing (no port, no file); it stays listed only until its parent reaps it,
+    // and in a container whose first process reaps no orphans (CI's) that is never, so it is not a survivor.
+    const { stdout } = await execBounded("ps", ["-A", "-o", "pid=,ppid=,stat="], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 });
+    return parseRows(
+        stdout
+            .split(/\r?\n/)
+            .filter((line) => !/^\s*\d+\s+\d+\s+Z/.test(line))
+            .join("\n"),
+    );
 };
 
 // The rows as they are now, or none when they cannot be read: a stop then has only the root's own tree kill to go on.
