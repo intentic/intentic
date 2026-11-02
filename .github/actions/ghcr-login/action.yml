@@ -40,7 +40,7 @@ runs:
           fi
           echo "$output" >&2
           # Anything the registry ANSWERED with is final — only an unreachable registry is worth another go.
-          if ! grep -qiE 'deadline exceeded|timeout|timed out|temporary failure|connection reset|connection refused|EOF|no such host|500 Internal|502 Bad Gateway|503 Service|504 Gateway' <<<"$output"; then
+          if ! grep -qiE 'deadline exceeded|timeout|timed out|temporary failure|connection reset|connection refused|EOF|no such host|no route to host|network is unreachable|500 Internal|502 Bad Gateway|503 Service|504 Gateway' <<<"$output"; then
             echo "ghcr.io refused the credential — not a timeout, so not retrying." >&2
             exit 1
           fi
