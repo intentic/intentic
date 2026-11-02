@@ -5,7 +5,7 @@ import type { Doors } from "../doors";
 // A repository's "Run on <device>" dialog. A start answers the terminal session the build and the launch run in, named as
 // the daemon names a run's job session, for the editor to open. On ada-pc the shop's desktop app is running and its
 // isolated twin fell over, so the dialog draws a running row (Stop, Restart, its log, a Terminal that follows it) and an
-// ended one.
+// ended one; the workspace root's kiosk runs there too, for the root's long list.
 
 const AT = Date.UTC(2026, 9, 31, 9, 0);
 
@@ -19,6 +19,17 @@ const demoRuns = (): DeviceRun[] => [
         startedAt: new Date(AT).toISOString(),
         repo: `web`,
         ports: [7880],
+    },
+    // The workspace root's kiosk, started from its Run dialog twenty minutes ago and still up.
+    {
+        device: `ada-pc`,
+        id: `kiosk-2d7e90`,
+        name: `kiosk`,
+        state: `running`,
+        said: `running, pid 6312`,
+        startedAt: new Date(AT - 1_200_000).toISOString(),
+        repo: `root`,
+        ports: [],
     },
     {
         device: `ada-pc`,

@@ -8,7 +8,8 @@ import { appTargetId, type PreviewTarget, repoTargetId } from "../../../models/p
      `<repo>--<name>`, with its own preview), one with an `artifact` on a computer, one with both in either place.
    - When the file declares nothing for the sandbox, what Start finds in the repository's own files (a Procfile, a `dev`
      or `start` script, a Cargo binary) is the sandbox's row, first, so every repository Start can run is runnable here.
-   The place is chosen once for the whole list (`SANDBOX` or a computer's id), as the dialog's "where" row shows. */
+   The place is chosen once for the whole list (`SANDBOX` or a computer's id), as the dialog's "where" row shows, and the
+   list then holds only what runs there: a row that cannot is not drawn faded in the way, it is counted on its own place. */
 
 // The sandbox's place in the "where" row. Not a device id: those are capability card ids, which never hold an `@`.
 export const SANDBOX = `@sandbox`;
@@ -29,6 +30,9 @@ export interface RunRow {
     readonly computers: boolean;
     readonly device: string | undefined;
     readonly isolated: boolean;
+    // What it runs, said when its row is opened: the command in the sandbox, the build made here for a computer.
+    readonly command: string | undefined;
+    readonly build: string | undefined;
 }
 
 export const FOUND = `@found`;
@@ -52,6 +56,8 @@ export const runRowsOf = (
             computers: target.artifact !== undefined,
             device: target.device,
             isolated: target.isolated,
+            command: target.command,
+            build: target.build,
         };
     });
     if (rows.some((row) => row.sandboxId !== undefined) || panel?.start === undefined) {
@@ -69,6 +75,8 @@ export const runRowsOf = (
             computers: false,
             device: undefined,
             isolated: false,
+            command: undefined,
+            build: undefined,
         },
         ...rows,
     ];
@@ -77,7 +85,24 @@ export const runRowsOf = (
 // Whether a row can run in the chosen place.
 export const runsAt = (row: RunRow, place: string): boolean => (place === SANDBOX ? row.sandboxId !== undefined : row.computers);
 
-// Where the dialog opens: the first row's own place (the sandbox, or the computer it names when that one can take a
+// The places the "where" row offers, each with something to run there: the sandbox when a row runs in it, then every
+// computer (in the order given) when a row carries a build to one. A computer is offered asleep or refusing too, so the
+// row can say why it cannot take a run rather than the computer vanishing.
+export const placesOf = (rows: readonly RunRow[], devices: readonly string[]): string[] => [
+    ...(rows.some((row) => runsAt(row, SANDBOX)) ? [SANDBOX] : []),
+    ...(rows.some((row) => row.computers) ? devices : []),
+];
+
+// Where the dialog opens: the place picked last for this repository while it is still offered (a computer asleep
+// today included: it was the reader's choice, and the dialog says why it cannot run), else the default below.
+export const openingPlace = (
+    rows: readonly RunRow[],
+    devices: readonly string[],
+    ready: (device: string) => boolean,
+    remembered: string | undefined,
+): string => (remembered !== undefined && placesOf(rows, devices).includes(remembered) ? remembered : defaultPlace(rows, devices, ready));
+
+// The default: the first row's own place (the sandbox, or the computer it names when that one can take a
 // run), else any computer that can, else the first computer, else the sandbox.
 export const defaultPlace = (rows: readonly RunRow[], devices: readonly string[], ready: (device: string) => boolean): string => {
     const [first] = rows;

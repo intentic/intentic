@@ -184,8 +184,9 @@ const wrapperBleed = computed(() => (flushInline && (wrapperSelect.value !== `` 
                  flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->
             <template v-if="open && body === `rail`" #below>
                 <div class="flex" :class="gap">
-                    <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
-                    <span class="invisible flex shrink-0 items-center" :class="gap" inert aria-hidden="true">
+                    <!-- The lead, mirrored and hidden, so the block starts where the title does. None when the row has no lead:
+                         an empty mirror still took the gap beside it and set the block in from the title. -->
+                    <span v-if="$slots[`lead`] || icon !== undefined" class="invisible flex shrink-0 items-center" :class="gap" inert aria-hidden="true">
                         <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                         <Icon v-if="icon !== undefined" :name="icon" :class="ROW_TIERS[tier].icon" />
                     </span>

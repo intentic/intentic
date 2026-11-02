@@ -574,6 +574,66 @@ export const WEB_RUN_JSON = `{
 }
 `;
 
+// What the workspace root says it can run, the Run dialog's long list (opened from the file tree's toolbar ▷): seven
+// targets in the sandbox, most with more to say than a line holds, and two that run on the owner's computer, one of them
+// inside Windows Sandbox. Parsed by daemon/settings.ts as the daemon parses the real file.
+export const ROOT_RUN_JSON = `{
+    "targets": [
+        {
+            "name": "dev",
+            "description": "Every app at once: the storefront on its dev server and the API on a local Postgres seeded with the fixture shop. Both reload on save and keep your local data.",
+            "command": "pnpm dev"
+        },
+        {
+            "name": "storefront",
+            "description": "Only the storefront, against the staging API. The quickest way to work on a page.",
+            "command": "pnpm --filter web dev"
+        },
+        {
+            "name": "storybook",
+            "description": "The component library: every checkout, pricing and account component in each of its states, from an empty cart to a declined card.",
+            "command": "pnpm storybook --port $PORT"
+        },
+        {
+            "name": "release",
+            "description": "What ships: the production builds of web and api behind the same proxy as the live site. Minutes to rebuild after an edit.",
+            "command": "pnpm build && pnpm start"
+        },
+        {
+            "name": "seed",
+            "description": "Resets the local database to the fixture shop, then runs dev: 312 products, three customers and one abandoned cart. Deletes every order and account you made locally.",
+            "command": "pnpm db:reset && pnpm db:seed && pnpm dev"
+        },
+        {
+            "name": "e2e",
+            "description": "Playwright against a fresh production build: signs up, buys the Starter plan with Stripe's test card and waits for the receipt e-mail. About four minutes.",
+            "command": "pnpm test:e2e --reporter=line"
+        },
+        {
+            "name": "check",
+            "description": "Typecheck, lint and unit tests for the packages your change touches.",
+            "command": "pnpm check --changed"
+        },
+        {
+            "name": "kiosk",
+            "description": "The in-store kiosk app on your PC, talking to the API in this sandbox through a port the run opens, so there is no forwarding to set up.",
+            "device": "ada-pc",
+            "build": "pnpm --filter kiosk build --target x86_64-pc-windows-msvc",
+            "artifact": "kiosk/target/x86_64-pc-windows-msvc/release/kiosk.exe",
+            "reach": [7880]
+        },
+        {
+            "name": "kiosk-isolated",
+            "description": "The same build inside Windows Sandbox: a throwaway VM that sees the build and nothing else of the computer.",
+            "device": "ada-pc",
+            "build": "pnpm --filter kiosk build --target x86_64-pc-windows-msvc",
+            "artifact": "kiosk/target/x86_64-pc-windows-msvc/release/kiosk.exe",
+            "isolated": true
+        }
+    ]
+}
+`;
+
 // One flat, root-relative table backing the tree, every read, search and write, so a file only needs adding here once.
 // A string is the real body; a number is a size-only stand-in. A missing path answers 404. Mutable: writes here persist
 // until reload.
@@ -605,6 +665,7 @@ const SOURCES: [string, string | number][] = [
     [`web/pnpm-lock.yaml`, 184_600],
     [`web/vite.config.ts`, 512],
     [`web/${RUN_TARGETS_FILE}`, WEB_RUN_JSON],
+    [RUN_TARGETS_FILE, ROOT_RUN_JSON],
     // Ignored: tree lists it grayed, and expanding it is what /workspace/children answers.
     [`web/node_modules/react/package.json`, 3_120],
     [`web/node_modules/vite/package.json`, 4_040],

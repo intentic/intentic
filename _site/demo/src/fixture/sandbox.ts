@@ -57,6 +57,24 @@ const CODE_PANELS: PanelSummary[] = [
         // Set is published (fixture/docs.ts); `api`'s below is only staged.
         docs: true,
     },
+    // The workspace root, listed because its .intentic/run.json (fixture/workspace.ts ROOT_RUN_JSON) declares targets
+    // that run in the sandbox, each one of its apps; as the daemon lists the root, with no folder's facts of its own.
+    {
+        repo: `root`,
+        hasPanel: false,
+        sandboxTargets: true,
+        running: false,
+        installed: true,
+        healthy: false,
+        servers: [],
+        deployConfig: false,
+        desiredState: false,
+        directoryUi: false,
+        monorepo: false,
+        tests: false,
+        userStories: false,
+        docs: false,
+    },
     {
         repo: `api`,
         hasPanel: false,

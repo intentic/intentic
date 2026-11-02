@@ -1,7 +1,7 @@
 import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 import { RunTargetsFileSchema, type RepoRunTargets } from "@intentic/sandbox-contract/schemas/run-targets";
 import { appTargets, appTargetId, repoTargets, repoTargetId } from "../../../models/preview/previewModel";
-import { defaultPlace, FOUND, runRowsOf, runsAt, SANDBOX } from "./runRows";
+import { defaultPlace, FOUND, openingPlace, placesOf, runRowsOf, runsAt, SANDBOX } from "./runRows";
 
 // The Run dialog's rows: every target the repository's run.json declares, each runnable where it says (a command in the
 // sandbox, an artifact on a computer), and, when the file says nothing for the sandbox, what Start finds there.
@@ -72,4 +72,33 @@ test(`the dialog opens on the first row's own place, else on a computer that can
     expect(defaultPlace(computerFirst, devices, (id) => id === `omen`)).toBe(`omen`);
     expect(defaultPlace(computerFirst, [], () => true)).toBe(SANDBOX);
     expect(defaultPlace([], devices, () => true)).toBe(SANDBOX);
+});
+
+test(`only places with something to run are offered, and the one picked last opens again while it still is`, () => {
+    const devices = [`omen`, `rog`];
+    const rows = runRowsOf(`shop`, FILE, undefined, []);
+    expect(placesOf(rows, devices)).toEqual([SANDBOX, `omen`, `rog`]);
+    // Nothing carries a build to a computer: no computer is offered, and a sandbox-only file offers the sandbox alone.
+    const sandboxOnly = runRowsOf(`shop`, declared([{ name: `web`, command: `pnpm dev` }]), undefined, []);
+    expect(placesOf(sandboxOnly, devices)).toEqual([SANDBOX]);
+    const computerOnly = runRowsOf(`shop`, declared([{ name: `desktop`, artifact: `a.exe` }]), undefined, []);
+    expect(placesOf(computerOnly, devices)).toEqual(devices);
+    expect(placesOf(computerOnly, [])).toEqual([]);
+
+    // The pick outlives the dialog, a computer asleep today included; one no longer offered falls back to the default.
+    const asleep = (): boolean => false;
+    expect(openingPlace(rows, devices, asleep, `rog`)).toBe(`rog`);
+    expect(openingPlace(rows, devices, () => true, undefined)).toBe(SANDBOX);
+    expect(openingPlace(rows, devices, () => true, `gone`)).toBe(SANDBOX);
+    expect(openingPlace(sandboxOnly, devices, () => true, `rog`)).toBe(SANDBOX);
+});
+
+test(`an open row says what it runs: the command in the sandbox, the build made for a computer`, () => {
+    const rows = runRowsOf(
+        `shop`,
+        declared([{ name: `game`, command: `cargo run`, build: `cargo build --release`, artifact: `target/game.exe` }]),
+        undefined,
+        [],
+    );
+    expect(rows[0]).toMatchObject({ command: `cargo run`, build: `cargo build --release` });
 });

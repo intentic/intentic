@@ -1,6 +1,7 @@
 import { refuse } from "@intentic/contract-serve";
 import type { RepoApp } from "@intentic/sandbox-contract/schemas/workspace/workspace-repos";
 import { workspaceEntries } from "../../fixture/workspace";
+import { DEMO_RUN_TARGETS } from "../account/settings";
 import { APP_TEMPLATES, appFiles, type AppTemplate } from "./monorepo";
 import { noteWritten } from "./edits";
 import { type JobLine, jobAge, jobRunning, startJob, stopJob } from "./jobs";
@@ -39,13 +40,30 @@ const discoverApps = (repo: string): { app: string; kind?: string }[] => {
     return [...apps].toSorted(([left], [right]) => left.localeCompare(right)).map(([app, kind]) => (kind === undefined ? { app } : { app, kind }));
 };
 
+// The targets a repository's .intentic/run.json runs in the sandbox, each one of its apps, as the daemon lists them
+// (the workspace root's among them, which is no monorepo).
+const declaredApps = (repo: string): { app: string; command: string }[] =>
+    (DEMO_RUN_TARGETS.repos.find((entry) => entry.repo === repo)?.targets ?? []).flatMap((target) =>
+        target.command === undefined ? [] : [{ app: target.name, command: target.command }],
+    );
+
+// A repository's apps: what its run.json declares for the sandbox, else a monorepo's `_apps/`.
+const appsOf = (repo: string): { app: string; kind?: string; command?: string }[] => {
+    const declared = declaredApps(repo);
+    if (declared.length > 0) {
+        return declared;
+    }
+    monorepoOf(repo);
+    return discoverApps(repo);
+};
+
 const sessionOf = (repo: string, app: string): string => `panel-${repo}--${app}`;
 
 // How long an install takes before the dev command starts, and the dev server after that before its port answers.
 const INSTALL_MS = 3_200;
 const BOOT_MS = 1_600;
 
-const devLines = (repo: string, app: string, port: number, install: boolean): JobLine[] => [
+const devLines = (repo: string, app: string, port: number, install: boolean, command = `pnpm -C _apps/${app} dev`): JobLine[] => [
     { after: 80, text: prompt(repo) },
     ...(install
         ? [
@@ -55,7 +73,7 @@ const devLines = (repo: string, app: string, port: number, install: boolean): Jo
               { after: 900, text: `Progress: resolved 412, reused 398, downloaded 14, added 412, done\r\n${DIM}Done in 2.9s${RESET}\r\n` },
           ]
         : []),
-    { after: 200, text: `${install ? prompt(repo) : ``}pnpm -C _apps/${app} dev\r\n\r\n` },
+    { after: 200, text: `${install ? prompt(repo) : ``}${command}\r\n\r\n` },
     { after: 600, text: `${DIM}> @${repo}/${app}@0.1.0 dev /work/${repo}/_apps/${app}${RESET}\r\n\r\n` },
     { after: 800, text: `  ${GREEN}${BOLD}VITE${RESET} v8.0.2  ${DIM}ready in 412 ms${RESET}\r\n\r\n` },
     { after: 60, text: `  ${GREEN}➜${RESET}  ${BOLD}Local${RESET}:   ${CYAN}http://localhost:${port}/${RESET}\r\n` },
@@ -63,7 +81,7 @@ const devLines = (repo: string, app: string, port: number, install: boolean): Jo
     { after: 4_000, text: `${CYAN}[vite]${RESET} page reload ${DIM}src/App.tsx${RESET}\r\n` },
 ];
 
-const portOf = (repo: string, app: string): number => 5_173 + discoverApps(repo).findIndex((entry) => entry.app === app);
+const portOf = (repo: string, app: string): number => 5_173 + appsOf(repo).findIndex((entry) => entry.app === app);
 
 // Where a start has got to, the daemon's `launch`: installing, then the dev command with nothing listening yet.
 const launchOf = (age: number, installing: boolean): RepoApp[`launch`] => {
@@ -78,9 +96,8 @@ const INSTALLING = new Set<string>();
 
 /** GET /workspace/repos/{repo}/apps */
 export const appsList = (repo: string) => {
-    monorepoOf(repo);
     return {
-        apps: discoverApps(repo).map(({ app, kind }) => {
+        apps: appsOf(repo).map(({ app, kind }) => {
             const session = sessionOf(repo, app);
             const age = jobAge(session);
             const launch = age === undefined ? undefined : launchOf(age, INSTALLING.has(session));
@@ -99,10 +116,7 @@ export const appsList = (repo: string) => {
 
 /** POST /workspace/repos/{repo}/apps/{app}/start */
 export const startApp = (repo: string, app: string): void => {
-    monorepoOf(repo);
-    if (!discoverApps(repo).some((entry) => entry.app === app)) {
-        refuse(`no app "${app}" in ${repo}`, 404);
-    }
+    const entry = appsOf(repo).find((candidate) => candidate.app === app) ?? refuse(`no app "${app}" in ${repo}`, 404);
     const session = sessionOf(repo, app);
     if (jobRunning(session)) {
         return;
@@ -117,7 +131,7 @@ export const startApp = (repo: string, app: string): void => {
     } else {
         INSTALLING.delete(session);
     }
-    startJob(session, { label: `${repo} · ${app}`, kind: `panel`, lines: devLines(repo, app, portOf(repo, app), install), oneShot: false });
+    startJob(session, { label: `${repo} · ${app}`, kind: `panel`, lines: devLines(repo, app, portOf(repo, app), install, entry.command), oneShot: false });
     // The port sampler's push once the server binds, which is what flips the row to healthy.
     setTimeout(() => pushRuntime(`panels`, `ports`), (install ? INSTALL_MS : 0) + BOOT_MS + 50);
     pushRuntime(`panels`);
@@ -125,15 +139,16 @@ export const startApp = (repo: string, app: string): void => {
 
 /** POST /workspace/repos/{repo}/apps/{app}/stop */
 export const stopApp = (repo: string, app: string): void => {
-    monorepoOf(repo);
+    appsOf(repo);
     stopJob(sessionOf(repo, app));
     pushRuntime(`panels`, `ports`);
 };
 
 /** The app a preview host names, and whether its dev server answers yet, for the preview proxy (previewSites.ts). */
 export const appAt = (host: string): { readonly repo: string; readonly app: string; readonly serving: boolean } | undefined => {
-    for (const path of workspaceEntries().keys()) {
-        const [, repo, app] = /^([^/]+)\/_apps\/([a-z][a-z0-9-]*)\/package\.json$/u.exec(path) ?? [];
+    const monorepoApps = [...workspaceEntries().keys()].map((path) => /^([^/]+)\/_apps\/([a-z][a-z0-9-]*)\/package\.json$/u.exec(path)?.slice(1) ?? []);
+    const declared = DEMO_RUN_TARGETS.repos.flatMap((entry) => declaredApps(entry.repo).map(({ app }) => [entry.repo, app]));
+    for (const [repo, app] of [...monorepoApps, ...declared]) {
         if (repo !== undefined && app !== undefined && new URL(appPage(repo, app)).host === host) {
             const session = sessionOf(repo, app);
             const age = jobAge(session);

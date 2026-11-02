@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { PanelStartSource } from "@intentic/sandbox-contract/schemas/panels";
-import { Button, ui, Icon, Modal, toneDot } from "@intentic/ui";
+import { Button, DisclosureRow, Icon, Modal, Notice, RowGroup, toneDot, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
@@ -12,18 +12,22 @@ import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTab
 import { openPreviewBeside } from "../../../workbench/browsers/browsersSurface";
 import { stateOf, tintOf } from "../../preview/targetWords";
 import { usePreviewTargets } from "../../preview/usePreviewTargets";
-import { defaultPlace, type RunRow, runRowsOf, runsAt, SANDBOX } from "./runRows";
+import { openingPlace, placesOf, type RunRow, runRowsOf, runsAt, SANDBOX } from "./runRows";
+import { rememberedPlace, rememberPlace } from "./runPlaceMemory";
 import { useDeviceRuns, useRunLog, useRunPresses, useRunTargets } from "../../../models/runs/useRunTargets";
 import type { DeviceRun } from "@intentic/sandbox-contract/schemas/run-targets";
 
 const t = useT();
 
-/* RUN A REPOSITORY, in the sandbox or on one of your computers: one dialog for both. Where it runs is chosen once, above
-   the list, the sandbox first and then every computer with whether it can take a run now; each target the repository's
-   run-targets file declares (and, when that file says nothing for the sandbox, what Start finds in its own files) is
-   then one row with one Run button. In the sandbox a run gets its own preview in Browsers, which opens on it; on a
+/* RUN A REPOSITORY, in the sandbox or on one of your computers: one dialog for both. Where it runs is chosen once, under
+   the title, the sandbox first and then every computer with whether it can take a run now and how many targets run
+   there; the pick is remembered per repository (runPlaceMemory.ts), so the dialog opens where it was last run from.
+   The list under it holds only what runs in that place, each target the repository's run-targets file declares (and,
+   when that file says nothing for the sandbox, what Start finds in its own files) as one row: its name and state, its
+   description on one line, and Run. A row opens on press into the whole description, what it runs and, on a computer,
+   the log of its newest run there. In the sandbox a run gets its own preview in Browsers, which opens on it; on a
    computer it opens the terminal it happens in, and the row then says what the computer reports of it (running, or
-   how it ended) with its Stop, Restart, log and a Terminal that follows it again. */
+   how it ended) with its Stop, Restart and a Terminal that follows it again. */
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -74,20 +78,38 @@ const ready = (id: string): boolean => {
     return device !== undefined && blocked(device) === undefined;
 };
 
+const deviceIds = computed(() => sorted.value.map((device) => device.id));
+// The places with something to run, each with how many targets run there: every computer counts the same rows.
+const places = computed(() => placesOf(rows.value, deviceIds.value));
+const countAt = (id: string): number => rows.value.filter((row) => runsAt(row, id)).length;
+
+// The reader's pick, read back for each repository the dialog opens on; a place no longer offered is passed over.
 const picked = ref<string | undefined>(undefined);
-// Opening another repository's runs starts from its own default, not the last one's choice.
-watch(dir, () => {
-    picked.value = undefined;
-});
-const place = computed(
-    () =>
-        picked.value ??
-        defaultPlace(
-            rows.value,
-            sorted.value.map((device) => device.id),
-            ready,
-        ),
+// THE LIST'S FLOOR while the dialog stays open: switching to a place with fewer targets keeps the height the list had,
+// since the dialog is centred and shrinking it would move the "where" row out from under the pointer. It opens at its
+// content's own height, so a short list is never padded with room it never had.
+const list = ref<HTMLElement>();
+const floor = ref(0);
+watch(
+    dir,
+    (repo) => {
+        picked.value = repo === undefined ? undefined : rememberedPlace(repo);
+        floor.value = 0;
+    },
+    { immediate: true },
 );
+const pick = (id: string): void => {
+    floor.value = Math.max(floor.value, list.value?.offsetHeight ?? 0);
+    picked.value = id;
+    if (dir.value !== undefined) {
+        rememberPlace(dir.value, id);
+    }
+};
+const place = computed(() => openingPlace(rows.value, deviceIds.value, ready, picked.value));
+// What the list holds: the rows that run where the dialog points, in the file's order.
+const shown = computed(() => rows.value.filter((row) => runsAt(row, place.value)));
+// Rows that run only on a computer while none is connected: no place offers them, so the list says they exist.
+const unplaced = computed(() => (sorted.value.length === 0 ? rows.value.filter((row) => row.computers && row.sandboxId === undefined).length : 0));
 const inSandbox = computed(() => place.value === SANDBOX);
 const chosen = computed(() => (inSandbox.value ? undefined : sorted.value.find((device) => device.id === place.value)));
 const chosenBlocked = computed(() => (chosen.value === undefined ? undefined : blocked(chosen.value)));
@@ -108,10 +130,6 @@ const foundWords = (found: PanelStartSource): string => {
     }
 };
 const descriptionOf = (row: RunRow): string | undefined => (row.found === undefined ? row.description : foundWords(row.found));
-
-// Why a row cannot run where the dialog points, said in place of its button's effect.
-const elsewhere = (row: RunRow): string =>
-    inSandbox.value ? t(`workspace.directoryRuns.onComputersOnly`) : t(`workspace.directoryRuns.inSandboxOnly`);
 
 /* ---- In the sandbox: start it, then show it where it is seen ---------------------------------------------------- */
 
@@ -231,13 +249,23 @@ const stateTone = (row: RunRow): string => {
     return current?.exitCode !== undefined && current.exitCode !== 0 ? `text-danger` : `text-muted`;
 };
 
-// One log open at a time, the row's by its key; it follows that row's newest run.
-const logRow = ref<string | undefined>(undefined);
+// One row open at a time, by its key: its whole description, what it runs here, and on a computer the log of its newest
+// run there, followed while it is open.
+const openRow = ref<string | undefined>(undefined);
 watch([dir, place], () => {
-    logRow.value = undefined;
+    openRow.value = undefined;
 });
+const setOpen = (row: RunRow, open: boolean): void => {
+    openRow.value = open ? row.key : undefined;
+};
+const isOpen = (row: RunRow): boolean => openRow.value === row.key;
+// What the open row says it runs in the chosen place: the sandbox's command, or the build made here for a computer.
+const commandHere = (row: RunRow): string | undefined => (inSandbox.value ? row.command : row.build);
+// A row opens only onto something its line does not already say.
+const opens = (row: RunRow): boolean =>
+    (row.found === undefined && row.description !== undefined) || commandHere(row) !== undefined || deviceRun(row) !== undefined;
 const logRun = computed(() => {
-    const row = rows.value.find((candidate) => candidate.key === logRow.value);
+    const row = rows.value.find((candidate) => candidate.key === openRow.value);
     return row === undefined ? undefined : deviceRun(row);
 });
 const { lines: logLines, failure: logFailure } = useRunLog(
@@ -245,9 +273,6 @@ const { lines: logLines, failure: logFailure } = useRunLog(
     computed(() => logRun.value?.id),
     computed(() => visible.value && logRun.value !== undefined),
 );
-const toggleLog = (row: RunRow): void => {
-    logRow.value = logRow.value === row.key ? undefined : row.key;
-};
 
 /* ---- Nothing to run yet ------------------------------------------------------------------------------------------ */
 
@@ -279,6 +304,8 @@ const EXAMPLE = `{
 }`;
 
 const PLACE = `touch-target flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors`;
+// A run's state beside a name: a small ring of its tone, then its words.
+const STATE = `inline-flex shrink-0 items-center gap-1 text-2xs font-normal`;
 const placeClass = (id: string, online: boolean): string[] => [
     PLACE,
     id === place.value ? `ui-pill-on` : online ? `text-muted hover:text-content` : `text-subtle hover:text-content`,
@@ -286,180 +313,202 @@ const placeClass = (id: string, online: boolean): string[] => [
 </script>
 
 <template>
-    <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryRuns.runIn`, { dir: dir ?? `` })">
+    <Modal v-model:open="visible" size="md">
+        <template #header="{ titleClass, titleId }">
+            <span :id="titleId" :class="titleClass">{{ t(`workspace.directoryRuns.runIn`, { dir: dir ?? `` }) }}</span>
+            <!-- Where: one choice for every target below, under the title so it stays put while a long list scrolls. The
+                 sandbox first, then each computer with its state as a dot; each with how many targets run there. -->
+            <div v-if="places.length > 1 || (places.length === 1 && !inSandbox)" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span id="directory-runs-where" class="text-xs font-normal text-subtle">{{ t(`workspace.directoryRuns.where`) }}</span>
+                <div role="radiogroup" aria-labelledby="directory-runs-where" class="flex flex-wrap items-center gap-1">
+                    <button
+                        v-if="places.includes(SANDBOX)"
+                        type="button"
+                        role="radio"
+                        :aria-checked="inSandbox"
+                        :class="placeClass(SANDBOX, true)"
+                        @click="pick(SANDBOX)"
+                    >
+                        <span :class="toneDot(`success`, DOT)" aria-hidden="true" />
+                        {{ t(`workspace.directoryRuns.sandbox`) }}
+                        <span class="tabular-nums text-subtle">{{ countAt(SANDBOX) }}</span>
+                    </button>
+                    <template v-if="places.length > (places.includes(SANDBOX) ? 1 : 0)">
+                        <button
+                            v-for="device in sorted"
+                            :key="device.id"
+                            type="button"
+                            role="radio"
+                            :aria-checked="device.id === place"
+                            :class="placeClass(device.id, device.online)"
+                            @click="pick(device.id)"
+                        >
+                            <span :class="dot(device)" aria-hidden="true" />
+                            {{ device.id }}
+                            <span class="tabular-nums text-subtle">{{ countAt(device.id) }}</span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </template>
         <template v-if="rows.length === 0 && entry?.error === undefined" #description>
             {{ t(`workspace.directoryRuns.declaresNothing`) }}
             <span class="font-mono text-content">{{ dir }}/{{ RUN_TARGETS_FILE }}</span>
         </template>
 
-        <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-3">
             <template v-if="rows.length > 0 || entry?.error !== undefined">
-                <!-- Where: one choice for every target below, the sandbox first, each computer with its state as a dot. -->
-                <div class="flex flex-col gap-2">
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span id="directory-runs-where" class="text-xs text-subtle">{{ t(`workspace.directoryRuns.where`) }}</span>
-                        <div role="radiogroup" aria-labelledby="directory-runs-where" class="flex flex-wrap items-center gap-1">
-                            <button type="button" role="radio" :aria-checked="inSandbox" :class="placeClass(SANDBOX, true)" @click="picked = SANDBOX">
-                                <span :class="toneDot(`success`, DOT)" aria-hidden="true" />
-                                {{ t(`workspace.directoryRuns.sandbox`) }}
-                            </button>
-                            <button
-                                v-for="device in sorted"
-                                :key="device.id"
-                                type="button"
-                                role="radio"
-                                :aria-checked="device.id === place"
-                                :class="placeClass(device.id, device.online)"
-                                @click="picked = device.id"
-                            >
-                                <span :class="dot(device)" aria-hidden="true" />
-                                {{ device.id }}
-                            </button>
-                        </div>
-                    </div>
-                    <p
-                        v-if="chosen !== undefined && chosenBlocked !== undefined"
-                        class="text-xs"
-                        :class="chosen.online ? `text-warning` : `text-muted`"
-                    >
-                        {{ chosenBlocked }}
-                        <RouterLink v-if="chosen.online" :to="`/capabilities/${chosen.id}`" class="ml-1 text-link hover:underline">{{
+                <!-- What went wrong, first: below a long list it would never be seen. -->
+                <Notice v-if="entry?.error !== undefined" tone="danger" size="sm">{{ entry.error }}</Notice>
+                <Notice v-if="chosen !== undefined && chosenBlocked !== undefined" :tone="chosen.online ? `warning` : `info`" size="sm">
+                    {{ chosenBlocked }}
+                    <template v-if="chosen.online" #actions>
+                        <RouterLink :to="`/capabilities/${chosen.id}`" :class="ui.textButton()">{{
                             t(`workspace.directoryRuns.openCard`)
                         }}</RouterLink>
-                    </p>
-                    <p v-else-if="!inSandbox && sorted.length === 0" class="text-xs text-muted">
-                        {{ t(`workspace.directoryRuns.noComputers`) }}
+                    </template>
+                </Notice>
+                <Notice v-if="!inSandbox && chosen !== undefined && listError !== undefined" tone="warning" size="sm">
+                    {{ t(`workspace.directoryRuns.listFailed`, { device: chosen.id, reason: listError }) }}
+                </Notice>
+                <Notice v-if="inSandbox && sandboxFailure !== undefined" tone="danger" size="sm">{{ sandboxFailure }}</Notice>
+                <Notice v-else-if="!inSandbox && failure !== undefined" tone="danger" size="sm">{{ failure }}</Notice>
+
+                <!-- What: only the targets that run where the dialog points, flat on the dialog's own surface, each its name, its
+                     state and one line of what it does, opening into the rest. -->
+                <div ref="list" class="flex flex-col gap-3" :style="floor > 0 ? { minHeight: `${floor}px` } : undefined">
+                    <RowGroup v-if="shown.length > 0">
+                        <DisclosureRow
+                            v-for="row in shown"
+                            :key="row.key"
+                            :open="isOpen(row)"
+                            :disabled="!opens(row)"
+                            @update:open="setOpen(row, $event)"
+                        >
+                            <template #title>
+                                <span class="flex min-w-0 items-center gap-2.5">
+                                    <span class="min-w-0 truncate font-mono">{{ row.name }}</span>
+                                    <span v-if="inSandbox && row.sandbox !== undefined && row.sandbox.running" :class="[STATE, tintOf(row.sandbox)]">
+                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateOf(row.sandbox) }}
+                                    </span>
+                                    <span v-if="stateWords(row) !== ``" :class="[STATE, stateTone(row)]">
+                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateWords(row) }}
+                                    </span>
+                                    <span v-if="!inSandbox && row.isolated" :class="[STATE, `text-subtle`]">
+                                        <Icon name="shield" />{{ t(`workspace.directoryRuns.isolated`) }}
+                                    </span>
+                                </span>
+                            </template>
+                            <!-- One line while closed (two on a phone); the whole of it once the row is open. -->
+                            <template v-if="descriptionOf(row) !== undefined" #description>
+                                <span :class="isOpen(row) ? `` : `line-clamp-2 md:line-clamp-1`">{{ descriptionOf(row) }}</span>
+                            </template>
+
+                            <template #control>
+                                <!-- In the sandbox: Run, or once it runs, Stop and Open. -->
+                                <template v-if="inSandbox">
+                                    <template v-if="row.sandbox?.running === true">
+                                        <Button :label="t(`ui.action.stop`)" tier="quiet" size="small" @click="stopInSandbox(row)" />
+                                        <Button :label="t(`ui.action.open`)" tier="boring" size="small" @click="show(row)">
+                                            <template #icon><Icon name="eye" class="mr-1.5 text-2xs" /></template>
+                                        </Button>
+                                    </template>
+                                    <!-- Repeated down the list, so quiet: a column of boxes would outshout the names. -->
+                                    <Button
+                                        v-else
+                                        :label="t(`workspace.directoryRuns.run`)"
+                                        :aria-label="t(`workspace.directoryRuns.runInSandbox`, { target: row.name })"
+                                        :title="t(`workspace.directoryRuns.runTipSandbox`)"
+                                        tier="quiet"
+                                        size="small"
+                                        :disabled="row.sandbox === undefined || starting !== undefined"
+                                        :loading="starting === row.key || row.sandbox === undefined"
+                                        @click="runInSandbox(row)"
+                                    >
+                                        <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
+                                    </Button>
+                                </template>
+                                <!-- On a computer: Run, or once it runs there, Stop and Restart; the terminal it runs in, while there is one. -->
+                                <template v-else>
+                                    <button
+                                        v-if="hasTerminal(row) && chosen !== undefined"
+                                        v-tooltip="t(`workspace.directoryRuns.terminal`)"
+                                        type="button"
+                                        :class="ui.iconButton()"
+                                        :aria-label="t(`workspace.directoryRuns.terminalTip`, { device: chosen.id })"
+                                        @click="openTerminal(row)"
+                                    >
+                                        <Icon name="terminal" class="text-xs" />
+                                    </button>
+                                    <Button
+                                        v-if="isStoppable(row) && chosen !== undefined"
+                                        :label="t(`ui.action.stop`)"
+                                        :aria-label="t(`workspace.directoryRuns.stopOn`, { target: row.name, device: chosen.id })"
+                                        :title="t(`workspace.directoryRuns.stopTip`, { device: chosen.id })"
+                                        tier="quiet"
+                                        size="small"
+                                        :disabled="chosenBlocked !== undefined"
+                                        :loading="isStopping(row)"
+                                        @click="stopOnComputer(row)"
+                                    >
+                                        <template #icon><Icon name="stop" class="mr-1.5 text-2xs" /></template>
+                                    </Button>
+                                    <Button
+                                        :label="isRunning(row) ? t(`workspace.directoryRuns.restart`) : t(`workspace.directoryRuns.run`)"
+                                        :aria-label="
+                                            chosen === undefined
+                                                ? undefined
+                                                : isRunning(row)
+                                                  ? t(`workspace.directoryRuns.restartOn`, { target: row.name, device: chosen.id })
+                                                  : t(`workspace.directoryRuns.runOn`, { target: row.name, device: chosen.id })
+                                        "
+                                        :title="
+                                            chosen === undefined
+                                                ? undefined
+                                                : isRunning(row)
+                                                  ? t(`workspace.directoryRuns.restartTip`, { device: chosen.id })
+                                                  : t(`workspace.directoryRuns.runTip`, { device: chosen.id })
+                                        "
+                                        tier="quiet"
+                                        size="small"
+                                        :disabled="chosen === undefined || chosenBlocked !== undefined || isStopping(row)"
+                                        :loading="isPending(row)"
+                                        @click="runOnComputer(row)"
+                                    >
+                                        <template #icon><Icon :name="isRunning(row) ? `refresh` : `play`" class="mr-1.5 text-2xs" /></template>
+                                    </Button>
+                                </template>
+                            </template>
+
+                            <!-- Open: what it runs here, then on a computer the log of its newest run there, followed while open. -->
+                            <template #below>
+                                <div class="flex flex-col gap-2.5 pb-1">
+                                    <div v-if="commandHere(row) !== undefined" class="flex flex-col gap-1">
+                                        <span class="text-2xs text-subtle">{{
+                                            inSandbox ? t(`workspace.directoryRuns.runsCommand`) : t(`workspace.directoryRuns.buildsCommand`)
+                                        }}</span>
+                                        <code class="whitespace-pre-wrap break-all font-mono text-2xs text-content">{{ commandHere(row) }}</code>
+                                    </div>
+                                    <div v-if="deviceRun(row) !== undefined" class="flex flex-col gap-1">
+                                        <span class="text-2xs text-subtle">{{ t(`workspace.directoryRuns.log`) }}</span>
+                                        <pre
+                                            class="max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content"
+                                            aria-live="polite"
+                                            >{{ logLines.length === 0 ? t(`workspace.directoryRuns.logEmpty`) : logLines.join(`\n`) }}</pre>
+                                        <p v-if="logFailure !== undefined" class="text-2xs text-danger">{{ logFailure }}</p>
+                                    </div>
+                                </div>
+                            </template>
+                        </DisclosureRow>
+                    </RowGroup>
+                    <!-- Targets only a computer runs, while none is connected: no place to pick them from, so they are named here. -->
+                    <p v-if="unplaced > 0" class="text-xs text-muted">
+                        {{ t(`workspace.directoryRuns.noComputerFor`, { count: unplaced }, unplaced) }}
                         <RouterLink to="/capabilities" class="ml-1 text-link hover:underline">{{
                             t(`workspace.directoryRuns.connectOne`)
                         }}</RouterLink>
                     </p>
                 </div>
-
-                <p v-if="entry?.error !== undefined" class="text-danger">{{ entry.error }}</p>
-
-                <!-- What: the targets, flat on the dialog's own surface, one Run each where the place takes it. -->
-                <ul class="flex flex-col divide-y divide-line-subtle border-t border-line-subtle">
-                    <li v-for="row in rows" :key="row.key" class="flex flex-col gap-2 py-3">
-                        <div class="flex items-center gap-4">
-                            <div class="flex min-w-0 flex-1 flex-col gap-1" :class="runsAt(row, place) ? `` : `opacity-60`">
-                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                                    <span class="font-mono text-sm text-content">{{ row.name }}</span>
-                                    <span
-                                        v-if="inSandbox && row.sandbox !== undefined && row.sandbox.running"
-                                        class="inline-flex items-center gap-1 text-2xs"
-                                        :class="tintOf(row.sandbox)"
-                                    >
-                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateOf(row.sandbox) }}
-                                    </span>
-                                    <span v-if="stateWords(row) !== ``" class="inline-flex items-center gap-1 text-2xs" :class="stateTone(row)">
-                                        <Icon name="circle" class="text-[0.5rem]" />{{ stateWords(row) }}
-                                    </span>
-                                    <span v-if="!inSandbox && row.isolated" class="inline-flex items-center gap-1 text-2xs text-subtle">
-                                        <Icon name="shield" />{{ t(`workspace.directoryRuns.isolated`) }}
-                                    </span>
-                                </div>
-                                <p v-if="descriptionOf(row) !== undefined" class="text-xs leading-relaxed text-muted">{{ descriptionOf(row) }}</p>
-                                <p v-if="!runsAt(row, place)" class="text-2xs text-subtle">{{ elsewhere(row) }}</p>
-                            </div>
-
-                            <!-- In the sandbox: Run, or once it runs, Open and Stop. -->
-                            <template v-if="inSandbox && runsAt(row, place)">
-                                <div v-if="row.sandbox?.running === true" class="flex shrink-0 items-center gap-1.5">
-                                    <Button :label="t(`ui.action.stop`)" tier="quiet" size="small" @click="stopInSandbox(row)" />
-                                    <Button :label="t(`ui.action.open`)" tier="boring" size="small" @click="show(row)">
-                                        <template #icon><Icon name="eye" class="mr-1.5 text-2xs" /></template>
-                                    </Button>
-                                </div>
-                                <Button
-                                    v-else
-                                    class="shrink-0"
-                                    :label="t(`workspace.directoryRuns.run`)"
-                                    :aria-label="t(`workspace.directoryRuns.runInSandbox`, { target: row.name })"
-                                    :title="t(`workspace.directoryRuns.runTipSandbox`)"
-                                    tier="boring"
-                                    size="small"
-                                    :disabled="row.sandbox === undefined || starting !== undefined"
-                                    :loading="starting === row.key || row.sandbox === undefined"
-                                    @click="runInSandbox(row)"
-                                >
-                                    <template #icon><Icon name="play" class="mr-1.5 text-2xs" /></template>
-                                </Button>
-                            </template>
-                            <!-- On a computer: Run, or once it runs there, Stop and Restart; its terminal while that is open, its log once it
-                                 has run. -->
-                            <div v-else class="flex shrink-0 items-center gap-1.5">
-                                <Button
-                                    v-if="hasTerminal(row) && chosen !== undefined"
-                                    :label="t(`workspace.directoryRuns.terminal`)"
-                                    :title="t(`workspace.directoryRuns.terminalTip`, { device: chosen.id })"
-                                    tier="quiet"
-                                    size="small"
-                                    @click="openTerminal(row)"
-                                >
-                                    <template #icon><Icon name="terminal" class="mr-1.5 text-2xs" /></template>
-                                </Button>
-                                <Button
-                                    v-if="deviceRun(row) !== undefined"
-                                    :label="logRow === row.key ? t(`workspace.directoryRuns.hideLog`) : t(`workspace.directoryRuns.log`)"
-                                    :aria-expanded="logRow === row.key"
-                                    tier="quiet"
-                                    size="small"
-                                    @click="toggleLog(row)"
-                                />
-                                <Button
-                                    v-if="isStoppable(row) && chosen !== undefined"
-                                    :label="t(`ui.action.stop`)"
-                                    :aria-label="t(`workspace.directoryRuns.stopOn`, { target: row.name, device: chosen.id })"
-                                    :title="t(`workspace.directoryRuns.stopTip`, { device: chosen.id })"
-                                    tier="quiet"
-                                    size="small"
-                                    :disabled="chosenBlocked !== undefined"
-                                    :loading="isStopping(row)"
-                                    @click="stopOnComputer(row)"
-                                >
-                                    <template #icon><Icon name="stop" class="mr-1.5 text-2xs" /></template>
-                                </Button>
-                                <Button
-                                    :label="isRunning(row) ? t(`workspace.directoryRuns.restart`) : t(`workspace.directoryRuns.run`)"
-                                    :aria-label="
-                                        chosen === undefined
-                                            ? undefined
-                                            : isRunning(row)
-                                              ? t(`workspace.directoryRuns.restartOn`, { target: row.name, device: chosen.id })
-                                              : t(`workspace.directoryRuns.runOn`, { target: row.name, device: chosen.id })
-                                    "
-                                    :title="
-                                        chosen === undefined
-                                            ? undefined
-                                            : isRunning(row)
-                                              ? t(`workspace.directoryRuns.restartTip`, { device: chosen.id })
-                                              : t(`workspace.directoryRuns.runTip`, { device: chosen.id })
-                                    "
-                                    tier="boring"
-                                    size="small"
-                                    :disabled="!runsAt(row, place) || chosen === undefined || chosenBlocked !== undefined || isStopping(row)"
-                                    :loading="isPending(row)"
-                                    @click="runOnComputer(row)"
-                                >
-                                    <template #icon><Icon :name="isRunning(row) ? `refresh` : `play`" class="mr-1.5 text-2xs" /></template>
-                                </Button>
-                            </div>
-                        </div>
-                        <!-- The run's log on the computer, followed while it is open. -->
-                        <div v-if="logRow === row.key && deviceRun(row) !== undefined" class="flex flex-col gap-1">
-                            <pre
-                                class="max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content"
-                                aria-live="polite"
-                                >{{ logLines.length === 0 ? t(`workspace.directoryRuns.logEmpty`) : logLines.join(`\n`) }}</pre>
-                            <p v-if="logFailure !== undefined" class="text-2xs text-danger">{{ logFailure }}</p>
-                        </div>
-                    </li>
-                </ul>
-                <p v-if="!inSandbox && chosen !== undefined && listError !== undefined" class="text-xs text-warning">
-                    {{ t(`workspace.directoryRuns.listFailed`, { device: chosen.id, reason: listError }) }}
-                </p>
-                <p v-if="inSandbox && sandboxFailure !== undefined" class="text-xs text-danger">{{ sandboxFailure }}</p>
-                <p v-else-if="!inSandbox && failure !== undefined" class="text-xs text-danger">{{ failure }}</p>
             </template>
 
             <!-- Nothing says how to run it: an agent can work that out, or the file can be written by hand. -->
