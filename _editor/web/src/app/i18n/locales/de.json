@@ -12800,6 +12800,7 @@
         "directoryRuns": {
             "agentTooOld": "Der Agent auf {device} ist zu alt, um Programme auszuführen. Aktualisieren Sie ihn dort.",
             "connectOne": "Einen verbinden",
+            "couldntFollow": "{target} auf {device} konnte nicht verfolgt werden.",
             "couldntRun": "{target} ließ sich auf {device} nicht ausführen.",
             "couldntStart": "{target} konnte in der Sandbox nicht gestartet werden: {reason}",
             "couldntStop": "{target} auf {device} konnte nicht gestoppt werden.",
@@ -12813,6 +12814,7 @@
             "hideLog": "Log ausblenden",
             "inSandboxOnly": "Läuft nur in der Sandbox: Es gibt nichts, was auf einen Computer übertragen wird.",
             "isolated": "Windows Sandbox",
+            "listFailed": "Was auf {device} läuft, konnte nicht gelesen werden, daher lässt sich hier nicht sagen, ob etwas läuft: {reason}",
             "log": "Log",
             "logEmpty": "Noch keine Ausgabe.",
             "mayBeRunning": "Läuft vielleicht",
@@ -12836,7 +12838,7 @@
             "stopTip": "Stoppt es auf {device} mit allem, was es gestartet hat, und schließt die dafür geöffneten Ports",
             "switchOff": "„Programme ausführen, die diese Sandbox sendet“ ist für {device} aus.",
             "terminal": "Terminal",
-            "terminalTip": "Öffnet das Terminal, in dem es gebaut und verfolgt wird; Strg+C dort stoppt es",
+            "terminalTip": "Verfolgt es in einem Terminal: was es auf {device} ausgibt. Strg+C dort stoppt es, Strg+D lässt es weiterlaufen",
             "where": "Wo",
             "yourComputers": "Ihre Computer"
         },

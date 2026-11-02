@@ -68,14 +68,10 @@ const createRunTerminals = (services: RunsServices, runner: TerminalRunner) => {
         }
     };
 
-    const start = async (input: RunStart): Promise<string> => {
-        const session = runSession(input.repo, input.target, input.device);
-        // Run pressed again is a restart: the terminal still building or following the last run ends, and the new
-        // `devices run` stops the program it left once its own build is ready (so a failed build leaves it going).
-        await end(session);
+    // Opens the target's terminal on `devices <args>`, holding a grant for its one computer while it lasts.
+    const open = async (input: RunStart, session: string, args: readonly string[]): Promise<string> => {
         const grant = services.runGrants.mint(input.device);
-        // Attached: the terminal follows the program's output, and Ctrl+C in it stops the program.
-        const command = ["devices", "run", input.target, "--device", input.device, "--attach"].map(shellQuote).join(" ");
+        const command = ["devices", ...args].map(shellQuote).join(" ");
         const abort = new AbortController();
         await new Promise<void>((done) => {
             const ended = runner
@@ -105,13 +101,32 @@ const createRunTerminals = (services: RunsServices, runner: TerminalRunner) => {
         return session;
     };
 
+    const start = async (input: RunStart): Promise<string> => {
+        const session = runSession(input.repo, input.target, input.device);
+        // Run pressed again is a restart: the terminal still building or following the last run ends, and the new
+        // `devices run` stops the program it left once its own build is ready (so a failed build leaves it going).
+        await end(session);
+        // Attached: the terminal follows the program's output, Ctrl+C in it stops the program, Ctrl+D leaves it.
+        return await open(input, session, ["run", input.target, "--device", input.device, "--attach"]);
+    };
+
+    // A program already running there, followed again (`devices attach`): the run's terminal was closed, or left with
+    // Ctrl+D. A terminal of the target's still open is that program's already, or the build that replaces it.
+    const attach = async (input: RunStart, id: string): Promise<string> => {
+        const session = runSession(input.repo, input.target, input.device);
+        if (live.has(session)) {
+            return session;
+        }
+        return await open(input, session, ["attach", id, "--device", input.device]);
+    };
+
     // The terminals still open for one computer's runs, for the Run dialog to reopen.
     const on = (device: string): RunTerminal[] =>
         [...live.entries()]
             .filter(([, held]) => held.input.device === device)
             .map(([session, held]) => ({ repo: held.input.repo, target: held.input.target, session }));
 
-    return { start, end, on };
+    return { start, attach, end, on };
 };
 
 // The daemon's one runner by default: the terminals list reads it to say a job terminal still runs (so the editor keeps
@@ -152,6 +167,10 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             assertRunnable(services, input.device);
             return { session: await terminals.start(input) };
         }),
+        attach: i.attach.handler(async ({ input }) => {
+            assertRunnable(services, input.device);
+            return { session: await terminals.attach({ repo: input.repo, target: input.target, device: input.device }, input.id) };
+        }),
         active: i.active.handler(async ({ input }) => {
             const open = terminals.on(input.device);
             const state = services.hostHub.state(input.device);
@@ -161,10 +180,9 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             try {
                 return { runs: await services.deviceRuns.list(input.device), terminals: open };
             } catch (error) {
-                // A computer whose switches refuse the listing has nothing of ours to show; the Run dialog says why
-                // from its card.
                 services.logger.warn({ err: errorMessage(error), device: input.device }, "runs on device: the computer did not list them");
-                return { runs: [], terminals: open };
+                // Said, not hidden: an empty list would read as "nothing runs there", which nobody checked.
+                return { runs: [], terminals: open, error: errorMessage(error) };
             }
         }),
         stop: i.stop.handler(async ({ input }) => {

@@ -3,6 +3,7 @@ import {
     DeviceRunsQuerySchema,
     DeviceRunsSchema,
     RUN_TARGETS_FILE,
+    RunAttachSchema,
     RunOutputQuerySchema,
     RunOutputSchema,
     RunStartedSchema,
@@ -33,6 +34,16 @@ export const runsContract = {
                 'Builds it in the sandbox, carries the build to the computer and starts it there, in a terminal you can watch. A run of the same target already going there is stopped first. The computer still decides: its "Run programs this sandbox sends" switch has to be on.',
         })
         .input(RunStartSchema)
+        .output(RunStartedSchema),
+    attach: procedure
+        .route({
+            method: "POST",
+            path: "/runs/attach",
+            summary: "Follow a run on one of your computers in a terminal",
+            description:
+                "Opens a terminal that follows a program already running on the computer: its last lines, then what it prints. Ctrl+C there stops it; Ctrl+D or closing the terminal leaves it running. A terminal of the target's still open there is answered instead.",
+        })
+        .input(RunAttachSchema)
         .output(RunStartedSchema),
     active: procedure
         .route({

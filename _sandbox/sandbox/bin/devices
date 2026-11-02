@@ -6,6 +6,7 @@
 //   reach   open one of the computer's own loopback ports at the same port here
 //   run     all of it from the repository's `.intentic/run.json`: build, push, reach, start (and, attached, follow it)
 //   stop    stop a program started there, with the ports opened for it
+//   attach  follow a program already running there (Ctrl+C stops it, Ctrl+D leaves it)
 //
 // It reads the bytes HERE, in this shell's own view of /work, which is the conversation's own checkout during an
 // isolated turn: the build that goes is the one this shell made. The daemon relays everything over the device link and
@@ -41,9 +42,13 @@ const USAGE = `devices — run a program built here on one of the owner's connec
       sandbox needs, start it there. Prints the run id the computer's app_status, app_logs and app_stop take, and
       \`devices stop\` does. A target with only a "command" runs in the sandbox (the Run dialog's Sandbox, or Start in
       Browsers), not here.
-      --attach stays with the program: prints what it prints, ends when it does, and Ctrl+C stops it. --detach
-      leaves it running and returns at once. Attached is the default in a terminal a person types in, detached in an
-      agent's shell.
+      --attach stays with the program: prints what it prints, ends when it does, Ctrl+C stops it there and Ctrl+D
+      leaves it running. --detach leaves it running and returns at once. Attached is the default in a terminal a
+      person types in, detached in an agent's shell.
+
+  devices attach <run-id | target> [--device <device>] [--repo <dir>]
+      Follow a program already running on a computer (a run id, or a target's newest running program) as --attach
+      does: its last lines, then what it prints. Ctrl+C stops it, Ctrl+D or closing the terminal leaves it running.
 
   devices stop <run-id | target> [--device <device>] [--force] [--repo <dir>]
       Stop a program started there (a run id), or every running program of a ${RUN_FILE} target, with everything it
@@ -505,34 +510,80 @@ const stop = async (args) => {
 
 const FOLLOW_EVERY_MS = 1000;
 
-// Stays with a started program: prints what it prints, ends when it does (exit 0 when it exited 0 or was stopped), and
-// stops it on Ctrl+C. Closing the terminal leaves it running: the Run dialog and `devices stop` still reach it.
+// The keys a person following a program types: the terminal hands them over as bytes (raw mode) instead of turning
+// Ctrl+C into a SIGINT for every process in the pane. That signal used to reach the pane's `tee` too, which carries what
+// this command prints to the screen: it died first, the next line written here failed on the closed pipe, and this
+// command could die before its stop left, leaving the program running with nothing on screen saying so.
+const CTRL_C = 0x03;
+const CTRL_D = 0x04;
+const CTRL_BACKSLASH = 0x1c;
+
+// Stays with a program running on a computer, as tmux attach stays with a session: prints what it prints, ends when it
+// does (exit 0 when it exited 0 or was stopped), stops it on Ctrl+C, and leaves it running on Ctrl+D or when the
+// terminal closes, for `devices attach` (the Run dialog's Terminal) to follow again.
 const follow = async (device, id) => {
-    say(`▸ following ${id} on ${device}: Ctrl+C stops it`);
-    let stopping = false;
-    const interrupt = () => {
-        if (stopping) {
-            say(`\n${id} was left running on ${device}: devices stop ${id} --device ${device}`);
-            process.exit(130);
-        }
-        stopping = true;
-        say(`\n▸ stopping ${id} on ${device} (Ctrl+C again leaves it running)`);
-        void call("POST", deviceRoute(device, "/apps/stop"), { id })
-            .then((reply) => {
-                say(reply.status >= 200 && reply.status < 300 ? stoppedLines(JSON.parse(reply.text).stopped).join("\n") : `${COMMAND}: ${refusalOf(reply.text)}`);
-                process.exit(130);
-            })
-            .catch((error) => die(`the daemon could not be reached to stop it: ${error.message}`));
+    // The screen gone (the pane closed, its tee ended) must never cost the stop its request.
+    process.stdout.on("error", () => undefined);
+    say(`▸ ${id} runs on ${device}, not in this sandbox: this terminal follows what it prints there.`);
+    const keys = process.stdin.isTTY === true;
+    say(keys ? `  Ctrl+C stops it on ${device} · Ctrl+D leaves it running (the Run dialog's Terminal follows it again)` : `  Ctrl+C stops it on ${device}`);
+    let stopping;
+    let hinted = false;
+    const leave = (why) => {
+        say(`\n▸ ${why}: ${id} keeps running on ${device}. Follow it again with the Run dialog's Terminal or devices attach ${id} --device ${device}; stop it with Stop there or devices stop ${id} --device ${device}`);
+        process.exit(0);
     };
-    process.on("SIGINT", interrupt);
-    process.on("SIGTERM", interrupt);
+    const stopIt = () => {
+        if (stopping !== undefined) {
+            say(`▸ still stopping ${id} on ${device}${keys ? " (Ctrl+D stops waiting and leaves this terminal)" : ""}`);
+            return;
+        }
+        say(`\n▸ stopping ${id} on ${device}: asked to close, forced after 5 seconds if it does not…`);
+        stopping = call("POST", deviceRoute(device, "/apps/stop"), { id })
+            .then((reply) => {
+                if (reply.status >= 200 && reply.status < 300) {
+                    say(stoppedLines(JSON.parse(reply.text).stopped).map((line) => `■ ${line}`).join("\n"));
+                    process.exit(0);
+                }
+                say(`${COMMAND}: ${device} did not stop it: ${refusalOf(reply.text)}`);
+                say(`${id} may still be running there: the Run dialog says what ${device} reports, and its Stop tries again.`);
+                process.exit(1);
+            })
+            .catch((error) => die(`the daemon could not be reached to stop it (${error.message}); ${id} may still be running on ${device}`, 1));
+    };
+    if (keys) {
+        process.stdin.setRawMode(true);
+        process.on("exit", () => {
+            try {
+                process.stdin.setRawMode(false);
+            } catch {
+                // allow(silent-catch): the terminal is already gone
+            }
+        });
+        process.stdin.on("data", (chunk) => {
+            for (const byte of chunk) {
+                if (byte === CTRL_C) {
+                    stopIt();
+                } else if (byte === CTRL_D || byte === CTRL_BACKSLASH) {
+                    leave(stopping === undefined ? "left it" : "stopped waiting");
+                } else if (!hinted) {
+                    hinted = true;
+                    say(`▸ what you type does not reach ${id} on ${device}: Ctrl+C stops it, Ctrl+D leaves it running`);
+                }
+            }
+        });
+        process.stdin.resume();
+    }
+    process.on("SIGINT", stopIt);
+    process.on("SIGTERM", stopIt);
+    // The terminal closed: a stop already asked for goes on in the daemon whatever happens here.
     process.on("SIGHUP", () => process.exit(0));
     let since;
     let lost = false;
     for (;;) {
         const query = since === undefined ? "?lines=50" : `?since=${since}`;
         const reply = await call("GET", deviceRoute(device, `/apps/${encodeURIComponent(id)}/output${query}`)).catch((error) => ({ status: 0, text: error.message }));
-        if (stopping) {
+        if (stopping !== undefined) {
             await sleep(FOLLOW_EVERY_MS);
             continue;
         }
@@ -561,12 +612,38 @@ const follow = async (device, id) => {
     }
 };
 
+// Follows a program already running there: a run id, or the newest running program of a run-targets target.
+const attach = async (args) => {
+    const { options, rest } = parse(args, { values: ["--device", "--repo"] });
+    const [what] = rest;
+    if (what === undefined || rest.length > 1) {
+        die(`attach takes a run id or a target\n\n${USAGE}`);
+    }
+    if (RUN_ID.test(what)) {
+        const device = options.device ?? (await answered("GET", `/devices/runs?${new URLSearchParams({ id: what })}`)).device;
+        await follow(device, what);
+        return;
+    }
+    const root = repoRoot(options.repo);
+    const declared = existsSync(join(root, RUN_FILE)) ? targetsOf(root).find((entry) => entry.name === what) : undefined;
+    const device = options.device ?? declared?.device;
+    if (device === undefined) {
+        die(`${declared === undefined ? `"${what}" is neither a run id nor a target ${RUN_FILE} declares` : `${what} names no device`}: pass --device <name>`);
+    }
+    const { runs } = await answered("GET", deviceRoute(device, "/apps"));
+    const running = runs.find((run) => run.name === what && run.state === "running");
+    if (running === undefined) {
+        die(`nothing called ${what} is running on ${device}`, 1);
+    }
+    await follow(device, running.id);
+};
+
 const [verb, ...args] = process.argv.slice(2);
 if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help") {
     say(USAGE);
     process.exit(verb === undefined ? 2 : 0);
 }
-const verbs = { push, start, reach, run, stop };
+const verbs = { push, start, reach, run, stop, attach };
 if (verbs[verb] === undefined) {
     die(`unknown command "${verb}"\n\n${USAGE}`);
 }

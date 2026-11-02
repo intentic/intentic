@@ -66,6 +66,18 @@ export function useRunPresses() {
         },
         // Brings a run's terminal back into the panel, focused.
         reopen: (session: string, target: string, device: string): void => openFocused(session, { title: `${target} on ${device}` }),
+        // Follows a program running there in a terminal of its own, once the one it was started in is gone.
+        follow: (repo: string, target: string, device: string, id: string): void => {
+            void starts.run(`follow:${runKey(repo, target, device)}`, {
+                what: t(`workspace.directoryRuns.terminal`),
+                failed: t(`workspace.directoryRuns.couldntFollow`, { target, device }),
+                task: async () => {
+                    const { session } = await sandboxRpc.runs.attach({ repo, target, device, id });
+                    openFocused(session, { title: `${target} on ${device}` });
+                    await relist();
+                },
+            });
+        },
         // Whether this target's run on this computer is being stopped.
         stopping: (repo: string, target: string, device: string): boolean => starts.at(stopKey(repo, target, device))?.state === `running`,
         // Stops the target's terminal and its program there (by id when known), with the ports opened for it.
@@ -106,6 +118,8 @@ export function useDeviceRuns(device: Ref<string | undefined>, active: Ref<boole
     const terminals = computed<readonly RunTerminal[]>(() => query.data.value?.terminals ?? []);
     return {
         runs,
+        // Why the computer's list could not be read, so an empty one is not taken for "nothing runs there".
+        listError: computed(() => query.data.value?.error),
         // A target's newest run there: the machine lists newest first.
         runOf: (name: string): DeviceRun | undefined => runs.value.find((run) => run.name === name),
         // The terminal a repository's target is still building, pushing or following in there.

@@ -12800,6 +12800,7 @@
         "directoryRuns": {
             "agentTooOld": "El agente de {device} es demasiado antiguo para ejecutar programas. Actualízalo allí.",
             "connectOne": "Conectar uno",
+            "couldntFollow": "No se pudo seguir {target} en {device}.",
             "couldntRun": "No se pudo ejecutar {target} en {device}.",
             "couldntStart": "No se pudo iniciar {target} en el sandbox: {reason}",
             "couldntStop": "No se pudo detener {target} en {device}.",
@@ -12813,6 +12814,7 @@
             "hideLog": "Ocultar registro",
             "inSandboxOnly": "Solo se ejecuta en el sandbox: no tiene nada que llevar a un ordenador.",
             "isolated": "Windows Sandbox",
+            "listFailed": "No se pudo leer qué se ejecuta en {device}, así que aquí no se puede saber si algo se ejecuta: {reason}",
             "log": "Registro",
             "logEmpty": "Todavía no ha escrito nada.",
             "mayBeRunning": "Puede que siga en marcha",
@@ -12836,7 +12838,7 @@
             "stopTip": "Lo detiene en {device} con todo lo que inició y cierra los puertos abiertos para él",
             "switchOff": "\"Ejecutar programas que envía este sandbox\" está desactivado para {device}.",
             "terminal": "Terminal",
-            "terminalTip": "Abre la terminal donde se compila y se sigue; Ctrl+C allí lo detiene",
+            "terminalTip": "Lo sigue en una terminal: lo que imprime en {device}. Ctrl+C allí lo detiene, Ctrl+D lo deja en marcha",
             "where": "Dónde",
             "yourComputers": "Tus ordenadores"
         },

@@ -5,7 +5,8 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { parseJsonOr } from "@intentic/base/json";
 import { runsRoot } from "./artifacts.js";
 import { stopWindowsSandbox } from "./isolated.js";
-import { type AppRun, runState, signalTree, waitGone } from "./programs.js";
+import { type AppRun, runState, waitGone } from "./programs.js";
+import { signalTree } from "./process-tree.js";
 
 /* EVERY PROGRAM `app_start` LEFT RUNNING, STOPPED FOR `uninstall --purge`. An app is started detached and outlives the
    agent on purpose (programs.ts), so a purge that only stopped the agent left whatever a sandbox had started running on

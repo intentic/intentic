@@ -7,7 +7,8 @@ import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabiliti
 import { ScopeError } from "../../policy.js";
 import { listArtifacts, sandboxRunsDir, stageArtifact } from "./artifacts.js";
 import { appLogsAfterWait, appStatusAfterWait } from "./app-wait-tools.js";
-import { appLogs, appStatus, appStop, descendantsOf, describeExit, parseRows, startApp } from "./programs.js";
+import { appLogs, appStatus, appStop, describeExit, startApp } from "./programs.js";
+import { descendantsOf, parseRows, survivorsOf } from "./process-tree.js";
 
 // Pushing a build and running it, on a real temp home as the POSIX user running the suite: the bytes go through the
 // same chunk/commit protocol the daemon drives, and the program is a real process the supervisor starts and stops.
@@ -97,6 +98,39 @@ test("a started program keeps running, its output is logged, and a stop ends it 
     expect(await appStatus(undefined, programs, SANDBOX, noScreen)).toContain(`▶ ${id}`);
     expect(await appStop(id, false, programs, SANDBOX)).toContain(`Stopped ${id}`);
     expect(await appStatus(id, programs, SANDBOX, noScreen)).toContain("stopped by the agent");
+});
+
+// A program that closes when asked can leave behind what it started outside its process group (on Windows, anything
+// whose parent ended first): taskkill /T had no parent left to walk from, and the run read as stopped while its child
+// kept the port (2026-11-02).
+test("a stop ends what the program started even when the program itself closed first", async () => {
+    const bytes = Buffer.from(`#!/bin/sh\ntrap 'exit 0' TERM\nsetsid sleep 60 &\necho "child $!"\nwhile :; do sleep 1; done\n`);
+    const path = await push(bytes, "leaves", "leaves.sh");
+    Bun.spawnSync(["chmod", "+x", path ?? ""]);
+    const started = await startApp({ program: path ?? "" }, programs, SANDBOX);
+    const id = /as (leaves-[0-9a-f]{6})/.exec(started)?.[1] ?? "";
+    const child = Number(/child (\d+)/.exec(await appLogs(id, 10, undefined, programs, SANDBOX))?.[1]);
+    expect(child).toBeGreaterThan(0);
+    expect(await appStop(id, false, programs, SANDBOX)).toContain(`Stopped ${id}`);
+    expect(() => process.kill(child, 0)).toThrow();
+}, 30_000);
+
+test("a survivor is the same process the tree held: on Windows under the same parent, elsewhere the same pid", () => {
+    const held: [number, number][] = [
+        [10, 1],
+        [11, 10],
+        [12, 11],
+        [20, 1],
+    ];
+    const tree = descendantsOf(held, 10);
+    // 11 outlived its parent; 12's pid now belongs to an unrelated program; 20 was never in the tree.
+    const after: [number, number][] = [
+        [11, 10],
+        [12, 99],
+        [20, 1],
+    ];
+    expect(survivorsOf(held, tree, 10, after, true)).toEqual([11]);
+    expect(survivorsOf(held, tree, 10, [[11, 1], [12, 1], [20, 1]], false)).toEqual([11, 12]);
 });
 
 // waitFor and untilExit answer on the line and on the exit, so an agent asks once rather than calling in a loop

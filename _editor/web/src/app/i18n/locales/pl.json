@@ -12117,6 +12117,7 @@
         "directoryRuns": {
             "agentTooOld": "Agent na {device} jest za stary, by uruchamiać programy. Zaktualizuj go tam.",
             "connectOne": "Podłącz komputer",
+            "couldntFollow": "Nie udało się śledzić {target} na {device}.",
             "couldntRun": "Nie udało się uruchomić {target} na {device}.",
             "couldntStart": "Nie udało się uruchomić {target} w sandboxie: {reason}",
             "couldntStop": "Nie udało się zatrzymać {target} na {device}.",
@@ -12130,6 +12131,7 @@
             "hideLog": "Ukryj log",
             "inSandboxOnly": "Działa tylko w sandboxie: nie ma nic do przeniesienia na komputer.",
             "isolated": "Windows Sandbox",
+            "listFailed": "Nie udało się odczytać, co działa na {device}, więc nie wiadomo, czy coś działa: {reason}",
             "log": "Log",
             "logEmpty": "Jeszcze nic nie wypisał.",
             "mayBeRunning": "Może nadal działać",
@@ -12153,7 +12155,7 @@
             "stopTip": "Zatrzymuje go na {device} razem ze wszystkim, co uruchomił, i zamyka otwarte dla niego porty",
             "switchOff": "„Uruchamiaj programy wysłane z sandboxa” jest wyłączone dla {device}.",
             "terminal": "Terminal",
-            "terminalTip": "Otwiera terminal, w którym jest budowany i śledzony; Ctrl+C w nim go zatrzymuje",
+            "terminalTip": "Śledzi go w terminalu: to, co wypisuje na {device}. Ctrl+C w nim go zatrzymuje, Ctrl+D zostawia go uruchomionego",
             "where": "Gdzie",
             "yourComputers": "Twoje komputery"
         },

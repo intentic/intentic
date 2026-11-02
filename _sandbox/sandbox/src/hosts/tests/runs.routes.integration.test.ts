@@ -192,14 +192,18 @@ test("Stop ends the run's terminal and stops the target's program on the compute
     expect(stopped).toEqual(["name:desktop", "desktop-def456"]);
 });
 
-test("what runs on a computer that cannot answer is nothing, never an error", async () => {
+test("a computer that cannot answer lists nothing and says why, never an empty list that reads as nothing running", async () => {
     const { fake } = runner();
     const failing: Partial<DeviceRuns> = {
         list: async () => {
             throw new Error("Run programs is off");
         },
     };
-    expect(await call(routes(workspace(), true, ["programs"], fake, createRunGrants(), failing).active, { device: "rog" })).toEqual({ runs: [], terminals: [] });
+    expect(await call(routes(workspace(), true, ["programs"], fake, createRunGrants(), failing).active, { device: "rog" })).toEqual({
+        runs: [],
+        terminals: [],
+        error: "Run programs is off",
+    });
     expect(await call(routes(workspace(), false, ["programs"], fake).active, { device: "rog" })).toEqual({ runs: [], terminals: [] });
 });
 
@@ -226,4 +230,25 @@ test("a run's terminal is the daemon's own runner's, so the terminals list keeps
     expect(shared.running(session)).toBe(true);
     expect(await call(runs.active, { device: "rog" })).toEqual({ runs: [], terminals: [{ repo: "app", target: "desktop", session }] });
     expect(await call(runs.active, { device: "omen" })).toMatchObject({ terminals: [] });
+});
+
+test("a program left running is followed again in its target's terminal with `devices attach`, or in the one still open", async () => {
+    const root = workspace();
+    const grants = createRunGrants();
+    const { fake, ran, aborted, finish } = runner();
+    const runs = routes(root, true, ["programs"], fake, grants);
+    const input = { repo: "app", target: "desktop", device: "rog" };
+    // Its run's terminal is gone (closed, or left with Ctrl+D): a new one follows the program by its id.
+    const { session } = await call<{ session: string }>(runs.attach, { ...input, id: "desktop-abc123" });
+    expect(session).toBe(runSession("app", "desktop", "rog"));
+    expect(ran).toEqual([{ session, command: "devices attach desktop-abc123 --device rog", cwd: join(root, "app"), grant: expect.any(String) }]);
+    expect(grants.allows(ran[0]?.grant ?? "", "rog")).toBe(true);
+    // Pressed again while that terminal is open: the same terminal, not a second follower, and nothing ended.
+    expect(await call(runs.attach, { ...input, id: "desktop-abc123" })).toEqual({ session });
+    expect(ran).toHaveLength(1);
+    expect(aborted).toEqual([]);
+    finish();
+    await new Promise((done) => setTimeout(done, 0));
+    expect(grants.allows(ran[0]?.grant ?? "", "rog")).toBe(false);
+    await expect(call(routes(root, false, ["programs"], fake).attach, { ...input, id: "desktop-abc123" })).rejects.toThrow("not connected");
 });

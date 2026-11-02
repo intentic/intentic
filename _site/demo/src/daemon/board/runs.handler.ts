@@ -4,7 +4,8 @@ import type { Doors } from "../doors";
 
 // A repository's "Run on <device>" dialog. A start answers the terminal session the build and the launch run in, named as
 // the daemon names a run's job session, for the editor to open. On ada-pc the shop's desktop app is running and its
-// isolated twin fell over, so the dialog draws a running row (Stop, Restart, its log) and an ended one.
+// isolated twin fell over, so the dialog draws a running row (Stop, Restart, its log, a Terminal that follows it) and an
+// ended one.
 
 const AT = Date.UTC(2026, 9, 31, 9, 0);
 
@@ -43,6 +44,8 @@ const DEMO_LOG = [
 export const runsDoors = {
     targets: () => DEMO_RUN_TARGETS,
     start: ({ repo, target, device }) => ({ session: `run-${repo}-${target}-${device}`.replaceAll(/[^a-zA-Z0-9_-]/gu, `-`) }),
+    // The running desktop app, followed again in a terminal of its own.
+    attach: ({ repo, target, device }) => ({ session: `job-run-${repo}-${target}-${device}`.replaceAll(/[^a-zA-Z0-9-]/gu, `-`) }),
     // desktop-isolated is being built again in its terminal, so its row offers that terminal and a Stop.
     active: ({ device }) => ({
         runs: demoRuns().filter((run) => run.device === device),

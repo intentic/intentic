@@ -12800,6 +12800,7 @@
         "directoryRuns": {
             "agentTooOld": "The agent on {device} is too old to run programs. Update it there.",
             "connectOne": "Connect one",
+            "couldntFollow": "Couldn't follow {target} on {device}.",
             "couldntRun": "Couldn't run {target} on {device}.",
             "couldntStart": "Couldn't start {target} in the sandbox: {reason}",
             "couldntStop": "Couldn't stop {target} on {device}.",
@@ -12813,6 +12814,7 @@
             "hideLog": "Hide log",
             "inSandboxOnly": "Runs in the sandbox only: it has nothing to carry to a computer.",
             "isolated": "Windows Sandbox",
+            "listFailed": "Couldn't read what runs on {device}, so this can't say whether anything does: {reason}",
             "log": "Log",
             "logEmpty": "Nothing printed yet.",
             "mayBeRunning": "May be running",
@@ -12836,7 +12838,7 @@
             "stopTip": "Stops it on {device} with everything it started, and closes the ports opened for it",
             "switchOff": "\"Run programs this sandbox sends\" is off for {device}.",
             "terminal": "Terminal",
-            "terminalTip": "Opens the terminal it is being built and followed in; Ctrl+C there stops it",
+            "terminalTip": "Follows it in a terminal: what it prints on {device}. Ctrl+C there stops it, Ctrl+D leaves it running",
             "where": "Where",
             "yourComputers": "Your computers"
         },

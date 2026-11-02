@@ -14,6 +14,7 @@ import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
 import { waitForEnd } from "./app-wait.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
+import { descendantsOf, processRows, signalTree, snapshotTree } from "./process-tree.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
 // PROGRAMS THE AGENT STARTED ON THIS MACHINE, AND KEPT AN EYE ON. run_command waits for its command and stops it at the
@@ -425,41 +426,6 @@ export const runOutput = async (run: AppRun, lines: number): Promise<{ text: str
     return err.text === "" ? out : { text: [out.text, `[stderr]\n${err.text}`].filter((part) => part !== "").join("\n"), total: out.total + err.total };
 };
 
-// Every process descended from `root`, root included, from (pid, parent) rows.
-export const descendantsOf = (rows: readonly (readonly [number, number])[], root: number): Set<number> => {
-    const tree = new Set<number>([root]);
-    let grew = true;
-    while (grew) {
-        grew = false;
-        for (const [pid, parent] of rows) {
-            if (!tree.has(pid) && tree.has(parent) && pid !== parent) {
-                tree.add(pid);
-                grew = true;
-            }
-        }
-    }
-    return tree;
-};
-
-const processRows = async (): Promise<[number, number][]> => {
-    if (process.platform === "win32") {
-        const { stdout } = await execBounded(
-            "powershell.exe",
-            ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId)\" }"],
-            { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 },
-        );
-        return parseRows(stdout);
-    }
-    const { stdout } = await execBounded("ps", ["-A", "-o", "pid=,ppid="], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 });
-    return parseRows(stdout);
-};
-
-export const parseRows = (text: string): [number, number][] =>
-    text.split(/\r?\n/).flatMap((line) => {
-        const [pid, parent] = line.trim().split(/\s+/).map(Number);
-        return pid !== undefined && parent !== undefined && Number.isInteger(pid) && Number.isInteger(parent) ? [[pid, parent] as [number, number]] : [];
-    });
-
 const windowsOf = async (run: AppRun, screen: Desktop): Promise<WindowInfo[]> => {
     if (run.isolated === true) {
         return (await screen.windows()).filter((window) => /windows ?sandbox/i.test(`${window.app} ${window.title}`));
@@ -574,20 +540,6 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
 export const waitGone = async (run: AppRun, ms: number, signal?: AbortSignal): Promise<boolean> =>
     await waitForEnd({ timeoutMs: ms, exit: endings.get(run.id), isEnded: async () => (await runState(run)) === "ended", signal });
 
-export const signalTree = async (pid: number, force: boolean): Promise<void> => {
-    if (process.platform === "win32") {
-        // /T takes everything it started; without /F a window is asked to close, as its close button would.
-        // allow(silent-catch): taskkill fails when the tree already ended, which is the outcome a stop wants
-        await execBounded("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { timeoutMs: 30_000 }).catch(() => undefined);
-        return;
-    }
-    try {
-        process.kill(-pid, force ? "SIGKILL" : "SIGTERM");
-    } catch {
-        // allow(silent-catch): a group already gone is the outcome a stop wants
-    }
-};
-
 export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
     assertEither(scopes);
     await refreshIsolated(sandboxUrl);
@@ -609,6 +561,8 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
         );
         return `Closed the Windows Sandbox ${run.id} ran in; everything inside it is gone.`;
     }
+    // Read before anything is signalled (process-tree.ts): what a graceful close leaves behind is ended after it.
+    const tree = await snapshotTree(run.pid);
     await signalTree(run.pid, force);
     let forced = force;
     if (!(await waitGone(run, STOP_GRACE_MS)) && !force) {
@@ -616,11 +570,19 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
         forced = true;
     }
     const gone = await waitGone(run, STOP_GRACE_MS);
+    if (!gone) {
+        // Not recorded as ended: a run said stopped while its program still runs is how the Run dialog lost sight of
+        // one that was still there.
+        throw new Error(`${run.id} (pid ${run.pid}) is still running after being forced to stop: something holds it (a debugger, an elevated child).`);
+    }
     await updateRuns(sandboxUrl, (runs) =>
         runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedByAgent: true } : entry)),
     );
-    if (!gone) {
-        throw new Error(`${run.id} (pid ${run.pid}) is still running after being forced to stop: something holds it (a debugger, an elevated child).`);
+    const left = await tree.endSurvivors();
+    if (left.length > 0) {
+        throw new Error(
+            `${run.id} itself stopped, but ${left.length} process(es) it started could not be: pid ${left.join(", ")}. They may hold its port; close them on the machine itself.`,
+        );
     }
     return `Stopped ${run.id}${forced && !force ? " (it did not close when asked, so it was forced)" : forced ? " (forced)" : ""}, with everything it started.`;
 };

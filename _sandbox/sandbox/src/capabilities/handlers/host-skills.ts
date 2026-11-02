@@ -229,8 +229,9 @@ the sandbox needs, the start. It first stops the target's run already going here
 port), and prints the run id; \`devices stop <run id or target> --device \${id}\` ends it and closes the ports opened for
 it. In your shell it returns once the program has started (\`--attach\` stays and prints what it prints instead). The
 owner's Run dialog (the ▷ on the repository's row in the file tree), with this computer picked, runs the very same
-command attached in a terminal (Ctrl+C there stops the program) and shows each target's state here with Stop, Restart
-and its log. A new target is a few lines in that file (\`devices --help\`): an
+command attached in a terminal (Ctrl+C there stops the program, Ctrl+D leaves it running; \`devices attach <run id or
+target>\` follows one again) and shows each target's state here with Stop, Restart, its log and a Terminal that
+follows it. A new target is a few lines in that file (\`devices --help\`): an
 \`artifact\` makes it run here, a \`command\` makes it run in the sandbox too; write one when you will run a program here
 more than once.
 

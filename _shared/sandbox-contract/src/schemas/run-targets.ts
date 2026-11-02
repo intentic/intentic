@@ -147,7 +147,14 @@ export const DeviceRunsSchema = z.object({
     runs: z.array(DeviceRunSchema),
     // The Run dialog's terminals for this computer that are still open.
     terminals: z.array(RunTerminalSchema),
+    // Why the computer's list could not be read: `runs` is then empty because nothing is known, not because nothing runs.
+    error: z.string().optional(),
 });
+
+// Follow a target's program already running on one computer in a terminal (`devices attach`), as its run's own terminal
+// does: the one the Run dialog's Terminal opens once that terminal is gone.
+export const RunAttachSchema = RunStartSchema.extend({ id: z.string().min(1).max(200) });
+export type RunAttach = z.infer<typeof RunAttachSchema>;
 
 // Stop a target's run on one computer: the terminal it is being built or followed in, and the program itself (by `id`,
 // else every running program the target's name is on).

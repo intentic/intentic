@@ -23,7 +23,7 @@ const t = useT();
    run-targets file declares (and, when that file says nothing for the sandbox, what Start finds in its own files) is
    then one row with one Run button. In the sandbox a run gets its own preview in Browsers, which opens on it; on a
    computer it opens the terminal it happens in, and the row then says what the computer reports of it (running, or
-   how it ended) with its Stop, Restart and log. */
+   how it ended) with its Stop, Restart, log and a Terminal that follows it again. */
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -38,7 +38,7 @@ const visible = computed({
 
 const router = useRouter();
 const { repos, devices } = useRunTargets();
-const { pending, failure, run, stop: stopRun, stopping, reopen } = useRunPresses();
+const { pending, failure, run, stop: stopRun, stopping, reopen, follow } = useRunPresses();
 const { allPanels } = usePanels();
 const { targets: live, start: startLive, stop: stopLive } = usePreviewTargets(visible);
 const { openFile } = useWorkspaceTabs();
@@ -164,7 +164,7 @@ const runOnComputer = (row: RunRow): void => {
 };
 
 // What the chosen computer runs: each row's newest run there, by the target's name.
-const { runOf, terminalOf } = useDeviceRuns(
+const { runOf, terminalOf, listError } = useDeviceRuns(
     computed(() => chosen.value?.id),
     computed(() => visible.value && chosen.value !== undefined && chosenBlocked.value === undefined),
 );
@@ -178,10 +178,19 @@ const runTerminal = (row: RunRow): string | undefined =>
 // Something of the row's to stop: its program running there, or its terminal still building it.
 const isStoppable = (row: RunRow): boolean => isRunning(row) || runTerminal(row) !== undefined;
 
+// A terminal to show: the run's own while it is open, else one that follows its program running there (the computer
+// holds the program, as tmux holds a session: a terminal closed or left with Ctrl+D is only a view of it).
+const hasTerminal = (row: RunRow): boolean => runTerminal(row) !== undefined || isRunning(row);
 const openTerminal = (row: RunRow): void => {
     const session = runTerminal(row);
-    if (session !== undefined && chosen.value !== undefined) {
+    const current = deviceRun(row);
+    if (chosen.value === undefined || entry.value === undefined) {
+        return;
+    }
+    if (session !== undefined) {
         reopen(session, row.name, chosen.value.id);
+    } else if (current?.state === `running`) {
+        follow(entry.value.repo, row.name, chosen.value.id, current.id);
     }
 };
 
@@ -380,9 +389,9 @@ const placeClass = (id: string, online: boolean): string[] => [
                                  has run. -->
                             <div v-else class="flex shrink-0 items-center gap-1.5">
                                 <Button
-                                    v-if="runTerminal(row) !== undefined"
+                                    v-if="hasTerminal(row) && chosen !== undefined"
                                     :label="t(`workspace.directoryRuns.terminal`)"
-                                    :title="t(`workspace.directoryRuns.terminalTip`)"
+                                    :title="t(`workspace.directoryRuns.terminalTip`, { device: chosen.id })"
                                     tier="quiet"
                                     size="small"
                                     @click="openTerminal(row)"
@@ -446,6 +455,9 @@ const placeClass = (id: string, online: boolean): string[] => [
                         </div>
                     </li>
                 </ul>
+                <p v-if="!inSandbox && chosen !== undefined && listError !== undefined" class="text-xs text-warning">
+                    {{ t(`workspace.directoryRuns.listFailed`, { device: chosen.id, reason: listError }) }}
+                </p>
                 <p v-if="inSandbox && sandboxFailure !== undefined" class="text-xs text-danger">{{ sandboxFailure }}</p>
                 <p v-else-if="!inSandbox && failure !== undefined" class="text-xs text-danger">{{ failure }}</p>
             </template>
