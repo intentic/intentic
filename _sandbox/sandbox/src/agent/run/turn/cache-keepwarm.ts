@@ -406,3 +406,12 @@ export const keepWarmDueOf = (deps: Pick<KeepWarmDeps, "conversations" | "logger
 
 /** Clears every hold's deadline, for a daemon shutting down; the holds themselves go with the process. */
 export const stopKeepWarm = (deps: Pick<KeepWarmDeps, "conversations" | "logger">): void => dueOf(deps).clearAll();
+
+// A turn's first cache reading names the hold it picked up, which the transcript turns into its receipt.
+export const keptWarmOf = (services: Pick<Services, "conversations">, conversationId: string | undefined, event: AgentEvent): AgentEvent => {
+    if (event.kind !== "prompt_cache" || conversationId === undefined) {
+        return event;
+    }
+    const kept = services.conversations.state(conversationId)?.turn.keptWarm;
+    return kept === undefined ? event : { ...event, kept };
+};

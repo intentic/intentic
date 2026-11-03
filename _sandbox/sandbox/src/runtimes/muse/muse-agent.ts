@@ -484,10 +484,10 @@ export const createMuseAgent = (options: MuseAgentOptions = {}) => {
                 () => ({
                     prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
                     plan: (planPrompt) => runPhase(run, { prompt: planPrompt, images: [], planning: true }),
-                    async *execute(_sessionId, prompt) {
+                    async *execute(_sessionId, phasePrompt) {
                         // Moves the mode as the Claude loop's approval does, so the composer's chip follows the turn out of planning.
                         yield { kind: "mode", mode: POST_PLAN_MODE };
-                        return yield* runPhase(run, { prompt, images: [], planning: false });
+                        return yield* runPhase(run, { prompt: phasePrompt, images: [], planning: false });
                     },
                 }),
                 () => runPhase(run, { prompt, images: attached.images, planning: false }),

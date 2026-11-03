@@ -48,7 +48,7 @@ import { breakPolicyFor } from "./turn/break-policy.js";
 import { stopResumeAt } from "./turn/turn-resume.js";
 import { withSwitchTold } from "./turn/turn-switch.js";
 import type { HeldTurn } from "./turn/holds/held-turn.js";
-import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
+import { keepableOf, keptWarmOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
@@ -797,15 +797,6 @@ const failureQueries = (services: Services): FailureQueries => ({
         return { made, nextAt: stopResumeAt(made) };
     },
 });
-
-// A turn's first cache reading names the hold it picked up, which the transcript turns into its receipt.
-const keptWarmOf = (services: Pick<Services, "conversations">, conversationId: string | undefined, event: AgentEvent): AgentEvent => {
-    if (event.kind !== "prompt_cache" || conversationId === undefined) {
-        return event;
-    }
-    const kept = services.conversations.state(conversationId)?.turn.keptWarm;
-    return kept === undefined ? event : { ...event, kept };
-};
 
 // What a running turn knows about itself, which each failure it classifies reads.
 interface TurnState {

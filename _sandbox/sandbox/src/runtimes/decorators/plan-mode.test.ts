@@ -171,10 +171,13 @@ test("the execute phase is told the plan is approved, in so many words", () => {
 test("approval notes reach the executing phase as instructions in the same decision", async () => {
     const runtime = scripted([planned("1. edit")]);
     const prompts: string[] = [];
-    const emulated: EmulatedPlan = { ...runtime.emulated, execute: async function* (_session, prompt) {
-        prompts.push(prompt);
-        yield { kind: "done" };
-    } };
+    const emulated: EmulatedPlan = {
+        ...runtime.emulated,
+        async *execute(_session, prompt) {
+            prompts.push(prompt);
+            yield { kind: "done" };
+        },
+    };
     await run(planMode(PLAN_ONLY, request("plan"), () => emulated, runtime.direct), [{ approve: true, feedback: "Keep the API compatible" }]);
     expect(prompts).toEqual(["The plan is approved. Follow these instructions while executing it:\nKeep the API compatible"]);
 });

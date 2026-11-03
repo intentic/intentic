@@ -151,7 +151,7 @@ interface Reported {
 }
 declare global {
     interface Window {
-        __page?: Reported;
+        pageReport?: Reported;
         // How long, on the host page's clock, since the later of `from` and the page's last new height.
         quietSince?: (from: number) => number;
     }
@@ -162,14 +162,14 @@ declare global {
 const hostDocument = (page: string, theme: PageTheme, cap: number): string =>
     `<!DOCTYPE html><html><head><style>html{color-scheme:${theme.appearance};background:${theme.variables["--background"]}}body{margin:0}` +
     `iframe{display:block;width:100%;height:${PLACEHOLDER}px;border:0;color-scheme:${theme.appearance}}</style>` +
-    `<script>window.__page={height:0,errors:[]};window.quietSince=function(from){return performance.now()-Math.max(from,window.__page.changedAt||0)};addEventListener("message",function(e){var f=document.querySelector("iframe"),d=e.data;` +
+    `<script>window.pageReport={height:0,errors:[]};window.quietSince=function(from){return performance.now()-Math.max(from,window.pageReport.changedAt||0)};addEventListener("message",function(e){var f=document.querySelector("iframe"),d=e.data;` +
     `if(!f||e.source!==f.contentWindow||!d||d.jsonrpc!=="2.0"||!d.params)return;` +
     `if(d.method===${JSON.stringify(PAGE_BRIDGE.sizeChanged)}&&d.params.height>0){var h=Math.ceil(d.params.height);` +
-    `window.__page={height:h,errors:window.__page.errors,changedAt:performance.now()};f.style.height=Math.min(${cap},Math.max(32,h))+"px";}` +
-    `else if(d.method===${JSON.stringify(PAGE_BRIDGE.error)}&&typeof d.params.message==="string")window.__page.errors.push(d.params.message);});</script>` +
+    `window.pageReport={height:h,errors:window.pageReport.errors,changedAt:performance.now()};f.style.height=Math.min(${cap},Math.max(32,h))+"px";}` +
+    `else if(d.method===${JSON.stringify(PAGE_BRIDGE.error)}&&typeof d.params.message==="string")window.pageReport.errors.push(d.params.message);});</script>` +
     `</head><body><iframe sandbox="allow-scripts allow-forms" srcdoc="${page.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></iframe></body></html>`;
 
-const reportedOf = (page: Page): Promise<Reported> => page.evaluate(() => window.__page ?? { height: 0, errors: [] });
+const reportedOf = (page: Page): Promise<Reported> => page.evaluate(() => window.pageReport ?? { height: 0, errors: [] });
 
 // Waits, at most `capMs`, until the page has said no new height for QUIET_MS since `since` (the host page's clock), then
 // answers what it last said. A cap reached is not an error: the page is measured as it stands.
@@ -251,7 +251,7 @@ export const checkPage = async (
             await page.setContent(hostDocument(sizedFirst(sealedPage(html, theme)), theme, cap), { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
             // The page's first word on its height, then its scripts' settling time, as the chat gives it.
             await page
-                .waitForFunction(() => (window.__page?.height ?? 0) > 0, undefined, { timeout: HEIGHT_WAIT_MS })
+                .waitForFunction(() => (window.pageReport?.height ?? 0) > 0, undefined, { timeout: HEIGHT_WAIT_MS })
                 // allow(silent-catch): a page that never says its height is measured in its frame below instead.
                 .catch(() => undefined);
             const settled = await settledReport(page, 0, SETTLE_MS);

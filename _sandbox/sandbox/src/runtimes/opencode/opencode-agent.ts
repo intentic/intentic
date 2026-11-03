@@ -995,7 +995,7 @@ const openCodePlan = (context: StreamContext, run: ReturnType<typeof phaseRun>, 
             images = [];
             return planPhaseOf(capture);
         },
-        execute: (sessionId, prompt) => run({ prompt, images: [], sessionId, agent: "build" }, context),
+        execute: (sessionId, phasePrompt) => run({ prompt: phasePrompt, images: [], sessionId, agent: "build" }, context),
     };
 };
 
