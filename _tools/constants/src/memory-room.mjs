@@ -209,6 +209,11 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size }) 
     const stallSustainedPercent = reading.stallSustainedPercent ?? 0;
     const unreserved = freeBytesOf(reading);
     const counted = countedBytesOf(reading);
+    // Asked before the sandbox's own figures, which may measure nothing: a VM with room says nothing of the PC under it.
+    const hostHeld = hostWait(reading, { workload, attended, reservedBytes, size }, need, unreserved);
+    if (hostHeld !== undefined) {
+        return hostHeld;
+    }
     if (limitBytes === undefined || usedBytes === undefined || counted === undefined || unreserved === undefined) {
         return { verdict: "run", needBytes: need, freeBytes: undefined, reservedBytes };
     }
@@ -250,6 +255,29 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size }) 
     // Named, or a sandbox reading 3 GiB free would seem to refuse work that needs 2.
     const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
     return shortOf(`Sandbox memory is low: ${used}${held}`, { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes });
+};
+
+// (2026-11-02) Why work nobody is waiting on should wait for the machine this sandbox runs on, or undefined while it need
+// not. Everything else here reads the sandbox's own cgroup and the kernel under it, which on a Windows PC is Docker
+// Desktop's WSL2 VM: on 2026-11-02 that VM read as roomy while Windows had 1.1 GB left and froze for 43 s. The daemon adds
+// `reading.host` from what the host's agent last said (hosts/host-memory.ts), only while that is fresh, so a reading
+// without it is "no host to answer to", never "no room". Work waits while starting it would take the host below its
+// reserve, the line under which the host's agent starts giving the VM's cache back. Only the work's own cost counts here:
+// the person's share in `needBytes` is room inside the sandbox, which the sandbox's own figures already keep.
+const hostShortOf = (host, costBytes, reservedBytes) => {
+    if (host === undefined || host.availableBytes - host.reserveBytes - reservedBytes >= costBytes) {
+        return undefined;
+    }
+    const held = reservedBytes > 0 ? `, ${gib(reservedBytes)} of it held for work that just started` : "";
+    return `${host.name}, the machine this sandbox runs on, is low on memory: it has ${gib(host.availableBytes)} available of ${gib(host.totalBytes)}${held}, and heavy work waits while starting it would leave it under ${gib(host.reserveBytes)}`;
+};
+
+// The verdict that holds work nobody waits on for the host, or undefined while the host has room for it (hostShortOf).
+const hostWait = (reading, { workload, attended, reservedBytes, size }, need, unreserved) => {
+    const diagnosis = attended ? undefined : hostShortOf(reading.host, costBytesOf(workload, size), reservedBytes);
+    return diagnosis === undefined
+        ? undefined
+        : { verdict: "wait", needBytes: need, freeBytes: unreserved === undefined ? undefined : Math.max(0, unreserved - reservedBytes), reservedBytes, diagnosis };
 };
 
 // Why work nobody is waiting on should wait for the disk, or undefined while it need not (the `disk` clause).

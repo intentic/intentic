@@ -43,7 +43,7 @@ test("the listing names every record with its size and time, ic's newest first a
 });
 
 test("a read answers the last lines that pass the grep, and an audit read can keep one tool's failures only", () => {
-    const lines = ["[t] keeper sandbox-1: healthy", "[t] watchdog: suspected sleep/resume", "[t] keeper sandbox-1: Restarting the sandbox"];
+    const lines = ["[t] keeper sandbox-1: healthy", "[t] watchdog: the agent was paused for 43 s (a sleep, a freeze, or the clock set forward; checking which)", "[t] keeper sandbox-1: Restarting the sandbox"];
     expect(filterLines(lines, "agent", { lines: 1, grep: "KEEPER" })).toEqual(["[t] keeper sandbox-1: Restarting the sandbox"]);
     expect(filterLines(lines, "agent", { lines: 10 })).toEqual(lines);
     const audit = [

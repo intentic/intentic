@@ -1,4 +1,4 @@
-import { createResourceBudget, type ResourceBudget } from "../../workload/resource-budget.js";
+import { createResourceBudget, hostAwareReading, type HostSource, type ResourceBudget } from "../../workload/resource-budget.js";
 import { createLiveMetrics, type LiveMetrics } from "./live-metrics.js";
 import type { PerfTracker } from "./perf.js";
 
@@ -14,6 +14,9 @@ export interface ResourcesSlice {
     // heavy-command queue's socket and the editor's gauge all read its snapshot. A service so a test can say what the box
     // has: the reading is of live cgroup files, and a suite on a genuinely full machine would refuse its own fixtures.
     readonly resources: ResourceBudget;
+    // (2026-11-02) Where the memory of the machine running this sandbox comes from, handed over at boot once the device hub
+    // exists (hosts/host-memory.ts): heavy work also waits for that machine.
+    readonly answerToHost: (host: HostSource) => void;
 }
 
 export interface ResourcesDeps {
@@ -27,7 +30,8 @@ export interface ResourcesDeps {
 // Builds the resources slice.
 export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesDeps): ResourcesSlice => {
     // Samples on a timer of its own, so a death certificate can look back at what the sandbox had.
-    const resources = createResourceBudget();
+    const reading = hostAwareReading();
+    const resources = createResourceBudget({ read: reading.read });
     return {
         perf,
         resourceOwners: () => {
@@ -39,5 +43,6 @@ export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesD
         },
         liveMetrics: createLiveMetrics({ workspaceRoot, budget: resources }),
         resources,
+        answerToHost: reading.answerToHost,
     };
 };

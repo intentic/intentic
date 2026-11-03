@@ -14,6 +14,9 @@ import { ArtifactNameSchema } from "./device-artifacts.js";
 
 export const RUN_TARGETS_FILE = `${STATE_DIR}/run.json`;
 
+// The longest a target may ask a stop to wait before forcing it (the machine's app_start takes the same bound).
+export const MAX_STOP_GRACE_SECONDS = 600;
+
 // The files under the workspace root's `.intentic/` that are the project's rather than the sandbox's, which no store of
 // the daemon's owns: a project kept at the workspace root declares its targets there, as any repository does in its own.
 // The root repo tracks them (VERSIONED_STATE_PATHS in state/workspace-state.ts), so an agent's edit lands like code.
@@ -58,6 +61,11 @@ export const RunTargetSchema = z
         // The device's own loopback ports the sandbox needs to reach while it runs (its local API, a dev server), each
         // opened at the same port in the sandbox.
         reach: z.array(z.int().min(1).max(65535)).max(16).default([]),
+        // On a computer: how long a stop waits, once the program was asked to close (WM_CLOSE to its window, a
+        // Ctrl-Break to a console program, SIGTERM elsewhere), before forcing it. Absent is the computer's own five
+        // seconds; a program that saves on exit on a machine short of memory (a game server writing its world) can
+        // need far more.
+        stopGraceSeconds: z.int().min(1).max(MAX_STOP_GRACE_SECONDS).optional(),
     })
     .strict()
     .refine(

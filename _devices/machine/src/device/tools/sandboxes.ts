@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { plural } from "@intentic/base/format";
-import { execBounded } from "@intentic/base/process";
+import { execBounded, stopProcessTree } from "@intentic/base/process";
 import { explain, homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
@@ -384,25 +384,10 @@ const spanOf = (ms: number): string => (ms >= 60_000 ? plural(Math.round(ms / 60
 const STOP_GRACE_MS = 10_000;
 
 // Ends a run that outlived its deadline, with whatever it started: its process group on POSIX (it leads one, below), its
-// process tree on Windows, where only taskkill reaches the children.
+// process tree on Windows, asked first there too (a Ctrl-Break on its console, @intentic/base windows-stop.ts) and forced
+// after the same grace.
 const stopRun = (child: ChildProcess): void => {
-    const pid = child.pid;
-    if (pid === undefined) {
-        return;
-    }
-    if (process.platform === "win32") {
-        spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => child.kill());
-        return;
-    }
-    const signal = (name: NodeJS.Signals): void => {
-        try {
-            process.kill(-pid, name);
-        } catch {
-            // allow(silent-catch): the group is already gone, which is what this was for
-        }
-    };
-    signal("SIGTERM");
-    setTimeout(() => signal("SIGKILL"), STOP_GRACE_MS).unref();
+    void stopProcessTree(child, STOP_GRACE_MS);
 };
 
 // One long child process, narrated as it goes. Every line is handed to `onLine` the moment it arrives, and the same

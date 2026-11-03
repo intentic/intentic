@@ -1,6 +1,6 @@
 import { askRoom, type MemoryReading } from "@intentic/constants/memory-room";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
-import { type Admission, type AdmitRequest, createResourceBudget, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
+import { type Admission, type AdmitRequest, createResourceBudget, hostAwareReading, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
 
 const GIB = 1024 ** 3;
 
@@ -202,6 +202,32 @@ test("held work that waits out its deadline is turned away with what was still s
     expect(message(turnedAway)).toBe(
         "Sandbox memory is low: 9.9 GiB of 10.0 GiB used. This background work waited 1 minute for room and did not start: work people send gets the room first.",
     );
+});
+
+// (2026-11-02) rog: the sandbox's VM had room while Windows under it had 1.1 GB left.
+test("heavy work waits for the machine the sandbox runs on while it is short, and a host that cannot say holds nothing", async () => {
+    const rog = { name: "rog", availableBytes: 1.1 * GIB, totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB };
+    let host: typeof rog | undefined = rog;
+    const reading = hostAwareReading(async () => box(16, 4));
+    const budget = createResourceBudget({ read: reading.read, now: ticking(), sampleMs: 0, waitIntervalMs: 1, waitDeadlineMs: 20 });
+    // Before boot hands a source over, the sandbox's own reading is all there is; what it admits counts against the host.
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
+    reading.answerToHost(async () => host);
+    const held = await budget.admit({ workload: "toolchain", attended: false, wait: {} });
+    expect(held.verdict).toBe("refuse");
+    expect(message(held)).toBe(
+        "rog, the machine this sandbox runs on, is low on memory: it has 1.1 GiB available of 32.0 GiB, 1.0 GiB of it held for work that just started, and heavy work waits while starting it would leave it under 3.2 GiB. This background work waited 1 minute for room and did not start: work people send gets the room first.",
+    );
+    // A person's turn is never held for the host, and a death in here is never put down to it.
+    expect((await budget.admit(person("ada"))).verdict).toBe("run");
+    expect(await budget.shortRecently()).toBe(false);
+    // No fresh reading from the host, or one that fails, is no constraint.
+    host = undefined;
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
+    reading.answerToHost(async () => {
+        throw new Error("hub gone");
+    });
+    expect((await budget.admit({ workload: "toolchain", attended: false })).verdict).toBe("run");
 });
 
 test("an abort ends a wait without its deadline", async () => {

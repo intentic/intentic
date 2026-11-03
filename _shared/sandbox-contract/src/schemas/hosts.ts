@@ -107,6 +107,37 @@ export const DeviceFactsSchema = z.object({
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
+/* THE HOST'S OWN MEMORY, ON EVERY HEARTBEAT (2026-11-02). A sandbox on a Windows PC runs inside Docker Desktop's WSL2
+   VM, so everything it reads about memory (its cgroup, the VM's /proc/meminfo) is the VM's. On 2026-11-02 rog's Windows
+   was down to 1.1 GB available while the VM held 20 GB, half of it file cache, and the sandbox's heavy-command queue
+   kept admitting builds until Windows paged itself into a 43 s freeze. So the Windows side's agent answers the daemon's
+   heartbeat (`ping`, every HOST_HEARTBEAT_MS) with what Windows has, and the daemon holds heavy work back while the
+   machine that runs it is short. Only the Windows side says it: a distro's agent would read the same VM the sandbox
+   already reads, a Linux host's containers read the host kernel's meminfo themselves, and macOS's `os.freemem()` counts
+   free pages only, not what the system could give, so it would read short all the time. */
+const HostMemorySchema = z.object({
+    // Physical memory the OS could hand out now (Windows' ullAvailPhys, standby cache included), in bytes.
+    availableBytes: z.number().nonnegative(),
+    totalBytes: z.number().positive(),
+});
+export type HostMemory = z.infer<typeof HostMemorySchema>;
+
+// The heartbeat's answer. `memory` is absent from an agent older than it and from every side but Windows (above); an
+// older daemon reads the `ok` and nothing else.
+export const DevicePingSchema = z.object({ ok: z.literal(true), memory: HostMemorySchema.optional() });
+
+const GIB = 1024 ** 3;
+
+/* WHEN A HOST COUNTS AS SHORT OF MEMORY: under 1.5 GiB available or under a tenth of its memory, whichever is more.
+   One line both sides keep: below it the Windows side's agent gives the WSL VM's file cache back to Windows
+   (environments/wsl-cache-drop.ts in @intentic/machine), and the sandbox holds back heavy work that would take the host
+   below it. Windows' memory manager trims working sets and pages hard well before it reaches zero: rog froze with 1.1 GB
+   left, so the floor sits above that. A tenth scales it with the machine, where one browser or a game can take a few
+   gigabytes in a second and 1.5 GiB of a 64 GiB machine is no margin at all. */
+const HOST_LOW_FLOOR_BYTES = 1.5 * GIB;
+const HOST_LOW_SHARE = 0.1;
+export const hostMemoryLowBytes = (totalBytes: number): number => Math.max(HOST_LOW_FLOOR_BYTES, HOST_LOW_SHARE * totalBytes);
+
 // Optional device capabilities gate calls to older agents: never send an operation unless its advertised feature permits it.
 // set-shape, rollback-to, background-prepare and sleep depend on ic support; keyring also requires a local installation.
 // reshape-later protects legacy deferred reshapes from becoming immediate; project-delivery otherwise waits for Bring back.

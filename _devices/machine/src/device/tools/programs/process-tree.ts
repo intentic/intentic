@@ -1,5 +1,5 @@
 import { sleep } from "@intentic/base/async";
-import { execBounded } from "@intentic/base/process";
+import { type CloseAsked, askWindowsTreeToClose, execBounded, forcedBecause, forceWindowsTree } from "@intentic/base/process";
 
 // A PROGRAM AND EVERYTHING IT STARTED, as the operating system lists them: what app_status reads a run's windows from,
 // and what app_stop ends. A stop reads the tree before it signals anything, because a program closed gracefully can end
@@ -70,24 +70,44 @@ export const survivorsOf = (before: ProcessRows, tree: ReadonlySet<number>, root
     return before.filter(([pid, parent]) => pid !== root && tree.has(pid) && now.has(windows ? `${pid} ${parent}` : `${pid}`)).map(([pid]) => pid);
 };
 
-export const signalTree = async (pid: number, force: boolean): Promise<void> => {
+// How a program was asked to stop: on Windows through its window or its console, or not at all (windows-stop.ts in
+// @intentic/base); elsewhere SIGTERM to its process group.
+export type StopAsked = CloseAsked | "sigterm";
+
+// Asks the tree rooted at `pid` to close. `consoleOf` is the program a launcher stands in for (programs.ts, Windows).
+const askTree = async (pid: number, consoleOf?: number): Promise<StopAsked> => {
     if (process.platform === "win32") {
-        // /T takes everything it started; without /F a window is asked to close, as its close button would.
-        // allow(silent-catch): taskkill fails when the tree already ended, which is the outcome a stop wants
-        await execBounded("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { timeoutMs: 30_000 }).catch(() => undefined);
+        return await askWindowsTreeToClose(pid, consoleOf === undefined ? {} : { consoleOf });
+    }
+    try {
+        process.kill(-pid, "SIGTERM");
+    } catch {
+        // allow(silent-catch): a group already gone is the outcome a stop wants
+    }
+    return "sigterm";
+};
+
+// Ends the tree rooted at `pid` at once.
+const forceTree = async (pid: number): Promise<void> => {
+    if (process.platform === "win32") {
+        await forceWindowsTree(pid);
         return;
     }
     try {
-        process.kill(-pid, force ? "SIGKILL" : "SIGTERM");
+        process.kill(-pid, "SIGKILL");
     } catch {
         // allow(silent-catch): a group already gone is the outcome a stop wants
     }
 };
 
+// Why a stop had to force a program that was asked first: on Windows whether it could be asked at all.
+const forcedReason = (asked: StopAsked, graceMs: number): string =>
+    asked === "sigterm" ? `it was sent SIGTERM and had not finished after ${Math.round(graceMs / 100) / 10} s` : forcedBecause(asked, graceMs);
+
 // One leftover process, forced: on Windows with what it started, elsewhere the process itself (it may lead no group).
 const signalOne = async (pid: number): Promise<void> => {
     if (process.platform === "win32") {
-        await signalTree(pid, true);
+        await forceWindowsTree(pid);
         return;
     }
     try {
@@ -122,4 +142,32 @@ export const snapshotTree = async (root: number): Promise<TreeSnapshot> => {
             return survivorsOf(before, tree, root, await rowsOrNone());
         },
     };
+};
+
+// How a stop went: whether the program is gone, whether it had to be forced, and (for a stop not asked to force) why.
+export interface StopOutcome {
+    readonly gone: boolean;
+    readonly forced: boolean;
+    readonly why?: string | undefined;
+}
+
+// How long a forced program gets to be gone before the stop says something still holds it.
+const FORCED_WAIT_MS = 5000;
+
+// THE ONE STOP app_stop AND `uninstall --purge` GIVE A PROGRAM: asked first (unless `force`), `graceMs` to finish, then
+// forced with everything it started. `gone(ms)` waits up to `ms` for the program to have ended.
+export const askThenForce = async (
+    pid: number,
+    { consoleOf, graceMs, force, gone }: { readonly consoleOf?: number | undefined; readonly graceMs: number; readonly force: boolean; readonly gone: (ms: number) => Promise<boolean> },
+): Promise<StopOutcome> => {
+    let why: string | undefined;
+    if (!force) {
+        const asked = await askTree(pid, consoleOf);
+        if (await gone(graceMs)) {
+            return { gone: true, forced: false };
+        }
+        why = forcedReason(asked, graceMs);
+    }
+    await forceTree(pid);
+    return { gone: await gone(FORCED_WAIT_MS), forced: true, why };
 };

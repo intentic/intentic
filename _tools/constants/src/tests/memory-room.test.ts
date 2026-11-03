@@ -196,6 +196,33 @@ test("the editor's full typecheck is priced at its measured peak, and a changed-
     expect(judge(reading, { workload: "toolchain", attended: false, size: "scoped-typecheck" })).toMatchObject({ verdict: "run", needBytes: 5 * GIB });
 });
 
+// (2026-11-02) rog: the sandbox's VM had room while Windows under it had 1.1 GB left and froze.
+test("work nobody waits on waits while it would take the machine running the sandbox under its reserve", () => {
+    const roomy = { limitBytes: 16 * GIB, usedBytes: 4 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    const rog = { name: "rog", availableBytes: 1.1 * GIB, totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB };
+    const held = judge({ ...roomy, host: rog }, { workload: "toolchain", attended: false });
+    expect(held).toMatchObject({ verdict: "wait", freeBytes: 12 * GIB });
+    expect(held.diagnosis).toBe(
+        "rog, the machine this sandbox runs on, is low on memory: it has 1.1 GiB available of 32.0 GiB, and heavy work waits while starting it would leave it under 3.2 GiB",
+    );
+    // Room for the work's own cost above the reserve is enough: a person's share is the sandbox's, not the host's.
+    expect(judge({ ...roomy, host: { ...rog, availableBytes: 4.2 * GIB } }, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run" });
+    // The editor's typecheck needs its 7 GiB above the reserve; what other work holds counts against the host too.
+    expect(judge({ ...roomy, host: { ...rog, availableBytes: 9 * GIB } }, { workload: "toolchain", attended: false, size: "editor-typecheck" })).toMatchObject({ verdict: "wait" });
+    expect(judge({ ...roomy, host: { ...rog, availableBytes: 4.2 * GIB } }, { workload: "toolchain", attended: false, reservedBytes: GIB })).toMatchObject({
+        verdict: "wait",
+        diagnosis: expect.stringContaining("it has 4.2 GiB available of 32.0 GiB, 1.0 GiB of it held for work that just started, and heavy work waits"),
+    });
+    // A person's turn is never held for the host, and a sandbox that measures nothing still answers to it.
+    expect(judge({ ...roomy, host: rog }, { workload: "agentRuntime", attended: true })).toMatchObject({ verdict: "run" });
+    expect(judge({ limitBytes: undefined, usedBytes: undefined, swapBytes: 0, stallPercent: 0, oomKills: undefined, host: rog }, { workload: "toolchain", attended: false })).toMatchObject({
+        verdict: "wait",
+        freeBytes: undefined,
+    });
+    // No host reading is no host constraint.
+    expect(judge(roomy, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run" });
+});
+
 test("only a name the gate knows is a size; any other is priced as its class", () => {
     expect(["targeted", "editor-typecheck", "scoped-typecheck"].filter((name) => isRoomSize(name))).toHaveLength(3);
     expect(isRoomSize("huge")).toBe(false);

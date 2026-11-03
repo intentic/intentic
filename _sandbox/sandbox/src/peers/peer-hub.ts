@@ -27,6 +27,15 @@ export interface PeerState<Announced, Facts> {
     readonly lastSeen?: number;
     readonly announced?: Announced;
     readonly facts?: Facts;
+    // (2026-11-02) The last heartbeat's answer and when it came, while the peer holds a socket: a device's says what memory
+    // its host has (hosts/host-memory.ts). Unparsed here; each door reads its own.
+    readonly pinged?: Pinged;
+}
+
+// A heartbeat's answer and when it came.
+export interface Pinged {
+    readonly at: number;
+    readonly answer: unknown;
 }
 
 interface LivePeer<Client, Announced, Facts> {
@@ -39,6 +48,7 @@ interface LivePeer<Client, Announced, Facts> {
     announced: Announced;
     facts: Facts | undefined;
     lastSeen: number;
+    pinged?: Pinged;
 }
 
 export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes> {
@@ -95,6 +105,21 @@ export const peerFailureFields = (error: unknown, deadlineMs: number): Record<st
     error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
         ? { reason: `no answer within ${deadlineMs}ms` }
         : { err: error };
+
+// One peer's heartbeat: every `heartbeatMs` a ping, its answer handed to `answered` and a failure (a deadline of one beat
+// included) to `failed`, as the fields a log line says of it.
+const startHeartbeat = (
+    client: Pick<PeerClient<unknown, unknown>, "ping">,
+    heartbeatMs: number,
+    answered: (pinged: Pinged) => void,
+    failed: (fields: ReturnType<typeof peerFailureFields>) => void,
+): NodeJS.Timeout =>
+    setInterval(() => {
+        void client
+            .ping(undefined, { signal: AbortSignal.timeout(heartbeatMs) })
+            .then((answer) => answered({ at: Date.now(), answer }))
+            .catch((err: unknown) => failed(peerFailureFields(err, heartbeatMs)));
+    }, heartbeatMs);
 
 export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes>(
     spec: PeerHubSpec,
@@ -172,16 +197,14 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 // remembered. A ping unanswered by the next beat counts as a failure: a half-open socket neither
                 // answers nor closes, so without a deadline it would read as online until TCP gave up, with one more
                 // unanswered ping piling up on every beat.
-                heartbeat: setInterval(() => {
-                    void connection.client.ping(undefined, { signal: AbortSignal.timeout(spec.heartbeatMs) }).catch((err: unknown) => {
-                        logger.warn({ ...peerFailureFields(err, spec.heartbeatMs), id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
-                        connection.close(1001, "no answer");
-                        const current = live.get(peer.key);
-                        if (current?.client === connection.client) {
-                            drop(peer.key, current, "heartbeat unanswered");
-                        }
-                    });
-                }, spec.heartbeatMs),
+                heartbeat: startHeartbeat(connection.client, spec.heartbeatMs, (pinged) => (peer.pinged = pinged), (fields) => {
+                    logger.warn({ ...fields, id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
+                    connection.close(1001, "no answer");
+                    const current = live.get(peer.key);
+                    if (current?.client === connection.client) {
+                        drop(peer.key, current, "heartbeat unanswered");
+                    }
+                }),
                 announced: connection.announced,
                 facts: seen.get(id)?.facts,
                 lastSeen: Date.now(),
@@ -350,11 +373,12 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
         state: (id) => {
             const peer = live.get(id);
             const remembered = peer ?? seen.get(id);
-            return {
+            const state = {
                 online: peer !== undefined,
                 ...(remembered === undefined ? {} : { lastSeen: remembered.lastSeen, announced: remembered.announced }),
                 ...(remembered?.facts !== undefined ? { facts: remembered.facts } : {}),
             };
+            return peer?.pinged === undefined ? state : { ...state, pinged: peer.pinged };
         },
     };
 };

@@ -37,7 +37,10 @@ flowchart LR
   on a Vue package, 4 GiB).
 - `memory-room` is the one formula for whether the sandbox has room (limit, used, free, stall, and what each workload
   class costs). The daemon's resource budget judges by it, and it is also the `memory-room` command `queue-run` asks:
-  it asks the daemon's room socket, and applies the formula itself where no daemon answers.
+  it asks the daemon's room socket, and applies the formula itself where no daemon answers. (2026-11-02) A reading may
+  carry `host`, the machine the sandbox runs on as the daemon last heard from it: work nobody waits on then also waits
+  while its cost would take that machine under `host.reserveBytes`. Only the daemon adds it, so the fallback formula
+  never has a host to answer to.
 - `dev-previews` is the record of a conversation's managed dev preview (its demo server): where the records live
   (`/tmp/intentic-previews`), what makes one trustworthy (pid, start tick, conversation stamp, pid namespace), the cap
   of three and the ten-minute idle bound, the conversation's own port in 47150-47199, and how a preview is stopped

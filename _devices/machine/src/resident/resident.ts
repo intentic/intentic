@@ -35,6 +35,7 @@ import { askHandover, handoverAsked } from "./handover.js";
 import { startLogRoll } from "./log-roll.js";
 import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
+import { type CacheDrop, startCacheDrop } from "../environments/wsl-cache-drop.js";
 import { startedBeforeSignIn } from "../device/session.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
@@ -285,6 +286,8 @@ interface Runtime {
     readonly kept: KeptCheck;
     readonly children: Children | undefined;
     readonly autoUpgrade: AutoUpgrade | undefined;
+    // The Windows side only: gives the WSL VM's file cache back to Windows when Windows runs low (wsl-cache-drop.ts).
+    readonly cacheDrop: CacheDrop | undefined;
     readonly finish: (code: number) => Promise<never>;
 }
 
@@ -356,7 +359,9 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
         process.on(signal, () => void finish(signalExitCode(signal)));
     }
-    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, finish };
+    // Before sign-in too: a PC short of memory is short whoever is signed in, and the drop needs no desktop.
+    const cacheDrop = WINDOWS_SIDE ? startCacheDrop(log) : undefined;
+    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, finish };
 };
 
 // The lease, and for an agent started before sign-in a sign-in's request to hand over: either ends this agent here.
@@ -414,6 +419,8 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
             await runtime.finish(0);
         }
     }
+    // Not awaited: one `os.freemem()` on a tick with memory to spare, and a drop that is due runs beside the loop.
+    runtime.cacheDrop?.tick();
     await stampLinks(runtime.connections);
     await stampAlive();
 };

@@ -40,6 +40,18 @@ export interface MemoryReading {
     readonly ioStallSustainedPercent?: number | undefined;
     // memory.events `oom_kill`, cumulative; undefined without a cgroup.
     readonly oomKills: number | undefined;
+    // (2026-11-02) The machine this sandbox runs on, as its agent last said, added by the daemon only while that is
+    // fresh; absent is "no host to answer to", never "no room". Work nobody waits on waits while it would take the host
+    // under `reserveBytes`.
+    readonly host?: HostRoom | undefined;
+}
+
+export interface HostRoom {
+    // The machine's name as the owner knows it (its device card), for the sentence a held command is given.
+    readonly name: string;
+    readonly availableBytes: number;
+    readonly totalBytes: number;
+    readonly reserveBytes: number;
 }
 
 export interface ShortMemory {

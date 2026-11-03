@@ -5,6 +5,7 @@ import {
     costBytesOf,
     freeBytesOf,
     judge,
+    type HostRoom,
     type MemoryReading,
     PERSON_RESERVE_BYTES,
     READING_FILES,
@@ -99,7 +100,8 @@ export interface ResourceBudget {
     // same request: an admission a later door would judge again is kept for it (`forTurn`).
     readonly admit: (request: AdmitRequest) => Promise<Admission>;
     // Whether any reading in the last few minutes had no room for work nobody waits on: why a runtime died, read off
-    // what the sampler already saw rather than a verdict taken now.
+    // what the sampler already saw rather than a verdict taken now. The sandbox's own room only: a death in here is not
+    // the host machine's to explain.
     readonly shortRecently: (windowMs?: number) => Promise<boolean>;
     // Since when (ms) every reading has had room for a person's turn, unbroken up to one taken now; undefined while that
     // one has none. How long memory has stayed free, which a hold waiting for room reads before it lets anything go
@@ -329,6 +331,32 @@ const createHolds = ({
     };
 };
 
+// (2026-11-02) The sandbox's reading with the machine it runs on beside it, so work nobody waits on also waits for that
+// machine (memory-room.mjs `hostShortOf`). Where the host part comes from is handed over at boot, once the device hub
+// exists (`answerToHost`, from hosts/host-memory.ts); until then, and whenever it answers undefined or fails, the reading
+// is the sandbox's own: no host constraint, never no room.
+export type HostSource = () => Promise<HostRoom | undefined>;
+interface HostAwareReading {
+    readonly read: () => Promise<MemoryReading>;
+    readonly answerToHost: (host: HostSource) => void;
+}
+export const hostAwareReading = (readSandbox: () => Promise<MemoryReading> = () => readMemoryReading()): HostAwareReading => {
+    let host: HostSource | undefined;
+    return {
+        read: async () => {
+            const [reading, room] = await Promise.all([
+                readSandbox(),
+                // allow(silent-catch): a host part that cannot be read is no host constraint, never no room
+                host?.().catch(() => undefined),
+            ]);
+            return room === undefined ? reading : { ...reading, host: room };
+        },
+        answerToHost: (source) => {
+            host = source;
+        },
+    };
+};
+
 export const createResourceBudget = ({
     read = () => readMemoryReading(),
     now = Date.now,
@@ -338,6 +366,7 @@ export const createResourceBudget = ({
     waitDeadlineMs = WAIT_DEADLINE_MS,
     holderCheckMs = HOLDER_CHECK_MS,
 }: {
+    // The sandbox's reading; `hostAwareReading` adds the machine it runs on.
     readonly read?: () => Promise<MemoryReading>;
     readonly now?: () => number;
     // Whether the process an admission named is still running.
@@ -509,7 +538,7 @@ export const createResourceBudget = ({
             return recent.some(
                 (taken) =>
                     taken.at >= at - windowMs &&
-                    judge(taken.reading, { workload: "agentRuntime", attended: false, reservedBytes: 0 }).verdict !== "run",
+                    judge({ ...taken.reading, host: undefined }, { workload: "agentRuntime", attended: false, reservedBytes: 0 }).verdict !== "run",
             );
         },
         // Every reading is judged against what admitted work holds now, so work let go a moment ago counts against the

@@ -1,6 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { Context } from "hono";
 import { z } from "zod";
+import { MAX_STOP_GRACE_SECONDS } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { soleLiveConversation } from "../conversations/actor/conversation-holdings.js";
@@ -57,6 +58,7 @@ const StartSchema = z
         name: z.string().max(100).optional(),
         isolated: z.boolean().optional(),
         network: z.boolean().optional(),
+        stopGraceSeconds: z.int().min(1).max(MAX_STOP_GRACE_SECONDS).optional(),
     })
     .strict();
 
@@ -108,6 +110,7 @@ const createDeviceDoorRoutes = (services: DeviceDoorServices) => ({
                 repo,
                 ports: reach ?? [],
                 ended: run.ended,
+                stopGraceSeconds: start.stopGraceSeconds,
             });
             return c.json({ device, text, id: run.id, ended: run.ended });
         } catch (error) {

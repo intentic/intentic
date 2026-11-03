@@ -355,6 +355,9 @@ const targetsOf = (root) => {
         if (target.reach !== undefined && !(Array.isArray(target.reach) && target.reach.every((port) => Number.isInteger(port) && port > 0 && port < 65536))) {
             die(`${where}.reach must be a list of port numbers`);
         }
+        if (target.stopGraceSeconds !== undefined && !(Number.isInteger(target.stopGraceSeconds) && target.stopGraceSeconds >= 1 && target.stopGraceSeconds <= 600)) {
+            die(`${where}.stopGraceSeconds must be a whole number of seconds, 1 to 600`);
+        }
     }
     return targets;
 };
@@ -460,6 +463,7 @@ const run = async (args) => {
         ...(target.reach === undefined || target.reach.length === 0 ? {} : { reach: target.reach }),
         ...(target.env === undefined ? {} : { env: target.env }),
         ...(target.isolated === true ? { isolated: true } : {}),
+        ...(target.stopGraceSeconds === undefined ? {} : { stopGraceSeconds: target.stopGraceSeconds }),
     });
     say(started.text);
     if (started.ended === true) {

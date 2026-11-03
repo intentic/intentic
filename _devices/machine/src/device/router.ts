@@ -14,6 +14,7 @@ import { ScopeError } from "./policy.js";
 import { stageArtifact } from "./tools/programs/artifacts.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
+import { windowsMemory } from "../environments/windows-memory.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import {
     keyringCapture,
@@ -278,7 +279,12 @@ export const createHostRouter = (runtime: HostRuntime) => {
             // list of sandboxes now, and the connection owns this one's entry in it.
             return { ok: true };
         }),
-        ping: os.ping.handler(() => ({ ok: true })),
+        // (2026-11-02) The Windows side says what memory Windows has with every heartbeat, which the sandbox's room gate
+        // holds heavy work back on (schemas/hosts.ts, HostMemorySchema); every other side answers as before.
+        ping: os.ping.handler(() => {
+            const memory = windowsMemory();
+            return memory === undefined ? { ok: true as const } : { ok: true as const, memory };
+        }),
         // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and the tool it names, not by
         // this contract or the daemon. Run as this link's call, so what it does to the desktop is shown under its name.
         mcp: os.mcp.handler(async ({ input }) => await calling.run(runtime, async () => await handleMcpMessage(input, runtime.scopes()))),

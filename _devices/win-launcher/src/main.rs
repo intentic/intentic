@@ -8,6 +8,8 @@ use std::process::ExitCode;
 
 // `--capture` and `--frame`: the screen read by GDI calls, for the agent that drives this desktop (capture.rs).
 mod capture;
+// `--ctrl-break <pid>`: a console program asked to stop, as its close button would (ctrl_break.rs).
+mod ctrl_break;
 
 #[cfg(windows)]
 use std::io::Write;
@@ -224,6 +226,9 @@ fn main() -> ExitCode {
     if capture::asked(&argv) {
         return capture::main(argv);
     }
+    if ctrl_break::asked(&argv) {
+        return ctrl_break::main(&argv);
+    }
     let launch = match parse(argv) {
         Ok(launch) => launch,
         // No log path was parsed, so stderr is the only place left — and it exists precisely when a person
@@ -252,14 +257,16 @@ fn main() -> ExitCode {
             &format!("{why}; the agent is not ended if this launcher is"),
         );
     }
-    /* THE CHILD'S OWN VERDICT, PASSED THROUGH, because with `--wait` this process is standing in for it: Task Scheduler
-    reads the action's exit code. Only the child's own 0 is a success: a code that does not fit a byte (an NTSTATUS from a
-    crash, the agent's watchdog ending it with TerminateProcess) and a wait that failed are both failures, so the task
-    never reads a dead agent as one that finished. */
+    /* THE CHILD'S OWN VERDICT, PASSED THROUGH WHOLE, because with `--wait` this process is standing in for it: Task
+    Scheduler reads the action's exit code, and the machine agent's app_start reads it to say how a program ended (a
+    missing DLL is 0xC0000135, which a byte cannot hold). Only the child's own 0 is a success: any other code, an NTSTATUS
+    included, is passed on as the same 32 bits, and a wait that failed is a failure, so nobody reads a dead child as one
+    that finished. (Before 2026-11-02 a code that did not fit a byte was flattened to 1.) */
     match child.wait() {
         Ok(status) => match status.code() {
             Some(0) => ExitCode::SUCCESS,
-            Some(code) => u8::try_from(code).map_or(ExitCode::FAILURE, ExitCode::from),
+            // ExitProcess takes the same unsigned 32 bits GetExitCodeProcess gave, so the code arrives unchanged.
+            Some(code) => std::process::exit(code),
             None => ExitCode::FAILURE,
         },
         Err(why) => {
@@ -278,6 +285,10 @@ fn main() -> ExitCode {
     let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
     if capture::asked(&argv) {
         eprintln!("intentic-launch reads the screen through Windows' own GDI calls, which this system has not got.");
+        return ExitCode::FAILURE;
+    }
+    if ctrl_break::asked(&argv) {
+        eprintln!("intentic-launch sends a Ctrl-Break through a Windows console, which this system has not got.");
         return ExitCode::FAILURE;
     }
     match parse(argv) {

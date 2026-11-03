@@ -573,7 +573,16 @@ flowchart LR
   of its own, one at a time at 7 GiB, taken even under a `pnpm -r typecheck` that already holds a heavy slot.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
-  snapshot, taken by the formula in `@intentic/constants/memory-room`.
+  snapshot, taken by the formula in `@intentic/constants/memory-room`. (2026-11-02) That reading is the sandbox's cgroup
+  and the kernel under it, which on a Windows PC is Docker Desktop's WSL2 VM, not Windows: rog's VM read as roomy while
+  Windows had 1.1 GB left and froze for 43 s. So the Windows side's machine agent answers the device heartbeat (`ping`,
+  every 30 s) with Windows' available and total memory, the hub keeps the last answer, and `hosts/host-memory.ts` adds
+  it to each reading when that connected machine is the one running this sandbox (found from device listings already
+  held; with none known, one listing is asked for every 15 minutes). Work nobody waits on (the heavy-command queue,
+  background children) then also waits while starting it would leave the host under 1.5 GiB or a tenth of its memory,
+  whichever is more, and is told so by name ("rog, the machine this sandbox runs on, is low on memory: …"). A person's
+  turn is never held for the host. No such machine, a distro whose Windows side is not connected, an agent older than
+  the field, or an answer over two minutes old is no host constraint, never "no room".
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had, its path and its layout. A document on `/history` also says whether it travels in
   a bundle (`portability`, and the `note` the bundle report shows when it does not); a workspace or auth one is found by

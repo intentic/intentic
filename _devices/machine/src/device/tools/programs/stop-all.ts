@@ -5,16 +5,13 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { parseJsonOr } from "@intentic/base/json";
 import { runsRoot } from "./artifacts.js";
 import { stopWindowsSandbox } from "./isolated.js";
-import { type AppRun, runState, waitGone } from "./programs.js";
-import { signalTree } from "./process-tree.js";
+import { type AppRun, runState, stopRunTree } from "./programs.js";
 
 /* EVERY PROGRAM `app_start` LEFT RUNNING, STOPPED FOR `uninstall --purge`. An app is started detached and outlives the
    agent on purpose (programs.ts), so a purge that only stopped the agent left whatever a sandbox had started running on
    this device, from a folder the purge then deletes. Every sandbox's record is read (`runs/<sandbox>/apps.json`), and
-   each run still going is stopped with everything it started: asked first, forced after the same grace `app_stop`
-   gives. A run whose pid cannot be shown to still be that program is not signalled (programs.ts runState). */
-
-const STOP_GRACE_MS = 5000;
+   each run still going is stopped with everything it started, as `app_stop` stops it (programs.ts stopRunTree): asked
+   first, forced after the run's own grace. A run whose pid cannot be shown to still be that program is not signalled (programs.ts runState). */
 
 export interface AppsStopped {
     readonly stopped: readonly string[];
@@ -43,11 +40,7 @@ const stopOne = async (run: AppRun): Promise<string> => {
     if (state === "unknown") {
         return `whether pid ${run.pid} is still ${run.name} cannot be checked here, so it was not signalled`;
     }
-    await signalTree(run.pid, false);
-    if (!(await waitGone(run, STOP_GRACE_MS))) {
-        await signalTree(run.pid, true);
-    }
-    return (await waitGone(run, STOP_GRACE_MS)) ? "stopped" : `pid ${run.pid} is still running after being forced to stop`;
+    return (await stopRunTree(run, false)).gone ? "stopped" : `pid ${run.pid} is still running after being forced to stop`;
 };
 
 /** Stops every app a sandbox started here that is still running; a record that cannot be read throws. */

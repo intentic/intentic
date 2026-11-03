@@ -12,6 +12,8 @@ export const resourcesSliceFake = () =>
         // real reading is of live cgroup files, and since it counts swap (workload/resource-budget.ts) a
         // suite running on a machine that is genuinely full refuses turns these tests are asserting the shape of.
         resources: budgetOn(),
+        // No machine runs a route suite, so there is no host part to hand over.
+        answerToHost: () => undefined,
         // Real tracker: in-memory, unref'd summary timer, and request middleware records through it on every route.
         perf: createPerfTracker(createLogger(testConfig)),
     }) satisfies Partial<ResourcesSlice>;

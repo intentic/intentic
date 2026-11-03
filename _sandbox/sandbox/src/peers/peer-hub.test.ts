@@ -259,6 +259,25 @@ test("a healthy peer stays online across heartbeats, at the door's own cadence",
     }
 });
 
+// (2026-11-02) A device's heartbeat answer carries its host's memory, which the room gate reads off the hub.
+test("the last heartbeat's answer is kept with its time while the peer is online, and goes when it drops", async () => {
+    jest.useFakeTimers();
+    try {
+        const live = hub();
+        const peer = fakePeer();
+        live.attach("laptop", peer.connection);
+        expect(live.state("laptop").pinged).toBeUndefined();
+        await advanceTimersByTimeAsync(spec.heartbeatMs);
+        expect(live.state("laptop").pinged).toEqual({ at: expect.any(Number), answer: { ok: true } });
+        peer.client.ping.mockRejectedValue(new Error("gone"));
+        await advanceTimersByTimeAsync(spec.heartbeatMs + 1_000);
+        expect(live.state("laptop")).toMatchObject({ online: false });
+        expect(live.state("laptop").pinged).toBeUndefined();
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 // A renamed card is a new label on the same connection: the socket stays, its calls reach the same peer under the new
 // id, and what was remembered of it moves too. Only the old id reads as gone.
 test("a rekeyed peer keeps its socket and answers under its new id", async () => {

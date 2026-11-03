@@ -183,3 +183,19 @@ test("a process tree is read from pid/parent rows, and Windows exit codes are sa
     expect(describeExit({ exitCode: 1 })).toBe("exited with code 1");
     expect(describeExit({})).toContain("unknown");
 });
+
+// A forced stop says why, and waits the run's own grace (a target's stopGraceSeconds) rather than a fixed five seconds:
+// "it did not close when asked" used to read the same whether the program could hear the asking or not (2026-11-02).
+test("a program that ignores the asking is forced after its own grace, and the stop says it was asked", async () => {
+    const bytes = Buffer.from(`#!/bin/sh\ntrap '' TERM\necho ignoring\nwhile :; do sleep 1; done\n`);
+    const path = await push(bytes, "stubborn", "stubborn.sh");
+    Bun.spawnSync(["chmod", "+x", path ?? ""]);
+    const started = await startApp({ program: path ?? "", stopGraceSeconds: 1 }, programs, SANDBOX);
+    const id = /as (stubborn-[0-9a-f]{6})/.exec(started)?.[1] ?? "";
+    await appLogsAfterWait(id, 10, undefined, programs, SANDBOX, { waitFor: "ignoring", untilExit: undefined, timeoutMs: 5000 });
+    const began = Date.now();
+    const said = await appStop(id, false, programs, SANDBOX);
+    expect(said).toContain(`Stopped ${id}, with everything it started. It was forced: it was sent SIGTERM and had not finished after 1 s.`);
+    expect(Date.now() - began).toBeLessThan(4500);
+    expect(await appStop(id, false, programs, SANDBOX)).toContain("is not running");
+}, 30_000);

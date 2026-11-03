@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import type { ExitRecord } from "./last-exit.js";
+import { explainPause, pauseReport } from "./pause-cause.js";
 
 /* A source-text Worker watches 5s main-loop pings and kills the process after 3m silence so existing supervisors restart a hung agent.
  * Use process.kill(pid, SIGKILL), not process.exit (which ends only the Worker); Windows exits 1 and POSIX reports signal 9.
@@ -37,23 +38,27 @@ export const wallJump = (previousCheck: number, now: number, previousWall: numbe
 // daemon makes, short enough that a laptop lid closed for a minute is seen.
 export const WALL_JUMP_MS = 10_000;
 
-// How long after a sleep a real stall still names it: the minutes a machine spends waking (Docker, WSL, the network).
+// How long after a pause a real stall still names it: the minutes a machine spends waking (Docker, WSL, the network).
 export const AFTER_SLEEP_MS = 10 * 60_000;
 
-// The line a sleep or a clock jump leaves. `seconds` is how long the agent was away, as far as either clock can say.
+// The line a pause or a clock jump leaves at once. `seconds` is how long the agent was away, as far as either clock can
+// say. It names no cause: on Windows a sleep and a freeze look alike to both clocks, and the main thread finds out which
+// and says so in the line after (pause-cause.ts; 2026-11-02, a freeze of a PC paging itself to a standstill was logged
+// as a "suspected sleep/resume").
 export const sleepLine = (seconds: number, at: Date): string =>
-    `[${at.toISOString()}] watchdog: the agent was paused for ${seconds} s (suspected sleep/resume, or the clock was set forward); not a stall, the count starts again\n`;
+    `[${at.toISOString()}] watchdog: the agent was paused for ${seconds} s (a sleep, a freeze, or the clock set forward; checking which); not a stall, the count starts again\n`;
 
 // The line the Worker writes before it ends the process, with the timestamp every other line of the log carries, and how
-// long after a suspected sleep it came when one was seen in the last minutes.
+// long after a pause it came when one was seen in the last minutes.
 export const stallLine = (seconds: number, at: Date, sinceSleepSeconds?: number): string =>
-    `[${at.toISOString()}] event loop stalled for ${seconds} s${sinceSleepSeconds === undefined ? "" : ` (${sinceSleepSeconds} s after a suspected sleep/resume)`}; exiting so the supervisor restarts the agent\n`;
+    `[${at.toISOString()}] event loop stalled for ${seconds} s${sinceSleepSeconds === undefined ? "" : ` (${sinceSleepSeconds} s after a pause of the whole agent)`}; exiting so the supervisor restarts the agent\n`;
 
 // The Worker's whole program, as source text: a compiled binary has no second file to load, and nothing here may depend
 // on the main thread, which is the thing that is stuck. It writes straight to fd 2 (where every supervisor sends the
 // agent's log): a Worker's process.stderr is relayed through the main thread, which would never pass it on. Before the
 // kill it closes the agent's exit record (last-exit.ts) itself, once the main thread has handed it the record to close:
-// nothing on the main thread runs again to say why it went.
+// nothing on the main thread runs again to say why it went. A pause it tells the main thread about, with the wall-clock
+// times around it, so that thread can ask the machine what it was.
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
 const { writeSync, writeFileSync } = require("node:fs");
@@ -76,10 +81,13 @@ setInterval(() => {
     const now = performance.now();
     const wall = Date.now();
     const jump = wallJump(checked, now, checkedWall, wall);
-    if (pausedAcross(checked, now, workerData.checkMs, workerData.limitMs) || jump >= workerData.jumpMs) {
+    const held = pausedAcross(checked, now, workerData.checkMs, workerData.limitMs);
+    if (held || jump >= workerData.jumpMs) {
+        const seconds = Math.round(Math.max(wall - checkedWall, now - checked) / 1000);
         last = now;
         sleptAt = now;
-        say(sleepLine(Math.round(Math.max(wall - checkedWall, now - checked) / 1000), new Date()));
+        say(sleepLine(seconds, new Date()));
+        parentPort.postMessage({ kind: "paused", seconds, from: checkedWall, to: wall, held });
     }
     checked = now;
     checkedWall = wall;
@@ -121,6 +129,24 @@ export const startWatchdog = ({
         workerData: { limitMs, checkMs: Math.min(pingMs, limitMs), jumpMs, afterSleepMs: AFTER_SLEEP_MS },
     });
     worker.unref();
+    // What a pause was, asked one at a time: a second pause while the first is being asked about (a machine still
+    // paging) is said by its own line above and not asked about again.
+    let asking = false;
+    worker.on("message", (message) => {
+        const pause = pauseReport.safeParse(message);
+        if (!pause.success || asking) {
+            return;
+        }
+        asking = true;
+        void explainPause(pause.data)
+            // allow(terminal-output): a line of the resident agent's own log, which its supervisor captures from stderr
+            .then((line) => process.stderr.write(line))
+            // allow(silent-catch): explainPause answers every failure as a line of its own; a log that will not take it has nothing to tell
+            .catch(() => undefined)
+            .finally(() => {
+                asking = false;
+            });
+    });
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a Worker's postMessage, which takes no origin
     const ping = setInterval(() => worker.postMessage(0), pingMs);
     ping.unref();

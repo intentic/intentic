@@ -66,7 +66,7 @@ flowchart LR
   and only the platform's knew 81045).
 - `node/process.ts` (`./process`) is one bounded child process for every Node tier but the daemon (which keeps
   `runCheck` for its workload classes): its own process group, ended whole at a deadline or abort (SIGTERM, then
-  SIGKILL; `taskkill /T /F` on Windows), settled once it exits even while a grandchild still holds its pipes, and its
+  SIGKILL; on Windows WM_CLOSE and a Ctrl-Break, then `taskkill /T /F`: `node/windows-stop.ts`, 2026-11-02), settled once it exits even while a grandchild still holds its pipes, and its
   output kept as head and tail with a `… [N characters cut] …` marker, decoded so a split UTF-8 character arrives
   whole. `execBounded` throws execFile's rejection shape, so a `promisify(execFile)` caller moves over unchanged
   (2026-10-12; the device agent's shell and adb runners each had a copy, and its sync runner had none of it and could

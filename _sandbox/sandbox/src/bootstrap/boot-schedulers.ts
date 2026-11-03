@@ -27,6 +27,7 @@ import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js"
 import type { BootPhase } from "./boot-phase.js";
 import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
+import { hostRoomSource } from "../hosts/host-memory.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { announceUnwatchedWrite, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
@@ -163,11 +164,14 @@ const startAutomations = ({ role, services, shutdown }: Pick<BootPhase, "role" |
 // Work held for memory looks again the moment a turn, a background job or a spawned child lets memory go, rather than
 // at its next interval: measured before, a held heavy command waited ~2.5 s past the room being there (2026-10-20).
 // Wired here, above both the workload budget and the agent layer, which the budget may not import.
-const wireRoomWakes = ({ events, resources }: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+const wireRoomWakes = (services: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+    const { events, resources, answerToHost } = services;
     const roomFreed = (): void => resources.changed();
     for (const stop of [events.subscribe("run.settled", roomFreed), onJobEnded(roomFreed), onChildSettled(roomFreed)]) {
         shutdown.push(stop);
     }
+    // Heavy work also waits for the machine this sandbox runs on while that machine is short (2026-11-02).
+    answerToHost(hostRoomSource(() => services));
 };
 
 // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it; its parent

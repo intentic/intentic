@@ -3,6 +3,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { sleep } from "../async.js";
 import { errnoCode } from "../errors.js";
+import { stopWindowsTree, WINDOWS_SWEEP_TIMEOUT_MS, windowsDescendantSweep, windowsPowershell } from "./windows-stop.js";
+
+export { askWindowsTreeToClose, type CloseAsked, closeAskedBy, forceWindowsTree, forcedBecause, windowsLauncher } from "./windows-stop.js";
 
 // ONE BOUNDED CHILD PROCESS, AS EVERY NODE TIER OUTSIDE THE DAEMON RUNS ONE: its own process group, ended whole at its
 // deadline or an abort, settled once it has exited even if a grandchild still holds its pipes, and its output kept in
@@ -209,20 +212,16 @@ const groupAlive = (pid: number): boolean => {
 };
 
 // Everything the command started, not only its direct child: SIGTERM to its process group, then SIGKILL to what is
-// left. Windows has no process groups, and no SIGTERM a console program hears, so taskkill ends the whole tree at once.
-export const stopProcessTree = async (child: ChildProcess, killGraceMs: number = KILL_GRACE_MS): Promise<void> => {
+// left. Windows has no process groups and no SIGTERM, so the tree is asked to close the two ways a Windows program hears
+// (windows-stop.ts: WM_CLOSE to its windows, a Ctrl-Break on its console), given the same grace, and forced after.
+// `startedAt` (when the command was started) lets a Windows stop find what a root that closed when asked left behind.
+export const stopProcessTree = async (child: ChildProcess, killGraceMs: number = KILL_GRACE_MS, startedAt?: number): Promise<void> => {
     const pid = child.pid;
     if (pid === undefined) {
         return;
     }
     if (process.platform === "win32") {
-        await new Promise<void>((resolve) => {
-            spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true })
-                .once("exit", () => resolve())
-                .once("error", () => resolve());
-        });
-        // The child at least, should taskkill have failed; a no-op once it has done its job.
-        child.kill();
+        await stopWindowsTree(child, pid, killGraceMs, startedAt);
         return;
     }
     signalGroup(pid, "SIGTERM");
@@ -271,11 +270,13 @@ interface Stopper {
 
 // The deadline and the abort, each ending the whole tree, and each remembered so the result can say which it was.
 const stopperFor = (child: ChildProcess, options: RunOptions): Stopper => {
+    // Made as the child is spawned: what a Windows stop sweeps for is started after it.
+    const startedAt = Date.now();
     let stopping: Promise<void> | undefined;
     let timedOut = false;
     let aborted = false;
     const stop = (): void => {
-        stopping ??= stopProcessTree(child, options.killGraceMs);
+        stopping ??= stopProcessTree(child, options.killGraceMs, startedAt);
     };
     const deadline =
         options.timeoutMs === undefined
@@ -465,32 +466,15 @@ export interface SyncProcessResult<Out = CollectedOutput> extends ProcessResult<
     readonly overflowed: boolean;
 }
 
-// How long the Windows sweep of a stopped command's descendants may take; PowerShell's own start is most of it.
-const WINDOWS_SWEEP_TIMEOUT_MS = 15_000;
-
 const sleepSync = (ms: number): void => {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
-
-// Windows has no process group, and by the time spawnSync returns it has already ended the direct child, so
-// `taskkill /T` has no root left to walk from. What the child started still names it as its parent, so the sweep walks
-// that record instead, and only through processes created since the call began: a pid Windows has since handed to
-// something unrelated is not this command's.
-const windowsDescendantSweep = (pid: number, since: number): string =>
-    [
-        "$ErrorActionPreference='SilentlyContinue'",
-        `$since=[DateTime]::Parse('${new Date(since - 1_000).toISOString()}').ToUniversalTime()`,
-        "$all=@(Get-CimInstance Win32_Process | Where-Object { $_.CreationDate.ToUniversalTime() -ge $since })",
-        `$queue=[System.Collections.Generic.Queue[uint32]]::new(); $queue.Enqueue(${pid})`,
-        "while($queue.Count -gt 0){ $parent=$queue.Dequeue(); foreach($p in $all){ if($p.ParentProcessId -eq $parent){ $queue.Enqueue($p.ProcessId); Stop-Process -Id $p.ProcessId -Force } } }",
-    ].join("; ");
 
 // Everything the stopped command left of its group: SIGTERM, a grace while any of it is left, then SIGKILL. On
 // Windows, the sweep above.
 const stopGroupSync = (pid: number, since: number, killGraceMs: number): void => {
     if (process.platform === "win32") {
-        const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-        spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-Command", windowsDescendantSweep(pid, since)], {
+        spawnSync(windowsPowershell(), ["-NoProfile", "-NonInteractive", "-Command", windowsDescendantSweep(pid, since)], {
             stdio: "ignore",
             windowsHide: true,
             timeout: WINDOWS_SWEEP_TIMEOUT_MS,

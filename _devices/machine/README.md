@@ -53,6 +53,15 @@ flowchart LR
   as destructive (the shared one, plus `pm uninstall`, `pm clear`, `rm -r`, `settings put`, `svc`, `reboot`, a
   wipe) needs "Run destructive commands". The sandbox judges `android_shell` as `adb shell <command>` and text
   typed with `android_act` like the desktop's, before either crosses.
+- (2026-11-02) **A stop asks before it forces, on every path** ([`tools/programs/`](src/device/tools/programs), and
+  `stopProcessTree` in [base](../../_tools/base)). `app_stop`, `uninstall --purge`, the `run_command` deadline and an
+  `ic` round's deadline each ask the program to close, wait its grace, then force what is left. On Windows, asking
+  means WM_CLOSE to a program with a window (`taskkill` without /F) and a Ctrl-Break to a console program
+  (`intentic-launch --ctrl-break`, [win-launcher](../win-launcher)); taskkill alone reaches no console program, so
+  before this every stop of one was forced. For a console program to have a console to be asked through, `app_start`
+  on Windows starts it through `intentic-launch --wait` (Node's `detached` gives it none); without the launcher it
+  starts as before. A run's grace is `app_start`'s `stopGraceSeconds` (a run target's in `run.json`), else 5 s, and a
+  forced stop says whether the program could not be asked or was asked and had not finished.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"
@@ -226,6 +235,18 @@ flowchart LR
   distro with an agent, and `upgrade` brings every environment to the same release. The root also updates itself
   on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`, which the update card can also ask
   for at once (`prepare-background`) and follows while it runs (ic's `update-preparing.json`).
+- (2026-11-02) The Windows side gives the WSL VM's file cache back to Windows when Windows runs low
+  ([`environments/wsl-cache-drop.ts`](src/environments/wsl-cache-drop.ts), the rules in `windows-memory.ts`). WSL keeps
+  the cache its builds and pulls leave as memory taken from Windows, and `.wslconfig`'s autoMemoryReclaim returns it
+  only once WSL is idle: on 2026-11-02 rog had 1.1 GB available while the VM held 20 GB, half of it cache, and froze
+  for 43 s. Each tick reads Windows' available memory (`os.freemem()`, which is ullAvailPhys there); under 1.5 GiB or a
+  tenth of the machine, whichever is more, and at most once every five minutes, it runs `sync; echo 1 >
+  /proc/sys/vm/drop_caches` as root in one running distro (the user's own first, else docker-desktop: every distro shares
+  the one kernel). WSL is never booted for this: with nothing in `wsl.exe --list --running` there is no cache to give.
+  The agent's log gets one line per drop with what Windows had before and five seconds after. The same side answers the
+  sandbox's heartbeat (`ping`) with Windows' available and total memory, which the sandbox's heavy-command gate holds
+  work back on while this PC is the one running it ([sandbox README](../../_sandbox/sandbox/README.md)); a distro's agent
+  and other platforms answer `{ ok: true }` as before.
 - The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
   is what the desktop app's tray reads.
 
@@ -843,8 +864,17 @@ source text, so the compiled binary needs no second file; both it and the SIGKIL
 `bun build --compile`. Like any crash, a stall counts toward a new release's trial ([`agent-trial.ts`](src/agent-trial.ts)).
 The stall is read on the monotonic clock, and the wall clock running ten seconds or more ahead of it between two checks
 (Linux's monotonic clock stops while the machine sleeps, so only the wall clock shows the time away) is a sleep too:
-either kind is logged as `watchdog: the agent was paused for N s (suspected sleep/resume, …)` and never counted, and a
-real stall within ten minutes of one says how long after it came (2026-10-11).
+either kind is logged as `watchdog: the agent was paused for N s (a sleep, a freeze, or the clock set forward; checking
+which)` and never counted, and a real stall within ten minutes of one says how long after it came (2026-10-11). The
+clocks alone cannot tell a sleep from a freeze on Windows, whose monotonic clock counts through a sleep (2026-11-02: a
+PC paging itself to a standstill with 1 GB free was logged as a suspected sleep). So the main thread, told of the pause
+by the Worker, finds out and logs a second line ([`pause-cause.ts`](src/resident/pause-cause.ts)): on Windows one
+PowerShell, bounded to a minute, reads the System log for Kernel-Power 42/107 (sleep and resume), 506/507 (Modern
+Standby) and Power-Troubleshooter 1 (wake) within a minute of the pause, and memory from the CIM performance classes,
+whose names no locale translates; elsewhere a monotonic gap is a freeze, since that clock stops in a sleep, and Linux's
+memory comes from `/proc`. The line reads `watchdog: the 43 s pause from <time> was not a sleep (Windows logged no sleep
+or wake around it): a freeze, the machine or this process held up; memory: 1,050 MB free of 32,405 MB, 2,300 pages/s
+paging`, or `… was a sleep: Windows went to sleep at … and woke at …`. One question runs at a time.
 
 ### Why the agent before ended
 
@@ -1032,8 +1062,10 @@ person who runs it alone, and either way it never downloads anything.
 - [src/sync/project/project-delivery.ts](src/sync/project/project-delivery.ts) — landed work written into a project folder (`deliverProject`).
 - [src/sync/gone.ts](src/sync/gone.ts) — when a paired sandbox counts as gone; `gone-watch.ts` acts on it, `retire.ts` retires its pairings, `forget-command.ts` is `sync forget`.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
+- [src/environments/wsl-cache-drop.ts](src/environments/wsl-cache-drop.ts) — the WSL VM's file cache given back to Windows when Windows runs low; the decisions in `windows-memory.ts`.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
 - [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
+- [src/resident/pause-cause.ts](src/resident/pause-cause.ts) — what a pause the watchdog saw was: a sleep, a freeze or the clock.
 - [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
 - [src/device/egress/set-egress.ts](src/device/egress/set-egress.ts) — the `set-egress` op: a tightening as it comes, a loosening under the owner's passkey (`proof.ts`), checked against the pins in `pins.ts`; `follower.ts` keeps `ic sandbox egress --follow` running, `trust-command.ts` is `intentic-machine egress trust`.
 - [src/keyring/commands.ts](src/keyring/commands.ts) — `intentic-machine keyring …`; `service.ts` installs, starts, upgrades and removes intentic-keyring, `relay.ts` carries the sandbox's `keyring*` calls to its pipe.

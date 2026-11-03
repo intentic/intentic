@@ -66,10 +66,15 @@ setTimeout(() => {
 }, 6_000);
 `;
 
-const pausedFor = async (ms: number): Promise<{ readonly signal: string | null; readonly stdout: string }> => {
+const pausedFor = async (ms: number): Promise<{ readonly signal: string | null; readonly stdout: string; readonly stderr: string }> => {
     const child = spawn(process.execPath, ["-e", pausable], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
+    let stderr = "";
     child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+    });
     const ready = new Promise<void>((resolve) => {
         child.stdout.on("data", (chunk: string) => {
             stdout += chunk;
@@ -85,7 +90,7 @@ const pausedFor = async (ms: number): Promise<{ readonly signal: string | null; 
     await new Promise((resolve) => setTimeout(resolve, ms));
     child.kill("SIGCONT");
     const signal = await ended;
-    return { signal, stdout };
+    return { signal, stdout, stderr };
 };
 
 test("a process paused for longer than the limit is not killed when it wakes", async () => {
@@ -95,4 +100,11 @@ test("a process paused for longer than the limit is not killed when it wakes", a
         { signal: null, survived: true },
         { signal: null, survived: true },
     ]);
+    // SIGSTOP holds the monotonic clock's time too, which a Linux sleep does not: the line after the pause says freeze.
+    if (process.platform === "linux") {
+        for (const { stderr } of runs) {
+            expect(stderr).toMatch(/watchdog: the agent was paused for \d+ s \(a sleep, a freeze, or the clock set forward; checking which\)/);
+            expect(stderr).toMatch(/watchdog: the \d+ s pause from \S+ was not a sleep \(the monotonic clock, which stops while this machine sleeps, kept counting\): a freeze/);
+        }
+    }
 }, 20_000);

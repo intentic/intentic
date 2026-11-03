@@ -3,7 +3,7 @@ import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceReportSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
 import { DeviceScopesSchema } from "../schemas/capabilities.js";
-import { DeviceFactsSchema } from "../schemas/hosts.js";
+import { DeviceFactsSchema, DevicePingSchema } from "../schemas/hosts.js";
 import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
@@ -45,8 +45,9 @@ export const deviceContract = {
     // like every input here: a switch this agent does not know is refused rather than silently not enforced. The daemon
     // sends the card's whole config, so the card's `platform` is accepted and ignored.
     setScopes: oc.input(DeviceScopesSchema.extend({ platform: z.string().optional() }).strict()).output(OkSchema),
-    // Daemon-driven liveness; doubles as keepalive against an idle tunnel and the gone-vs-quiet probe.
-    ping: oc.output(OkSchema),
+    // Daemon-driven liveness; doubles as keepalive against an idle tunnel and the gone-vs-quiet probe. (2026-11-02) The
+    // Windows side also answers with what memory Windows has (DevicePingSchema), which the sandbox's room gate reads.
+    ping: oc.output(DevicePingSchema),
     // One MCP JSON-RPC message forwarded verbatim in both directions, unmodified.
     mcp: oc.input(z.unknown()).output(z.unknown()),
     // Streamed for a person watching progress; the scope is checked on the machine, this only adds visibility.

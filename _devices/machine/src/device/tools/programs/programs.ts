@@ -4,7 +4,7 @@ import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promise
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { execBounded } from "@intentic/base/process";
+import { execBounded, windowsLauncher } from "@intentic/base/process";
 import { parseJsonOr } from "@intentic/base/json";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import { commandLineOf } from "@intentic/sandbox-contract/policy/device-programs";
@@ -13,7 +13,8 @@ import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
 import { waitForEarlyExit, waitForEnd } from "./app-wait.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
-import { descendantsOf, processRows, signalTree, snapshotTree } from "./process-tree.js";
+import { askThenForce, descendantsOf, processRows, snapshotTree, type StopOutcome } from "./process-tree.js";
+import { STOP_GRACE_SECONDS, startDirect, startThroughLauncher } from "./launch.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
 // PROGRAMS THE AGENT STARTED ON THIS MACHINE, AND KEPT AN EYE ON. run_command waits for its command and stops it at the
@@ -41,6 +42,11 @@ export interface AppRun {
     // Run inside Windows Sandbox (isolated.ts): `pid` is the launcher's, `log` the program's output inside the VM, and
     // it is running while a Windows Sandbox is open.
     readonly isolated?: true;
+    // Started through intentic-launch on Windows (startThroughLauncher): `pid` is the launcher, which lives as long as
+    // the program and ends with its exit code, and this is the program itself, whose console a stop sends Ctrl-Break on.
+    readonly programPid?: number | undefined;
+    // How long a stop waits, once the program was asked to close, before forcing it; absent is STOP_GRACE_SECONDS.
+    readonly stopGraceSeconds?: number | undefined;
 }
 
 export interface StartRequest {
@@ -51,14 +57,13 @@ export interface StartRequest {
     readonly name?: string | undefined;
     readonly isolated?: boolean | undefined;
     readonly network?: boolean | undefined;
+    readonly stopGraceSeconds?: number | undefined;
 }
 
 // The runs a sandbox keeps on record; an older ended one is forgotten (its log file stays until the folder is cleared).
 const KEEP_RUNS = 30;
 // How long a start waits to see whether the program falls over at once: a missing DLL ends a Windows exe within a second.
 const EARLY_EXIT_MS = 1500;
-// A graceful stop's grace before it is forced.
-const STOP_GRACE_MS = 5000;
 // How much of a log's end is read to answer app_logs.
 const LOG_TAIL_BYTES = 1024 * 1024;
 export const DEFAULT_LOG_LINES = 200;
@@ -309,36 +314,35 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
     const id = idFor(name);
     await mkdir(logsDir(sandboxUrl), { recursive: true });
     const log = join(logsDir(sandboxUrl), `${id}.log`);
-    const logHandle = await open(log, "a");
+    // Marked as the agent's (shell.ts, AGENT_COMMAND_ENV), after the request's own variables: a hint for the keyring's
+    // record, which the program can still unset, not a boundary.
+    const env = markedAsAgentCommand({ ...process.env, ...request.env });
+    const launcher = windowsLauncher();
     let child: ChildProcess;
+    let programPid: number | undefined;
     // Heard from the moment it exists: a program that dies at once ends before anything awaited after the spawn.
     let exit: Promise<{ code: number | null; signal: string | null }> = Promise.resolve({ code: null, signal: null });
     try {
-        child = spawn(program, [...(request.args ?? [])], {
-            cwd,
-            // Marked as the agent's (shell.ts, AGENT_COMMAND_ENV), after the request's own variables: a hint for the
-            // keyring's record, which the program can still unset, not a boundary.
-            env: markedAsAgentCommand({ ...process.env, ...request.env }),
-            // Its own process group (posix) or no console of ours (Windows): it outlives this agent, and a stop reaches
-            // everything it started. Not hidden, since an app is started to be seen.
-            detached: true,
-            windowsHide: false,
-            stdio: ["ignore", logHandle.fd, logHandle.fd],
-        });
-        const spawned = child;
-        exit = new Promise((done) => spawned.once("exit", (code, signal) => done({ code, signal })));
-        await new Promise<void>((done, fail) => {
-            child.once("spawn", () => done());
-            child.once("error", (error) => fail(error));
-        });
+        const started = launcher === undefined ? await startDirect(program, request.args ?? [], cwd, env, log) : await startThroughLauncher(launcher, program, request.args ?? [], cwd, env, log);
+        child = started.child;
+        exit = started.exit;
+        programPid = started.programPid;
     } catch (error) {
         throw new Error(`Could not start ${program}: ${errorMessage(error)}`, { cause: error });
-    } finally {
-        // The child holds its own copy of the descriptor.
-        await logHandle.close();
     }
     const pid = child.pid ?? 0;
-    const run: AppRun = { id, name, program, args: [...(request.args ?? [])], cwd, pid, startedAt: new Date().toISOString(), log };
+    const run: AppRun = {
+        id,
+        name,
+        program,
+        args: [...(request.args ?? [])],
+        cwd,
+        pid,
+        startedAt: new Date().toISOString(),
+        log,
+        programPid,
+        stopGraceSeconds: request.stopGraceSeconds,
+    };
     children.set(id, child);
     await updateRuns(sandboxUrl, (runs) => [...runs, run]);
     const exited = exit.then(async ({ code, signal }) => {
@@ -354,7 +358,7 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
         const { text } = await tailLines(log, 40);
         return `${name} (${id}) ${describeExit(final)} within ${EARLY_EXIT_MS / 1000}s of starting.${text === "" ? " It printed nothing." : `\nIts last output:\n${text}`}`;
     }
-    return `Started ${name} as ${id} (pid ${pid}) in ${cwd}. Its output goes to ${log}. Give it a moment, then app_status ${id} lists its windows (pass a window id to screenshot or ui_elements); app_logs reads what it printed; app_stop ends it with everything it started.`;
+    return `Started ${name} as ${id} (pid ${programPid ?? pid}) in ${cwd}. Its output goes to ${log}. Give it a moment, then app_status ${id} lists its windows (pass a window id to screenshot or ui_elements); app_logs reads what it printed; app_stop ends it with everything it started.`;
 };
 
 // A program started inside Windows Sandbox: the folder it is in mapped read-only, a log folder of its own writable, the
@@ -453,7 +457,7 @@ export const assertEither = (scopes: DeviceScopes): void => {
 const runLine = (run: AppRun, state: RunState): string => {
     const said =
         state === "running"
-            ? `running, pid ${run.pid}`
+            ? `running, pid ${run.programPid ?? run.pid}`
             : state === "unknown"
               ? `perhaps running: pid ${run.pid} is alive, but whether it is still this run cannot be checked, so app_stop will not signal it`
               : describeExit(run);
@@ -562,14 +566,8 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
     }
     // Read before anything is signalled (process-tree.ts): what a graceful close leaves behind is ended after it.
     const tree = await snapshotTree(run.pid);
-    await signalTree(run.pid, force);
-    let forced = force;
-    if (!(await waitGone(run, STOP_GRACE_MS)) && !force) {
-        await signalTree(run.pid, true);
-        forced = true;
-    }
-    const gone = await waitGone(run, STOP_GRACE_MS);
-    if (!gone) {
+    const outcome = await stopRunTree(run, force);
+    if (!outcome.gone) {
         // Not recorded as ended: a run said stopped while its program still runs is how the Run dialog lost sight of
         // one that was still there.
         throw new Error(`${run.id} (pid ${run.pid}) is still running after being forced to stop: something holds it (a debugger, an elevated child).`);
@@ -583,6 +581,13 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
             `${run.id} itself stopped, but ${left.length} process(es) it started could not be: pid ${left.join(", ")}. They may hold its port; close them on the machine itself.`,
         );
     }
-    return `Stopped ${run.id}${forced && !force ? " (it did not close when asked, so it was forced)" : forced ? " (forced)" : ""}, with everything it started.`;
+    const how = outcome.why !== undefined ? ` It was forced: ${outcome.why}.` : outcome.forced ? " (forced)" : "";
+    return `Stopped ${run.id}, with everything it started.${how}`;
 };
 
+// The run's grace, said in milliseconds.
+const graceOf = (run: Pick<AppRun, "stopGraceSeconds">): number => (run.stopGraceSeconds ?? STOP_GRACE_SECONDS) * 1000;
+
+// A run stopped as app_stop and `uninstall --purge` both stop one: asked, its own grace, then forced.
+export const stopRunTree = async (run: AppRun, force: boolean): Promise<StopOutcome> =>
+    await askThenForce(run.pid, { consoleOf: run.programPid, graceMs: graceOf(run), force, gone: async (ms) => await waitGone(run, ms) });

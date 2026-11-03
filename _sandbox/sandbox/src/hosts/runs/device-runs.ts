@@ -112,8 +112,12 @@ export type DeviceToolCall = (device: string, tool: string, args: DeviceToolArgs
 
 const LIST_MS = 15_000;
 const LOGS_MS = 15_000;
-// app_stop asks, waits five seconds, forces, and waits five more.
+// app_stop asks, waits the run's grace (five seconds unless its target says otherwise), forces, and waits five more:
+// this covers all of it but the grace, which is added per run.
 const STOP_MS = 30_000;
+const DEFAULT_GRACE_SECONDS = 5;
+// A run this sandbox did not start since its last restart has an unknown grace: this much is allowed for it.
+const UNKNOWN_GRACE_SECONDS = 60;
 // The most of a log read at once, to find what came after an earlier read (programs.ts MAX_LOG_LINES).
 const MAX_TAIL_LINES = 2000;
 
@@ -121,6 +125,7 @@ interface Held {
     readonly name: string;
     readonly repo: string | undefined;
     readonly ports: readonly number[];
+    readonly stopGraceSeconds: number | undefined;
     ended: boolean;
 }
 
@@ -129,7 +134,7 @@ export interface DeviceRuns {
     readonly started: (
         device: string,
         id: string,
-        held: { name: string; repo?: string | undefined; ports: readonly number[]; ended?: boolean },
+        held: { name: string; repo?: string | undefined; ports: readonly number[]; ended?: boolean; stopGraceSeconds?: number | undefined },
     ) => void;
     readonly list: (device: string) => Promise<DeviceRun[]>;
     // The computer's sentence; throws its refusal.
@@ -191,14 +196,16 @@ export const createDeviceRuns = (deps: {
     };
 
     const stop = async (device: string, id: string, force = false): Promise<string> => {
-        const text = await asked(device, "app_stop", { id, force }, STOP_MS);
+        const own = held.get(keyOf(device, id));
+        const grace = own === undefined ? UNKNOWN_GRACE_SECONDS : (own.stopGraceSeconds ?? DEFAULT_GRACE_SECONDS);
+        const text = await asked(device, "app_stop", { id, force }, STOP_MS + grace * 1000);
         await release(device, id);
         return text;
     };
 
     return {
         started: (device, id, run) => {
-            held.set(keyOf(device, id), { name: run.name, repo: run.repo, ports: [...run.ports], ended: false });
+            held.set(keyOf(device, id), { name: run.name, repo: run.repo, ports: [...run.ports], stopGraceSeconds: run.stopGraceSeconds, ended: false });
             if (run.ended === true) {
                 void release(device, id);
             }

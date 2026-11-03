@@ -52,6 +52,7 @@ import { osTools } from "./tools/os/os.js";
 import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
+import { appStartInput } from "./tools/programs/launch.js";
 import { appLogsAfterWait, appStatusAfterWait, DEFAULT_APP_WAIT_MS, MAX_APP_WAIT_MS } from "./tools/programs/app-wait-tools.js";
 import { calling } from "./indicator.js";
 import { MACHINE_VERSION } from "../version.js";
@@ -576,20 +577,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         description:
             'Start a program on this device and keep it running after the call returns: an app to look at, click through and read the output of, which run_command (it waits, and stops the command at its deadline) is wrong for. Pass the path `devices push <this device> <build>` printed in the sandbox shell, or the program inside a pushed folder; a program the sandbox pushed needs this device\'s "Run programs this sandbox sends" switch, any other program "Run commands". Its stdout and stderr go to a log of its own (app_logs). A program that falls over within a second or two is answered with its exit code, said in words (a missing DLL, an architecture mismatch), and its last output. Answers with the run id the other app_* tools take.',
         effect: "destructive",
-        input: z.object({
-            program: required.describe("A full path (a pushed build, or any program on this device), or a bare name found on its PATH."),
-            args: z.array(z.string()).max(100).optional().describe("Arguments, each passed as is, with no shell between."),
-            cwd: required.optional().describe("Working directory. Default: the program's own folder."),
-            env: z.record(z.string(), z.string()).optional().describe("Environment variables to set on top of the agent's own."),
-            name: required.optional().describe("What to call this run in app_status. Default: the program's name."),
-            isolated: z
-                .boolean()
-                .optional()
-                .describe(
-                    "Windows only: run it inside Windows Sandbox, a throwaway VM that sees the program's folder read-only and nothing else of this machine, and is discarded on app_stop. Needs Windows Pro/Enterprise with Windows Sandbox turned on; one at a time; boots in 10-20s.",
-                ),
-            network: z.boolean().optional().describe("With isolated: whether the VM has a network. Default true."),
-        }),
+        input: appStartInput,
         run: async (request, scopes) => textResult(await startApp(request, scopes, callerSandbox())),
     }),
     tool({
@@ -626,7 +614,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "app_stop",
         description:
-            "Stop a program started with app_start, together with every process it started. It is asked to close first, as its close button would, and forced after five seconds; `force` skips the asking.",
+            "Stop a program started with app_start, together with every process it started. It is asked to close first, as its close button would (on Windows: WM_CLOSE to a program with a window, a Ctrl-Break to a console program; elsewhere SIGTERM), and forced after its grace (app_start's stopGraceSeconds, default five seconds); `force` skips the asking. A forced stop says why: the program could not be asked, or it was asked and had not finished.",
         effect: "write",
         input: z.object({ id: required.describe("The run id from app_start."), force: z.boolean().default(false) }),
         run: async ({ id, force }, scopes) => textResult(await appStop(id, force, scopes, callerSandbox())),
