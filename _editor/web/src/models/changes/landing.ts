@@ -9,8 +9,14 @@ import { registry } from "../fleet/useAgents-registry";
 // A conversation with no title of its own; the review still has to name what it is waiting for.
 const UNTITLED = `a conversation`;
 
-/** What is mid-land, roster order: the session, and what to call it. Empty means nothing is being carried into this tree. */
-export const landingAgents = computed<readonly { readonly id: string; readonly title: string }[]>(() =>
+/** A session carrying its work into this tree, and what to call it. */
+export interface LandingAgent {
+    readonly id: string;
+    readonly title: string;
+}
+
+/** What is mid-land, roster order. Empty means nothing is being carried into this tree. */
+export const landingAgents = computed<readonly LandingAgent[]>(() =>
     registry.value.filter((agent) => agent.status === `landing`).map((agent) => ({ id: agent.id, title: agent.title ?? UNTITLED })),
 );
 
@@ -20,11 +26,14 @@ export const landingNames = computed<readonly string[]>(() => landingAgents.valu
 /** A land is writing this tree: what parks the rescan, and what the review says instead of a claim about the tree. */
 export const landingNow = computed<boolean>(() => landingNames.value.length > 0);
 
-/** The line a strip or a tile shows, already phrased; undefined when nothing is landing. */
-export const landingLine = computed<string | undefined>(() => {
-    const [first, ...rest] = landingNames.value;
+/** The line a strip or a tile shows for these titles, already phrased; undefined for none. */
+export const landingLineOf = (names: readonly string[]): string | undefined => {
+    const [first, ...rest] = names;
     if (first === undefined) {
         return undefined;
     }
     return rest.length === 0 ? `Landing ${first}` : `Landing ${first} and ${rest.length} more`;
-});
+};
+
+/** The line for what is mid-land right now; undefined when nothing is landing. */
+export const landingLine = computed<string | undefined>(() => landingLineOf(landingNames.value));

@@ -12,7 +12,7 @@ import type {
     RepoTarget,
 } from "@intentic/sandbox-contract/schemas/git/git";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
-import { computed, watch, toValue, type MaybeRefOrGetter } from "vue";
+import { computed, shallowRef, watch, toValue, type MaybeRefOrGetter } from "vue";
 import { isShared, scopeKey, SHARED_SCOPE, type ViewScope } from "../../app/workspaceScope";
 import { withinScope } from "../../app/projectScope";
 import { useChat } from "../conversations/run/useChat";
@@ -23,7 +23,7 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { useRole } from "../../client/sandbox/useRole";
 import { refusalSummary } from "../workspace/push/refusalSummary";
 import { outgoingWork } from "../workspace/push/outgoingWork";
-import { landingLine, landingNow } from "./landing";
+import { landingAgents, landingLineOf, landingNow, type LandingAgent } from "./landing";
 import { spliceRepoChanges } from "../workspace/changes/spliceRepoChanges";
 import { truncatedTotal } from "../workspace/changes/truncation";
 import { dropEditBuffers } from "../workspace/files/useEditBuffers";
@@ -219,11 +219,18 @@ export const fetchChanges = (view: ViewScope = SHARED_SCOPE): Promise<GitChanges
 const invalidateChanges = (): Promise<void> =>
     Promise.all([...workingReviewKeys, ...agentReviewPrefixes].map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined);
 
+// The last land to end, and what it carried. The roster drops `landing` once the patch is in the tree, but the review
+// still holds its answer from before the land until the rescan that drop releases comes back, so a view goes on saying
+// the land until it has answered past this moment. Otherwise a clean tree's "No uncommitted changes." flashes between
+// the arriving chip and the landed files.
+const landEnded = shallowRef<{ readonly at: number; readonly agents: readonly LandingAgent[] } | undefined>(undefined);
+
 // A land applying to the tree is the one moment a rescan is both wrong and expensive: the patch is half in, and the
 // scan it would run fights the land for git subprocesses. Both refresh paths park on `landingNow`, and this is what
 // ends the pause — for a land nobody in this browser asked for as much as for one somebody pressed.
-watch(landingNow, (now, was) => {
-    if (was && !now) {
+watch(landingAgents, (now, was) => {
+    if (was.length > 0 && now.length === 0) {
+        landEnded.value = { at: Date.now(), agents: was };
         void Promise.all([...workingReviewKeys, ...agentReviewPrefixes].map((queryKey) => invalidatePushedQueries(queryClient, { queryKey })));
     }
 });
@@ -494,6 +501,16 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
     // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
     // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
     const committing = computed<readonly string[]>(() => [...new Set([...(press.value?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
+    // What is being carried into this tree as this view reads it: the roster's lands, then the last one to end until this
+    // view's review has answered (or failed) since, the read that shows its files.
+    const arriving = computed<readonly LandingAgent[]>(() => {
+        if (landingAgents.value.length > 0) {
+            return landingAgents.value;
+        }
+        const ended = landEnded.value;
+        const answeredAt = Math.max(query.dataUpdatedAt.value, query.errorUpdatedAt.value);
+        return ended !== undefined && answeredAt < ended.at ? ended.agents : [];
+    });
 
     return {
         repos,
@@ -516,7 +533,9 @@ export function useChanges(view: MaybeRefOrGetter<ViewScope> = SHARED_SCOPE) {
         // the tree, and while this is set the tree is being written, so the claims yield to it rather than sit beside
         // it: what is listed is the tree BEFORE the land, by design, since the review deliberately doesn't rescan
         // mid-land.
-        landing: landingLine,
+        landing: computed(() => landingLineOf(arriving.value.map((agent) => agent.title))),
+        // The sessions behind `landing`, for the chips their work will wear.
+        arriving,
         error,
         refresh: query.refetch,
         fileDiff: (repo: string, path: string, side: GitDiffSide) => fileDiff(repo, path, side, toValue(view)),

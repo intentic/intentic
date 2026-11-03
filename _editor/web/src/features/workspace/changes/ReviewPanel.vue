@@ -60,7 +60,6 @@ import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
 import { repoOfPath, turnWrites } from "../../../models/workspace/files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../../models/workspace/push/outgoingWork";
 import { COMMIT_SCOPE, type PressFace, useChanges } from "../../../models/changes/useChanges";
-import { landingAgents } from "../../../models/changes/landing";
 import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -153,14 +152,14 @@ watch(
 // The chip row earns its place once an agent has files to tell apart from the owner's, and stays while "You" is lit
 // with files left, so the chip that lit it is there to clear it (and take back its staging) after the last agent's
 // work leaves the tree; an agent's lit chip retires above as its files do. A land under way earns it too: the work
-// arriving is shown on the chip it will wear, where the reader looks for whose work is here.
+// arriving is shown on the chip it will wear, where the reader looks for whose work is here, until the rescan shows it.
 const chipRowShown = computed(
-    () => legend.value.agents.length > 0 || landingAgents.value.length > 0 || (originFilter.value === YOURS && legend.value.yours > 0),
+    () => legend.value.agents.length > 0 || changes.arriving.value.length > 0 || (originFilter.value === YOURS && legend.value.yours > 0),
 );
 // A session already holding a chip spins on it while more of its work lands; one with nothing here yet gets a chip of
 // its own, dashed, since none of its files can be staged or filtered until they arrive.
-const landingIds = computed(() => new Set(landingAgents.value.map((agent) => agent.id)));
-const arriving = computed(() => landingAgents.value.filter((agent) => !legend.value.agents.some((entry) => entry.id === agent.id)));
+const landingIds = computed(() => new Set(changes.arriving.value.map((agent) => agent.id)));
+const arriving = computed(() => changes.arriving.value.filter((agent) => !legend.value.agents.some((entry) => entry.id === agent.id)));
 
 // Resolves an id via the live fleet card first (repaints on a rename instantly), then the review's own
 // `originAgents`, which survives archiving. An id-shaped fallback still draws a chip rather than reattributing the file

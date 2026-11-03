@@ -197,9 +197,17 @@ it(`says what is being carried in instead of denying there is anything`, async (
     expect(el.textContent).toContain(`From`);
     expect(el.textContent).not.toContain(`No uncommitted changes.`);
 
-    // And gets out of the way the moment the tree can speak for itself.
+    // The roster drops the land once the patch is in, but the list is still the tree from before it until the rescan
+    // that drop releases answers: claiming a clean tree in between flashed "No uncommitted changes." between the
+    // arriving chip and the files it brought.
     registry.value = [];
-    await nextTick();
+    await settle();
+    expect(held).toHaveLength(1);
+    expect(arriving(el, `Rewrite the parser`)).not.toBeNull();
+    expect(el.textContent).not.toContain(`No uncommitted changes.`);
+
+    // And gets out of the way the moment the tree can speak for itself.
+    await answer({ repos: [] });
     expect(arriving(el, `Rewrite the parser`)).toBeNull();
     expect(el.textContent).not.toContain(`From`);
     expect(el.textContent).toContain(`No uncommitted changes.`);
