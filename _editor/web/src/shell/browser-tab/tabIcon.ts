@@ -1,7 +1,7 @@
 import { glyphBody } from "@intentic/ui/glyph";
 import { ICONS } from "@intentic/ui/icons";
 import { type LogoStyle, readLogoStyle } from "../../features/sandbox/overview/logo/presets";
-import type { TabMark } from "./tabSignal";
+import type { MarkPlate, TabMark } from "./tabSignal";
 
 // The tab's icon for a mark: the open sandbox's logo, or the lotus (public/favicon.svg, the same paths) where it has
 // none, with a disc in its lower right corner, cut out of the picture by a ring so it reads on a light tab strip and a
@@ -21,7 +21,11 @@ const LOTUS_PATHS = [
 const LOTUS = `#e07b27`;
 // Warm grey, the lotus with its colour taken out: the universal "not connected".
 const LOTUS_OFFLINE = `#8f8a84`;
+// What needs the reader, where the page has no look to read (countPlate): the rail's chip is drawn in the look's own
+// count plate, and the disc follows it whenever it can, since a red "1" on the taskbar over a gold "1" on the rail read
+// as two different alarms (2026-11-03).
 const ASKS = `#e5484d`;
+const ASKS_LABEL = `#fff`;
 const DONE = `#2f9e64`;
 const WORKING = `#3d8bf2`;
 
@@ -94,11 +98,29 @@ export const visibleSquare = (pixels: Uint8ClampedArray, width: number, height: 
     return { width, height, side, x: (left + right + 1 - side) / 2, y: (top + bottom + 1 - side) / 2 };
 };
 
+/**
+ * The Agents tile's count plate in the look on screen (viewBadge.ts draws it as `bg-info-plate text-plate-content`), or
+ * undefined where the page has none to read. A colour is only ever written into an attribute of the icon's own SVG.
+ */
+export const countPlate = (): MarkPlate | undefined => {
+    const root = globalThis.document?.documentElement;
+    if (root === undefined) {
+        return undefined;
+    }
+    const style = getComputedStyle(root);
+    const fill = style.getPropertyValue(`--color-info-plate`).trim();
+    const label = style.getPropertyValue(`--color-plate-content`).trim();
+    return fill === `` || label === `` ? undefined : { fill, label };
+};
+
+const asksFill = (mark: { readonly plate?: MarkPlate }): string => attribute(mark.plate?.fill ?? ASKS);
+const asksLabel = (mark: { readonly plate?: MarkPlate }): string => attribute(mark.plate?.label ?? ASKS_LABEL);
+
 // A digit up to nine; past that a bare disc, since two digits at this size are a smudge and the title spells the count.
-const asksGlyph = (count: number): string =>
+const asksGlyph = (count: number, label: string): string =>
     count > 9
         ? ``
-        : `<text x="23" y="28" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="14" font-weight="700" fill="#fff">${count}</text>`;
+        : `<text x="23" y="28" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="14" font-weight="700" fill="${label}">${count}</text>`;
 
 const CHECK = `<path d="M18.9 23.3l2.8 2.8 5.4-5.6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
 
@@ -113,7 +135,7 @@ interface Disc {
 const discOf = (mark: TabMark): Disc | undefined => {
     switch (mark.kind) {
         case `asks`:
-            return { fill: ASKS, at: 23, radius: 9, glyph: asksGlyph(mark.count) };
+            return { fill: asksFill(mark), at: 23, radius: 9, glyph: asksGlyph(mark.count, asksLabel(mark)) };
         case `done`:
             return { fill: DONE, at: 23, radius: 9, glyph: CHECK };
         // Smaller, bare and further into the corner: the ambient mark, which never outshouts one asking for the reader.
@@ -141,12 +163,17 @@ export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCro
     return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 32 32">${body}</svg>`;
 };
 
-// Two marks draw the same icon exactly when these match; the count only matters while it fits the disc.
+// Two marks draw the same icon exactly when these match; the count only matters while it fits the disc, and the plate
+// whenever there is one, so a change of look draws the disc again.
 export const iconKey = (mark: TabMark | undefined): string | undefined => {
     if (mark === undefined) {
         return undefined;
     }
-    return mark.kind === `asks` ? `asks:${mark.count > 9 ? `many` : mark.count}` : mark.kind;
+    if (mark.kind !== `asks`) {
+        return mark.kind;
+    }
+    const key = `asks:${mark.count > 9 ? `many` : mark.count}`;
+    return mark.plate === undefined ? key : `${key}:${mark.plate.fill}:${mark.plate.label}`;
 };
 
 // The mark alone, for the desktop app's taskbar button (desktop-app badge.rs): Windows draws an app's overlay in the
@@ -155,16 +182,16 @@ export const iconKey = (mark: TabMark | undefined): string | undefined => {
 // one: the taskbar's icon is the app's and cannot be greyed.
 const OVERLAY_CHECK = `<path d="M9.2 16.5l4.6 4.7 9-9.4" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>`;
 
-const overlayDigit = (count: number): string =>
+const overlayDigit = (count: number, label: string): string =>
     count > 9
         ? ``
-        : `<text x="16" y="23.5" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="21" font-weight="700" fill="#fff">${count}</text>`;
+        : `<text x="16" y="23.5" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Arial,Helvetica,sans-serif" font-size="21" font-weight="700" fill="${label}">${count}</text>`;
 
 export const overlaySvg = (mark: TabMark): string => {
     let body: string;
     switch (mark.kind) {
         case `asks`:
-            body = `<circle cx="16" cy="16" r="15" fill="${ASKS}"/>${overlayDigit(mark.count)}`;
+            body = `<circle cx="16" cy="16" r="15" fill="${asksFill(mark)}"/>${overlayDigit(mark.count, asksLabel(mark))}`;
             break;
         case `done`:
             body = `<circle cx="16" cy="16" r="15" fill="${DONE}"/>${OVERLAY_CHECK}`;

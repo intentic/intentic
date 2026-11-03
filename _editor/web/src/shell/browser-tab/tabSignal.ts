@@ -4,8 +4,16 @@
 
 import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
 
+// The colours the Agents tile's count chip wears in the look on screen (its opaque plate and the label knocked out of
+// it), so the tab's disc and the desktop app's taskbar overlay say the same number in the same colour as the rail. Read
+// off the page by tabIcon.ts `countPlate`; none keeps the icon's own red.
+export interface MarkPlate {
+    readonly fill: string;
+    readonly label: string;
+}
+
 export type TabMark =
-    | { readonly kind: `asks`; readonly count: number }
+    | { readonly kind: `asks`; readonly count: number; readonly plate?: MarkPlate }
     | { readonly kind: `offline` }
     | { readonly kind: `done` }
     | { readonly kind: `working` };

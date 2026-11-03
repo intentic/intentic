@@ -25,6 +25,20 @@ describe(`the tab's icon`, () => {
         expect(svg).not.toContain(`<circle`);
     });
 
+    it(`wears the Agents tile's count plate when the look gives one, and draws again when it changes`, () => {
+        const plate = { fill: `rgb(232, 196, 106)`, label: `rgb(20, 18, 16)` };
+        const svg = iconSvg({ kind: `asks`, count: 3, plate });
+        expect(svg).toContain(`r="9" fill="rgb(232, 196, 106)"`);
+        expect(svg).toMatch(/<text[^>]*fill="rgb\(20, 18, 16\)"[^>]*>3<\/text>/);
+        expect(svg).not.toContain(`#e5484d`);
+        expect(iconKey({ kind: `asks`, count: 3, plate })).not.toBe(iconKey({ kind: `asks`, count: 3 }));
+        expect(iconKey({ kind: `asks`, count: 3, plate })).not.toBe(iconKey({ kind: `asks`, count: 3, plate: { ...plate, fill: `red` } }));
+    });
+
+    it(`keeps a plate's colour inside its attribute`, () => {
+        expect(iconSvg({ kind: `asks`, count: 1, plate: { fill: `x" onload="y`, label: `#fff` } })).toContain(`fill="x&quot; onload=&quot;y"`);
+    });
+
     it(`draws two counts alike once neither fits the disc`, () => {
         expect(iconKey({ kind: `asks`, count: 12 })).toBe(iconKey({ kind: `asks`, count: 40 }));
         expect(iconKey({ kind: `asks`, count: 2 })).toBe(`asks:2`);
@@ -103,6 +117,9 @@ describe(`the taskbar's overlay`, () => {
         expect(svg).toMatch(/<text[^>]*>4<\/text>/);
         expect(svg).not.toContain(`<path d="M16 9.5`);
         expect(overlaySvg({ kind: `asks`, count: 10 })).not.toContain(`<text`);
+        const plated = overlaySvg({ kind: `asks`, count: 2, plate: { fill: `#d4a640`, label: `#1a1714` } });
+        expect(plated).toContain(`r="15" fill="#d4a640"`);
+        expect(plated).toMatch(/<text[^>]*fill="#1a1714"[^>]*>2<\/text>/);
     });
 
     it(`checks off a finish, and draws work and an outage as smaller, quieter dots`, () => {

@@ -1,3 +1,4 @@
+import { useTheme } from "@intentic/ui/theme";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { attentionCalls, type CallerStanding, laneOf } from "../../models/agent-status/agentStatus-lanes";
 import { type AgentStanding, turnWorking } from "../../models/agent-status/agentStatus-standing";
@@ -17,6 +18,8 @@ import { setTabLogo, setTabMark } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { newsItemsBetween, type TabFrame, tabMark, tabOffline } from "./tabSignal";
 import { justSetUp } from "../../models/sandbox/live/justSetUp";
+import { useSkin } from "../../skins/useSkin";
+import { countPlate } from "./tabIcon";
 
 // The browser tab as a surface of the app (tabSignal.ts has the rules): what the fleet says the tab should show, and
 // when it should ring. The page's own name comes from the router, and tabTitle.ts writes both. Inside the desktop app,
@@ -124,16 +127,27 @@ export const startBrowserTab = (): void => {
         tellDesktop(news, chime !== undefined);
     });
 
-    const shown = computed(() =>
-        tabStatus.value
-            ? tabMark({
-                  asks: agentsAttention.value,
-                  offline: tabOffline(availability.value, seen.value),
-                  doneAway: doneAway.value,
-                  working: fleet.value.some(turnWorking),
-              })
-            : undefined,
-    );
+    // The rail's count chip in the look on screen, read again whenever the look changes: the scheme, the skin and the
+    // accent all repaint it, and each is on <html> before this runs (they apply synchronously).
+    const { scheme, accent } = useTheme();
+    const { skin } = useSkin();
+    const plate = ref(countPlate());
+    watch([scheme, skin, accent], () => {
+        plate.value = countPlate();
+    });
+    const shown = computed(() => {
+        if (!tabStatus.value) {
+            return undefined;
+        }
+        const mark = tabMark({
+            asks: agentsAttention.value,
+            offline: tabOffline(availability.value, seen.value),
+            doneAway: doneAway.value,
+            working: fleet.value.some(turnWorking),
+        });
+        // The same count as the Agents tile, so the same colour: the tab's disc and the taskbar's overlay wear its plate.
+        return mark?.kind === `asks` && plate.value !== undefined ? { ...mark, plate: plate.value } : mark;
+    });
     watch(shown, (mark) => setTabMark(mark), { immediate: true });
     // The open sandbox's logo stands in for the lotus whether or not the tab shows the fleet's marks, on the tab and on
     // the desktop app's icon alike.
