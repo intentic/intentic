@@ -79,6 +79,7 @@ export class TranscriptView extends TranscriptClock {
     // changed since its last read (transcriptScan.ts).
     private readonly firstAwaiting = firstWhere<ChatMessage>(isAwaitingDecision);
     private readonly firstPlan = firstWhere<ChatMessage>((message) => message.plan?.status === `pending`);
+    private readonly firstAsk = firstWhere<ChatMessage>((message) => message.question?.status === `pending` || message.pageAsk?.status === `pending`);
     private readonly costTotal = runningTotal<ChatMessage>((message) => message.usage?.costUsd ?? 0);
     private readonly inputTotal = runningTotal<ChatMessage>((message) => message.usage?.inputTokens ?? 0);
     private readonly outputTotal = runningTotal<ChatMessage>((message) => message.usage?.outputTokens ?? 0);
@@ -88,6 +89,9 @@ export class TranscriptView extends TranscriptClock {
 
     // Message carrying a plan awaiting decision, if any; routes feedback into a plan rejection instead of a fresh turn.
     readonly pendingPlanMessage = computed(() => this.firstPlan(this.messages.value));
+
+    // Message carrying a question or a page awaiting its answer, if any; the composer's words answer it (composerSend).
+    readonly pendingAskMessage = computed(() => this.firstAsk(this.messages.value));
 
     // Lifetime accounting summed off the rows on screen; the daemon's registry is the cross-device authoritative total.
     readonly costUsd = computed(() => this.costTotal(this.messages.value));

@@ -5,11 +5,13 @@ import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { type SendBlock, sendBlockLine, sendBlockTitle } from "../../../models/providers/sendAvailability";
 
-// Press precedence: place (agent voice, no turn), edit (rewind), plan (revise), later (explicit booking), scheduled (wait for allowance).
-// Then idle sends; parked queues behind a live question/card, including one known to the roster before this window draws it.
+// Press precedence: place (agent voice, no turn), edit (rewind), plan (revise), answer (a question or page card, in your
+// own words), later (explicit booking), scheduled (wait for allowance).
+// Then idle sends; parked queues behind any other live card (a permission, a hand-off), including one known to the roster
+// before this window draws it.
 // Finally steer sends mid-turn input when supported, otherwise queue waits for the turn to end.
 // Explicit later bookings win even during a running turn; spent-account scheduled sends never contact the provider before reopening.
-export type SendIntent = `place` | `edit` | `plan` | `later` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
+export type SendIntent = `place` | `edit` | `plan` | `answer` | `later` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
 
 // A stopped turn's instants, already resolved to booleans by the pane (which owns the clock), since a
 // pure predicate can't read time itself. `ready` is the only thing separating an offer from a countdown.
@@ -43,6 +45,11 @@ export interface ComposerSituation {
     readonly editing: boolean;
     /** A plan is on screen awaiting approval or feedback. */
     readonly pendingPlan: boolean;
+    /**
+     * A question or a page asked to be answered on is on screen awaiting its answer: words in the box answer it, in the
+     * reader's own words, rather than waiting behind it (2026-11-03: a reader who wanted to say "neither" had to pick one).
+     */
+    readonly pendingAsk?: boolean;
     /** A turn is live. */
     readonly streaming: boolean;
     /** That live turn is parked on a card (plan, question, permission). */
@@ -109,6 +116,9 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
     if (situation.pendingPlan) {
         return `plan`;
     }
+    if (situation.pendingAsk === true) {
+        return `answer`;
+    }
     if (situation.later === true) {
         return `later`;
     }
@@ -133,6 +143,8 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     edit: (words) => (words.plain === true ? t(`chat.composerIntent.plain.placeholderEdit`) : t(`chat.composerIntent.placeholderEdit`)),
     // Says what typing does here, since a reply that reads like consent ("go ahead") would otherwise look like approval.
     plan: () => t(`chat.composerIntent.placeholderPlan`),
+    // The card's options are one way to answer and the box is the other, so neither reads as the only door.
+    answer: () => t(`chat.composerIntent.placeholderAnswer`),
     // When it goes is on the pill and the button already; the box only says this message is the one being booked.
     later: () => t(`chat.composerIntent.placeholderLater`),
     scheduled: (words) => t(`chat.composerIntent.placeholderScheduled`, { when: words.reopens ?? `` }),
@@ -157,6 +169,8 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
             ? t(`chat.composerIntent.hintEditOne`)
             : { title: t(`chat.composerIntent.hintEditOne`), rows: [{ label: t(`chat.composerIntent.alsoReplaced`), value: words.editDropped - 1 }] },
     plan: () => ({ title: t(`chat.composerIntent.hintPlan`), note: t(`chat.composerIntent.hintPlanNote`) }),
+    // Says the words go now and settle the card, so nobody expects a pick above to still be taken after.
+    answer: () => ({ title: t(`chat.composerIntent.hintAnswer`), note: t(`chat.composerIntent.hintAnswerNote`) }),
     // When it goes, and that it can still be sent sooner, re-timed or taken back from where it waits.
     later: (words) => ({
         title: t(`chat.composerIntent.hintLater`),
@@ -227,7 +241,14 @@ const accountRefusalOf = (situation: ComposerSituation): SendBlock | undefined =
 // anyway, naming the account so the daemon tries it rather than holding or moving the turn; a refused try costs nothing,
 // the message stays in the transcript with the provider's own reason.
 const accountCautionOf = (situation: ComposerSituation): SendBlock | undefined => {
-    if (situation.voiceAgent || situation.editing || situation.streaming || situation.pendingPlan || situation.later === true) {
+    if (
+        situation.voiceAgent ||
+        situation.editing ||
+        situation.streaming ||
+        situation.pendingPlan ||
+        situation.pendingAsk === true ||
+        situation.later === true
+    ) {
         return undefined;
     }
     return situation.accountBlock;
@@ -329,12 +350,17 @@ export const sendAnywayHint = (block: SendBlock): TooltipValue => ({
     note: t(`chat.composerIntent.hintAnywayNote`),
 });
 
-// The last turn stopped, but staged words/files, a pending plan, or a queued message mean saying so
+// The last turn stopped, but staged words/files, a pending plan or question, or a queued message mean saying so
 // would be wrong. Visible is the strip; offered is the bare press continuing it NOW, which additionally requires
 // `pickUp.ready` and an account with room: on a spent one the press is refused before anything runs, so the bare press
 // there means "continue at the reopen" instead (reopenPressOf), which is what the time-labelled button beside it says.
 export const continueVisible = (situation: ComposerSituation): boolean =>
-    situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
+    situation.pickUp !== undefined &&
+    !situation.staged &&
+    situation.queued === 0 &&
+    !situation.pendingPlan &&
+    situation.pendingAsk !== true &&
+    situation.connected;
 
 // A blocked reading still keeps the bare Continue back: only a press on words in the box sends anyway. So does a time the
 // reader picked for the next words (`later`), whose greyed Send reads as that time: an empty Enter continuing now beside
@@ -397,7 +423,8 @@ export const sendable = (situation: ComposerSituation, intent: SendIntent, refus
     if (intent === `scheduled`) {
         return situation.staged || reopenPressOf(situation) !== undefined;
     }
-    if (intent === `place` || intent === `edit` || intent === `later`) {
+    // An answer is the words: an empty press would settle the card with nothing said.
+    if (intent === `place` || intent === `edit` || intent === `later` || intent === `answer`) {
         return situation.staged;
     }
     return situation.staged || continueOffered(situation) || queueFlushable(situation);

@@ -218,6 +218,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     }),
     awaitingDecision: computed(() => conversation.value.transcript.awaitingDecision.value),
     pendingPlanMessage: computed(() => conversation.value.transcript.pendingPlanMessage.value),
+    pendingAskMessage: computed(() => conversation.value.transcript.pendingAskMessage.value),
     // Asked on every frame of a streamed turn, so through a reader of only the rows changed since it last read
     // (transcriptScan.ts), one per view.
     continuation: ((newest) => computed(() => continuationFor(conversation.value.transcript.messages.value, newest)))(newestOf(newestPermission)),

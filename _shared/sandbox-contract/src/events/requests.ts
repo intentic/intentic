@@ -22,6 +22,25 @@ export const AskQuestionSchema = z.object({
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
+/**
+ * The own words every question of a card of several was answered with: one reply to the whole card, as the chat's
+ * composer sends it, the same for each question and none of its options. Undefined for any other answer, a lone
+ * question's included, whose own words read as an ordinary answer. The daemon says it once to the model and the card
+ * draws it once, so neither repeats one message under every question.
+ */
+export const sharedOwnWords = (questions: readonly AskQuestion[], answers: Readonly<Record<string, readonly string[]>> | undefined): string | undefined => {
+    const first = answers?.[questions[0]?.question ?? ""];
+    const words = first?.length === 1 ? first[0] : undefined;
+    if (answers === undefined || words === undefined || questions.length < 2) {
+        return undefined;
+    }
+    const shared = questions.every((question) => {
+        const picks = answers[question.question];
+        return picks?.length === 1 && picks[0] === words && !question.options.some((option) => option.label === words);
+    });
+    return shared ? words : undefined;
+};
+
 // The command a request is holding, as data rather than prose. `spans` is carried from the classifier's own match (never
 // re-derived), offset into `text` after truncation.
 export const ProgramAskSchema = z.object({

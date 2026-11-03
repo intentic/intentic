@@ -10,6 +10,7 @@ import {
     reopenHintFor,
     reopenPressOf,
     sendable,
+    sendAnyway,
     sendHintFor,
     type SendIntent,
     sendIntentOf,
@@ -49,6 +50,9 @@ it(`names the press by the most specific thing armed, in one order`, () => {
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true }))).toBe(`plan`);
     // The most specific act of the lot: pointing at a message wins over every standing posture below it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true }))).toBe(`edit`);
+    // A question or page waiting takes the words as its answer, over steering, the queue and a booking alike.
+    expect(sendIntentOf(chat({ streaming: true, steerable: true, awaitingDecision: true, pendingAsk: true }))).toBe(`answer`);
+    expect(sendIntentOf(chat({ waitingOnYou: true, pendingAsk: true, later: true }))).toBe(`answer`);
     // The agent's voice is not a turn at all, so nothing about a turn can outrank it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true, voiceAgent: true }))).toBe(`place`);
 });
@@ -62,6 +66,23 @@ it(`reads a chat the agents list says waits on you as parked, before its card is
     // A plan waiting is still the revision field, and an armed edit still an edit.
     expect(sendIntentOf(chat({ waitingOnYou: true, pendingPlan: true }))).toBe(`plan`);
     expect(sendIntentOf(chat({ waitingOnYou: true, editing: true }))).toBe(`edit`);
+});
+
+// Words typed while a question or page waits answer it now, in the reader's own words: they were held behind the card
+// until a pick (2026-11-03), so a reader whose answer was none of the options had to pick one to be heard.
+it(`answers a waiting question with the words in the box, never with an empty press`, () => {
+    const asked = chat({ streaming: true, awaitingDecision: true, waitingOnYou: true, pendingAsk: true });
+    expect(sendIntentOf(asked)).toBe(`answer`);
+    expect(placeholderFor(`answer`, WORDS)).toBe(`Pick above, or answer in your own words…`);
+    expect(sendHintFor(`answer`, WORDS)).toEqual({ title: `Send as answer`, note: `Goes now, instead of picking` });
+    expect(sendable(asked, `answer`, undefined)).toBe(false);
+    expect(sendable({ ...asked, staged: true }, `answer`, undefined)).toBe(true);
+    // Its files go with it, so one still going up holds the press back as any send's does.
+    expect(sendRefusal({ ...asked, staged: true, attached: true, uploading: true })).toEqual(expect.any(String));
+    // An answer starts no turn on the account: a blocked reading neither stops it nor turns it into "Send anyway".
+    const blocked = { ...asked, staged: true, streaming: false, accountBlock: `reconnect` as const };
+    expect(sendRefusal(blocked)).toBeUndefined();
+    expect(sendAnyway(blocked)).toBeUndefined();
 });
 
 it(`schedules only a send that would start a turn on a spent account`, () => {
@@ -155,7 +176,7 @@ it(`says when a booked message goes, and that an ordinary send takes what is sch
 });
 
 it(`gives every intent its own sentence in both slots`, () => {
-    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `later`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
+    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `answer`, `later`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
     const hints = intents.map((intent) => JSON.stringify(sendHintFor(intent, WORDS)));
 

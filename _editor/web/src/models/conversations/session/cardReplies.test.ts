@@ -14,7 +14,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) };
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
 
-const { CardReplies, SKIP_CALL, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
+const { CardReplies, SKIP_CALL, afterReply, composerAnswer, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
 const { TranscriptClock } = await import("../transcript/transcriptClock");
 const { onCardAnswered } = await import("./cardAnswered");
 type CardAnswer = Parameters<InstanceType<typeof CardReplies>["reply"]>[1];
@@ -305,6 +305,44 @@ describe(`planFeedback`, () => {
     it(`is nothing when there are neither words nor files`, () => {
         expect(planFeedback(`   `)).toBeUndefined();
         expect(planFeedback(undefined, [])).toBeUndefined();
+    });
+});
+
+// The composer's words as the waiting card's answer (2026-11-03): typed while a question or page waited, they used to be
+// held behind it until a pick.
+describe(`composerAnswer`, () => {
+    const cardRow = (kind: string) => {
+        const { event } = CARDS.find((card) => card.event.kind === kind)!;
+        return parkedOn(event).host.transcript.messages.value[1];
+    };
+
+    it(`answers every question of a card with the words, whole, and the files on the first`, () => {
+        const two = [...QUESTIONS, { question: `Where?`, header: `Place`, multiSelect: true, options: [{ label: `Here`, description: `h` }] }];
+        const row = parkedOn({ kind: `question`, requestId: `r1`, questions: two }).host.transcript.messages.value[1];
+        const answer = composerAnswer(row, `  neither, see this `, [{ name: `shot.png`, path: `notes/shot.png` }]);
+        expect(answer).toEqual({
+            kind: `question`,
+            answers: { "Which?": [`neither, see this`], "Where?": [`neither, see this`] },
+            attachments: { "Which?": [`notes/shot.png`] },
+        });
+        // What the daemon takes, as the wire types it.
+        expect(AgentReplySchema.safeParse({ ...answer, requestId: `r1` }).success).toBe(true);
+        // Files alone still say something, as the card's own Other row does.
+        expect(composerAnswer(row, ``, [{ name: `shot.png`, path: `notes/shot.png` }])).toMatchObject({
+            answers: { "Which?": [`(see the attached file)`] },
+        });
+    });
+
+    it(`answers a page with the words as a JSON string, the files named in them`, () => {
+        const answer = composerAnswer(cardRow(`page_ask`), `none of these`, [{ name: `a.png`, path: `docs/a.png` }]);
+        expect(answer).toEqual({ kind: `page_ask`, value: JSON.stringify(`none of these\n@docs/a.png`) });
+        expect(AgentReplySchema.safeParse({ ...answer, requestId: `r1` }).success).toBe(true);
+    });
+
+    it(`is nothing with nothing to say, or no question or page waiting`, () => {
+        expect(composerAnswer(cardRow(`question`), `   `)).toBeUndefined();
+        expect(composerAnswer(cardRow(`permission`), `go on`)).toBeUndefined();
+        expect(composerAnswer(undefined, `go on`)).toBeUndefined();
     });
 });
 

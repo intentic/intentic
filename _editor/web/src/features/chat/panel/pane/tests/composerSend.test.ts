@@ -456,6 +456,66 @@ describe(`a plan waiting on an answer`, () => {
     });
 });
 
+// Words typed while a question or a page waits answer it now, in the reader's own words, and the turn goes on with them:
+// they used to wait behind the card until a pick (2026-11-03), so "neither of these" could only be said by picking one.
+describe(`a question or page waiting on an answer`, () => {
+    const QUESTION = { question: `Which style?`, header: `Style`, multiSelect: false, options: [{ label: `A`, description: `a` }] };
+    const asking = (row: Partial<ChatMessage>) => {
+        const composer = composerOf();
+        composer.chat.transcript.adopt([
+            { id: 1, role: `user`, text: `mock it up` },
+            { id: 2, role: `assistant`, text: ``, ...row },
+        ]);
+        return composer;
+    };
+
+    it(`takes the words as the question's answer, with the chips, and spends the box`, async () => {
+        const { chat, say, send, host } = asking({ question: { requestId: `q1`, questions: [QUESTION], status: `pending` } });
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
+
+        expect(send.intent.value).toBe(`answer`);
+        expect(send.composerPlaceholder.value).toBe(`Pick above, or answer in your own words…`);
+        chat.draft.value = `neither, why not both?`;
+        chat.attachments.value = [CHIP];
+        send.submit();
+        await nextTick();
+
+        expect(reply.mock.calls).toEqual([
+            [`q1`, { kind: `question`, answers: { "Which style?": [`neither, why not both?`] }, attachments: { "Which style?": [CHIP.path] } }],
+        ]);
+        expect(say).not.toHaveBeenCalled();
+        expect(chat.draft.value).toBe(``);
+        expect(chat.attachments.value).toEqual([]);
+        expect(host.pin).toHaveBeenCalledTimes(1);
+    });
+
+    it(`answers a page with the words, and gives them back when the answer did not land`, async () => {
+        // path-literals: content, a page's stored path as the event carries it
+        const page = { id: `p1`, title: `Pick a style`, path: `.intentic/records/artifacts/pages/c/p1.r0.html` };
+        const { chat, say, send } = asking({ pageAsk: { requestId: `p1`, page, status: `pending` } });
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(false);
+        chat.draft.value = `none of them`;
+
+        send.submit();
+        await nextTick();
+
+        expect(reply.mock.calls).toEqual([[`p1`, { kind: `page_ask`, value: `"none of them"` }]]);
+        expect(say).not.toHaveBeenCalled();
+        expect(chat.draft.value).toBe(`none of them`);
+    });
+
+    it(`does nothing on an empty press`, () => {
+        const { chat, say, send } = asking({ question: { requestId: `q1`, questions: [QUESTION], status: `pending` } });
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
+
+        send.submit();
+
+        expect(send.canSend.value).toBe(false);
+        expect(reply).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
+    });
+});
+
 describe(`what intercepts a press`, () => {
     it(`places the words as the agent's when the voice is armed, and keeps them when the place is refused`, async () => {
         const { chat, host, say, send } = composerOf();

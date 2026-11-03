@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { composingKey } from "@intentic/ui/keys";
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
-import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
+import { type AskQuestion, sharedOwnWords } from "@intentic/sandbox-contract/events/requests";
 import { type ComponentPublicInstance, computed, inject, nextTick, reactive, ref, type Ref, watch } from "vue";
 import {
     answerStarted,
@@ -22,7 +22,7 @@ import { uuid } from "../../../../lib/uuid";
 import ChatCard, { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
-import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import { type CardAnswer, FILES_ONLY_ANSWER } from "../../../../models/conversations/session/cardReplies";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { documentDrawn, questionStatus } from "./cardStatus";
 import { useT } from "@intentic/ui/i18n";
@@ -211,9 +211,6 @@ const filesSettled = (index: number): boolean => filesOf(index).every((file) => 
 const otherPending = (index: number): boolean =>
     isSelected(index, OTHER_LABEL) && otherValue(index).trim().length === 0 && filesOf(index).length === 0;
 
-// What an Other row with files and no words answers with, so the pick is never blank.
-const FILES_ONLY_ANSWER = `(see the attached file)`;
-
 // Resolves picks to answer values, swapping the Other sentinel for its typed text.
 const picksFor = (index: number): string[] =>
     (selections.value[index] ?? []).flatMap((label) => {
@@ -278,8 +275,12 @@ interface DecidedOption {
     readonly picked: boolean;
 }
 
+// One reply in the reader's own words to every question at once (the composer's, composerAnswer): drawn once under the
+// questions, not repeated as each one's pick.
+const sharedAnswer = computed(() => sharedOwnWords(card.value.questions, card.value.answers));
+
 const decidedOptions = (question: AskQuestion): DecidedOption[] => {
-    const picks = card.value.answers?.[question.question] ?? [];
+    const picks = sharedAnswer.value === undefined ? (card.value.answers?.[question.question] ?? []) : [];
     const typed = picks.filter((pick) => !question.options.some((option) => option.label === pick));
     return [
         ...question.options.map((option) => ({ label: option.label, description: option.description, picked: picks.includes(option.label) })),
@@ -443,11 +444,25 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                     </div>
                     <!-- The files that went with the answer, outside the list since they are not options. -->
                     <ChatAttachmentStrip
-                        v-if="decidedFiles(question).length > 0"
+                        v-if="sharedAnswer === undefined && decidedFiles(question).length > 0"
                         :attachments="decidedFiles(question)"
                         class="flex-wrap pt-1"
                     />
                 </template>
+            </div>
+            <!-- The one answer the reader wrote to all of them, as a picked row of its own after the last question. -->
+            <div v-if="!choosing && sharedAnswer !== undefined" class="flex flex-col gap-1">
+                <div class="chat-option chat-option-picked">
+                    <span class="chat-option-mark"><Icon name="check" class="text-2xs text-accent" /></span>
+                    <span class="min-w-0 whitespace-pre-wrap text-xs font-medium text-content"
+                        ><span class="sr-only">{{ t(`chat.chatQuestionCard.chosen`) }} </span>{{ sharedAnswer }}</span
+                    >
+                </div>
+                <ChatAttachmentStrip
+                    v-if="card.questions[0] && decidedFiles(card.questions[0]).length > 0"
+                    :attachments="decidedFiles(card.questions[0])"
+                    class="flex-wrap pt-1"
+                />
             </div>
         </div>
         <!-- In the shared answer row, like every other card, not floating under the last option. -->

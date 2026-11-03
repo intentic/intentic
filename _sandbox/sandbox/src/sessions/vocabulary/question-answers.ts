@@ -1,6 +1,6 @@
 import { isAbsolute, join } from "node:path";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
+import { type AskQuestion, sharedOwnWords } from "@intentic/sandbox-contract/events/requests";
 
 // formatAnswers renders the ask tool's result (picks or dismissal) as the text returned to the model, read the same way
 // regardless of which of the three callers produced it. parseAnswers is the inverse, for a session rebuilt from stored
@@ -12,6 +12,9 @@ type QuestionReply = Extract<AgentReply, { kind: "question" }>;
 export const ASK_TOOL_NAMES: ReadonlySet<string> = new Set(["mcp__ui__ask", "AskUserQuestion"]);
 
 const ANSWERED = "The user answered:";
+// One reply in the user's own words to a card of several questions (the chat's composer answers a card that way): said
+// once, as the one message it is, not repeated under every question as if each had been answered apart.
+const ANSWERED_ALL = "The user answered all of these questions at once, in their own words:";
 const DISMISSED =
     "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
 const NO_ANSWER = "(no answer)";
@@ -40,13 +43,41 @@ export const formatAnswers = (questions: readonly AskQuestion[], reply: Question
         return DISMISSED;
     }
     const answers = reply.answers;
+    const note = answerFiles(questions, reply).length > 0 ? `\n\n${ATTACHED_NOTE}` : "";
+    const words = sharedOwnWords(questions, answers);
+    if (words !== undefined) {
+        const files = answerFiles(questions, reply, root).map((path) => `${ATTACHED}${path}`);
+        return `${ANSWERED_ALL}\n${[words, ...files].join("\n")}${note}`;
+    }
     const lines = questions.flatMap((question) => {
         const picks = answers[question.question] ?? [];
         const files = (reply.attachments?.[question.question] ?? []).map((path) => `${ATTACHED}${placed(root, path)}`);
         return [`- ${labelOf(question)}: ${picks.length > 0 ? picks.join(PICK_SEPARATOR) : NO_ANSWER}`, ...files];
     });
-    const note = answerFiles(questions, reply).length > 0 ? `\n\n${ATTACHED_NOTE}` : "";
     return `${ANSWERED}\n${lines.join("\n")}${note}`;
+};
+
+// The written body without its head and trailing note; a stored result flattens the pictures that rode after the text
+// into `[image]` marks (tool-calls resultText), dropped here too.
+const bodyOf = (text: string, head: string): string => {
+    const body = text.slice(head.length + 1).replace(/(\[image\])+$/, "");
+    return body.endsWith(`\n\n${ATTACHED_NOTE}`) ? body.slice(0, -(ATTACHED_NOTE.length + 2)) : body;
+};
+
+// A shared answer read back: the words every question took, the files after them on the first question, as the chat
+// sends them (composerAnswer).
+const parseShared = (questions: readonly AskQuestion[], requestId: string, text: string): QuestionReply => {
+    const lines = bodyOf(text, ANSWERED_ALL).split("\n");
+    const at = lines.findIndex((line) => line.startsWith(ATTACHED));
+    const words = (at === -1 ? lines : lines.slice(0, at)).join("\n");
+    const files = at === -1 ? [] : lines.slice(at).map((line) => line.slice(ATTACHED.length));
+    const answers = Object.fromEntries(questions.map((question) => [question.question, [words]]));
+    const first = questions[0]?.question;
+    const reply: QuestionReply = { kind: "question", requestId, answers };
+    if (first !== undefined && files.length > 0) {
+        reply.attachments = { [first]: files };
+    }
+    return reply;
 };
 
 // Undefined when the text isn't one the formatter wrote, so the caller leaves the card unanswered rather than inventing
@@ -56,12 +87,13 @@ export const parseAnswers = (questions: readonly AskQuestion[], requestId: strin
     if (text === DISMISSED) {
         return { kind: "question", requestId, cancelled: true };
     }
+    if (text.startsWith(`${ANSWERED_ALL}\n`)) {
+        return parseShared(questions, requestId, text);
+    }
     if (!text.startsWith(`${ANSWERED}\n`)) {
         return undefined;
     }
-    // A stored result flattens the pictures that rode after the text into `[image]` marks (tool-calls resultText).
-    const body = text.slice(ANSWERED.length + 1).replace(/(\[image\])+$/, "");
-    const lines = (body.endsWith(`\n\n${ATTACHED_NOTE}`) ? body.slice(0, -(ATTACHED_NOTE.length + 2)) : body).split("\n");
+    const lines = bodyOf(text, ANSWERED).split("\n");
     const answers: Record<string, string[]> = {};
     const attachments: Record<string, string[]> = {};
     for (const question of questions) {

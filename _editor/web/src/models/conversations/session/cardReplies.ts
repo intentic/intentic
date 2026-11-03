@@ -105,6 +105,41 @@ export const planFeedback = (text: string | undefined, attachments: readonly Cha
     return written.length > 0 ? written : undefined;
 };
 
+// What an own-words answer with files and no words says, so the answer is never blank (the question card's Other row too).
+export const FILES_ONLY_ANSWER = `(see the attached file)`;
+
+/**
+ * The composer's words as the answer to the question or page card `message` holds, in the reader's own words, the way
+ * the card's own Other row answers (2026-11-03: words typed while a card waited were held until a pick, so a reader who
+ * meant "neither" had to pick one). A question takes them as every one of its asks' answer, whole, with the staged files
+ * on the first, since the words are one reply to the card rather than to any one ask; the daemon says a shared answer
+ * once (question-answers.ts). A page takes them as a JSON string, its answer's one form, the files named in it as a plan's
+ * notes name them. Undefined with nothing to say, or no such card waiting.
+ */
+export const composerAnswer = (message: ChatMessage | undefined, text: string, attachments: readonly ChatAttachment[] = []): CardAnswer | undefined => {
+    const words = text.trim();
+    if (words.length === 0 && attachments.length === 0) {
+        return undefined;
+    }
+    const question = message?.question;
+    if (question?.status === `pending`) {
+        const said = words.length > 0 ? words : FILES_ONLY_ANSWER;
+        const answer: Extract<CardAnswer, { kind: "question" }> = {
+            kind: `question`,
+            answers: Object.fromEntries(question.questions.map((ask) => [ask.question, [said]])),
+        };
+        const first = question.questions[0]?.question;
+        if (first !== undefined && attachments.length > 0) {
+            answer.attachments = { [first]: attachments.map((file) => file.path) };
+        }
+        return answer;
+    }
+    if (message?.pageAsk?.status === `pending`) {
+        return { kind: `page_ask`, value: JSON.stringify(planFeedback(words, attachments)) };
+    }
+    return undefined;
+};
+
 // The request id of the card a row holds; a row holds at most one.
 export const requestIdOf = (row: TranscriptRequests): string | undefined =>
     Object.values(FIELD_OF)

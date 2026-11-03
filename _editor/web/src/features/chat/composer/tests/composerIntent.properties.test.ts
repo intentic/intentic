@@ -56,9 +56,11 @@ const PICK_UPS: readonly (PickUpSituation | undefined)[] = [
     ...[true, false].flatMap((ready) => ([undefined, `book`, `arm`, `armed`] as const).map((atReopen) => ({ ready, atReopen }))),
 ];
 const BLOCKS: readonly (SendBlock | undefined)[] = [undefined, `spent`, `editSpent`, `reconnect`, `admin`, `verify`, `wait`];
-const INTENTS: readonly SendIntent[] = [`place`, `edit`, `plan`, `later`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
-// The fourteen yes-or-no inputs, then the pick-up, the queue, the reopen and the account's block.
-const AXES = [...Array.from({ length: 14 }, () => 2), PICK_UPS.length, 2, 2, BLOCKS.length];
+const INTENTS: readonly SendIntent[] = [`place`, `edit`, `plan`, `answer`, `later`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
+// The card on screen waiting for an answer (axis 6): none, a plan, or a question or page. A turn parks on one at a time.
+const CARDS = 3;
+// The fourteen yes-or-no inputs (the card three-way), then the pick-up, the queue, the reopen and the account's block.
+const AXES = [...Array.from({ length: 14 }, (_, axis) => (axis === 6 ? CARDS : 2)), PICK_UPS.length, 2, 2, BLOCKS.length];
 
 // The snapshot one combination of AXES names.
 const situationOf = (digits: readonly number[]): ComposerSituation => {
@@ -71,6 +73,7 @@ const situationOf = (digits: readonly number[]): ComposerSituation => {
         voiceAgent: on(4),
         editing: on(5),
         pendingPlan: on(6),
+        pendingAsk: digits[6] === 2,
         streaming: on(7),
         awaitingDecision: on(8),
         waitingOnYou: on(9),
@@ -115,7 +118,13 @@ const bareOf = (situation: ComposerSituation, refusal: string | undefined): `now
 // running, no plan pending, and no account reading in the way of a fresh turn (composerIntent.ts queueFlushable and
 // accountCautionOf, whose rule this restates).
 const flushes = (situation: ComposerSituation): boolean => {
-    const freshTurn = !situation.voiceAgent && !situation.editing && !situation.streaming && !situation.pendingPlan && situation.later !== true;
+    const freshTurn =
+        !situation.voiceAgent &&
+        !situation.editing &&
+        !situation.streaming &&
+        !situation.pendingPlan &&
+        situation.pendingAsk !== true &&
+        situation.later !== true;
     const cautioned = freshTurn && situation.accountBlock !== undefined;
     return situation.queued > 0 && !situation.streaming && !situation.pendingPlan && situation.queueScheduled !== true && !cautioned;
 };
@@ -147,8 +156,14 @@ const brokenRules = (situation: ComposerSituation): readonly string[] => {
     );
     // A bare press that continues now never meets the wall it would be refused at.
     rule(`a bare Continue into a wall`, offered && (walled || situation.pickUp?.ready !== true));
-    // Place, edit and a booking for later need words: an empty press would place nothing, rewind, or book nothing.
-    rule(`an empty place, edit or booking sends`, (intent === `place` || intent === `edit` || intent === `later`) && !situation.staged && sends);
+    // Place, edit, an answer and a booking for later need words: an empty press would place nothing, rewind, settle a
+    // card with nothing said, or book nothing.
+    rule(
+        `an empty place, edit, answer or booking sends`,
+        (intent === `place` || intent === `edit` || intent === `answer` || intent === `later`) && !situation.staged && sends,
+    );
+    // A question or page waiting takes the words as its answer, ahead of any queue: never held behind the card it answers.
+    rule(`words held behind the card they answer`, situation.pendingAsk === true && (intent === `parked` || intent === `queue` || intent === `steer`));
     // The agent's voice has no live turn to speak into.
     rule(
         `the agent's voice goes into a running turn`,
@@ -211,9 +226,9 @@ describe(`every snapshot of the composer`, () => {
             }
         });
         expect(wrong).toEqual([]);
-        expect(total).toBe(2 ** 14 * PICK_UPS.length * 2 * 2 * BLOCKS.length);
+        expect(total).toBe(2 ** 13 * CARDS * PICK_UPS.length * 2 * 2 * BLOCKS.length);
         expect([...seen].sort()).toEqual([...INTENTS].sort());
-        // Four million snapshots: seconds alone, longer on a machine busy with other suites.
+        // Six million snapshots: seconds alone, longer on a machine busy with other suites.
     }, 300_000);
 
     // Every intent says what a press there does, in every set of words a pane can hand it.

@@ -71,6 +71,38 @@ describe("the ask tool's result", () => {
         });
     });
 
+    /* One message from the chat answering a whole card: said once, as the message it is, and read back as the same reply. */
+    it("writes one own-words answer shared by every question once", () => {
+        const words = "Neither.\nWhy can't we use both?";
+        const reply = {
+            kind: "question" as const,
+            requestId: "q1",
+            answers: { "Which store?": [words], "Deploy where?": [words] },
+            attachments: { "Which store?": ["/tmp/sketch.png"] },
+        };
+        const text = formatAnswers(questions, reply);
+        expect(text).toBe(
+            [
+                "The user answered all of these questions at once, in their own words:",
+                "Neither.",
+                "Why can't we use both?",
+                "  - attached file (read it): /tmp/sketch.png",
+                "",
+                "The user attached files to their answer; read them with the Read tool before acting on it.",
+            ].join("\n"),
+        );
+        expect(parseAnswers(questions, "q1", `${text}[image]`)).toEqual(reply);
+    });
+
+    /* The same pick on every question is still a pick, and a lone question's own words read as they always did. */
+    it("keeps the per-question wording for a shared option and for a single question", () => {
+        const both = [questions[0]!, { ...questions[1]!, options: [{ label: "Postgres", description: "p" }] }];
+        const picked = { kind: "question" as const, requestId: "q1", answers: { "Which store?": ["Postgres"], "Deploy where?": ["Postgres"] } };
+        expect(formatAnswers(both, picked)).toBe("The user answered:\n- Store: Postgres\n- Deploy where?: Postgres");
+        const lone = { kind: "question" as const, requestId: "q1", answers: { "Which store?": ["neither"] } };
+        expect(formatAnswers([questions[0]!], lone)).toBe("The user answered:\n- Store: neither");
+    });
+
     it("hands no files over with a dismissal", () => {
         const dismissed = { kind: "question" as const, requestId: "q1", cancelled: true, attachments: { "Which store?": ["a.png"] } };
         expect(answerFiles(questions, dismissed)).toEqual([]);

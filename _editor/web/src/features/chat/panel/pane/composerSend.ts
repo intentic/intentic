@@ -37,13 +37,14 @@ import { formatReset } from "../../../../models/providers/usageStatus";
 import { type SendBlock, sendBlockOf } from "../../../../models/providers/sendAvailability";
 import { anyProviderReady } from "../../../../models/providers/access";
 import { providerWithheld } from "../../../../models/providers/aiReach";
-import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
-import { type ChatAttachment, type ChatMessage, continuationFor } from "../../../../models/conversations/transcript/transcript";
+import { type ChatAttachment, continuationFor } from "../../../../models/conversations/transcript/transcript";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { useFreshAgentSend } from "./freshAgentSend";
 import { useContinueLater } from "./continueLater";
+import { planFeedback } from "../../../../models/conversations/session/cardReplies";
+import { planAnswers, pressable, useAskAnswer } from "./cardAnswers";
 import { spentUntilOf } from "../../../../models/conversations/accounts/runServing";
 import { pressGoes } from "../../../../models/conversations/endings/pressWay";
 
@@ -110,73 +111,16 @@ const nameBlockedAccount = (view: ConversationView, block: SendBlock | undefined
     }
 };
 
-// Whether a press may go at all: the sandbox answers, and the reader may drive this chat.
-const pressable = (host: Pick<SendHost, "reachable" | "canDrive">): boolean => host.reachable.value && host.canDrive.value;
-
 // The turn as the composer treats it: live as the card says it too (ConversationView.turnLive), a run to stop or steer only
 // where one goes (never a resume, whose words wait behind it); one a person ended is over here from the press, so what is
 // typed next is the next turn's (TurnClient.say waits the unwind out), never words for it or an answer to its card.
-const composerTurn = ({ turnLive, turnStoppable, ending, awaitingDecision, pendingPlanMessage }: ConversationView) => ({
+const composerTurn = ({ turnLive, turnStoppable, ending, awaitingDecision, pendingPlanMessage, pendingAskMessage }: ConversationView) => ({
     live: computed(() => turnLive.value && ending.value === undefined),
     stoppable: computed(() => turnStoppable.value && ending.value === undefined),
     parked: computed(() => awaitingDecision.value && ending.value === undefined),
     planMessage: computed(() => (ending.value === undefined ? pendingPlanMessage.value : undefined)),
+    askMessage: computed(() => (ending.value === undefined ? pendingAskMessage.value : undefined)),
 });
-
-// Approval carries the composer's notes into execution. Restore the notes if the decision was refused.
-// Keep planning sends the same notes as revision feedback.
-const planAnswers = (
-    host: SendHost,
-    planMessage: Readonly<Ref<ChatMessage | undefined>>,
-    composer: { readonly settle: () => void; readonly sendDraft: () => void },
-) => {
-    const { view, history, editorContext } = host;
-    const { draft, attachments, staged } = view;
-    const approvePlan = async (): Promise<void> => {
-        const plan = planMessage.value?.plan;
-        if (plan === undefined || !pressable(host)) {
-            return;
-        }
-        const text = draft.value.trim();
-        const staging = attachments.value;
-        const files = host.staging.snapshot();
-        const notes = text.length > 0 || files.length > 0;
-        if (notes) {
-            attachments.value = [];
-            editorContext.include.value = false;
-            composer.settle();
-        }
-        const approved = await view.conversation.value.requests.reply(plan.requestId, {
-            kind: `plan`,
-            approve: true,
-            feedback: notes ? planFeedback(text, files) : undefined,
-        });
-        if (!notes) {
-            return;
-        }
-        if (!approved) {
-            draft.value = text;
-            attachments.value = staging;
-            return;
-        }
-        if (text.length > 0) {
-            history.value?.record(text);
-        }
-        host.pin();
-    };
-    const keepPlanning = (): void => {
-        const plan = planMessage.value?.plan;
-        if (plan === undefined || !pressable(host)) {
-            return;
-        }
-        if (staged.value) {
-            composer.sendDraft();
-            return;
-        }
-        void view.conversation.value.requests.reply(plan.requestId, { kind: `plan`, approve: false });
-    };
-    return { approvePlan, keepPlanning };
-};
 
 // When the reader picked for the next message to go, where this composer may book one (sendLater.ts).
 const laterPick = (host: Pick<SendHost, "view" | "laterOffered">) =>
@@ -332,7 +276,7 @@ const stopPress = (host: Pick<SendHost, "mobile">, words: Readonly<Ref<ComposerW
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
-    const { live, stoppable, parked, planMessage } = composerTurn(view);
+    const { live, stoppable, parked, planMessage, askMessage } = composerTurn(view);
     const t = useT();
     const later = laterPick(host);
     // Running only while something counts down to a named instant (an allowance reset, a booked time); nothing else here
@@ -365,6 +309,7 @@ export const useComposerSend = (host: SendHost) => {
         voiceAgent: voiceAgent.value,
         editing: editing.value !== undefined,
         pendingPlan: planMessage.value !== undefined,
+        pendingAsk: askMessage.value !== undefined,
         streaming: live.value,
         awaitingDecision: parked.value,
         waitingOnYou: view.waitingOnYou.value,
@@ -486,17 +431,21 @@ export const useComposerSend = (host: SendHost) => {
 
     const { approvePlan, keepPlanning } = planAnswers(host, planMessage, { settle: settleComposer, sendDraft });
 
-    // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue or an
-    // appended send; then the run-through badge, then `canSend` for what's left. `now` skips the scheduling, for a caller
-    // that just made room itself (a reset claimed, an account switched).
+    // The presses that never reach the queue: words placed as the agent's, an armed edit spent, the card above answered.
+    const intercepts = { place: placeDraft, edit: sendEdit, answer: useAskAnswer(host, askMessage, settleComposer).answer };
+
+    // Place, edit and answer intercept and always return, since falling through with an empty box would misfire as
+    // Continue or an appended send; then the run-through badge, then `canSend` for what's left. `now` skips the
+    // scheduling, for a caller that just made room itself (a reset claimed, an account switched).
     const submit = (options: { readonly now?: boolean } = {}): void => {
         host.runThrough.clearFailures();
         if (!pressable(host)) {
             return;
         }
-        if (intent.value === `place` || intent.value === `edit`) {
+        const press = intent.value;
+        if (press === `place` || press === `edit` || press === `answer`) {
             if (readyToSend.value) {
-                void (intent.value === `place` ? placeDraft() : sendEdit());
+                void intercepts[press]();
             }
             return;
         }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { parseJsonWith } from "@intentic/base/json";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { z } from "zod";
 import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatCard from "../../../../components/ChatCard.vue";
@@ -20,6 +22,9 @@ const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (ans
 const card = computed(() => props.message.pageAsk!);
 const actions = usePageActions(() => card.value.page);
 
+// A JSON string's text; undefined for any other value, which reads as it was sent.
+const wordsOf = (value: string): string | undefined => parseJsonWith(value, z.string());
+
 // The page's answer, or why it was not taken; a card no longer waiting tells the page so rather than staying silent.
 const submit = answerOnPage(
     () => props.message.pageAsk,
@@ -27,13 +32,15 @@ const submit = answerOnPage(
     (answer) => props.reply(answer),
 );
 
-// What was sent, on one line: the reader's own answer, as the agent read it.
+// What was sent, on one line: the reader's own answer, as the agent read it. Words alone (what the composer answers a
+// page with, composerAnswer) read as the words, not as the JSON string they travel as.
 const sent = computed(() => {
     const value = card.value.value;
     if (value === undefined) {
         return undefined;
     }
-    return value.length > 160 ? `${value.slice(0, 159)}…` : value;
+    const words = wordsOf(value) ?? value;
+    return words.length > 160 ? `${words.slice(0, 159)}…` : words;
 });
 </script>
 
