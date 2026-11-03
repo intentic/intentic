@@ -1,13 +1,13 @@
 import "@intentic/testing/dom";
 import { effectScope, ref } from "vue";
 import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
-import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import type { FleetAgent } from "../useAgents-fleet";
 
 // The card's two presses for a stranded turn reach the daemon through useAgents, stubbed to see which one went.
 const setBreakPolicy = jest.fn(async () => {});
 const resumeHeldTurn = jest.fn(async () => {});
 const notice = ref<string | undefined>();
-jest.mock("../../../../models/fleet/useAgents", () => ({
+jest.mock("../useAgents", () => ({
     useAgents: () => ({ setBreakPolicy, resumeHeldTurn, refresh: async () => {}, notice }),
 }));
 

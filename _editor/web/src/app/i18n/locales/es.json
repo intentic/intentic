@@ -3114,6 +3114,9 @@
             "bookedForSpentReopened": "Programado para cuando se reabra {waited}, y vuelve a tener margen: Enviar ahora lo envía.",
             "servedOn": "Va a {served}. | Van a {served}."
         },
+        "chatLandStrip": {
+            "files": "{count} archivo | {count} archivos"
+        },
         "sandboxNotice": {
             "compacted": "Contexto compactado para liberar espacio.",
             "stopped": "Detenido.",

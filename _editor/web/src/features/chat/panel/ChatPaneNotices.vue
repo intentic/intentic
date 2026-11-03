@@ -10,18 +10,21 @@ import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import ChatTrialStrip from "./ChatTrialStrip.vue";
+import ChatLandStrip from "./landing/ChatLandStrip.vue";
+import { landStripOf } from "./landing/landStrip";
+import { useRole } from "../../../client/sandbox/useRole";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
 import { modelsPath } from "../../../lib/routes/modelsPath";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
-// (archived; then what it can send with — account gate, trial, expired credential), each with its one answering
+// (archived; work waiting to land; then what it can send with — account gate, trial, expired credential), each with its one answering
 // press. The composer's own state stays with the composer; reads this pane's conversation via the injected view,
 // never the focused one.
 
 const t = useT();
 
-const { conversation, provider, accounts } = usePaneView();
+const { conversation, provider, accounts, streaming } = usePaneView();
 const { reachable, active } = useSandbox();
 
 // The last of the hours THIS sandbox spends, above the composer, to the person spending them: only on a hosted
@@ -48,6 +51,19 @@ watch(
 const activeArchived = computed(() => {
     const agent = agentById(conversation.value.conversationId);
     return agent?.archivedAt === undefined ? undefined : agent;
+});
+
+// Its finished work still on its branch, its land under way, or its land refused, with the press the board card offers
+// for it (landStrip.ts): said here for the reader who opened the chat rather than landed it from the board.
+const { canShip, canReview } = useRole();
+const landStrip = computed(() => {
+    const agent = agentById(conversation.value.conversationId);
+    const strip = landStripOf(agent, {
+        canAct: canShip.value || canReview.value,
+        streaming: streaming.value,
+        elsewhere: conversation.value.box.value !== undefined,
+    });
+    return agent === undefined || strip === undefined ? undefined : { agent, strip };
 });
 
 // The credential the next turn runs on can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
@@ -77,6 +93,7 @@ const activeAccountReauth = computed(() => {
             {{ t(`ui.action.restore`) }}
         </Button>
     </div>
+    <ChatLandStrip v-else-if="landStrip !== undefined" :agent="landStrip.agent" :strip="landStrip.strip" />
     <ChatAccountPanel />
     <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
     <ChatPrivacyStrip />

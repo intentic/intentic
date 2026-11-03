@@ -3,7 +3,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { useAudience } from "../../../app/useAudience";
+import { useAudience } from "../../app/useAudience";
 import AgentLandPress from "./AgentLandPress.vue";
 
 let app: App | undefined;

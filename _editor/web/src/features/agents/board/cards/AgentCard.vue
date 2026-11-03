@@ -23,7 +23,7 @@ import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import CardLandPresses from "./CardLandPresses.vue";
 import CardStrandedClones from "./CardStrandedClones.vue";
-import { useCardRequests } from "./cardRequests";
+import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
 import { parentOf, sessionMark } from "../../../../models/agent-status/ownership";

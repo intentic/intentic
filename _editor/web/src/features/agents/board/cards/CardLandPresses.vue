@@ -7,7 +7,7 @@ import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { landWord } from "../../../../models/fleet/branches/branchLanding";
 import TourMark from "../../../tour/TourMark.vue";
-import { useCardRequests } from "./cardRequests";
+import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 
 // A Ready card's presses (AgentCard draws this only while it is Ready or its land runs): a maintainer's Land now, a
 // collaborator's Request land, and the standing ask either one is about.

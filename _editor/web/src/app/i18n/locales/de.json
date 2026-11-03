@@ -3114,6 +3114,9 @@
             "bookedForSpentReopened": "Geplant für den Zeitpunkt, an dem {waited} wieder öffnet, und es hat wieder Kontingent: „Jetzt senden“ schickt es ab.",
             "servedOn": "Läuft auf {served}. | Laufen auf {served}."
         },
+        "chatLandStrip": {
+            "files": "{count} Datei | {count} Dateien"
+        },
         "sandboxNotice": {
             "compacted": "Kontext verdichtet, um Platz zu schaffen.",
             "stopped": "Gestoppt.",

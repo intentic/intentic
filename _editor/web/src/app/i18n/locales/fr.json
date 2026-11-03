@@ -3114,6 +3114,9 @@
             "bookedForSpentReopened": "Prévu pour la réouverture de {waited}, qui a de nouveau de la marge : Envoyer maintenant l'envoie.",
             "servedOn": "Part sur {served}. | Partent sur {served}."
         },
+        "chatLandStrip": {
+            "files": "{count} fichier | {count} fichiers"
+        },
         "sandboxNotice": {
             "compacted": "Contexte compacté pour libérer de la place.",
             "stopped": "Arrêté.",

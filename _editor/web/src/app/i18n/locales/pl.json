@@ -3114,6 +3114,9 @@
             "bookedForSpentReopened": "Zaplanowano na odnowienie {waited}, a ma już zapas: Wyślij teraz wyśle ją od razu.",
             "servedOn": "Pójdzie do {served}. | Pójdą do {served}. | Pójdą do {served}."
         },
+        "chatLandStrip": {
+            "files": "{count} plik | {count} pliki | {count} plików"
+        },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
             "stopped": "Zatrzymano.",

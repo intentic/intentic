@@ -27,7 +27,7 @@ jest.mock(`../../../models/conversations/accounts/useChat-catalog`, () => ({ loa
 jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         // Shallow, as the conversation list holds them (sandboxShallowRef): a deep ref would unwrap the selection's refs.
-        conversation: shallowRef({ conversationId: `agent-1`, turn: { resume }, selection: { servingAccount } }),
+        conversation: shallowRef({ conversationId: `agent-1`, box: ref(undefined), turn: { resume }, selection: { servingAccount } }),
         provider,
         account: ref(undefined),
         accounts,
@@ -50,7 +50,7 @@ jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: (
 const spending = (usedMinutes: number): HostedPlanState =>
     hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(usedMinutes))], spentHours(usedMinutes)));
 // The conversation's own board row, for what its run has changed so far (the spent trial's Review press).
-const agentRow = ref<{ diff?: { files: number; insertions: number; deletions: number } } | undefined>(undefined);
+const agentRow = ref<{ id: string; status: string; diff?: { files: number; insertions: number; deletions: number } } | undefined>(undefined);
 jest.mock(`../../../models/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => agentRow.value,
@@ -66,6 +66,8 @@ jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent(
 jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name: `NeedsStrip`, setup: () => () => undefined }) }));
 // The privacy shield's strip reads the shield's own status, and has its own test (privacy/ChatPrivacyStrip.test.ts).
 jest.mock(`./privacy/ChatPrivacyStrip.vue`, () => ({ default: defineComponent({ name: `ChatPrivacyStrip`, setup: () => () => undefined }) }));
+// The land strip has its own tests (landing/); its presses would pull in the fleet's whole action layer here.
+jest.mock(`./landing/ChatLandStrip.vue`, () => ({ default: defineComponent({ name: `ChatLandStrip`, setup: () => () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     RouterLink: RouterLinkStub as never,
@@ -244,7 +246,7 @@ it(`turns into the way out once today's allowance is gone, saying when it comes 
 // connect flow. What the run changed is one press away, beside the way on.
 it(`offers the changes the run already made once the trial stops it`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
-    agentRow.value = { diff: { files: 2, insertions: 11, deletions: 2 } };
+    agentRow.value = { id: `agent-1`, status: `error`, diff: { files: 2, insertions: 11, deletions: 2 } };
 
     const element = mount();
 

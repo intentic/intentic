@@ -1,11 +1,11 @@
 <!-- The review's one primary press, in whichever form this reader gets it: Fix conflicts, Land now, Request land, or the fact that it was asked. -->
 <script setup lang="ts">
-import { useAudience } from "../../../app/useAudience";
+import { useAudience } from "../../app/useAudience";
 import { Button, type Tip } from "@intentic/ui";
-import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
-import { landWord } from "../../../models/fleet/branches/branchLanding";
-import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { landWord } from "../../models/fleet/branches/branchLanding";
+import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
 
 // One body for the desktop header and a phone's Changes screen, so the role split (maintainers land, collaborators
 // ask, the daemon enforcing the floor either way) is decided in one template rather than kept in step across two.

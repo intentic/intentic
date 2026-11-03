@@ -3114,6 +3114,9 @@
             "bookedForSpentReopened": "Booked for when {waited} reopens, and it has room again: Send now sends it.",
             "servedOn": "Goes on {served}. | Go on {served}."
         },
+        "chatLandStrip": {
+            "files": "{count} file | {count} files"
+        },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
             "stopped": "Stopped.",

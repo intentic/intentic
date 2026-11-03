@@ -2,13 +2,13 @@ import type { Tip } from "@intentic/ui";
 import { messageOr, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref } from "vue";
-import { landRequestWork, requestLandAgent } from "../../../../models/fleet/agentActions";
-import { cardPressWay, goesAtReopen } from "../../../../models/conversations/endings/pressWay";
-import { sandboxNow } from "../../../../models/agent-status/sandboxClock";
-import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
-import { useAgents } from "../../../../models/fleet/useAgents";
-import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { useOperation } from "../../../../workbench/operations/operations";
+import { landRequestWork, requestLandAgent } from "../agentActions";
+import { cardPressWay, goesAtReopen } from "../../conversations/endings/pressWay";
+import { sandboxNow } from "../../agent-status/sandboxClock";
+import { refreshAcross } from "../../sandbox/live/fleetAcross";
+import { useAgents } from "../useAgents";
+import type { FleetAgent } from "../useAgents-fleet";
+import { useOperation } from "../../../workbench/operations/operations";
 
 // The two presses an agent card sends to the daemon itself rather than emitting to its host, since the board is only one
 // of the card's several hosts: a collaborator's Request land, and Send again (or Send at reset) for a turn a spent

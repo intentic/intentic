@@ -22,6 +22,8 @@ import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
 import { timeAgo } from "@intentic/ui";
 import { useAudience } from "../../../app/useAudience";
 import { useRole } from "../../../client/sandbox/useRole";
+import { landFromMenu } from "../../../models/fleet/presses/landPress";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 
 // One open chat as the rail draws it. A component rather than a block of ChatTabList's template because the card is
 // named by its own composer while nothing else has named it (tabLabel → draftPreview): read from the list, that one
@@ -32,7 +34,8 @@ import { useRole } from "../../../client/sandbox/useRole";
 const t = useT();
 // Which model answers is a developer's fact: a maker's and a guest's rail row names the conversation, not the model.
 const { maker } = useAudience();
-const { isGuest } = useRole();
+const { isGuest, canShip } = useRole();
+const words = useVocabulary();
 const modelShown = computed(() => !maker.value && !isGuest.value);
 
 const props = defineProps<{
@@ -79,6 +82,24 @@ const chip = computed(() => (props.agent === undefined ? props.view.chip : setti
 // keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
 const unsentWords = (): string | undefined => draftPreview(props.conversation.draft.value);
 
+// The board card's Land now, on the row of a chat whose work waits on its branch, so landing it needs no trip into the chat
+// or to the board. A maintainer's press on this sandbox's own card, as the row's menu offers it (agentMenu.landRows); while
+// the land runs the card reads `landing`, which takes the press away until it answers. A refusal is a toast (landFromMenu).
+const landable = computed(
+    () =>
+        canShip.value &&
+        props.agent !== undefined &&
+        props.agent.status === `ready` &&
+        props.agent.archivedAt === undefined &&
+        props.conversation.box.value === undefined,
+);
+const landRow = (event: Event): void => {
+    event.stopPropagation();
+    if (props.agent !== undefined) {
+        void landFromMenu(props.agent, `land`);
+    }
+};
+
 // The × sits inside the card's click target; stop propagation or the press also selects the row.
 const closeRow = (event: Event): void => {
     event.stopPropagation();
@@ -115,6 +136,18 @@ const closeRow = (event: Event): void => {
                 :members="viewersOfSession(props.conversation.session.value!.id)"
                 :label="t(`chat.words.inChat`)"
             />
+            <!-- Always drawn while the work waits, unlike the ×: a press found only by hovering is the one a reader misses. -->
+            <span
+                v-if="landable"
+                role="button"
+                :aria-label="words.land"
+                v-tooltip.top="words.land"
+                class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-overlay hover:text-success"
+                data-row-land
+                @click="landRow"
+            >
+                <Icon name="check" class="text-2xs" />
+            </span>
             <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
             <span
                 v-if="props.closable"

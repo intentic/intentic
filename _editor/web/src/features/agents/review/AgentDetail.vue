@@ -43,7 +43,7 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useChat } from "../../../models/conversations/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
-import AgentLandPress from "./AgentLandPress.vue";
+import AgentLandPress from "../../../parts/fleet/AgentLandPress.vue";
 import ReviewFocusButton from "./ReviewFocusButton.vue";
 import ChatChangesSwitch from "./pager/ChatChangesSwitch.vue";
 import SwipePages from "./pager/SwipePages.vue";
