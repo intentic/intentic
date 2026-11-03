@@ -8,6 +8,7 @@
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/docker-config.sh"
+. "$(dirname "$0")/../lib/buildkit-retry.sh"
 cd "$(repo_root)"
 # The starter build below is a docker build, as netd's is: the same fix for a credential helper this shell cannot run.
 docker_config_without_missing_helpers
@@ -221,7 +222,7 @@ starter_bound=()
 if command -v timeout >/dev/null 2>&1; then
     starter_bound=(timeout --kill-after=30 1800)
 fi
-"${starter_bound[@]}" docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
+buildkit_retry "${starter_bound[@]}" docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
     "${starter_args[@]}" \
     --output "type=local,dest=$starter_build" _sandbox/sandbox/starter
 [ -f "$starter_build/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }

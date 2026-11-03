@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks registry-retry.sh, npm-publish-retry.sh, image-pull.sh and github.sh: each is a pattern list deciding which
+// Checks BuildKit, registry, npm, image-pull and GitHub retries: each is a pattern list deciding which
 // failure a release rides out, asserted against failures that actually killed one, in both directions. Patterns are read
 // back out of the scripts, compiled as POSIX ERE case-insensitively; the retry loop is drilled through bash when available.
 import { spawnSync } from "node:child_process";
@@ -11,6 +11,47 @@ import { root, trackedFiles } from "./lib/repo.mjs";
 // Each drill prints one line per case, `<case> <attempts> <status>`. Delays are 0: there's no clock worth waiting out.
 
 const SUBJECTS = [
+    {
+        id: "buildkit-retry",
+        script: "_tools/scripts/lib/buildkit-retry.sh",
+        predicate: "buildkit_retry_transient",
+        rideItOut: [
+            [
+                "worker discovery lost its Docker socket (killed release images-amd64 in run 41552955701)",
+                'ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"',
+            ],
+        ],
+        failAtOnce: [
+            ["a broken Dockerfile", "ERROR: failed to solve: dockerfile parse error on line 3: unknown instruction: RUNN"],
+            ["a compile failure", 'ERROR: process "/bin/sh -c cargo build --release" did not complete successfully: exit code: 101'],
+            ["a registry refusal", "ERROR: failed to solve: unauthorized: authentication required"],
+            ["an unreachable Docker daemon", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"],
+            ["an expired build deadline", "ERROR: failed to solve: DeadlineExceeded: context deadline exceeded"],
+            ["a cancelled build", "ERROR: failed to build: failed to solve: Canceled: context canceled"],
+            ["a connection lost during the build", "ERROR: failed to solve: rpc error: code = Unavailable desc = use of closed network connection"],
+        ],
+        drill: String.raw`
+export BUILDKIT_RETRY_ATTEMPTS=3 BUILDKIT_RETRY_DELAY=0
+DROPPED='ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"'
+BROKEN='ERROR: process "/bin/sh -c cargo build --release" did not complete successfully: exit code: 101'
+
+flaky() {
+    echo x >> "$count"
+    [ "$(wc -l < "$count")" -ge 2 ] && return 0
+    printf '%s\n' "$DROPPED" >&2
+    return 1
+}
+disconnected() { echo x >> "$count"; printf '%s\n' "$DROPPED" >&2; return 1; }
+broken() { echo x >> "$count"; printf '%s\n' "$BROKEN" >&2; return 101; }
+timed_out() { echo x >> "$count"; return 124; }
+
+run flaky buildkit_retry flaky
+run disconnected buildkit_retry disconnected
+run broken buildkit_retry broken
+run timed-out buildkit_retry timed_out
+`,
+        expect: { flaky: [2, 0], disconnected: [3, 1], broken: [1, 101], "timed-out": [1, 124] },
+    },
     {
         id: "registry-retry",
         script: "_tools/scripts/lib/registry-retry.sh",
