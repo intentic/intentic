@@ -85,6 +85,20 @@ runs:
         # Source-consumed packages have no build script to resync them; unchanged manifests/lockfile otherwise leave stale code in the store.
         # Even --force can take that shortcut. Persistent node_modules needs this invalidation before every install.
         rm -f node_modules/.pnpm-workspace-state-v1.json
+        # BUN'S POSTINSTALL EMPTIES ITS OWN PLATFORM PACKAGE. install.js RENAMES @oven/bun-<platform>/bin/bun into
+        # bun/bin/bun.exe, so on a retained node_modules the platform package is left without its binary, and every
+        # later run of that postinstall falls back to a network `npm install` of it. When that fails quietly (a slow
+        # registry, run 41695644909) the install dies with `Failed to find package "@oven/bun-linux-x64"`.
+        # pnpm leaves a missing file inside an installed package alone, but re-imports a package whose directory is
+        # gone, so drop the emptied ones (and the npm fallback's copies nested in bun) and let the store restore them.
+        for pkg in node_modules/.pnpm/@oven+bun-*/node_modules/@oven/*/; do
+          [ -d "$pkg" ] || continue
+          if [ ! -e "${pkg}bin/bun" ] && [ ! -e "${pkg}bin/bun.exe" ]; then
+            echo "restoring ${pkg%/} from the store: an earlier bun postinstall moved its binary out"
+            rm -rf -- "${pkg%%/node_modules/@oven/*}"
+          fi
+        done
+        rm -rf node_modules/.pnpm/bun@*/node_modules/bun/node_modules/@oven
         # The frozen install's own words decide the fallback, not its exit code: only a lockfile that disagrees with
         # the manifests (pnpm's OUTDATED_LOCKFILE and its two kin) is drift. A registry that drops the connection is
         # not, and would only fail again a second time slower.
