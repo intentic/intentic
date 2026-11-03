@@ -1,13 +1,13 @@
 import { refuse } from "@intentic/contract-serve";
 import { ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
-import { cancelCi, ciJobs, ciRunsResponse, rerunCi } from "../../fixture/ci";
+import { cancelCi, ciJobs, ciRunsResponse, dispatchCi, forgetCi, rerunCi } from "../../fixture/ci";
 import { demoMode, demoQuiet } from "../../mode";
 import { pushRuntime } from "../runtimePush";
 import { putCard, workCard } from "./workCards";
 import { patchAgent, roster } from "./roster";
 import type { Doors } from "../doors";
 
-// The CI board over the fixture's runs, with rerun and cancel acting on them (fixture/ci.ts plays a rerun's graph) and
+// The CI board over the fixture's runs, with rerun, dispatch, cancel and failure tracking acting on them, and
 // Fix-with-agent opening a conversation on the failure. Main is failing, with its fix agents, only in the whole recording,
 // the one roster that carries them.
 const options = () => ({ mainFailing: demoMode.id === `full`, green: demoQuiet() });
@@ -17,16 +17,24 @@ const RERUN_PUSH_MS = 45_000;
 // from the forge (about 1 s and 2 s on GitHub for a 4 MB log), so the board's card standing in for it is seen as it is.
 const FIX_READS_LOGS_MS = 3_000;
 
+const startRun = (repo: string, runId: number, start: typeof rerunCi) => {
+    if (start(repo, runId, Date.now()) === undefined) {
+        refuse(`No run ${runId} on ${repo}.`, 404);
+    }
+    pushRuntime(`ci`);
+    // The run ends on its own; the push is the webhook's delivery saying so.
+    setTimeout(() => pushRuntime(`ci`), RERUN_PUSH_MS);
+    return { ok: true as const };
+};
+
 export const ciDoors = {
     runs: () => ciRunsResponse(Date.now(), options()),
     jobs: ({ repo, runId }) => ({ jobs: ciJobs(repo, runId, Date.now(), demoQuiet()) }),
-    rerun: ({ repo, runId }) => {
-        if (rerunCi(repo, runId, Date.now()) === undefined) {
-            refuse(`No run ${runId} on ${repo}.`, 404);
-        }
+    rerun: ({ repo, runId }) => startRun(repo, runId, rerunCi),
+    dispatch: ({ repo, runId }) => startRun(repo, runId, dispatchCi),
+    forget: (target) => {
+        forgetCi(target);
         pushRuntime(`ci`);
-        // The run ends on its own; the push is the webhook's delivery saying so.
-        setTimeout(() => pushRuntime(`ci`), RERUN_PUSH_MS);
         return { ok: true as const };
     },
     cancel: ({ repo, runId }) => {
