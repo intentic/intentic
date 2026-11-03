@@ -63,6 +63,18 @@ describe("a timed text wait", () => {
         expect(JSON.stringify(answer)).toContain('waiting for \\"Saved\\": Timeout 50ms exceeded');
     });
 
+    it("names the time asked for in its timeout, however far the clock moved while it set the wait up", async () => {
+        // Every reading a millisecond on: the wait once took its own time from a second reading and said "49ms".
+        let clock = 1_000;
+        const answer = await sendBoundingWait(
+            { name: "browser_wait_for", arguments: { time: 0.05, text: "Saved" } },
+            undefined,
+            (_params, signal) => new Promise<RpcMessage>((resolve) => signal?.addEventListener("abort", () => resolve({ error: { code: -32800, message: "cancelled" } }))),
+            () => (clock += 1),
+        );
+        expect(JSON.stringify(answer)).toContain('waiting for \\"Saved\\": Timeout 50ms exceeded');
+    });
+
     it("knows a timeout from any other failure", () => {
         expect(waitTimedOut(timedOut)).toBe(true);
         expect(waitTimedOut(found)).toBe(false);

@@ -85,11 +85,13 @@ export const sendBoundingWait = async (
     send: (params: NonNullable<RpcMessage["params"]>, signal?: AbortSignal) => Promise<RpcMessage>,
     now: () => number = Date.now,
 ): Promise<RpcMessage> => {
-    const bounded = boundedWaitOf(params, now());
+    // One reading of the clock for both: a second one a millisecond later answered a 300ms wait as "Timeout 299ms".
+    const started = now();
+    const bounded = boundedWaitOf(params, started);
     if (bounded === undefined) {
         return send(params, signal);
     }
-    const asked = bounded.deadline - now();
+    const asked = bounded.deadline - started;
     for (;;) {
         const cutoff = new AbortController();
         const timer = setTimeout(() => cutoff.abort(), Math.max(0, bounded.deadline - now()));
