@@ -593,7 +593,7 @@ const decide = async (
             message: { content: [{ type: "tool_use", id: `call-${call.tool}`, name: call.tool, input: call.input ?? {} }] },
         } as SDKMessage;
         result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
-        if (result.behavior === "allow" && call.tool === "ExitPlanMode") {
+        if (result?.behavior === "allow" && call.tool === "ExitPlanMode") {
             for (const matcher of args.options.hooks?.PostToolUse ?? []) {
                 if (matcher.matcher !== "^ExitPlanMode$") {
                     continue;

@@ -25,7 +25,8 @@ jest.mock("../prompt/preset-prompt.js", () => ({
 // graph deserves the truth: version.ts finds its package.json by walking up with existsSync, and an
 // always-true stub stops that walk at src/ and fails the whole suite on a module far from the tmux gate.
 jest.mock("node:fs", async () => {
-    const actual = fsOriginal;
+    // Bun rewires the imported namespace when installing the mock; capture the original functions first.
+    const actual = { ...fsOriginal };
     return {
         ...actual,
         existsSync: (path: import("node:fs").PathLike) => (String(path).includes("tmux") ? true : actual.existsSync(path)),

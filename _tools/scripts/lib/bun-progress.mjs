@@ -6,8 +6,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { processTree } from "./memory-ceiling.mjs";
 
-// A file's heading in bun's output: `path/to/x.test.ts:` alone on its line, inside a `##[group]` on GitHub Actions.
-const FILE_HEADING = /^(?:##\[group\])?(\S+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/u;
+// A file's heading in bun's output: plain, a raw GitHub `::group::` command, or the runner's stored `##[group]` form.
+const FILE_HEADING = /^(?:##\[group\]|::group::)?(\S+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/u;
 const FAILED_TEST = /^\(fail\) /u;
 const SUMMARY = /^Ran \d+ tests? across \d+ files?\./u;
 // What fails a run without a `(fail)` line of its own: an error thrown outside any test (bun counts it as a failure and

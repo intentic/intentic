@@ -63,3 +63,16 @@ test("the checklist arrives as the plan, and its own tool and every other frame 
         undefined,
     ]);
 });
+
+
+test("an interrupted call is a failed step, on first sight and after an update", () => {
+    expect(read([
+        { kind: "tool_call", id: "stopped", name: "Bash", category: "execute", status: "interrupted" },
+        { kind: "tool_call", id: "running", name: "Bash", category: "execute", status: "in_progress" },
+        { kind: "tool_call_update", id: "running", status: "interrupted" },
+    ])).toEqual([
+        { step: { id: "stopped", tool: "Bash", kind: "execute", status: "failed" } },
+        { step: { id: "running", tool: "Bash", kind: "execute", status: "running" } },
+        { step: { id: "running", tool: "Bash", kind: "execute", status: "failed" } },
+    ]);
+});

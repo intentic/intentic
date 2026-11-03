@@ -4,6 +4,7 @@ import { pairings } from "../peers/enrollment.js";
 import { redeemCodes } from "../peers/redeem-codes.js";
 import { enrolledFleet, syncPairBurns, type SyncMode } from "../peers/desktop-sync.js";
 import type { HostsSlice } from "./hosts-slice.js";
+import { createRunBuilds } from "./runs/run-builds.js";
 
 // The hosts slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -12,6 +13,7 @@ export const hostsSliceFake = ({ historyRoot }: SliceFakeContext) =>
         // Real pairing table so mint and redeem share one implementation, following the test's own history root.
         syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
         redeemCodes: redeemCodes(),
+        runBuilds: createRunBuilds(),
         enrollTokens: pairings(),
         // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
         // so every route running a turn needs it.

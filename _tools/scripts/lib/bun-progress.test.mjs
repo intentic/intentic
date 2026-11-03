@@ -201,3 +201,10 @@ test("an (unnamed) failure that is a hook timing out is named with its file's be
         [],
     );
 });
+
+
+test("reads GitHub workflow group commands before the runner formats them", () => {
+    const progress = fed(["src/a.test.ts"], ["::group::src/a.test.ts:", "(pass) one", "::endgroup::"]);
+    assert.deepEqual([...progress.seen], ["src/a.test.ts"]);
+    assert.deepEqual(unreported(progress), []);
+});

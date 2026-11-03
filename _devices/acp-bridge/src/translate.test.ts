@@ -120,3 +120,15 @@ test("context_usage maps to usage_update; the head, the end, and accounting or t
     expect(translate({ kind: "attached", run: "r", startedAt: 0, seq: 0, rows: [] })).toEqual([]);
     expect(translate({ kind: "end" })).toEqual([]);
 });
+
+
+test("an interrupted tool is a failed ACP call, both on first sight and on update", () => {
+    const translate = createTranslator(CWD);
+    const tool: TranscriptTool = { id: "stopped", name: "Bash", category: "execute", status: "interrupted" };
+    expect(translate(patch({ op: "tool", index: 0, tool }))).toEqual([
+        { sessionUpdate: "tool_call", toolCallId: "stopped", title: "Bash", kind: "execute", status: "failed" },
+    ]);
+    expect(translate(patch({ op: "tool", index: 0, tool }))).toEqual([
+        { sessionUpdate: "tool_call_update", toolCallId: "stopped", status: "failed" },
+    ]);
+});

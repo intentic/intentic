@@ -4,7 +4,7 @@ import { DESK_SANDBOX_NAME } from "../../fixture/desk";
 import { demoCommandSaid, demoDevices, demoEgressOwnerKeys, switchDemoPairings } from "../../fixture/devices";
 import { inProcessSubagents } from "../../fixture/fleet";
 import { demoMetrics } from "../../fixture/metrics";
-import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../../fixture/storage";
+import { demoDiskPressure, demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../../fixture/storage";
 import { demoQuiet, deskEdition } from "../../mode";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "../events";
@@ -29,6 +29,7 @@ export const systemDoors = {
     metrics: () => demoMetrics(Date.now(), roster.agents),
     // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
     storage: () => demoStorageReport(),
+    diskPressure: () => demoDiskPressure(),
     scanStorage: () => demoStorageScan(),
     cancelStorageScan: () => demoStorageCancel(),
     cleanStorage: ({ category }) => demoStorageClean(category),
