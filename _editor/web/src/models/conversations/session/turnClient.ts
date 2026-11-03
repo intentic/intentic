@@ -24,13 +24,14 @@ import { bookingOfMessage, holdOfQueue, perMessage, unbookedOf } from "../drafts
 import { sentFrom } from "../drafts/composerDrafts";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../../providers/accountsOutdated";
-import { type ContinueOptions, withHandoffChosen } from "../endings/pickUp";
+import { type ContinueOptions, type PressedOn, withHandoffChosen } from "../endings/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../../../client/sandbox/streams/turnStream";
 import { noteTurnCompleted, track } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor } from "../transcript/transcript";
 import { refusalWords } from "../transcript/sandboxNotice";
 import type { TurnHost } from "./turnHost";
+import { followSteered, type Heard, leftTo, type LeftTo } from "./steeredWords";
 import { accepted, advance, IDLE, phaseEnding, type RunEvent, type RunPhase, type TurnEnding } from "./runPhase";
 
 // One conversation's runs, as this window drives them: a message is sent (opened, then taken at the daemon's ack),
@@ -394,7 +395,7 @@ export class TurnClient {
 
     // Hands an opened turn's words to the daemon and follows it to its end. `taken` hears exactly once whether the daemon
     // took the words: at its ack, or as the turn ends without one. Words it said into a turn already running, or queued
-    // behind one, leave this window's bubble to the daemon's own row, and this window follows that turn instead.
+    // behind one, leave this window's bubble to the daemon's own row (steeredWords.ts), and this window follows that turn.
     private async deliverTurn(
         opened: OpenedTurn,
         text: string,
@@ -415,7 +416,7 @@ export class TurnClient {
         const turn: Omit<TurnContext, "run"> = { sent, provider: settings.agent, account: settings.account, harness: settings.harness };
         const messageId = this.messageIdFor(text);
         this.message = messageId;
-        let elsewhere = false;
+        let elsewhere: LeftTo | undefined;
         const body = this.requestBody({ text, attachments, messageId, editorContext }, { opened: { settings, session }, forkOf, errand });
         try {
             const receipt = await this.post(body, controller.signal);
@@ -430,9 +431,8 @@ export class TurnClient {
             if (host.box.value !== undefined) {
                 host.registered.value = true;
             }
-            elsewhere = receipt.delivered !== `started` || receipt.run === undefined;
-            if (elsewhere) {
-                host.transcript.dropLocal(userMessageId);
+            if (receipt.delivered !== `started` || receipt.run === undefined) {
+                elsewhere = leftTo(host.transcript, receipt, userMessageId, messageId);
             } else {
                 this.ranOn(settings);
                 await this.follow(receipt.run, turn, userMessageId, controller);
@@ -445,8 +445,8 @@ export class TurnClient {
             this.endTurn();
         }
         // Another turn holds the conversation: the words went into it or wait behind it, so that turn is the one to follow.
-        if (elsewhere) {
-            await this.reattach();
+        if (elsewhere !== undefined) {
+            await (elsewhere.steered === undefined ? this.reattach() : followSteered(this, host.transcript, elsewhere.steered));
         }
     }
 
@@ -642,14 +642,15 @@ export class TurnClient {
     }
 
     // What "carry on" does: a held turn is re-run, and a turn the daemon holds nothing of (a Stop, a restart since) is
-    // carried on by the daemon in its own session. Neither adds a word of the person's to the conversation.
-    async continueTurn(options: ContinueOptions = {}): Promise<void> {
+    // carried on by the daemon in its own session. Neither adds a word of the person's to the conversation. `from` is the
+    // pick-up the press was made on: the pane's (the card's, useChat-view pickUpView), else this window's own.
+    async continueTurn(options: ContinueOptions = {}, from: PressedOn = { pickUp: this.host.pickUp.value }): Promise<void> {
         if (this.continuing.value) {
             return;
         }
         this.continuing.value = true;
         try {
-            if (!(await this.resumeHeldTurn(options))) {
+            if (!(await this.resumeHeldTurn(options, from))) {
                 await this.carryOn();
             }
         } catch (error) {
@@ -828,8 +829,8 @@ export class TurnClient {
 
     // Re-run the held turn: what Continue means when the daemon kept it; false leaves it to carryOn.
     // No message is appended: a press is the same request again, so the daemon resumes with a note, not a repeat.
-    async resumeHeldTurn(options: ContinueOptions = {}): Promise<boolean> {
-        const held = this.host.pickUp.value?.held;
+    async resumeHeldTurn(options: ContinueOptions = {}, from: PressedOn = { pickUp: this.host.pickUp.value }): Promise<boolean> {
+        const held = from.pickUp?.held;
         if (this.streaming.value || held === undefined) {
             return false;
         }
@@ -886,11 +887,11 @@ export class TurnClient {
         );
     }
 
-    // Records how a spent allowance's held turn continues once it is sent again (agent.chooseHandoff): carry the session,
-    // trim it, or summarise it. Starts nothing; the card shows the pick at once and snaps back if the daemon refuses it.
-    async chooseHandoff(handoff: HandoffMode): Promise<boolean> {
+    // Records how a spent allowance's held turn (`from`, the pane's, as continueTurn's) continues once sent again: carry the
+    // session, trim it, or summarise it. Starts nothing; the card shows the pick at once and snaps back if refused.
+    async chooseHandoff(handoff: HandoffMode, from: PressedOn = { pickUp: this.host.pickUp.value }): Promise<boolean> {
         const { host } = this;
-        const before = host.pickUp.value;
+        const before = from.pickUp;
         if (before?.held?.handoff === undefined || !host.registered.value) {
             return false;
         }
@@ -1021,7 +1022,7 @@ export class TurnClient {
 
     // What the sandbox said to words that waited (turnOutbox.ts): a refusal hands them back as one at the door does, a turn
     // of their own is followed here over the waiting bubble, and words said into a live turn or queued behind it leave the
-    // bubble to the daemon's row.
+    // bubble to the daemon's row (steeredWords.ts).
     private answered(entry: OutboxEntry, receipt: MessageReceipt | SandboxHttpError, bubble: number | undefined): void {
         const sent: SentMessage = { text: entry.text, attachments: entry.attachments };
         if (receipt instanceof SandboxHttpError) {
@@ -1038,10 +1039,8 @@ export class TurnClient {
             void this.followTaken(receipt.run, bubble, entry, sent);
             return;
         }
-        if (bubble !== undefined) {
-            this.host.transcript.dropLocal(bubble);
-        }
-        void this.reattach();
+        const left: LeftTo = bubble === undefined ? {} : leftTo(this.host.transcript, receipt, bubble, entry.messageId);
+        void (left.steered === undefined ? this.reattach() : followSteered(this, this.host.transcript, left.steered));
     }
 
     // A waiting message the sandbox took as a turn of its own: followed from its ack, the run's head drawn over its bubble.
@@ -1212,9 +1211,9 @@ export class TurnClient {
     // Attach to a turn already running daemon-side (before a reload, from another window or device, or one the queue
     // started). False when nothing is live, so the caller falls back to hydration; undefined when the daemon could not be
     // asked (FollowEnd), which is no answer at all. `passed` is a run this window has already seen to its end, which a
-    // head naming it stands down for.
-    async reattach(passed?: string): Promise<FollowEnd> {
-        return (await this.follows(passed)).end;
+    // head naming it stands down for; `heard` sees each head this window takes, just before it is drawn.
+    async reattach(passed?: string, heard?: Heard): Promise<FollowEnd> {
+        return (await this.follows(passed, undefined, heard)).end;
     }
 
     /**
@@ -1227,7 +1226,7 @@ export class TurnClient {
 
     // An attach as reattach makes it, saying too whether the daemon opened on `passed` itself (`older`): asked to follow
     // on `after` it, only a sandbox too old to wait for the next run does.
-    private async follows(passed?: string, after?: string): Promise<{ readonly end: FollowEnd; readonly older: boolean }> {
+    private async follows(passed?: string, after?: string, heard?: Heard): Promise<{ readonly end: FollowEnd; readonly older: boolean }> {
         if (this.streaming.value) {
             return { end: true, older: false };
         }
@@ -1247,6 +1246,7 @@ export class TurnClient {
                 // The daemon is streaming this run at us, so it's already its own record; nothing here is undelivered.
                 this.beginTurn({ kind: `attached`, controller, startedAt: head.startedAt, run: head.run });
             }
+            heard?.(head);
             // This window may have drawn this run already; the head's rows replace what it holds, nothing draws twice.
             host.transcript.attachRun(head);
             // No `sent`: this window did not type these words, so a refusal has nothing of its own to hand back and

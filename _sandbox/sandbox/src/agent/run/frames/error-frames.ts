@@ -215,7 +215,10 @@ const SHARED_RULES: readonly FailureRule[] = [
  * its order, then the rules every runtime shares. A coded frame, or one the sandbox worded itself (whose author coded it,
  * or left it uncoded on purpose), comes back as it is. Every runtime's frames pass through this at the one door they all
  * go out by (stream-agent's run loop), so a sentence read on one loop is read on all of them. What is read is what the
- * failure said, never the stderr its process printed behind it (withStderrTail): a crash is not a provider's limit.
+ * failure said, never the stderr its process printed behind it (withStderrTail): a crash is not a provider's limit. A
+ * frame its words coded goes out in those words alone: the stderr is kept only where nothing named the failure, as the
+ * one clue to it, and behind a coded sentence it was log noise in what the reader opens (Devin's "weekly usage quota
+ * has been exhausted. … stderr: INFO run_acp_server…", 2026-10-28).
  */
 export const codedFailure = (frame: ErrorEvent, rules: readonly FailureRule[] = []): ErrorEvent => {
     if (frame.code !== undefined || frame.own === true) {
@@ -223,8 +226,11 @@ export const codedFailure = (frame: ErrorEvent, rules: readonly FailureRule[] = 
     }
     const said = withoutStderrTail(frame.message);
     if (isUnsentParameterRefusalText(said)) {
-        return unsentParameterFrame(frame.message);
+        return unsentParameterFrame(sentenceOf(said, frame.message));
     }
     const rule = [...rules, ...SHARED_RULES].find(([recognizes]) => recognizes(said));
-    return rule === undefined ? frame : { ...frame, code: rule[1] };
+    return rule === undefined ? frame : { ...frame, code: rule[1], message: sentenceOf(said, frame.message) };
 };
+
+// The words without their stderr, given back the full stop the fold took off them (withStderrTail joins on ". stderr: ").
+const sentenceOf = (said: string, whole: string): string => (said === whole || /[.!?]$/u.test(said) ? said : `${said}.`);

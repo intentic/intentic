@@ -5,7 +5,7 @@ import { useSettled } from "@intentic/ui/async";
 import { ref, watch } from "vue";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { answeredAt } from "../../../models/agent-status/answeredAt";
-import { statusIcon } from "../models/catalog";
+import { headerGlyph, statusLookOf } from "./statusLook";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
@@ -97,7 +97,8 @@ const startNew = (): void => {
                 :class="{ 'ui-row-select-on': activeId === c.conversationId }"
                 @click="pick(c.conversationId)"
             >
-                <Icon v-bind="statusIcon(c.status.value)" />
+                <!-- What it is doing, as its card says it (statusLook.ts): the rail's reading, its window's only without a card. -->
+                <Icon v-bind="headerGlyph(statusLookOf(c, agentById(c.conversationId)))" />
                 <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.conversationId ? 'text-link' : 'text-content'">{{
                     c.title.value ?? (c.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`))
                 }}</span>

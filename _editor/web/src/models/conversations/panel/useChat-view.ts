@@ -2,15 +2,15 @@ import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
-import { computed, type ComputedRef, inject, type InjectionKey } from "vue";
-import type { AgentStanding } from "../../agent-status/agentStatus-standing";
+import { computed, type ComputedRef, inject, type InjectionKey, shallowRef, watch } from "vue";
+import { type AgentStanding, turnInFlight } from "../../agent-status/agentStatus-standing";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { Conversation } from "../session/conversation";
 import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import { providerCommands } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
-import { type ContinueOptions, withCardBooking } from "../endings/pickUp";
+import { type ContinueOptions, type PickUp, pickUpOfPress, withCardBooking } from "../endings/pickUp";
 import type { ForkLink } from "../run/turnRequest";
 import { reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerReadyOn } from "../../providers/access";
@@ -27,15 +27,133 @@ import { type PromptAuthor, severalPeopleIn } from "../transcript/promptAuthor";
 import { useAuth } from "../../../client/auth/useAuth";
 
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
-// the fleet store; a view handed none reads only what its own window saw.
-type CardOf = (conversationId: string) => AgentStanding | undefined;
+// the fleet store; a view handed none reads only what its own window saw. The run it names and when it last moved are
+// what tell a card that has not yet caught up with a run this window followed to its end (liveView).
+type PaneCard = AgentStanding & { readonly run?: string | undefined; readonly updatedAt?: number | undefined };
+type CardOf = (conversationId: string) => PaneCard | undefined;
 
-// A person ended the live turn and it is only unwinding (`stopping`, `dismissing`), read off the same card the board
-// draws (endingOfTab), so the live line, the Stop button and the composer change in the press's own frame and say what
-// the board says, wherever the press was made. Undefined outside a live turn and for one nobody ended.
-const endingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
-    ending: computed(() => endingOfTab(conversation.value, cardOf?.(conversation.value.conversationId))),
-});
+// How the pane stops a turn its card says runs while this window follows no stream of it: the board's own Stop
+// (agentActions.stopAgent), naming the run the card shows, handed in for the same reason as the card.
+type StopCard = (conversation: Conversation) => Promise<void>;
+
+// The run this window last stopped following, and what the card said of it at that moment.
+interface LetGo {
+    readonly chat: string;
+    readonly run: string;
+    readonly updatedAt: number | undefined;
+}
+
+// The pick-up strip's state, and the press it offers. Undefined while this window streams, since a pick-up outlives its
+// failure until the next turn actually starts; the state arms the strip immediately after a send, before that turn begins.
+// The card is the word on it once it says (AgentSummary.press, the daemon's one reading) and no turn of its is in flight:
+// nothing to press, or the ending to carry on from (pickUpOfPress). A card without it (a sandbox older than it, a draft's)
+// or one whose turn is under way leaves this window's own reading, its spent allowance's reset and booking read off the
+// card once it is about this ending (withCardBooking), as before. The press goes on the pick-up shown: a reloaded window
+// that never saw the frame re-runs the turn the daemon holds, rather than carrying the session on beside it. Read off the
+// card as the roster has it, never the one liveView leaves out while it repeats the run this window let go of: a card
+// that settled before the stream closed stays that run at that instant while the sandbox re-times, moves or fires the
+// hold, and the strip then kept the frame's reset while the board said the new one. A card still saying that run is in
+// flight is caught up with by the same in-flight test.
+const pickUpView = (conversation: ComputedRef<Conversation>, card: ComputedRef<PaneCard | undefined>, elsewhere: ComputedRef<boolean>) => {
+    const pickUp = computed((): PickUp | undefined => {
+        const chat = conversation.value;
+        const standing = card.value;
+        // A turn runs, here or where the card names one running (another window, a wake, the sandbox's own re-run once it
+        // started): nothing stopped short while it does, and an ending this window still held stood a Continue beside the
+        // Stop. Not over a resume, whose strip says how the turn ended and what is bringing it back; nor over a card naming
+        // no run (an older sandbox), which cannot be told from one still repeating the run this window just saw end.
+        if (chat.turn.streaming.value || elsewhere.value) {
+            return undefined;
+        }
+        const inFlight = standing !== undefined && turnInFlight(standing) && standing.status !== `landing`;
+        return standing?.press === undefined || inFlight
+            ? withCardBooking(chat.pickUp.value, standing)
+            : pickUpOfPress(standing.press, chat.pickUp.value, standing);
+    });
+    return {
+        pickUp,
+        // The press itself: continuing re-runs a held turn or has the daemon carry the session on, a choice that reads state
+        // (`TurnClient.continueTurn`) no view should ask about directly. Neither sends a message, so neither counts as one.
+        continueTurn: (options?: ContinueOptions): Promise<void> => conversation.value.turn.continueTurn(options, { pickUp: pickUp.value }),
+        // How a spent allowance's held turn continues once sent again: the card's hand-off pick (handoffChoice.ts), on the
+        // held turn the strip shows, as the press is, so a window whose own reading is not that turn still sends it.
+        chooseHandoff: (handoff: HandoffMode): Promise<boolean> => conversation.value.turn.chooseHandoff(handoff, { pickUp: pickUp.value }),
+    };
+};
+
+// A turn live in this chat as the board's card says it, whoever started it (another window or device, a wake, a child's
+// report, a booked send, the resume pass): `turnInFlight`, the reading the board and the pane's attach go by. The window's
+// own stream says so only once it is attached, and in the gap the composer read idle over a running turn (2026-10-28,
+// snug-condor-4nbi: the card said running, the user's bubble went 83 ms after the press, and the words were sent twice).
+// A card still naming the run this window just followed to its end is not that: the roster settles a moment after the
+// stream closes, so until it says anything newer (`updatedAt`) the card is left out, and the chat reads what its own
+// window saw, as it did before. A run that went on after its stream was lost moves the card, and counts again.
+const liveView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined, stopCard: StopCard | undefined) => {
+    const card = computed(() => cardOf?.(conversation.value.conversationId));
+    const letGo = shallowRef<LetGo | undefined>();
+    if (cardOf !== undefined) {
+        // Sync, so no frame reads the card between the stream closing and the mark being made.
+        watch(
+            () => [conversation.value.conversationId, conversation.value.turn.liveRun.value] as const,
+            ([chat, run], [before, followed]) => {
+                if (run === undefined && followed !== undefined && chat === before) {
+                    letGo.value = { chat, run: followed, updatedAt: card.value?.updatedAt };
+                }
+            },
+            { flush: `sync` },
+        );
+    }
+    // The card, unless it only repeats what it said of the run this window let go of.
+    const shown = computed(() => {
+        const standing = card.value;
+        const gone = letGo.value;
+        const behind =
+            standing !== undefined &&
+            gone !== undefined &&
+            gone.chat === conversation.value.conversationId &&
+            standing.run === gone.run &&
+            standing.updatedAt === gone.updatedAt;
+        return behind ? undefined : standing;
+    });
+    // Not a land: `landing` is the card's land lease, never a turn, so words sent then start one of their own and there is no
+    // turn for a Stop to end. A resume is one (the daemon carrying the chat on by itself), whose words wait behind it.
+    const cardLive = computed(() => shown.value !== undefined && turnInFlight(shown.value) && shown.value.status !== `landing`);
+    // What a Stop can end: a turn this window follows, or one the card says runs. Not a resume, which runs nothing until
+    // its re-run starts (conversation-status.ts): a Stop there found no run (turn-doors.ts stopTurn answers `stopped:
+    // false`), the card flashed "stopping" and went back to resuming, and the board refuses it ("picking back up",
+    // laneDrop.ts). Its way off is the strip's answer to how it ended.
+    const turnStoppable = computed(() => conversation.value.turn.streaming.value || (cardLive.value && shown.value?.status !== `resuming`));
+    return {
+        ...pickUpView(
+            conversation,
+            card,
+            computed(() => turnStoppable.value && shown.value?.run !== undefined),
+        ),
+        // A person ended the live turn and it is only unwinding (`stopping`, `dismissing`), read off the same card the
+        // board draws (endingOfTab), so the live line, the Stop button and the composer change in the press's own frame and
+        // say what the board says, wherever the press was made. Undefined outside a live turn and for one nobody ended.
+        ending: computed(() => endingOfTab(conversation.value, shown.value)),
+        cardLive,
+        // A turn is live here: this window follows its stream, or the card says one runs. What the composer's Stop, its
+        // Escape and its reading of a press (steer, queue) go by; `streaming` stays this window's own stream.
+        turnLive: computed(() => conversation.value.turn.streaming.value || cardLive.value),
+        // Whether that live turn has a run a Stop ends: what the composer's Stop button, its Escape and their hints go by.
+        turnStoppable,
+        // Stop, for whichever turn is live: one this window follows by its own path (TurnClient.stop), as it always was;
+        // one only the card says runs by the board's, which names the run the card shows, so a press that lands after that
+        // turn ended cannot cancel the next.
+        stop: (): void => {
+            const chat = conversation.value;
+            if (chat.turn.streaming.value || !turnStoppable.value || stopCard === undefined) {
+                chat.turn.stop();
+                return;
+            }
+            // allow(silent-catch): the press is a claim on the card, which goes back to running when the stop is refused;
+            // the card saying so again is the report, as on the board.
+            void stopCard(chat).catch(() => undefined);
+        },
+    };
+};
 
 // How the last turn failed, as the board's card says: what a held queue was refused for once the refusal's own row is
 // gone, since a turn that ran nothing is never recorded and stays attachable for only a minute. Undefined for a view
@@ -45,16 +163,6 @@ const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
         const card = cardOf?.(conversation.value.conversationId);
         return card?.failureCode === undefined ? undefined : { code: card.failureCode, text: card.failure };
     }),
-});
-
-// The pick-up strip's state. Undefined while streaming, since a pick-up outlives its failure until the next turn actually
-// starts; the state arms the strip immediately after a send, before that turn begins. A spent allowance's reset and
-// booking are read off the board's card once it is about this ending (withCardBooking), so the chat says when it goes as
-// the card does, whichever window re-timed it.
-const pickUpView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
-    pickUp: computed(() =>
-        conversation.value.turn.streaming.value ? undefined : withCardBooking(conversation.value.pickUp.value, cardOf?.(conversation.value.conversationId)),
-    ),
 });
 
 // What the board's card says this chat waits on a person for (a question, a plan, a permission), known before this
@@ -97,12 +205,12 @@ const authorsView = (conversation: ComputedRef<Conversation>) => ({
 
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
-export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf) => ({
+export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf, stopCard?: StopCard) => ({
     conversation,
     messages: computed(() => conversation.value.transcript.messages.value),
     ...authorsView(conversation),
     streaming: computed(() => conversation.value.turn.streaming.value),
-    ...endingView(conversation, cardOf),
+    ...liveView(conversation, cardOf, stopCard),
     // This chat's slash commands: its own turns' list if any, else the provider's last known list.
     availableCommands: computed<readonly AgentCommand[]>(() => {
         const own = conversation.value.availableCommands.value;
@@ -110,15 +218,9 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     }),
     awaitingDecision: computed(() => conversation.value.transcript.awaitingDecision.value),
     pendingPlanMessage: computed(() => conversation.value.transcript.pendingPlanMessage.value),
-    ...pickUpView(conversation, cardOf),
     // Asked on every frame of a streamed turn, so through a reader of only the rows changed since it last read
     // (transcriptScan.ts), one per view.
     continuation: ((newest) => computed(() => continuationFor(conversation.value.transcript.messages.value, newest)))(newestOf(newestPermission)),
-    // The press itself: continuing re-runs a held turn or has the daemon carry the session on, a choice that reads state
-    // (`TurnClient.continueTurn`) no view should ask about directly. Neither sends a message, so neither counts as one.
-    continueTurn: (options?: ContinueOptions): Promise<void> => conversation.value.turn.continueTurn(options),
-    // How a spent allowance's held turn continues once sent again: the card's hand-off pick (handoffChoice.ts).
-    chooseHandoff: (handoff: HandoffMode): Promise<boolean> => conversation.value.turn.chooseHandoff(handoff),
     // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
     // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
     // cannot disagree with the same switch on the board.

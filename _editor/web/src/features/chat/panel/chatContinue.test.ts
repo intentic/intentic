@@ -350,8 +350,10 @@ it(`offers only the answers this ending can take`, async () => {
     expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Keep trying`]);
 });
 
-// An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
-it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
+// An unheld allowance means the daemon has no copy of the refused turn: before its reset a press carries the session on
+// into the same wall, which is a try, so the press is a quiet Try now that goes (pressWay.ts: a refused try costs
+// nothing), and the bare Enter keeps its stricter offer, saying nothing until the reset.
+it(`counts an unheld allowance down instead of going quiet, offering only a quiet try until it resets`, async () => {
     const conversation = stoppedChat();
     const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
@@ -360,12 +362,18 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
 
     expect(composerText()).toContain(`Limit reached`);
     expect(composerText()).toContain(`about 60 min`);
-    expect(continueButton()?.disabled).toBe(true);
+    expect(continueButton()).toBeUndefined();
+    expect(button(`Try now`)?.disabled).toBe(false);
     expect(composerText()).not.toContain(`Enter to continue`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
     expect(say).not.toHaveBeenCalled();
     expect(carry).not.toHaveBeenCalled();
+
+    button(`Try now`)!.click();
+    await settle();
+    expect(carry).toHaveBeenCalledTimes(1);
+    expect(say).not.toHaveBeenCalled();
 });
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
@@ -795,7 +803,8 @@ it(`offers the other account twice when the session is worth carrying, each with
     rows[0]?.click();
     await settle();
     expect(conversation.selection.account.value).toBe(`acc-2`);
-    expect(resume).toHaveBeenCalledWith({ carry: true });
+    // On the pick-up the strip shows, which a reloaded window has only from the card.
+    expect(resume).toHaveBeenCalledWith({ carry: true }, { pickUp: expect.objectContaining({ reason: `limit`, held: expect.objectContaining({ ran: true }) }) });
 });
 
 it(`offers only the fresh session when nothing ran`, async () => {
@@ -811,7 +820,7 @@ it(`offers only the fresh session when nothing ran`, async () => {
     expect(rows[0]?.textContent).not.toContain(`keeping this session`);
     rows[0]?.click();
     await settle();
-    expect(resume).toHaveBeenCalledWith({ carry: false });
+    expect(resume).toHaveBeenCalledWith({ carry: false }, { pickUp: expect.objectContaining({ reason: `limit`, held: { ran: false, handoffTokens: 6_000 } }) });
 });
 
 // A move the owner's policy already booked fires on the next pass, so it names its destination rather than an hour —
@@ -886,5 +895,105 @@ describe(`a conversation no account of its provider can serve`, () => {
         conversation.selection.apply({ kind: `set`, picks: { account: `acc-2` } });
         await settle();
         expect(document.querySelector(`[data-access-wall]`)).toBeNull();
+    });
+});
+
+// A turn that reached its own ceiling or ended incomplete is held for a press alone: no answer to the stop's question
+// would ever send it, so the question is not asked, the line says the press is the way on, and the press is there.
+it(`asks no question of a stop held for a press alone, and offers the press`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true, pressOnly: true } };
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+    await mountPanel();
+
+    expect(answerPills()).toEqual([]);
+    expect(composerText()).toContain(`Turn stopped short · work kept · only Continue carries it on`);
+    expect(composerText()).not.toContain(`Goes by itself`);
+    expect(continueButton()?.disabled).toBe(false);
+    continueButton()!.click();
+    await settle();
+    expect(carry).toHaveBeenCalledTimes(1);
+});
+
+/* THE SAME SPENT ALLOWANCE WITH NO KNOWN RESET (Cursor, Grok and Devin publish none) used to get three answers: a greyed
+   Continue under "awaiting reset" here, Send again on the board card, and Send anyway for typed words. The strip's press
+   now goes, a quiet Try now that names the reading (pressWay.ts); the bare Enter keeps its stricter offer. */
+describe(`a press on an account whose reading says it cannot serve`, () => {
+    const spentNoReset = (): void => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `Claude`, email: `a@b.c`, connectedAt: 1 }] };
+        providerRefusals.value = { claude: [{ at: Date.now(), kind: `limit`, message: `usage limit reached`, account: `acc-1` }] };
+    };
+    const signedOut = (): void => {
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `Claude`, email: `a@b.c`, connectedAt: 1, needsReauth: true }] };
+    };
+
+    it.each([
+        [`spent with no reset`, spentNoReset, { reason: `limit`, held: { ran: true } }],
+        [`spent with no reset, the turn not held`, spentNoReset, { reason: `limit` }],
+        [`spent with no reset, a stopped turn`, spentNoReset, { reason: `stopped`, held: { ran: true } }],
+        [`signed out`, signedOut, { reason: `stopped`, held: { ran: true } }],
+    ] as const)(`tries the account now when it reads %s, quietly, and only from the strip`, async (_name, reading, pickUp) => {
+        reading();
+        const conversation = stoppedChat();
+        conversation.pickUp.value = pickUp;
+        const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+        await mountPanel();
+
+        const tryNow = button(`Try now`);
+        expect(tryNow?.disabled).toBe(false);
+        expect(tryNow?.classList.contains(`p-button-text`)).toBe(true);
+        expect(continueButton()).toBeUndefined();
+        expect(composerText()).not.toContain(`Enter to continue`);
+        composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+        await settle();
+        expect(carry).not.toHaveBeenCalled();
+
+        tryNow!.click();
+        await settle();
+        expect(carry).toHaveBeenCalledTimes(1);
+    });
+
+    // The one rest the press keeps: right after a refusal where nothing ran, pressing again is refused the same way.
+    it(`rests a minute after a refusal where nothing ran, and says so`, async () => {
+        spentNoReset();
+        const conversation = stoppedChat();
+        conversation.pickUp.value = { reason: `limit`, held: { ran: false }, coolUntil: Date.now() + 60_000 };
+        await mountPanel();
+
+        expect(button(`Try now`)?.disabled).toBe(true);
+    });
+});
+
+/* THE CARD IS THE WORD ON WHAT A PRESS DOES (AgentSummary.press), once it says and no turn of it runs. */
+describe(`a strip read off the board's card`, () => {
+    const RESET = Math.floor(Date.now() / 1_000) + 8 * 3_600;
+
+    // 2026-11-01, true-pine-bgzz: the card in Finished, the composer still saying "Limit reached, work kept".
+    it(`says nothing where the card says nothing is to press, whatever this window saw`, async () => {
+        const conversation = stoppedChat();
+        conversation.pickUp.value = { reason: `limit`, readyAt: RESET * 1_000, held: { ran: true } };
+        agentEntry.value = rosterEntry({ status: `idle`, press: { kind: `none` } });
+        await mountPanel();
+
+        expect(composerText()).not.toContain(`Limit reached`);
+        expect(continueButton()).toBeUndefined();
+        expect(button(`Try now`)).toBeUndefined();
+    });
+
+    // A window reloaded after the refusal never saw its frame: the card's held turn is the strip, and the press re-runs it
+    // rather than carrying the session on beside it.
+    it(`offers a reloaded window the card's held turn, and re-runs it on the press`, async () => {
+        const conversation = stoppedChat();
+        conversation.pickUp.value = undefined;
+        const ending = { reason: `limit`, resetsAt: RESET, held: { ran: true } };
+        agentEntry.value = rosterEntry({ failureCode: `rate_limit`, limitResetsAt: RESET, limitHeld: true, press: { kind: `continue`, ending } });
+        const rerun = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+        await mountPanel();
+
+        expect(composerText()).toContain(`Limit reached · work kept · back`);
+        expect(continueButton()?.disabled).toBe(false);
+        continueButton()!.click();
+        await settle();
+        expect(rerun).toHaveBeenCalledWith({}, { pickUp: { reason: `limit`, readyAt: RESET * 1_000, held: { ran: true } } });
     });
 });

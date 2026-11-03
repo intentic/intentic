@@ -624,12 +624,14 @@ const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision
 // replaced or re-pointed meanwhile was once stamped fired while the pass ran the copy it had read, so the superseded
 // words went out, on the account the person had moved them off, and the new hold's own booking never fired
 // (2026-10-10). Refused, the pass judges the hold as it now stands on its next round.
+// Told to every window: the card's `next` and `press` read this hold, and the start the fire leads to can take several
+// awaits to begin, or never begin at all.
 const onHeldFired = (state: ConversationState, ladder: boolean, judged: HeldRecord): Decision<boolean> => {
     const { held } = state.resume;
     if (held === undefined || held !== judged || held.fired || (ladder && held.tries >= RETRY_LADDER_TRIES)) {
         return unchanged(state, false);
     }
-    return unchanged(withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), true);
+    return { state: withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), effects: BROADCAST, reply: true };
 };
 
 // Bounds runaway steering per conversation; a settling turn empties the boxes, this guards one that never does. Only

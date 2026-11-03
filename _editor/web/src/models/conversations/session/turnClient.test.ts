@@ -43,6 +43,11 @@ const queueSchedule = jest.fn<SandboxRpc["agent"]["queueSchedule"]>();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, switchAccount, queueSchedule } }),
 }));
+// Reading a chat again (useChat-sessions.hydrateOnce), and the open chats it is found among, by the client it holds.
+const hydrateOnce = jest.fn();
+const openChats = shallowRef<readonly { readonly turn: unknown }[]>([]);
+jest.mock("../run/useChat-sessions", () => ({ hydrateOnce }));
+jest.mock("../tabs/useChat-tabs", () => ({ conversations: openChats }));
 
 const { TurnClient } = await import("./turnClient");
 const { TranscriptView } = await import("./transcriptView");
@@ -85,6 +90,18 @@ const unwinding = (runId: string, startedAt: number, prompt: string, closed: Pro
         async () => {
             const frame = frames.shift();
             return frame === undefined ? { done: true, value: undefined } : { done: false, value: await frame() };
+        },
+        async () => undefined,
+    );
+};
+
+// A run another window started, as its attach stream carries it: the head with its rows whole, then the end.
+const headOf = (runId: string, rows: readonly TranscriptRow[]): AsyncIteratorClass<AttachFrame, unknown, void> => {
+    const frames: AttachFrame[] = [{ kind: `attached`, run: runId, startedAt: 3_000, seq: 0, rows: rows.map((row) => ({ ...row, run: runId })) }, { kind: `end` }];
+    return new AsyncIteratorClass<AttachFrame, unknown, void>(
+        async () => {
+            const frame = frames.shift();
+            return frame === undefined ? { done: true, value: undefined } : { done: false, value: frame };
         },
         async () => undefined,
     );
@@ -196,6 +213,8 @@ beforeEach(() => {
 
 afterEach(() => {
     unstubAllGlobals();
+    hydrateOnce.mockReset();
+    openChats.value = [];
     for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueSchedule]) {
         procedure.mockReset();
     }
@@ -601,6 +620,36 @@ describe(`a run's lifecycle`, () => {
         setDaemonRoutes(undefined);
     });
 
+    // The press goes on the pick-up the pane shows, the card's where it says (useChat-view pickUpView): a window reloaded
+    // after the refusal never saw the frame, and its own reading holds nothing, so it carried the session on beside a
+    // turn the daemon held, instead of re-running it.
+    it(`re-runs the held turn the pane's pick-up names, though this window saw no frame of it`, async () => {
+        const { client, host } = clientOf();
+        resume.mockImplementation(async () => ({ run: `r-card` }));
+        attach.mockImplementation(async () => attached(`r-card`, 4_000, `clean the sandbox`));
+        expect(host.pickUp.value).toBeUndefined();
+
+        await client.continueTurn({}, { pickUp: { reason: `limit`, held: { ran: true } } });
+
+        expect(resume.mock.calls.map(([input]) => input.conversationId)).toEqual([`c1`]);
+        expect(run).not.toHaveBeenCalled();
+    });
+
+    // And the other way: a card saying nothing is held is the word, whatever this window's own reading still holds.
+    it(`carries the session on where the pane's pick-up holds nothing, over a hold this window still remembers`, async () => {
+        const { client, host } = clientOf();
+        host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        answers({ delivered: `started`, run: `r-carry` });
+        attach.mockImplementation(async () => attached(`r-carry`, 4_000, `clean the sandbox`));
+
+        await client.continueTurn({}, { pickUp: { reason: `stopped` } });
+
+        expect(resume).not.toHaveBeenCalled();
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(await client.resumeHeldTurn({}, { pickUp: undefined })).toBe(false);
+        expect(resume).not.toHaveBeenCalled();
+    });
+
     it(`re-runs nothing the daemon is not holding, and nothing while a turn is live`, async () => {
         const idle = clientOf();
         idle.host.pickUp.value = { reason: `stopped` };
@@ -641,6 +690,102 @@ describe(`saying something`, () => {
 
         expect(attach).toHaveBeenCalledTimes(1);
         expect(host.transcript.messages.value.map((message) => message.text)).toEqual([`the other window's ask`]);
+    });
+
+    // Queued words are the queue's to show, the same in every window: the bubble goes at the answer, nothing is read again.
+    it(`asks nothing again for a send the daemon queued`, async () => {
+        const { client, host } = clientOf();
+        openChats.value = [{ turn: client }];
+        answers({ delivered: `queued` });
+        attach.mockImplementation(async () => {
+            throw new SandboxHttpError(404, `Nothing is running.`);
+        });
+
+        await client.say(`and the docs too`);
+
+        expect(host.transcript.messages.value).toEqual([]);
+        await new Promise((settle) => setTimeout(settle, 0));
+        expect(hydrateOnce).not.toHaveBeenCalled();
+    });
+
+    /* WORDS SAID INTO A TURN THIS WINDOW DOES NOT FOLLOW (steeredWords.ts). Regression 2026-10-28 (snug-condor-4nbi):
+       the card said running, this chat was idle, the bubble went 83 ms after the press, before this window attached to
+       the turn that carried the words, and the person sent them again. */
+    it(`keeps words said into another window's turn on screen until attached to it, then draws them as the daemon's row`, async () => {
+        const { client, host } = clientOf();
+        answers({ delivered: `steered`, run: `r-other` });
+        const shownAtAttach: string[][] = [];
+        attach.mockImplementation(async () => {
+            shownAtAttach.push(host.transcript.messages.value.map((message) => message.text));
+            const messageId = run.mock.calls[0]?.[0].messageId;
+            return headOf(`r-other`, [userRow(`the other window's ask`, 2_000, []), userRow(`and the docs too`, 3_500, [], messageId)]);
+        });
+
+        await client.say(`and the docs too`);
+
+        expect(shownAtAttach).toEqual([[`and the docs too`]]);
+        // Drawn once, as the daemon's own row, never beside the bubble.
+        expect(host.transcript.messages.value.map((message) => ({ text: message.text, run: message.run }))).toEqual([
+            { text: `the other window's ask`, run: `r-other` },
+            { text: `and the docs too`, run: `r-other` },
+        ]);
+        expect(hydrateOnce).not.toHaveBeenCalled();
+    });
+
+    it(`keeps them when there is nothing to attach to, reads the chat again, and lets the bubble go for the record's row`, async () => {
+        const { client, host } = clientOf();
+        openChats.value = [{ turn: {} }, { turn: client }];
+        answers({ delivered: `steered`, run: `r-other` });
+        attach.mockImplementation(async () => {
+            throw new SandboxHttpError(404, `Nothing is running.`);
+        });
+
+        await client.say(`and the docs too`);
+
+        expect(host.transcript.messages.value.map((message) => message.text)).toEqual([`and the docs too`]);
+        await waitFor(() => expect(hydrateOnce).toHaveBeenCalledTimes(1));
+        expect(hydrateOnce.mock.calls[0]?.[0]).toBe(openChats.value[1]);
+
+        // The read brings the record's row for the same message: the words are drawn once, as the record has them.
+        const [bubble] = host.transcript.messages.value;
+        const messageId = run.mock.calls[0]?.[0].messageId;
+        host.transcript.adopt([bubble!, { ...userRow(`and the docs too`, 3_500, [], messageId), id: 9, run: `r-other`, rowId: `row-9` }]);
+        await waitFor(() => expect(host.transcript.messages.value.map((message) => message.id)).toEqual([9]));
+    });
+
+    it(`keeps them when the sandbox could not be asked whether anything runs`, async () => {
+        const { client, host } = clientOf();
+        openChats.value = [{ turn: client }];
+        answers({ delivered: `steered`, run: `r-other` });
+        attach.mockImplementation(async () => {
+            throw new TypeError(`Failed to fetch`);
+        });
+
+        await client.say(`and the docs too`);
+
+        expect(host.transcript.messages.value.map((message) => message.text)).toEqual([`and the docs too`]);
+        await waitFor(() => expect(hydrateOnce).toHaveBeenCalledTimes(1));
+    });
+
+    // Words that waited for the sandbox to answer go the same way once it does.
+    it(`keeps waited words the sandbox then said into a turn on screen, and reads the chat again`, async () => {
+        const { client, host } = clientOf();
+        openChats.value = [{ turn: client }];
+        run.mockImplementation(async () => {
+            throw new TypeError(`Failed to fetch`);
+        });
+        await client.say(`and the docs too`);
+        expect(client.outbox.entries.value).toHaveLength(1);
+
+        run.mockReset();
+        answers({ delivered: `steered`, run: `r-other` });
+        attach.mockImplementation(async () => {
+            throw new SandboxHttpError(404, `Nothing is running.`);
+        });
+        await client.outbox.flush();
+
+        await waitFor(() => expect(hydrateOnce).toHaveBeenCalledTimes(1));
+        expect(host.transcript.messages.value.map(({ text, unsent }) => ({ text, unsent }))).toEqual([{ text: `and the docs too`, unsent: undefined }]);
     });
 
     // A scheduled send opens no turn: no bubble, no working line, nothing followed. The words are the queue's, drawn at

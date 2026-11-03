@@ -3,7 +3,7 @@ import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-sear
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type StandingChip, standingChip } from "../../../models/agent-status/agentStatus-chips";
 import { type TileRim, tileRim } from "../../../models/agent-status/agentStatus-lanes";
-import { activityIcon, activityLine, agentStatusMeta, cornerInk, cornerStandingShown } from "../../../models/agent-status/agentStatus-meta";
+import { activityIcon, activityLine } from "../../../models/agent-status/agentStatus-meta";
 import { endingByHand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import type { Stamp } from "../../../models/fleet/board/stamps";
 import { cardStampsOf } from "../../../models/fleet/board/useCardStamps";
@@ -13,9 +13,9 @@ import { snapshotFingerprint } from "../../../models/fleet/useAgents-registry";
 import { fleet, type FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
-import { statusIcon, statusLabel } from "../models/catalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { isArchived, originOf } from "./tabs";
+import { statusLookOf } from "./statusLook";
 import { t } from "@intentic/ui/i18n";
 
 // Everything a rail row is handed that isn't a primitive, derived in one place per card. Kept apart from the list
@@ -47,19 +47,12 @@ export interface CardView {
     readonly meta: boolean;
 }
 
-// Status glyph for the trailing slot: agent status when fleet-carded, else the conversation's own status. Returned
-// pre-bound as one object so the row computes it once, not per-field.
+// Status glyph for the trailing slot: agent status when fleet-carded, else the conversation's own status, by the same
+// reading the chat's header draws (statusLook.ts). Returned pre-bound as one object so the row computes it once, not
+// per-field.
 const statusOf = (entry: OpenChat): CardView[`status`] => {
-    if (entry.agent !== undefined) {
-        if (!cornerStandingShown(entry.agent.status)) {
-            return undefined;
-        }
-        const meta = agentStatusMeta(entry.agent.status);
-        return { name: meta.icon, spin: meta.spin, class: `text-xs ${cornerInk(meta.class)}`, "aria-label": meta.label };
-    }
-    const status = entry.conversation.status.value;
-    const icon = statusIcon(status);
-    return { name: icon.name, spin: icon.spin, class: `text-xs ${cornerInk(icon.class)}`, "aria-label": statusLabel(status) };
+    const look = statusLookOf(entry.conversation, entry.agent);
+    return look.cornered ? { name: look.name, spin: look.spin, class: look.corner, "aria-label": look.label } : undefined;
 };
 
 // Model label as the pickers show it, undefined while no model is recorded yet. `activeModel` is what last ran, as its

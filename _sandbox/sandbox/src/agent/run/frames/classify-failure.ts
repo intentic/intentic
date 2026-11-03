@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { failureCourseOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { loopDoor } from "@intentic/sandbox-contract/models/agent-catalog";
 import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
@@ -496,9 +497,21 @@ const dressDeath = async (event: ErrorFrame, context: FailureContext, conversati
     return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) } };
 };
 
+// A turn that reached its own iteration or time ceiling, or ended incomplete: stopped partway with nothing to repair, its
+// work perhaps half done and the next move the person's. Held whole for their press alone (`pressOnly`), never re-run by a
+// clock whatever the conversation answers for a stop: a ladder re-running it is the runaway the ceiling exists to stop.
+// So the frame offers the press and names no rung, and the ladder is not asked.
+const dressCarry = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
+    const frame: ErrorFrame = { ...event, held: { ran: context.answered, ...opt("contextTokens", context.contextTokens), pressOnly: true }, autoResume: "available" };
+    return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, pressOnly: true, ...leftBy(context) } };
+};
+
+// Which hold a failure makes is its code's course in the contract's table (failure-codes.ts), the one every window's
+// offer reads too, so the daemon cannot hold a turn no window offers to carry on, nor offer one it never held.
 const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening | undefined): Promise<Dressed> => {
     const { conversationId } = context.turn;
-    if (event.code === "rate_limit") {
+    const course = failureCourseOf(event.code);
+    if (course === "limit") {
         return dressLimit(event, context, queries, reopening ?? (await reopeningOf(event, context, queries)));
     }
     // Every other wall holds a turn only on a conversation.
@@ -510,20 +523,32 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
         const armed = breakArmed(await queries.breakPolicy(conversationId, "outage"));
         return { frame: outageFrame(event, armed, context.outage), held: { ...heldBase(context, conversationId), reason: "outage" as const } };
     }
-    // Says on the frame whether the daemon will re-mint and re-run this credential.
-    if (event.code === "claude-token-refused") {
-        const { remint } = context;
-        return remint === undefined
-            ? bare(event)
-            : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint } };
+    switch (course) {
+        // Says on the frame whether the daemon will re-mint and re-run this credential.
+        case "remint": {
+            const { remint } = context;
+            return remint === undefined
+                ? bare(event)
+                : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint } };
+        }
+        case "overflow":
+            return dressOverflow(event, context, conversationId);
+        case "flagged":
+            return dressFlagged(event, context, conversationId);
+        // A death nothing coded climbs the stop ladder on the conversation's answer; a coded stop waits for a press.
+        case "carry":
+            return event.code === undefined ? dressDeath(event, context, conversationId, queries) : dressCarry(event, context, conversationId);
+        // An outage past its attempt budget, or with no breaker state, comes back by nothing.
+        case "outage":
+        // Refused before the model saw a word: the words wait in the queue, or with the sandbox that started the turn,
+        // which holds a door of its own (turn-resume.ts startConversationTurn).
+        case "door":
+        // Nothing to hold: what is left is the person's next message, or a fix.
+        case "bare":
+        // A warning about a turn that went on.
+        case "note":
+            return bare(event);
     }
-    if (event.code === "context-overflow") {
-        return dressOverflow(event, context, conversationId);
-    }
-    if (event.code === "safeguard-flagged") {
-        return dressFlagged(event, context, conversationId);
-    }
-    return event.code === undefined ? dressDeath(event, context, conversationId, queries) : bare(event);
 };
 
 // Google's sentence for an account it stopped serving until its owner verifies it (403, VALIDATION_REQUIRED).

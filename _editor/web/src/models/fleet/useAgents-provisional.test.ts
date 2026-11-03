@@ -69,6 +69,16 @@ describe("what a press draws before the daemon answers", () => {
         expect(shown(`a1`)?.conflictCauses).toBeUndefined();
     });
 
+    // A pressed turn leaves nothing to press until the daemon says otherwise: the chat's strip reads its own window then.
+    it("draws a pressed turn with no press left from the ending it answers", () => {
+        roster(card(`a1`, { status: `error`, failureCode: `rate_limit`, limitHeld: true, press: { kind: `continue`, ending: { reason: `limit`, held: { ran: true } } } }));
+
+        claim(`a1`, undefined, `turn`);
+
+        expect(shown(`a1`)).toMatchObject({ status: `running` });
+        expect(shown(`a1`)?.press).toBeUndefined();
+    });
+
     it("draws a Stop as the stopping it will become, in the lane stopping rests in", () => {
         roster(card(`a1`, { status: `running`, startedAt: 500 }));
 
@@ -76,6 +86,19 @@ describe("what a press draws before the daemon answers", () => {
 
         expect(shown(`a1`)?.status).toBe(`stopping`);
         expect(laneOf(`a1`)).toBe(`attention`);
+    });
+
+    // The daemon's press stands through a land lease (agents-registry.ts summaryOf reads it as the card reads once the land
+    // lets go), so the chat's strip does too: drawn without it, a window that saw no frame of its own lost its strip from
+    // the Land press until the daemon's own landing card, and one with an older reading of its own showed that instead.
+    it("keeps the press the turn left through a land it draws", () => {
+        const press = { kind: `continue`, ending: { reason: `stopped`, held: { ran: true, pressOnly: true } } } as const;
+        roster(card(`a1`, { status: `error`, failureCode: `turn-cap`, failure: `The turn reached its limit.`, press }));
+
+        claim(`a1`, undefined, `land`);
+
+        expect(shown(`a1`)).toMatchObject({ status: `landing`, press });
+        expect(shown(`a1`)?.failureCode).toBeUndefined();
     });
 
     it("draws a land from an errored card straight into Finished, its failure going with the status it came from", () => {

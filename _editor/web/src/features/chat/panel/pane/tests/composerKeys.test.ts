@@ -10,6 +10,8 @@ import type { ChatMessage } from "../../../../../models/conversations/transcript
 import { conversationView } from "../../../../../models/conversations/panel/useChat-view";
 import { type PopoverList, useComposerKeys, useRecallRing } from "../composerKeys";
 import { runningTurn } from "../../../../../testing/runningTurn";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../../../../models/agent-status/agentStatus-standing";
 
 // Pins who gets each key in the composer (an open list, then recall, then Escape's ladder, then Enter), what a
 // keystroke of the user's own ends, and which key the one hint slot teaches at each moment.
@@ -20,9 +22,15 @@ let rings = 0;
 const freshRing = (): string => `sb-keys-${(rings += 1)}`;
 
 let unmount: (() => void) | undefined;
-const keysOf = () => {
+// `card` is the board's card for the chat, where a case has one; the board's Stop for it is caught.
+const keysOf = (card?: () => AgentStanding | undefined) => {
     const chat = new Conversation(`c1`);
-    const view = conversationView(computed(() => chat));
+    const stopCard = jest.fn(() => Promise.resolve());
+    const view = conversationView(
+        computed(() => chat),
+        card,
+        stopCard,
+    );
     const input = ref<HTMLTextAreaElement | null>(document.body.appendChild(document.createElement(`textarea`)));
     const open = ref<`mention` | `command` | undefined>();
     const command = ref<AgentCommand>();
@@ -71,7 +79,7 @@ const keysOf = () => {
         keys!.onKeydown(event);
         return event.defaultPrevented;
     };
-    return { chat, host, open, command, live, spoken, press, keys: keys! };
+    return { chat, host, open, command, live, spoken, press, stopCard, keys: keys! };
 };
 
 afterEach(() => {
@@ -188,6 +196,34 @@ describe(`Escape`, () => {
         expect(press(`Escape`)).toBe(false);
         expect(stop).toHaveBeenCalledTimes(1);
     });
+
+    // A turn another window, a wake or the resume pass started, this window not attached to it yet: Escape stops it the
+    // board's way (ConversationView.stop), and lets go once a Stop made anywhere is unwinding it.
+    it(`stops a turn only the card says runs, by the card, and nothing once it is ending`, () => {
+        const card = shallowRef<AgentStanding>({ status: `running`, attention: NO_ATTENTION });
+        const { chat, press, stopCard } = keysOf(() => card.value);
+        const own = jest.spyOn(chat.turn, `stop`);
+
+        expect(press(`Escape`)).toBe(true);
+        expect(stopCard).toHaveBeenCalledTimes(1);
+        expect(own).not.toHaveBeenCalled();
+
+        card.value = { status: `stopping`, attention: NO_ATTENTION };
+        expect(press(`Escape`)).toBe(false);
+        card.value = { status: `idle`, attention: NO_ATTENTION };
+        expect(press(`Escape`)).toBe(false);
+        expect(stopCard).toHaveBeenCalledTimes(1);
+    });
+
+    // A resume runs nothing a Stop could end (turn-doors.ts stopTurn answers `stopped: false`): Escape leaves it alone.
+    it(`leaves a resume alone, which runs nothing to stop`, () => {
+        const card = shallowRef<AgentStanding>({ status: `resuming`, attention: NO_ATTENTION });
+        const { keys, press, stopCard } = keysOf(() => card.value);
+
+        expect(press(`Escape`)).toBe(false);
+        expect(stopCard).not.toHaveBeenCalled();
+        expect(keys.composerHint.value).not.toBe(t(`chat.chatPane.escToStop`));
+    });
 });
 
 describe(`recall`, () => {
@@ -271,5 +307,14 @@ describe(`the hint slot`, () => {
 
         spoken.value = `Sending in a moment, Esc to catch it`;
         expect(keys.composerHint.value).toBe(`Sending in a moment, Esc to catch it`);
+    });
+
+    it(`teaches Escape for a turn only the card says runs`, () => {
+        const card = shallowRef<AgentStanding>({ status: `idle`, attention: NO_ATTENTION });
+        const { keys } = keysOf(() => card.value);
+        expect(keys.composerHint.value).toBe(t(`chat.chatPane.atForFilesAndSettings`));
+
+        card.value = { status: `running`, attention: NO_ATTENTION };
+        expect(keys.composerHint.value).toBe(t(`chat.chatPane.escToStop`));
     });
 });

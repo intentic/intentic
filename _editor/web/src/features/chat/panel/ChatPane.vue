@@ -7,6 +7,7 @@ import { RouterLink, useRouter } from "vue-router";
 import { loopDesignWords } from "../models/run-settings/loopDesignWords";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { useAgents } from "../../../models/fleet/useAgents";
+import { stopAgent } from "../../../models/fleet/agentActions";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { conversationView, PANE_VIEW } from "../../../models/conversations/panel/useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
@@ -100,10 +101,11 @@ const emit = defineEmits<{ focus: []; close: [] }>();
 
 // The prop as a ref, for the view and composables that follow this pane from one chat to the next.
 const chat = computed(() => props.conversation);
-// The board's card for this chat is what its live turn is drawn from (ConversationView.ending), so the two agree.
-const paneView = conversationView(chat, (id) => useAgents().agentById(id));
+// The board's card for this chat is what its live turn is drawn from (ConversationView.ending, turnLive), so the two
+// agree; a turn only the card says runs is stopped as the board stops it, by the run the card shows.
+const paneView = conversationView(chat, (id) => useAgents().agentById(id), (stopped) => stopAgent(stopped.conversationId, stopped.box.value));
 provide(PANE_VIEW, paneView);
-const { messages, streaming, ending, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
+const { messages, streaming, turnStoppable, ending, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
 const { reachable, connection } = useSandbox();
 // The daemon refused this account outright, unlike "not connected yet": waiting won't fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
@@ -579,9 +581,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             :child="subagentOf.child"
                             :parent-title="agentDisplayTitle(subagentOf.parent)"
                             :provider="subagentOf.parent.provider"
-                            :stoppable="streaming && !ending && !readOnly"
+                            :stoppable="turnStoppable && !ending && !readOnly"
                             @back="backToParent()"
-                            @stop="conversation.turn.stop()"
+                            @stop="paneView.stop()"
                             @write="writeTo(conversation)"
                         />
                         <template v-else-if="readOnly">
@@ -892,13 +894,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             />
                                         </button>
 
-                                        <!-- Stop covers the entire live turn, including parked cards; once pressed (or the turn ended any other way) the turn reads as over, and Send takes the slot back. -->
+                                        <!-- Stop covers the entire live turn, including parked cards and one only the card says runs (ConversationView.turnStoppable), never a resume, which runs nothing to stop; once pressed (or the turn ended any other way) the turn reads as over, and Send takes the slot back. -->
                                         <button
-                                            v-if="streaming && !ending"
+                                            v-if="turnStoppable && !ending"
                                             type="button"
                                             class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
                                             :disabled="!reachable"
-                                            @click="conversation.turn.stop()"
+                                            @click="paneView.stop()"
                                             v-tooltip.top="stopHint"
                                             :aria-label="stopLabel"
                                         >

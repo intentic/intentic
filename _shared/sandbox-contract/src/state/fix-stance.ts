@@ -1,4 +1,4 @@
-import { turnedAwayCode } from "../policy/turned-away.js";
+import { turnedAwayCode } from "../policy/failure-codes.js";
 import { type AgentSummary, awaitsWake } from "../schemas/agents.js";
 
 /* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a failed pipeline row, a refused push. */

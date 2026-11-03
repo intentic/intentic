@@ -1,5 +1,4 @@
-import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
-import { isPrivacyRefusal, type PrivacyRefusalCode } from "@intentic/sandbox-contract/schemas/privacy-egress";
+import { type FailureKind, failureTraitsOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import { t } from "@intentic/ui/i18n";
 import type { AgentStanding } from "./agentStatus-standing";
 
@@ -7,84 +6,13 @@ import type { AgentStanding } from "./agentStatus-standing";
 // the kind, and the chat's notice leads a provider's words with the kind's own line (failureView.ts). The daemon codes
 // every failure it can classify (agent-events.ts's error codes, carried on the card as `failureCode` and on the notice
 // row); the card used to read only two of them and call every other one "Error", so an organization switching Claude Code
-// off, a provider timing out and a model that no longer exists all wore the same word as a crash. Grouped by what the
-// reader does next, not by provider; a failure nothing coded has no kind, and each surface says so in its own words.
-export type FailureKind =
-    // The account signs in but is refused service: an organization or plan that switched it off.
-    | `access`
-    // The account's credential is dead or missing; a reconnect fixes it.
-    | `signedOut`
-    // The provider failed and kept failing past the retries.
-    | `outage`
-    // The model the turn named is not served to this account, or cannot run this kind of turn.
-    | `model`
-    // The turn is bigger than the model's window.
-    | `contextFull`
-    // The installed engine is older than the model requires.
-    | `update`
-    // The provider's safety classifier stopped the turn.
-    | `flagged`
-    // A spent allowance the `rate_limit` code does not cover (the free trial's day).
-    | `limit`
-    // The privacy shield held the words back before anything was read.
-    | `privacy`
-    // Held at the door for want of room, as a memory hold is.
-    | `held`
-    // The runtime stopped partway without failing outright; the work may be half done.
-    | `cutShort`
-    // The harness read the message as a slash command it does not have; the model never saw it.
-    | `command`
-    // The runtime warned about a turn it went on with: a note, not an ending.
-    | `advisory`;
-
-// Every code the wire names, each with its kind: a code added to the contract fails the build here until it has one, so no
-// surface draws a failure it has no word for. The shield's own refusals are the contract's to name (isPrivacyRefusal),
-// and are all the privacy kind.
-const KINDS_BY_CODE = {
-    rate_limit: `limit`,
-    "session-not-found": `cutShort`,
-    "codex-advisory": `advisory`,
-    "unknown-command": `command`,
-    "agent-busy": `held`,
-    "sandbox-memory-low": `held`,
-    "sandbox-disk-low": `held`,
-    "tools-unenforced": `held`,
-    "agent-domain-refused": `held`,
-    "claude-not-entitled": `access`,
-    "account-not-entitled": `access`,
-    "account-not-allowed": `access`,
-    "subscription-required": `access`,
-    "claude-reauth": `signedOut`,
-    "codex-reauth": `signedOut`,
-    "claude-token-refused": `signedOut`,
-    "acp-auth-required": `signedOut`,
-    "provider-outage": `outage`,
-    "trial-unavailable": `outage`,
-    "grok-model-invalid": `model`,
-    "codex-model-invalid": `model`,
-    "model-unavailable": `model`,
-    "trial-model-unavailable": `model`,
-    "model-helper-only": `model`,
-    "context-window-too-small": `contextFull`,
-    "context-overflow": `contextFull`,
-    "engine-version-floor": `update`,
-    "safeguard-flagged": `flagged`,
-    "trial-exhausted": `limit`,
-    "workspace-setup": `held`,
-    "turn-cap": `cutShort`,
-    "harness-incomplete": `cutShort`,
-} as const satisfies Record<Exclude<AgentErrorCode, PrivacyRefusalCode>, FailureKind>;
-// Looked up by a bare string, since the roster and a row carry the code as one: a newer sandbox's code this build has no
-// word for reads as no kind, never as a wrong one.
-const KIND_OF_CODE = new Map<string, FailureKind>(Object.entries(KINDS_BY_CODE));
+// off, a provider timing out and a model that no longer exists all wore the same word as a crash. Which kind each code is
+// lives in the contract's failure table (failure-codes.ts), whose row the chat and the daemon read too; a failure nothing
+// coded has no kind, and each surface says so in its own words.
+export type { FailureKind };
 
 /** The kind a failure code names; undefined for none, and for a code this build does not know. */
-export const kindOfCode = (code: string | undefined): FailureKind | undefined => {
-    if (isPrivacyRefusal(code)) {
-        return `privacy`;
-    }
-    return code === undefined ? undefined : KIND_OF_CODE.get(code);
-};
+export const kindOfCode = (code: string | undefined): FailureKind | undefined => failureTraitsOf(code)?.kind;
 
 // The kind an `error` card's failure is, or undefined for one nothing classified (and for every other status: a refused
 // start says "Didn't start" whatever refused it, since that is the half of it the reader did not know).

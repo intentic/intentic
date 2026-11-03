@@ -1,4 +1,6 @@
 import { RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { AgentErrorCodeSchema } from "@intentic/sandbox-contract/events/agent-events";
+import { type FailureCourse, failureCourseOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import { opt } from "../../../opt.js";
 import type { LimitWay } from "../../models/limit-way.js";
 import { OUTAGE_MAX_ATTEMPTS } from "../../providers/provider-health.js";
@@ -13,6 +15,7 @@ import {
     outageFrame,
 } from "./classify-failure.js";
 import { FAR_RERUN_MS } from "../../subagents/child-records.js";
+import type { HeldReason } from "../turn/holds/held-turn.js";
 
 const NOW = 1_800_000_000_000;
 // Whatever the turn is attributed to rides its refusal, the actor included.
@@ -862,5 +865,77 @@ describe("a spent allowance on a routed provider", () => {
 
     test("names no account where the translator picked the credential", async () => {
         expect(await filedAccount("native")).toBeUndefined();
+    });
+});
+
+/* WHICH HOLD A FAILURE MAKES IS ITS CODE'S COURSE IN THE CONTRACT'S TABLE (failure-codes.ts), the row every window's offer
+   reads too. Before it, only a death nothing coded was held for a press: a turn that hit its own iteration or time
+   ceiling (turn-cap) or ended incomplete was held by nothing, no window offered to carry it on, and people typed
+   "Continue" by hand (2026-11). */
+describe("a failure, by its code's course", () => {
+    // The fact each wall's hold stands on beside its code; none for the walls whose code alone decides.
+    interface Wall {
+        readonly held: HeldReason | undefined;
+        readonly change?: Partial<FailureContext>;
+    }
+    const WALLS = {
+        limit: { held: "limit" },
+        outage: { held: "outage", change: { outage: { attempt: 0, retryAt: NOW } } },
+        remint: { held: "auth", change: { remint: { account: "acct", refusedToken: "tok-1" } } },
+        overflow: { held: "overflow" },
+        flagged: { held: "flagged" },
+        carry: { held: "stopped" },
+        door: { held: undefined },
+        bare: { held: undefined },
+        note: { held: undefined },
+    } satisfies { readonly [C in FailureCourse]: Wall };
+    const wallOf = (code: string | undefined): Wall => WALLS[failureCourseOf(code)];
+    const codes = [...AgentErrorCodeSchema.options, undefined].map((code) => [code ?? "uncoded", code] as const);
+
+    test.each(codes)("%s on a conversation is held as its course says, standing on its wall's own fact", async (_name, code) => {
+        const wall = wallOf(code);
+        const plan = await classifyFailure({ kind: "error", code, message: "words" }, context(wall.change), answering({ way }));
+        expect([code, plan.held?.reason]).toStrictEqual([code, wall.held]);
+        // A hold the frame does not promise is one no window offers: every held frame says so.
+        expect([code, plan.held === undefined || plan.frame.held !== undefined || plan.frame.autoResume !== undefined]).toStrictEqual([code, true]);
+    });
+
+    // Without the breaker's state or a credential to re-mint, an outage and a refused token hold nothing.
+    test.each(codes)("%s without its wall's own fact holds only where its code alone decides", async (_name, code) => {
+        const course = failureCourseOf(code);
+        const plan = await classifyFailure({ kind: "error", code, message: "words" }, context(), answering({ way }));
+        const holds = course === "limit" || course === "overflow" || course === "flagged" || course === "carry";
+        expect([code, plan.held !== undefined]).toStrictEqual([code, holds]);
+    });
+
+    test.each(codes)("%s holds nothing off a conversation", async (_name, code) => {
+        const wall = wallOf(code);
+        const plan = await classifyFailure({ kind: "error", code, message: "words" }, context({ ...wall.change, turn: { agent: "claude", harness: "native", prompt: "ship it" } }), answering());
+        expect([code, plan.held]).toStrictEqual([code, undefined]);
+    });
+
+    // A ceiling re-run by a clock is the runaway it exists to stop: offered for a press, whatever the conversation
+    // answers for a stop and however far a ladder got, asking neither.
+    test.each(["turn-cap", "harness-incomplete"] as const)("%s is held for a press alone, never laddered", async (code) => {
+        const event: ErrorFrame = { kind: "error", code, message: "Reached the turn's own ceiling." };
+        const queries = answering({ policy: "retry", made: 1, rung: 1_800_000_060_500 });
+        const plan = await classifyFailure(event, context(), queries);
+        // The frame says so too, so the window that watched it asks no question nothing would act on.
+        expect(plan.frame).toStrictEqual({ ...event, held: { ran: true, contextTokens: 9_000, pressOnly: true }, autoResume: "available" });
+        expect(plan.held).toStrictEqual({ input, reason: "stopped", pressOnly: true, sessionId: "s-1", ran: true, standing, contextTokens: 9_000 });
+        expect(queries.asked).toStrictEqual([]);
+    });
+
+    test("a death nothing coded still climbs the ladder, and is not held for a press alone", async () => {
+        const queries = answering({ policy: "retry", made: 1, rung: 1_800_000_060_500 });
+        const plan = await classifyFailure(died, context(), queries);
+        expect(plan.frame).toMatchObject({ autoResume: "scheduled", nextAt: 1_800_000_061, retries: { made: 1, max: RETRY_LADDER_TRIES } });
+        expect(plan.held).toMatchObject({ reason: "stopped" });
+        expect(plan.held?.pressOnly).toBeUndefined();
+        expect(plan.frame.kind === "error" ? plan.frame.held?.pressOnly : "not an error frame").toBeUndefined();
+        expect(queries.asked).toStrictEqual([
+            ["breakPolicy", "c-1", "stopped"],
+            ["stopLadder", "c-1"],
+        ]);
     });
 });

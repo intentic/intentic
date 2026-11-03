@@ -542,3 +542,60 @@ describe("the pass never sends a held turn into an allowance the records call sp
         expect(at.started.map((turn) => turn.account)).toEqual(["acct-b"]);
     });
 });
+
+/* A TURN THAT REACHED ITS OWN CEILING IS NEVER RE-RUN BY A CLOCK (2026-11). A turn-cap or an incomplete ending is held for
+   a person's press (held-turn.ts pressOnly): a ladder sending it again by itself is the runaway the ceiling exists to
+   stop. An ordinary stop, a death nothing coded, still climbs the ladder its conversation's answer arms. */
+describe("a stopped turn held for a press alone", () => {
+    const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
+    const PROFILE = { agent: "claude", harness: "native", account: "acct-a" } as const;
+    const NOW = 1_800_000_000_000;
+
+    // Two conversations stopped two minutes ago on a sandbox whose answer to a stop is to retry: one held for a press
+    // alone, one on the ladder.
+    const fleet = async () => {
+        const settings = { get: async () => SandboxSettingsSchema.parse({ stopPolicy: "retry" }), onSet: () => () => undefined };
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences(), { settings });
+        await agents.init();
+        const started: TurnInput[] = [];
+        const services = unstubbed<Services>("services", {
+            agents,
+            conversations,
+            logger: pino({ level: "silent" }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: settings.get }),
+            resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [{ id: "acct-a", label: "a", connectedAt: 0 }] }),
+            claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+            turns: unstubbed<Services["turns"]>("turns", {
+                drain: async () => {},
+                start: async (turn) => {
+                    started.push(turn);
+                    return { id: `run-${started.length}`, async *frames() {} };
+                },
+            }),
+        });
+        for (const [id, pressOnly] of [["c-press", true], ["c-ladder", false]] as const) {
+            await beginTurn(conversations, { conversationId: id, isolated: true, prompt: "Fix the gallery", profile: PROFILE }, NOW - 120_000);
+            const code = pressOnly ? "turn-cap" : undefined;
+            conversations.send(id, { kind: "frame", frame: { kind: "error", code, message: "Stopped short.", autoResume: "available", held: { ran: true } } }, NOW - 120_000);
+            const hold = { input: { conversationId: id, prompt: "Fix the gallery", ...PROFILE }, reason: "stopped", ran: true } as const;
+            conversations.send(id, { kind: "turn-held", held: pressOnly ? { ...hold, pressOnly: true } : hold }, NOW - 120_000);
+            await conversations.send(id, { kind: "settle" }, NOW - 110_000).settled;
+        }
+        return { agents, conversations, services, started };
+    };
+
+    it("is never sent by the pass, however long it waits, while an ordinary stop's rung still goes", async () => {
+        const at = await fleet();
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.started.map((turn) => turn.conversationId)).toEqual(["c-ladder"]);
+
+        // An hour on, past every rung the ladder has: still held, still unfired, and not given up on as a spent ladder.
+        await createTurnResumeScheduler(at.services).tick(NOW + 60 * 60_000);
+        expect(at.started.map((turn) => turn.conversationId)).toEqual(["c-ladder"]);
+        expect(at.conversations.state("c-press")?.resume.held).toMatchObject({ reason: "stopped", pressOnly: true, fired: false });
+        expect(at.agents.get("c-press")).toMatchObject({ status: "error", failureCode: "turn-cap" });
+    });
+});

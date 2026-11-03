@@ -108,7 +108,7 @@ describe(`a row written before failures were coded`, () => {
 // THE RULE FOR A CODED ROW WRITTEN BEFORE `own` WAS KEPT (before 2026-10-20): authorship is never inferred, from the code
 // or from the words, since the same code is the sandbox's sentence on one path and a provider's on another (Cursor's
 // `agent-busy`, a door's `privacy-unshielded`). Such a row reads as the provider's: its kind's line, which every code has
-// (KINDS_BY_CODE), and its words, the sandbox's included, one press away. Never the unrecognized line, never a raw
+// (the contract's failure table), and its words, the sandbox's included, one press away. Never the unrecognized line, never a raw
 // headline, and nothing it said is lost.
 describe(`a coded row written before authorship was kept`, () => {
     const SAID = `The protected execution-domain policy is unreadable: refused before any model ran.`;

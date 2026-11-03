@@ -59,7 +59,7 @@ export interface KeysHost {
 // An empty box can't take a newline but can take a recall, so the slot advertises whichever key is live.
 const composerHintOf = (host: KeysHost): ComputedRef<string> => {
     const { view, popovers, history } = host;
-    const { draft, streaming, awaitingDecision } = view;
+    const { draft, turnStoppable, awaitingDecision } = view;
     const t = useT();
     const recallable = computed(() => draft.value === `` && history.value?.recallable === true);
     return computed(() => {
@@ -69,8 +69,9 @@ const composerHintOf = (host: KeysHost): ComputedRef<string> => {
             return spoken;
         }
         // While generating, the way out is the shortcut worth the slot: the only place Escape's meaning is learned. A
-        // turn already ending has nothing left to stop.
-        if (streaming.value && view.ending.value === undefined && !awaitingDecision.value) {
+        // turn already ending has nothing left to stop. Live as the card says it too (ConversationView.turnStoppable), so
+        // the key is taught for a turn this window is not attached to yet, never for a resume, which runs nothing to stop.
+        if (turnStoppable.value && view.ending.value === undefined && !awaitingDecision.value) {
             return t(`chat.chatPane.escToStop`);
         }
         // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.
@@ -101,7 +102,7 @@ const composerHintOf = (host: KeysHost): ComputedRef<string> => {
 
 export const useComposerKeys = (host: KeysHost) => {
     const { view, popovers, history } = host;
-    const { draft, streaming, awaitingDecision } = view;
+    const { draft, turnStoppable, awaitingDecision } = view;
 
     // True when recall consumed the key; claims nothing while text is selected, since arrows then collapse the
     // selection. Reads the live element, not the `caret` ref, which goes stale under an auto-repeating arrow.
@@ -153,6 +154,7 @@ export const useComposerKeys = (host: KeysHost) => {
     // Escape, after the lists and recall had their claim: voice catches a counting-down send and quits hands-free; an
     // armed edit is abandoned (free: nothing changed); only then does it stop a turn that is generating, since a
     // card-parked turn spends nothing and Stop is the way out of it instead, and one already ending has nothing to stop.
+    // The same Stop as the button's (ConversationView.stop): a turn only the card says runs is stopped by the card's run.
     const escapeKeydown = (): boolean => {
         // A reply being read aloud is the first thing Escape silences; hands-free stays on for the next thing said.
         if (speech.speaking.value !== undefined) {
@@ -167,10 +169,10 @@ export const useComposerKeys = (host: KeysHost) => {
             view.conversation.value.transcript.cancelEdit();
             return true;
         }
-        if (!streaming.value || view.ending.value !== undefined || awaitingDecision.value || !host.reachable.value) {
+        if (!turnStoppable.value || view.ending.value !== undefined || awaitingDecision.value || !host.reachable.value) {
             return false;
         }
-        view.conversation.value.turn.stop();
+        view.stop();
         return true;
     };
 

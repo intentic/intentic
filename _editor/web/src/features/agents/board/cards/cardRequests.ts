@@ -3,7 +3,7 @@ import { messageOr, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref } from "vue";
 import { landRequestWork, requestLandAgent } from "../../../../models/fleet/agentActions";
-import { limitClosed } from "../../../../models/agent-status/agentStatus-standing";
+import { cardPressWay, goesAtReopen } from "../../../../models/conversations/endings/pressWay";
 import { sandboxNow } from "../../../../models/agent-status/sandboxClock";
 import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -69,10 +69,14 @@ export const useCardRequests = (agent: () => FleetAgent, title: () => string, re
     // While the allowance is still shut a re-run now is only refused again, so the press books the chat's own answer
     // instead: this conversation's limit policy set to `resend` (TurnBreakQuestion's Send again). The daemon then derives
     // a `next` re-run at the reset, which takes the card out of Attention while its corner says when it goes. Once the
-    // window is open, or the provider published no reset (nothing could book it), the press re-runs the turn now. Ticks
+    // window is open, or the provider published no reset (nothing could book it), the press re-runs the turn now. The one
+    // rule the chat's strip presses by (pressWay.ts), so the card's press and the strip's solid one go the same way. Ticks
     // only while a reset is ahead, so the press turns into Send again once it passes.
     const clock = useNow(() => resendable() && agent().limitResetsAt !== undefined, 15_000);
-    const atReset = computed(() => resendable() && limitClosed(agent(), sandboxNow(clock.value)));
+    const atReset = computed(() => {
+        const way = resendable() ? cardPressWay(agent(), sandboxNow(clock.value)) : undefined;
+        return way !== undefined && goesAtReopen(way);
+    });
     const resendTip = computed(
         (): Tip =>
             atReset.value

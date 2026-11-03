@@ -1,7 +1,7 @@
 import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
 import type { BranchLink, FreshLink } from "../run/turnRequest";
 import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
-import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agent-status/agentStatus-standing";
+import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf, turnInFlight } from "../../agent-status/agentStatus-standing";
 import { clockOffset } from "../../agent-status/sandboxClock";
 import { endingStanding } from "../session/runPhase";
 import type { Conversation } from "../session/conversation";
@@ -107,11 +107,13 @@ const endedHere = (conversation: Conversation): EndingByHand | undefined => {
 // that card folds every press into one reading (this chat's own through TabFacts.ending, another window's or device's
 // through the roster, a board press through its claim), so the chat and the board cannot say different things about
 // one Stop. With no card to read (another box's conversation, or a surface handed no fleet) it is what this window saw
-// for itself. Undefined outside a live turn, so a card still wearing an earlier turn's ending never draws it over the
-// next one.
+// for itself. A turn the card says is in flight while this window follows no stream of it (one another window, a wake or
+// the resume pass started, or one whose stream this window lost) is read off the card alone, so a Stop or a dismissal
+// made anywhere shows here too. Undefined outside a live turn, so a card still wearing an earlier turn's ending never
+// draws it over the next one.
 export const endingOfTab = (conversation: Conversation, card: AgentStanding | undefined): EndingByHand | undefined => {
     if (!conversation.turn.streaming.value) {
-        return undefined;
+        return card !== undefined && turnInFlight(card) ? endingOf(card) : undefined;
     }
     return card === undefined ? endedHere(conversation) : endingOf(card);
 };

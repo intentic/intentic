@@ -15,7 +15,7 @@ import { canArchive } from "../../../models/fleet/useAgents-fleet";
 import OriginMark from "../../../parts/fleet/OriginMark.vue";
 import RailLane from "../../../components/RailLane.vue";
 import RailColumn from "./RailColumn.vue";
-import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
+import { headerGlyph, statusLookOf } from "./statusLook";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../../../models/conversations/panel/chatPanelLayout";
 import { allTabs, isArchived, laneOfTab, needsYouQueue, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
@@ -82,6 +82,8 @@ const runningCount = computed(
             return agent !== undefined ? turnInFlight(agent) : conversation.turn.streaming.value;
         }).length,
 );
+// What the open chat is doing, as its card says it (the rail's own reading, statusLook.ts), its window's only without one.
+const activeLook = computed(() => statusLookOf(active.value, agentById(active.value.conversationId)));
 const attentionCount = computed(
     () => conversations.value.filter((conversation) => laneOfTab(conversation, agentById(conversation.conversationId)) === `attention`).length,
 );
@@ -376,7 +378,7 @@ onBeforeUnmount(() => {
                 @dblclick.prevent.stop="beginRename()"
             >
                 <!-- What this chat is doing; rendered (dim) even when idle so the row's left edge never shifts. -->
-                <Icon v-bind="statusIcon(active.status.value)" :aria-label="statusLabel(active.status.value)" class="shrink-0" />
+                <Icon v-bind="headerGlyph(activeLook)" :aria-label="activeLook.label" class="shrink-0" />
                 <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                 <OriginMark :origin="originOf(active)" compact />
                 <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
@@ -385,7 +387,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span
                     class="min-w-0 truncate text-left font-medium"
-                    :class="statusTabClass(active.status.value)"
+                    :class="activeLook.title"
                     v-tooltip.bottom.overflow="tabLabel(active)"
                     >{{ tabLabel(active) }}</span
                 >

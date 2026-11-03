@@ -184,6 +184,8 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
     limitResetsAt: undefined,
     limitHeld: undefined,
     next: keptSends(card.next),
+    // Nothing to press while the turn it went with runs; the daemon's next card says what is.
+    press: undefined,
     unfinished: undefined,
     activity: undefined,
     unread: false,
@@ -210,11 +212,14 @@ export const endedHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefin
 // (TabFacts.resumeWithdrawn). The roster keeps reading `resuming` then, so the sidebar called a chat working for 41
 // minutes beside the chat's own "stopped short": drawn instead as the failure the sandbox now holds, as its card will
 // read once it stops saying resuming. Only over `resuming`: any later word from the roster is newer than this.
+// The press the resuming card said (none) is not the failure's: the chat reads its own window's then, as from an older card.
 export const withdrawnHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefined): T =>
-    tab?.resumeWithdrawn === undefined || card.status !== `resuming` ? card : { ...card, status: `error`, failure: tab.resumeWithdrawn.message, failureCode: tab.resumeWithdrawn.error, failureOwn: tab.resumeWithdrawn.own };
+    tab?.resumeWithdrawn === undefined || card.status !== `resuming`
+        ? card
+        : { ...card, status: `error`, failure: tab.resumeWithdrawn.message, failureCode: tab.resumeWithdrawn.error, failureOwn: tab.resumeWithdrawn.own, press: undefined };
 
 // A land between turns: the conflict and failure a settled status carried go with it; only a running turn hides
-// `unfinished`, so it stays.
+// `unfinished`, so it stays, and so does the press the turn left, which the daemon keeps through its land lease too.
 const asLanding = <T extends FleetAgent>(card: T): T => ({
     ...card,
     status: `landing`,

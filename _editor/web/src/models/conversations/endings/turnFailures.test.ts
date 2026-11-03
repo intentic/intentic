@@ -1,4 +1,6 @@
 import { AgentErrorCodeSchema } from "@intentic/sandbox-contract/events/agent-events";
+import { type FailureCourse, failureCourseOf, failureTraitsOf } from "@intentic/sandbox-contract/policy/failure-codes";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { computed, ref } from "vue";
@@ -10,6 +12,10 @@ import { type FailureHost, TurnFailures } from "./turnFailures";
 // The sandbox's account list, as a give-up or a clean turn asks it again; late imported by the module under test.
 const refreshAccounts = jest.fn(async () => []);
 jest.mock("../accounts/useChat-accounts", () => ({ refreshAccounts }));
+// The catalog a refused model or trial reads again; late imported by the module under test, recorded here.
+const loadTrialStatus = jest.fn(async () => {});
+const loadProviderModels = jest.fn(async (_provider: AgentProvider) => {});
+jest.mock("../accounts/useChat-catalog", () => ({ loadTrialStatus, loadProviderModels }));
 
 // A failure host whose turn records what the failure asked of it; nothing here writes a transcript line, so that seam
 // names itself if a case reaches for it.
@@ -256,4 +262,98 @@ it(`never puts a failure's own words on the error line, whatever its code`, () =
         failures.cancelProbe();
         expect([code, host.error.value?.includes(`own words`) === true, failures.failedTurn]).toEqual([code, false, true]);
     }
+});
+
+/* EVERY FAILURE TAKES THE COURSE THE CONTRACT'S TABLE GIVES ITS CODE (failure-codes.ts), the one the daemon's hold reads:
+   five places used to classify the codes by hand. A refusal the board called "Held" (a tool list the runtime cannot keep,
+   a full disk) marked the tab as crashed here, and a turn that hit its own ceiling (turn-cap, harness-incomplete) was
+   offered no Continue anywhere, so people typed "Continue" by hand (2026-11). */
+describe(`a failure, by its code's course`, () => {
+    // What a frame saying nothing beyond its code leaves on this window: no account, no reset, no booking, no breaker.
+    interface Left {
+        readonly crashed: boolean;
+        readonly pickUp: PickUp[`reason`] | undefined;
+        readonly errorLine: boolean;
+    }
+    const nothing: Left = { crashed: false, pickUp: undefined, errorLine: false };
+    const LEFT = {
+        // The held words carry their own press: never the tab's failure. An old engine says where to install a newer one.
+        door: (code) => ({ ...nothing, errorLine: code === `engine-version-floor` }),
+        // Nothing holds it and nothing here fixes it: failed, but a vanished session, whose next send starts fresh, and a
+        // kind the board calls held (a conversation busy with a turn of its own), which is a wait.
+        bare: (code) => ({
+            crashed: code !== `session-not-found` && failureTraitsOf(code)?.kind !== `held`,
+            pickUp: undefined,
+            errorLine: code === `acp-auth-required`,
+        }),
+        // Stopped with nothing to repair: the Continue strip, the turn held for it, on a tab that reads as failed.
+        carry: () => ({ ...nothing, crashed: true, pickUp: `stopped` }),
+        note: () => nothing,
+        limit: () => ({ ...nothing, pickUp: `limit` }),
+        // No breaker state on the frame: nothing is retrying it.
+        outage: () => ({ ...nothing, crashed: true }),
+        // No re-mint scheduled: the credential is the account list's to say.
+        remint: () => nothing,
+        // No fresh session scheduled: the re-run already overflowed.
+        overflow: () => ({ ...nothing, crashed: true }),
+        flagged: () => ({ ...nothing, pickUp: `flagged` }),
+    } satisfies { readonly [C in FailureCourse]: (code: string | undefined) => Left };
+    const kept: SessionRef = { id: `s1`, provider: `claude`, account: undefined, harness: `native` };
+
+    it.each([...AgentErrorCodeSchema.options, undefined].map((code) => [code ?? `uncoded`, code] as const))(`%s`, (_name, code) => {
+        const host = { ...hostOf(), selection: unstubbed<FailureHost[`selection`]>(`selection`, { provider: computed(() => `claude`) }) };
+        host.session.value = kept;
+        const failures = new TurnFailures(host);
+        failures.apply({ kind: `error`, message: `The provider's own words.`, code });
+        failures.cancelProbe();
+        const left: Left = { crashed: failures.crashed.value, pickUp: host.pickUp.value?.reason, errorLine: host.error.value !== null };
+        expect(left).toEqual(LEFT[failureCourseOf(code)](code));
+        // Only a vanished session is dropped, so the next send starts fresh; every other failure keeps the one it ran in.
+        expect([code, host.session.value]).toEqual([code, code === `session-not-found` ? undefined : kept]);
+    });
+
+    it(`offers a turn that reached its own ceiling, or ended incomplete, the Continue that re-runs the kept turn`, () => {
+        for (const code of [`turn-cap`, `harness-incomplete`] as const) {
+            const host = hostOf();
+            const failures = new TurnFailures(host);
+            failures.apply({
+                kind: `error`,
+                code,
+                message: `Stopped at its own ceiling.`,
+                autoResume: `available`,
+                held: { ran: true, contextTokens: 9_000 },
+            });
+            expect([code, host.pickUp.value]).toEqual([code, { reason: `stopped`, held: { ran: true, contextTokens: 9_000 } }]);
+        }
+    });
+
+    it(`keeps an uncoded stop's ladder on its pick-up: when the next rung goes, and how far it got`, () => {
+        const host = hostOf();
+        new TurnFailures(host).apply({
+            kind: `error`,
+            message: `the harness crashed`,
+            autoResume: `scheduled`,
+            nextAt: 1_800_000_061,
+            retries: { made: 1, max: 3 },
+            held: { ran: true },
+        });
+        expect(host.pickUp.value).toEqual({ reason: `stopped`, nextAt: 1_800_000_061_000, retries: { made: 1, max: 3 }, held: { ran: true } });
+    });
+
+    // Each provider is named after the code that asked, so the catalog's reads say which refusals reloaded what.
+    it(`reads the catalog again for a refused model or trial, and for nothing else`, async () => {
+        loadTrialStatus.mockClear();
+        loadProviderModels.mockClear();
+        for (const code of AgentErrorCodeSchema.options) {
+            // SAFETY: the provider is only ever handed back to the recording catalog above, never resolved as one.
+            const provider = computed(() => code as AgentProvider);
+            const host = { ...hostOf(), selection: unstubbed<FailureHost[`selection`]>(`selection`, { provider }) };
+            const failures = new TurnFailures(host);
+            failures.apply({ kind: `error`, message: `The provider's own words.`, code });
+            failures.cancelProbe();
+        }
+        const reloaded = [`model-unavailable`, `grok-model-invalid`, `codex-model-invalid`, `trial-model-unavailable`].toSorted();
+        await waitFor(() => expect(loadProviderModels.mock.calls.map(([provider]) => provider).toSorted()).toEqual(reloaded));
+        expect(loadTrialStatus).toHaveBeenCalledTimes(3);
+    });
 });

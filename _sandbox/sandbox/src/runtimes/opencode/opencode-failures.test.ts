@@ -40,6 +40,19 @@ describe("an execution's failure", () => {
         expect(executionErrorFrame(overflow, GOOGLE)).toEqual({ kind: "error", code: "context-overflow", message: overflow.message });
     });
 
+    // OpenCode's words when a step finishes `content-filter` (Gemini's SAFETY, PROHIBITED_CONTENT, BLOCKLIST… or a prompt's
+    // blockReason): six such turns on gemini-3.8-flash-high went out uncoded and were re-run on the stopped ladder into
+    // the same filter (2026-11-01). Held for a person instead, never re-run by a clock.
+    test("a response the provider's filter blocked is held for a person as safeguard-flagged", () => {
+        const blocked = failure("provider.content-filter", "Provider blocked the response");
+        const withheld = failure("provider.content-filter", "Google withheld its output (PROHIBITED_CONTENT)");
+
+        expect(executionErrorFrame(blocked, GOOGLE)).toEqual({ kind: "error", code: "safeguard-flagged", message: "Provider blocked the response" });
+        expect(executionErrorFrame(withheld, GOOGLE)).toEqual({ kind: "error", code: "safeguard-flagged", message: withheld.message });
+        // The same words under no type of OpenCode's are not read as a block.
+        expect(executionErrorFrame(failure("unknown", "Provider blocked the response"), GOOGLE)).toEqual({ kind: "error", message: "Provider blocked the response" });
+    });
+
     test("a type that says nothing more falls back on the sentence, and a sentence that says nothing stays uncoded", () => {
         expect(executionErrorFrame(failure("unknown", "Rate limit exceeded, retry later"), GOOGLE)).toMatchObject({ code: "rate_limit" });
         expect(executionErrorFrame(failure("unknown", "Model not found: grok-9. Did you mean grok-4?"), GROK)).toMatchObject({ code: "grok-model-invalid" });
@@ -51,6 +64,12 @@ describe("a retry OpenCode scheduled", () => {
     const NOW = 1_000_000;
     const CAP_LEFT = 20 * 60_000;
     const retry = (error: StructuredError, attempt: number, waitMs: number) => ({ error, attempt, at: NOW + waitMs });
+
+    test("a filter's block is OpenCode's to retry, but handed over as held once its wait would pass the turn's cap", () => {
+        const blocked = failure("provider.content-filter", "Provider blocked the response");
+        expect(retryHandover(retry(blocked, 1, 30_000), CAP_LEFT, NOW)).toBeUndefined();
+        expect(retryHandover(retry(blocked, 1, CAP_LEFT), CAP_LEFT, NOW)).toEqual({ kind: "error", code: "safeguard-flagged", message: "Provider blocked the response" });
+    });
 
     test("a short rate limit and an outage's first tries are OpenCode's to wait out", () => {
         expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, 30_000), CAP_LEFT, NOW)).toBeUndefined();

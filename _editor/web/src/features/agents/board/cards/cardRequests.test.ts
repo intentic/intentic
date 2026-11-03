@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import { effectScope, ref } from "vue";
+import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // The card's two presses for a stranded turn reach the daemon through useAgents, stubbed to see which one went.
@@ -49,4 +50,19 @@ it(`sends the held turn now once the window is open or no reset is known`, async
     }
     expect(resumeHeldTurn).toHaveBeenCalledTimes(2);
     expect(setBreakPolicy).not.toHaveBeenCalled();
+});
+
+// The card's press goes the way the chat's strip does for the same reopen (pressWay.ts), from a sandbox that states the
+// press too: a reset ahead books the resend, none known (Cursor, Grok, Devin publish none) or one passed sends it now.
+it(`goes the strip's way from a card that states its press`, async () => {
+    const withPress = (resetInSeconds: number | undefined): FleetAgent => {
+        const card = stranded(resetInSeconds);
+        const ending: TurnEnding = card.limitResetsAt === undefined ? { reason: `limit`, held: { ran: true } } : { reason: `limit`, resetsAt: card.limitResetsAt, held: { ran: true } };
+        return { ...card, press: { kind: `continue`, ending } };
+    };
+    expect(await pressFor(withPress(40 * 60))).toBe(true);
+    expect(setBreakPolicy).toHaveBeenCalledTimes(1);
+    expect(await pressFor(withPress(undefined))).toBe(false);
+    expect(await pressFor(withPress(-60))).toBe(false);
+    expect(resumeHeldTurn).toHaveBeenCalledTimes(2);
 });

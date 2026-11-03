@@ -1,5 +1,5 @@
 import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
-import { isRateLimited } from "../../../engines/failure-sentences.js";
+import { isRateLimited, withStderrTail } from "../../../engines/failure-sentences.js";
 import { codedFailure, type FailureRule } from "./error-frames.js";
 
 /* ONE READING OF A FAILURE'S WORDS, FOR EVERY RUNTIME. Each loop used to read its vendor's sentences with its own list,
@@ -83,6 +83,20 @@ test("a crash's stderr is never read as a provider's limit, by a number or a wor
         expect(isRateLimited(sentence), sentence).toBe(true);
     }
     expect(isRateLimited("at Ab1 (file:///opt/claude/cli.js:429:17)")).toBe(false);
+});
+
+// Devin's spent allowance as the ACP loop folds it (2026-10-28): the sentence, then hundreds of characters of its CLI's
+// log lines. Coded, the sentence is the whole story; uncoded, the stderr is the one clue to what broke, and stays.
+test("a frame its words coded goes out without the stderr behind them; one nothing named keeps it", () => {
+    const quota = "Your weekly usage quota has been exhausted. Visit https://app.devin.ai/settings/usage to purchase on-demand usage or turn on auto-reload.";
+    const log = "INFO run_acp_server:session_db_call:session_db_job: chisel_agent::session_db: close time.busy=715µs time.idle=46.6µs";
+    const folded = withStderrTail(quota, log);
+    // The sentence whole, its full stop included, which the fold took off it.
+    expect(codedFailure({ kind: "error", message: folded })).toEqual({ kind: "error", code: "rate_limit", message: quota });
+    const refused = "400 invalid_request_error: Unsupported parameter: prompt_cache_retention is not found for this model";
+    expect(codedFailure({ kind: "error", message: withStderrTail(refused, log) }).message).not.toContain(log);
+    const crash = withStderrTail("Session not found", log);
+    expect(codedFailure({ kind: "error", message: crash })).toEqual({ kind: "error", message: crash });
 });
 
 test("a runtime's own rules are read before the shared ones, and an unsent parameter before both", () => {

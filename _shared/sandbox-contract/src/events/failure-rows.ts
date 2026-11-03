@@ -1,7 +1,7 @@
 import type { AgentEvent } from "./agent-events.js";
 import { type FailureSaid, type NoticeCode, noticeCode } from "./sandbox-notice.js";
 import type { TranscriptRow } from "./transcript.js";
-import { anotherModelClears, turnedAwayCode } from "../policy/turned-away.js";
+import { anotherModelClears, turnedAwayCode } from "../policy/failure-codes.js";
 
 /* EVERY ROW A FAILURE LEAVES, in one place: the fold's one way from an `error` frame to a notice. Each row is coded,
    whatever the frame carried, so no reader ever has to guess from a row's words whether it is a failure, or what kind:

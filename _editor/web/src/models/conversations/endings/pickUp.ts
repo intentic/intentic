@@ -2,6 +2,7 @@ import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schem
 import type { HeldEnding, RetryLadder, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
+import type { AgentPress } from "@intentic/sandbox-contract/schemas/agent-press";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../../providers/usageStatus";
@@ -52,6 +53,14 @@ export interface HeldTurn {
     readonly handoffTokens?: number;
     readonly moving?: string;
     readonly handoff?: HandoffOffer;
+    // Only a press sends it again: the turn reached its own ceiling or ended incomplete, and no standing answer re-runs it
+    // (the daemon's held-turn.ts pressOnly), so the strip asks no question about it.
+    readonly pressOnly?: boolean;
+}
+
+/** The pick-up a Continue press was made on: the one the pane shows (the card's, where it says), not only this window's. */
+export interface PressedOn {
+    readonly pickUp: PickUp | undefined;
 }
 
 /** What a Continue press may say about how it goes on: keep the session across an account move, and which hand-off. */
@@ -141,6 +150,22 @@ export const withCardBooking = (pickUp: PickUp | undefined, card: AgentStanding 
 // The held turn with the move the card says is booked for it, or none.
 const movingTo = ({ moving: _was, ...held }: HeldTurn, moving: string | undefined): HeldTurn => (moving === undefined ? held : { ...held, moving });
 
+/**
+ * The pick-up as the board's card states the daemon's one reading of the press (AgentSummary.press): nothing to press,
+ * or its ending, timed and pointed by the card's booking as any card about this ending is (withCardBooking). The one thing
+ * only this window knows rides along: its rest after a refusal where nothing ran (coolUntil), while it is about the same
+ * wall. Over the window's own reading, which it built from the frame it happened to watch: the card stood in Finished
+ * while the composer still said "Limit reached, work kept" (2026-11-01, true-pine-bgzz), and a reloaded window lost its
+ * strip, or kept one nothing would act on.
+ */
+export const pickUpOfPress = (press: AgentPress, own: PickUp | undefined, card: AgentStanding): PickUp | undefined => {
+    if (press.kind === `none`) {
+        return undefined;
+    }
+    const said = withCardBooking(pickUpOf(press.ending), card);
+    return said === undefined || own?.coolUntil === undefined || own.reason !== said.reason ? said : { ...said, coolUntil: own.coolUntil };
+};
+
 // How long Continue rests after a spent allowance refused a turn at the door (see PickUp.coolUntil). Short, since the
 // provider's reset guess is routinely early and the press is the way to find out; long enough that a second press is a
 // decision rather than a reflex.
@@ -172,6 +197,9 @@ export const wakesHeldUntil = (pickUp: PickUp | undefined, waiting: readonly Que
 
 // Past this, a wall-clock time reads better than a countdown nobody can act on; under it, the relative wait wins.
 const CLOCK_FROM_MS = 90 * 60 * 1_000;
+
+/** A stopped turn held for a press alone (HeldTurn.pressOnly): no answer to the stop's question would ever send it. */
+export const pressOnlyStop = (pickUp: PickUp | undefined): boolean => pickUp?.reason === `stopped` && pickUp.held?.pressOnly === true;
 
 // A held turn is always pressable, whatever the reset says: disabling it protected against a re-fail that costs nothing
 // (the daemon's own fire is idempotent), while a dead button next to a countdown just pushed the user to type the word
@@ -251,7 +279,9 @@ const originStatus = (pickUp: PickUp): string => {
     if (pickUp.reason === `outage`) {
         return `${t(`chat.turnBreak.outageStatus`)}${retriedSoFar(pickUp)}`;
     }
-    return `${t(`chat.turnBreak.stoppedStatus`)}${retriedSoFar(pickUp)}`;
+    // Held for a press alone: nothing carries it on by itself, which the line says rather than leaving a reader to wait.
+    const pressed = pressOnlyStop(pickUp) ? ` · ${t(`chat.turnBreak.waitsForPress`)}` : ``;
+    return `${t(`chat.turnBreak.stoppedStatus`)}${retriedSoFar(pickUp)}${pressed}`;
 };
 
 // Limit reached comes in two shapes: work kept (hit mid-flight) or nothing ran (spent before the first request);
@@ -281,7 +311,8 @@ export const pickUpNext = (pickUp: PickUp, policy: TurnBreakPolicy, now: number 
     if (pickUp.held?.moving !== undefined) {
         return t(`chat.turnBreak.movingNow`, { account: pickUp.held.moving });
     }
-    if (policy === `wait`) {
+    // Held for a press alone, nothing goes by itself whatever the answer says.
+    if (policy === `wait` || pressOnlyStop(pickUp)) {
         return undefined;
     }
     const at = pickUp.nextAt ?? pickUp.readyAt;

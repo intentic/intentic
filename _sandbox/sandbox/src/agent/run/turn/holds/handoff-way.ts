@@ -1,4 +1,5 @@
-import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentTurn, ATTACHMENT_LIMIT, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { HandedOff, HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../../../composition.js";
@@ -91,6 +92,52 @@ export const replaceHeld = (services: Pick<Services, "conversations">, input: Ro
     const held: HeldTurn | undefined =
         input.conversationId === undefined ? undefined : services.conversations.send(input.conversationId, { kind: "resume-superseded" }).reply;
     return { held, way: handoffWayOf(input, held) };
+};
+
+// The re-runs whose own note tells the model none of the request was read (events/resume.ts): a spent allowance refusing
+// it outright, and a refusal at the door. Any other re-run's words reached a model once, on the session it goes on from.
+const UNREAD_RERUNS: ReadonlySet<string> = new Set(["refused", "door"]);
+
+// Words that open with a slash are a command to the harness, which parses one only at the very start of a message.
+const opensWithCommand = (prompt: string): boolean => prompt.trimStart().startsWith("/");
+
+// The held turn's words, where no model ever read them and they are the same person's as the new words taking their
+// place: a turn that answered nothing, sent first or as a re-run whose note says nothing was read. Never a flagged
+// turn's, which sent again only meet the same classifier, and never a press's own re-run of it.
+const unsentOf = (input: RoutedTurn, held: HeldTurn | undefined): HeldTurn["input"] | undefined => {
+    if (held === undefined || held.ran || held.reason === "flagged" || input.resume !== undefined) {
+        return undefined;
+    }
+    const was = held.input;
+    const samePerson = input.speaker?.kind === "person" && was.speaker?.kind === "person" && was.actor === input.actor;
+    const unread = was.resume === undefined || UNREAD_RERUNS.has(was.resume);
+    return samePerson && unread ? was : undefined;
+};
+
+/**
+ * A person's words a held turn never got to a model, carried ahead of their new words that take its place, as the queue
+ * joins one person's messages in a row (conversation-queue.ts together). A turn refused before it answered (a spent
+ * allowance's outright refusal, a refusal at the door) stays drawn in the transcript under its failure, but its hold is
+ * superseded as the new turn begins (replaceHeld), and the session the new turn resumes never read it: the words went
+ * nowhere while the chat showed them sent, and the model answered only the new ones. A command's words, and a join past
+ * the files one turn carries, go as they were sent. The held run's rows join the runs the model never saw, as a press's
+ * re-run's do (turn-resume.ts rerunOf), so a fresh session seeded from the record does not read them twice.
+ */
+export const withUnsentWords = (input: RoutedTurn, held: HeldTurn | undefined): RoutedTurn => {
+    const was = unsentOf(input, held);
+    const words = was === undefined ? "" : withoutResumeNote(was.prompt);
+    const attachments = [...(was?.attachments ?? []), ...(input.attachments ?? [])];
+    if (words.trim() === "" || opensWithCommand(words) || opensWithCommand(input.prompt) || attachments.length > ATTACHMENT_LIMIT) {
+        return input;
+    }
+    const mentions = [...new Set([...(was?.mentions ?? []), ...(input.mentions ?? [])])].filter((path) => !attachments.includes(path));
+    const joined: RoutedTurn = { ...input, prompt: [words, input.prompt].filter((text) => text.length > 0).join("\n\n") };
+    return {
+        ...joined,
+        ...opt("attachments", attachments.length > 0 ? attachments : undefined),
+        ...opt("mentions", mentions.length > 0 ? mentions : undefined),
+        ...opt("unseenRuns", held?.run === undefined ? undefined : [...(input.unseenRuns ?? []), held.run]),
+    };
 };
 
 /**

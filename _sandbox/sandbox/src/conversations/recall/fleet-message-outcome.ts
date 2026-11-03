@@ -73,7 +73,9 @@ export const reachedBy = (
 };
 
 // The walls the sandbox sends a held turn past again by itself, on a clock of its own (turn-resume.ts RUNGS), and on what.
-// Every other hold waits for a press, but a spent allowance's booked re-run and a wait for memory, which `next` says.
+// Every other hold waits for a press, but a spent allowance's booked re-run and a wait for memory, which `next` says. A
+// stop held for a press alone (a turn that reached its own ceiling, held-turn.ts pressOnly) waits for one too: no rung
+// fires it.
 const RETRIED = new Map<HeldRecord["reason"], string>([
     ["auth", "once the account's sign-in is renewed"],
     ["outage", "once the provider answers again"],
@@ -101,7 +103,7 @@ const heldWords = (to: string, held: HeldRecord | undefined): string | undefined
     if (held === undefined || held.fired) {
         return undefined;
     }
-    const retried = RETRIED.get(held.reason);
+    const retried = held.pressOnly === true ? undefined : RETRIED.get(held.reason);
     if (retried !== undefined) {
         return `It is held, and the sandbox sends it again by itself ${retried}. \`agents show ${to}\` says how that goes.`;
     }

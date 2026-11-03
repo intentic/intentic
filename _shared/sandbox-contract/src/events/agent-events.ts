@@ -426,6 +426,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The ways this turn can continue once its cache is cold, the one the sandbox suggests, and the one a
                 // person picked (schemas/providers/handoff.ts). Absent where there is nothing to carry.
                 handoff: HandoffOfferSchema.optional(),
+                // A turn at its own ceiling or ended incomplete: only a press sends it again, never a standing answer.
+                pressOnly: z.boolean().optional().describe("Only a press sends it again: no standing answer re-runs it. Absent for every other hold."),
             })
             .optional(),
         // provider-outage only, while the breaker has tries left: epoch seconds its backoff next lets one through.

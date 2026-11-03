@@ -10,8 +10,10 @@ import type { LandStandings } from "../../../../conversations/land/standing.js";
 import type { Services } from "../../../../composition.js";
 import type { RoutedTurn } from "../../../../seams/turn-starter.js";
 import { handoffOfferOf } from "../../../providers/limit-handoff.js";
-import { carriedHandoff, handoffWayOf, keptHandoffOf, replaceHeld, withoutSession } from "../holds/handoff-way.js";
-import type { HeldOf } from "../holds/held-turn.js";
+import { carriedHandoff, handoffWayOf, keptHandoffOf, replaceHeld, withoutSession, withUnsentWords } from "../holds/handoff-way.js";
+import type { HeldOf, HeldTurn } from "../holds/held-turn.js";
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { ATTACHMENT_LIMIT } from "@intentic/sandbox-contract/schemas/agent";
 
 /* proud-meadow-86lu, 2026-10-26: a Codex turn held for a spent allowance, its card reading Summary. A "Continue" booked
    for the reset took the held turn's place and went on the old session whole, and when that was refused at the reset
@@ -141,5 +143,57 @@ describe("a turn replacing the held one", () => {
     test("supersedes nothing for a turn with no conversation", () => {
         const conversations = unstubbed<Services["conversations"]>("conversations", {});
         expect(replaceHeld({ conversations }, turn({ conversationId: undefined }))).toStrictEqual({ held: undefined, way: undefined });
+    });
+});
+
+/* Gap 6, 2026-11-03: a person's turn a spent allowance refused before the model answered stays drawn in the chat under
+   its "Limit reached", held for Continue. The person typed something new instead, and the new turn superseded the hold:
+   the session it resumed never read the refused words, so the model answered only the new ones while the chat showed
+   both sent. The new words now go out behind the ones nothing ever read. */
+describe("a person's new words over a held turn no model read", () => {
+    const ADA = { actor: "ada@example.com", speaker: { kind: "person", email: "ada@example.com" } } as const;
+    const refused = (over: Partial<HeldTurn["input"]> = {}, hold: Partial<HeldOf<"limit">> = {}): HeldTurn =>
+        held({ input: { ...HELD_INPUT, ...ADA, ...over }, ran: false, handoff: undefined, ...hold });
+    const said = (over: Partial<RoutedTurn> = {}): RoutedTurn => turn({ prompt: "and add a test for it", ...ADA, ...over });
+
+    test("go out behind the held words, as one person's messages in a row are joined", () => {
+        expect(withUnsentWords(said(), refused()).prompt).toBe("Port the EZD connector\n\nand add a test for it");
+    });
+
+    test("carry the held turn's files and mentions with them, each once", () => {
+        const joined = withUnsentWords(said({ attachments: ["b.png"], mentions: ["src/a.ts", "a.png"] }), refused({ attachments: ["a.png"], mentions: ["src/a.ts"] }));
+        expect(joined.attachments).toStrictEqual(["a.png", "b.png"]);
+        expect(joined.mentions).toStrictEqual(["src/a.ts"]);
+    });
+
+    // A re-run whose own note says nothing was read (the press's `refused`, a door's): the words without the note.
+    test("carry a re-run's words without the note it was sent with, where that note says nothing was read", () => {
+        for (const resume of ["refused", "door"] as const) {
+            const rerun = refused({ prompt: withResumeNote(HELD_INPUT.prompt, RESUME_NOTES[resume]), resume });
+            expect(withUnsentWords(said(), rerun).prompt).toBe("Port the EZD connector\n\nand add a test for it");
+        }
+    });
+
+    // The door's run is recorded but never seen: a fresh session seeded from the record must not read the words twice.
+    test("count a door's run among the runs the model never saw", () => {
+        const door: HeldTurn = { input: { ...HELD_INPUT, ...ADA }, reason: "door", ran: false, run: "run-door" };
+        expect(withUnsentWords(said({ unseenRuns: ["run-0"] }), door)).toMatchObject({ prompt: "Port the EZD connector\n\nand add a test for it", unseenRuns: ["run-0", "run-door"] });
+    });
+
+    const UNCHANGED: readonly [string, RoutedTurn, HeldTurn | undefined][] = [
+        ["nothing is held", said(), undefined],
+        ["the held turn answered, so its session has its words", said(), refused({}, { ran: true })],
+        ["a press re-runs the held turn itself", said({ resume: "refused" }), refused()],
+        ["a flagged turn's words would only meet the same classifier", said(), { input: { ...HELD_INPUT, ...ADA }, reason: "flagged", ran: false }],
+        ["another person's words: a turn has one owner", said({ actor: "bo@example.com", speaker: { kind: "person", email: "bo@example.com" } }), refused()],
+        ["the held words were the sandbox's", said(), refused({ speaker: { kind: "sandbox", source: "watch" } })],
+        ["the new words are a child's report", said({ speaker: { kind: "agent", conversationId: "child" } }), refused()],
+        ["the held turn re-ran words a model already read", said(), refused({ prompt: withResumeNote(HELD_INPUT.prompt, RESUME_NOTES.stopped), resume: "stopped" })],
+        ["the new words are a command the harness reads only at the start", said({ prompt: "/compact" }), refused()],
+        ["the held words were a command", said(), refused({ prompt: "/review" })],
+        ["together they carry more files than one turn may", said({ attachments: Array.from({ length: ATTACHMENT_LIMIT }, (_, i) => `n${i}.png`) }), refused({ attachments: ["a.png"] })],
+    ];
+    test.each(UNCHANGED)("go as they were sent where %s", (_, input, hold) => {
+        expect(withUnsentWords(input, hold)).toBe(input);
     });
 });

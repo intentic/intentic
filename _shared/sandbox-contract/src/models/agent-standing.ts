@@ -8,6 +8,7 @@ import {
     type LandFailure,
 } from "../schemas/agents.js";
 import { type AgentNext, goesBySelf } from "../schemas/agent-next.js";
+import type { AgentPress } from "../schemas/agent-press.js";
 
 // (2026-10-16) Moved here from the editor (_editor/web/src/models/agent-status/agentStatus-standing.ts, which re-exports
 // it), so the daemon counts what needs the person by the very rules the board draws with (models/agent-lanes.ts): the
@@ -56,6 +57,9 @@ export interface AgentStanding {
     // What carries it on with nobody pressing anything, and when (AgentSummary.next): the daemon's one reading, which
     // every lane, chip and corner below asks, never the hold, the queue or an answer it was derived from.
     readonly next?: AgentNext | undefined;
+    // What a person's Continue does now (AgentSummary.press): the daemon's one reading, which the chat's strip follows over
+    // its own. Absent from a sandbox older than it, and from a standing carried where a card can't go.
+    readonly press?: AgentPress | undefined;
     // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
     // from a sandbox older than it, where only a turn's own `failure` can say so.
     readonly landFailure?: LandFailure | undefined;

@@ -15,7 +15,8 @@ import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost } from "../../../models/conversations/endings/pickUp";
+import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost, pressOnlyStop } from "../../../models/conversations/endings/pickUp";
+import { pressWayOf } from "../../../models/conversations/endings/pressWay";
 import type { ReopenPress } from "../composer/composerIntent";
 import { handoffLine } from "../../../models/conversations/endings/handoffChoice";
 import HandoffQuestion from "./HandoffQuestion.vue";
@@ -61,7 +62,7 @@ const props = defineProps<{
 // Enter do the same.
 const emit = defineEmits<{ (event: "continue", options?: ContinueOptions): void; (event: "continueAtReopen"): void }>();
 
-const { conversation, connected, servingState, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff, waiting } = usePaneView();
+const { conversation, connected, servingState, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff, waiting, continueTurn } = usePaneView();
 const continuing = computed(() => conversation.value.turn.continuing.value);
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
@@ -109,11 +110,11 @@ const { holds } = useAccess();
 const mayConnect = computed(() => canShip.value || holds(`ownAccounts`));
 const connectTo = computed(() => modelsHref({ open: accessWall.value?.provider }));
 const retestHint = computed((): Tip => ({ title: t(`chat.accessWall.retestTitle`), note: t(`chat.accessWall.retestNote`) }));
-// Straight to the conversation, not through the pane's Continue, which holds back a press on an account that reads blocked:
-// here the person asks for exactly that attempt, and the daemon answers it with the re-test rather than a whole turn.
+// Straight to the pane's view, not through the composer's Continue: here the person asks for exactly that attempt, and the
+// daemon answers it with the re-test rather than a whole turn.
 const retest = (): void => {
     if (!continuing.value && reachable.value) {
-        void conversation.value.turn.continueTurn();
+        void continueTurn();
     }
 };
 const status = computed(
@@ -148,17 +149,30 @@ const continueAtHint = computed((): Tip => ({
     note: t(`chat.composerIntent.hintContinueAtReopenNote`),
 }));
 
+// The press, by the one rule the composer and the board card read too (pressWay.ts): which press, and whether it goes.
+const pressWay = computed(() => {
+    const facts = { state: servingState.value, spentUntil: props.spentUntil, accessWall: accessWall.value !== undefined, reachable: reachable.value };
+    return pickUp.value === undefined ? undefined : pressWayOf({ ...facts, pickUp: pickUp.value, continuing: continuing.value, now: now.value });
+});
+
 // A held turn resends unchanged: nothing is added to the conversation, so pressing it twice is free. The reset
 // shown is the provider's own guess and is routinely early; pressing before it costs one refused request.
 // Press cost, shown to un-hide it: a held turn that ran re-reads its whole context cold; one refused at the door
 // opens a fresh session with a short hand-off (both measured by the daemon at failure, PickUp.held).
 const continueHint = computed((): TooltipValue => {
-    if (accountBlock.value !== undefined) {
-        return { title: sendBlockTitle(accountBlock.value), note: sendBlockLine(accountBlock.value) };
+    const press = pressWay.value;
+    if (press?.rest === `cooling`) {
+        return t(`chat.chatContinueStrip.resting`);
+    }
+    // A reading in the way with no reopen to wait for: the press tries past it, and names it rather than a reset nobody knows.
+    if (press?.reading !== undefined) {
+        const rows = [{ label: t(`chat.composerIntent.lastReading`), value: sendBlockTitle(press.reading) }];
+        return { title: t(`chat.chatContinueStrip.tryNow`), rows, note: t(`chat.chatContinueStrip.tryReadingNote`) };
     }
     const keys = !mobile.value && props.enterContinues === true ? keyCap(`enter`) : undefined;
-    // Before a spent account's reopen the press is a try: worth one, since the reopen is an estimate, and said as such.
-    const trying = spent.value ? t(`chat.chatContinueStrip.tryNowNote`) : undefined;
+    // Before a reopen still ahead (the account's, or an unheld allowance's own) the press is a try: worth one, since the
+    // reopen is an estimate, and said as such.
+    const trying = press?.kind === `tryThenAt` || press?.kind === `try` ? t(`chat.chatContinueStrip.tryNowNote`) : undefined;
     if (pickUp.value?.held !== undefined) {
         const cost = pressCost(pickUp.value.held);
         const label = {
@@ -181,9 +195,6 @@ const continueHint = computed((): TooltipValue => {
                       ],
             note: trying ?? t(`chat.chatContinueStrip.mayBeatReset`),
         };
-    }
-    if (!props.ready) {
-        return t(`chat.chatContinueStrip.awaitingReset`);
     }
     return trying === undefined ? { title: t(`chat.chatContinueStrip.pickUp`), keys } : { title: t(`chat.chatContinueStrip.tryNow`), note: trying };
 });
@@ -244,11 +255,12 @@ const fallback = computed(() =>
 const outdated = computed(() => allowanceWall.value && accountsOutdated.value && accounts.value.length > 1);
 
 // The one question, asked through the control every wall shares (TurnBreakQuestion): a flagged turn has none, since the
-// person picks each time. On a spent account it is asked only where its answer is the appointment (a held limit turn): a
-// ladder's or an outage's tries could only be refused before the reopen, and the card's own press books the continuation.
+// person picks each time, nor a stop held for a press alone (pickUp.ts pressOnlyStop), which no answer would send. On a
+// spent account it is asked only where its answer is the appointment (a held limit turn): a ladder's or an outage's tries
+// could only be refused before the reopen, and the card's own press books the continuation.
 const breakWall = computed(() => {
     const wall = ending.value;
-    if (wall === undefined || !isTurnBreak(wall)) {
+    if (wall === undefined || !isTurnBreak(wall) || pressOnlyStop(pickUp.value)) {
         return undefined;
     }
     return spent.value && props.atReopen !== `arm` && props.atReopen !== `armed` ? undefined : wall;
@@ -502,6 +514,10 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                         <Icon name="clock" class="mr-1 text-2xs" />{{ continueAtLabel }}
                     </Button>
                 </template>
+                <!-- Something in the way with no reopen to wait for (spent with none published, an account blocked, an unheld allowance before its own reset): trying is a quiet press, and it goes, since readings lag the provider and a refused try costs nothing. -->
+                <Button v-else-if="pressWay?.kind === `try`" size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
+                    {{ t(`chat.chatContinueStrip.tryNow`) }}
+                </Button>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
                 <Button tier="accent" v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`ui.action.continue`) }}

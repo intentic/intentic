@@ -34,8 +34,9 @@ const OPENCODE_MODEL_UNAVAILABLE = /\bmodel unavailable\b/i;
 export const isModelInvalid = (message: string): boolean => isModelRefusalText(message, OPENCODE_MODEL_UNAVAILABLE);
 
 // What a failure is, for the daemon: a spent allowance waits for its reset, a provider having a bad time is re-run on
-// backoff, a session past its window is re-run fresh, and a model the route cannot reach is taken off the picker.
-type FailureKind = "rate-limit" | "outage" | "no-route" | undefined;
+// backoff, a session past its window is re-run fresh, a model the route cannot reach is taken off the picker, and a
+// response the provider's own filter blocked is held for a person.
+type FailureKind = "rate-limit" | "outage" | "no-route" | "content-filter" | undefined;
 
 // OpenCode's types (2.0.26 `SessionExecution` → `provider.*`), each read as what the daemon can do about it.
 const KIND_OF_TYPE = new Map<string, FailureKind>([
@@ -45,6 +46,10 @@ const KIND_OF_TYPE = new Map<string, FailureKind>([
     ["provider.internal", "outage"],
     ["provider.timeout", "outage"],
     ["provider.no-route", "no-route"],
+    // A provider's safety or content filter: OpenCode's own type for a step finishing `content-filter` ("Provider blocked
+    // the response"; Gemini's SAFETY, PROHIBITED_CONTENT, BLOCKLIST, RECITATION… finish reasons or a prompt's
+    // blockReason) and for a ContentPolicy refusal ("… withheld its output (SAFETY)"), checked against 2.2.2.
+    ["provider.content-filter", "content-filter"],
 ]);
 
 // A 5xx is the provider's own trouble whatever OpenCode called it; a 429 is a limit.
@@ -75,6 +80,10 @@ const typedFrame = (error: StructuredError, kind: FailureKind, target: FailureTa
             return { kind: "error", code: "rate_limit", message: error.message };
         case "outage":
             return { kind: "error", code: "provider-outage", message: error.message };
+        case "content-filter":
+            // The same words sent again meet the same filter: held for a person to send again or pick another model,
+            // never re-run by a clock (classify-failure.ts).
+            return { kind: "error", code: "safeguard-flagged", message: error.message };
         case "no-route":
             // xAI's own rejection of a retired id keeps its catalog-reloading code; any other model the server cannot
             // route is off the picker until it can.
@@ -134,6 +143,12 @@ export const retryHandover = (retry: ScheduledRetry, capRemainingMs: number, now
         const resetsAt = latestOf(Math.ceil(retry.at / 1_000), namedReset(errorDetail(retry.error), now));
         const handed = pastCap || retry.error.type === "provider.quota" || wait > RATE_LIMIT_PATIENCE_MS;
         return handed ? { kind: "error", code: "rate_limit", message: retry.error.message, ...opt("resetsAt", resetsAt) } : undefined;
+    }
+    // A filter's block: OpenCode's own retries may still get past one (a recitation is not always repeated), so they run,
+    // but never past the turn's cap, where the wait would end the turn as its own ceiling (`turn-cap`, a Continue) rather
+    // than the block it is, held for a person (safeguard-flagged).
+    if (kind === "content-filter") {
+        return pastCap ? { kind: "error", code: "safeguard-flagged", message: retry.error.message } : undefined;
     }
     if (kind === "no-route") {
         return undefined;

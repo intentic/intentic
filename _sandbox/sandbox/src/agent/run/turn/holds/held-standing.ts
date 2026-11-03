@@ -52,19 +52,23 @@ const retimeLimitHold = async (services: Services, conversationId: string, held:
 
 // What a "resuming" card withdrawn because its answer no longer resumes it says: why it stopped promising, and the press.
 const NO_LONGER_ARMED = "This turn is no longer picked up by itself: the answer to how it ended is now to wait. Continue carries it on.";
+// The same for a hold nothing but a press ever lets go, whatever the answer.
+const PRESS_ONLY = "This turn stopped at its own limit and is not picked up by itself. Continue carries it on.";
 
 // A stopped or outage hold armed when its turn ended reads "resuming", in Active. Once its answer is wait, nothing will
 // resume it, so the promise is withdrawn and the hold left for a press: the card falls to Attention with Continue. Left
-// alone it stood in Active for good, since the pass returns before its rung on an unarmed answer.
+// alone it stood in Active for good, since the pass returns before its rung on an unarmed answer. A hold for a press
+// alone (held-turn.ts pressOnly) is resumed by nothing whatever the answer, so it never reads "resuming" either.
 const withdrawUnarmedResume = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
     if ((held.reason !== "stopped" && held.reason !== "outage") || services.conversations.state(conversationId)?.turn.resuming !== true) {
         return;
     }
-    if (breakArmed(await breakPolicyFor(services, conversationId, held.reason))) {
+    const pressOnly = held.pressOnly === true;
+    if (!pressOnly && breakArmed(await breakPolicyFor(services, conversationId, held.reason))) {
         return;
     }
-    if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: NO_LONGER_ARMED }, now).settled) {
-        services.logger.info({ conversationId, reason: held.reason }, "resume pass: a resuming turn's answer is now to wait, so it waits for a press");
+    if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: pressOnly ? PRESS_ONLY : NO_LONGER_ARMED }, now).settled) {
+        services.logger.info({ conversationId, reason: held.reason, pressOnly }, "resume pass: a resuming turn's answer is now to wait, so it waits for a press");
     }
 };
 

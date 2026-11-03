@@ -3,7 +3,7 @@ import { HandoffOfferSchema } from "@intentic/sandbox-contract/schemas/providers
 import { RESUME_NOTES, type ResumeReason } from "@intentic/sandbox-contract/events/resume";
 import { TodoItemSchema } from "@intentic/sandbox-contract/events/requests";
 import { TurnSpeakerSchema } from "@intentic/sandbox-contract/schemas/speaker";
-import { turnedAwayCode } from "@intentic/sandbox-contract/policy/turned-away";
+import { turnedAwayCode } from "@intentic/sandbox-contract/policy/failure-codes";
 import { z } from "zod";
 import { opt } from "../../opt.js";
 import type { Services } from "../../composition.js";
@@ -49,6 +49,9 @@ export const StoredLimitHoldSchema = z.object({
     reason: z.enum(KEPT_REASONS).optional(),
     // How many rungs of its ladder a stopped turn has climbed, so a restart neither forgets them nor climbs them again.
     tries: z.number().int().nonnegative().optional(),
+    // A stopped turn held for a press alone (held-turn.ts pressOnly): a restart must not put it on the ladder it was kept
+    // off, which would re-run a turn that reached its own ceiling by itself.
+    pressOnly: z.boolean().optional(),
     // A flagged turn's session entry before the stopped response (refusal-fork.ts), where a press resumes it.
     forkAt: z.string().optional(),
     input: HeldInputSchema,
@@ -186,6 +189,15 @@ const standsBehind = (stored: StoredLimitHold, ending: PersistedAgent["ending"])
     }
 };
 
+// A stop or an outage its ladder was bringing back when the daemon went down: armed when its turn ended, so nothing was
+// filed as its failure and the entry still ends as the turn before it left it (conversation-decide.ts comingBackNow),
+// where any other stop or outage files its failure. The actor's word that it is coming back (`resuming`) is not kept, so
+// it is said again: without it the card read idle with nothing to press over a held turn, and once the conversation's
+// answer became `wait` nothing fired the hold nor withdrew a promise (held-standing.ts withdrawUnarmedResume) that would
+// have offered it for a press, so it sat held under a card offering nothing.
+const comingBack = (held: HeldRecord, entry: PersistedAgent | undefined): boolean =>
+    (held.reason === "stopped" || held.reason === "outage") && held.pressOnly !== true && entry?.ending.kind === "idle";
+
 /**
  * Puts back every spent allowance's hold its entry kept across the restart, so the resume pass fires a booked resend at
  * its reset and a booked move at once, as the daemon that made it would have, and a turn the sandbox starts meanwhile
@@ -195,9 +207,13 @@ const standsBehind = (stored: StoredLimitHold, ending: PersistedAgent["ending"])
 export const restoreLimitHolds = (services: Pick<Services, "agents" | "conversations" | "logger">): number => {
     let restored = 0;
     for (const conversationId of services.agents.ids()) {
-        const held = restoredLimitHold(services.agents.entry(conversationId));
+        const entry = services.agents.entry(conversationId);
+        const held = restoredLimitHold(entry);
         if (held !== undefined) {
             services.conversations.send(conversationId, { kind: "hold-restored", held });
+            if (comingBack(held, entry) && services.conversations.state(conversationId)?.resume.held === held) {
+                services.conversations.send(conversationId, { kind: "resume-promised" });
+            }
             restored += 1;
         }
     }

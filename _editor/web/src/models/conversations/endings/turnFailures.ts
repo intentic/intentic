@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { isPrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
+import { failureCourseOf, failureTraitsOf } from "@intentic/sandbox-contract/policy/failure-codes";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { cooledPickUp, type PickUp, warmedPickUp } from "./pickUp";
@@ -12,12 +12,13 @@ import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../lib/staleChunk";
 import { markNeedsReauth, providerAccounts } from "../../providers/providerAccounts";
 
-// Maps a turn failure's code to what this window does: what it reloads, what it waits for, and whether the turn returns on
-// its own. The daemon owns the failure's transcript line, the one place a failure is said (failure-rows.ts: every failure
-// leaves a coded row, drawn by failureView.ts), and keeps a refused message in the conversation's queue, held. The error
-// line never repeats a failure's words: it says only what this window adds (where to install an engine, how to sign an
-// agent in), in the reader's language. A frame's words copied onto it were the second rendering of the same failure,
-// raw where the row was not (21e4260d93, 2026-10-19). Recovery state for the auto-resuming codes lives here.
+// Maps a turn failure to what this window does, by the course the contract's failure table gives its code
+// (failure-codes.ts, the row the daemon's hold reads too): what it reloads, what it waits for, and whether the turn
+// returns on its own. The daemon owns the failure's transcript line, the one place a failure is said (failure-rows.ts:
+// every failure leaves a coded row, drawn by failureView.ts), and keeps a refused message in the conversation's queue,
+// held. The error line never repeats a failure's words: it says only what this window adds (where to install an engine,
+// how to sign an agent in), in the reader's language. A frame's words copied onto it were the second rendering of the
+// same failure, raw where the row was not (21e4260d93, 2026-10-19). Recovery state for the auto-resuming codes lives here.
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
 
@@ -27,9 +28,6 @@ export interface OutageResume {
     readonly retryAt: number;
     readonly scheduled: boolean;
 }
-
-// The daemon refused the pinned model (not served, or not on this plan); the reloaded catalog repoints the picker.
-const MODEL_REFUSED: ReadonlySet<TurnError["code"]> = new Set([`grok-model-invalid`, `codex-model-invalid`, `model-unavailable`]);
 
 // Each probe is the fallback since 2026-10-20: the roster frame that says the daemon's re-run started is followed at
 // once (heardRunning), so a probe only catches a frame this window missed, and looks on a slow beat. Each still outlasts
@@ -47,15 +45,6 @@ export type FailureHost = Pick<Conversation, "session" | "error" | "pickUp"> & {
     readonly turn: Pick<TurnClient, "streaming" | "reattach">;
 };
 
-
-// Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a turn too
-// big for the model (or a model that can only write one-shot jobs, or one the privacy shield cannot cover, or one whose
-// own rules hold personal data) until another is picked or it is let through, low memory until the person says go ahead,
-// a workspace the sandbox was too loaded to set up until it has room again. The privacy strip says why above the
-// composer; the transcript's own row says the rest, so no error line repeats it.
-// The shield's own refusals are the contract's to name (isPrivacyRefusal), so a code it adds is held here too.
-const HELD_AT_THE_DOOR: ReadonlySet<string> = new Set([`unknown-command`, `context-window-too-small`, `model-helper-only`, `sandbox-memory-low`, `workspace-setup`]);
-const heldAtTheDoor = (code: string | undefined): boolean => code !== undefined && (HELD_AT_THE_DOOR.has(code) || isPrivacyRefusal(code));
 export class TurnFailures {
     // The outage this conversation is waiting out; cleared when the next turn starts (resume or user send).
     readonly outageResume = ref<OutageResume | undefined>();
@@ -101,7 +90,7 @@ export class TurnFailures {
 
     constructor(private readonly host: FailureHost) {}
 
-    // Routes a turn failure by its code to how it is presented and recovered from.
+    // Routes a turn failure by its code's course to how it is presented and recovered from.
     apply(error: TurnError): void {
         const { message, code } = error;
         const comingBack = error.autoResume === `scheduled` && code !== `rate_limit`;
@@ -110,43 +99,56 @@ export class TurnFailures {
         }
         this.promised = comingBack;
         this.failed = true;
-        if (heldAtTheDoor(code)) {
-            return;
-        }
-        switch (code) {
-            case `claude-reauth`:
-                // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
-                // No error line: the composer already shows a reauth banner with the one-click fix.
-                this.markReauth(error, message);
+        const course = failureCourseOf(code);
+        switch (course) {
+            case `door`:
+                this.applyDoorRefusal(error);
                 return;
-            case `codex-reauth`:
-                // Same badge as claude-reauth; the transcript's row says what happened. No held message replays it.
-                this.markReauth(error, message);
-                this.crashed.value = true;
-                return;
-            case `claude-token-refused`:
-                this.applyAuthRefusedError(error);
-                return;
-            case `session-not-found`:
-                // Session vanished mid-turn: drop the dead id so the next send starts fresh. No error line.
-                this.host.session.value = undefined;
-                return;
-            case `codex-advisory`:
-                // Codex warned but finished the turn; the daemon's muted line already covers it.
-                return;
-            case `rate_limit`:
+            case `limit`:
                 this.applyLimitError(error);
                 return;
-            case `provider-outage`:
+            case `outage`:
                 this.applyOutageError(error);
                 return;
-            case `safeguard-flagged`:
+            case `remint`:
+                this.applyAuthRefusedError(error);
+                return;
+            case `overflow`:
+                this.applyOverflowError(error);
+                return;
+            case `flagged`:
                 this.applyFlaggedError(error);
+                return;
+            case `carry`:
+                this.applyCarryOn(error);
+                return;
+            case `bare`:
+                this.applyBareError(error);
+                return;
+            case `note`:
+                // The runtime warned but finished the turn; the daemon's muted line already covers it.
+                return;
+            default:
+                return course satisfies never;
+        }
+    }
+
+    // Nothing ran, and the daemon holds the message in the queue (or the sandbox that sent it keeps it): a dead credential
+    // until the account is back, an unrecognized command until it is reworded, a model or trial that cannot take it until
+    // another is picked, the privacy shield until it is let through, low memory or disk until there is room. The held
+    // words carry their own press (ChatHeldMessages) and the transcript's own row says why, so the tab is not failed and
+    // no error line repeats it: this adds only what the window itself does about it.
+    private applyDoorRefusal(error: TurnError): void {
+        const { code } = error;
+        switch (code) {
+            case `claude-reauth`:
+                // No error line: the composer already shows a reauth banner with the one-click fix.
+                this.markReauth(error, error.message);
                 return;
             case `trial-unavailable`:
             case `trial-model-unavailable`:
             case `trial-exhausted`:
-                // Message undelivered and refunded; held in the queue for explicit retry, not the outage auto-resume loop.
+                // Undelivered and refunded; held in the queue for an explicit retry, not the outage auto-resume loop.
                 importOrReload(
                     () => import(`../accounts/useChat-catalog`),
                     async (chat) => {
@@ -157,50 +159,76 @@ export class TurnFailures {
                     },
                 );
                 return;
+            case `model-unavailable`:
+                // The plan does not carry the pinned model: the reloaded catalog repoints the picker.
+                this.reloadModels();
+                return;
+            case `engine-version-floor`: {
+                // The old engine refused it. Where to install a newer one is all this adds, since the daemon's row can't
+                // say that; that the message is held is the row's to say.
+                const floor = error.engine?.floor;
+                this.host.error.value =
+                    floor === undefined ? t(`chat.turnFailures.installNewerEngine`) : t(`chat.turnFailures.installNewerEngineFloor`, { floor });
+                return;
+            }
             default:
-                this.applyUnhandledError(error);
                 return;
         }
     }
 
-    // Failures this window cannot fix itself, said by the transcript's row; where nothing was processed yet the daemon
-    // holds the message.
-    private applyUnhandledError(error: TurnError): void {
+    // Stopped partway with nothing named to repair (a runtime that died, a turn that reached its own ceiling or ended
+    // incomplete): the daemon holds it whole, so the press re-runs the kept turn (`held`) rather than sending a message
+    // nobody typed. The tab still reads it as failed, as it always has a turn that died, until an answer or the next turn.
+    private applyCarryOn(error: TurnError): void {
+        this.crashed.value = true;
+        this.host.pickUp.value = {
+            reason: `stopped`,
+            ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
+            ...(error.retries === undefined ? {} : { retries: error.retries }),
+            ...(error.held === undefined ? {} : { held: error.held }),
+        };
+    }
+
+    // Failures nothing holds and this window cannot fix itself, said by the transcript's row: no Continue, since pressing
+    // would only re-fail, and the tab reads as failed until the next turn.
+    private applyBareError(error: TurnError): void {
         const { code } = error;
-        if (code === `context-overflow`) {
-            this.applyOverflowError(error);
+        if (code === `session-not-found`) {
+            // Session vanished mid-turn: drop the dead id so the next send starts fresh. No error line.
+            this.host.session.value = undefined;
+            return;
+        }
+        // A kind the board calls held is a wait, never a failure (the conversation was busy with a turn of its own): the
+        // tab reads as the board's corner does, not as failed.
+        if (failureTraitsOf(code)?.kind === `held`) {
             return;
         }
         this.crashed.value = true;
-        if (MODEL_REFUSED.has(code)) {
-            importOrReload(
-                () => import(`../accounts/useChat-catalog`),
-                (chat) => chat.loadProviderModels(this.host.selection.provider.value),
-            );
-            return;
+        switch (code) {
+            case `codex-reauth`:
+                // Same badge as claude-reauth; the transcript's row says what happened. No held message replays it.
+                this.markReauth(error, error.message);
+                return;
+            case `grok-model-invalid`:
+            case `codex-model-invalid`:
+                // The daemon refused the pinned model: the reloaded catalog repoints the picker.
+                this.reloadModels();
+                return;
+            case `acp-auth-required`:
+                // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
+                this.host.error.value = t(`chat.turnFailures.signAgentIn`);
+                return;
+            default:
+                return;
         }
-        if (code === `engine-version-floor`) {
-            // Nothing ran (old engine refused): message held in the queue for retry. Where to install a newer engine is all
-            // this adds, since the daemon's row can't say that; that the message is held is the row's to say.
-            const floor = error.engine?.floor;
-            this.host.error.value =
-                floor === undefined ? t(`chat.turnFailures.installNewerEngine`) : t(`chat.turnFailures.installNewerEngineFloor`, { floor });
-            return;
-        }
-        if (code === `acp-auth-required`) {
-            // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
-            this.host.error.value = t(`chat.turnFailures.signAgentIn`);
-            return;
-        }
-        // Continue only for an unknown code, since a named one re-fails; `held` makes the press re-run the kept turn.
-        if (code === undefined) {
-            this.host.pickUp.value = {
-                reason: `stopped`,
-                ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
-                ...(error.retries === undefined ? {} : { retries: error.retries }),
-                ...(error.held === undefined ? {} : { held: error.held }),
-            };
-        }
+    }
+
+    // The provider's catalog for the composer's provider, read again so the picker stops offering a model it refused.
+    private reloadModels(): void {
+        importOrReload(
+            () => import(`../accounts/useChat-catalog`),
+            (chat) => chat.loadProviderModels(this.host.selection.provider.value),
+        );
     }
 
     // Lights the reauth badge at once, on the account the frame names as having served the turn: the daemon's word, never

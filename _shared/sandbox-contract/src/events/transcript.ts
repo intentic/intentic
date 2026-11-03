@@ -544,6 +544,12 @@ export const TurnEndingSchema = z.object({
             handoff: HandoffOfferSchema.optional().describe(
                 "How the held turn can continue once its cache is cold: carry the session, trim it, or summarise it, which one the sandbox suggests, and which one a person picked. Absent where there is nothing to carry.",
             ),
+            pressOnly: z
+                .boolean()
+                .optional()
+                .describe(
+                    "Only a press sends it again: no standing answer re-runs it, whatever the conversation's answer to its wall says, since it reached its own ceiling or ended incomplete. Absent for every other hold.",
+                ),
         })
         .optional()
         .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),

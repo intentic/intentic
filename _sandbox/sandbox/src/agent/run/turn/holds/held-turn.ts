@@ -6,8 +6,8 @@ import type { VerificationStanding } from "../../../verification/agent-verificat
 // What a held turn is, per wall: the record every wall's hold shares, and what only one wall's carries. The resume pass
 // that fires them is turn-resume.ts; the stored copy that survives a restart is limit-hold.ts.
 
-// The wall a held turn stopped at; `stopped` is a death with nothing to repair, `door` a refusal before the model saw it,
-// `flagged` the provider's safety classifier stopping it partway.
+// The wall a held turn stopped at; `stopped` is a death (or a stop at its own ceiling) with nothing to repair, `door` a
+// refusal before the model saw it, `flagged` the provider's safety classifier stopping it partway.
 export type HeldReason = "limit" | "stopped" | "overflow" | "door" | "outage" | "auth" | "flagged";
 
 // A turn a wall stranded, held for a press (however long it takes) or the resume pass (RUNGS). One shape per wall: what
@@ -32,6 +32,10 @@ interface HeldBase {
     // Token costs from the failure frame, kept so a reopened tab's record matches the numbers the live frame showed.
     readonly contextTokens?: number | undefined;
     readonly handoffTokens?: number | undefined;
+    // Held for a person's press alone, never re-run by a clock whatever the conversation's answer to its wall: a turn that
+    // reached its own iteration or time ceiling, or ended incomplete (failure-codes.ts, the `carry` course with a code).
+    // A ladder re-running it is the runaway the ceiling exists to stop.
+    readonly pressOnly?: boolean | undefined;
 }
 
 // An account a spent allowance's held turn goes on instead of the one that refused it, and whether its session goes too.

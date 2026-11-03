@@ -3,8 +3,9 @@ import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useDriveRefusal } from "../session/driveRefusal";
-import { statusIcon } from "../models/catalog";
+import { headerGlyph, statusLookOf } from "./statusLook";
 import { useChat } from "../../../models/conversations/run/useChat";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatSwitcherSheet from "./ChatSwitcherSheet.vue";
@@ -25,6 +26,9 @@ const emit = defineEmits<{
 
 const { conversations, activeId } = useChat();
 const active = computed(() => conversations.value.find((c) => c.conversationId === activeId.value));
+// What it is doing, as its card says it (statusLook.ts): the rail's reading, its window's own only without a card.
+const { agentById } = useAgents();
+const activeLook = computed(() => (active.value === undefined ? undefined : statusLookOf(active.value, agentById(active.value.conversationId))));
 
 const sheetOpen = ref(false);
 </script>
@@ -37,7 +41,7 @@ const sheetOpen = ref(false);
             class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left active:bg-overlay"
             @click="sheetOpen = true"
         >
-            <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
+            <Icon v-if="activeLook" v-bind="headerGlyph(activeLook)" />
             <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{
                 active?.title.value ?? (active?.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`))
             }}</span>

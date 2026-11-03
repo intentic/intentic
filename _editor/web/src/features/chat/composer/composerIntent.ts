@@ -336,9 +336,17 @@ export const sendAnywayHint = (block: SendBlock): TooltipValue => ({
 export const continueVisible = (situation: ComposerSituation): boolean =>
     situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
 
-// A blocked reading still keeps the bare Continue back: only a press on words in the box sends anyway.
+// A blocked reading still keeps the bare Continue back: only a press on words in the box sends anyway. So does a time the
+// reader picked for the next words (`later`), whose greyed Send reads as that time: an empty Enter continuing now beside
+// it did the opposite of what it said. And a turn live or parked as the card says it while this window shows an older
+// ending (one another window started, a resume): an empty Enter there continued or booked beside a greyed Send, into a
+// turn already under way. The strip's own press is the way on in each. An armed edit or the agent's voice takes every
+// press for itself (composerSend.ts submit), so an "Enter to continue" taught under either was a key that did nothing.
+const bareFree = (situation: ComposerSituation): boolean =>
+    continueVisible(situation) && situation.later !== true && !situation.streaming && !situation.waitingOnYou && !situation.editing && !situation.voiceAgent;
+
 export const continueOffered = (situation: ComposerSituation): boolean =>
-    continueVisible(situation) &&
+    bareFree(situation) &&
     situation.pickUp?.ready === true &&
     situation.spentUntil === undefined &&
     situation.accountBlock === undefined &&
@@ -351,7 +359,7 @@ export const continueOffered = (situation: ComposerSituation): boolean =>
  */
 export const reopenPressOf = (situation: ComposerSituation): ReopenPress | undefined => {
     const press = situation.pickUp?.atReopen;
-    return continueVisible(situation) && situation.spentUntil !== undefined && (press === `book` || press === `arm`) ? press : undefined;
+    return bareFree(situation) && situation.spentUntil !== undefined && (press === `book` || press === `arm`) ? press : undefined;
 };
 
 /** The scheduled button's hover on an empty box with a turn to continue: what it books, when, or that it is booked. */

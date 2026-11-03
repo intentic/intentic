@@ -9,11 +9,14 @@ import {
     LIMIT_COOLDOWN_MS,
     pickUpNext,
     pickUpOf,
+    pickUpOfPress,
     pickUpReady,
     pickUpShort,
     pickUpStatus,
     pickUpWhen,
     pressCost,
+    pressOnlyStop,
+    type PickUp,
     wakesHeldUntil,
     warmedPickUp,
     withCardBooking,
@@ -377,5 +380,62 @@ describe(`withHandoffChosen`, () => {
         const plain = { reason: `limit`, held: { ran: true } } as const;
         expect(withHandoffChosen(plain, `carry`)).toBe(plain);
         expect(withHandoffChosen(undefined, `carry`)).toBeUndefined();
+    });
+});
+
+// A turn that reached its own ceiling or ended incomplete is held for a press alone (the daemon's held-turn.ts
+// pressOnly): no answer to the stop's question would send it, so nothing says one would, and the status says the press is
+// the way on. A death nothing coded still climbs its ladder, and says so.
+describe(`a stop held for a press alone`, () => {
+    const pressOnly: PickUp = { reason: `stopped`, held: { ran: true, pressOnly: true } };
+
+    it(`says nothing goes by itself, whatever the answer`, () => {
+        for (const policy of [`wait`, `retry`, `resend`, `move`] as const) {
+            expect(pickUpNext(pressOnly, policy, NOW)).toBeUndefined();
+            expect(pickUpNext({ ...pressOnly, retries: { made: 1, max: 3 }, nextAt: NOW + 15_000 }, policy, NOW)).toBeUndefined();
+        }
+        expect(pickUpNext({ reason: `stopped`, held: { ran: true } }, `retry`, NOW)).toBe(`Goes by itself shortly`);
+    });
+
+    it(`says the press is the way on`, () => {
+        expect(pickUpStatus(pressOnly, NOW)).toBe(`Turn stopped short · work kept · only Continue carries it on`);
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW)).toBe(`Turn stopped short · work kept`);
+    });
+
+    it(`is only a stop's`, () => {
+        expect(pressOnlyStop(pressOnly)).toBe(true);
+        expect(pressOnlyStop({ reason: `stopped`, held: { ran: true } })).toBe(false);
+        expect(pressOnlyStop({ reason: `limit`, held: { ran: true, pressOnly: true } })).toBe(false);
+        expect(pressOnlyStop(undefined)).toBe(false);
+    });
+
+    it(`comes through from the record's ending and the card's press`, () => {
+        const ending = { reason: `stopped`, held: { ran: true, pressOnly: true } } as const;
+        expect(pickUpOf(ending)).toEqual(pressOnly);
+        expect(pickUpOfPress({ kind: `continue`, ending }, undefined, { status: `error`, failureCode: `turn-cap`, attention: NO_ATTENTION })).toEqual(pressOnly);
+    });
+});
+
+// The card's press as the strip's pick-up (useChat-view pickUpView reads it while the card says and no turn runs).
+describe(`pickUpOfPress`, () => {
+    const RESET = NOW / 1_000 + 3_600;
+    const card: AgentStanding = { status: `error`, failureCode: `rate_limit`, limitResetsAt: RESET, limitHeld: true, attention: NO_ATTENTION };
+    const held = { kind: `continue`, ending: { reason: `limit`, resetsAt: RESET, held: { ran: false } } } as const;
+
+    it(`is nothing where the card says nothing is to press, whatever this window saw`, () => {
+        expect(pickUpOfPress({ kind: `none` }, { reason: `limit`, held: { ran: true } }, { status: `idle`, attention: NO_ATTENTION })).toBeUndefined();
+    });
+
+    it(`is the card's ending, timed and pointed by the card's booking`, () => {
+        expect(pickUpOfPress(held, undefined, card)).toEqual({ reason: `limit`, readyAt: RESET * 1_000, held: { ran: false } });
+        const booked = { ...card, next: { kind: `rerun`, at: RESET * 1_000 + 5_000, onto: `acct-2` } } as const;
+        expect(pickUpOfPress(held, undefined, booked)).toEqual({ reason: `limit`, readyAt: RESET * 1_000, booked: true, nextAt: RESET * 1_000 + 5_000, held: { ran: false, moving: `acct-2` } });
+    });
+
+    // The rest is this window's alone: it pressed, nothing ran, and pressing again at once is refused the same way.
+    it(`keeps this window's rest after a refusal on the same wall only`, () => {
+        expect(pickUpOfPress(held, { reason: `limit`, held: { ran: false }, coolUntil: NOW + 60_000 }, card)?.coolUntil).toBe(NOW + 60_000);
+        expect(pickUpOfPress(held, { reason: `stopped`, coolUntil: NOW + 60_000 }, card)?.coolUntil).toBeUndefined();
+        expect(pickUpOfPress(held, { reason: `limit`, held: { ran: false } }, card)?.coolUntil).toBeUndefined();
     });
 });

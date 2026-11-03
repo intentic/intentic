@@ -80,6 +80,26 @@ describe("the sender of a message whose turn did not run", () => {
         expect(started[1]?.prompt).not.toContain("agents resume");
     });
 
+    // A turn that reached its own ceiling is held for a press alone: no rung re-runs it, whatever its wall's ladder does.
+    test("hears that a stopped turn held for a press alone waits for one, while one on the ladder is tried again", async () => {
+        const fleet = await workspace();
+        const { services, started } = messageDaemon(fleet);
+        await messageConversation(services, "sender", "target", "support replied", memoryStartWindow());
+        const input = { conversationId: "target", prompt: "go", agent: "claude" } as const;
+        fleet.conversations.send("target", { kind: "turn-held", held: { input, reason: "stopped", ran: true, pressOnly: true } });
+
+        await reportPeerMessageOutcome(services, settledOf({ failure: "Reached the maximum number of turns." }));
+        expect(started[1]?.prompt).toContain("It is held there until somebody presses its Continue: `agents resume target` sends it again");
+        expect(started[1]?.prompt).not.toContain("by itself a few times");
+
+        const laddered = await workspace();
+        const ladder = messageDaemon(laddered);
+        await messageConversation(ladder.services, "sender", "target", "support replied", memoryStartWindow());
+        laddered.conversations.send("target", { kind: "turn-held", held: { input, reason: "stopped", ran: true } });
+        await reportPeerMessageOutcome(ladder.services, settledOf({ failure: "the harness crashed" }));
+        expect(ladder.started[1]?.prompt).toContain("the sandbox sends it again by itself a few times, since its runtime died under it");
+    });
+
     test("hears when the sandbox runs it again by itself", async () => {
         const { services, started } = messageDaemon(await workspace());
         await messageConversation(services, "sender", "target", "support replied", memoryStartWindow());
