@@ -2,6 +2,7 @@ import { procedure } from "../protocol/route-meta.js";
 import {
     CiFixParamSchema,
     CiFixResponseSchema,
+    CiForgetParamSchema,
     CiJobsResponseSchema,
     CiRunParamSchema,
     CiRunsResponseSchema,
@@ -40,6 +41,26 @@ export const ciContract = {
             description: "Asks the forge to stop a run in progress.",
         })
         .input(CiRunParamSchema)
+        .output(OkSchema),
+    dispatch: procedure
+        .route({
+            method: "POST",
+            path: "/ci/runs/dispatch",
+            summary: "Run a workflow again on its branch's newest commit",
+            description:
+                "Starts a fresh run of the workflow the given run belongs to, on that run's branch as it is now, rather than re-running the old commit. On GitHub the workflow must accept a manual start (`workflow_dispatch`); the forge's refusal comes back as it said it.",
+        })
+        .input(CiRunParamSchema)
+        .output(OkSchema),
+    forget: procedure
+        .route({
+            method: "POST",
+            path: "/ci/failures/forget",
+            summary: "Stop tracking a failing workflow on a main-line branch",
+            description:
+                "Takes one workflow off the branch's failure, or the whole failure when none is named, without waiting for a run to pass. For a workflow that will not run again, or a failure that is not the code's.",
+        })
+        .input(CiForgetParamSchema)
         .output(OkSchema),
     jobs: procedure
         .route({

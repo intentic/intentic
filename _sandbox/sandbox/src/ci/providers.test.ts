@@ -330,6 +330,85 @@ test("a failed job names its id, the step that failed it, and gitlab's own reaso
     expect(gitlab).toEqual([{ job: "test", id: 3, reason: "script_failure" }]);
 });
 
+// Actions reports a job past its time limit, and one no runner took, as cancelled: only its check run's annotations say
+// which, and each is asked once.
+test("a cancelled github job that ran out of time, or that no runner took, is a failed one with why; a plain cancel is none", async () => {
+    const calls: { method: string; url: string }[] = [];
+    const client = ciClientFor(
+        "github",
+        scriptedFetch(
+            {
+                "GET /actions/runs/91/jobs": {
+                    jobs: [
+                        { id: 9101, name: "verify-core", conclusion: "success", steps: [] },
+                        { id: 9102, name: "migrations", conclusion: "cancelled", steps: [{ name: "Run migrations", conclusion: "cancelled" }] },
+                        { id: 9103, name: "mobile / ios", conclusion: "cancelled", steps: [] },
+                        { id: 9104, name: "release", conclusion: "cancelled", steps: [] },
+                    ],
+                },
+                "GET /check-runs/9102/annotations": [{ message: "The job has exceeded the maximum execution time of 15m0s" }],
+                "GET /check-runs/9103/annotations": [{ message: "The job was not acquired by Runner of type hosted even after multiple attempts" }],
+                "GET /check-runs/9104/annotations": [{ message: "The operation was canceled." }],
+            },
+            calls,
+        ),
+    );
+    const expected = [
+        { job: "migrations", id: 9102, reason: "timed_out" },
+        { job: "mobile / ios", id: 9103, reason: "runner_unavailable" },
+    ];
+    expect(await client.failedSteps(githubProject, 91)).toEqual(expected);
+    expect(await client.failedSteps(githubProject, 91)).toEqual(expected);
+    expect(calls.filter(({ url }) => url.includes("/annotations"))).toHaveLength(3);
+    expect(await client.failedJobs(githubProject, 91)).toEqual(["migrations", "mobile / ios"]);
+    expect(await client.passedJobs(githubProject, 91)).toEqual(["verify-core"]);
+});
+
+test("a run is read by its id, and its workflow started again on its branch's head, on both forges", async () => {
+    const calls: { method: string; url: string; body?: string }[] = [];
+    const github = ciClientFor(
+        "github",
+        scriptedFetch(
+            {
+                "GET /actions/runs/92": {
+                    id: 92,
+                    workflow_id: 5,
+                    name: "Nightly",
+                    event: "schedule",
+                    head_branch: "main",
+                    head_sha: "abc",
+                    status: "completed",
+                    conclusion: "failure",
+                    html_url: "u",
+                    created_at: "2026-11-03T10:00:00Z",
+                    updated_at: "2026-11-03T11:00:00Z",
+                },
+                "POST /actions/workflows/5/dispatches": {},
+            },
+            calls,
+        ),
+    );
+    expect(await github.run(githubProject, 92)).toMatchObject({ runId: 92, workflow: "Nightly", trigger: "schedule", status: "failed" });
+    await github.dispatch(githubProject, 92);
+    expect(calls.at(-1)).toEqual({ method: "POST", url: "https://api.github.com/repos/acme/web/actions/workflows/5/dispatches", body: `{"ref":"main"}` });
+
+    const gitlab = ciClientFor(
+        "gitlab",
+        scriptedFetch(
+            {
+                "GET /pipelines/93/jobs": [{ name: "test" }],
+                "GET /pipelines/93": { id: 93, ref: "main", sha: "abc", status: "failed", web_url: "u", created_at: "2026-11-03T10:00:00Z", source: "push" },
+                "POST /pipeline": {},
+            },
+            calls,
+        ),
+    );
+    expect(await gitlab.passedJobs(gitlabProject, 93)).toEqual(["test"]);
+    expect(await gitlab.run(gitlabProject, 93)).toMatchObject({ runId: 93, status: "failed" });
+    await gitlab.dispatch(gitlabProject, 93);
+    expect(calls.at(-1)).toMatchObject({ method: "POST", url: expect.stringContaining("/pipeline"), body: `{"ref":"main"}` });
+});
+
 test("gitlab client addresses the project by its url-encoded path", async () => {
     const calls: { method: string; url: string; body?: string }[] = [];
     const client = ciClientFor("gitlab", scriptedFetch({ "GET /hooks": [], "POST /hooks": {} }, calls));

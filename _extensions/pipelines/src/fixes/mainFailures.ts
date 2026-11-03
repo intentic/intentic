@@ -1,5 +1,13 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { type CiMainFailure, type CiRepo, isPipelineInFlight, type MainFailureHandBack, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import {
+    type CiMainFailure,
+    type CiMainFailureWorkflow,
+    type CiRepo,
+    isPipelineInFlight,
+    MAIN_FAILURE_STALE_MS,
+    type MainFailureHandBack,
+    type PipelineRun,
+} from "@intentic/sandbox-contract/schemas/ci";
 import { type FixStance, fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import { latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-ids";
 
@@ -56,6 +64,15 @@ export const mainFailureState = (failure: CiMainFailure, fixer?: AgentSummary, r
     return failure.fixer !== undefined || kind === `fix-up` ? `fixing` : `unassigned`;
 };
 
+// When the failure began as the reader should be told it: its longest-failing workflow's own start, since each workflow
+// keeps its own and the failure's `since` is when its first job ever failed. A failure that absorbed a month of other
+// breakages said "since Oct 5" over a CI breakage of that morning. From a daemon that does not time workflows apart, the
+// failure's own.
+export const failingSince = (failure: Pick<CiMainFailure, "since" | "workflows">): number => {
+    const starts = (failure.workflows ?? []).flatMap((workflow) => (workflow.since === undefined ? [] : [workflow.since]));
+    return starts.length === 0 ? failure.since : Math.min(...starts);
+};
+
 // Every failing main line, the longest-failing first: the breakage that has waited longest is the one a reader is owed
 // first.
 export const mainFailuresOf = (
@@ -75,7 +92,14 @@ export const mainFailuresOf = (
                 run,
             };
         })
-        .toSorted((left, right) => left.failure.since - right.failure.since);
+        .toSorted((left, right) => failingSince(left.failure) - failingSince(right.failure));
+
+// The keys the view's `busy` lock files the block's own presses under, beside the run rows' `host:project:runId`: a
+// workflow's fresh start is addressed by its failing run, which the board often no longer lists, and letting go of a
+// workflow (or of the whole failure, with none named) by the branch it fails on.
+export const dispatchKey = (run: Pick<PipelineRun, "repo" | "runId">): string => `dispatch:${run.repo}:${run.runId}`;
+export const forgetKey = (failure: Pick<CiMainFailure, "repo" | "branch">, workflow: string | undefined): string =>
+    `forget:${failure.repo}:${failure.branch}:${workflow ?? ``}`;
 
 // Whether a failure waits for the reader, for the banner and the rail to say so the same way.
 export const waitsForYou = (view: Pick<MainFailureView, "state">): boolean => view.state === `waits` || view.state === `reported`;
@@ -90,6 +114,38 @@ export const offersFix = (view: Pick<MainFailureView, "state" | "run">): boolean
 // banner with neither (its run has left the board, and nobody is on it) leaves the rows theirs.
 export const leadsRows = (view: Pick<MainFailureView, "state" | "run">): boolean => view.state === `fixing` || offersFix(view);
 
+// The workflow a board run belongs to, as the daemon names it: GitHub's workflow name, or `ci` where a commit runs one
+// pipeline (GitLab) and the run names none (main-streak.ts, workflowOf).
+const ONE_PIPELINE = `ci`;
+export const workflowOfRun = (run: Pick<PipelineRun, "workflow">): string =>
+    run.workflow === undefined || run.workflow === `` ? ONE_PIPELINE : run.workflow;
+
+// The board's runs of one failing workflow on the failure's branch that came after its failing run, newest first. Run
+// ids only grow on both forges, so "after" needs no clock, and holds for a failing run the board no longer lists.
+const runsAfter = (
+    failure: Pick<CiMainFailure, "repo" | "branch">,
+    workflow: Pick<CiMainFailureWorkflow, "name" | "runId">,
+    runs: readonly PipelineRun[],
+): PipelineRun[] =>
+    runs
+        .filter(
+            (run) =>
+                run.repo === failure.repo && run.branch === failure.branch && workflowOfRun(run) === workflow.name && run.runId > workflow.runId,
+        )
+        .toSorted((left, right) => right.runId - left.runId);
+
+// The newest run of a failing workflow when it was cancelled after the run that failed it: the run that would have
+// measured the fix, and the reason nothing did. GitHub's own page shows it as the workflow's state, so the block draws
+// it too, or the two disagree about what main is doing.
+const cancelledAfter = (
+    failure: Pick<CiMainFailure, "repo" | "branch">,
+    workflow: Pick<CiMainFailureWorkflow, "name" | "runId">,
+    runs: readonly PipelineRun[],
+): PipelineRun | undefined => {
+    const [newest] = runsAfter(failure, workflow, runs);
+    return newest?.status === `canceled` ? newest : undefined;
+};
+
 // The runs the daemon names as failing now: each failing workflow's newest failed run. Its word outranks the board's
 // "superseded", which is per commit: a later commit whose CI passed says nothing of a nightly that does not run on a push,
 // and the board would otherwise file the nightly's failure away as history while the banner says main still fails.
@@ -98,35 +154,90 @@ const namedRuns = (failure: Pick<CiMainFailure, "workflows">): ReadonlySet<numbe
 
 // The runs a failing main line speaks for, which the board draws inside its block, joined to its header by a drawn
 // lane: the branch's failures that nothing has passed since (a superseded one is history, and stays with the other
-// runs) and the ones the daemon names failing whatever passed after them, and the runs on it still going, since a push
-// after the fix is how it gets measured. In the board's own order.
+// runs) and the ones the daemon names failing whatever passed after them, the runs on it still going, since a push
+// after the fix is how it gets measured, and each failing workflow's newest run where it was cancelled after the
+// failure, which is why nothing measured it. In the board's own order.
 export const coveredRuns = (
     failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">,
     runs: readonly PipelineRun[],
     superseded: ReadonlyMap<PipelineRun, PipelineRun>,
 ): PipelineRun[] => {
     const named = namedRuns(failure);
+    const cancelled = new Set((failure.workflows ?? []).flatMap((workflow) => cancelledAfter(failure, workflow, runs) ?? []));
     return runs.filter(
         (run) =>
             run.repo === failure.repo &&
             run.branch === failure.branch &&
-            ((run.status === `failed` && (named.has(run.runId) || !superseded.has(run))) || isPipelineInFlight(run.status)),
+            ((run.status === `failed` && (named.has(run.runId) || !superseded.has(run))) || isPipelineInFlight(run.status) || cancelled.has(run)),
     );
 };
 
+// How long a failing workflow goes without failing again, or anything else running it, before the banner says nothing
+// is measuring it and offers to stop tracking it: past a nightly's day and a busy branch's pushes, and well short of
+// the daemon dropping it by itself (MAIN_FAILURE_STALE_MS).
+export const QUIET_AFTER_MS = 3 * 24 * 60 * 60_000;
+
+// What stands between one failing workflow and the branch passing again, and so what the reader can do about it.
+// `measuring`: a run of it is going now, so wait. `cancelled`: its newest run, after the failure, was cancelled (a
+// person, a newer push's concurrency group, a runner that never came), so nothing measured it, and a re-run does.
+// `scheduled`: a push never runs it, only its schedule or a manual start, so Run now measures it today. `quiet`: it has
+// not failed for days and nothing ran it since, so nothing is measuring it; the daemon drops it at `dropsAt`, and
+// Stop tracking does it now. `next`: its newest run is the failing one, and the next push or the fix agent's work is
+// what measures it, which the story already says.
+export type WorkflowBlocker =
+    | { readonly kind: `measuring`; readonly run: PipelineRun }
+    | { readonly kind: `cancelled`; readonly run: PipelineRun }
+    | { readonly kind: `scheduled` }
+    | { readonly kind: `quiet`; readonly failedAt: number; readonly dropsAt: number; readonly scheduled: boolean }
+    | { readonly kind: `next` };
+
+// One failing workflow's blocker, read off the daemon's fields first and the board's runs second: the failing run is
+// often older than every run listed (a nightly), and the daemon's trigger and time then say what the board cannot.
+export const blockerOf = (
+    failure: Pick<CiMainFailure, "repo" | "branch">,
+    workflow: CiMainFailureWorkflow,
+    runs: readonly PipelineRun[],
+    now: number,
+): WorkflowBlocker => {
+    const failing = runs.find((run) => run.repo === failure.repo && run.runId === workflow.runId);
+    // A re-run keeps its run's id, so the failing run itself going again is a measurement too.
+    const going = [...runsAfter(failure, workflow, runs), ...(failing === undefined ? [] : [failing])].find((run) => isPipelineInFlight(run.status));
+    if (going !== undefined) {
+        return { kind: `measuring`, run: going };
+    }
+    const cancelled = cancelledAfter(failure, workflow, runs);
+    if (cancelled !== undefined) {
+        return { kind: `cancelled`, run: cancelled };
+    }
+    const scheduled = (workflow.trigger ?? failing?.trigger) === `schedule`;
+    const failedAt = workflow.failedAt ?? failing?.createdAt;
+    if (failedAt !== undefined && now - failedAt > QUIET_AFTER_MS) {
+        return { kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, scheduled };
+    }
+    return scheduled ? { kind: `scheduled` } : { kind: `next` };
+};
+
+// Whether nothing on its way will measure the workflow: no run of it going, and its next one is not a push's to start.
+export const stalls = (blocker: WorkflowBlocker): boolean => blocker.kind !== `measuring` && blocker.kind !== `next`;
+
 // One workflow failing on the branch, as the banner names it: which, its jobs, and the way to its failing run, whether
-// the board lists that run or not. A scheduled workflow's run is often older than every run listed, which is how a
-// board of green rows sits under "main is failing".
+// the board lists that run or not, with what blocks it from passing. A scheduled workflow's run is often older than every
+// run listed, which is how a board of green rows sits under "main is failing".
 export interface FailingWorkflow {
     readonly name: string;
     // Spelled only where a push starts several pipelines (GitHub); a GitLab commit's one pipeline needs no name.
     readonly named: boolean;
     readonly runId: number;
     readonly jobs: readonly string[];
+    // Those of its jobs that ran out of time, which the banner says apart: the forge calls them cancelled.
+    readonly timedOut: readonly string[];
+    // When it began failing, where the daemon keeps it per workflow.
+    readonly since: number | undefined;
     // The run's page: the listed run's own link, else built from the repository's.
     readonly url: string | undefined;
     // Whether the board lists the run, so the reader is told when the one failing is not among the rows.
     readonly listed: boolean;
+    readonly blocker: WorkflowBlocker;
 }
 
 // A run's page when the board does not list it, on each forge's own path.
@@ -136,9 +247,10 @@ const runPage = (repo: Pick<CiRepo, "host" | "url">, runId: number): string =>
 // Each workflow failing on the branch, in the order they began failing. Empty from a daemon that does not say, which
 // leaves the banner its flat list of jobs.
 export const failingWorkflowsOf = (
-    failure: Pick<CiMainFailure, "repo" | "workflows">,
+    failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">,
     runs: readonly PipelineRun[],
     repo: Pick<CiRepo, "host" | "url"> | undefined,
+    now: number = Date.now(),
 ): FailingWorkflow[] =>
     (failure.workflows ?? []).map((workflow) => {
         const run = runs.find((candidate) => candidate.repo === failure.repo && candidate.runId === workflow.runId);
@@ -147,17 +259,23 @@ export const failingWorkflowsOf = (
             named: repo?.host !== `gitlab`,
             runId: workflow.runId,
             jobs: workflow.jobs,
+            timedOut: workflow.timedOut ?? [],
+            since: workflow.since,
             url: run?.url ?? (repo === undefined ? undefined : runPage(repo, workflow.runId)),
             listed: run !== undefined,
+            blocker: blockerOf(failure, workflow, runs, now),
         };
     });
 
 // What the block's one sentence says: the state the failure is in, in the reader's terms, and the move it asks for. While
 // the agent has it, its live stance decides, since "an agent is on it" is the wrong sentence once the fix is written or
 // landed. A landed fix is measured by the next push (main-fixer.ts: the owner commits and pushes it), so a run that
-// started after it landed is that measurement under way. A run on the branch that PASSED since it landed means the
-// push happened and the failure still stands: what fails is a workflow that push did not run or fix (a nightly), and
-// "commit and push it" would send the reader to do again what is done.
+// started after it landed is that measurement under way. A run on the branch that started after it landed, with none
+// of the failing workflows going now, means the push happened and nothing on its way will measure what still fails:
+// those workflows were cancelled, run on a schedule, or were not run by that push. That is `stalled`, and its way
+// forward is each workflow's own line (blockerOf), never "commit and push it" again. Only a pass of one of the failing
+// workflows says anything about them: Scorecard or CodeQL passing after the push once made the banner say "newer runs
+// on main pass" while CI itself had been cancelled.
 export type MainFailureStory =
     | `working`
     | `needsYou`
@@ -165,18 +283,40 @@ export type MainFailureStory =
     | `landed`
     | `proving`
     | `collecting`
-    | `pushed`
+    | `stalled`
     | `waiting`
     | `ended`
     | Exclude<MainFailureState, `fixing`>;
 
+// A landed fix's story: being measured, measured by nothing on its way (`stalled`), or still to be pushed.
+const landedStory = (
+    failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">,
+    landedAt: number,
+    covered: readonly PipelineRun[],
+    runs: readonly PipelineRun[],
+    now: number,
+): MainFailureStory => {
+    if (covered.some((run) => isPipelineInFlight(run.status) && run.createdAt > landedAt)) {
+        return `proving`;
+    }
+    const onBranch = runs.filter((run) => run.repo === failure.repo && run.branch === failure.branch && run.createdAt > landedAt);
+    const workflows = failure.workflows ?? [];
+    if (workflows.length === 0) {
+        // A daemon that does not tell workflows apart: any pass after the land is the push's word.
+        return onBranch.some((run) => run.status === `success`) ? `stalled` : `landed`;
+    }
+    const waiting = workflows.some((workflow) => !stalls(blockerOf(failure, workflow, runs, now)));
+    return onBranch.length > 0 && !waiting ? `stalled` : `landed`;
+};
+
 export const storyOf = (
     view: Pick<MainFailureView, "state" | "stance" | "fixer"> & {
-        readonly failure: Pick<CiMainFailure, "repo" | "branch">;
+        readonly failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">;
         readonly run?: PipelineRun | undefined;
     },
     covered: readonly PipelineRun[],
     runs: readonly PipelineRun[] = [],
+    now: number = Date.now(),
 ): MainFailureStory => {
     if (view.state === `failed-again` && view.run !== undefined && isPipelineInFlight(view.run.status)) {
         return `collecting`;
@@ -189,17 +329,8 @@ export const storyOf = (
             return `needsYou`;
         case `ready`:
             return `ready`;
-        case `landed`: {
-            const landedAt = view.fixer?.updatedAt ?? Number.POSITIVE_INFINITY;
-            if (covered.some((run) => isPipelineInFlight(run.status) && run.createdAt > landedAt)) {
-                return `proving`;
-            }
-            const passedSince = runs.some(
-                (run) =>
-                    run.repo === view.failure.repo && run.branch === view.failure.branch && run.status === `success` && run.createdAt > landedAt,
-            );
-            return passedSince ? `pushed` : `landed`;
-        }
+        case `landed`:
+            return landedStory(view.failure, view.fixer?.updatedAt ?? Number.POSITIVE_INFINITY, covered, runs, now);
         case `waiting`:
             return `waiting`;
         case `ended`:

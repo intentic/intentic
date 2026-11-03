@@ -7,7 +7,7 @@ import { defaultGit } from "@intentic/base/git";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { MAIN_FAILURE_STALE_MS, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -20,9 +20,11 @@ import { ciLogsRoot, jobLogPath } from "./logs/job-logs.js";
 import {
     fixerSettled,
     fixPressed,
+    forgetFailure,
     jobFailed,
     mainFailures,
     resetMainFixer,
+    resumeMainFixer,
     runFinished,
     streakFixerFor,
     TURNS_PER_STREAK,
@@ -78,9 +80,13 @@ const summary = (id: string, over: Partial<AgentSummary> = {}): AgentSummary => 
 });
 
 interface Forge {
-    // A run's failed jobs as the jobs list answers them.
+    // A run's jobs as the jobs list answers them.
     jobs: Record<number, { id: number; name: string; conclusion: string; steps?: { name: string; conclusion: string }[] }[]>;
     log: string;
+    // What a job's check run says of it, by job id: why a cancelled job was cancelled.
+    annotations: Record<number, { message: string }[]>;
+    // Runs read one by one, by id, as Actions answers them.
+    runs: Record<number, { event: string; created_at: string; name: string }>;
 }
 
 const harness = async (autoRepair = true) => {
@@ -103,7 +109,7 @@ const harness = async (autoRepair = true) => {
     const logged: string[] = [];
     const logFields: unknown[] = [];
     const reruns: string[] = [];
-    const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds" };
+    const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds", annotations: {}, runs: {} };
     // These runs exercise the unpinned fallback; fresh settings otherwise assign every job a preset.
     const settings = { autoRepair, roleSetups: {} };
     const services = unstubbed<Services>("services", {
@@ -177,6 +183,28 @@ const harness = async (autoRepair = true) => {
         const runJobs = /\/actions\/runs\/(\d+)\/jobs/.exec(path);
         if (runJobs !== null) {
             return new Response(JSON.stringify({ jobs: forge.jobs[Number(runJobs[1])] ?? [] }));
+        }
+        const annotations = /\/check-runs\/(\d+)\/annotations/.exec(path);
+        if (annotations !== null) {
+            return new Response(JSON.stringify(forge.annotations[Number(annotations[1])] ?? []));
+        }
+        const oneRun = /\/actions\/runs\/(\d+)$/.exec(path);
+        if (oneRun !== null) {
+            const read = forge.runs[Number(oneRun[1])];
+            return read === undefined
+                ? new Response("Not Found", { status: 404 })
+                : new Response(
+                      JSON.stringify({
+                          id: Number(oneRun[1]),
+                          head_branch: "main",
+                          head_sha: `sha${oneRun[1]}`,
+                          status: "completed",
+                          conclusion: "failure",
+                          html_url: path,
+                          updated_at: read.created_at,
+                          ...read,
+                      }),
+                  );
         }
         return new Response(JSON.stringify({ workflow_runs: [] }));
     }) as unknown as FetchFn;
@@ -266,9 +294,10 @@ test("a run's failed jobs are parked while it goes on, and its finish starts one
             since: expect.any(Number),
             runId: 41,
             jobs: ["verify-core", "lint"],
-            workflows: [{ name: "CI", runId: 41, jobs: ["verify-core", "lint"] }],
+            workflows: [{ name: "CI", runId: 41, jobs: ["verify-core", "lint"], since: expect.any(Number), failedAt: expect.any(Number) }],
             fixer: FIXER,
             decision: expect.objectContaining({ kind: "fix-up", conversationId: FIXER }),
+            attempts: 1,
         },
     ]);
 });
@@ -371,14 +400,14 @@ test("a later pass of every workflow that failed ends the streak, and another wo
     await runFinished(services, run(44, "success", { workflow: "Scorecard" }), fetchFn);
     expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI", "CodeQL"]);
     // The board is told which workflow each job fails in, so a pass of CI is not read as main passing.
-    expect((await mainFailures(services))[0]?.workflows).toEqual([
+    expect((await mainFailures(services))[0]?.workflows).toMatchObject([
         { name: "CI", runId: 41, jobs: ["verify-core"] },
         { name: "CodeQL", runId: 43, jobs: ["analyze"] },
     ]);
     await runFinished(services, run(45, "success"), fetchFn);
     expect(await failure()).toMatchObject({ workflows: { CodeQL: 43 } });
     expect((await failure())?.findings.map(({ text }) => text)).toEqual(["analyze"]);
-    expect((await mainFailures(services))[0]?.workflows).toEqual([{ name: "CodeQL", runId: 43, jobs: ["analyze"] }]);
+    expect((await mainFailures(services))[0]?.workflows).toMatchObject([{ name: "CodeQL", runId: 43, jobs: ["analyze"] }]);
 
     await runFinished(services, run(46, "success", { workflow: "CodeQL" }), fetchFn);
     expect(await failure()).toBeUndefined();
@@ -618,4 +647,135 @@ test("the default branch the forge said is main's line; one said of a repository
     await failRun(41, ["verify-core"], { branch: "trunk" });
     expect(started.map(({ conversationId }) => conversationId)).toEqual([FIXER]);
     expect(await jobFailed(services, project, job(42, 8, "verify-core", { branch: "main" }), fetchFn)).toBe("skipped");
+});
+
+// GitHub reports a job past its `timeout-minutes` as cancelled, and a run with it in as cancelled too: the run still says
+// which of main's failing jobs pass now, and the timed-out one is a failure like any other.
+test("a cancelled run clears the jobs that passed in it, and a job that ran out of time is a failure its agent hears", async () => {
+    const { services, fetchFn, running, said, failure, failRun, forge } = await harness();
+    await failRun(61, ["verify-core", "verify-platform"]);
+    running.delete(FIXER);
+    forge.jobs[62] = [
+        { id: 620, name: "verify-core", conclusion: "success" },
+        { id: 621, name: "verify-platform", conclusion: "success" },
+        { id: 622, name: "migrations", conclusion: "cancelled" },
+        { id: 623, name: "release", conclusion: "cancelled" },
+    ];
+    forge.annotations[622] = [{ message: "The job has exceeded the maximum execution time of 15m0s" }];
+    forge.annotations[623] = [{ message: "The operation was canceled." }];
+
+    await runFinished(services, run(62, "canceled"), fetchFn);
+
+    expect((await failure())?.findings).toEqual([expect.objectContaining({ source: "CI", text: "migrations", timedOut: true })]);
+    expect((await mainFailures(services))[0]?.workflows).toEqual([
+        expect.objectContaining({ name: "CI", runId: 62, jobs: ["migrations"], timedOut: ["migrations"] }),
+    ]);
+    expect(said.map((words) => words.turn.conversationId)).toEqual(["ci-fix-web-61"]);
+    expect(said[0]!.turn.prompt).toContain(`run 62 failed 1 job: "migrations"`);
+});
+
+test("a run whose only failures are cancels clears what passed in it, and a job no runner took is the fleet's", async () => {
+    const { services, fetchFn, reruns, failure, failRun, forge, sentences } = await harness();
+    const nightly = { workflow: "Nightly", trigger: "schedule" };
+    await failRun(71, ["desktop-windows / smoke"], nightly);
+    expect((await mainFailures(services))[0]?.workflows).toEqual([expect.objectContaining({ name: "Nightly", trigger: "schedule" })]);
+    forge.jobs[72] = [
+        { id: 720, name: "desktop-windows / smoke", conclusion: "success" },
+        { id: 721, name: "mobile / ios", conclusion: "cancelled" },
+    ];
+    forge.annotations[721] = [{ message: "The job was not acquired by Runner of type hosted even after multiple attempts" }];
+
+    await runFinished(services, run(72, "failed", nightly), fetchFn);
+
+    // Every job that failed on it has passed since, so main no longer fails, and the run the fleet failed is re-run.
+    expect(await failure()).toBeUndefined();
+    expect(sentences).toContainEqual(expect.stringContaining("no longer fails: every job that failed on it has passed since, the last of them in run 72"));
+    expect(reruns).toEqual([expect.stringContaining("/actions/runs/72/rerun")]);
+});
+
+test("a run that is not main's CI (Dependabot's) is nobody's failure, and one heard before its run was known comes off", async () => {
+    const { services, fetchFn, project, started, failure, failRun } = await harness();
+    const dependabot = { workflow: "cargo in /app for glib - Update #1646310324", trigger: "dynamic" };
+    await failRun(81, ["Dependabot"], dependabot);
+    expect(await failure()).toBeUndefined();
+
+    // A job's own webhook names no trigger; the run's own delivery, kept for the board, does.
+    services.ciRuns.upsert(run(82, "running", dependabot));
+    expect(await jobFailed(services, project, job(82, 820, "Dependabot", { workflow: dependabot.workflow }), fetchFn)).toBe("skipped");
+    // Heard with nothing known of its run, it begins a failure, and its run finishing takes it off again.
+    await jobFailed(services, project, job(83, 830, "Dependabot", { workflow: dependabot.workflow }), fetchFn);
+    expect(Object.keys((await failure())?.workflows ?? {})).toEqual([dependabot.workflow]);
+    await runFinished(services, run(83, "failed", dependabot), fetchFn);
+    expect(await failure()).toBeUndefined();
+    expect(started).toEqual([]);
+});
+
+test("a workflow that has not failed for two weeks comes off, and a person can take one off, or the whole failure", async () => {
+    const { services, fetchFn, failure, failRun, sentences } = await harness();
+    await failRun(91);
+    await failRun(92, ["analyze"], { workflow: "CodeQL" });
+    await failRun(93, ["smoke"], { workflow: "Nightly" });
+    const longAgo = Date.now() - MAIN_FAILURE_STALE_MS - 1;
+    await services.ciStore.failure("web", "main", (current) =>
+        current === undefined ? current : { ...current, spans: { ...current.spans, CodeQL: { since: longAgo, failedAt: longAgo } } },
+    );
+
+    // Any pass on the branch sweeps them, whatever workflow passed.
+    await runFinished(services, run(94, "success", { workflow: "Scorecard" }), fetchFn);
+    expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI", "Nightly"]);
+
+    expect(await forgetFailure(services, { repo: "web", branch: "main", workflow: "Nightly" })).toBe(true);
+    expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI"]);
+    expect((await failure())?.findings.map(({ text }) => text)).toEqual(["verify-core"]);
+    expect(await forgetFailure(services, { repo: "web", branch: "main", workflow: "Nightly" })).toBe(false);
+
+    expect(await forgetFailure(services, { repo: "web", branch: "main" })).toBe(true);
+    expect(await failure()).toBeUndefined();
+    expect(sentences.at(-1)).toContain("main of web was set aside by hand");
+});
+
+test("each workflow keeps its own times, and a failure kept before they were timed apart learns them at boot", async () => {
+    const { services, fetchFn, failure, failRun, forge } = await harness();
+    await failRun(101);
+    const since = (await failure())?.spans["CI"]?.since ?? 0;
+    await failRun(102, ["analyze"], { workflow: "CodeQL" });
+    await failRun(103);
+    expect((await failure())?.spans["CI"]).toEqual({ since, failedAt: expect.any(Number) });
+    expect((await failure())?.spans["CodeQL"]?.since).toBeGreaterThanOrEqual(since);
+
+    // Kept before 2026-11-03: three workflows with no times, one of them a Dependabot update's.
+    const recent = new Date(Date.now() - 60_000).toISOString();
+    forge.runs[110] = { event: "dynamic", created_at: recent, name: "cargo in /app for glib - Update #1" };
+    forge.runs[111] = { event: "schedule", created_at: recent, name: "Nightly" };
+    forge.runs[109] = { event: "push", created_at: new Date(Date.now() - 3_600_000).toISOString(), name: "CI" };
+    forge.runs[112] = { event: "push", created_at: recent, name: "CI" };
+    await services.ciStore.recordPass("web", "main", "CI", 109);
+    await services.ciStore.failure("web", "main", () => ({
+        since: 1,
+        findings: [
+            { id: "a", source: "cargo in /app for glib - Update #1", text: "Dependabot" },
+            { id: "b", source: "Nightly", text: "smoke" },
+            { id: "c", source: "CI", text: "verify-core" },
+        ],
+        decisions: [],
+        firstRunId: 100,
+        runId: 112,
+        count: 3,
+        workflows: { "cargo in /app for glib - Update #1": 110, Nightly: 111, CI: 112 },
+        spans: {},
+        heard: [],
+        turns: 0,
+        changed: false,
+    }));
+    resetMainFixer();
+
+    await resumeMainFixer(services, fetchFn);
+
+    expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["Nightly", "CI"]);
+    expect((await failure())?.spans).toEqual({
+        // Nothing passed on file: failing at most since the streak began.
+        Nightly: { since: 1, failedAt: Date.parse(recent), trigger: "schedule" },
+        // Failing since its newest pass.
+        CI: { since: Date.parse(forge.runs[109].created_at), failedAt: Date.parse(recent), trigger: "push" },
+    });
 });

@@ -1,5 +1,5 @@
 import { type Backoff, createBackoff, serialLock } from "@intentic/base/async";
-import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contract/schemas/ci";
+import { CI_POLL_INTERVAL_MS, isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
@@ -34,6 +34,10 @@ export interface CiPoller {
     readonly poll: () => Promise<void>;
 }
 
+// Whether a listed run is over and heard of: a result, or a cancel, which is no result but main's fix agent reads
+// (events.ts dispatchCiRun).
+const isOver = (run: PipelineRun): boolean => ciResultOf(run) !== undefined || run.status === "canceled";
+
 export const createCiPoller = (
     services: Services,
     fetchFn: FetchFn = fetch,
@@ -50,7 +54,7 @@ export const createCiPoller = (
     const pollRepo = async (project: Awaited<ReturnType<typeof ciProjects>>[number]): Promise<void> => {
         const client = ciClientFor(project.account.provider, fetchFn);
         const listed = await client.listRuns(project, RUNS_PER_POLL);
-        const terminal = listed.filter((run) => ciResultOf(run) !== undefined);
+        const terminal = listed.filter(isOver);
         const known = await services.ciStore.announcedRuns(project.repo);
         const ids = terminal.map((run) => run.runId);
         // First poll of a repo adopts state silently; it still records it so the next run can edge against it.

@@ -20,7 +20,24 @@ import { FIX_LOG_BYTES, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
-import { type FailedJob, findingOf, fixerOf, fleetFailed, heardOf, mainFailureOf, withFixPressed, withHeard, withJob, workflowOf } from "./main-streak.js";
+import { orElse, setDown, tell, timedApart } from "./main-ends.js";
+import {
+    type FailedJob,
+    findingOf,
+    fixerOf,
+    fleetFailed,
+    heardOf,
+    isMainsOwn,
+    mainFailureOf,
+    withFixPressed,
+    withHeard,
+    withJob,
+    withLearnedSpans,
+    withoutStale,
+    withoutWorkflow,
+    withRecovered,
+    workflowOf,
+} from "./main-streak.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
@@ -69,38 +86,8 @@ let settleCapMs = RUN_SETTLE_CAP_MS;
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const batchKeyOf = (repo: string, runId: number): string => `${repo}\n${runId}`;
 
-// Where a best-effort step failed, for its log line.
-interface Where {
-    readonly repo?: string;
-    readonly runId?: number;
-    readonly jobId?: number;
-    readonly fixer?: string;
-    readonly type?: string;
-}
-
-// A best-effort step: what it answers, or, when it throws, the fallback, with the failure logged. Nothing the fixer does
-// may fail the delivery or the pass that brought it the news.
-const orElse = async <T>(services: Pick<Services, "logger">, work: Promise<T>, fallback: T, message: string, where: Where): Promise<T> => {
-    try {
-        return await work;
-    } catch (error) {
-        services.logger.warn({ ...where, err: error }, message);
-        return fallback;
-    }
-};
-
 // Whether the failure was handed to the owner since its fix agent was last given it.
 const waitsForOwner = (streak: CiFailure): boolean => streak.decisions.at(-1)?.kind === "spent";
-
-const tell = (services: Services, type: string, content: string, outcome: "ok" | "error", conversationId?: string): void => {
-    void orElse(
-        services,
-        services.activity.append({ direction: "system", type, content, outcome, ...opt("conversationId", conversationId) }),
-        undefined,
-        "ci repair: activity append failed",
-        { type },
-    );
-};
 
 const decided = async (services: Services, repo: string, branch: string, decision: MainFailureDecision): Promise<void> => {
     await services.ciStore.failure(repo, branch, (current) =>
@@ -294,9 +281,9 @@ const sendOn = async (
         await handOver(services, project.repo, branch, fixer, agent?.archivedAt === undefined ? { reason: "gone" } : ARCHIVED);
         return false;
     }
-    const ended = endedHandBack(agent, streak);
-    if (ended !== undefined) {
-        await handOver(services, project.repo, branch, fixer, ended);
+    const handBack = endedHandBack(agent, streak);
+    if (handBack !== undefined) {
+        await handOver(services, project.repo, branch, fixer, handBack);
         return false;
     }
     // Only a turn the sandbox starts is counted: words said into the live one cost it none.
@@ -387,8 +374,10 @@ const park = (services: Services, project: CiProject, job: FailedJob, log: strin
 /** One failed job of a main-line branch: begins the branch's streak, and is parked until its run is handed over to the
  *  fix agent (handOverRun). Each job is handled once however many ways it arrives; a fleet failure, and a failure older
  *  than main's newest pass, are not the agent's. */
-export const jobFailed = async (services: Services, project: CiProject, job: FailedJob, fetchFn: FetchFn = fetch): Promise<Verdict> => {
-    if (!(await isMainLine(services, project, job.branch))) {
+export const jobFailed = async (services: Services, project: CiProject, heardJob: FailedJob, fetchFn: FetchFn = fetch): Promise<Verdict> => {
+    // A job's own webhook does not say what set its run off; the run's own deliveries, kept for the board, do.
+    const job = heardJob.trigger === undefined ? { ...heardJob, trigger: services.ciRuns.known(project.repo, heardJob.runId)?.trigger } : heardJob;
+    if (!isMainsOwn(job.trigger) || !(await isMainLine(services, project, job.branch))) {
         return "skipped";
     }
     const key = keyOf(project.repo, job.branch);
@@ -457,6 +446,7 @@ const jobOf = (run: PipelineRun, step: FailedStep): FailedJob => ({
     step: step.step,
     steps: step.steps,
     reason: step.reason,
+    trigger: run.trigger,
 });
 
 // The failed jobs of a run, in or out of flight; a forge that will not say leaves nothing to act on.
@@ -498,51 +488,6 @@ const rerunFleet = async (services: Services, project: CiProject, run: PipelineR
     }
 };
 
-// The streak is over: said, logged with what it cost, and a fix agent still working told it may stop.
-const ended = async (services: Services, repo: string, run: PipelineRun, streak: CiFailure): Promise<void> => {
-    await services.ciStore.failure(repo, run.branch, () => undefined);
-    publishRuntimeChange("ci");
-    const fixer = fixerOf(streak);
-    const agent = fixer === undefined ? undefined : services.agents.get(fixer);
-    const lastedMs = Date.now() - streak.since;
-    services.logger.info(
-        {
-            repo,
-            branch: run.branch,
-            lastedMs,
-            runs: streak.count,
-            turns: streak.turns,
-            handedOver: streak.decisions.some((decision) => decision.kind === "spent"),
-            fixer,
-            costUsd: agent?.costUsd,
-            inputTokens: agent?.inputTokens,
-            outputTokens: agent?.outputTokens,
-        },
-        "ci repair: streak ended",
-    );
-    const minutes = Math.max(1, Math.round(lastedMs / 60_000));
-    const cost = agent?.costUsd === undefined ? "" : `, for $${agent.costUsd.toFixed(2)}`;
-    tell(
-        services,
-        "ci.repair_retired",
-        `${run.branch} of ${repo} passed again at ${run.sha.slice(0, 7)}, ${minutes} min and ${streak.count} failed run(s) after it began failing${fixer === undefined ? "" : `; its fix agent took ${streak.turns} turn(s)${cost}`}.`,
-        "ok",
-        fixer,
-    );
-    if (fixer !== undefined && services.conversations.running(fixer)) {
-        await orElse(
-            services,
-            services.turns.steer(fixer, {
-                text: `${run.branch} of "${repo}" passed in run ${run.runId}: main no longer fails. Finish what you are doing without starting anything new.`,
-                voice: "sandbox",
-            }),
-            false,
-            "ci repair: the fix agent could not be told main passes again",
-            { fixer },
-        );
-    }
-};
-
 // A passing run takes its workflow off the streak; the last one off ends it. A failure kept before workflows were told
 // apart ends at any pass.
 const passed = async (services: Services, project: CiProject, run: PipelineRun): Promise<void> => {
@@ -555,20 +500,13 @@ const passed = async (services: Services, project: CiProject, run: PipelineRun):
         }
         const failing = Object.keys(streak.workflows);
         const newest = streak.workflows[workflow];
+        // A pass of another workflow, or an older one, says nothing of what fails; the stale come off whatever passed.
         if (failing.length > 0 && (newest === undefined || run.runId < newest)) {
+            await setDown(services, project.repo, run.branch, streak, withoutStale(streak, Date.now()), { kind: "unmeasured" });
             return;
         }
-        if (failing.length > 1) {
-            const { [workflow]: _passed, ...others } = streak.workflows;
-            await services.ciStore.failure(project.repo, run.branch, (current) =>
-                current === undefined
-                    ? current
-                    : { ...current, workflows: others, findings: current.findings.filter((owed) => owed.source !== workflow) },
-            );
-            publishRuntimeChange("ci");
-            return;
-        }
-        await ended(services, project.repo, run, streak);
+        const next = failing.length === 0 ? undefined : withoutWorkflow(streak, workflow);
+        await setDown(services, project.repo, run.branch, streak, next === undefined ? undefined : withoutStale(next, Date.now()), { kind: "passed", run });
     });
 };
 
@@ -589,11 +527,15 @@ const failedRun = async (services: Services, project: CiProject, run: PipelineRu
 /** A finished run, from its webhook or the poller: a pass takes its workflow off main's failure, and a failure hands every
  *  failed job not yet heard of to the fixer at once, re-running a run only the fleet failed. */
 export const runFinished = async (services: Services, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
-    if (run.status !== "success" && run.status !== "failed") {
+    if (run.status !== "success" && run.status !== "failed" && run.status !== "canceled") {
         return;
     }
     const project = (await ciProjects(services)).find((candidate) => candidate.repo === run.repo);
     if (project === undefined || !(await isMainLine(services, project, run.branch))) {
+        return;
+    }
+    if (!isMainsOwn(run.trigger)) {
+        await notMains(services, project, run);
         return;
     }
     if (run.status === "success") {
@@ -605,16 +547,84 @@ export const runFinished = async (services: Services, run: PipelineRun, fetchFn:
     for (const step of steps) {
         verdicts.push(await jobFailed(services, project, jobOf(run, step), fetchFn));
     }
+    const failing = steps.filter((_step, index) => verdicts[index] === "code").map((step) => step.job);
+    // Only a failed run ran every verification job whatever the others concluded; a cancelled one says only what passed.
+    if (run.status === "failed" && failing.length > 0) {
+        await failedRun(services, project, run, failing);
+    }
+    await recovered(services, project, run, fetchFn);
     if (verdicts.length > 0 && verdicts.every((verdict) => verdict === "fleet")) {
         await rerunFleet(services, project, run, fetchFn);
         return;
     }
-    const failing = steps.filter((_step, index) => verdicts[index] === "code").map((step) => step.job);
-    if (failing.length > 0) {
-        await failedRun(services, project, run, failing);
-    }
     await handOverRun(services, project, run.branch, run.runId, "finished", fetchFn);
 };
+
+// What a run that did not pass whole still says of main's failure (main-streak.ts withRecovered): the jobs that passed
+// in it are fixed, and the failure ends once no job that failed on it is left.
+const recovered = async (services: Services, project: CiProject, run: PipelineRun, fetchFn: FetchFn): Promise<void> => {
+    const passedJobs = await orElse(
+        services,
+        ciClientFor(project.account.provider, fetchFn).passedJobs(project, run.runId),
+        [],
+        "ci repair: the run's passed jobs could not be read",
+        { repo: project.repo, runId: run.runId },
+    );
+    await serially(keyOf(project.repo, run.branch), async () => {
+        const streak = (await services.ciStore.failures())[keyOf(project.repo, run.branch)];
+        if (streak !== undefined) {
+            const next = withRecovered(streak, { workflow: workflowOf(run.workflow), runId: run.runId, passed: passedJobs }, Date.now());
+            await setDown(services, project.repo, run.branch, streak, next, { kind: "recovered", run });
+        }
+    });
+};
+
+// Drops the repository's jobs parked for their run's handover that `drop` names; a run's clock stops once none of its
+// jobs is left.
+const unpark = (repo: string, drop: (parked: Parked) => boolean): void => {
+    for (const [key, batch] of batches) {
+        if (!key.startsWith(`${repo}\n`)) {
+            continue;
+        }
+        for (const [jobId, parked] of batch.jobs) {
+            if (drop(parked)) {
+                batch.jobs.delete(jobId);
+            }
+        }
+        if (batch.jobs.size === 0) {
+            clearTimeout(batch.timer);
+            batches.delete(key);
+        }
+    }
+};
+
+// A run on the main line that is none of main's CI (isMainsOwn): whatever it failed is nobody's, and a job of it heard
+// before its run was known for what it is (its own webhook) comes off again.
+const notMains = (services: Services, project: CiProject, run: PipelineRun): Promise<void> =>
+    serially(keyOf(project.repo, run.branch), async () => {
+        unpark(project.repo, ({ job }) => job.runId === run.runId);
+        const streak = (await services.ciStore.failures())[keyOf(project.repo, run.branch)];
+        const workflow = workflowOf(run.workflow);
+        if (streak?.workflows[workflow] !== undefined) {
+            await setDown(services, project.repo, run.branch, streak, withoutWorkflow(streak, workflow), { kind: "unmeasured" });
+        }
+    });
+
+/** A person took a workflow off a failing main-line branch, or the whole failure when none is named
+ *  (POST /ci/failures/forget): what is parked of it is dropped too, and a later failure of it begins again. Whether there
+ *  was anything to take off. */
+export const forgetFailure = (services: Services, target: { readonly repo: string; readonly branch: string; readonly workflow?: string | undefined }): Promise<boolean> =>
+    serially(keyOf(target.repo, target.branch), async () => {
+        const streak = (await services.ciStore.failures())[keyOf(target.repo, target.branch)];
+        const { workflow } = target;
+        if (streak === undefined || (workflow !== undefined && streak.workflows[workflow] === undefined)) {
+            return false;
+        }
+        unpark(target.repo, ({ job }) => job.branch === target.branch && (workflow === undefined || workflowOf(job.workflow) === workflow));
+        await setDown(services, target.repo, target.branch, streak, workflow === undefined ? undefined : withoutWorkflow(streak, workflow), { kind: "set-aside" });
+        services.logger.info({ repo: target.repo, branch: target.branch, workflow }, "ci repair: a person set main's failure aside");
+        return true;
+    });
 
 /** A run still going, from the poller where no webhook is live: every job that already failed is parked for the run's
  *  handover. */
@@ -690,15 +700,7 @@ export const fixPressed = (
         await services.ciStore.failure(run.repo, run.branch, (current) =>
             current === undefined ? current : withFixPressed(current, press),
         );
-        const key = batchKeyOf(run.repo, run.runId);
-        const batch = batches.get(key);
-        for (const jobId of failedJobIds) {
-            batch?.jobs.delete(jobId);
-        }
-        if (batch !== undefined && batch.jobs.size === 0) {
-            clearTimeout(batch.timer);
-            batches.delete(key);
-        }
+        unpark(run.repo, ({ job }) => job.runId === run.runId && failedJobIds.includes(job.jobId));
         publishRuntimeChange("ci");
         return outcome;
     });
@@ -725,6 +727,14 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
         if (project === undefined) {
             continue;
         }
+        // A failure kept before workflows were timed apart learns its times from the forge, once.
+        const learned = await timedApart(services, project, branch, streak, fetchFn);
+        await serially(key, async () => {
+            const current = (await services.ciStore.failures())[key];
+            if (current !== undefined) {
+                await setDown(services, repo, branch, current, withLearnedSpans(current, learned, Date.now()), { kind: "unmeasured" });
+            }
+        });
         const runs = await orElse(
             services,
             ciClientFor(project.account.provider, fetchFn).listRuns(project, RUNS_LISTED),

@@ -110,7 +110,9 @@ and never runs typecheck, build or test (`pnpm verify` does, by hand).
 
 When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
 branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the
-first job that fails and ends once a later run of every workflow that failed on it passes. No verification job in
+first job that fails and ends once a later run of every workflow that failed on it passes, or every job that failed
+has passed since; a workflow nothing has run for two weeks comes off by itself, and a person can take one off from the
+Pipelines board. No verification job in
 `ci.yml` waits on another's success, so one run reports everything wrong with a commit, and the sandbox hands a run's
 failed jobs over together: when the run finishes, or 45 minutes after its first failure if it is still going (what fails
 after that follows at its end). The agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest

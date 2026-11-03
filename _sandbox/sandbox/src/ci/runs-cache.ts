@@ -14,6 +14,9 @@ export interface RunsCache {
     readonly sweep: () => PipelineRun[] | undefined;
     readonly replace: (runs: PipelineRun[]) => PipelineRun[];
     readonly upsert: (run: PipelineRun) => void;
+    // A run of the repository as last heard, however old the sweep: what a job's own webhook does not say of its run
+    // (what set it off), the run's own deliveries did.
+    readonly known: (repo: string, runId: number) => PipelineRun | undefined;
 }
 
 const keyOf = (run: PipelineRun): string => `${run.host}\n${run.project}\n${run.runId}`;
@@ -40,5 +43,6 @@ export const createRunsCache = (ttlMs = TTL_MS): RunsCache => {
             }
             runs = newestFirst([run, ...runs.filter((kept) => keyOf(kept) !== keyOf(run))]);
         },
+        known: (repo, runId) => runs.find((run) => run.repo === repo && run.runId === runId),
     };
 };

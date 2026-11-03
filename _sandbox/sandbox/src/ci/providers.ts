@@ -1,8 +1,11 @@
 import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
-import { BoundedMap, type CachedAsync, cachedAsync } from "@intentic/base/held";
+import { BoundedMap } from "@intentic/base/held";
 import { plainText } from "@intentic/base/plain-text";
-import { CiRateLimited, throwOn } from "./forge-refusals.js";
+import { cooled } from "./forge/forge-cooldown.js";
+import { throwOn } from "./forge-refusals.js";
+import { cancelledFailures } from "./forge/github-cancels.js";
+import { jobLists } from "./forge/job-lists.js";
 import type { CiProject } from "./projects.js";
 import { z } from "zod";
 import { remoteWorkflow, resolveRun, type RunJob, workflowCalls } from "./workflowGraph.js";
@@ -30,7 +33,8 @@ export interface FailedStep {
     // Every step that failed it, in order: a job whose steps each run whatever the one before concluded can fail
     // several. Absent where the forge has no steps.
     readonly steps?: readonly string[];
-    // GitLab's word for why the job failed (`script_failure`, `runner_system_failure`, …), where it gives one.
+    // GitLab's word for why the job failed (`script_failure`, `runner_system_failure`, …), where it gives one; on GitHub,
+    // why a job it reports as cancelled is a failure after all (CANCEL_CAUSES): `timed_out` or `runner_unavailable`.
     readonly reason?: string;
 }
 
@@ -43,6 +47,14 @@ export interface CiClient {
     // the fleet died, not the code. A job allowed to fail is none of them. Read while the run is still going too: a job
     // that already failed is listed.
     readonly failedSteps: (project: CiProject, runId: number) => Promise<FailedStep[]>;
+    // Names of the run's jobs that passed: what a run that did not pass as a whole still says of the jobs failing on
+    // main (main-fixer.ts, recovered).
+    readonly passedJobs: (project: CiProject, runId: number) => Promise<string[]>;
+    // One run by its id, however old: the list calls reach only the newest.
+    readonly run: (project: CiProject, runId: number) => Promise<PipelineRun>;
+    // A fresh run of the run's workflow on its branch as it is now, rather than the old commit again. GitHub refuses a
+    // workflow that takes no manual start (`workflow_dispatch`).
+    readonly dispatch: (project: CiProject, runId: number) => Promise<void>;
     // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
     // One job's log, reduced to plain text (plain-text.ts) and cut to its last `maxBytes` (Infinity reads it whole); an
@@ -78,50 +90,6 @@ const isSettled = (status: PipelineStatus): boolean => !isPipelineInFlight(statu
 
 // One run, as every per-run reading here is filed: the account's API, the project, the run.
 const runKey = (project: CiProject, runId: number): string => `${project.account.apiBase}\n${project.project}\n${runId}`;
-
-// ---- job lists, shared by their readers ----
-
-// A Fix press waits on its run's job list before any agent exists (ci-fix.ts ciFailureEvidence), and reads it three ways
-// at once; the board's row read the very same list moments before the press, to draw its stage circles. So readers share
-// one request while it is out, and a list is kept past it only once `settled` says it cannot move short of a re-run:
-// briefly, which bounds a re-run started outside this sandbox, while one started here forgets it at once. Kept per
-// transport, so one test's stand-in never answers another's read.
-const JOB_LISTS_FRESH_MS = 120_000;
-const JOB_LISTS_KEPT = 100;
-
-interface JobLists<T> {
-    // Always asks the vendor, and keeps what it answers: the board's own reads, so its graph is never a kept copy.
-    readonly read: (fetchFn: FetchFn, key: string, list: () => Promise<T[]>) => Promise<T[]>;
-    // The list as last read, while it is fresh; read otherwise.
-    readonly kept: (fetchFn: FetchFn, key: string, list: () => Promise<T[]>) => Promise<T[]>;
-    readonly forget: (fetchFn: FetchFn, key: string) => void;
-}
-
-const jobLists = <T>(settled: (jobs: readonly T[]) => boolean): JobLists<T> => {
-    const byTransport = new WeakMap<FetchFn, CachedAsync<string, T[]>>();
-    const listsOf = (fetchFn: FetchFn): CachedAsync<string, T[]> => {
-        const known = byTransport.get(fetchFn);
-        if (known !== undefined) {
-            return known;
-        }
-        const fresh = cachedAsync<string, T[]>({ ttlMs: JOB_LISTS_FRESH_MS, maxEntries: JOB_LISTS_KEPT, keep: settled });
-        byTransport.set(fetchFn, fresh);
-        return fresh;
-    };
-    return {
-        read: (fetchFn, key, list) => {
-            const lists = listsOf(fetchFn);
-            // The list kept before, and any read still out, go first: this read's answer must postdate the asking, and if
-            // it finds the run moving again (a re-run), a kept reader must join it, never be handed the old settled list.
-            lists.drop(key);
-            return lists.get(key, list);
-        },
-        kept: (fetchFn, key, list) => listsOf(fetchFn).get(key, list),
-        forget: (fetchFn, key) => {
-            listsOf(fetchFn).drop(key);
-        },
-    };
-};
 
 // ---- github: Actions workflow runs ----
 
@@ -193,6 +161,32 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
 };
 
 const githubApi = (project: CiProject, path: string): string => `${project.account.apiBase}/repos/${project.project}${path}`;
+const githubGet = (fetchFn: FetchFn, project: CiProject, path: string): Promise<Response> =>
+    fetchFn(githubApi(project, path), { headers: githubHeaders(project.account.token) });
+
+// What a POST to a forge's API sends, as JSON.
+type ForgeJson = string | number | boolean | null | readonly ForgeJson[] | { readonly [key: string]: ForgeJson };
+type ForgeBody = { readonly [key: string]: ForgeJson };
+
+// A POST to a forge's API, with a JSON body when it takes one; a refusal throws with what the forge said.
+const postTo = async (fetchFn: FetchFn, url: string, headers: Record<string, string>, what: string, body?: ForgeBody): Promise<void> => {
+    const init: RequestInit = { method: "POST", headers };
+    if (body !== undefined) {
+        init.headers = { ...headers, "Content-Type": "application/json" };
+        init.body = JSON.stringify(body);
+    }
+    await throwOn(await fetchFn(url, init), what);
+};
+
+// The run names its workflow by id and its branch; a dispatch starts that workflow on the branch's head.
+const githubDispatch = async (fetchFn: FetchFn, project: CiProject, runId: number): Promise<void> => {
+    const run = await json<{ readonly workflow_id: number; readonly head_branch: string | null }>(
+        await githubGet(fetchFn, project, `/actions/runs/${runId}`),
+        "github run",
+    );
+    const dispatches = githubApi(project, `/actions/workflows/${run.workflow_id}/dispatches`);
+    await postTo(fetchFn, dispatches, githubHeaders(project.account.token), "github workflow dispatch", { ref: run.head_branch ?? "" });
+};
 
 interface WorkflowSource {
     readonly root: string;
@@ -216,6 +210,18 @@ interface GithubJob {
     readonly html_url: string | null;
     readonly steps?: readonly { readonly name: string; readonly conclusion: string | null }[];
 }
+
+// A job of a run as main's fix agent hears of it: failed, or cancelled in a way that is a failure after all (`cause`,
+// forge/github-cancels.ts); none for any other.
+const githubFailedStep = (job: GithubJob, cause: string | undefined): FailedStep[] => {
+    if (cause === undefined && (job.conclusion === null || githubStatus("completed", job.conclusion) !== "failed")) {
+        return [];
+    }
+    const steps = (job.steps ?? []).filter((candidate) => candidate.conclusion === "failure").map((candidate) => candidate.name);
+    const step = steps[0];
+    const named: FailedStep = step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step, steps };
+    return [cause === undefined ? named : { ...named, reason: cause }];
+};
 
 // Settled once every job has completed; an empty list is a run whose jobs have not been made yet.
 const githubJobLists = jobLists<GithubJob>((jobs) => jobs.length > 0 && jobs.every((job) => job.status === "completed"));
@@ -298,16 +304,8 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         workflowSources.set(cacheKey, source);
         return source;
     };
-    const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
-        await throwOn(
-            await fetchFn(githubApi(project, path), {
-                method: "POST",
-                headers: { ...githubHeaders(project.account.token), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
-                ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-            }),
-            what,
-        );
-    };
+    const post = (project: CiProject, path: string, what: string, body?: ForgeBody): Promise<void> =>
+        postTo(fetchFn, githubApi(project, path), githubHeaders(project.account.token), what, body);
     const listJobs = (project: CiProject, runId: number, what: string) => async (): Promise<GithubJob[]> =>
         (
             await json<{ jobs: GithubJob[] }>(
@@ -315,11 +313,17 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 what,
             )
         ).jobs;
-    // A fix's reading, which takes the list the board's row just read (githubJobLists) rather than waiting on it again.
-    const jobsOf = async (project: CiProject, runId: number): Promise<GithubJob[]> =>
-        (await githubJobLists.kept(fetchFn, runKey(project, runId), listJobs(project, runId, "github jobs list"))).filter(
-            (job) => job.conclusion !== null && githubStatus("completed", job.conclusion) === "failed",
+    const jobListOf = (project: CiProject, runId: number): Promise<GithubJob[]> =>
+        githubJobLists.kept(fetchFn, runKey(project, runId), listJobs(project, runId, "github jobs list"));
+    // A fix's reading, which takes the list the board's row just read (githubJobLists) rather than waiting on it again:
+    // every job that failed, and every cancelled one whose cancel says it failed after all, in the run's order.
+    const jobsOf = async (project: CiProject, runId: number): Promise<FailedStep[]> => {
+        const listed = await jobListOf(project, runId);
+        const cancels = await cancelledFailures(listed, runKey(project, 0), (jobId) =>
+            fetchFn(githubApi(project, `/check-runs/${jobId}/annotations`), { headers: githubHeaders(project.account.token) }),
         );
+        return listed.flatMap((job) => githubFailedStep(job, cancels.get(job)));
+    };
     // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
     const logOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
         const response = await fetchFn(githubApi(project, `/actions/jobs/${jobId}/logs`), { headers: githubHeaders(project.account.token) });
@@ -333,13 +337,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             );
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
-        failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
-        failedSteps: async (project, runId) =>
-            (await jobsOf(project, runId)).map((job) => {
-                const steps = (job.steps ?? []).filter((candidate) => candidate.conclusion === "failure").map((candidate) => candidate.name);
-                const step = steps[0];
-                return step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step, steps };
-            }),
+        failedJobs: async (project, runId) => (await jobsOf(project, runId)).map(({ job }) => job),
+        failedSteps: jobsOf,
+        passedJobs: async (project, runId) => (await jobListOf(project, runId)).filter((job) => job.conclusion === "success").map((job) => job.name),
+        run: async (project, runId) => githubRun(project, await json<GithubRun>(await githubGet(fetchFn, project, `/actions/runs/${runId}`), "github run")),
+        dispatch: (project, runId) => githubDispatch(fetchFn, project, runId),
         // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
         // fetched alongside the job list, not after; unreadable, jobs go out as listed. Readable, the list is the run's
         // graph as GitHub draws it: every declared job, the ones not reported yet (or never) included, in its order.
@@ -574,6 +576,17 @@ interface GitlabFailedJob {
 // Never settled: the failed-only list a fix reads is shared while out (jobLists) and not kept past it.
 const gitlabFailedLists = jobLists<GitlabFailedJob>(() => false);
 
+const gitlabPipelineOf = async (fetchFn: FetchFn, project: CiProject, runId: number): Promise<GitlabPipeline> =>
+    json<GitlabPipeline>(await fetchFn(gitlabApi(project, `/pipelines/${runId}`), { headers: gitlabHeaders(project) }), "gitlab pipeline");
+
+const gitlabPassedJobs = async (fetchFn: FetchFn, project: CiProject, runId: number): Promise<string[]> =>
+    (
+        await json<{ readonly name: string }[]>(
+            await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?scope[]=success&per_page=100`), { headers: gitlabHeaders(project) }),
+            "gitlab passed jobs",
+        )
+    ).map((job) => job.name);
+
 const gitlabClient = (fetchFn: FetchFn): CiClient => {
     // Enrichment never fails the listing; every catch here is a deliberate swallow, not a rethrow.
     const metaFromJobs = async (project: CiProject): Promise<Map<number, GitlabRunMeta>> => {
@@ -618,16 +631,8 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
         }
     };
 
-    const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
-        await throwOn(
-            await fetchFn(gitlabApi(project, path), {
-                method: "POST",
-                headers: { ...gitlabHeaders(project), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
-                ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-            }),
-            what,
-        );
-    };
+    const post = (project: CiProject, path: string, what: string, body?: ForgeBody): Promise<void> =>
+        postTo(fetchFn, gitlabApi(project, path), gitlabHeaders(project), what, body);
     // A job allowed to fail fails nothing, so it is none of the pipeline's failures. Shared by a fix's three readings of
     // it (gitlabFailedLists), never kept: a failed-only list cannot say whether the pipeline is still going.
     const failedJobsOf = async (project: CiProject, runId: number): Promise<GitlabFailedJob[]> =>
@@ -670,6 +675,10 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             (await failedJobsOf(project, runId)).map((job) =>
                 job.failure_reason === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, reason: job.failure_reason },
             ),
+        passedJobs: (project, runId) => gitlabPassedJobs(fetchFn, project, runId),
+        run: async (project, runId) => gitlabRun(project, await gitlabPipelineOf(fetchFn, project, runId)),
+        // A commit's one pipeline is the project's: a new one on the pipeline's ref is the same workflow on its head.
+        dispatch: async (project, runId) => post(project, "/pipeline", "gitlab pipeline create", { ref: (await gitlabPipelineOf(fetchFn, project, runId)).ref }),
         // `stage` is native here; the view groups by it directly, timestamps only order stages by actual start.
         allJobs: async (project, runId) => {
             const listed = await json<
@@ -764,51 +773,6 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
 // repository has no default branch yet.
 const GithubRepositorySchema = z.object({ id: z.number(), full_name: z.string(), default_branch: z.string().nullish() });
 const GitlabProjectSchema = z.object({ id: z.number(), path_with_namespace: z.string(), default_branch: z.string().nullish() });
-
-// ---- the rate limit, shared by every caller ----
-
-// When each account's limit lifts, kept per transport like the job lists, so one test's stand-in never cools another's.
-// An account is its API and its token: the limit is the token's, whichever repository asked.
-const cooldowns = new WeakMap<FetchFn, Map<string, number>>();
-
-// The client with the cooldown in front: while an account's limit is spent, every call on it fails at once with the same
-// typed refusal instead of spending a request the forge will refuse, so the poller, the hook reconcile and the board's
-// backfill all wait it out without each knowing about it.
-const cooled = (client: CiClient, fetchFn: FetchFn): CiClient => {
-    const held = cooldowns.get(fetchFn) ?? new Map<string, number>();
-    cooldowns.set(fetchFn, held);
-    const guard =
-        <A extends unknown[], R>(call: (project: CiProject, ...rest: A) => Promise<R>) =>
-        async (project: CiProject, ...rest: A): Promise<R> => {
-            const account = `${project.account.apiBase}\n${project.account.token}`;
-            const until = held.get(account);
-            if (until !== undefined && Date.now() < until) {
-                throw new CiRateLimited(`${project.account.host}'s API`, until);
-            }
-            held.delete(account);
-            try {
-                return await call(project, ...rest);
-            } catch (error) {
-                if (error instanceof CiRateLimited) {
-                    held.set(account, Math.max(held.get(account) ?? 0, error.until));
-                }
-                throw error;
-            }
-        };
-    return {
-        listRuns: guard(client.listRuns),
-        failedJobs: guard(client.failedJobs),
-        failedSteps: guard(client.failedSteps),
-        allJobs: guard(client.allJobs),
-        jobLog: guard(client.jobLog),
-        rerun: guard(client.rerun),
-        cancel: guard(client.cancel),
-        ensureHook: guard(client.ensureHook),
-        removeHook: guard(client.removeHook),
-        repository: guard(client.repository),
-        projectUrl: client.projectUrl,
-    };
-};
 
 export const ciClientFor = (host: "github" | "gitlab", fetchFn: FetchFn = fetch): CiClient =>
     cooled(host === "github" ? githubClient(fetchFn) : gitlabClient(fetchFn), fetchFn);

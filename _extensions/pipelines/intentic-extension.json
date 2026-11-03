@@ -13,6 +13,8 @@
             "GET /ci/runs",
             "POST /ci/runs/rerun",
             "POST /ci/runs/cancel",
+            "POST /ci/runs/dispatch",
+            "POST /ci/failures/forget",
             "POST /ci/runs/jobs",
             "POST /ci/fix"
         ]

@@ -171,6 +171,30 @@ export const CiMainFailureWorkflowSchema = z.object({
     name: z.string().describe("The workflow, by the name the forge gives it. `ci` on a forge that runs one pipeline per commit."),
     runId: z.number().describe("Its newest run that failed."),
     jobs: z.array(z.string()).describe("Its jobs failing now, by name."),
+    since: z
+        .number()
+        .optional()
+        .describe(
+            "When this workflow began failing on the branch, in milliseconds: each workflow keeps its own, so one failing for weeks does not make another's breakage look as old. Absent for a failure kept before workflows were timed apart.",
+        ),
+    failedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When its newest run failed, in milliseconds. A workflow that has not failed for MAIN_FAILURE_STALE_MS, and has not passed either, is taken off the failure by itself.",
+        ),
+    trigger: z
+        .string()
+        .optional()
+        .describe(
+            "What set its newest failed run off, in the forge's own word (`push`, `schedule`, …), where it is known: a scheduled workflow is measured by its next scheduled run, or one started by hand, and never by a push.",
+        ),
+    timedOut: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Those of its failing jobs that failed by running out of time, which the forge reports as cancelled rather than failed. Absent when none did.",
+        ),
 });
 export type CiMainFailureWorkflow = z.infer<typeof CiMainFailureWorkflowSchema>;
 export const CiMainFailureSchema = z.object({
@@ -192,8 +216,29 @@ export const CiMainFailureSchema = z.object({
     decision: MainFailureDecisionSchema.optional().describe(
         "The latest thing decided about it: `fix-up` while the fix agent has it, `spent` once it waits for you (its turns are used up, or it stopped without a fix), `reported` when repairs are off.",
     ),
+    attempts: z
+        .number()
+        .optional()
+        .describe(
+            "How many fix attempts have been opened on it so far. A failure on its tenth attempt is stuck in a way no single attempt says. Absent from a daemon that does not count them.",
+        ),
 });
 export type CiMainFailure = z.infer<typeof CiMainFailureSchema>;
+// How long a workflow failing on a main-line branch stays on the failure without failing again or passing: its newest
+// failed run is then weeks old, so nothing is measuring it (a one-off run, a workflow renamed or no longer scheduled),
+// and holding the failure open on it only hides the branch's real state.
+export const MAIN_FAILURE_STALE_MS = 14 * 24 * 60 * 60_000;
+// Takes a workflow off a failing main-line branch by hand, or the whole failure when no workflow is named: what a person
+// does when they know better than the forge (the workflow was deleted, or what fails is not the code's to fix).
+export const CiForgetParamSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    branch: z.string().describe("Which main-line branch."),
+    workflow: z
+        .string()
+        .optional()
+        .describe("The workflow to stop tracking, by the name the failure lists it under. Leave it out to end the whole failure, every workflow on it."),
+});
+export type CiForgetParam = z.infer<typeof CiForgetParamSchema>;
 export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.

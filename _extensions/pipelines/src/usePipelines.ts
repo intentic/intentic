@@ -1,4 +1,11 @@
-import { type CiFixParam, type CiFixResponse, isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import {
+    type CiFixParam,
+    type CiFixResponse,
+    type CiForgetParam,
+    type CiRunParam,
+    isPipelineInFlight,
+    type PipelineRun,
+} from "@intentic/sandbox-contract/schemas/ci";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import { runPickOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentRunBooking, AgentRunChoice } from "@intentic/extension-ui";
@@ -83,6 +90,17 @@ export function usePipelines() {
         mutationFn: (run: PipelineRun) => api.sandbox.rpc.ci.cancel({ repo: run.repo, runId: run.runId }),
         onSuccess: invalidate,
     });
+    // A fresh run of the workflow a run belongs to, on its branch as it is now: what measures a scheduled workflow today,
+    // where a re-run would measure the old commit again. Addressed by run, since the failing one is often off the board.
+    const dispatch = useMutation({
+        mutationFn: (run: CiRunParam) => api.sandbox.rpc.ci.dispatch({ repo: run.repo, runId: run.runId }),
+        onSuccess: invalidate,
+    });
+    // Takes a workflow off a failing main line by hand, or the whole failure when none is named.
+    const forget = useMutation({
+        mutationFn: (param: CiForgetParam) => api.sandbox.rpc.ci.forget(param),
+        onSuccess: invalidate,
+    });
     // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
     // own named default; effort travels with the model so a pick can't silently drop to the provider's default tier.
     // `mode` is the verb the picker's bar was ended with over an attempt that already exists; absent is the plain
@@ -103,6 +121,8 @@ export function usePipelines() {
         loaded,
         rerun,
         cancel,
+        dispatch,
+        forget,
         fix,
     };
 }

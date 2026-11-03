@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { ciContract } from "@intentic/sandbox-contract/contracts/ci.contract";
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiRepo, CiRunParam, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { implement, ORPCError } from "@orpc/server";
 import { areasOf, runAsOf } from "../auth/principal.js";
 import { speakerOf, spokenBy } from "../seams/turn-speaker.js";
@@ -10,7 +10,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
-import { fixPressed, mainFailures, streakFixerFor } from "./main-fixer.js";
+import { fixPressed, forgetFailure, mainFailures, streakFixerFor } from "./main-fixer.js";
 import { createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -73,18 +73,28 @@ const sharedRunLists = (
     };
 };
 
+const resolveProject = async (services: Services, repo: string): Promise<CiProject> => {
+    const project = (await ciProjects(services)).find((candidate) => candidate.repo === repo);
+    if (project === undefined) {
+        throw new ORPCError("NOT_FOUND", { message: `no CI project mapped for repo "${repo}"` });
+    }
+    return project;
+};
+
 export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => {
     const i = implement(ciContract).$context<OrpcContext>();
     // Every open Pipelines board re-lists on a stale cache, so a dead token used to write this line on each read.
     const backfill = createCiFailureLog(services.logger, "ci: runs backfill failed", "ci: runs backfill works again");
     const listRuns = sharedRunLists(() => services.ciRuns, fetchFn, backfill);
-    const resolve = async (repo: string): Promise<CiProject> => {
-        const project = (await ciProjects(services)).find((candidate) => candidate.repo === repo);
-        if (project === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: `no CI project mapped for repo "${repo}"` });
-        }
-        return project;
-    };
+    const resolve = (repo: string): Promise<CiProject> => resolveProject(services, repo);
+    // A press on a run the daemon only passes along to its forge.
+    const onRun =
+        (verb: "rerun" | "cancel" | "dispatch") =>
+        async ({ input }: { readonly input: CiRunParam }) => {
+            const project = await resolve(input.repo);
+            await upstream(ciClientFor(project.account.provider, fetchFn)[verb](project, input.runId));
+            return { ok: true as const };
+        };
     return {
         runs: i.runs.handler(async ({ context }) => {
             const projects = await ciProjects(services);
@@ -110,14 +120,12 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             const listed = await Promise.all(projects.map(listRuns));
             return { repos, runs: services.ciRuns.replace(listed.flat()), failures };
         }),
-        rerun: i.rerun.handler(async ({ input }) => {
-            const project = await resolve(input.repo);
-            await upstream(ciClientFor(project.account.provider, fetchFn).rerun(project, input.runId));
-            return { ok: true as const };
-        }),
-        cancel: i.cancel.handler(async ({ input }) => {
-            const project = await resolve(input.repo);
-            await upstream(ciClientFor(project.account.provider, fetchFn).cancel(project, input.runId));
+        rerun: i.rerun.handler(onRun("rerun")),
+        cancel: i.cancel.handler(onRun("cancel")),
+        dispatch: i.dispatch.handler(onRun("dispatch")),
+        // Nothing left to take off is no failure of the press: a second click, or a board a moment behind.
+        forget: i.forget.handler(async ({ input }) => {
+            await forgetFailure(services, input);
             return { ok: true as const };
         }),
         jobs: i.jobs.handler(async ({ input }) => {

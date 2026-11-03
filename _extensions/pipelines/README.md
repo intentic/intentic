@@ -26,14 +26,25 @@ flowchart LR
   reader learns which. Then who has it (a pill that opens the agent) and the one press, then one sentence on where the
   fix stands and the reader's move, read off the agent's live stance (`storyOf`): working, waiting on you, ready to
   review, landed ("commit and push it: the next run on main shows whether it worked"), being measured by a run that
-  started after it landed, pushed (a run on the branch passed since it landed, so what still fails is a workflow that
-  push did not run), new failures after landing ("New failures found", with "Fix now" even while the run is still going),
-  or handed back with a two-word reason from the contract's `MainFailureHandBack`. Auto-fix still collects a run's
+  started after it landed, stalled (the push happened, and no failing workflow has a run going or a push's run to come:
+  each was cancelled, runs on a schedule, or has gone quiet), new failures after landing ("New failures found", with
+  "Fix now" even while the run is still going), or handed back with a two-word reason from the contract's
+  `MainFailureHandBack`. Only a run of one of the failing workflows says anything about them: before 2026-11-03 a
+  Scorecard or CodeQL pass after the push read as "newer runs on main pass" while CI itself had been cancelled.
+- Each workflow line says what stands between it and passing, and the press that clears it (`blockerOf`): a run of it
+  going now; its newest run cancelled after the failure (that run is drawn in the block, with its own Re-run); a
+  scheduled workflow, with Run now (`ci.dispatch`, a fresh run on the branch's head rather than the old commit again);
+  or quiet for days, with when the daemon drops it by itself (`MAIN_FAILURE_STALE_MS` after it last failed) and Stop
+  tracking (`ci.forget`). Jobs that ran out of time are marked, since GitHub calls them cancelled. Each line carries its
+  own since when the block lists several, the header's since is the longest-failing workflow's (`failingSince`), the
+  agent's pill counts its attempts once there has been more than one, and Mark resolved ends the whole failure behind a
+  confirm. Auto-fix still collects a run's
   failures until it finishes or reaches its wait cap; the manual press starts with the failures reported so far,
   and only additional failed jobs follow automatically. A newer run with no failures reported keeps the measuring
   state. Under the header
   sit the runs it is about (`coveredRuns`: the branch's failures nothing has passed since, the ones the daemon names
-  failing whatever passed on a later commit, and its runs still going), indented and joined to the header's plate by a
+  failing whatever passed on a later commit, its runs still going, and each failing workflow's newest run when it was
+  cancelled after the failure, so the block agrees with the forge's own page), indented and joined to the header's plate by a
   drawn lane, a trunk with an elbow into each run's status glyph, measured from where they sit so it survives a row
   opening into its job graph. Every other run follows in time order. It never shows the daemon's sentence or a turn's
   error: those are in the agent's conversation. The agent is joined by the id the failure names (`fixer`), never by a

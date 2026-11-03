@@ -39,8 +39,6 @@
             "landed": "The fix is in your workspace. Commit and push it: the next run on {branch} shows whether it worked.",
             "needsYou": "The auto-fix agent is waiting on you. Open it to answer.",
             "proving": "The fix is in. A new run on {branch} is checking it now.",
-            "pushed": "The fix is pushed and newer runs on {branch} pass, but {workflows} has not passed since. Only its own next run clears this. | The fix is pushed and newer runs on {branch} pass, but {workflows} have not passed since. Only their own next runs clear this.",
-            "pushedUnnamed": "The fix is pushed and newer runs on {branch} pass, but a workflow that failed has not passed since. Only its own next run clears this.",
             "ready": "A fix is ready on the agent's branch. Open it to review and land it.",
             "reported": "Auto-fix is off, so no agent was sent. Start one, or fix it by hand.",
             "unassigned": "Auto-fix waits for the run to finish, so its agent gets every failure at once. Start one now to skip the wait.",
@@ -48,11 +46,27 @@
             "waits": "{reason}: the auto-fix agent handed this back. Continue gives it more turns.",
             "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes.",
             "collecting": "Some jobs failed on a newer run. Auto-fix is collecting the remaining results. Fix now to start sooner.",
-            "failedAgain": "A newer run on {branch} has failed jobs. Fix now to start another attempt."
+            "failedAgain": "A newer run on {branch} has failed jobs. Fix now to start another attempt.",
+            "stalled": "The fix is pushed, but nothing will run {workflows} again on its own. Its line above says how to measure it. | The fix is pushed, but nothing will run {workflows} again on their own. Each line above says how to measure it.",
+            "stalledUnnamed": "The fix is pushed, but what failed has not passed again since. Only its own next run clears this."
         },
         "title": "{branch} is failing",
         "fixNow": "Fix now",
-        "newFailures": "New failures found"
+        "newFailures": "New failures found",
+        "attempt": "attempt {count}",
+        "timedOutJob": "{job} (timed out)",
+        "runNow": "Run now",
+        "stopTracking": "Stop tracking",
+        "stopTrackingNamed": "Stop tracking {workflow}",
+        "resolve": "Mark resolved",
+        "resolveHeader": "Mark {branch} resolved?",
+        "resolveDescription": "Every workflow comes off this failure now and the fix agent is sent nothing more. A workflow that fails again opens it again.",
+        "blocker": {
+            "measuring": "running again now at {sha}",
+            "cancelled": "its newest run, at {sha}, was cancelled, so nothing measured it: re-run it below",
+            "scheduled": "runs on a schedule, not on a push: its next run measures it",
+            "quiet": "has not run since {when}; tracking stops by itself on {drop}"
+        }
     },
     "pipelineDag": {
         "step": "Step {n}"

@@ -39,8 +39,6 @@
             "landed": "La correction est dans votre espace de travail. Committez et poussez-la : la prochaine exécution sur {branch} dira si elle marche.",
             "needsYou": "L'agent de correction auto vous attend. Ouvrez-le pour répondre.",
             "proving": "La correction est intégrée. Une nouvelle exécution sur {branch} la vérifie en ce moment.",
-            "pushed": "Le correctif est poussé et les exécutions plus récentes sur {branch} passent, mais {workflows} n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte. | Le correctif est poussé et les exécutions plus récentes sur {branch} passent, mais {workflows} ne sont pas repassés depuis. Seules leurs propres prochaines exécutions lèvent l'alerte.",
-            "pushedUnnamed": "Le correctif est poussé et les exécutions plus récentes sur {branch} passent, mais un workflow en échec n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte.",
             "ready": "Une correction est prête sur la branche de l'agent. Ouvrez-le pour la relire et l'intégrer.",
             "reported": "La correction auto est désactivée, donc aucun agent n'a été envoyé. Lancez-en un ou corrigez à la main.",
             "unassigned": "La correction auto attend la fin de l'exécution, pour que son agent reçoive tous les échecs d'un coup. Lancez-en un maintenant pour ne pas attendre.",
@@ -48,11 +46,27 @@
             "waits": "{reason} : l'agent de correction auto l'a rendu. Continuer lui redonne des tours.",
             "working": "L'agent de correction auto s'en occupe. Chaque nouvel échec sur {branch} va au même agent jusqu'à ce qu'une exécution réussisse.",
             "collecting": "Certaines tâches d’une exécution plus récente ont échoué. La correction automatique rassemble les résultats restants. Cliquez sur « Corriger maintenant » pour commencer plus tôt.",
-            "failedAgain": "Une exécution plus récente sur {branch} comporte des tâches en échec. Cliquez sur « Corriger maintenant » pour lancer une nouvelle tentative."
+            "failedAgain": "Une exécution plus récente sur {branch} comporte des tâches en échec. Cliquez sur « Corriger maintenant » pour lancer une nouvelle tentative.",
+            "stalled": "Le correctif est poussé, mais rien ne relancera {workflows} de lui-même. Sa ligne ci-dessus dit comment le mesurer. | Le correctif est poussé, mais rien ne relancera {workflows} d'eux-mêmes. Chaque ligne ci-dessus dit comment le mesurer.",
+            "stalledUnnamed": "Le correctif est poussé, mais ce qui a échoué n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte."
         },
         "title": "{branch} échoue",
         "fixNow": "Corriger maintenant",
-        "newFailures": "Nouveaux échecs détectés"
+        "newFailures": "Nouveaux échecs détectés",
+        "attempt": "tentative {count}",
+        "timedOutJob": "{job} (délai dépassé)",
+        "runNow": "Lancer maintenant",
+        "stopTracking": "Ne plus suivre",
+        "stopTrackingNamed": "Ne plus suivre {workflow}",
+        "resolve": "Marquer comme résolu",
+        "resolveHeader": "Marquer {branch} comme résolu ?",
+        "resolveDescription": "Tous les workflows quittent cet échec maintenant, et l'agent de correction ne reçoit plus rien. Un workflow qui échoue à nouveau le rouvre.",
+        "blocker": {
+            "measuring": "en cours de nouvelle exécution sur {sha}",
+            "cancelled": "sa dernière exécution, sur {sha}, a été annulée, donc rien ne l'a mesuré : relancez-la ci-dessous",
+            "scheduled": "s'exécute selon un planning, pas à chaque push : sa prochaine exécution le mesure",
+            "quiet": "ne s'est pas exécuté depuis {when} ; le suivi s'arrête de lui-même le {drop}"
+        }
     },
     "pipelineDag": {
         "step": "Étape {n}"

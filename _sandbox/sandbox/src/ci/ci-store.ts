@@ -29,6 +29,9 @@ const CiFindingSchema = z.object({
     id: z.string(),
     source: z.string(),
     text: z.string(),
+    // Whether it failed by running out of time, the last time it failed: GitHub reports that as a cancel
+    // (forge/github-cancels.ts), GitLab as `job_execution_timeout`.
+    timedOut: z.boolean().optional(),
 });
 export type CiFinding = z.infer<typeof CiFindingSchema>;
 
@@ -50,6 +53,11 @@ const CiFailureSchema = z.object({
     // Each workflow failing on it, with the newest run of it that failed: a later run of that workflow passing takes it
     // off, and the streak ends with the last one. Empty for a failure kept before 2026-09-27, which any passing run ends.
     workflows: z.record(z.string(), z.number()).default({}),
+    // Each workflow in `workflows`, timed apart (2026-11-03): when it began failing, when it last failed, and what set its
+    // newest failed run off (the forge's word: `push`, `schedule`). One workflow failing for weeks then no longer makes
+    // another's breakage read as old, and one that has not failed for MAIN_FAILURE_STALE_MS, nor passed, comes off.
+    // Absent for a workflow kept before, which the boot fills in from the forge (main-ends.ts, timedApart).
+    spans: z.record(z.string(), z.object({ since: z.number(), failedAt: z.number(), trigger: z.string().optional() })).default({}),
     // Every failed job the streak has heard of, as `<runId>/<jobId>`, oldest first: each is handled once, however many
     // ways it arrives (its own webhook, its run's, the poller). Bounded.
     heard: z.array(z.string()).default([]),

@@ -53,6 +53,7 @@ const SPENT: CiFailure = {
     runId: RUN_ID,
     count: 2,
     workflows: { CI: RUN_ID },
+    spans: {},
     heard: ["40/6", "41/7"],
     turns: 3,
     changed: false,
@@ -249,6 +250,7 @@ test("the runs list answers each failing main-line branch as a failure, with its
                 at: 2,
                 detail: "Its fix agent had its 3 turns and main still fails.",
             },
+            attempts: 1,
         },
     ]);
     expect(Object.keys(answer)).toEqual(["repos", "runs", "failures"]);

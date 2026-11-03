@@ -1,9 +1,11 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import type { CiMainFailure, MainFailureDecision } from "@intentic/sandbox-contract/schemas/ci";
+import { type CiMainFailure, MAIN_FAILURE_STALE_MS, type MainFailureDecision } from "@intentic/sandbox-contract/schemas/ci";
 import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import {
+    blockerOf,
     coveredRuns,
+    failingSince,
     failingWorkflowsOf,
     handBackOf,
     jobsAtAGlance,
@@ -12,8 +14,11 @@ import {
     type MainFailureState,
     mainFailureState,
     offersFix,
+    QUIET_AFTER_MS,
+    stalls,
     storyOf,
     waitsForYou,
+    workflowOfRun,
 } from "./mainFailures";
 import { agentCard, pipelineRun } from "../testing";
 
@@ -155,6 +160,14 @@ describe(`mainFailuresOf`, () => {
         expect(mainFailuresOf([failing({ fixer: first })], [fixer], [run])[0]?.state).toBe(`fixing`);
     });
 
+    // A failure that has been open for weeks over a nightly says when each workflow began, and the block is ordered by
+    // the longest-failing workflow it holds now, not by when the failure first opened.
+    it(`orders by the longest-failing workflow it holds, where the daemon times them apart`, () => {
+        const ci = failing({ repo: `web`, since: NOW - 40 * MINUTE, workflows: [{ name: `CI`, runId: 43, jobs: [`unit`], since: NOW - 2 * MINUTE }] });
+        const api = failing({ repo: `api`, since: NOW - 10 * MINUTE });
+        expect(mainFailuresOf([ci, api], [], []).map((view) => view.failure.repo)).toEqual([`api`, `web`]);
+    });
+
     it(`puts the longest-failing first, and is nothing from a daemon that keeps no failures`, () => {
         const views = mainFailuresOf([failing({ repo: `web`, since: NOW - MINUTE }), failing({ repo: `api`, since: NOW - 40 * MINUTE })], [], []);
         expect(views.map((view) => view.failure.repo)).toEqual([`api`, `web`]);
@@ -224,6 +237,21 @@ describe(`coveredRuns`, () => {
         expect(coveredRuns(failing(), [ciPassed, nightly, oldCi], superseded)).toEqual([]);
     });
 
+    // GitHub shows a workflow's newest run as its state: a cancelled run after the failure is why nothing measured it, and
+    // a block without it disagreed with the forge's own page about what main is doing.
+    it(`draws a failing workflow's newest run when it was cancelled after the failure, and no other cancelled run`, () => {
+        const failed = pipelineRun({ runId: 43, workflow: `CI` });
+        const cancelled = pipelineRun({ runId: 60, workflow: `CI`, status: `canceled` });
+        const olderCancel = pipelineRun({ runId: 41, workflow: `CI`, status: `canceled` });
+        const otherWorkflow = pipelineRun({ runId: 61, workflow: `Scorecard`, status: `canceled` });
+        const named = failing({ workflows: [{ name: `CI`, runId: 43, jobs: [`unit`] }] });
+        const runs = [otherWorkflow, cancelled, failed, olderCancel];
+        expect(coveredRuns(named, runs, new Map())).toEqual([cancelled, failed]);
+        // Once a later run of it goes, that run is the measurement, and the cancelled one is history again.
+        const going = pipelineRun({ runId: 62, workflow: `CI`, status: `running` });
+        expect(coveredRuns(named, [going, ...runs], new Map())).toEqual([going, failed]);
+    });
+
     it(`covers nothing when the board no longer lists the branch's runs`, () => {
         expect(coveredRuns(failing(), [pipelineRun({ runId: 9, branch: `feat/x` })], new Map())).toEqual([]);
     });
@@ -237,18 +265,36 @@ describe(`failingWorkflowsOf`, () => {
     ];
 
     it(`names each workflow with its jobs, linked to the listed run or, off the board, to the forge's page for it`, () => {
-        const listed = pipelineRun({ runId: 52, url: `https://github.com/acme/web/actions/runs/52` });
-        expect(failingWorkflowsOf(failing({ workflows }), [listed], repo)).toEqual([
+        const listed = pipelineRun({ runId: 52, url: `https://github.com/acme/web/actions/runs/52`, createdAt: NOW - MINUTE });
+        expect(failingWorkflowsOf(failing({ workflows }), [listed], repo, NOW)).toEqual([
             {
                 name: `Nightly`,
                 named: true,
                 runId: 30,
                 jobs: [`desktop-windows / smoke`],
+                timedOut: [],
+                since: undefined,
                 url: `https://github.com/acme/web/actions/runs/30`,
                 listed: false,
+                blocker: { kind: `next` },
             },
-            { name: `CI`, named: true, runId: 52, jobs: [`changes`], url: listed.url, listed: true },
+            {
+                name: `CI`,
+                named: true,
+                runId: 52,
+                jobs: [`changes`],
+                timedOut: [],
+                since: undefined,
+                url: listed.url,
+                listed: true,
+                blocker: { kind: `next` },
+            },
         ]);
+    });
+
+    it(`carries the daemon's own start and the jobs that ran out of time`, () => {
+        const timed = [{ name: `CI`, runId: 52, jobs: [`migrations`, `unit`], timedOut: [`migrations`], since: NOW - 5 * MINUTE }];
+        expect(failingWorkflowsOf(failing({ workflows: timed }), [], repo, NOW)[0]).toMatchObject({ timedOut: [`migrations`], since: NOW - 5 * MINUTE });
     });
 
     it(`does not spell GitLab's one pipeline, and is nothing from a daemon that does not say`, () => {
@@ -256,6 +302,75 @@ describe(`failingWorkflowsOf`, () => {
         const [one] = failingWorkflowsOf(failing({ workflows: [{ name: `ci`, runId: 7, jobs: [`test`] }] }), [], gitlab);
         expect(one).toMatchObject({ named: false, url: `https://gitlab.com/acme/api/-/pipelines/7` });
         expect(failingWorkflowsOf(failing(), [], repo)).toEqual([]);
+    });
+});
+
+describe(`failingSince`, () => {
+    it(`is the longest-failing workflow's own start, else the failure's`, () => {
+        const workflows = [
+            { name: `Nightly`, runId: 30, jobs: [`smoke`], since: NOW - 3 * MINUTE },
+            { name: `CI`, runId: 52, jobs: [`unit`], since: NOW - 9 * MINUTE },
+        ];
+        expect(failingSince(failing({ since: NOW - 999 * MINUTE, workflows }))).toBe(NOW - 9 * MINUTE);
+        expect(failingSince(failing({ workflows: [{ name: `CI`, runId: 52, jobs: [`unit`] }] }))).toBe(NOW - 30 * MINUTE);
+    });
+});
+
+describe(`workflowOfRun`, () => {
+    it(`is the run's workflow, or the one pipeline a GitLab commit runs`, () => {
+        expect(workflowOfRun({ workflow: `CI` })).toBe(`CI`);
+        expect(workflowOfRun({})).toBe(`ci`);
+        expect(workflowOfRun({ workflow: `` })).toBe(`ci`);
+    });
+});
+
+describe(`blockerOf`, () => {
+    const ci = { name: `CI`, runId: 43, jobs: [`unit`] };
+    const branch = { repo: `web`, branch: `main` };
+
+    it(`is measuring while a later run of the workflow goes, or its failing run is re-run`, () => {
+        const going = pipelineRun({ runId: 50, workflow: `CI`, status: `queued` });
+        expect(blockerOf(branch, ci, [going], NOW)).toEqual({ kind: `measuring`, run: going });
+        const rerun = pipelineRun({ runId: 43, workflow: `CI`, status: `running` });
+        expect(blockerOf(branch, ci, [rerun], NOW)).toEqual({ kind: `measuring`, run: rerun });
+        // Another workflow going, or the same one on another branch, measures nothing of this one.
+        const elsewhere = [pipelineRun({ runId: 51, workflow: `Scorecard`, status: `running` }), pipelineRun({ runId: 52, workflow: `CI`, branch: `feat/x`, status: `running` })];
+        expect(blockerOf(branch, ci, elsewhere, NOW)).toEqual({ kind: `next` });
+    });
+
+    it(`is the cancelled run when the workflow's newest run after the failure was cancelled`, () => {
+        const cancelled = pipelineRun({ runId: 60, workflow: `CI`, status: `canceled` });
+        expect(blockerOf(branch, ci, [cancelled, pipelineRun({ runId: 43, workflow: `CI` })], NOW)).toEqual({ kind: `cancelled`, run: cancelled });
+        const older = pipelineRun({ runId: 41, workflow: `CI`, status: `canceled` });
+        expect(blockerOf(branch, ci, [older], NOW)).toEqual({ kind: `next` });
+    });
+
+    it(`is scheduled for a workflow a push never runs, by the daemon's word or the failing run's`, () => {
+        expect(blockerOf(branch, { ...ci, trigger: `schedule` }, [], NOW)).toEqual({ kind: `scheduled` });
+        expect(blockerOf(branch, ci, [pipelineRun({ runId: 43, workflow: `CI`, trigger: `schedule`, createdAt: NOW - MINUTE })], NOW)).toEqual({
+            kind: `scheduled`,
+        });
+        expect(blockerOf(branch, { ...ci, trigger: `push` }, [], NOW)).toEqual({ kind: `next` });
+    });
+
+    it(`is quiet once it has not failed for days and nothing ran it, with the day the daemon lets it go`, () => {
+        const failedAt = NOW - QUIET_AFTER_MS - MINUTE;
+        expect(blockerOf(branch, { ...ci, failedAt }, [], NOW)).toEqual({ kind: `quiet`, failedAt, dropsAt: failedAt + MAIN_FAILURE_STALE_MS, scheduled: false });
+        expect(blockerOf(branch, { ...ci, failedAt, trigger: `schedule` }, [], NOW)).toMatchObject({ kind: `quiet`, scheduled: true });
+        expect(blockerOf(branch, { ...ci, failedAt: NOW - QUIET_AFTER_MS + MINUTE }, [], NOW)).toEqual({ kind: `next` });
+    });
+
+    it(`counts only measuring and the next push as something on its way`, () => {
+        const run = pipelineRun({ runId: 50 });
+        expect(
+            [
+                { kind: `measuring` as const, run },
+                { kind: `next` as const },
+                { kind: `cancelled` as const, run },
+                { kind: `scheduled` as const },
+                { kind: `quiet` as const, failedAt: 0, dropsAt: 1, scheduled: false },
+            ].map(stalls),
+        ).toEqual([false, false, true, true, true]);
     });
 });
 
@@ -281,16 +396,32 @@ describe(`storyOf`, () => {
         expect(storyOf(fixing(`landed`), [after, before])).toBe(`proving`);
     });
 
-    // The fix went out and the push's own runs passed, yet main still fails: what fails is a workflow that push did not
-    // run, and "commit and push it" would send the reader to do again what is done.
-    it(`calls a landed fix pushed once a run on the branch passed after it landed`, () => {
+    // From a daemon that does not tell workflows apart, a pass after the land is the only word that the push happened.
+    it(`calls a landed fix stalled once any run on the branch passed after it, where workflows are not told apart`, () => {
         const passedAfter = pipelineRun({ runId: 53, status: `success`, createdAt: NOW - 4 * MINUTE });
         const passedBefore = pipelineRun({ runId: 50, status: `success`, createdAt: NOW - 6 * MINUTE });
         const otherBranch = pipelineRun({ runId: 54, status: `success`, branch: `feat/x`, createdAt: NOW - 3 * MINUTE });
         expect(storyOf(fixing(`landed`), [], [passedBefore, otherBranch])).toBe(`landed`);
-        expect(storyOf(fixing(`landed`), [], [passedAfter, passedBefore])).toBe(`pushed`);
+        expect(storyOf(fixing(`landed`), [], [passedAfter, passedBefore])).toBe(`stalled`);
         const measuring = pipelineRun({ runId: 55, status: `running`, createdAt: NOW - 2 * MINUTE });
         expect(storyOf(fixing(`landed`), [measuring], [measuring, passedAfter])).toBe(`proving`);
+    });
+
+    // The case behind "newer runs on main pass" over a CI that had been cancelled: Scorecard and CodeQL passed after the
+    // push, CI's own run was cancelled, and the nightly only runs on its schedule. Nothing on its way measures either.
+    it(`calls a pushed fix stalled when nothing on its way will run a failing workflow again`, () => {
+        const workflows = [
+            { name: `CI`, runId: 43, jobs: [`verify-core / verify`] },
+            { name: `Nightly`, runId: 30, jobs: [`desktop-windows / smoke`], trigger: `schedule` },
+        ];
+        const view = { ...fixing(`landed`), failure: failing({ workflows }) };
+        const scorecard = pipelineRun({ runId: 61, workflow: `Scorecard`, status: `success`, createdAt: NOW - 3 * MINUTE });
+        const cancelled = pipelineRun({ runId: 60, workflow: `CI`, status: `canceled`, createdAt: NOW - 3 * MINUTE });
+        expect(storyOf(view, [cancelled], [scorecard, cancelled], NOW)).toBe(`stalled`);
+        // Scorecard passing alone says nothing of CI: its newest run is still the failing one, and a push measures it.
+        expect(storyOf(view, [], [scorecard], NOW)).toBe(`landed`);
+        // Nothing ran on the branch since the land: it is not pushed yet, whatever else blocks it.
+        expect(storyOf(view, [], [pipelineRun({ runId: 60, workflow: `CI`, status: `canceled`, createdAt: NOW - 9 * MINUTE })], NOW)).toBe(`landed`);
     });
 
     it(`is the failure's own state once nobody is working on it`, () => {

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
-import type { CiRepo, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiRepo, CiRunParam, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import {
     type AgentRunAttempt,
     type AgentRunBooking,
     AgentRunButton,
     type AgentRunChoice,
     appLink,
+    Button,
+    ConfirmDialog,
     fixStanceLook,
     formatClock,
     formatDate,
@@ -18,15 +20,32 @@ import {
     toneInk,
     tonePlate,
     toneRim,
+    ui,
     useAgentRunPick,
 } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { host } from "../host";
-import { failingWorkflowsOf, handBackOf, jobsAtAGlance, type MainFailureStory, type MainFailureView, offersFix, storyOf } from "./mainFailures";
+import {
+    dispatchKey,
+    type FailingWorkflow,
+    failingSince,
+    failingWorkflowsOf,
+    forgetKey,
+    handBackOf,
+    jobsAtAGlance,
+    type MainFailureStory,
+    type MainFailureView,
+    offersFix,
+    stalls,
+    storyOf,
+} from "./mainFailures";
 import { t } from "../i18n.js";
 
 // One incident card above the run list connects coveredRuns and owns the only fix action; nested run rows suppress duplicate actions.
 // Show branch/since, every failing workflow/jobs/run link, the fix agent and its live storyOf next step (including commit/push after land).
+// Each workflow line also says what blocks it (blockerOf) with the press that clears it: the cancelled run's own row to
+// re-run, Run now for a scheduled one, Stop tracking one nothing measures; the whole failure can be marked resolved
+// behind a confirm.
 // Use a distinct filled card/header so main's failure cannot read as another run; raw daemon/turn errors stay in the agent conversation.
 
 const props = defineProps<{
@@ -42,23 +61,31 @@ const props = defineProps<{
 }>();
 // The run row's own event, so the view handles both the same way: the caret's model pick, and the verb its panel ended
 // with over the agent's attempt (Continue / Start over).
+// `dispatch` starts a workflow afresh on the branch, `forget` takes one workflow (or, with none, the whole failure) off
+// it: the view runs each and keys `busy` the way this block reads it (mainFailures.ts). A cancelled run's Re-run is its
+// own row's, drawn inside this block (coveredRuns), so the line only points at it rather than offering a second.
 const emit = defineEmits<{
     fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined, booking: AgentRunBooking | undefined];
+    dispatch: [run: CiRunParam];
+    forget: [workflow: string | undefined];
 }>();
 
 const api = host();
 
 const failure = computed(() => props.view.failure);
 const jobs = computed(() => jobsAtAGlance(failure.value.jobs));
-const jobsLineOf = (names: readonly string[]): string => {
+// A job that ran out of time says so: the forge calls it cancelled, and the reader would otherwise look for a test.
+const jobsLineOf = (names: readonly string[], timedOut: readonly string[] = []): string => {
     const { shown, folded } = jobsAtAGlance(names);
-    return [shown.join(`, `), ...(folded.length > 0 ? [t(`mainFailure.moreJobs`, { count: folded.length })] : [])].join(` `);
+    const spelled = shown.map((name) => (timedOut.includes(name) ? t(`mainFailure.timedOutJob`, { job: name }) : name));
+    return [spelled.join(`, `), ...(folded.length > 0 ? [t(`mainFailure.moreJobs`, { count: folded.length })] : [])].join(` `);
 };
 const jobsLine = computed(() => jobsLineOf(failure.value.jobs));
 // Each workflow failing, by name, with its jobs and its run. Empty from a daemon that does not say, which leaves the
 // flat job list.
 const workflows = computed(() => failingWorkflowsOf(failure.value, props.runs, props.repo));
-const workflowNames = computed(() => workflows.value.filter((workflow) => workflow.named).map((workflow) => workflow.name));
+// The workflows nothing on its way will measure, which the stalled sentence names.
+const stalledNames = computed(() => workflows.value.filter((workflow) => workflow.named && stalls(workflow.blocker)).map((workflow) => workflow.name));
 
 // The fixer's newest attempt when the fleet has it, else the conversation the failure names, which the chat can still
 // open from the archive.
@@ -93,14 +120,10 @@ const STORY = {
     proving: () => t(`mainFailure.story.proving`, { branch: failure.value.branch }),
     collecting: () => t(`mainFailure.story.collecting`),
     "failed-again": () => t(`mainFailure.story.failedAgain`, { branch: failure.value.branch }),
-    pushed: () =>
-        workflowNames.value.length === 0
-            ? t(`mainFailure.story.pushedUnnamed`, { branch: failure.value.branch })
-            : t(
-                  `mainFailure.story.pushed`,
-                  { branch: failure.value.branch, workflows: workflowNames.value.join(`, `), count: workflowNames.value.length },
-                  workflowNames.value.length,
-              ),
+    stalled: () =>
+        stalledNames.value.length === 0
+            ? t(`mainFailure.story.stalledUnnamed`)
+            : t(`mainFailure.story.stalled`, { workflows: stalledNames.value.join(`, `), count: stalledNames.value.length }, stalledNames.value.length),
     waiting: () => t(`mainFailure.story.waiting`),
     ended: () => t(`mainFailure.story.ended`),
     waits: () => t(`mainFailure.story.waits`, { reason: handBack.value }),
@@ -109,6 +132,12 @@ const STORY = {
 } as const satisfies Readonly<Record<MainFailureStory, () => string>>;
 const story = computed(() => STORY[storyOf(props.view, props.covered, props.runs)]());
 
+// The attempt count rides in the pill once there has been more than one: a failure on its tenth attempt is stuck in a way
+// no single attempt's stance says.
+const attempts = computed(() => {
+    const count = failure.value.attempts ?? 0;
+    return count > 1 ? t(`mainFailure.attempt`, { count }) : undefined;
+});
 // Who has it, as one pill: the agent's live stance while it works (the run rows' own look), "Needs you" once it is
 // handed back, and the way into the agent whenever there is one. Undefined before anybody is on it.
 const pill = computed<(ReturnType<typeof fixStanceLook> & { label: string; link: boolean }) | undefined>(() => {
@@ -179,10 +208,59 @@ const pressFix = (): void => {
     }
 };
 
-// The wall-clock minute it started failing, with its day once it is not today's: "10:20", "Sep 24, 09:10".
-const since = computed(() =>
-    formatDate(failure.value.since) === formatDate(Date.now()) ? formatClock(failure.value.since) : formatDayMonthTime(failure.value.since),
-);
+// The wall-clock minute it started failing, with its day once it is not today's: "10:20", "Sep 24, 09:10". The
+// longest-failing workflow's own start, not when the failure first opened (failingSince).
+const sinceAt = computed(() => failingSince(failure.value));
+const when = (at: number): string => (formatDate(at) === formatDate(Date.now()) ? formatClock(at) : formatDayMonthTime(at));
+const since = computed(() => when(sinceAt.value));
+// A workflow's own start, spelled only where the block names more than one: with one, it is the header's.
+const ownSince = (workflow: FailingWorkflow): string | undefined =>
+    workflow.since === undefined || workflows.value.length < 2 ? undefined : t(`mainFailure.since`, { when: when(workflow.since) });
+
+// What blocks each workflow, in a few words, and the press that clears it (blockerOf). A workflow whose newest run is
+// the failing one says nothing here: the story's sentence is its next step.
+interface BlockerLine {
+    readonly text: string;
+    readonly actions: readonly { readonly label: string; readonly key: string; readonly press: () => void }[];
+}
+const sha7 = (run: PipelineRun): string => run.sha.slice(0, 7);
+const dispatchOf = (workflow: FailingWorkflow) => {
+    const param = { repo: failure.value.repo, runId: workflow.runId };
+    return { label: t(`mainFailure.runNow`), key: dispatchKey(param), press: () => emit(`dispatch`, param) };
+};
+const forgetOf = (workflow: FailingWorkflow) => ({
+    label: t(`mainFailure.stopTracking`),
+    key: forgetKey(failure.value, workflow.name),
+    press: () => emit(`forget`, workflow.name),
+});
+const blockerLine = (workflow: FailingWorkflow): BlockerLine | undefined => {
+    const blocker = workflow.blocker;
+    switch (blocker.kind) {
+        case `measuring`:
+            return { text: t(`mainFailure.blocker.measuring`, { sha: sha7(blocker.run) }), actions: [] };
+        case `cancelled`:
+            return { text: t(`mainFailure.blocker.cancelled`, { sha: sha7(blocker.run) }), actions: [] };
+        case `scheduled`:
+            return { text: t(`mainFailure.blocker.scheduled`), actions: [dispatchOf(workflow)] };
+        case `quiet`:
+            return {
+                text: t(`mainFailure.blocker.quiet`, { when: formatDayMonthTime(blocker.failedAt), drop: formatDayMonthTime(blocker.dropsAt) }),
+                actions: [...(blocker.scheduled ? [dispatchOf(workflow)] : []), forgetOf(workflow)],
+            };
+        default:
+            return undefined;
+    }
+};
+const lines = computed(() => new Map(workflows.value.map((workflow) => [workflow.name, blockerLine(workflow)])));
+
+// Marking the whole failure resolved ends it for every workflow at once, so it asks first; one workflow's Stop tracking
+// does not, since a later failure of it opens it again.
+const resolving = ref(false);
+const resolveKey = computed(() => forgetKey(failure.value, undefined));
+const resolve = (): void => {
+    resolving.value = false;
+    emit(`forget`, undefined);
+};
 
 // THE LANE: a trunk down from the header's glyph and an elbow into each covered row's status glyph (`data-lane-node`,
 // PipelineRunRow), drawn from where they actually sit rather than from row heights this block cannot know: a row
@@ -261,41 +339,77 @@ onBeforeUnmount(() => {
                     <div class="flex min-w-0 flex-col gap-0.5">
                         <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
                             <span class="text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
-                            <span class="text-xs text-subtle" v-tooltip.top="formatTimestamp(failure.since)">{{
-                                t(`mainFailure.since`, { when: since })
-                            }}</span>
+                            <span class="text-xs text-subtle" v-tooltip.top="formatTimestamp(sinceAt)">{{ t(`mainFailure.since`, { when: since }) }}</span>
                         </div>
 
                         <!-- Each workflow failing, linked to its failing run: the one place the reader learns a nightly fails
-                             while every push passes, and the way to its run when the list below does not hold it. -->
-                        <div
+                             while every push passes, and the way to its run when the list below does not hold it. Beside it,
+                             what blocks it from passing and the press that clears it (blockerOf), so a failure nothing will
+                             measure on its own says so where it is read. -->
+                        <ul
                             v-if="workflows.length > 0"
                             data-workflows
-                            class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                            class="flex min-w-0 flex-col gap-1 text-xs"
                             :aria-label="t(`mainFailure.failingJobs`)"
                         >
-                            <a
+                            <li
                                 v-for="workflow in workflows"
                                 :key="workflow.name"
-                                :href="workflow.url"
-                                target="_blank"
-                                rel="noopener"
-                                class="group inline-flex min-w-0 items-center gap-1.5 hover:text-link"
-                                v-tooltip.top="{
-                                    title: t(`mainFailure.openRun`),
-                                    tone: `danger`,
-                                    rows: [
-                                        { label: t(`tip.run`), value: `#${workflow.runId}` },
-                                        { label: t(`mainFailure.failingJobs`), value: workflow.jobs.join(`, `) },
-                                    ],
-                                    note: workflow.listed ? undefined : t(`mainFailure.runNotListed`),
-                                }"
+                                :data-workflow="workflow.name"
+                                :data-blocker="workflow.blocker.kind"
+                                class="group/row flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
                             >
-                                <span v-if="workflow.named" class="shrink-0 font-semibold text-content group-hover:text-link">{{ workflow.name }}</span>
-                                <span class="min-w-0 truncate font-mono text-muted group-hover:text-link">{{ jobsLineOf(workflow.jobs) }}</span>
-                                <Icon name="external-link" class="shrink-0 text-2xs text-subtle group-hover:text-link" />
-                            </a>
-                        </div>
+                                <a
+                                    :href="workflow.url"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="group inline-flex min-w-0 items-center gap-1.5 hover:text-link"
+                                    v-tooltip.top="{
+                                        title: t(`mainFailure.openRun`),
+                                        tone: `danger`,
+                                        rows: [
+                                            { label: t(`tip.run`), value: `#${workflow.runId}` },
+                                            { label: t(`mainFailure.failingJobs`), value: workflow.jobs.join(`, `) },
+                                        ],
+                                        note: workflow.listed ? undefined : t(`mainFailure.runNotListed`),
+                                    }"
+                                >
+                                    <span v-if="workflow.named" class="shrink-0 font-semibold text-content group-hover:text-link">{{ workflow.name }}</span>
+                                    <span class="min-w-0 truncate font-mono text-muted group-hover:text-link">{{
+                                        jobsLineOf(workflow.jobs, workflow.timedOut)
+                                    }}</span>
+                                    <Icon name="external-link" class="shrink-0 text-2xs text-subtle group-hover:text-link" />
+                                </a>
+                                <span v-if="ownSince(workflow) !== undefined" class="shrink-0 text-subtle">{{ ownSince(workflow) }}</span>
+                                <template v-if="lines.get(workflow.name) !== undefined">
+                                    <span data-blocker-text class="min-w-0 text-content">{{ lines.get(workflow.name)?.text }}</span>
+                                    <Button
+                                        v-for="action in lines.get(workflow.name)?.actions ?? []"
+                                        :key="action.key"
+                                        :label="action.label"
+                                        size="small"
+                                        tier="boring"
+                                        :loading="busy === action.key"
+                                        :disabled="busy !== undefined"
+                                        @click="action.press"
+                                    />
+                                </template>
+                                <!-- Any workflow can be let go of by hand; one whose line already offers it as its way forward
+                                     carries no second press. Quiet, and shown on the line's hover where a pointer can. -->
+                                <button
+                                    v-if="workflow.blocker.kind !== `quiet`"
+                                    type="button"
+                                    data-stop-tracking
+                                    :class="ui.iconButton({ size: `sm` }, `shrink-0 md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
+                                    :aria-label="t(`mainFailure.stopTrackingNamed`, { workflow: workflow.name })"
+                                    :disabled="busy !== undefined"
+                                    v-tooltip.top="t(`mainFailure.stopTracking`)"
+                                    @click="forgetOf(workflow).press()"
+                                >
+                                    <Icon name="eye-slash" class="text-2xs" />
+                                </button>
+                            </li>
+                        </ul>
                         <span
                             v-else-if="jobs.shown.length > 0"
                             class="min-w-0 truncate font-mono text-xs text-muted"
@@ -323,7 +437,20 @@ onBeforeUnmount(() => {
                     >
                         <Icon :name="pill.icon" :spin="pill.spin" class="text-2xs" />
                         {{ pill.label }}
+                        <span v-if="attempts !== undefined" data-attempts class="font-normal text-subtle">· {{ attempts }}</span>
                     </component>
+
+                    <!-- Ending the whole failure by hand, for when the reader knows better than the forge: quiet, and asked
+                         first, since every workflow on it goes at once. -->
+                    <Button
+                        data-resolve
+                        :label="t(`mainFailure.resolve`)"
+                        size="small"
+                        tier="quiet"
+                        :loading="busy === resolveKey"
+                        :disabled="busy !== undefined"
+                        @click="resolving = true"
+                    />
 
                     <!-- The run rows' own split button, moved up with the press: the caret re-points the model, and over an
                          agent that already tried, its panel ends in Continue / Start over. -->
@@ -348,6 +475,16 @@ onBeforeUnmount(() => {
         <div v-if="covered.length > 0" :class="toneRim(`danger`, `soft`, `ml-10 divide-y divide-line-subtle border-t`)">
             <slot />
         </div>
+
+        <ConfirmDialog
+            :open="resolving"
+            :header="t(`mainFailure.resolveHeader`, { branch: failure.branch })"
+            :description="t(`mainFailure.resolveDescription`)"
+            :confirm-label="t(`mainFailure.resolve`)"
+            :destructive="false"
+            @cancel="resolving = false"
+            @confirm="resolve"
+        />
 
         <svg
             v-if="lane !== undefined"

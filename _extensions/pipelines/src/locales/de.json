@@ -39,8 +39,6 @@
             "landed": "Die Lösung ist in Ihrem Arbeitsbereich. Committen und pushen Sie sie: Der nächste Lauf auf {branch} zeigt, ob sie wirkt.",
             "needsYou": "Der Auto-Reparatur-Agent wartet auf Sie. Öffnen Sie ihn, um zu antworten.",
             "proving": "Die Lösung ist drin. Ein neuer Lauf auf {branch} prüft sie gerade.",
-            "pushed": "Der Fix ist gepusht und neuere Läufe auf {branch} bestehen, aber {workflows} ist seitdem nicht durchgelaufen. Erst sein eigener nächster Lauf hebt das auf. | Der Fix ist gepusht und neuere Läufe auf {branch} bestehen, aber {workflows} sind seitdem nicht durchgelaufen. Erst ihre eigenen nächsten Läufe heben das auf.",
-            "pushedUnnamed": "Der Fix ist gepusht und neuere Läufe auf {branch} bestehen, aber ein fehlgeschlagener Workflow ist seitdem nicht durchgelaufen. Erst sein eigener nächster Lauf hebt das auf.",
             "ready": "Eine Lösung liegt auf dem Branch des Agenten bereit. Öffnen Sie ihn, um sie zu prüfen und zu übernehmen.",
             "reported": "Die Auto-Reparatur ist aus, daher wurde kein Agent geschickt. Starten Sie einen oder reparieren Sie es von Hand.",
             "unassigned": "Die Auto-Reparatur wartet, bis der Lauf fertig ist, damit ihr Agent alle Fehler auf einmal bekommt. Starten Sie jetzt einen, um nicht zu warten.",
@@ -48,11 +46,27 @@
             "waits": "{reason}: Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden.",
             "working": "Der Auto-Reparatur-Agent ist dran. Jeder neue Fehler auf {branch} geht an denselben Agenten, bis ein Lauf grün ist.",
             "collecting": "Einige Jobs eines neueren Laufs sind fehlgeschlagen. Die automatische Fehlerbehebung sammelt die übrigen Ergebnisse. Wähle „Jetzt beheben“, um früher zu beginnen.",
-            "failedAgain": "Ein neuerer Lauf auf {branch} hat fehlgeschlagene Jobs. Wähle „Jetzt beheben“, um einen weiteren Versuch zu starten."
+            "failedAgain": "Ein neuerer Lauf auf {branch} hat fehlgeschlagene Jobs. Wähle „Jetzt beheben“, um einen weiteren Versuch zu starten.",
+            "stalled": "Der Fix ist gepusht, aber nichts wird {workflows} von selbst erneut ausführen. Seine Zeile oben sagt, wie er sich messen lässt. | Der Fix ist gepusht, aber nichts wird {workflows} von selbst erneut ausführen. Jede Zeile oben sagt, wie er sich messen lässt.",
+            "stalledUnnamed": "Der Fix ist gepusht, aber was fehlgeschlagen ist, hat seitdem nicht wieder bestanden. Erst sein eigener nächster Lauf hebt das auf."
         },
         "title": "{branch} schlägt fehl",
         "fixNow": "Jetzt beheben",
-        "newFailures": "Neue Fehler gefunden"
+        "newFailures": "Neue Fehler gefunden",
+        "attempt": "Versuch {count}",
+        "timedOutJob": "{job} (Zeit überschritten)",
+        "runNow": "Jetzt ausführen",
+        "stopTracking": "Nicht mehr verfolgen",
+        "stopTrackingNamed": "{workflow} nicht mehr verfolgen",
+        "resolve": "Als behoben markieren",
+        "resolveHeader": "{branch} als behoben markieren?",
+        "resolveDescription": "Alle Workflows werden jetzt von diesem Fehler genommen, und der Reparatur-Agent bekommt nichts mehr geschickt. Schlägt ein Workflow erneut fehl, öffnet er ihn wieder.",
+        "blocker": {
+            "measuring": "läuft gerade erneut auf {sha}",
+            "cancelled": "sein neuester Lauf auf {sha} wurde abgebrochen, also hat ihn nichts gemessen: unten erneut ausführen",
+            "scheduled": "läuft nach Zeitplan, nicht bei einem Push: sein nächster Lauf misst ihn",
+            "quiet": "ist seit {when} nicht mehr gelaufen; die Verfolgung endet von selbst am {drop}"
+        }
     },
     "pipelineDag": {
         "step": "Schritt {n}"

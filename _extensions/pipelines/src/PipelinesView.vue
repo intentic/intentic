@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiForgetParam, CiMainFailure, CiRepo, CiRunParam, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import { ciFixTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { CiFix } from "./fixes/ciFixes";
@@ -30,7 +30,7 @@ import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
 import MainFailureBanner from "./fixes/MainFailureBanner.vue";
-import { coveredRuns, leadsRows, mainFailuresOf, type MainFailureView } from "./fixes/mainFailures";
+import { coveredRuns, dispatchKey, forgetKey, leadsRows, mainFailuresOf, type MainFailureView } from "./fixes/mainFailures";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
@@ -45,7 +45,7 @@ import { t } from "./i18n.js";
 // at the head of its repository's runs, with the one fix agent the daemon put on it.
 
 const api = host();
-const { repos: allRepos, runs: allRuns, failures: allFailures, loaded, rerun, cancel, fix } = usePipelines();
+const { repos: allRepos, runs: allRuns, failures: allFailures, loaded, rerun, cancel, dispatch, forget, fix } = usePipelines();
 // The open project's rows only (api.workspace.inProject): runs come from the CI routes, not from repos(), so the view
 // narrows them itself and says on its chip how many repositories it put out of sight.
 const repos = computed(() => allRepos.value.filter((repo) => api.workspace.inProject(repo.repo)));
@@ -223,16 +223,28 @@ const actionKey = (run: PipelineRun): string => `${run.host}:${run.project}:${ru
 const busy = ref<string | undefined>();
 const actionError = ref<string | undefined>();
 
-const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Promise<void> => {
-    busy.value = actionKey(run);
+// One press at a time, under the key its control reads `busy` by; a refusal is said above the board.
+const pressed = async (key: string, press: () => Promise<object>): Promise<void> => {
+    busy.value = key;
     actionError.value = undefined;
     try {
-        await action.mutateAsync(run);
+        await press();
     } catch (failure) {
         actionError.value = errorMessage(failure);
     } finally {
         busy.value = undefined;
     }
+};
+const act = (run: PipelineRun, action: typeof rerun | typeof cancel): Promise<void> => pressed(actionKey(run), () => action.mutateAsync(run));
+// A failing main line's own presses (MainFailureBanner): its workflow started afresh on the branch, and one workflow,
+// or with none named the whole failure, let go of.
+const dispatchRun = (run: CiRunParam): Promise<void> => pressed(dispatchKey(run), () => dispatch.mutateAsync(run));
+const forgetWorkflow = (failure: Pick<CiMainFailure, "repo" | "branch">, workflow: string | undefined): Promise<void> => {
+    const param: CiForgetParam = { repo: failure.repo, branch: failure.branch };
+    if (workflow !== undefined) {
+        param.workflow = workflow;
+    }
+    return pressed(forgetKey(failure, workflow), () => forget.mutateAsync(param));
 };
 
 // `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
@@ -373,6 +385,8 @@ const fixRun = async (
                                         :repo="standing.repo"
                                         :busy="busy"
                                         @fix="fixRun"
+                                        @dispatch="dispatchRun"
+                                        @forget="forgetWorkflow(incident.view.failure, $event)"
                                     >
                                         <PipelineRunRow
                                             v-for="run in incident.covered"

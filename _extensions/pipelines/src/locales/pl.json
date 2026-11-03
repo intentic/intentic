@@ -39,8 +39,6 @@
             "landed": "Poprawka jest w Twojej przestrzeni roboczej. Zrób commit i push: następny przebieg na {branch} pokaże, czy działa.",
             "needsYou": "Agent auto-naprawy czeka na Ciebie. Otwórz go, żeby odpowiedzieć.",
             "proving": "Poprawka jest scalona. Nowy przebieg na {branch} właśnie ją sprawdza.",
-            "pushed": "Poprawka jest wypchnięta i nowsze uruchomienia na {branch} przechodzą, ale {workflows} od tamtej pory nie przeszedł. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu. | Poprawka jest wypchnięta i nowsze uruchomienia na {branch} przechodzą, ale {workflows} od tamtej pory nie przeszły. Zgłoszenie zniknie dopiero po ich własnych kolejnych udanych uruchomieniach.",
-            "pushedUnnamed": "Poprawka jest wypchnięta i nowsze uruchomienia na {branch} przechodzą, ale jeden z nieudanych workflowów od tamtej pory nie przeszedł. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu.",
             "ready": "Poprawka czeka na gałęzi agenta. Otwórz go, żeby ją przejrzeć i scalić.",
             "reported": "Auto-naprawa jest wyłączona, więc nie wysłano agenta. Uruchom go albo napraw ręcznie.",
             "unassigned": "Auto-naprawa czeka, aż przebieg się skończy, żeby jej agent dostał wszystkie błędy naraz. Uruchom go teraz, żeby nie czekać.",
@@ -48,11 +46,27 @@
             "waits": "{reason}: agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury.",
             "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie.",
             "collecting": "Część zadań w nowszym przebiegu nie powiodła się. Auto-naprawa zbiera pozostałe wyniki. Wybierz „Napraw teraz”, żeby zacząć wcześniej.",
-            "failedAgain": "Nowszy przebieg na {branch} ma nieudane zadania. Wybierz „Napraw teraz”, żeby rozpocząć kolejną próbę."
+            "failedAgain": "Nowszy przebieg na {branch} ma nieudane zadania. Wybierz „Napraw teraz”, żeby rozpocząć kolejną próbę.",
+            "stalled": "Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Jego wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć.",
+            "stalledUnnamed": "Poprawka jest wypchnięta, ale to, co się nie powiodło, od tamtej pory nie przeszło. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu."
         },
         "title": "{branch} nie przechodzi",
         "fixNow": "Napraw teraz",
-        "newFailures": "Wykryto nowe błędy"
+        "newFailures": "Wykryto nowe błędy",
+        "attempt": "próba {count}",
+        "timedOutJob": "{job} (przekroczony czas)",
+        "runNow": "Uruchom teraz",
+        "stopTracking": "Przestań śledzić",
+        "stopTrackingNamed": "Przestań śledzić {workflow}",
+        "resolve": "Oznacz jako rozwiązane",
+        "resolveHeader": "Oznaczyć {branch} jako rozwiązane?",
+        "resolveDescription": "Wszystkie workflowy schodzą teraz z tego zgłoszenia, a agent naprawy nie dostaje już nic więcej. Workflow, który znów się nie powiedzie, otworzy je ponownie.",
+        "blocker": {
+            "measuring": "właśnie działa ponownie na {sha}",
+            "cancelled": "jego najnowsze uruchomienie, na {sha}, zostało anulowane, więc nic go nie zmierzyło: uruchom je ponownie poniżej",
+            "scheduled": "działa według harmonogramu, nie po pushu: zmierzy go jego następne uruchomienie",
+            "quiet": "nie był uruchamiany od {when}; śledzenie skończy się samo {drop}"
+        }
     },
     "pipelineDag": {
         "step": "Krok {n}"
