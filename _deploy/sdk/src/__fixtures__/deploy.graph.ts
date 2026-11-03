@@ -608,7 +608,7 @@ export const expectedGraph: DesiredStateGraph = {
                         port: 23104,
                     },
                 ],
-                image: "cloudflare/cloudflared:2026.10.4@sha256:c6c7ae1d5dfdcb094ad344ed68ccffc26635c9c6be80965664c33baf064b0515",
+                image: "cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba",
             },
             dependsOn: ["cf", "host"],
         },
