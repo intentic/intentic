@@ -378,7 +378,19 @@ fi
 # 7. the deep link, into the app that is already running
 # xdg-open, not a direct argv call: this is the route a link takes from an external browser, and it exercises
 # the MIME entry and the handler lookup along with the app's own forwarding.
-WORKSPACE_WINDOW=$(mapped_windows | head -1 || true)
+# Read until exactly one window answers. xdotool exits on the BadWindow a window gone mid-search raises (Xlib's
+# default handler), and the app maps and drops short-lived windows of its own: one read caught that, came back
+# empty, and failed the "original window" check below with the workspace window right there (run 41704324555).
+WORKSPACE_WINDOW=""
+for _ in $(seq 20); do
+    ids=$(mapped_windows 2>/dev/null || true)
+    if [ "$(printf '%s\n' "$ids" | grep -c .)" -eq 1 ]; then
+        WORKSPACE_WINDOW=$ids
+        break
+    fi
+    sleep 0.5
+done
+[ -n "$WORKSPACE_WINDOW" ] || fail "the workspace window could not be told apart before the link (mapped: ${ids:-none})"
 rm -f "$SETUP_MARKER"
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
