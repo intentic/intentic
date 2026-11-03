@@ -12,7 +12,7 @@ test("every code the wire names has a row, and the table names no code the wire 
     }
 });
 
-// The door set as policy/turned-away.ts kept it by hand until the table: refused before the model saw a word.
+// The door course names the codes refused before the model saw a word.
 test("the codes turned away at the door are exactly the eighteen refused before the model saw a word", () => {
     const door = codesWhere((code) => failureCourseOf(code) === "door");
     expect(door).toEqual(

@@ -7,7 +7,7 @@ import { breakPolicyFor } from "../turn/break-policy.js";
 
 // A TURN WHOSE OWN VIEW OF THE WORKSPACE DID NOT COME UP IN TIME. Its namespace holder said nothing for the whole quiet
 // bound twice, a second apart (withSetupRetry), with the daemon awake to hear it: the sandbox too loaded to set the turn
-// up. Nothing ran, so the turn is turned away at the door with a code of its own (`workspace-setup`, turned-away.ts) and
+// up. Nothing ran, so the turn is turned away at the door with a code of its own (`workspace-setup`, failure-codes.ts) and
 // held like a memory hold: sent again by itself once the sandbox has had room a while (turn-resume.ts, releaseRoomHolds),
 // where the conversation's answer to the memory wall is to resend. Before this, the holder's raw error ("namespace setup
 // timed out: ") was the turn's only word, and the person pressed Continue themselves (2026-10-13, mellow-harbor-rk0i).

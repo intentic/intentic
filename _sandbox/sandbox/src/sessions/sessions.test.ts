@@ -344,7 +344,7 @@ test("reads a dismissed question back as cancelled, and one with no result as fr
 
     const asked = messages.flatMap((message) => (message.question === undefined ? [] : [message.question]));
     expect(asked.map((question) => question.status)).toEqual(["cancelled", "cancelled"]);
-    expect(messages.at(-1)?.tools?.[0]?.status).toBe("in_progress");
+    expect(messages.at(-1)?.tools?.[0]?.status).toBe("interrupted");
 });
 
 // The SDK files a fresh assistant message around every content block, so three calls between two sentences are stored
@@ -396,7 +396,7 @@ test("the tail is the turn begun at `since`, not the session it sits at the end 
     ]);
     const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000);
     expect(messages.map((message) => message.text)).toEqual(["now the printer", ""]);
-    expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Bash", status: "in_progress" });
+    expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Bash", status: "interrupted" });
 });
 
 // A long turn waiting on background agents takes each one's report as a stored user message; cutting at the last of
@@ -544,12 +544,12 @@ test("a compacted chain's summary restores as the compaction notice the live tur
     ]);
 });
 
-test("a call whose result never arrived stays in progress rather than claiming it finished", async () => {
+test("a call whose result never arrived is interrupted when its stored turn ends", async () => {
     getSessionMessages.mockResolvedValue([
         { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "sleep 100" } }] } },
     ]);
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
-    expect(messages[0]?.tools?.[0]?.status).toBe("in_progress");
+    expect(messages[0]?.tools?.[0]?.status).toBe("interrupted");
 });
 
 // An archived agent's transcript is keyed by a retired worktree path the dir-scoped search no longer reaches, so the

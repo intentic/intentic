@@ -58,7 +58,7 @@ const toolCall = (tool: TranscriptTool, cwd: string): SessionUpdate => {
         toolCallId: tool.id,
         title: tool.target !== undefined ? `${tool.name}: ${tool.target}` : tool.name,
         kind: tool.category,
-        status: tool.status,
+        status: tool.status === "interrupted" ? "failed" : tool.status,
         ...(locations !== undefined ? { locations } : {}),
         ...(content !== undefined ? { content } : {}),
     };
@@ -70,7 +70,7 @@ const toolCallUpdate = (tool: TranscriptTool, cwd: string): SessionUpdate => {
     return {
         sessionUpdate: "tool_call_update",
         toolCallId: tool.id,
-        status: tool.status,
+        status: tool.status === "interrupted" ? "failed" : tool.status,
         ...(locations !== undefined ? { locations } : {}),
         ...(content !== undefined ? { content } : {}),
     };

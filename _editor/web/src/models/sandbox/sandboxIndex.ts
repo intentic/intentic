@@ -51,6 +51,12 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`sandbox.search.overviewResources`)],
     },
     {
+        id: `overview-gpu`,
+        slug: `overview`,
+        title: () => t(`sandbox.sandboxOverview.gpu`),
+        terms: () => [t(`sandbox.sandboxOverview.gpuOnRequest`), t(`sandbox.sandboxOverview.gpuAll`)],
+    },
+    {
         id: `overview-fence`,
         slug: `overview`,
         title: () => t(`sandbox.networkFence.rowLabel`),

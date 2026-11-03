@@ -14,7 +14,7 @@ const CHECKLIST_TOOLS = new Set(["TodoWrite", "TaskCreate", "TaskUpdate", "TaskL
 const DELEGATING_TOOLS = new Set(["Task", "Agent"]);
 
 // A call's status as its step's.
-const TOOL_STEP = { pending: "running", in_progress: "running", completed: "done", failed: "failed" } as const satisfies Record<ToolCallStatus, ListenerStep["status"]>;
+const TOOL_STEP = { pending: "running", in_progress: "running", completed: "done", failed: "failed", interrupted: "failed" } as const satisfies Record<ToolCallStatus, ListenerStep["status"]>;
 
 // A subagent's status as its step's; one still at work (or parked) leaves the step as it was.
 const subagentStepStatus = (status: SubagentStatus | undefined): ListenerStep["status"] | undefined => {

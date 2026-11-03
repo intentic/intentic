@@ -39,6 +39,7 @@ export const agentsSamples: GroupSamples<`agents`> = ({ fleet }) => ({
     // The refused land read again, settled by hand, and its committed work found in history.
     conflicts: { id: fleet.CONFLICT_AGENT_ID },
     settle: { id: fleet.CONFLICT_AGENT_ID },
+    settleClone: { id: fleet.REVIEW_AGENT_ID, dir: `api/vendor`, action: `fold` },
     history: { id: fleet.CONFLICT_AGENT_ID },
     // Filed and brought back, then filed again and the archive emptied; the discard takes a card nothing else reads.
     archive: { ids: [fleet.CONFLICT_AGENT_ID] },

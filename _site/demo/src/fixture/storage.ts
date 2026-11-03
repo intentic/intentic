@@ -1,6 +1,7 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import {
     STORAGE_CLEANABILITY,
+    type DiskPressure,
     type StorageCategoryId,
     type StorageCategoryUsage,
     type StorageCleanResult,
@@ -171,7 +172,7 @@ const usageOf = (id: StorageCategoryId, category: DemoCategory): StorageCategory
     };
 };
 
-const scanAt = (finishedAt: number): StorageScan => {
+const scanAt = (finishedAt: number) => {
     const categories = (Object.entries(DEMO_DISK) as [StorageCategoryId, DemoCategory][])
         .map(([id, category]) => usageOf(id, category))
         .filter((category) => category.bytes > 0)
@@ -185,7 +186,7 @@ const scanAt = (finishedAt: number): StorageScan => {
         disk: { usedBytes: Math.round(counted + 1.6 * GIB), totalBytes: 100 * GIB },
         categories,
         unreadable: 0,
-    };
+    } satisfies StorageScan;
 };
 
 // Measured three days before the demo opened and kept across the box's restarts since, so the card opens on a figure
@@ -197,6 +198,14 @@ const SCAN_MS = 4_000;
 let running: { readonly timer: ReturnType<typeof setTimeout>; readonly done: PromiseWithResolvers<StorageReport> } | undefined;
 
 export const demoStorageReport = (): StorageReport => ({ scan: last, scanning: running !== undefined });
+
+export const demoDiskPressure = (): DiskPressure => ({
+    level: "ok",
+    freeBytes: last.disk.totalBytes - last.disk.usedBytes,
+    totalBytes: last.disk.totalBytes,
+    measuredAt: last.finishedAt,
+    using: last.categories.slice(0, 3).map(({ id, bytes }) => ({ id, bytes })),
+});
 
 export const demoStorageScan = (): Promise<StorageReport> => {
     if (running !== undefined) {
