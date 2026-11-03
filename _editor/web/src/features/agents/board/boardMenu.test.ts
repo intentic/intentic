@@ -1,6 +1,7 @@
 // The one card menu, through the real board: a right-click opens it on the card pressed, with that card's rows, and its
 // Open row points the chat at that card. Unit-level rows are view/cardMenu.test.ts; this pins the board's wiring.
 import "@intentic/testing/dom";
+import { waitFor } from "@intentic/testing/bun";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { t } from "@intentic/ui/i18n";
@@ -65,7 +66,12 @@ const landed = (id: string): AgentSummary => ({
 
 // The menu's rows, wherever PrimeVue drew its overlay; a row's press sits on its link.
 const menuRows = (): string[] => [...document.querySelectorAll(`[role="menuitem"]`)].map((row) => row.getAttribute(`aria-label`) ?? ``);
-const pressRow = (label: string): void => document.querySelector<HTMLElement>(`[role="menuitem"][aria-label="${label}"] a`)!.click();
+const pressRow = async (label: string): Promise<void> => {
+    const row = document.querySelector<HTMLElement>(`[role="menuitem"][aria-label="${label}"] a`)!;
+    // Rows mount before PrimeVue's enter transition focuses the menu. Let that handoff finish before Rename focuses its field.
+    await waitFor(() => expect(document.activeElement).toBe(row.closest(`[role="menubar"]`)));
+    row.click();
+};
 
 it(`opens on the card right-clicked, with that card's rows, and points the chat at it from Open`, async () => {
     setAgents([landed(`a1`), landed(`a2`)], 100);
@@ -82,7 +88,7 @@ it(`opens on the card right-clicked, with that card's rows, and points the chat 
         t(`agents.agentsView.copySessionName`),
         t(`agents.agentsView.archive`),
     ]);
-    pressRow(t(`ui.action.open`));
+    await pressRow(t(`ui.action.open`));
     await settle();
     expect(useChat().activeId.value).toBe(`a2`);
 });
@@ -103,7 +109,9 @@ it(`opens from the card's ⋯ as well, and renames the card in place from it`, a
     header.querySelector<HTMLElement>(`button[aria-label="${t(`ui.action.moreActions`)}"]`)!.click();
     await settle();
     expect(menuRows()).toContain(t(`ui.action.rename`));
-    pressRow(t(`ui.action.rename`));
+    await pressRow(t(`ui.action.rename`));
     await settle();
-    expect(card.querySelector<HTMLInputElement>(`input[aria-label="${t(`agents.words.agentTitle`)}"]`)?.value).toBe(`agent a1`);
+    const input = card.querySelector<HTMLInputElement>(`input[aria-label="${t(`agents.words.agentTitle`)}"]`);
+    expect(input?.value).toBe(`agent a1`);
+    expect(document.activeElement).toBe(input);
 });
