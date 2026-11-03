@@ -1,4 +1,4 @@
-import type { CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiForgetParam, CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { API_MAIN_FIXER_ID, WEB_MAIN_FIXER_ID } from "./fleet";
 
 // acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,
@@ -356,11 +356,30 @@ export const ciRunsResponse = (
     runs: [...reruns.map((run) => rerunAt(run, now)), ...(mainFailing ? [...branchRuns(now, green), ...mainFailureRuns(now)] : branchRuns(now, green))]
         .map((run) => withCancel(run, now))
         .toSorted((left, right) => right.createdAt - left.createdAt),
-    failures: mainFailing ? mainFailures(now) : [],
+    failures: mainFailing ? trackedFailures(now) : [],
 });
 
-// RERUN AND CANCEL: what the board's buttons do here. A rerun is a new run of the same commit, played at ten pipeline
-// seconds per real one (the whole graph in about forty seconds), and it passes: the failures on this board are flaky
+const forgotten = new Set<string>();
+const failureKey = ({ repo, branch, workflow }: CiForgetParam): string => JSON.stringify([repo, branch, workflow]);
+
+const trackedFailures = (now: number): CiMainFailure[] => mainFailures(now).flatMap((failure) => {
+    if (forgotten.has(failureKey(failure))) {
+        return [];
+    }
+    const workflows = failure.workflows?.filter((workflow) => !forgotten.has(failureKey({ ...failure, workflow: workflow.name })));
+    if (workflows === undefined) {
+        return [failure];
+    }
+    return workflows.length === 0 ? [] : [{ ...failure, workflows, jobs: [...new Set(workflows.flatMap((workflow) => workflow.jobs))] }];
+});
+
+/** Stops tracking a workflow or the whole branch, while retaining its historical runs. */
+export const forgetCi = (target: CiForgetParam): void => {
+    forgotten.add(failureKey(target));
+};
+
+// What the board's run buttons do here. A rerun keeps its commit; a dispatch uses its branch's newest recorded commit.
+// Both play at ten pipeline seconds per real one (the whole graph in about forty seconds), and pass: its failures are flaky
 // or fixed. A cancel stops a running run where it stands.
 
 const PIPELINE_SPEED = 10;
@@ -410,18 +429,36 @@ const withCancel = (run: PipelineRun, now: number): PipelineRun => {
         : { ...run, status: `canceled`, durationSeconds: Math.round((Math.min(now, at) - run.createdAt) / 1000) };
 };
 
-/** Starts the run again on the same commit, as a new run with the forge's next id. */
-export const rerunCi = (repo: string, runId: number, now: number): PipelineRun | undefined => {
-    const base = [...reruns, ...allRuns(now)].find((run) => run.repo === repo && run.runId === runId);
+const startCi = (repo: string, runId: number, now: number, fresh: boolean): PipelineRun | undefined => {
+    const recorded = allRuns(now);
+    const known = [...reruns, ...recorded];
+    const base = known.find((run) => run.repo === repo && run.runId === runId);
     if (base === undefined) {
         return undefined;
     }
-    const next = Math.max(...[...reruns, ...allRuns(now)].filter((run) => run.repo === repo).map((run) => run.runId)) + 1;
+    const head = fresh
+        ? recorded.filter((run) => run.repo === repo && run.branch === base.branch).reduce((latest, run) => run.createdAt > latest.createdAt ? run : latest)
+        : base;
+    const next = Math.max(...known.filter((run) => run.repo === repo).map((run) => run.runId)) + 1;
     const { failedJobs: _failed, durationSeconds: _took, ...rest } = base;
-    const run: PipelineRun = { ...rest, runId: next, status: `running`, createdAt: now, trigger: `retry`, url: base.url.replace(String(runId), String(next)) };
+    const run: PipelineRun = {
+        ...rest,
+        sha: head.sha,
+        runId: next,
+        status: `running`,
+        createdAt: now,
+        trigger: fresh ? (base.host === `github` ? `workflow_dispatch` : `web`) : `retry`,
+        url: base.url.replace(String(runId), String(next)),
+    };
     reruns.unshift(run);
     return run;
 };
+
+/** Starts the run again on the same commit, as a new run with the forge's next id. */
+export const rerunCi = (repo: string, runId: number, now: number): PipelineRun | undefined => startCi(repo, runId, now, false);
+
+/** Starts its workflow on the newest recorded commit of the same branch. */
+export const dispatchCi = (repo: string, runId: number, now: number): PipelineRun | undefined => startCi(repo, runId, now, true);
 
 /** Cancels a run still going; one that has ended answers as it was. */
 export const cancelCi = (repo: string, runId: number, now: number): boolean => {
