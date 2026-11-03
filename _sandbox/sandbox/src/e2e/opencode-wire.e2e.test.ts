@@ -31,9 +31,6 @@ const tier = e2eTier("opencode wire conformance", { enabledBy: "INTENTIC_E2E_PRO
 const MODEL_ID = "conformance-model";
 const AUTH_TOKEN = "intentic-opencode-conformance";
 
-// Not the SDK's default (4096); a real sandbox's warm server listens there, tying the result to the host.
-const TIER_PORT = 45096;
-
 // What the person says when they refuse the held command, and the words the MCP tool answers with: each is how the
 // scripted model knows the tool's result reached it.
 const REFUSAL_FEEDBACK = "Open a pull request instead of pushing.";
@@ -231,8 +228,8 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             // Gemini wiring pointed at loopback; text-only inputModalities, since these scenarios send no images.
             gemini: { baseUrl: model.baseUrl, token: AUTH_TOKEN, models: async () => [{ id: MODEL_ID, inputModalities: ["text"] }] },
             workspaceRoot: workspace,
-            // Off the daemon's own port: the default is already bound by a running sandbox, failing this boot opaquely.
-            port: TIER_PORT,
+            // No port: the kernel picks a free one, as it does for the daemon's own server. A fixed one here (45096, in the
+            // ephemeral range) was taken on CI by something else on the host, failing the boot (run 41710820321).
         });
         // Booted here, not in the first test, so a failing server fails as setup, not as whichever scenario ran first.
         await service.client();
