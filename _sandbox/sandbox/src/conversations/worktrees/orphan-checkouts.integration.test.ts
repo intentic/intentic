@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UnitOwners } from "../../store/conversation-units.js";
 import { overlaysDir, overlaysRoot } from "./isolation.js";
-import { orphanCheckoutsChore, type OrphanCheckoutsDeps, sweepOrphanCheckouts } from "./orphan-checkouts.js";
+import {
+    LEFTOVER_PRESS_MIN_AGE_MS,
+    LeftoverRefused,
+    leftoverRefusal,
+    orphanCheckoutsChore,
+    type OrphanCheckoutsDeps,
+    sweepOrphanCheckouts,
+    trashLeftover,
+} from "./orphan-checkouts.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -100,4 +108,30 @@ test("the chore is the daily orphan-checkouts one, and an empty volume is no fai
     expect(chore.name).toBe("orphan-checkouts");
     expect(chore.everyMs).toBe(DAY_MS);
     await chore.run();
+});
+
+describe("a leftover moved to the trash on a person's press", () => {
+    it("goes minutes after its last change rather than a day, checkout to the trash and overlay removed", async () => {
+        const root = await historyRoot();
+        await conversationOnDisk(root, "gone-one");
+        const later = Date.now() + LEFTOVER_PRESS_MIN_AGE_MS + 60_000;
+        await trashLeftover(depsFor(root, ["owned-one"], database(["owned-one"]), later), "gone-one");
+        expect(await readdir(join(root, "worktrees"))).toEqual([]);
+        expect(await readdir(overlaysRoot(root))).toEqual([]);
+        expect(await readFile(join(root, "trash", `gone-one-checkout-${String(later)}`, "src", "draft.ts"), "utf8")).toBe("uncommitted\n");
+    });
+
+    it("refuses, saying why, what a conversation owns, what just changed, and while the registry cannot answer", async () => {
+        const root = await historyRoot();
+        await conversationOnDisk(root, "gone-one");
+        await conversationOnDisk(root, "owned-one");
+        const later = Date.now() + LEFTOVER_PRESS_MIN_AGE_MS + 60_000;
+        await expect(trashLeftover(depsFor(root, ["owned-one"], database(["owned-one"]), later), "owned-one")).rejects.toThrow("a conversation owns it");
+        await expect(trashLeftover(depsFor(root, ["owned-one"], database(["owned-one"]), Date.now()), "gone-one")).rejects.toThrow(LeftoverRefused);
+        expect(leftoverRefusal(depsFor(root, ["owned-one"], database(["owned-one"], true), later), "gone-one")).toBe(
+            "the sandbox cannot say for certain which conversations exist right now",
+        );
+        expect(leftoverRefusal(depsFor(root, ["owned-one"], database(["owned-one"]), later), ".not-a-conversation")).toBe("not a conversation's directory");
+        expect((await readdir(join(root, "worktrees"))).toSorted()).toEqual(["gone-one", "owned-one"]);
+    });
 });

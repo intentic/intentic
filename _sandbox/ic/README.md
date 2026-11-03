@@ -528,6 +528,26 @@ flowchart LR
     with `wsl --manage <distro> --set-sparse false`: a dynamic VHDX that is not sparse reuses what a trim frees inside
     itself and fragments only as it grows, at the cost of no longer handing that space back to Windows. One that
     cannot be changed (the distro already running, a disk too fragmented to fill its holes) starts as it is, with a note.
+  - **Its disk, watched (2026-11-03).** Every sandbox and every compose project on the engine writes to its one ext4
+    disk. On rog one sandbox's history volume (462 GB of Rust `target/`) filled it and an unrelated Postgres of the
+    owner's PANICked on ENOSPC, with nothing said: WSL's and Windows' own `df` show other disks, a sandbox's disk watch
+    cleans only its own checkouts, and tidy runs daily. `ic engine disk` ([src/engine/disk.rs](src/engine/disk.rs))
+    reads it with one `df` through `wsl.exe --exec`, only while the distro runs (`wsl -d` would start a stopped one), and
+    answers a level off what a process that is not root may still write, since ext4 keeps 5% back for root (54 GB on
+    rog) and a database in a container is not root: `ok`, `low` under 10% of the disk (the sandboxes' own watch says low
+    at the same share), `critical` under 5%, `full` under the size of the ballast the keeper holds back
+    ([engine/README.md](engine/README.md#its-disk)). `--json` is the machine agent's.
+    `--consumers` names what takes the space and whose it is
+    ([src/engine/disk_consumers.rs](src/engine/disk_consumers.rs)): ic's labels and volume and image families name a
+    sandbox, `com.docker.compose.project` a compose project, images count only the space no other image shares. It is
+    one `docker system df -v`, which sizes every volume by walking it (a minute once on rog, not done after ten minutes
+    under load the next time), so it is kept in `~/.intentic/engine/disk-consumers.json` for `--max-age` minutes and
+    bounded at thirty; `--kept` answers from the kept one at any age and never measures. `--relieve` clears what is
+    nobody's data, more at each level: dangling build cache and dangling images when low, all unused build cache when
+    critical, and when full first the ballast, then the same. Never a volume, never an image with a name (tidy decides
+    those), and never during a move between engines (the read still runs). Rejected: telling from the sandboxes alone.
+    Each one sees this disk through its own volume and says low, but it can neither name the owner's compose database
+    nor clear the engine's cache.
   - **A network of its own.** WSL's distros share one network namespace, and Docker Desktop keeps its engine in its
     own; since rootfs 1.1.0 ours does too. The keeper (written into the distro by every start, from
     [engine/rootfs/](engine/rootfs/)) runs dockerd in the namespace `intentic`, with pasta for the way out, a

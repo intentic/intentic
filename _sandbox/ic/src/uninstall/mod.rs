@@ -7,6 +7,9 @@ mod inventory;
 mod plan;
 mod steps;
 
+/// Docker's size words read as bytes, which the engine's disk watch reads too (engine/disk.rs).
+pub use inventory::parse_docker_size;
+
 use std::path::PathBuf;
 
 use crate::ui;

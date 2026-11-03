@@ -89,6 +89,11 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "cache/sccache/", category: "buildCaches", depth: 0 },
     // Turborepo drops its cache beside the git dirs it resolves a worktree's root through.
     { root: "history", prefix: "gits/.turbo/", category: "buildCaches", depth: 0 },
+    // Frozen Cargo targets every checkout's overlay reads through (conversations/worktrees/cargo-warm.ts, 2026-11-04): the
+    // shared part of the checkouts' build output, so counted with the checkouts and as protected as they are. A build
+    // cache would be cleanable file by file, and a clean of a snapshot a live overlay reads would corrupt every checkout
+    // reading it; unused ones retire on their own (retireWarmSnapshots).
+    { root: "history", prefix: "cargo-warm/", category: "checkouts", depth: 1, protected: true },
     { root: "history", prefix: "scopes/", category: "restorePoints", depth: 1, protected: true },
     { root: "history", prefix: "worktrees/", category: "checkouts", depth: 1, protected: true },
     { root: "history", prefix: "overlays/", category: "checkouts", depth: 1, protected: true },
@@ -173,8 +178,10 @@ export interface StorageClassification {
 // Build output found inside a checkout: the folder itself is the item, and everything below it is the same.
 export const buildOutputClassification = (rel: string): StorageClassification => ({ category: "buildOutputs", item: rel, unit: true, settled: true });
 
-// Whether a history-relative path lies inside one conversation's checkout, deep enough to hold a build tool's output.
-export const insideCheckout = (root: StorageRootKind, rel: string): boolean => root === "history" && rel.startsWith("worktrees/") && segments(rel).length > 2;
+// Whether a history-relative path lies inside one conversation's checkout, deep enough to hold a build tool's output,
+// or is one of its overlay layers (`overlays/<id>/<layer>`), where a shared Cargo target's own writes live (cargo-warm.ts).
+export const insideCheckout = (root: StorageRootKind, rel: string): boolean =>
+    root === "history" && ((rel.startsWith("worktrees/") && segments(rel).length > 2) || (rel.startsWith("overlays/") && segments(rel).length === 3));
 
 // One path's category, keyed by the root it sits in; `rel` is root-relative with forward slashes.
 export const classifyStoragePath = (root: StorageRootKind, rel: string): StorageClassification => {

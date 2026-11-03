@@ -143,7 +143,53 @@ export const removeQuietly = async (path: string): Promise<void> => {
     }
 };
 
+// INCREMENTAL FIRST (2026-11-03). Of one shinobi checkout's 32 GB `target/`, 16 GB was `debug/incremental`: rustc's
+// per-session cache for the workspace's own crates, the half that only speeds up the next edit of the same session. It
+// goes after an hour idle, the rest of the output after the settings' idle hours; a build after that recompiles the
+// workspace's crates once, never the dependencies.
+const INCREMENTAL = "incremental";
+
+// A Cargo target's incremental caches: `<target>/<profile>/incremental`, and `<target>/<triple>/<profile>/incremental`
+// for a cross build (the wasm32 one beside debug/).
+const incrementalDirs = async (target: string): Promise<string[]> => {
+    const found: string[] = [];
+    const walk = async (dir: string, depth: number): Promise<void> => {
+        const entries = (await readdir(dir, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
+        for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
+            const path = join(dir, entry.name);
+            if (entry.name === INCREMENTAL) {
+                found.push(path);
+            } else if (depth < 2) {
+                await walk(path, depth + 1);
+            }
+        }
+    };
+    await walk(target, 0);
+    return found;
+};
+
+// A Cargo target by name beside its Cargo.toml, or by Cargo's own tag.
+const isCargoTarget = async (path: string): Promise<boolean> =>
+    (basename(path) === "target" && (await pathExists(join(dirname(path), "Cargo.toml")))) || cargoTagged(path);
+
+// Which part of a build output a pass takes: all of it, or only Cargo's incremental caches.
+export type PruneScope = "all" | "incremental";
+
+// What a pass removes of one build output folder it found: the folder itself, or the incremental caches inside it when
+// it is a Cargo target (a Gradle or Flutter folder has none, and is left whole for the full pass).
+const unitsOf = async (path: string, scope: PruneScope): Promise<string[]> => {
+    if (scope === "all") {
+        // An empty one frees nothing, and under a shared Cargo target it is the overlay's mount point: removed from the
+        // daemon's side it would unmount the layer inside a namespace still holding it (cargo-warm.ts).
+        const entries = (await readdir(path).catch(undefinedIfMissing)) ?? [];
+        return entries.length === 0 ? [] : [path];
+    }
+    return (await isCargoTarget(path)) ? incrementalDirs(path) : [];
+};
+
 export interface PruneOptions {
+    // `incremental` removes only Cargo's incremental caches; `all`, the default, every build output folder whole.
+    readonly scope?: PruneScope;
     // Asked before each folder: false leaves the rest for a later pass (a turn opened in the checkout meanwhile).
     readonly proceed?: () => boolean;
     // A pause between folders, so a sweep of many spreads its IO rather than taking the disk in one burst.
@@ -164,22 +210,24 @@ export const pruneBuildOutputs = async (
         return { removed, failed, skipped };
     }
     const remove = options.remove ?? removeQuietly;
-    for (const path of await findBuildOutputs(checkout)) {
-        if (!(await disposable(checkout, path))) {
+    for (const output of await findBuildOutputs(checkout)) {
+        if (!(await disposable(checkout, output))) {
             continue;
         }
-        if (options.proceed?.() === false) {
-            skipped.push(relative(checkout, path));
-            continue;
-        }
-        if (removed.length + failed.length > 0) {
-            await sleep(options.paceMs ?? 0);
-        }
-        try {
-            await remove(path);
-            removed.push(relative(checkout, path));
-        } catch {
-            failed.push(relative(checkout, path));
+        for (const path of await unitsOf(output, options.scope ?? "all")) {
+            if (options.proceed?.() === false) {
+                skipped.push(relative(checkout, path));
+                continue;
+            }
+            if (removed.length + failed.length > 0) {
+                await sleep(options.paceMs ?? 0);
+            }
+            try {
+                await remove(path);
+                removed.push(relative(checkout, path));
+            } catch {
+                failed.push(relative(checkout, path));
+            }
         }
     }
     return { removed, failed, skipped };

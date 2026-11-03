@@ -6,19 +6,22 @@ import type { HistorySpace } from "./checkout-space.js";
 // THE DISK-PRESSURE WATCH (2026-11-03). On 11-02 shinobi's history volume went from 4% free to nothing in seventeen
 // minutes; five conversations' rebases died half-written, and the only word anywhere was Claude Code's own "Disk full"
 // banner. Nothing in the sandbox looked at the disk between hourly sweeps. This looks once a minute, and:
-// - under REAP_BELOW free, removes build output from settled checkouts (landed first, then the longest idle) until the
-//   volume is back over it: the one thing on a full disk that is large, regenerable and nobody's work;
+// - under REAP_BELOW free (the settings' threshold), removes build output from settled checkouts (landed first, then
+//   the longest idle) until the volume is back over it: the one thing on a full disk that is large, regenerable and
+//   nobody's work;
 // - under LOW_BELOW and CRITICAL_BELOW, tells the owner once per level (a push, and the attention row the editor
 //   draws while the level stands), and again only after the disk has been back over REAP_BELOW, so a volume that
 //   hovers at 9% is said once, not every minute.
 // Fractions of the volume rather than bytes: the same 50 GB is a crisis on a 200 GB disk and a margin on 4 TB.
-const REAP_BELOW = 0.15;
+// (2026-11-03) REAP_BELOW is the default of the settings' `diskReapBelowPercent`: on a disk the sandbox shares with other
+// sandboxes and the owner's own containers (a local engine), the owner may want room kept sooner.
+export const REAP_BELOW = 0.15;
 const LOW_BELOW = 0.1;
 const CRITICAL_BELOW = 0.05;
 
 const RANK = { ok: 0, reaping: 1, low: 2, critical: 3 } as const satisfies Record<DiskPressureLevel, number>;
 
-export const pressureLevel = (space: HistorySpace): DiskPressureLevel => {
+export const pressureLevel = (space: HistorySpace, reapBelow: number = REAP_BELOW): DiskPressureLevel => {
     if (space.totalBytes <= 0) {
         return "ok";
     }
@@ -29,7 +32,7 @@ export const pressureLevel = (space: HistorySpace): DiskPressureLevel => {
     if (free < LOW_BELOW) {
         return "low";
     }
-    return free < REAP_BELOW ? "reaping" : "ok";
+    return free < reapBelow ? "reaping" : "ok";
 };
 
 // The categories a warning names as what is using the disk.
@@ -43,6 +46,8 @@ const usingOf = (scan: StorageScan | undefined): DiskPressure["using"] =>
 
 export interface DiskPressureDeps {
     readonly read: () => Promise<HistorySpace>;
+    // The reaping threshold as a fraction of the volume, read each tick; REAP_BELOW where nothing sets it.
+    readonly reapBelow?: () => Promise<number>;
     // Removes settled checkouts' build output until `enough`; resolves how many checkouts it took some from.
     readonly reap: (enough: () => Promise<boolean>) => Promise<number>;
     readonly lastScan: () => Promise<StorageScan | undefined>;
@@ -67,14 +72,15 @@ export const createDiskPressureWatch = (deps: DiskPressureDeps): DiskPressureWat
     let told: DiskPressureLevel = "ok";
     const tick = async (): Promise<void> => {
         const before = await deps.read();
+        const reapBelow = (await deps.reapBelow?.()) ?? REAP_BELOW;
         let space = before;
-        let level = pressureLevel(before);
+        let level = pressureLevel(before, reapBelow);
         let reaped = state.reaped;
         if (level !== "ok") {
-            const checkouts = await deps.reap(async () => pressureLevel(await deps.read()) === "ok");
+            const checkouts = await deps.reap(async () => pressureLevel(await deps.read(), reapBelow) === "ok");
             if (checkouts > 0) {
                 space = await deps.read();
-                level = pressureLevel(space);
+                level = pressureLevel(space, reapBelow);
                 reaped = { bytes: Math.max(0, space.freeBytes - before.freeBytes), checkouts, at: deps.now() };
                 deps.logger.info({ ...reaped, level }, "storage: the disk was short; removed build output from settled checkouts");
             }

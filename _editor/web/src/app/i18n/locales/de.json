@@ -1084,6 +1084,10 @@
             "howItWorksNote": "Der geteilte Workspace bleibt",
             "unlink": "Verknüpfung lösen",
             "unlinkNote": "Startet von der Hauptlinie"
+        },
+        "cardDiskUse": {
+            "onDisk": "{bytes} auf der Festplatte",
+            "lastScan": "Beim letzten Scan. Freigeben auf der Speicher-Karte."
         }
     },
     "app": {
@@ -9028,7 +9032,11 @@
         "useSandboxStorage": {
             "couldntMeasure": "Der Speicherplatz ließ sich nicht messen",
             "couldntClean": "{category} ließ sich nicht bereinigen",
-            "cleaning": "{category} wird bereinigt"
+            "cleaning": "{category} wird bereinigt",
+            "cleaningBuildOutput": "Build-Ausgabe von {name} wird entfernt",
+            "freeingCheckout": "Arbeitskopie von {name} wird freigegeben",
+            "trashingCheckout": "{name} wird in den Papierkorb verschoben",
+            "couldntPress": "In {name} ließ sich kein Speicher freigeben"
         },
         "sandboxStorageCard": {
             "historyLow": "Auf dem Historien-Datenträger sind {free} frei, weniger als die {floor}, die für neue Unterhaltungen frei gehalten werden. Schaffen Sie hier Platz und senden Sie dann erneut.",
@@ -11022,6 +11030,46 @@
             "tcpUdp": "TCP + UDP",
             "tcp": "TCP",
             "udp": "UDP"
+        },
+        "storageCheckouts": {
+            "heading": "Arbeitskopien der Unterhaltungen",
+            "summary": "{count} Arbeitskopie, {bytes} | {count} Arbeitskopien, {bytes}",
+            "intro": "Jede Unterhaltung arbeitet in einer eigenen Kopie der Repositorys, und ihre Builds lassen dort ihre Ausgabe zurück. Build-Ausgabe entsteht beim nächsten Build neu. Eine freigegebene Arbeitskopie behält ihre Arbeit auf ihrem Branch und kommt mit dem nächsten Zug der Unterhaltung zurück.",
+            "leftoverName": "Keine Unterhaltung",
+            "landedName": "{count} übernommene Arbeitskopie | {count} übernommene Arbeitskopien",
+            "working": "Arbeitet",
+            "idle": "Untätig",
+            "held": "Arbeit nicht übernommen",
+            "landed": "Übernommen",
+            "archived": "Archiviert",
+            "leftover": "Übrig: keine Unterhaltung gehört dazu",
+            "active": "aktiv {when}",
+            "partCheckout": "Arbeitskopie {bytes}",
+            "partBuildOutput": "Build-Ausgabe {bytes}",
+            "partOverlay": "Abhängigkeiten {bytes}",
+            "cleanBuildOutput": "{bytes} freigeben",
+            "cleanBuildOutputNote": "Build-Ausgabe entfernen. Die Arbeitskopie und ihre Arbeit bleiben, der nächste Build erzeugt die Ausgabe neu.",
+            "release": "Arbeitskopie freigeben",
+            "releaseNote": "Den Inhalt der Arbeitskopie auf ihren Branch committen und sie dann entfernen. Die Unterhaltung bleibt, ihr nächster Zug bringt die Arbeitskopie zurück.",
+            "trash": "In den Papierkorb",
+            "trashHeader": "Diese übrige Arbeitskopie in den Papierkorb verschieben?",
+            "trashWarning": "Keine Unterhaltung gehört mehr zu dieser Arbeitskopie, sie kann aber Arbeit enthalten, die niemand committet hat. Der Papierkorb behält sie eine Weile, bevor er geleert wird.",
+            "freeLanded": "{count} übernommene freigeben | Alle {count} übernommenen freigeben",
+            "showAll": "Alle {count} anzeigen",
+            "showFewer": "Weniger anzeigen"
+        },
+        "agentDiskSpace": {
+            "heading": "Speicherplatz",
+            "buildOutputIdle": "Build-Ausgabe untätiger Unterhaltungen entfernen nach",
+            "buildOutputIdleNote": "Ein Rust-Target allein kann pro Unterhaltung zig Gigabyte groß sein. Die Arbeitskopie und ihre Arbeit bleiben, der nächste Build erzeugt die Ausgabe neu. Bei übernommenen Unterhaltungen und für Cargos inkrementellen Cache nach einer Stunde.",
+            "n1Hour": "1 Stunde",
+            "n6Hours": "6 Stunden",
+            "n1Day": "1 Tag",
+            "n1Week": "1 Woche",
+            "reapBelow": "Aufräumen, wenn der freie Speicher unter",
+            "reapBelowNote": "Build-Ausgabe wird aus jeder Unterhaltung entfernt, in der nichts läuft, die am längsten untätige zuerst, bis wieder Platz ist. Unter 10 % und erneut unter 5 % wirst du benachrichtigt.",
+            "leanRust": "Schlanke Rust-Builds",
+            "leanRustNote": "Agenten bauen Rust nur mit Zeilentabellen als Debug-Info. Targets brauchen weniger Platz und Backtraces behalten Datei und Zeile, aber ein Debugger sieht keine lokalen Variablen. Überschreibt, was die Cargo.toml eines Repositorys zur Debug-Info sagt."
         }
     },
     "settings": {

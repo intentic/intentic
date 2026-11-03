@@ -868,7 +868,9 @@ flowchart LR
   the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,
   running turns, queued messages and unsent drafts prevent reclaim.
 - Build output leaves a settled checkout (`conversations/worktrees/build-outputs/build-outputs.ts`, `conversations/registry/build-output-sweep/build-output-reaper.ts`): a
-  landed one's an hour after the land, any other's after 6 quiet hours, swept every 15 minutes. Each checkout is
+  landed one's an hour after the land, any other's after the settings' `buildOutputIdleHours` (6 by default), swept
+  every 15 minutes; Cargo's `incremental/` caches go after an hour (2026-11-03: 16 GB of one shinobi checkout's 32 GB
+  target was `debug/incremental`, the part only the same session's next edit uses). Each checkout is
   judged by its own conversation alone: a live turn, a background command or a child still at work in it keeps it,
   and nothing waits for the whole sandbox to be idle (2026-11-03: shinobi's twenty conversations kept a turn running
   67% of the time, the old idle gate never opened, and 51 checkouts grew 424 GiB of Rust `target/`). Build output is
@@ -877,13 +879,39 @@ flowchart LR
   tracks nothing in it. Removal runs `rm` in a child at the command class's niceness and best-effort IO 7
   (`workload/workload-class.ts`), paced between folders. The checkout itself stays; the next build regenerates what
   went, and the Rust recipe's sccache (seed-skills/environment) makes that minutes rather than ten. `node_modules` and
-  `dist` are never touched, since in an isolated checkout they are overlay mount points.
+  `dist` are never touched, since in an isolated checkout they are overlay mount points. `leanRustBuilds` (off by
+  default) puts `CARGO_PROFILE_DEV_DEBUG` and `CARGO_PROFILE_TEST_DEBUG=line-tables-only` in every turn's shell
+  (`agent/run/harness/turn-env.ts`), which overrides a repository's own debug-info profile.
+- `sharedCargoTargets` (off by default; a prototype, 2026-11-04, `conversations/worktrees/cargo-warm.ts`) makes an
+  isolated checkout's Cargo `target/` an overlay like the dependency mirrors: its lower a frozen copy of the main
+  checkout's last finished build of that workspace (`/history/cargo-warm/<workspace>/<created>-<lock>-<toolchain>/`),
+  its upper the checkout's own layer in `/history/overlays/<id>/`, so a checkout keeps only what it compiled itself. The
+  copy is made behind a turn's plan when the main checkout's `Cargo.lock` or toolchain no longer matches the newest
+  one, a profile at a time under Cargo's own `.cargo-lock` taken without waiting, by `cp -a --reflink=auto` and without
+  `incremental/`; never by hard links, since Cargo rewrites its fingerprint and `.d` files in place. A layer stays on the
+  snapshot it was first built over (`warm-lower` beside its upper) while it holds anything; an older snapshot goes once
+  no mount table on the machine names it and no pin of it is under ten minutes old. Which units are reused is Cargo's
+  own fingerprint call, so a snapshot only makes a build cheaper. Reuse is correct because every checkout is seen at
+  `/work`, where the snapshot was built: a target copied to a checkout at its own path also measured fresh, but kept the
+  other path baked into `env!("CARGO_MANIFEST_DIR")`. Measured on `_sandbox/netd` with `_shared/relay` (167 units,
+  `-j2`, ext4): cold, 96 s and a 1,102 MB target; the snapshot, 5 s and 800 MB; a second checkout over it, 20 s,
+  rebuilding only its 5 path crates, with a 486 MB upper of which 305 MB is `incremental/` (181 MB against 797 MB without
+  it). Not measured: a large workspace such as integra's 32 GB target, a reflink filesystem, or many checkouts at once.
+  Not covered: fenced conversations, the unprivileged agent domain, a target moved by `CARGO_TARGET_DIR` or
+  `build.target-dir`, and turns with no namespace, all of which build their own `target/` as before. The build-output
+  reaper frees a settled checkout's layers with the rest of its output (`releaseWarmLayers`: the incremental caches
+  after an idle hour, the whole upper and its pin after the idle hours, never a layer a live overlay still mounts),
+  leaves an empty `target/` alone since it is the overlay's mount point, and after any pass that freed something the
+  sweep and the disk-pressure watch retire snapshots nothing reads any more (`retireAllWarmSnapshots`). The Storage scan
+  counts a layer as its conversation's build output (`isWarmLayer`) and the snapshots once, with the checkouts, as
+  protected as they are: a file clean of a snapshot a live overlay reads would corrupt every checkout reading it.
 - The disk-pressure watch (`system/resources/storage/disk-pressure.ts`, 2026-11-03) reads the history volume once a
-  minute. Under 15% free it removes settled checkouts' build output at once, landed ones first and then the longest
-  idle, until the volume is back over 15%. Under 10% and under 5% it tells the owner once per level, with a push
+  minute. Under the settings' `diskReapBelowPercent` free (15% by default) it removes settled checkouts' build output
+  at once, landed ones first and then the longest idle, until the volume is back over it. Under 10% and under 5% it
+  tells the owner once per level, whatever the threshold, with a push
   (`notifyIfAway` at 10%, `notify` at 5%) and a "disk is nearly full" row at the head of the sandbox's attention
   list, saying what is left, what it removed and what holds the most, with a Clean press; it says so again only after
-  the disk has been back over 15%. `GET /system/disk-pressure` answers from its last reading, and the `disk` runtime
+  the disk has been back over the threshold. `GET /system/disk-pressure` answers from its last reading, and the `disk` runtime
   domain says when that moved. Hourly, a Cargo-tagged folder in `/tmp` (an agent's `CARGO_TARGET_DIR`) that no build
   wrote to for a day and that no running process names (argv, cwd or `CARGO_TARGET_DIR`) is removed the same way
   (`conversations/worktrees/build-outputs/tmp-cargo-targets.ts`). Not on archive of the conversation that made it: every Claude
@@ -1048,6 +1076,16 @@ were about 0.3 GB of a checkout that went on to hold 8-23 GB of `target/`.
 Storage lists build output inside checkouts as its own category, `buildOutputs`, carved out of the protected
 checkouts by the folders the sweep would remove; its Clean hands the press to the build-output reaper, which takes only
 checkouts whose conversation has nothing running, and the checkouts themselves stay protected.
+Every conversation directory is listed too (2026-11-03, `system/resources/storage/checkout-usage.ts`): the scan sums
+each `worktrees/<id>`, its build output and `overlays/<id>` (`StorageScan.checkouts`), and the report joins those sizes
+with where each conversation stands now (`conversations/registry/checkout-standing.ts`: working, idle, held, landed,
+archived, or a leftover no conversation owns) and what may be done with it by the daemon's own rules.
+`system.pressCheckout` does one of three: `cleanBuildOutput` (the reaper, for that conversation at any age),
+`release` (the held-checkout reclaim at any age: work committed onto its branch, checkout and overlay removed, the next
+turn brings them back; refused while anything runs or a watch, queued message or unsent draft needs the checkout) or
+`trash` (a leftover into the trash now, rather than after the orphan pass's day; never while the registry cannot
+answer, nor ten minutes after anything in it changed). A refusal answers `CONFLICT` with the reason. On 11-03 one
+sandbox's 95 checkouts held 427 GB and the card could say only "checkouts" and its eight biggest folders.
 
 ## Commands
 

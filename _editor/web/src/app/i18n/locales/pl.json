@@ -1084,6 +1084,10 @@
             "howItWorksNote": "Wspólna przestrzeń się nie zmienia",
             "unlink": "Odłącz",
             "unlinkNote": "Startuje z głównej linii"
+        },
+        "cardDiskUse": {
+            "onDisk": "{bytes} na dysku",
+            "lastScan": "Według ostatniego skanu dysku. Zwolnij miejsce na karcie Dysk."
         }
     },
     "app": {
@@ -8602,7 +8606,11 @@
         "useSandboxStorage": {
             "couldntClean": "Nie udało się wyczyścić: {category}",
             "couldntMeasure": "Nie udało się zmierzyć dysku",
-            "cleaning": "Czyszczenie: {category}"
+            "cleaning": "Czyszczenie: {category}",
+            "cleaningBuildOutput": "Usuwanie wyników kompilacji: {name}",
+            "freeingCheckout": "Zwalnianie kopii: {name}",
+            "trashingCheckout": "Przenoszenie do kosza: {name}",
+            "couldntPress": "Nie udało się zwolnić miejsca: {name}"
         },
         "words": {
             "addSandbox": "Dodaj sandbox",
@@ -10425,6 +10433,46 @@
             "tcpUdp": "TCP + UDP",
             "tcp": "TCP",
             "udp": "UDP"
+        },
+        "storageCheckouts": {
+            "heading": "Kopie robocze rozmów",
+            "summary": "{count} kopia robocza, {bytes} | {count} kopie robocze, {bytes} | {count} kopii roboczych, {bytes}",
+            "intro": "Każda rozmowa pracuje we własnej kopii repozytoriów, a jej kompilacje zostawiają tam swoje wyniki. Wyniki kompilacji wracają przy następnej kompilacji. Zwolniona kopia zachowuje pracę na swojej gałęzi i wraca przy następnej turze rozmowy.",
+            "leftoverName": "Bez rozmowy",
+            "landedName": "{count} wdrożona kopia | {count} wdrożone kopie | {count} wdrożonych kopii",
+            "working": "Pracuje",
+            "idle": "Bezczynna",
+            "held": "Praca niewdrożona",
+            "landed": "Wdrożona",
+            "archived": "Zarchiwizowana",
+            "leftover": "Pozostałość: żadna rozmowa jej nie posiada",
+            "active": "aktywna {when}",
+            "partCheckout": "kopia {bytes}",
+            "partBuildOutput": "wyniki kompilacji {bytes}",
+            "partOverlay": "zależności {bytes}",
+            "cleanBuildOutput": "Zwolnij {bytes}",
+            "cleanBuildOutputNote": "Usuń wyniki kompilacji. Kopia i jej praca zostają, a następna kompilacja odtworzy wyniki.",
+            "release": "Zwolnij kopię",
+            "releaseNote": "Zatwierdź zawartość kopii na jej gałęzi, a potem ją usuń. Rozmowa zostaje, a jej następna tura przywróci kopię.",
+            "trash": "Przenieś do kosza",
+            "trashHeader": "Przenieść tę pozostałą kopię do kosza?",
+            "trashWarning": "Żadna rozmowa nie posiada już tej kopii, ale może ona zawierać pracę, której nikt nie zatwierdził. Kosz trzyma ją przez jakiś czas, zanim zostanie opróżniony.",
+            "freeLanded": "Zwolnij {count} wdrożoną | Zwolnij {count} wdrożone | Zwolnij {count} wdrożonych",
+            "showAll": "Pokaż wszystkie ({count})",
+            "showFewer": "Pokaż mniej"
+        },
+        "agentDiskSpace": {
+            "heading": "Miejsce na dysku",
+            "buildOutputIdle": "Usuwaj wyniki kompilacji bezczynnych rozmów po",
+            "buildOutputIdleNote": "Sam target Rusta może zajmować dziesiątki gigabajtów na rozmowę. Kopia i jej praca zostają; następna kompilacja odtworzy wyniki. Wdrożone rozmowy i przyrostowa pamięć podręczna Cargo znikają po godzinie.",
+            "n1Hour": "1 godzina",
+            "n6Hours": "6 godzin",
+            "n1Day": "1 dzień",
+            "n1Week": "1 tydzień",
+            "reapBelow": "Sprzątaj, gdy wolne miejsce spadnie poniżej",
+            "reapBelowNote": "Wyniki kompilacji znikają z każdej rozmowy, w której nic nie działa, od najdłużej bezczynnej, aż znów będzie miejsce. Dostaniesz powiadomienie poniżej 10% i ponownie poniżej 5%.",
+            "leanRust": "Lekkie kompilacje Rusta",
+            "leanRustNote": "Agenci kompilują Rusta tylko z tablicami linii jako informacją debugowania. Targety zajmują mniej miejsca, a ślady stosu zachowują plik i linię, ale debugger nie widzi zmiennych lokalnych. Nadpisuje to, co Cargo.toml repozytorium mówi o informacji debugowania."
         }
     },
     "settings": {

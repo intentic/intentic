@@ -14,7 +14,7 @@ Desktop come over when their owner moves them (`ic engine move --to intentic`).
   that already holds images on overlay2 keeps that store.
 - `iptables`, `ip6tables`, `openssl`, `ca-certificates`, `passt` (pasta) and `socat` from Alpine
 - `/usr/local/bin/intentic-engine` — foreground keeper started by `ic engine start`; on a PC with an NVIDIA GPU it also
-  writes a CDI spec for it ([below](#the-nvidia-gpu))
+  writes a CDI spec for it ([below](#the-nvidia-gpu)), and it holds the disk's ballast ([below](#its-disk))
 - `/etc/wsl.conf` — no Windows PATH append; automount stays on, at `/mnt/`, which is where `ic` and the desktop app
   point a bind mount of a Windows folder (`docker-host/src/wsl_path.rs`)
 
@@ -77,6 +77,31 @@ pipe ([below](#its-named-pipe)) takes it past Docker Desktop. A sandbox moved fr
 Docker Desktop answered `/health` from Windows, reached the internet, and ran Docker in Docker. Two starts at once ended
 with one keeper and both `ic engine start`s answered in 3.6 s; a start after the keeper was killed stopped the dockerd
 and pasta it left and answered in 7.7 s; the desktop app's keeper brought a killed engine back in 34 s.
+
+## Its disk
+
+(2026-11-03) Every sandbox and every compose project on the engine writes to the distro's one ext4 disk (a VHDX that
+reads as about 1 TB). On rog one sandbox's history volume, 462 GB of Rust build output, filled it, and an unrelated
+Postgres of the owner's PANICked on ENOSPC and stayed down. `ic engine disk` reads and relieves the disk from Windows
+and the machine agent watches it every minute ([ic README](../README.md), `src/engine/disk.rs`). The keeper's own part
+is the ballast: some of the disk held back so that it can be given back at the last moment.
+
+- **What.** One file, `/var/lib/intentic-engine/ballast`, of 2% of the disk, within 2 and 10 GiB (10 GiB on a 1 TB
+  disk). It is made with `fallocate`: its blocks are reserved and nothing is written, so the VHDX under it does not grow
+  and making it costs no I/O. It sits outside Docker's data root, so nothing Docker does counts or removes it.
+- **When it goes.** The moment less than its own size is left to write (and never later than the disk's critical
+  line, 5%), the keeper deletes it, so a database can checkpoint, git can finish a pack, and the sandboxes' reapers and
+  `ic engine disk --relieve` have room to work. Given back any earlier, it would be spent before the disk was full.
+  `ic engine disk --relieve` deletes it too when it finds the disk full, should the keeper's loop not have.
+- **When it comes back.** Only while 10% of the disk and its own size are left to write, so holding it back never
+  makes the disk short: made at a start with room, and made again once that much is free again. A filesystem that
+  refuses `fallocate` gets no ballast, said once in the log; writing one out in zeros was rejected, since that grows the
+  VHDX by its size.
+- "Left to write" is `df`'s Available: what a process that is not root may still write. ext4 keeps 5% of the disk back
+  for root (54 GB of rog's), and a database in a container writes as its own user, so that is where it stops.
+- The keeper looks every ten seconds, in either network mode (`keep_disk`, stopped with the other helpers), and logs
+  each ballast it makes or gives back to `/var/log/intentic-engine.log`. The numbers are the same ones ic reads the
+  disk by: a test in `src/engine/disk.rs` reads them off the keeper's text.
 
 ## The NVIDIA GPU
 

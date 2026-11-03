@@ -440,6 +440,43 @@ export const SandboxSettingsSchema = z.object({
         ),
     agentRetentionDays: AgentRetentionDaysSchema,
     heldCheckoutDays: HeldCheckoutDaysSchema,
+    // The build-output sweep's clock (conversations/registry/archive.ts). Hours, not days: a Rust `target/` is 10-30 GB,
+    // so the window is about how long a follow-up should find a warm build, not about keeping anybody's work.
+    buildOutputIdleHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(168)
+        .default(6)
+        .describe(
+            "How many hours a conversation sits idle before the build output in its checkout (a Rust `target/`, Gradle and Flutter output) is removed. The checkout and its work stay; the next build makes the output again. A landed conversation's goes after an hour whatever this says, and Cargo's incremental cache, half of a Rust target, goes after an hour too.",
+        ),
+    // disk-pressure.ts's reaping threshold. Under 10% and 5% the owner is told whatever this says.
+    diskReapBelowPercent: z
+        .number()
+        .int()
+        .min(5)
+        .max(50)
+        .default(15)
+        .describe(
+            "Under how much free space, as a percentage of the disk, build output is removed from every conversation that has nothing running, the longest idle first, until the disk is back over it.",
+        ),
+    // Read live into every turn's shell (agent/run/harness/turn-env.ts); off by default, since it overrides what a
+    // repository's own Cargo.toml asks of its debug info.
+    leanRustBuilds: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Build Rust with line tables only for debug info (CARGO_PROFILE_DEV_DEBUG and CARGO_PROFILE_TEST_DEBUG set to `line-tables-only` in agents' shells). A debug target takes less disk and backtraces keep their file and line, but a debugger sees no local variables. It overrides what a repository's own Cargo.toml says about debug info.",
+        ),
+    // A prototype, off by default (2026-11-04): an isolated checkout's Cargo `target/` laid over a frozen copy of the main
+    // checkout's, so each checkout keeps only what it compiled differently (conversations/worktrees/cargo-warm.ts).
+    sharedCargoTargets: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Share compiled Rust dependencies between conversations' checkouts. The main checkout's last finished build is copied once into a frozen layer, without Cargo's incremental cache, and each checkout's `target/` reads through it, keeping only what that checkout compiles itself. Needs the main checkout built at least once, and isolated turns (a sandbox with CAP_SYS_ADMIN); without them every checkout builds its own `target/` as before. Fenced conversations and the unprivileged agent domain are not covered yet.",
+        ),
     // One answer per ending, never a set of switches over the same event: the chat's own question and these rows are
     // the same question at two scopes. Every ending defaults to `wait`, because a re-run spends the reader's allowance
     // on a turn they sent once.

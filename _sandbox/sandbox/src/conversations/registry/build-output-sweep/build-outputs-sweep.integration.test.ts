@@ -5,7 +5,18 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { isolatedAgent } from "../agents-store.testing.js";
-import { type AgentArchiveDeps, BUILD_OUTPUT_QUIET_MS, type BuildOutputSweep, NO_QUIET, NORMAL_QUIET, sweepBuildOutputs } from "../archive.js";
+import {
+    type AgentArchiveDeps,
+    BUILD_OUTPUT_QUIET_MS,
+    type BuildOutputSweep,
+    CheckoutBusy,
+    INCREMENTAL_QUIET_MS,
+    NO_QUIET,
+    NORMAL_QUIET,
+    type PrunedAt,
+    quietOfSettings,
+    sweepBuildOutputs,
+} from "../archive.js";
 import { createLogger } from "../../../logger.js";
 import { createBuildOutputReaper } from "./build-output-reaper.js";
 import type { AgentWorktrees } from "../../worktrees/worktrees.js";
@@ -67,11 +78,11 @@ const pass = (overrides: Partial<BuildOutputSweep> = {}): BuildOutputSweep => ({
 describe("sweepBuildOutputs", () => {
     it("empties a quiet checkout's build output once, and walks it again only after the card moves", async () => {
         const dir = checkout("c1");
-        const prunedAt = new Map<string, number>();
+        const prunedAt: PrunedAt = new Map();
         expect(await sweepBuildOutputs(sweepDeps([card()]), pass({ prunedAt }))).toEqual([{ id: "c1", removed: ["target"] }]);
         expect(existsSync(join(dir, "target"))).toBe(false);
         expect(existsSync(join(dir, "Cargo.toml"))).toBe(true);
-        expect(prunedAt.get("c1")).toBe(0);
+        expect(prunedAt.get("c1")).toEqual({ updatedAt: 0, scope: "all" });
         // Rebuilt by a later look at the card that changed nothing: the remembered pass stands.
         mkdirSync(join(dir, "target"));
         expect(await sweepBuildOutputs(sweepDeps([card()]), pass({ prunedAt }))).toEqual([]);
@@ -115,7 +126,118 @@ describe("sweepBuildOutputs", () => {
     });
 });
 
+describe("incremental first", () => {
+    // A cross build's caches sit one level deeper, beside a target triple (the wasm32 one shinobi built).
+    const withIncremental = (id: string): string => {
+        const dir = checkout(id);
+        mkdirSync(join(dir, "target", "debug", "incremental", "app-1x2y"), { recursive: true });
+        mkdirSync(join(dir, "target", "wasm32-unknown-unknown", "debug", "incremental"), { recursive: true });
+        mkdirSync(join(dir, "target", "debug", "deps"), { recursive: true });
+        writeFileSync(join(dir, "target", "debug", "deps", "libserde.rlib"), "rlib");
+        return dir;
+    };
+
+    it("takes only Cargo's incremental caches after an hour idle, and the rest after the idle hours", async () => {
+        const dir = withIncremental("c1");
+        const prunedAt: PrunedAt = new Map();
+        const idle = [card({ status: "idle" })];
+        const swept = await sweepBuildOutputs(sweepDeps(idle), pass({ now: INCREMENTAL_QUIET_MS, prunedAt }));
+        // In the order the directory lists them, which is the filesystem's.
+        expect(swept.map(({ id, removed }) => ({ id, removed: removed.toSorted() }))).toEqual([
+            { id: "c1", removed: ["target/debug/incremental", "target/wasm32-unknown-unknown/debug/incremental"] },
+        ]);
+        expect(existsSync(join(dir, "target", "debug", "deps", "libserde.rlib"))).toBe(true);
+        expect(prunedAt.get("c1")).toEqual({ updatedAt: 0, scope: "incremental" });
+        // The same card an hour later is not walked again for the same scope.
+        expect(await sweepBuildOutputs(sweepDeps(idle), pass({ now: 2 * INCREMENTAL_QUIET_MS, prunedAt }))).toEqual([]);
+        expect(await sweepBuildOutputs(sweepDeps(idle), pass({ now: BUILD_OUTPUT_QUIET_MS, prunedAt }))).toEqual([{ id: "c1", removed: ["target"] }]);
+        expect(existsSync(join(dir, "target"))).toBe(false);
+    });
+
+    it("leaves a Gradle build folder whole on an incremental pass", async () => {
+        const dir = withIncremental("c1");
+        mkdirSync(join(dir, "app", "build", "intermediates"), { recursive: true });
+        writeFileSync(join(dir, "app", "build.gradle"), "");
+        writeFileSync(join(dir, ".gitignore"), "target/\nbuild/\n");
+        await sweepBuildOutputs(sweepDeps([card({ status: "idle" })]), pass({ now: INCREMENTAL_QUIET_MS }));
+        expect(existsSync(join(dir, "app", "build", "intermediates"))).toBe(true);
+        expect(existsSync(join(dir, "target", "debug", "incremental"))).toBe(false);
+    });
+
+    it("follows the settings' idle hours: one hour takes everything at the hour", async () => {
+        const dir = withIncremental("c1");
+        const swept = await sweepBuildOutputs(sweepDeps([card({ status: "idle" })]), pass({ now: INCREMENTAL_QUIET_MS, quiet: quietOfSettings(1) }));
+        expect(swept).toEqual([{ id: "c1", removed: ["target"] }]);
+        expect(existsSync(join(dir, "target"))).toBe(false);
+    });
+});
+
+describe("a shared Cargo target's layers (cargo-warm.ts)", () => {
+    // A checkout whose `target` is only the overlay's mount point, and the layer under overlays/<id> holding what its
+    // builds wrote over the snapshot.
+    const overlaid = async (id: string): Promise<{ dir: string; layer: string; overlaysOf: (one: string) => string }> => {
+        const dir = checkout(id);
+        rmSync(join(dir, "target"), { recursive: true });
+        mkdirSync(join(dir, "target"));
+        const overlays = join(root, ".overlays");
+        const layer = join(overlays, id, "target");
+        mkdirSync(join(layer, "upper", "debug", "incremental", "app-1x2y"), { recursive: true });
+        mkdirSync(join(layer, "upper", "debug", "deps"), { recursive: true });
+        mkdirSync(join(layer, "work"), { recursive: true });
+        writeFileSync(join(layer, "warm-lower"), "/history/cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb\n");
+        return { dir, layer, overlaysOf: (one) => join(overlays, one) };
+    };
+
+    it("frees the layer with the checkout, and leaves the empty mount point where it stands", async () => {
+        const { dir, layer, overlaysOf } = await overlaid("c1");
+        expect(await sweepBuildOutputs(sweepDeps([card()]), pass({ overlaysOf }))).toEqual([{ id: "c1", removed: ["target"] }]);
+        expect(existsSync(join(dir, "target"))).toBe(true);
+        expect(existsSync(join(layer, "upper"))).toBe(false);
+        expect(existsSync(join(layer, "warm-lower"))).toBe(false);
+    });
+
+    it("takes only the layer's incremental caches after an idle hour, keeping its pin", async () => {
+        const { layer, overlaysOf } = await overlaid("c1");
+        const swept = await sweepBuildOutputs(sweepDeps([card({ status: "idle" })]), pass({ now: INCREMENTAL_QUIET_MS, overlaysOf }));
+        expect(swept).toEqual([{ id: "c1", removed: ["target/debug/incremental"] }]);
+        expect(existsSync(join(layer, "upper", "debug", "deps"))).toBe(true);
+        expect(existsSync(join(layer, "warm-lower"))).toBe(true);
+    });
+
+    it("names a layer's path reapable by the conversation that owns it", () => {
+        // Siblings, as worktrees/ and overlays/ are on the history volume.
+        const overlays = join(root, "overlays");
+        const reaper = createBuildOutputReaper({
+            archive: sweepDeps([card({ id: "settled" })]),
+            worktreesRoot: join(root, "worktrees"),
+            overlaysRoot: overlays,
+            runningJobs: () => 0,
+        });
+        expect(reaper.reapable(join(overlays, "settled", "target"), 0)).toBe(true);
+        expect(reaper.reapable(join(overlays, "unknown", "target"), 0)).toBe(false);
+    });
+});
+
 describe("build-output reaper", () => {
+    it("removes one conversation's build output on a press whatever its age, and refuses while it runs", async () => {
+        const settled = checkout("settled");
+        checkout("busy");
+        const cards = [card({ id: "settled", status: "idle", updatedAt: Date.now() }), card({ id: "busy" })];
+        const reaper = createBuildOutputReaper({ archive: sweepDeps(cards, new Set(["busy"])), worktreesRoot: root, runningJobs: () => 0 });
+        expect(await reaper.reapOne("settled")).toEqual({ id: "settled", removed: ["target"] });
+        expect(existsSync(join(settled, "target"))).toBe(false);
+        await expect(reaper.reapOne("busy")).rejects.toThrow(CheckoutBusy);
+        await expect(reaper.reapOne("nobody")).rejects.toThrow(CheckoutBusy);
+    });
+
+    it("reads the sweep's clock from its settings each pass", async () => {
+        const dir = checkout("c1");
+        const cards = [card({ status: "idle", updatedAt: Date.now() - INCREMENTAL_QUIET_MS })];
+        const reaper = createBuildOutputReaper({ archive: sweepDeps(cards), worktreesRoot: root, runningJobs: () => 0, quiet: async () => quietOfSettings(1) });
+        expect(await reaper.sweep(Date.now())).toEqual([{ id: "c1", removed: ["target"] }]);
+        expect(existsSync(join(dir, "target"))).toBe(false);
+    });
+
     it("names a checkout's build output reapable only while its conversation has nothing running", () => {
         const cards = [card({ id: "settled" }), card({ id: "busy" })];
         const reaper = createBuildOutputReaper({ archive: sweepDeps(cards, new Set(["busy"])), worktreesRoot: root, runningJobs: () => 0 });

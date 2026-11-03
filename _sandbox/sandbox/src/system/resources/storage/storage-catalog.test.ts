@@ -1,7 +1,7 @@
 import { HISTORY_STATE_FILES } from "../../../store/evolution/history-state.js";
 import { STORAGE_CLEANABILITY, StorageCategoryIdSchema } from "@intentic/sandbox-contract/schemas/metrics";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
-import { categoryFolders, classifyStoragePath, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";
+import { categoryFolders, classifyStoragePath, insideCheckout, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";
 
 // The table every scan sizes by and every clean asks right before it removes a path. What matters most is the
 // boundary between what may go and what may not, so these pin exact answers at that boundary.
@@ -82,6 +82,23 @@ describe("classifyStoragePath", () => {
         expect(classifyStoragePath("volume", "docker/overlay2/l/ABC").category).toBe("docker");
         expect(classifyStoragePath("volume", ".pnpm-store/v11/index.db").category).toBe("packageStores");
         expect(classifyStoragePath("volume", "lost+found/#12").category).toBe("other");
+    });
+});
+
+describe("shared Cargo targets (cargo-warm.ts)", () => {
+    test("a snapshot counts with the checkouts it serves, protected like them, one item per workspace", () => {
+        const path = "cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb/target/debug/deps/libserde.rlib";
+        expect(classifyStoragePath("history", path)).toEqual({ category: "checkouts", item: "cargo-warm/%2F", unit: false, settled: true });
+        expect(isProtectedStoragePath("history", path)).toBe(true);
+    });
+
+    test("a checkout's overlay layer is looked at for build output, exactly one level below its conversation", () => {
+        expect(insideCheckout("history", "overlays/c1/target")).toBe(true);
+        expect(insideCheckout("history", "overlays/c1")).toBe(false);
+        expect(insideCheckout("history", "overlays/c1/target/upper")).toBe(false);
+        expect(insideCheckout("history", "worktrees/c1/app/target")).toBe(true);
+        expect(insideCheckout("history", "worktrees/c1")).toBe(false);
+        expect(insideCheckout("workspace", "overlays/c1/target")).toBe(false);
     });
 });
 

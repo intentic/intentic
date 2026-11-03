@@ -1084,6 +1084,10 @@
             "howItWorksNote": "L'espace partagé ne bouge pas",
             "unlink": "Délier",
             "unlinkNote": "Part de la ligne principale"
+        },
+        "cardDiskUse": {
+            "onDisk": "{bytes} sur le disque",
+            "lastScan": "Lors du dernier scan du disque. À libérer depuis la carte Disque."
         }
     },
     "app": {
@@ -9028,7 +9032,11 @@
         "useSandboxStorage": {
             "couldntMeasure": "Impossible de mesurer le disque",
             "couldntClean": "Impossible de nettoyer {category}",
-            "cleaning": "Nettoyage : {category}"
+            "cleaning": "Nettoyage : {category}",
+            "cleaningBuildOutput": "Suppression de la sortie de compilation de {name}",
+            "freeingCheckout": "Libération de la copie de {name}",
+            "trashingCheckout": "Mise à la corbeille de {name}",
+            "couldntPress": "Impossible de libérer de l'espace dans {name}"
         },
         "sandboxStorageCard": {
             "historyLow": "Le disque d'historique n'a plus que {free} de libre, sous les {floor} réservés aux nouvelles conversations. Libérez de l'espace ici, puis renvoyez.",
@@ -11022,6 +11030,46 @@
             "tcpUdp": "TCP + UDP",
             "tcp": "TCP",
             "udp": "UDP"
+        },
+        "storageCheckouts": {
+            "heading": "Copies de travail des conversations",
+            "summary": "{count} copie de travail, {bytes} | {count} copies de travail, {bytes}",
+            "intro": "Chaque conversation travaille dans sa propre copie des dépôts, et ses compilations y laissent leur sortie. La sortie de compilation revient avec la compilation suivante. Une copie libérée garde son travail sur sa branche et revient au prochain tour de la conversation.",
+            "leftoverName": "Aucune conversation",
+            "landedName": "{count} copie intégrée | {count} copies intégrées",
+            "working": "Au travail",
+            "idle": "Inactive",
+            "held": "Travail non intégré",
+            "landed": "Intégrée",
+            "archived": "Archivée",
+            "leftover": "Restante : aucune conversation ne la possède",
+            "active": "active {when}",
+            "partCheckout": "copie {bytes}",
+            "partBuildOutput": "sortie de compilation {bytes}",
+            "partOverlay": "dépendances {bytes}",
+            "cleanBuildOutput": "Libérer {bytes}",
+            "cleanBuildOutputNote": "Supprimer sa sortie de compilation. La copie et son travail restent, et la compilation suivante la recrée.",
+            "release": "Libérer la copie",
+            "releaseNote": "Committer le contenu de la copie sur sa branche, puis la supprimer. La conversation reste, et son prochain tour ramène la copie.",
+            "trash": "Mettre à la corbeille",
+            "trashHeader": "Mettre cette copie restante à la corbeille ?",
+            "trashWarning": "Plus aucune conversation ne possède cette copie, mais elle peut contenir du travail que personne n'a committé. La corbeille la garde un moment avant d'être vidée.",
+            "freeLanded": "Libérer {count} intégrée | Libérer les {count} intégrées",
+            "showAll": "Tout afficher ({count})",
+            "showFewer": "Afficher moins"
+        },
+        "agentDiskSpace": {
+            "heading": "Espace disque",
+            "buildOutputIdle": "Supprimer la sortie de compilation des conversations inactives après",
+            "buildOutputIdleNote": "Un target Rust peut à lui seul peser des dizaines de gigaoctets par conversation. La copie et son travail restent ; la compilation suivante recrée la sortie. Pour les conversations intégrées et le cache incrémental de Cargo, après une heure.",
+            "n1Hour": "1 heure",
+            "n6Hours": "6 heures",
+            "n1Day": "1 jour",
+            "n1Week": "1 semaine",
+            "reapBelow": "Nettoyer quand l'espace libre passe sous",
+            "reapBelowNote": "La sortie de compilation est supprimée de chaque conversation où rien ne tourne, la plus longtemps inactive d'abord, jusqu'à ce qu'il y ait de nouveau de la place. Vous êtes prévenu sous 10 % puis sous 5 %.",
+            "leanRust": "Compilations Rust allégées",
+            "leanRustNote": "Les agents compilent Rust avec les seules tables de lignes comme informations de débogage. Les targets prennent moins de place et les traces gardent fichier et ligne, mais un débogueur ne voit pas les variables locales. Remplace ce que le Cargo.toml d'un dépôt dit des informations de débogage."
         }
     },
     "settings": {

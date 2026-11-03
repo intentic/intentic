@@ -1084,6 +1084,10 @@
             "howItWorksNote": "The shared workspace stays put",
             "unlink": "Unlink",
             "unlinkNote": "Starts from the main line"
+        },
+        "cardDiskUse": {
+            "onDisk": "{bytes} on disk",
+            "lastScan": "At the last disk scan. Free it from the Disk card."
         }
     },
     "app": {
@@ -9028,7 +9032,11 @@
         "useSandboxStorage": {
             "couldntMeasure": "Couldn't measure the disk",
             "couldntClean": "Couldn't clean {category}",
-            "cleaning": "Cleaning {category}"
+            "cleaning": "Cleaning {category}",
+            "cleaningBuildOutput": "Removing build output from {name}",
+            "freeingCheckout": "Freeing the checkout of {name}",
+            "trashingCheckout": "Moving {name} to the trash",
+            "couldntPress": "Couldn't free space in {name}"
         },
         "sandboxStorageCard": {
             "historyLow": "The history disk has {free} free, below the {floor} kept free for new conversations. Free space here, then send again.",
@@ -11022,6 +11030,46 @@
             "tcpUdp": "TCP + UDP",
             "tcp": "TCP",
             "udp": "UDP"
+        },
+        "storageCheckouts": {
+            "heading": "Conversation checkouts",
+            "summary": "{count} checkout, {bytes} | {count} checkouts, {bytes}",
+            "intro": "Each conversation works in its own copy of the repositories, and its builds leave their output there. Build output comes back with the next build. A freed checkout keeps its work on its branch and comes back with the conversation's next turn.",
+            "leftoverName": "No conversation",
+            "landedName": "{count} landed checkout | {count} landed checkouts",
+            "working": "Working",
+            "idle": "Idle",
+            "held": "Work not landed",
+            "landed": "Landed",
+            "archived": "Archived",
+            "leftover": "Left over: no conversation owns it",
+            "active": "active {when}",
+            "partCheckout": "checkout {bytes}",
+            "partBuildOutput": "build output {bytes}",
+            "partOverlay": "dependencies {bytes}",
+            "cleanBuildOutput": "Free {bytes}",
+            "cleanBuildOutputNote": "Remove its build output. The checkout and its work stay, and the next build makes the output again.",
+            "release": "Free checkout",
+            "releaseNote": "Commit what the checkout holds onto its branch, then remove it. The conversation stays, and its next turn brings the checkout back.",
+            "trash": "Move to trash",
+            "trashHeader": "Move this leftover checkout to the trash?",
+            "trashWarning": "No conversation owns this checkout any more, but it may hold work nobody committed. The trash keeps it for a while before it is emptied.",
+            "freeLanded": "Free {count} landed | Free all {count} landed",
+            "showAll": "Show all {count}",
+            "showFewer": "Show fewer"
+        },
+        "agentDiskSpace": {
+            "heading": "Disk space",
+            "buildOutputIdle": "Remove build output from idle conversations after",
+            "buildOutputIdleNote": "A Rust target alone can be tens of gigabytes per conversation. The checkout and its work stay; the next build makes the output again. Landed conversations and Cargo's incremental cache go after an hour.",
+            "n1Hour": "1 hour",
+            "n6Hours": "6 hours",
+            "n1Day": "1 day",
+            "n1Week": "1 week",
+            "reapBelow": "Clean up when free space falls below",
+            "reapBelowNote": "Build output goes from every conversation with nothing running, the longest idle first, until there is room again. You are told under 10% and again under 5%.",
+            "leanRust": "Lean Rust builds",
+            "leanRustNote": "Agents build Rust with line tables only for debug info. Targets take less disk and backtraces keep their file and line, but a debugger sees no local variables. Overrides what a repository's Cargo.toml says about debug info."
         }
     },
     "settings": {

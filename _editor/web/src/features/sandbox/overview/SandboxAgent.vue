@@ -14,6 +14,7 @@ import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
 import AgentToolLoading from "../agent-settings/behaviour/AgentToolLoading.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
+import AgentDiskSpace from "../agent-settings/behaviour/AgentDiskSpace.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
 import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
@@ -175,6 +176,8 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentFinishedWork />
                 <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
                 <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
+                <!-- What finished builds keep on disk, after what finished conversations keep. -->
+                <AgentDiskSpace />
                 <AgentChangelog />
                 <AgentRecovery />
                 <!-- Beside the automation failure limit above (in its Advanced view), which is the other setting that only

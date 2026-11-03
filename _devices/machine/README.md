@@ -838,6 +838,46 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
   nothing sleeps.
 
+### The engine's disk
+
+(2026-11-03) On a Windows PC every sandbox and every compose project its owner runs on the intentic engine write to
+one disk inside the engine's distro. On rog one sandbox's history volume (462 GB of Rust build output) filled it, and an
+unrelated Postgres of the owner's PANICked on ENOSPC and stayed down. Nothing had said a word: WSL's and Windows' own
+tools show other disks, each sandbox's disk watch cleans only its own checkouts, and the daily tidy came too late. The
+Windows side's agent now watches that disk
+([`device/sandbox-rounds/engine-disk.ts`](src/device/sandbox-rounds/engine-disk.ts)). ic does the measuring and the
+clearing ([`ic engine disk`](../../_sandbox/ic/README.md)); this keeps the clock and tells.
+
+- **Every minute**, `ic engine disk --json`: one `df` in the distro, and the level it makes. `ok`; `low` under 10% of
+  the disk left to write; `critical` under 5%; `full` under the ballast the engine's keeper holds back (2% of the disk,
+  2 to 10 GiB, [engine README](../../_sandbox/ic/engine/README.md#its-disk)), which the keeper gives back the moment the
+  disk reaches it. "Left to write" is what a process that is not root may still write, which is where a database in a
+  container stops. An engine that is not this PC's, a stopped one, or an ic too old to answer is said once and asked
+  again every ten minutes. Only the Windows side runs it: the engine is the PC's, and the distros' agents would watch
+  the same disk twice.
+- **Cleared.** On each level crossed upwards, and every quarter hour while it stands at critical or full, `--relieve`
+  clears what is nobody's data for that level: dangling build cache and dangling images when low, all unused build
+  cache when critical, and when full the ballast first. Never a volume and never an image with a name. A clearing while
+  the level stands is logged only when it freed something. The switch is the PC's `engineDiskRelief` in `machine.json`
+  (`intentic-machine updates --disk on|off`, absent means on); off, the disk is still watched and told.
+- **Told.** Each level crossed upwards is one line in `machine.log`, what the agent already says everything in, naming
+  what takes the space and whose it is: `engine disk: critical — 40.0 GB of 1006.9 GB left to write (3%). Cleared build
+  cache 82.5 GB: 122.5 GB left. Biggest: sandbox a4ba63bf2aa5's history volume 430.3 GB, …, sandbox 82789f4106b4's
+  images 50.0 GB (measured 2 h ago).` Back to ok is said once, and re-arms the word, so a disk that hovers is told once
+  per stretch, as the sandboxes' own disk watch does. Sizes are this agent's (`sizeLabel`: binary units, as Explorer
+  shows them); ic and Docker print decimal ones.
+- **What takes the space** is Docker's own `docker system df -v`, which sizes every volume by walking it: a minute once on
+  rog, not done after ten minutes the next time, with the engine busy. So the line names the measurement ic last kept
+  (`--consumers --kept`, never waiting), and a fresh one runs in the background while the disk is short and the kept one is
+  over six hours old, one at a time and, when one fails, not again for three hours (a run into ic's thirty-minute bound
+  retried hourly would keep the disk busy half the time). A line that had none young enough is followed by
+  `engine disk: what takes the space: …` when the measurement lands.
+- The levels, the told level and the last clearing are kept in memory, as the keeper's ladder is: an agent restart
+  during a stretch says its level once more. Rejected: leaving it to the sandboxes. Each one's own watch sees this disk
+  through its history volume and tells its owner, but none can name another sandbox's volume or the owner's compose
+  database, or clear the engine's cache. This line reaches the owner wherever `machine.log` is read (`device_logs`, a
+  terminal): the device facts and the heartbeat, which a sandbox would show, do not carry it yet.
+
 ### Upkeep
 
 What older releases left on a device, and the stores with no bound, are put right by a reconciler that ships with each

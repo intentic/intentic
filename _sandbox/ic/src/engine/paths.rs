@@ -26,6 +26,16 @@ pub fn moves_path() -> Option<PathBuf> {
     home().map(|home| home.join(".intentic").join("engine").join("moves.json"))
 }
 
+/// `%USERPROFILE%\.intentic\engine\disk-consumers.json` — the last measurement of what takes the engine's disk
+/// (disk_consumers.rs), kept because Docker takes minutes to make one.
+pub fn disk_consumers_path() -> Option<PathBuf> {
+    home().map(|home| {
+        home.join(".intentic")
+            .join("engine")
+            .join("disk-consumers.json")
+    })
+}
+
 /// `%USERPROFILE%\.intentic\engine-cache\` — resumable downloads ahead of install.
 pub fn cache_dir() -> Option<PathBuf> {
     home().map(|home| home.join(".intentic").join("engine-cache"))

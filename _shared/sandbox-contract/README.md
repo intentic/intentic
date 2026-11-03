@@ -181,6 +181,14 @@ node _shared/sandbox-contract/scripts/subpath-imports.mjs <dirs or files>       
 node _shared/sandbox-contract/scripts/subpath-imports.mjs --check <dirs or files>     # exit 1 if anything would change
 ```
 
+`sandboxContract` sits at the size the declaration emitter will still write (TS7056, "the inferred type of this node
+exceeds the maximum length"): `pnpm build` fails on `src/index.ts` when a change spells out too much type. A schema
+that is the output of several routes, or that carries a large nested shape, is named with an interface and annotated
+`z.ZodType<T, T>` (`schemas/agent-press.ts`, `schemas/metrics.ts` `StorageReport` and the checkout shapes). An alias of
+`z.infer<…>` does not help, since the emitter spells the alias out anyway. (2026-11-03: the per-conversation storage
+rows tipped it; naming `StorageReport`, which two routes spelled out whole, gave the room back. Folding three presses
+into one `pressCheckout` route was not enough on its own.)
+
 The lock (`src/state/contract-lock.ts`) walks every module of `src/` (`src/state/contract-modules.ts`) rather than the
 barrel's namespace, and refuses two modules exporting different schemas under one name. `scripts/write-aggregate.mjs
 --check` holds `sandboxContract` to the files in `src/contracts/`.

@@ -1,6 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import {
+    type CheckoutSize,
     STORAGE_CLEANABILITY,
     type StorageCategoryId,
     type StorageCategoryUsage,
@@ -124,6 +125,32 @@ const usageOf = (category: StorageCategoryId, tally: CategoryTally, options: Sca
     };
 };
 
+// Every conversation directory on the history volume, from the tallies the walk already keeps by item: a checkout is a
+// `checkouts` item under worktrees/ (its build output carved out of it), an overlay one under overlays/, and its build
+// output every `buildOutputs` item below worktrees/<id>/ or overlays/<id>/.
+const checkoutSizes = (tallies: ReadonlyMap<StorageCategoryId, CategoryTally>, history: string): CheckoutSize[] => {
+    const byId = new Map<string, CheckoutSize>();
+    const add = (path: string, place: "worktrees" | "overlays", field: "bytes" | "buildOutputBytes" | "overlayBytes", bytes: number): void => {
+        const [top, id] = relative(history, path).split(sep);
+        if (top !== place || id === undefined || id === "") {
+            return;
+        }
+        const size = byId.get(id) ?? { id, bytes: 0, buildOutputBytes: 0, overlayBytes: 0 };
+        byId.set(id, { ...size, [field]: size[field] + bytes });
+    };
+    for (const [path, item] of tallies.get("checkouts")?.items ?? []) {
+        add(path, "worktrees", "bytes", item.bytes);
+        add(path, "overlays", "overlayBytes", item.bytes);
+    }
+    for (const [path, item] of tallies.get("buildOutputs")?.items ?? []) {
+        add(path, "worktrees", "buildOutputBytes", item.bytes);
+        // A shared Cargo target's layer: what this checkout compiled differently from the snapshot (cargo-warm.ts).
+        add(path, "overlays", "buildOutputBytes", item.bytes);
+    }
+    const total = (size: CheckoutSize): number => size.bytes + size.buildOutputBytes + size.overlayBytes;
+    return [...byId.values()].toSorted((left, right) => total(right) - total(left) || left.id.localeCompare(right.id));
+};
+
 export const scanStorage = async (options: ScanOptions): Promise<StorageScan> => {
     const { roots, signal } = options;
     const startedAt = options.now();
@@ -219,6 +246,7 @@ export const scanStorage = async (options: ScanOptions): Promise<StorageScan> =>
         outcome: complete ? "complete" : "partial",
         ...(volume === undefined ? {} : { disk: { usedBytes: (volume.blocks - volume.bfree) * volume.bsize, totalBytes: volume.blocks * volume.bsize } }),
         categories,
+        checkouts: checkoutSizes(tallies, roots.history),
         unreadable,
     };
 };

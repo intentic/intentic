@@ -1084,6 +1084,10 @@
             "howItWorksNote": "El espacio compartido no cambia",
             "unlink": "Desvincular",
             "unlinkNote": "Empieza desde la línea principal"
+        },
+        "cardDiskUse": {
+            "onDisk": "{bytes} en disco",
+            "lastScan": "En el último análisis del disco. Libéralo desde la tarjeta Disco."
         }
     },
     "app": {
@@ -9028,7 +9032,11 @@
         "useSandboxStorage": {
             "couldntMeasure": "No se pudo medir el disco",
             "couldntClean": "No se pudo limpiar {category}",
-            "cleaning": "Limpiando {category}"
+            "cleaning": "Limpiando {category}",
+            "cleaningBuildOutput": "Quitando la salida de compilación de {name}",
+            "freeingCheckout": "Liberando la copia de {name}",
+            "trashingCheckout": "Moviendo {name} a la papelera",
+            "couldntPress": "No se pudo liberar espacio en {name}"
         },
         "sandboxStorageCard": {
             "historyLow": "El disco del historial tiene {free} libres, por debajo de los {floor} reservados para conversaciones nuevas. Libera espacio aquí y vuelve a enviar.",
@@ -11022,6 +11030,46 @@
             "tcpUdp": "TCP + UDP",
             "tcp": "TCP",
             "udp": "UDP"
+        },
+        "storageCheckouts": {
+            "heading": "Copias de trabajo de las conversaciones",
+            "summary": "{count} copia de trabajo, {bytes} | {count} copias de trabajo, {bytes}",
+            "intro": "Cada conversación trabaja en su propia copia de los repositorios, y sus compilaciones dejan ahí su salida. La salida de compilación vuelve con la siguiente compilación. Una copia liberada conserva su trabajo en su rama y vuelve con el siguiente turno de la conversación.",
+            "leftoverName": "Sin conversación",
+            "landedName": "{count} copia integrada | {count} copias integradas",
+            "working": "Trabajando",
+            "idle": "Inactiva",
+            "held": "Trabajo sin integrar",
+            "landed": "Integrada",
+            "archived": "Archivada",
+            "leftover": "Sobrante: ninguna conversación es su dueña",
+            "active": "activa {when}",
+            "partCheckout": "copia {bytes}",
+            "partBuildOutput": "salida de compilación {bytes}",
+            "partOverlay": "dependencias {bytes}",
+            "cleanBuildOutput": "Liberar {bytes}",
+            "cleanBuildOutputNote": "Quitar su salida de compilación. La copia y su trabajo se quedan, y la siguiente compilación la vuelve a generar.",
+            "release": "Liberar copia",
+            "releaseNote": "Confirmar lo que contiene la copia en su rama y luego quitarla. La conversación se queda, y su siguiente turno trae la copia de vuelta.",
+            "trash": "Mover a la papelera",
+            "trashHeader": "¿Mover esta copia sobrante a la papelera?",
+            "trashWarning": "Ninguna conversación es ya dueña de esta copia, pero puede contener trabajo que nadie confirmó. La papelera la guarda un tiempo antes de vaciarse.",
+            "freeLanded": "Liberar {count} integrada | Liberar las {count} integradas",
+            "showAll": "Mostrar las {count}",
+            "showFewer": "Mostrar menos"
+        },
+        "agentDiskSpace": {
+            "heading": "Espacio en disco",
+            "buildOutputIdle": "Quitar la salida de compilación de conversaciones inactivas tras",
+            "buildOutputIdleNote": "Un target de Rust puede ocupar decenas de gigabytes por conversación. La copia y su trabajo se quedan; la siguiente compilación vuelve a generar la salida. Las conversaciones integradas y la caché incremental de Cargo se van tras una hora.",
+            "n1Hour": "1 hora",
+            "n6Hours": "6 horas",
+            "n1Day": "1 día",
+            "n1Week": "1 semana",
+            "reapBelow": "Limpiar cuando el espacio libre baje del",
+            "reapBelowNote": "Se quita la salida de compilación de cada conversación sin nada en marcha, empezando por la más inactiva, hasta que vuelva a haber sitio. Se te avisa por debajo del 10 % y otra vez por debajo del 5 %.",
+            "leanRust": "Compilaciones de Rust ligeras",
+            "leanRustNote": "Los agentes compilan Rust solo con tablas de líneas como información de depuración. Los targets ocupan menos y las trazas conservan archivo y línea, pero un depurador no ve variables locales. Anula lo que el Cargo.toml de un repositorio diga sobre la información de depuración."
         }
     },
     "settings": {

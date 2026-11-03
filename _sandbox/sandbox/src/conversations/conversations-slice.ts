@@ -103,7 +103,15 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
     // A database made again this boot does not name the directories on the volume, so the orphan sweep holds off.
     const units = conversationUnits(historyRoot, { has: agentsStore.has, any: agentsStore.any, recreated: recovery !== undefined });
     // Shared by the turn path and worktree creation so both read one capability probe.
-    const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot, logger });
+    const turnIsolation = createTurnIsolation({
+        root: workspace.root,
+        historyRoot,
+        logger,
+        cargoWarm: () =>
+            whole()
+                .sandboxSettings.get()
+                .then((settings) => settings.sharedCargoTargets),
+    });
     // Built before the registry, which derives a card's land standing through it rather than a stored verdict.
     const agentWorktrees = createAgentWorktrees(
         { workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: turnIsolation, logger, perf },

@@ -7,6 +7,8 @@
 
 pub mod choice;
 mod commands;
+mod disk;
+mod disk_consumers;
 mod fetch;
 mod install_plan;
 pub mod leave;
@@ -24,6 +26,7 @@ mod windows;
 #[cfg(windows)]
 mod wsl_integration;
 
+pub use disk::DiskArgs;
 pub use moves::CopyArgs;
 pub use record::EngineRecord;
 
@@ -465,7 +468,7 @@ pub fn adopt() {
 }
 
 pub use commands::{
-    default_action, docker_desktop_installed, run_copy, run_fetch, run_hold, run_install,
+    default_action, docker_desktop_installed, run_copy, run_disk, run_fetch, run_hold, run_install,
     run_prefer, run_relay, run_remove, run_restart, run_start, run_status, run_stop, run_update,
     run_wsl,
 };

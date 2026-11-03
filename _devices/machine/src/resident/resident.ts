@@ -10,6 +10,7 @@ import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
 import { baseDir, runLogPath, runPidPath } from "../config.js";
 import { startAutoBackup } from "../device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "../device/sandbox-rounds/auto-prepare.js";
+import { startEngineDiskWatch } from "../device/sandbox-rounds/engine-disk.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "../device/config.js";
 import { connect, reachedOverLoopback } from "../device/connection.js";
 import { hostedSlugs, keeperOn, startKeeper } from "../device/sandbox-rounds/keeper.js";
@@ -315,6 +316,7 @@ const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Con
     const upkeep = startUpkeep(log, lease.supervisor);
     // The egress follower fences a sandbox as docker starts it, while this environment's ic advertises `egress`
     // (device/egress/follower.ts); the probation watch's minute round is its backstop, where ic reasserts the rules.
+    // The engine's disk is the PC's, one for both sides, so only the Windows side watches it (sandbox-rounds/engine-disk.ts).
     return [
         watch,
         keeper,
@@ -323,6 +325,7 @@ const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Con
         upkeep,
         startLogRoll(runLogPath, log),
         startEgressFollower(log),
+        ...(WINDOWS_SIDE ? [startEngineDiskWatch(log)] : []),
     ];
 };
 

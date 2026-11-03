@@ -1,7 +1,7 @@
 import { checkoutSpace } from "./checkout-space.js";
 import { defaultGit } from "@intentic/base/git";
 import { lstat, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../../app-env.js";
@@ -9,6 +9,7 @@ import type { Services } from "../../../composition.js";
 import { statePath } from "../../../state-paths.js";
 import type { StorageRoots } from "./storage-catalog.js";
 import { createStorageRoutes } from "./storage.routes.js";
+import { type CheckoutActions, CheckoutActionRefused } from "./checkout-usage.js";
 import { plant, removeStorageTrees, storageTree } from "./storage.testing.js";
 
 // The four storage procedures over a real temp tree, through oRPC's own call so the contract's schemas judge every
@@ -20,7 +21,14 @@ const OLD = 30 * 24 * 60 * 60 * 1000;
 
 afterEach(removeStorageTrees);
 
-const routesOver = (roots: StorageRoots) =>
+// A `target` folder inside a checkout is build output here, and every one may go.
+const anyTarget = {
+    detect: async (dir: string) => basename(dir) === "target",
+    reapable: () => true,
+    reap: async () => ({ removed: 0, failed: 0 }),
+};
+
+const routesOver = (roots: StorageRoots, checkouts?: CheckoutActions) =>
     createStorageRoutes(
         {
             config: unstubbed<Services["config"]>("config", { historyRoot: roots.history }),
@@ -30,6 +38,8 @@ const routesOver = (roots: StorageRoots) =>
         async () => {
             throw new Error("no package store in this tree");
         },
+        checkouts === undefined ? undefined : anyTarget,
+        checkouts,
     );
 
 // A tree with one of each kind of answer: a cleanable category, a safe one with a part too recent, and state.
@@ -164,4 +174,67 @@ test("Storage exposes each live repository's committed checkout cost, changing w
     await commit();
     const next = (await defaultGit(repo, ["rev-parse", "HEAD"])).stdout.trim();
     expect((await call(routes.storage, undefined, { context })).repositoryCheckouts).toEqual([{ repo: "backup", head: next, bytes: 8 }]);
+});
+
+test("every conversation directory is listed with where its conversation stands, and a refused press says why", async () => {
+    const { roots } = await storageTree();
+    await plant(join(roots.history, "worktrees", "c1", "app", "src", "main.rs"), 300, NOW, OLD);
+    await plant(join(roots.history, "worktrees", "c1", "app", "target", "debug", "app"), 2000, NOW, OLD);
+    await plant(join(roots.history, "overlays", "c1", "node_modules", "left-pad", "index.js"), 100, NOW, OLD);
+    // A shared Cargo target's layer: build output of c1's, not its checkout.
+    await plant(join(roots.history, "overlays", "c1", "target", "upper", "debug", "app"), 400, NOW, OLD);
+    await plant(join(roots.history, "worktrees", "gone", "README.md"), 50, NOW, OLD);
+    await plant(join(roots.history, "worktrees", "stray", "README.md"), 10, NOW, OLD);
+    const pressed: string[] = [];
+    const routes = routesOver(roots, {
+        factsOf: async (id) => {
+            if (id === "gone") {
+                return undefined;
+            }
+            return id === "stray"
+                ? { state: "leftover", reapable: false, releasable: false, trashable: true }
+                : { state: "idle", title: "Fix the login bug", updatedAt: 5, reapable: true, releasable: true, trashable: false };
+        },
+        clean: async (id) => {
+            pressed.push(`clean ${id}`);
+            return { id, removed: ["app/target"] };
+        },
+        release: async () => {
+            throw new CheckoutActionRefused("a turn is under way in it");
+        },
+        trash: async (id) => void pressed.push(`trash ${id}`),
+    });
+
+    const report = await call(routes.scanStorage, undefined, { context });
+    expect(report.scan?.checkouts).toEqual([
+        { id: "c1", bytes: 300, buildOutputBytes: 2400, overlayBytes: 100 },
+        { id: "gone", bytes: 50, buildOutputBytes: 0, overlayBytes: 0 },
+        { id: "stray", bytes: 10, buildOutputBytes: 0, overlayBytes: 0 },
+    ]);
+    // `gone` left the disk after the scan: no row to press on.
+    expect(report.checkouts).toEqual([
+        {
+            id: "c1",
+            bytes: 300,
+            buildOutputBytes: 2400,
+            overlayBytes: 100,
+            state: "idle",
+            title: "Fix the login bug",
+            updatedAt: 5,
+            can: { cleanBuildOutput: true, release: true, trash: false },
+        },
+        { id: "stray", bytes: 10, buildOutputBytes: 0, overlayBytes: 0, state: "leftover", can: { cleanBuildOutput: false, release: false, trash: true } },
+    ]);
+    expect(await call(routes.pressCheckout, { id: "c1", press: "cleanBuildOutput" }, { context })).toEqual({ id: "c1", removed: ["app/target"] });
+    expect(await call(routes.pressCheckout, { id: "stray", press: "trash" }, { context })).toEqual({ id: "stray", removed: [] });
+    await expect(call(routes.pressCheckout, { id: "c1", press: "release" }, { context })).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: "a turn is under way in it",
+    });
+    expect(pressed).toEqual(["clean c1", "trash stray"]);
+});
+
+test("a sandbox that keeps no checkouts answers a press as not found", async () => {
+    const { roots } = await storageTree();
+    await expect(call(routesOver(roots).pressCheckout, { id: "c1", press: "release" }, { context })).rejects.toMatchObject({ code: "NOT_FOUND" });
 });

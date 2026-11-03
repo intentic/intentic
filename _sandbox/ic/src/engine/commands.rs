@@ -128,6 +128,11 @@ pub fn run_wsl(action: Option<String>, distro: Option<String>) -> Result<()> {
     super::wsl(action.as_deref(), distro.as_deref()).map_err(Fail::from)
 }
 
+/// `ic engine disk`: the engine's disk, what takes it, and relief when it is short (disk.rs).
+pub fn run_disk(args: super::disk::DiskArgs) -> Result<()> {
+    super::disk::run(args)
+}
+
 pub fn run_copy(args: super::moves::CopyArgs) -> Result<()> {
     super::moves::copy(args)
 }

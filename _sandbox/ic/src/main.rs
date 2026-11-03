@@ -439,6 +439,26 @@ enum EngineCommand {
         #[arg(long)]
         json: bool,
     },
+    /// How full the engine's disk is, its level (ok, low, critical, full) and what takes the space, each named by
+    /// whose it is; `--relieve` clears the build cache and dangling images, and at full the ballast. Never a volume
+    Disk {
+        /// One line of JSON (the machine agent reads this)
+        #[arg(long)]
+        json: bool,
+        /// Also name what takes the space (slow: Docker sizes every volume, so a measurement is kept and reused)
+        #[arg(long)]
+        consumers: bool,
+        /// With --consumers: how old a kept measurement may be before it is made again, in minutes
+        #[arg(long = "max-age", default_value_t = 60)]
+        max_age: u64,
+        /// With --consumers: answer from the kept measurement however old, and never measure now
+        #[arg(long)]
+        kept: bool,
+        /// Clear what is nobody's data, more at each level: dangling build cache and images when low, all unused build
+        /// cache when critical, and the ballast the engine holds back when full
+        #[arg(long)]
+        relieve: bool,
+    },
     /// Import the WSL distro, generate TLS, and start the engine
     Install,
     /// Start the engine and wait until it answers
@@ -1445,6 +1465,19 @@ fn main() {
             None => engine::default_action(),
             Some(EngineCommand::Fetch) => engine::run_fetch(),
             Some(EngineCommand::Status { json }) => engine::run_status(json),
+            Some(EngineCommand::Disk {
+                json,
+                consumers,
+                max_age,
+                kept,
+                relieve,
+            }) => engine::run_disk(engine::DiskArgs {
+                json,
+                consumers,
+                max_age_minutes: max_age,
+                kept,
+                relieve,
+            }),
             Some(EngineCommand::Install) => engine::run_install(),
             Some(EngineCommand::Start { quiet }) => engine::run_start(quiet),
             Some(EngineCommand::Stop) => engine::run_stop(),
@@ -1519,7 +1552,9 @@ fn allowed_during_a_move(command: &Command) -> bool {
         ),
         Command::Engine { command } => matches!(
             command,
-            None | Some(EngineCommand::Status { .. }) | Some(EngineCommand::Fetch)
+            None | Some(EngineCommand::Status { .. })
+                | Some(EngineCommand::Fetch)
+                | Some(EngineCommand::Disk { relieve: false, .. })
         ),
         Command::Image(_) | Command::Features { .. } => true,
         // Reading what is here changes nothing; an uninstall waits for the move like every other change.
@@ -2016,6 +2051,48 @@ mod tests {
         };
         assert_eq!(setup_code.as_deref(), Some("--replace"));
         assert!(!replace);
+    }
+
+    #[test]
+    fn engine_disk_reads_only_by_default_and_relieves_only_when_asked() {
+        let Ok(Cli {
+            command:
+                Command::Engine {
+                    command:
+                        Some(EngineCommand::Disk {
+                            json,
+                            consumers,
+                            max_age,
+                            kept,
+                            relieve,
+                        }),
+                },
+        }) = parse(&["engine", "disk", "--json", "--consumers", "--kept"])
+        else {
+            panic!("engine disk did not parse")
+        };
+        assert!(json && consumers && kept);
+        assert_eq!(max_age, 60);
+        // Clearing is never implied: a read is what runs during a move between engines.
+        assert!(!relieve);
+        let Ok(cli) = parse(&["engine", "disk", "--json", "--relieve", "--max-age", "360"]) else {
+            panic!("engine disk --relieve did not parse")
+        };
+        assert!(matches!(
+            cli.command,
+            Command::Engine {
+                command: Some(EngineCommand::Disk {
+                    relieve: true,
+                    max_age: 360,
+                    ..
+                })
+            }
+        ));
+        assert!(!allowed_during_a_move(&cli.command));
+        let Ok(read) = parse(&["engine", "disk"]) else {
+            panic!("engine disk did not parse")
+        };
+        assert!(allowed_during_a_move(&read.command));
     }
 
     #[test]

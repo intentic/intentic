@@ -29,6 +29,8 @@ export interface MachineConfig {
     readonly sandboxBackups?: boolean;
     readonly sandboxTidy?: boolean;
     readonly sandboxKeeper?: boolean;
+    // The engine's disk cleared by itself when it runs short (device/sandbox-rounds/engine-disk.ts); the Windows side's.
+    readonly engineDiskRelief?: boolean;
     // Minutes a sandbox this environment keeps goes unneeded before the keeper puts it to sleep (sandbox-rounds/sleep.ts);
     // absent is the default, 0 never.
     readonly sandboxSleepMinutes?: number;

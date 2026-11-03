@@ -10,6 +10,7 @@ import { storageCategoryLabel, storageCategoryText } from "./storageCategories";
 import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 import { useSandboxStorage } from "./useSandboxStorage";
 import { STORAGE_ANCHOR } from "./storageAnchor";
+import StorageCheckouts from "./StorageCheckouts.vue";
 
 // What is filling this sandbox's disk, by what the space is for, with a way to free what may go. A scan is asked for,
 // never started by opening the page: it reads every file on the volumes, and the last one stays on screen meanwhile.
@@ -208,6 +209,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         />
         <Notice v-if="storage.scanNotice.value" :of="storage.scanNotice.value" />
         <Notice v-if="storage.cleanNotice.value" :of="storage.cleanNotice.value" />
+        <Notice v-if="storage.pressNotice.value" :of="storage.pressNotice.value" />
         <Notice v-if="cleanedNotice" :of="cleanedNotice" />
         <Notice
             v-if="historyDisk?.low"
@@ -362,6 +364,14 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             <p v-if="scan.unreadable > 0" class="text-2xs text-subtle">
                 {{ t(`sandbox.sandboxStorageCard.unreadable`, { count: scan.unreadable }, scan.unreadable) }}
             </p>
+
+            <!-- Under the categories, the checkouts category taken apart by conversation, each with its own presses. -->
+            <StorageCheckouts
+                :rows="storage.report.value?.checkouts ?? []"
+                :pressing="storage.pressingCheckout.value"
+                :disabled="scanning || storage.cleaningCategory.value !== undefined"
+                @press="storage.pressCheckouts"
+            />
         </div>
 
         <ConfirmDialog

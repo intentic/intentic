@@ -218,6 +218,15 @@ test("disk retention defaults bound checkouts and restore points while preservin
     expect(existing.retention.restorePointKeepDays).toBe(0);
 });
 
+test("build output defaults: six idle hours, reaping under 15% free, full debug info", () => {
+    const defaults = SandboxSettingsSchema.parse({});
+    expect(defaults.buildOutputIdleHours).toBe(6);
+    expect(defaults.diskReapBelowPercent).toBe(15);
+    expect(defaults.leanRustBuilds).toBe(false);
+    expect(SandboxSettingsSchema.safeParse({ buildOutputIdleHours: 0 }).success).toBe(false);
+    expect(SandboxSettingsSchema.safeParse({ diskReapBelowPercent: 4 }).success).toBe(false);
+});
+
 describe(`restore points' retention, renamed so a stored zero is the owner's own (2026-10-18)`, () => {
     const read = (retention: Record<string, unknown>) => {
         const converted = convertDocument(SETTINGS_HISTORY, `object`, { retention: { transcriptDays: 7, ...retention } }, true);

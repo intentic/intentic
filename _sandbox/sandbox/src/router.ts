@@ -58,8 +58,14 @@ import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
 import { createAreasRoutes } from "./areas/areas.routes.js";
 import { createStorageRoutes } from "./system/resources/storage/storage.routes.js";
-import { createBuildOutputReaper } from "./conversations/registry/build-output-sweep/build-output-reaper.js";
+import { type BuildOutputReaper, createBuildOutputReaper } from "./conversations/registry/build-output-sweep/build-output-reaper.js";
+import { CheckoutBusy, releaseCheckout } from "./conversations/registry/archive.js";
+import { checkoutStanding } from "./conversations/registry/checkout-standing.js";
+import { LeftoverRefused, trashLeftover } from "./conversations/worktrees/orphan-checkouts.js";
+import { type CheckoutActions, CheckoutActionRefused } from "./system/resources/storage/checkout-usage.js";
 import { isBuildOutputPath } from "./conversations/worktrees/build-outputs/build-outputs.js";
+import { isWarmLayer } from "./conversations/worktrees/cargo-warm.js";
+import { overlaysRoot } from "./conversations/worktrees/isolation.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
@@ -82,22 +88,57 @@ import { pruneStore } from "./workspace/watch/state-janitor.js";
 export type SandboxRouter = Router<typeof sandboxContract, OrpcContext>;
 
 
-// What the Storage card needs of build output in checkouts: how its scan recognises a folder as one, whether a clean may
-// take it now, and the clean itself, over a reaper of its own (a press ignores what earlier passes remember anyway).
-const storageBuildOutputs = (services: Services) => {
-    const reaper = createBuildOutputReaper({
+// The Storage card's presses run over a reaper of their own (a press ignores what earlier passes remember anyway).
+const storageReaper = (services: Services): BuildOutputReaper =>
+    createBuildOutputReaper({
         archive: services,
         worktreesRoot: join(services.config.historyRoot, "worktrees"),
+        overlaysRoot: overlaysRoot(services.config.historyRoot),
         runningJobs: (id) => runningJobsOf(services.conversations, id).length,
     });
-    return {
-        detect: isBuildOutputPath,
-        reapable: (path: string) => reaper.reapable(path, Date.now()),
-        reap: async () => {
-            const swept = await reaper.reapAll(Date.now());
-            return { removed: swept.reduce((total, one) => total + one.removed.length, 0), failed: 0 };
-        },
+
+// What the Storage card needs of build output in checkouts: how its scan recognises a folder as one, whether a clean may
+// take it now, and the clean itself.
+const storageBuildOutputs = (reaper: BuildOutputReaper) => ({
+    // A shared Cargo target's overlay layer is build output too (cargo-warm.ts): what one checkout compiled differently.
+    detect: async (dir: string) => (await isBuildOutputPath(dir)) || (await isWarmLayer(dir)),
+    reapable: (path: string) => reaper.reapable(path, Date.now()),
+    reap: async () => {
+        const swept = await reaper.reapAll(Date.now());
+        return { removed: swept.reduce((total, one) => total + one.removed.length, 0), failed: 0 };
+    },
+});
+
+// The Storage card's per-conversation rows and presses (system/resources/storage/checkout-usage.ts). A refusal from the
+// conversation's state, on either side of the subsystem line, becomes the route's conflict.
+const storageCheckouts = (services: Services, reaper: BuildOutputReaper): CheckoutActions => {
+    const runningJobs = (id: string) => runningJobsOf(services.conversations, id).length;
+    const leftovers = {
+        historyRoot: services.config.historyRoot,
+        worktreesRoot: join(services.config.historyRoot, "worktrees"),
+        registry: services.agents,
+        owners: services.conversationUnits.owners,
+        logger: services.logger,
     };
+    const refused = async <T>(press: () => Promise<T>): Promise<T> => {
+        try {
+            return await press();
+        } catch (error) {
+            throw error instanceof CheckoutBusy || error instanceof LeftoverRefused ? new CheckoutActionRefused(error.message) : error;
+        }
+    };
+    return {
+        factsOf: (id) => checkoutStanding({ archive: services, runningJobs, leftovers }, id),
+        clean: (id) => refused(async () => ({ id, removed: [...(await reaper.reapOne(id)).removed] })),
+        release: (id) => refused(() => releaseCheckout(services, runningJobs, id)),
+        trash: (id) => refused(() => trashLeftover(leftovers, id)),
+    };
+};
+
+// One reaper for both, made once per router.
+const storageRoutes = (services: Services) => {
+    const reaper = storageReaper(services);
+    return createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger), storageBuildOutputs(reaper), storageCheckouts(services, reaper));
 };
 
 export const createRouter = (services: Services): SandboxRouter => ({
@@ -184,7 +225,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     system: {
         ...createSystemRoutes(services),
         ...createDeviceSystemRoutes(services),
-        ...createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger), storageBuildOutputs(services)),
+        ...storageRoutes(services),
     },
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),

@@ -12,7 +12,15 @@ import {
 } from "../schemas/devices.js";
 import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
-import { DiskPressureSchema, SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
+import {
+    CheckoutPressInputSchema,
+    CheckoutPressResultSchema,
+    DiskPressureSchema,
+    SandboxMetricsSchema,
+    StorageCleanInputSchema,
+    StorageCleanResultSchema,
+    StorageReportSchema,
+} from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
 import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
@@ -197,7 +205,7 @@ export const systemContract = {
             path: "/system/disk-pressure",
             summary: "How close the disk is to full",
             description:
-                "The history volume's free space as the sandbox's disk watch last read it, a minute ago at most, and what it did about it: under 15% free it removes build output from checkouts whose conversation has nothing running, and under 10% and 5% it tells the owner. Also the biggest categories of the last storage scan, so a warning can say what is using the space.",
+                "The history volume's free space as the sandbox's disk watch last read it, a minute ago at most, and what it did about it: under the reaping threshold (15% free unless the settings say otherwise) it removes build output from checkouts whose conversation has nothing running, and under 10% and 5% it tells the owner. Also the biggest categories of the last storage scan, so a warning can say what is using the space.",
         })
         .meta({ floor: "maintainer" })
         .output(DiskPressureSchema),
@@ -212,6 +220,17 @@ export const systemContract = {
         })
         .input(StorageCleanInputSchema)
         .output(StorageCleanResultSchema),
+    // One conversation's checkout at a time, by the rules the sweeps apply: the Storage card's per-conversation rows.
+    pressCheckout: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/storage/checkouts/press",
+            summary: "Free the space one conversation's checkout holds",
+            description:
+                "`cleanBuildOutput` removes the build output in one conversation's checkout, which its next build makes again. `release` commits what the checkout holds onto its branch and removes it and its overlay; the next turn brings them back. `trash` moves a checkout no conversation owns into the trash. Each is refused, with why, while the conversation's state forbids it: anything running in it, or work waiting that needs the checkout.",
+        })
+        .input(CheckoutPressInputSchema)
+        .output(CheckoutPressResultSchema),
     // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
     terminals: systemRoute
         .route({

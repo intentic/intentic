@@ -15,6 +15,16 @@ import { detachedStamp } from "../../seams/workload-stamp.js";
 import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
 import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
 import { currentBoot, OVERLAY_FS_NAME, overlayOptions, prepareLayer } from "./overlay-layers.js";
+import {
+    type CargoWarmRequest,
+    cargoWarmRoot,
+    cargoWorkspaces,
+    pinWarmLower,
+    refreshWarmSnapshots,
+    targetFree,
+    type WarmMount,
+    warmTargetOf,
+} from "./cargo-warm.js";
 import { type NamespaceEntryReference, registerMountEntry } from "../../workload/namespace-entry.js";
 import {
     type NamespaceHolder,
@@ -101,6 +111,10 @@ export interface IsolationPlan {
     readonly overlays: string;
     // Absent for a conversation that may see the whole workspace, which needs none of it.
     readonly fence: FencedPlacement | undefined;
+    // The Cargo workspaces whose `target` may read through a frozen snapshot (cargo-warm.ts). Only behind the
+    // sharedCargoTargets setting, for an unfenced checkout of its own where namespaces can be built; only a mount-only
+    // view mounts them (prepareMountView), so a sandbox or an agent domain leaves each target the checkout's own.
+    readonly cargoWarm?: CargoWarmRequest;
 }
 
 // One path derivation shared by the daemon (which creates and reclaims these) and the plan, so there is no second
@@ -125,6 +139,8 @@ export interface MountFacts {
     readonly shelf: boolean;
     readonly store: boolean;
     readonly volatile: boolean;
+    // The warm Cargo layers this view mounts, each pinned to its snapshot (warmMountsOf).
+    readonly warm?: readonly WarmMount[];
 }
 
 // Where one mirror's overlay layer lives, outside the worktree; the fenced sandbox shares the convention (layerOf).
@@ -152,6 +168,12 @@ export const mountTable = (plan: IsolationPlan, facts: MountFacts): MountEntry[]
         const options = overlayOptions(join(MAIN_MOUNT, rel), join(layer, "upper"), join(layer, "work"));
         entries.push({ source: OVERLAY_FS_NAME, target: join(plan.root, rel), type: "overlay", options: facts.volatile ? `${options},volatile` : options });
     }
+    // Last, over the checkout's own folders: a target's lower is a snapshot on the history volume, not the main checkout.
+    for (const warm of facts.warm ?? []) {
+        const layer = layerDirOf(plan, warm.rel);
+        const options = overlayOptions(warm.lower, join(layer, "upper"), join(layer, "work"));
+        entries.push({ source: OVERLAY_FS_NAME, target: join(plan.root, warm.rel), type: "overlay", options: facts.volatile ? `${options},volatile` : options });
+    }
     return entries;
 };
 
@@ -167,7 +189,7 @@ export const fstabOf = (entries: readonly MountEntry[]): string =>
 // were 314 spawns, each a fork and exec on a box already paging). Inside the namespace, `/work/<rel>` is the worktree's
 // `<rel>` unless a bind from the main checkout lies over it: there the main checkout's copy is the mount point, and it
 // already exists, since the walk found the mirror there.
-export const mountPointsOf = (plan: IsolationPlan, facts: Pick<MountFacts, "shelf" | "store">): string[] => {
+export const mountPointsOf = (plan: IsolationPlan, facts: Pick<MountFacts, "shelf" | "store" | "warm">): string[] => {
     const fromMain = [...SHARED_STATE, ...(facts.shelf ? [SHELF] : []), ...(facts.store ? [PACKAGE_STORE] : [])];
     const underMain = (rel: string): boolean => fromMain.some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`));
     return [
@@ -176,6 +198,7 @@ export const mountPointsOf = (plan: IsolationPlan, facts: Pick<MountFacts, "shel
         ...(facts.shelf ? [join(plan.worktree, SHELF)] : []),
         ...(facts.store ? [join(plan.worktree, PACKAGE_STORE)] : []),
         ...plan.mirrors.filter((rel) => !underMain(rel)).map((rel) => join(plan.worktree, rel)),
+        ...(facts.warm ?? []).map((warm) => join(plan.worktree, warm.rel)),
     ];
 };
 
@@ -208,6 +231,31 @@ export interface MountView {
     readonly release: () => Promise<void>;
 }
 
+// The warm Cargo layers a view mounts (cargo-warm.ts): each workspace's `target` read through its repository's frozen
+// snapshot, only where the checkout has no target of its own and a snapshot exists. Whatever goes wrong leaves that
+// target the checkout's own, as before the setting, rather than failing the turn's namespace.
+export const warmMountsOf = async (plan: IsolationPlan, boot: string | undefined): Promise<WarmMount[]> => {
+    const request = plan.cargoWarm;
+    if (request === undefined) {
+        return [];
+    }
+    const mounts: WarmMount[] = [];
+    for (const crate of request.crates) {
+        const rel = warmTargetOf(crate);
+        const layer = layerDirOf(plan, rel);
+        try {
+            const lower = (await targetFree(join(plan.worktree, rel))) ? await pinWarmLower(request.store, crate, layer) : undefined;
+            if (lower !== undefined) {
+                await prepareLayer(layer, boot);
+                mounts.push({ rel, lower });
+            }
+        } catch (error) {
+            process.emitWarning(`cargo-warm: ${rel} builds a target of its own this turn: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    return mounts;
+};
+
 export const prepareMountView = async (plan: IsolationPlan, options: { readonly volatile?: boolean } = {}): Promise<MountView> => {
     const [shelf, store, volatile, boot] = await Promise.all([
         isDirectory(join(plan.root, SHELF)),
@@ -215,7 +263,7 @@ export const prepareMountView = async (plan: IsolationPlan, options: { readonly 
         options.volatile ?? overlayVolatileAvailable(dirname(plan.overlays)),
         currentBoot(),
     ]);
-    const facts = { shelf, store, volatile };
+    const facts = { shelf, store, volatile, warm: await warmMountsOf(plan, volatile ? boot : undefined) };
     const table = mountTable(plan, facts);
     await Promise.all(mountPointsOf(plan, facts).map((dir) => mkdir(dir, { recursive: true })));
     const layers = await Promise.all(plan.mirrors.map((rel) => prepareLayer(layerDirOf(plan, rel), volatile ? boot : undefined)));
@@ -534,7 +582,15 @@ export interface TurnIsolation {
     readonly sandboxAvailable: () => Promise<boolean>;
 }
 
-export const createTurnIsolation = (options: { readonly root: string; readonly historyRoot: string; readonly logger: Logger }): TurnIsolation => {
+export interface TurnIsolationOptions {
+    readonly root: string;
+    readonly historyRoot: string;
+    readonly logger: Logger;
+    // The sharedCargoTargets setting, read at each plan so switching it applies from the next turn (cargo-warm.ts).
+    readonly cargoWarm?: () => Promise<boolean>;
+}
+
+export const createTurnIsolation = (options: TurnIsolationOptions): TurnIsolation => {
     const { root, historyRoot, logger } = options;
     // Probed once per daemon life: the answer never changes, and re-probing would spawn a process on every turn.
     let probe: Promise<boolean> | undefined;
@@ -560,6 +616,24 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
         });
         return sandboxProbe;
     };
+    // Asked for only where it could be mounted: a checkout of its own, with namespaces. Freezing what main has built
+    // runs behind the plan, so a turn mounts what an earlier one froze and never waits on a copy.
+    const cargoWarmFor = async (worktree: string): Promise<CargoWarmRequest | undefined> => {
+        const wanted = await (options.cargoWarm?.() ?? Promise.resolve(false)).catch(
+            // allow(silent-catch): settings that cannot be read leave it at its default, off.
+            () => false,
+        );
+        if (!wanted || worktree === root || !(await available())) {
+            return undefined;
+        }
+        const crates = await cargoWorkspaces(worktree);
+        if (crates.length === 0) {
+            return undefined;
+        }
+        const store = cargoWarmRoot(historyRoot);
+        void refreshWarmSnapshots({ store, main: root, crates, overlays: overlaysRoot(historyRoot), logger });
+        return { store, crates };
+    };
     return {
         available,
         sandboxAvailable: sandboxReady,
@@ -569,7 +643,7 @@ export const createTurnIsolation = (options: { readonly root: string; readonly h
             const mirrors = await mirroredDirs(root, worktree, { intoNestedRepos: true });
             const overlays = overlaysDir(historyRoot, basename(worktree));
             if (fence === undefined) {
-                return { worktree, root, mirrors, overlays, fence: undefined };
+                return { worktree, root, mirrors, overlays, fence: undefined, ...opt("cargoWarm", await cargoWarmFor(worktree)) };
             }
             const folders = fence.map((folder) => foldPath(folder)).filter((folder): folder is string => folder !== undefined);
             return {

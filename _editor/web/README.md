@@ -757,3 +757,10 @@ app's window to another face, or sent the workspace to `/setup`.)_
 The sandbox Storage card warns when the history volume falls below its checkout floor, separately from the workspace
 volume. It also names repositories whose full checkout costs at least 1 GiB and links to Personas → Runs on → Carries.
 The same cost appears beside those repositories in a persona's selection controls.
+Under its categories it lists every conversation's checkout from the last scan (`overview/storage/StorageCheckouts.vue`,
+2026-11-03): largest first, with its standing, its parts, and the presses the daemon allows it now (free its build
+output, free the checkout, move a leftover nobody owns to the trash, or free every landed one at once). A press writes
+the row's new standing into the report (`checkoutsView.ts afterPress`) instead of scanning again, since a scan reads every
+file. A board card marks a checkout of 1 GiB or more with its size, linking to the card (`CardDiskUse.vue`). Agent →
+Finishing → Disk space holds the build-output idle time, the free-space threshold for cleaning everything idle, and
+lean Rust builds (`AgentDiskSpace.vue`).

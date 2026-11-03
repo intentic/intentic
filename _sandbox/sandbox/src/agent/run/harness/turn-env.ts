@@ -16,9 +16,15 @@ const sshAgentEnv = async (services: Services, conversationId: string | undefine
     return socket === undefined ? {} : { SSH_AUTH_SOCK: socket };
 };
 
+// LEAN RUST BUILDS (2026-11-03): one shinobi checkout's dependency artifacts were 15 GB of a 32 GB target, most of it
+// debug info. Line tables keep a backtrace's file and line; Cargo reads a profile from the environment over Cargo.toml's.
+export const leanRustEnv = (on: boolean): Record<string, string> =>
+    on ? { CARGO_PROFILE_DEV_DEBUG: "line-tables-only", CARGO_PROFILE_TEST_DEBUG: "line-tables-only" } : {};
+
 // The environment a turn's shell runs with: connected cli capabilities' variables (credential-gateway addresses for every
 // brokered card, the credential itself only for one delivered raw), extension settings env, extension bin dirs on PATH,
-// the conversation's own ssh agent socket, and the ripgrep config that makes `rg` search documents. Shared by streamAgent and the watch restore in agent/watchers.ts so both
+// the conversation's own ssh agent socket, the ripgrep config that makes `rg` search documents, and lean Rust debug info
+// when the settings ask for it. Shared by streamAgent and the watch restore in agent/watchers.ts so both
 // derive the same environment. Read live, never stored, so a rotated or revoked credential is always current.
 // `conversationId` is whose requests the gateway addresses and the ssh agent answer to: its gates, its cards, its
 // ledger rows.
@@ -26,12 +32,14 @@ export const turnCliEnv = async (services: Services, conversationId: string | un
     const gateway = { sessions: services.brokerSessions, origin: services.gatewayOrigin, conversationId };
     const delivery = async (capability: string) => (await services.credentialPolicy.of(capability)).delivery ?? "gateway";
     // cli capabilities contribute their variables; `contributes.settings.env` extensions add theirs too.
+    const settings = await services.sandboxSettings.get();
     const env = {
         ...(await cliEnvOf(services, { gateway, delivery })),
         ...(await extensionEnvOf(services)),
         ...(await sshAgentEnv(services, conversationId)),
         // `rg` reading documents through fileq, while the keeper keeps their shadows (derived/search-env.ts).
-        ...(await documentSearchEnv((await services.sandboxSettings.get()).documentSearch)),
+        ...(await documentSearchEnv(settings.documentSearch)),
+        ...leanRustEnv(settings.leanRustBuilds),
     };
     // Extensions shipping `contributes.bin` get their bin dir prepended so the tool resolves by name.
     const binDirs = await extensionBinDirsOf(services);

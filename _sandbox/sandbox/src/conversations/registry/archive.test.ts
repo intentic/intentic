@@ -15,7 +15,12 @@ import {
     sweepHeldCheckouts,
     heldCheckoutByAge,
     buildOutputsQuiet,
+    buildOutputsDue,
     BUILD_OUTPUT_QUIET_MS,
+    CheckoutBusy,
+    INCREMENTAL_QUIET_MS,
+    quietOfSettings,
+    releaseCheckout,
     LANDED_BUILD_OUTPUT_QUIET_MS,
     NO_QUIET,
     reapOrder,
@@ -476,6 +481,7 @@ const heldDeps = (
     overrides: {
         readonly jobs?: number;
         readonly family?: { readonly child: string; readonly running?: boolean; readonly turnRunning?: boolean };
+        readonly card?: AgentSummary;
     } = {},
 ) => {
     const order: string[] = [];
@@ -493,7 +499,7 @@ const heldDeps = (
             : [[family.child, unstubbed<ChildRecord>("child", { running: family.running, held: undefined, paused: undefined, pending: undefined })]],
     );
     const deps = unstubbed<AgentArchiveDeps>("archive", {
-        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card({ status: "ready" })], entry: () => isolatedAgent([]) }),
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [overrides.card ?? card({ status: "ready" })], entry: () => isolatedAgent([]) }),
         conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", {
             running: (id) => family?.turnRunning === true && id === family.child,
             state: () => undefined,
@@ -538,4 +544,43 @@ describe("sweepHeldCheckouts never pulls a checkout out from under live work", (
         expect(retire).toHaveBeenCalledTimes(1);
         expect(order).toEqual(["reap", "retire"]);
     });
+});
+
+describe("releaseCheckout, a person's press on one conversation's row", () => {
+    it("frees a settled checkout at any age, reaping what is left before the directory goes", async () => {
+        const { deps, retire, order, runningJobs } = heldDeps({ card: card({ status: "idle", updatedAt: Date.now() }) });
+        await releaseCheckout(deps, runningJobs, "c1");
+        expect(retire).toHaveBeenCalledTimes(1);
+        expect(order).toEqual(["reap", "retire"]);
+    });
+
+    it("refuses, saying why, while work runs in it or waits on its checkout", async () => {
+        const jobs = heldDeps({ jobs: 1 });
+        await expect(releaseCheckout(jobs.deps, jobs.runningJobs, "c1")).rejects.toThrow("a background command still runs in it");
+        const running = heldDeps({ card: card({ status: "running" }) });
+        await expect(releaseCheckout(running.deps, running.runningJobs, "c1")).rejects.toThrow("a turn is under way in it");
+        const draft = heldDeps({ card: card({ status: "idle", unsentAt: 1 }) });
+        await expect(releaseCheckout(draft.deps, draft.runningJobs, "c1")).rejects.toThrow(CheckoutBusy);
+        await expect(releaseCheckout(draft.deps, draft.runningJobs, "nobody")).rejects.toThrow("no conversation by that id");
+        expect([jobs.retire, running.retire, draft.retire].map((retire) => retire.mock.calls.length)).toEqual([0, 0, 0]);
+    });
+
+    it("frees the checkout an archived conversation left behind, whatever it was waiting on", async () => {
+        const watch = { id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 };
+        const { deps, retire, runningJobs } = heldDeps({ card: card({ status: "landed", archivedAt: 1, watches: [watch] }) });
+        await releaseCheckout(deps, runningJobs, "c1");
+        expect(retire).toHaveBeenCalledTimes(1);
+    });
+});
+
+test("Cargo's incremental caches are due after an hour idle, the rest after the idle hours", () => {
+    expect(buildOutputsDue(card({ status: "idle" }), INCREMENTAL_QUIET_MS - 1)).toBe(undefined);
+    expect(buildOutputsDue(card({ status: "idle" }), INCREMENTAL_QUIET_MS)).toBe("incremental");
+    expect(buildOutputsDue(card({ status: "idle" }), BUILD_OUTPUT_QUIET_MS)).toBe("all");
+    expect(buildOutputsDue(card({ status: "landed" }), INCREMENTAL_QUIET_MS)).toBe("all");
+    expect(buildOutputsDue(card({ status: "running" }), BUILD_OUTPUT_QUIET_MS)).toBe(undefined);
+    expect(buildOutputsDue(card({ status: "idle" }), 0, NO_QUIET)).toBe("all");
+    // A day's idle hours: six hours in, only the incremental caches.
+    expect(buildOutputsDue(card({ status: "idle" }), BUILD_OUTPUT_QUIET_MS, quietOfSettings(24))).toBe("incremental");
+    expect(buildOutputsDue(card({ status: "idle" }), DAY, quietOfSettings(24))).toBe("all");
 });

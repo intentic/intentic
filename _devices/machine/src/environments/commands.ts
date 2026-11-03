@@ -74,6 +74,7 @@ export interface UpdatesFlags {
     readonly sandboxes?: "on" | "off";
     readonly backups?: "on" | "off";
     readonly tidy?: "on" | "off";
+    readonly disk?: "on" | "off";
 }
 
 // On is the resting state and is stored as the key's absence; only an explicit off is written down.
@@ -84,12 +85,13 @@ const switchedTo = (flag: "on" | "off" | undefined, stored: boolean | undefined)
 type SwitchedConfig = { -readonly [K in keyof MachineConfig]: MachineConfig[K] };
 
 export const withSwitches = (config: MachineConfig, flags: UpdatesFlags): MachineConfig => {
-    const { agentUpdates, sandboxUpdates, sandboxBackups, sandboxTidy, ...rest } = config;
+    const { agentUpdates, sandboxUpdates, sandboxBackups, sandboxTidy, engineDiskRelief, ...rest } = config;
     const next: SwitchedConfig = rest;
     const agent = switchedTo(flags.agent, agentUpdates);
     const sandboxes = switchedTo(flags.sandboxes, sandboxUpdates);
     const backups = switchedTo(flags.backups, sandboxBackups);
     const tidy = switchedTo(flags.tidy, sandboxTidy);
+    const disk = switchedTo(flags.disk, engineDiskRelief);
     if (agent !== undefined) {
         next.agentUpdates = agent;
     }
@@ -102,11 +104,14 @@ export const withSwitches = (config: MachineConfig, flags: UpdatesFlags): Machin
     if (tidy !== undefined) {
         next.sandboxTidy = tidy;
     }
+    if (disk !== undefined) {
+        next.engineDiskRelief = disk;
+    }
     return next;
 };
 
 const updatesArgs = (flags: UpdatesFlags): string[] =>
-    (["agent", "sandboxes", "backups", "tidy"] as const).flatMap((flag) => {
+    (["agent", "sandboxes", "backups", "tidy", "disk"] as const).flatMap((flag) => {
         const value = flags[flag];
         return value === undefined ? [] : [`--${flag}`, value];
     });
@@ -114,7 +119,7 @@ const updatesArgs = (flags: UpdatesFlags): string[] =>
 // Every switch is the PC's, kept on its root: a distro hands the command to its Windows side rather than keeping a copy.
 export const updates = buildCommand<UpdatesFlags>({
     docs: {
-        brief: "What this device does by itself: update its agent (the whole PC at once), download each sandbox's next image, back each sandbox up daily and tidy what swaps leave behind",
+        brief: "What this device does by itself: update its agent (the whole PC at once), download each sandbox's next image, back each sandbox up daily, tidy what swaps leave behind and clear the engine's disk when it runs short",
     },
     parameters: {
         flags: {
@@ -136,6 +141,12 @@ export const updates = buildCommand<UpdatesFlags>({
                 parse: onOff,
                 optional: true,
                 brief: "Once a day, clear the images, records and trash that swaps and removals leave behind; volumes are never deleted (on by default)",
+            },
+            disk: {
+                kind: "parsed",
+                parse: onOff,
+                optional: true,
+                brief: "When the intentic engine's disk runs short, clear its build cache and dangling images, and when it is all but full its ballast; volumes are never touched, and the disk is watched and told either way (on by default)",
             },
         },
     },
@@ -179,4 +190,5 @@ export const switchRows = (config: MachineConfig): readonly SwitchRow[] => [
     switchRow("sandboxes", config.sandboxUpdates !== false, "each next update downloads in the background", "each update downloads when it is taken"),
     switchRow("backups", config.sandboxBackups !== false, "each running sandbox daily, encrypted, on this device", "none taken by themselves"),
     switchRow("tidy", config.sandboxTidy !== false, "daily: old images, removed sandboxes' records, week-old trash", "left until tidied by hand"),
+    switchRow("disk", config.engineDiskRelief !== false, "the engine's build cache and dangling images cleared when its disk runs short", "the engine's disk watched and told, never cleared by itself"),
 ];

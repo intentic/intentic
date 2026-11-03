@@ -121,7 +121,7 @@ const reclaim = async (historyRoot: string, kind: Kind, id: string, dir: string,
 };
 
 // Asked per directory at the decision, so a conversation registered since the pass began is never unowned.
-const ownershipOf = (deps: OrphanCheckoutsDeps, id: string): Ownership => {
+const ownershipOf = (deps: Pick<OrphanCheckoutsDeps, "registry" | "owners" | "logger">, id: string): Ownership => {
     try {
         return deps.registry.ids().includes(id) || deps.owners.has(id) ? "owned" : "unowned";
     } catch (error) {
@@ -180,6 +180,53 @@ export const sweepOrphanCheckouts = async (deps: OrphanCheckoutsDeps, now: numbe
         await judgeOne(deps, tally, target, now);
     }
     return tally;
+};
+
+// A LEFTOVER ON A PERSON'S PRESS (2026-11-03). The Storage card lists every checkout no conversation owns; a press moves
+// one to the trash now instead of after the daily pass's day. Still never while the registry cannot answer, and never a
+// directory changed in the last few minutes, which is what a conversation being opened right now looks like.
+export const LEFTOVER_PRESS_MIN_AGE_MS = 10 * 60 * 1000;
+
+// Why a leftover may not go now; undefined when it may. The age is read at the press itself (trashLeftover).
+export const leftoverRefusal = (deps: Pick<OrphanCheckoutsDeps, "registry" | "owners" | "logger">, id: string): string | undefined => {
+    if (!isConversationId(id)) {
+        return "not a conversation's directory";
+    }
+    const held = registryHold({ recreated: deps.owners.recreated, databaseAny: deps.owners.any(), loaded: deps.registry.ids().length });
+    if (held !== undefined) {
+        return "the sandbox cannot say for certain which conversations exist right now";
+    }
+    const ownership = ownershipOf(deps, id);
+    return ownership === "unowned" ? undefined : "a conversation owns it";
+};
+
+export class LeftoverRefused extends Error {}
+
+export const trashLeftover = async (deps: OrphanCheckoutsDeps, id: string): Promise<void> => {
+    const refusal = leftoverRefusal(deps, id);
+    if (refusal !== undefined) {
+        throw new LeftoverRefused(refusal);
+    }
+    const now = (deps.now ?? Date.now)();
+    const targets = [
+        { kind: "checkouts" as const, dir: join(deps.worktreesRoot, id) },
+        { kind: "overlays" as const, dir: overlaysDir(deps.historyRoot, id) },
+    ];
+    const standing = [];
+    for (const target of targets) {
+        if ((await lstat(target.dir).catch(undefinedIfMissing)) !== undefined) {
+            standing.push(target);
+        }
+    }
+    for (const target of standing) {
+        if (now - (await lastChange(target.dir, CHANGE_DEPTH, now)) < LEFTOVER_PRESS_MIN_AGE_MS) {
+            throw new LeftoverRefused("it changed in the last few minutes");
+        }
+    }
+    for (const target of standing) {
+        await reclaim(deps.historyRoot, target.kind, id, target.dir, now);
+    }
+    deps.logger.info({ id }, "agents: moved a checkout no conversation owns to the trash on request");
 };
 
 // Daily; root-scoped like the boot's worktree sweep.

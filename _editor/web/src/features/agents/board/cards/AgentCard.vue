@@ -23,6 +23,7 @@ import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import CardLandPresses from "./CardLandPresses.vue";
 import CardStrandedClones from "./CardStrandedClones.vue";
+import CardDiskUse from "./CardDiskUse.vue";
 import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
@@ -758,6 +759,8 @@ const grab = (event: PointerEvent): void => {
             </p>
             <!-- A clone of its own the reach names: folded into its repository, or made a workspace repo (CardStrandedClones). -->
             <CardStrandedClones v-if="reach !== undefined" :agent="agent" />
+            <!-- What its checkout held at the last scan, once that is worth freeing (CardDiskUse). -->
+            <CardDiskUse :agent="agent" />
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />

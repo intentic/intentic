@@ -41,6 +41,13 @@ describe("withSwitches", () => {
         expect(off).toEqual({ sandboxUpdates: false, sandboxBackups: false, sandboxTidy: false });
         expect(withSwitches(off, { backups: "on" })).toEqual({ sandboxUpdates: false, sandboxTidy: false });
     });
+
+    // The engine's disk is cleared by itself when it runs short (sandbox-rounds/engine-disk.ts) unless this is off.
+    it("stores the engine disk's clearing off under its own key, and on as its absence", () => {
+        const off = withSwitches({ sandboxTidy: false }, { disk: "off" });
+        expect(off).toEqual({ sandboxTidy: false, engineDiskRelief: false });
+        expect(withSwitches(off, { disk: "on" })).toEqual({ sandboxTidy: false });
+    });
 });
 
 // cmd's echo of %USERPROFILE% arrived in the OEM code page; base64 of the UTF-8 arrives the same in every code page.

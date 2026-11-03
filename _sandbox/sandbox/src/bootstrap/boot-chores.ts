@@ -2,7 +2,9 @@ import { join } from "node:path";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { dockerPruneChore } from "../capabilities/handlers/docker-prune.js";
 import { parkedRefRetentionChore } from "../conversations/land/parked-ref-retention.js";
-import { sweepAgedAgents, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { quietOfSettings, sweepAgedAgents, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { cargoWarmRoot, retireAllWarmSnapshots } from "../conversations/worktrees/cargo-warm.js";
+import { overlaysRoot } from "../conversations/worktrees/isolation.js";
 import { type BuildOutputReaper, createBuildOutputReaper } from "../conversations/registry/build-output-sweep/build-output-reaper.js";
 import { reapTmpCargoTargets } from "../conversations/worktrees/build-outputs/tmp-cargo-targets.js";
 import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
@@ -108,8 +110,22 @@ const reaperOf = ({ config, services }: BootPhase): BuildOutputReaper =>
     (reaper ??= createBuildOutputReaper({
         archive: services,
         worktreesRoot: join(config.historyRoot, "worktrees"),
+        overlaysRoot: overlaysRoot(config.historyRoot),
         runningJobs: (id) => runningJobsOf(services.conversations, id).length,
+        quiet: async () => quietOfSettings((await services.sandboxSettings.get()).buildOutputIdleHours),
     }));
+
+// A pass that freed checkouts' shared-Cargo layers unpinned the snapshots they read; the unused ones go now rather than
+// at the next turn's setup (cargo-warm.ts retireAllWarmSnapshots). Nothing to do where no snapshot was ever made.
+const retireUnpinned = async ({ config, logger }: BootPhase, swept: number): Promise<void> => {
+    if (swept === 0) {
+        return;
+    }
+    const retired = await retireAllWarmSnapshots({ store: cargoWarmRoot(config.historyRoot), overlays: overlaysRoot(config.historyRoot), now: Date.now() });
+    if (retired.length > 0) {
+        logger.info({ retired: retired.length }, "storage: retired shared Cargo snapshots no checkout reads any more");
+    }
+};
 
 export const retentionChores = (phase: BootPhase): Chore[] => {
     const { config, logger, role, services } = phase;
@@ -132,7 +148,7 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                       // Often enough that a landed checkout's output goes about an hour after the land.
                       everyMs: BUILD_OUTPUT_SWEEP_MS,
                       // No sandbox-wide quiet moment: each checkout is judged by its own conversation (archive.ts).
-                      run: async (): Promise<void> => void (await reaperOf(phase).sweep(Date.now())),
+                      run: async (): Promise<void> => retireUnpinned(phase, (await reaperOf(phase).sweep(Date.now())).length),
                   },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },
                   // Root-scoped: a guest sharing the history root prunes nothing.
@@ -187,7 +203,12 @@ const startDiskPressure = (phase: BootPhase): (() => void) => {
     const read = () => readHistorySpace(config.historyRoot);
     return startDiskPressureWatch({
         read,
-        reap: async (enough) => (await reaperOf(phase).reapUnderPressure(Date.now(), enough)).length,
+        reapBelow: async () => (await services.sandboxSettings.get()).diskReapBelowPercent / 100,
+        reap: async (enough) => {
+            const swept = (await reaperOf(phase).reapUnderPressure(Date.now(), enough)).length;
+            await retireUnpinned(phase, swept);
+            return swept;
+        },
         lastScan: () => readLastStorageScan(config.historyRoot),
         tell: async (level, state) => {
             const notice = diskLow(level, state);

@@ -1,4 +1,11 @@
-import type { StorageCategoryId, StorageCleanResult, StorageReport } from "@intentic/sandbox-contract/schemas/metrics";
+import type {
+    CheckoutPress,
+    CheckoutPressResult,
+    CheckoutUsage,
+    StorageCategoryId,
+    StorageCleanResult,
+    StorageReport,
+} from "@intentic/sandbox-contract/schemas/metrics";
 import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { queryClient } from "../../../../lib/queryPersistence";
@@ -8,11 +15,27 @@ import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useOperation } from "../../../../workbench/operations/operations";
+import { afterPress } from "./checkoutsView";
 
 // The Disk card's data: the daemon's last measurement, a scan that leaves it on screen until the new one lands, and a
 // clean that measures again once it is done. The daemon holds the one scan, so a second window joins it. Both runs
 // are the sandbox's, kept in the operations ledger: a clean takes as long as the folder is big, and the card opened
 // again meanwhile holds its buttons and then says what it freed.
+
+// The tag of a run over several checkouts at once: every row's buttons wait on it.
+export const PRESSING_MANY = `*`;
+
+// What the operations ledger says while a checkout press runs, and on its receipt.
+const pressingWhat = (press: CheckoutPress, name: string): string => {
+    switch (press) {
+        case `cleanBuildOutput`:
+            return t(`sandbox.useSandboxStorage.cleaningBuildOutput`, { name });
+        case `release`:
+            return t(`sandbox.useSandboxStorage.freeingCheckout`, { name });
+        case `trash`:
+            return t(`sandbox.useSandboxStorage.trashingCheckout`, { name });
+    }
+};
 
 export function useSandboxStorage() {
     const { canShip } = useRole();
@@ -58,6 +81,30 @@ export function useSandboxStorage() {
         await scan();
     };
 
+    // Conversations' checkouts one at a time (the daemon's pressCheckout), several in one run for the card's "free every
+    // landed one". Each row's new standing is written into the report as it goes rather than measured again: a scan
+    // reads every file, and only these rows moved. The first refusal ends the run, and says why.
+    const pressing = useOperation<CheckoutPressResult[]>(`sandbox/storage/checkout`);
+    const pressingCheckout = computed(() => (pressing.busy.value ? pressing.operation.value?.tag : undefined));
+    const pressCheckouts = async (rows: readonly CheckoutUsage[], press: CheckoutPress, name: string): Promise<void> => {
+        if (pressing.busy.value || rows.length === 0) {
+            return;
+        }
+        await pressing.run({
+            what: pressingWhat(press, name),
+            tag: rows.length === 1 ? rows[0]?.id : PRESSING_MANY,
+            failed: t(`sandbox.useSandboxStorage.couldntPress`, { name }),
+            task: async () => {
+                const results: CheckoutPressResult[] = [];
+                for (const row of rows) {
+                    results.push(await sandboxRpc.system.pressCheckout({ id: row.id, press }, { context: { deadline: false } }));
+                    queryClient.setQueryData<StorageReport | undefined>(read.queryKey.value, (report) => afterPress(report, row.id, press));
+                }
+                return results;
+            },
+        });
+    };
+
     // Another window's scan is this one's too: joining it is how this card learns when it ends.
     watch(
         () => query.data.value?.scanning === true,
@@ -78,8 +125,11 @@ export function useSandboxStorage() {
         cleanNotice: cleaning.failure,
         cleaned: cleaning.value,
         cleaningCategory,
+        pressNotice: pressing.failure,
+        pressingCheckout,
         scan,
         cancel,
         clean,
+        pressCheckouts,
     };
 }

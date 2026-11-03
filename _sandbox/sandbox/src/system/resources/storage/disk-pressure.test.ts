@@ -16,6 +16,36 @@ test("the level is read off the volume's free fraction, at each boundary", () =>
     expect(pressureLevel({ freeBytes: 0, totalBytes: 0 })).toBe("ok");
 });
 
+test("the settings' reaping threshold moves where reaping starts, never where the owner is told", () => {
+    expect(pressureLevel(at(249), 0.25)).toBe("reaping");
+    expect(pressureLevel(at(250), 0.25)).toBe("ok");
+    // Under the warning line it is low whatever the threshold says, and so reaped too.
+    expect(pressureLevel(at(99), 0.05)).toBe("low");
+    expect(pressureLevel(at(120), 0.05)).toBe("ok");
+});
+
+test("a watch reads its threshold each tick and reaps until the disk is back over it", async () => {
+    let enoughAnswers: boolean[] = [];
+    let space = 200;
+    const watch = createDiskPressureWatch({
+        read: async () => at(space),
+        reapBelow: async () => 0.25,
+        reap: async (enough) => {
+            space += 60;
+            enoughAnswers = [await enough()];
+            return 1;
+        },
+        lastScan: async () => undefined,
+        tell: async () => {},
+        changed: () => {},
+        logger: { info: () => {}, warn: () => {} },
+        now: () => 42,
+    });
+    await watch.tick();
+    expect(enoughAnswers).toEqual([true]);
+    expect(watch.state()).toMatchObject({ level: "ok", freeBytes: 260, reaped: { bytes: 60, checkouts: 1, at: 42 } });
+});
+
 // A disk whose free space the test sets, a reap that frees what the test says, and a record of every word to the owner.
 const harness = (free: number[], reaps: number[] = []) => {
     let space = free[0] ?? TOTAL;

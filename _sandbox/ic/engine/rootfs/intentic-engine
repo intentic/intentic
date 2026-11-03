@@ -87,6 +87,78 @@ if [ ! -f /etc/docker/daemon.json ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------
+# THE DISK'S BALLAST (2026-11-03). Every sandbox and every compose project on this engine writes to this distro's one
+# disk. On rog, 2026-11-03, one sandbox's history volume filled it and a Postgres of the owner's PANICked on ENOSPC and
+# stayed down. So the keeper holds some of the disk back as a ballast: one file of BALLAST_PERCENT of the disk, 2 to
+# 10 GiB, made with fallocate (its blocks are reserved and nothing is written, so the VHDX under it does not grow), and
+# deleted the moment less than its own size is left to write, so databases can checkpoint, git can finish a pack, and
+# the sandboxes' reapers and `ic engine disk --relieve` have room to work. It is made only while LOW_BELOW_PERCENT of the
+# disk and its own size are left, so holding it never makes the disk short, and made again once that much is free again.
+# "Left" is df's Available: what a process that is not root may write, which is where a database in a container stops
+# (ext4 keeps 5% back for root). Looked at every ten seconds, whatever the network mode. `ic engine disk` reads the disk
+# by the same numbers (src/engine/disk.rs, whose test reads them off this file).
+# ---------------------------------------------------------------------------------------------------------------------
+DATA_ROOT="/var/lib/docker"
+BALLAST="/var/lib/intentic-engine/ballast"
+BALLAST_PERCENT=2
+BALLAST_MIN_KIB=2097152
+BALLAST_MAX_KIB=10485760
+LOW_BELOW_PERCENT=10
+CRITICAL_BELOW_PERCENT=5
+
+keep_disk() {
+  # A loop that must outlast every command in it that fails: not one of them ends it.
+  set +e
+  refused=""
+  while :; do
+    reading="$(df -Pk "$DATA_ROOT" 2>/dev/null | awk 'NR == 2 { print $2, $4 }')"
+    total="${reading% *}"
+    left="${reading#* }"
+    case "$total:$left" in
+      *[!0-9:]* | :* | *:) sleep 10; continue ;;
+    esac
+    want=$((total / 100 * BALLAST_PERCENT))
+    [ "$want" -lt "$BALLAST_MIN_KIB" ] && want="$BALLAST_MIN_KIB"
+    [ "$want" -gt "$BALLAST_MAX_KIB" ] && want="$BALLAST_MAX_KIB"
+    full=$((total / 100 * CRITICAL_BELOW_PERCENT))
+    [ "$want" -lt "$full" ] && full="$want"
+    room=$((total / 100 * LOW_BELOW_PERCENT + want))
+    if [ -f "$BALLAST" ]; then
+      if [ "$left" -lt "$full" ]; then
+        rm -f "$BALLAST" \
+          && say "the disk is all but full ($((left / 1024)) MiB left to write): gave its $((want / 1024)) MiB ballast back"
+      fi
+    elif [ -z "$refused" ] && [ "$left" -ge "$room" ]; then
+      mkdir -p "${BALLAST%/*}"
+      if fallocate -l "$((want * 1024))" "$BALLAST" 2>>"$LOG"; then
+        say "held $((want / 1024)) MiB of the disk back as its ballast ($BALLAST), given back when it is all but full"
+      else
+        # Said once: a filesystem that refuses fallocate refuses it every time, and a ballast written out in zeros would
+        # grow the VHDX by its size.
+        rm -f "$BALLAST"
+        refused=1
+        say "could not hold a ballast back on this disk (fallocate refused): running without one"
+      fi
+    fi
+    sleep 10
+  done
+}
+
+start_disk_watch() {
+  pid_alive "$STATE/disk.pid" intentic-engine && return 0
+  keep_disk </dev/null >/dev/null 2>&1 9>&- &
+  echo "$!" >"$STATE/disk.pid"
+}
+
+stop_disk_watch() {
+  if pid_alive "$STATE/disk.pid" intentic-engine; then
+    kill "$(cat "$STATE/disk.pid")" 2>/dev/null || true
+  fi
+  rm -f "$STATE/disk.pid"
+  return 0
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # THE NVIDIA GPU (2026-10-28). A sandbox whose GPU switch is on runs with `--gpus=all`, and this engine had no NVIDIA
 # runtime, so ic's probe dropped the GPU ("this computer has no NVIDIA container runtime"; rog, RTX 5080, 2026-10-28).
 # WSL hands every distro the Windows driver: /dev/dxg and the user-mode libraries in /usr/lib/wsl/lib, nvidia-smi
@@ -364,7 +436,7 @@ stop_helpers() {
     kill "$(cat "$STATE/pasta.pid")" 2>/dev/null || true
   fi
   rm -f "$STATE/forwarding.pid" "$STATE/pasta.pid"
-  return 0
+  stop_disk_watch
 }
 
 # What a keeper that was killed left running: its helpers, and its dockerd, which outlive it and which nothing outside
@@ -434,6 +506,7 @@ isolated() {
   echo isolated >"$STATE/network"
   keep_forwards </dev/null >/dev/null 2>&1 9>&- &
   echo "$!" >"$STATE/forwarding.pid"
+  start_disk_watch
   say "dockerd in its own network namespace ($NS_NAME), API on 127.0.0.1:$PORT"
   # shellcheck disable=SC2086
   nsenter -n"$NS" dockerd $DOCKERD_ARGS --host-gateway-ip="$HOST_ALIAS" </dev/null >>"$LOG" 2>&1 9>&- &
@@ -468,12 +541,14 @@ shared() {
   iptables -t nat -C PREROUTING -d 127.0.0.0/8 -j RETURN 2>/dev/null \
     || iptables -t nat -I PREROUTING 1 -d 127.0.0.0/8 -j RETURN 2>>"$LOG" || true
   echo shared >"$STATE/network"
+  start_disk_watch
+  trap 'stop_disk_watch' EXIT
   # A child waited on, not exec'd: the keeper keeps the lock while dockerd runs, and dockerd's own children (containerd's
   # shims outlive it) do not inherit it.
   # shellcheck disable=SC2086
   dockerd $DOCKERD_ARGS </dev/null >>"$LOG" 2>&1 9>&- &
   DOCKERD=$!
-  trap 'kill -TERM "$DOCKERD" 2>/dev/null; wait "$DOCKERD" || true; exit 143' INT TERM
+  trap 'kill -TERM "$DOCKERD" 2>/dev/null; wait "$DOCKERD" || true; stop_disk_watch; exit 143' INT TERM
   status=0
   wait "$DOCKERD" || status=$?
   exit "$status"

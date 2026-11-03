@@ -261,6 +261,24 @@ export const StorageCategoryUsageSchema = z.object({
 });
 export type StorageCategoryUsage = z.infer<typeof StorageCategoryUsageSchema>;
 
+// One conversation's directories on the history volume as the scan measured them (2026-11-03): every checkout, not the
+// eight biggest a category lists, so the Storage card can say which conversation holds what.
+// The checkout shapes are named, never inferred, like agent-press.ts's: spelled out inside the two storage routes they
+// took the aggregated contract's type past what the declaration emitter will write (TS7056).
+const CheckoutSizeFields = z.object({
+    id: z.string().describe("The directory's name under worktrees/ or overlays/: a conversation id, whether or not a conversation still owns it."),
+    bytes: z.number().describe("The checkout without its build output: the repositories' files and anything else its turns wrote there."),
+    buildOutputBytes: z.number().describe("Build output inside the checkout (a Rust `target/`, Gradle and Flutter output)."),
+    overlayBytes: z.number().describe("What its turns installed over the main tree's dependencies."),
+});
+export interface CheckoutSize {
+    readonly id: string;
+    readonly bytes: number;
+    readonly buildOutputBytes: number;
+    readonly overlayBytes: number;
+}
+export const CheckoutSizeSchema: z.ZodType<CheckoutSize, CheckoutSize> = CheckoutSizeFields;
+
 export const StorageScanSchema = z.object({
     startedAt: z.number().describe("When the scan began, in milliseconds."),
     finishedAt: z.number().describe("When it ended, in milliseconds: the moment these sizes describe."),
@@ -275,11 +293,44 @@ export const StorageScanSchema = z.object({
         .optional()
         .describe("The volume as a whole. Absent when the volume would not say."),
     categories: z.array(StorageCategoryUsageSchema).describe("Every category that holds anything, largest first."),
+    checkouts: z
+        .array(CheckoutSizeSchema)
+        .optional()
+        .describe("Every conversation directory on the history volume, largest first. Absent from a scan made before this was measured."),
     unreadable: z.number().describe("Files and folders the scan could not read, and so did not count."),
 });
 export type StorageScan = z.infer<typeof StorageScanSchema>;
 
-export const StorageReportSchema = z.object({
+// Where a measured checkout stands now, for what may be done with it: `working` has a turn, a background command or a
+// child at work in it; `held` has work nobody has landed; `archived` is a conversation put away whose checkout is still
+// on disk; `leftover` is a directory no conversation owns.
+export type CheckoutState = "working" | "idle" | "held" | "landed" | "archived" | "leftover";
+export const CheckoutStateSchema: z.ZodType<CheckoutState, CheckoutState> = z.enum(["working", "idle", "held", "landed", "archived", "leftover"]);
+
+export interface CheckoutUsage extends CheckoutSize {
+    readonly state: CheckoutState;
+    readonly title?: string | undefined;
+    readonly updatedAt?: number | undefined;
+    readonly can: { readonly cleanBuildOutput: boolean; readonly release: boolean; readonly trash: boolean };
+}
+export const CheckoutUsageSchema: z.ZodType<CheckoutUsage, CheckoutUsage> = CheckoutSizeFields.extend({
+    state: CheckoutStateSchema,
+    title: z.string().optional().describe("The conversation's title, when it has one."),
+    updatedAt: z.number().optional().describe("When the conversation last moved, in milliseconds. Absent for a leftover."),
+    can: z
+        .object({
+            cleanBuildOutput: z.boolean().describe("Its build output may be removed now: it has some, and nothing runs in the conversation."),
+            release: z
+                .boolean()
+                .describe(
+                    "Its checkout may be freed now: what it holds is committed onto its branch, the checkout and overlay go, and its next turn brings them back.",
+                ),
+            trash: z.boolean().describe("A leftover that may be moved to the trash now, where it waits a while before it is emptied."),
+        })
+        .describe("What may be done with it now, by the same rules the daemon applies when asked."),
+});
+
+const StorageReportFields = z.object({
     scan: StorageScanSchema.optional().describe(
         "The last scan that finished, kept across restarts; its `finishedAt` says how old it is. Absent until one has.",
     ),
@@ -303,12 +354,40 @@ export const StorageReportSchema = z.object({
         )
         .optional()
         .describe("Live repositories' checkout costs, cached per repository and commit. Repositories without a readable HEAD are omitted."),
+    checkouts: z
+        .array(CheckoutUsageSchema)
+        .optional()
+        .describe(
+            "The last scan's conversation directories, largest first, each with where its conversation stands now. Sizes are as of the scan; a directory gone since is left out. Absent until a scan has measured them.",
+        ),
 });
-export type StorageReport = z.infer<typeof StorageReportSchema>;
+// An interface, named like the checkout shapes above: the report is the output of two routes, each of which spelled it
+// out whole, and an alias of the inferred type is spelled out all the same.
+export interface StorageReport extends z.infer<typeof StorageReportFields> {}
+export const StorageReportSchema: z.ZodType<StorageReport, StorageReport> = StorageReportFields;
+
+export type CheckoutPress = "cleanBuildOutput" | "release" | "trash";
+export interface CheckoutPressInput {
+    readonly id: string;
+    readonly press: CheckoutPress;
+}
+export const CheckoutPressInputSchema: z.ZodType<CheckoutPressInput, CheckoutPressInput> = z.object({
+    id: z.string().describe("The conversation id the directory is named by."),
+    press: z.enum(["cleanBuildOutput", "release", "trash"]).describe("What to do with it, as the row's `can` allows."),
+});
+
+export interface CheckoutPressResult {
+    readonly id: string;
+    readonly removed: readonly string[];
+}
+export const CheckoutPressResultSchema: z.ZodType<CheckoutPressResult, CheckoutPressResult> = z.object({
+    id: z.string(),
+    removed: z.array(z.string()).describe("Build output folders removed, relative to the checkout; empty for a release or a trash."),
+});
 
 // How close the history volume is to full, as the daemon's disk-pressure watch last read it (GET /system/disk-pressure).
-// `reaping`: under 15% free, settled checkouts' build output is being removed; `low` and `critical` are under 10% and
-// 5%, which the owner is told about once each.
+// `reaping`: under the settings' `diskReapBelowPercent` free (15% by default), settled checkouts' build output is being
+// removed; `low` and `critical` are under 10% and 5%, which the owner is told about once each.
 export const DiskPressureLevelSchema = z.enum(["ok", "reaping", "low", "critical"]);
 export type DiskPressureLevel = z.infer<typeof DiskPressureLevelSchema>;
 

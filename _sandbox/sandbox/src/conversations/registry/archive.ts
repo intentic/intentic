@@ -10,8 +10,9 @@ import type { ResourceReaper } from "../../system/boot/reaper.js";
 import type { ConversationActors } from "../actor/conversation-actors.js";
 import { isBooked } from "../actor/conversation-queue.js";
 import type { AgentsRegistry } from "./agents-registry.js";
-import { isIsolated, type PersistedAgent } from "./agents-store.js";
-import { type PruneOptions, pruneBuildOutputs, removeQuietly } from "../worktrees/build-outputs/build-outputs.js";
+import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
+import { type PruneOptions, type PruneScope, pruneBuildOutputs, removeQuietly } from "../worktrees/build-outputs/build-outputs.js";
+import { releaseWarmLayers } from "../worktrees/cargo-warm.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // The board's only non-destructive exit: the Finished lane never transitions out on its own, and each finished card
@@ -306,7 +307,7 @@ export const heldCheckoutByAge = (agent: AgentSummary, now: number, retentionMs:
 // preview) runs from that checkout, a child it spawned may still run, be paused on a wall or wait on a card, and lands
 // into it when it ends, and a re-run booked for the conversation itself opens a turn in it. Any of these leaves the
 // checkout for a later sweep; nothing is stopped for the disk's sake.
-const stillWorking = (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): string | undefined => {
+export const stillWorking = (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): string | undefined => {
     if (runningJobs(id) > 0) {
         return "a background command still runs in it";
     }
@@ -351,10 +352,7 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
             continue;
         }
         try {
-            // Nothing of its own runs now; what is left (an idle terminal, a viewer, a stray process) goes before its
-            // directory does. Not forced: a terminal a person is attached to right now stays theirs.
-            await deps.reaper?.reapConversation(agent.id);
-            await deps.agentWorktrees.retire(agent.id, entry.placement.repos, entry.social.title?.text);
+            await retireCheckout(deps, entry);
             reclaimed.push(agent.id);
             deps.logger.info({ id: agent.id }, "agents: reclaimed held conversation checkout and overlay; work kept on branch");
         } catch (error) {
@@ -362,6 +360,50 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
         }
     }
     return reclaimed;
+};
+
+// Nothing of its own runs now; what is left (an idle terminal, a viewer, a stray process) goes before its directory
+// does. Not forced: a terminal a person is attached to right now stays theirs.
+const retireCheckout = async (deps: AgentArchiveDeps, entry: IsolatedAgent): Promise<void> => {
+    await deps.reaper?.reapConversation(entry.id);
+    await deps.agentWorktrees.retire(entry.id, entry.placement.repos, entry.social.title?.text);
+};
+
+// A per-conversation press the conversation's state refuses; the route answers it as a conflict, with the reason.
+export class CheckoutBusy extends Error {}
+
+// FREEING ONE CHECKOUT ON A PERSON'S PRESS (2026-11-03). The held-checkout reclaim above, for any settled conversation
+// and at any age: the Storage card's per-conversation row. Watches, queued words and unsent drafts still need the working
+// copy, as for the reclaim; an archived conversation whose checkout outlived its archive may always go.
+export const checkoutReleaseRefusal = (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): string | undefined => {
+    const agent = deps.agents.list().find((card) => card.id === id);
+    const entry = deps.agents.entry(id);
+    if (agent === undefined || entry === undefined) {
+        return "no conversation by that id";
+    }
+    if (!isIsolated(entry)) {
+        return "the conversation works in the main tree, not a checkout of its own";
+    }
+    if (deps.conversations.running(id) || (agent.archivedAt === undefined && !SETTLED.has(agent.status))) {
+        return "a turn is under way in it";
+    }
+    if (agent.archivedAt === undefined && ((agent.watches ?? []).length > 0 || (agent.queue?.items.length ?? 0) > 0 || agent.unsentAt !== undefined)) {
+        return "it waits on a watch, a queued message or an unsent draft, which need its checkout";
+    }
+    return stillWorking(deps, runningJobs, id);
+};
+
+export const releaseCheckout = async (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): Promise<void> => {
+    const refusal = checkoutReleaseRefusal(deps, runningJobs, id);
+    const entry = deps.agents.entry(id);
+    if (refusal !== undefined || entry === undefined || !isIsolated(entry)) {
+        throw new CheckoutBusy(refusal ?? "the conversation has no checkout of its own");
+    }
+    if ((await deps.agentWorktrees.presence(id)) !== "present") {
+        return;
+    }
+    await retireCheckout(deps, entry);
+    deps.logger.info({ id }, "agents: freed a conversation checkout and overlay on request; work kept on branch");
 };
 
 // A checkout's build output goes once its card has been settled this long (worktrees/build-outputs/build-outputs.ts says what and
@@ -380,31 +422,73 @@ export const LANDED_BUILD_OUTPUT_QUIET_MS = 60 * 60 * 1000;
 // Settled: nothing in flight reads or writes the checkout. Landing reads it; a resume or a stop is about to.
 const SETTLED: ReadonlySet<AgentSummary["status"]> = new Set(["idle", "stopped", "ready", "landed", "conflict", "error", "interrupted"]);
 
+// Cargo's incremental caches, half of a Rust target, go sooner than the rest (build-outputs.ts INCREMENTAL FIRST).
+export const INCREMENTAL_QUIET_MS = 60 * 60 * 1000;
+
 export interface BuildOutputQuiet {
     readonly quietMs: number;
     readonly landedQuietMs: number;
+    // Settled this long, only the incremental caches go; absent, nothing goes before `quietMs`.
+    readonly incrementalQuietMs?: number;
 }
 
-export const NORMAL_QUIET: BuildOutputQuiet = { quietMs: BUILD_OUTPUT_QUIET_MS, landedQuietMs: LANDED_BUILD_OUTPUT_QUIET_MS };
+export const NORMAL_QUIET: BuildOutputQuiet = {
+    quietMs: BUILD_OUTPUT_QUIET_MS,
+    landedQuietMs: LANDED_BUILD_OUTPUT_QUIET_MS,
+    incrementalQuietMs: INCREMENTAL_QUIET_MS,
+};
 // Under disk pressure or a person's press, every settled checkout qualifies; the order decides which goes first.
 export const NO_QUIET: BuildOutputQuiet = { quietMs: 0, landedQuietMs: 0 };
 
-export const buildOutputsQuiet = (agent: AgentSummary, now: number, quiet: BuildOutputQuiet = NORMAL_QUIET): boolean =>
+// The sweep's clock as the settings set it (`buildOutputIdleHours`); a landed card's and the incremental caches' hour
+// stays an hour, unless the owner asked for less than that for everything.
+export const quietOfSettings = (idleHours: number): BuildOutputQuiet => {
+    const quietMs = idleHours * 60 * 60 * 1000;
+    return {
+        quietMs,
+        landedQuietMs: Math.min(LANDED_BUILD_OUTPUT_QUIET_MS, quietMs),
+        incrementalQuietMs: Math.min(INCREMENTAL_QUIET_MS, quietMs),
+    };
+};
+
+// Settled, and waiting on nothing that would use the checkout's build again: the clock may run.
+const sweepable = (agent: AgentSummary): boolean =>
     agent.archivedAt === undefined &&
     SETTLED.has(agent.status) &&
     (agent.watches ?? []).length === 0 &&
     (agent.queue?.items.length ?? 0) === 0 &&
-    agent.unsentAt === undefined &&
-    now - agent.updatedAt >= (agent.status === "landed" ? quiet.landedQuietMs : quiet.quietMs);
+    agent.unsentAt === undefined;
+
+// How much of a checkout's build output is due now: all of it, only the incremental caches, or none.
+export const buildOutputsDue = (agent: AgentSummary, now: number, quiet: BuildOutputQuiet = NORMAL_QUIET): PruneScope | undefined => {
+    if (!sweepable(agent)) {
+        return undefined;
+    }
+    const idle = now - agent.updatedAt;
+    if (idle >= (agent.status === "landed" ? quiet.landedQuietMs : quiet.quietMs)) {
+        return "all";
+    }
+    return quiet.incrementalQuietMs !== undefined && idle >= quiet.incrementalQuietMs ? "incremental" : undefined;
+};
+
+export const buildOutputsQuiet = (agent: AgentSummary, now: number, quiet: BuildOutputQuiet = NORMAL_QUIET): boolean =>
+    buildOutputsDue(agent, now, quiet) === "all";
 
 // Which goes first when not every checkout need go: landed work before work still to be landed, then the card that has
 // sat idle longest.
 export const reapOrder = (left: AgentSummary, right: AgentSummary): number =>
     Number(right.status === "landed") - Number(left.status === "landed") || left.updatedAt - right.updatedAt;
 
-// Which card was last pruned at which `updatedAt`, so a quiet checkout is walked once, not every hour; any activity
-// moves `updatedAt` and earns it a fresh look. Lost with the daemon, which costs one walk per quiet checkout a boot.
-export type PrunedAt = Map<string, number>;
+// Which card was last pruned at which `updatedAt`, and how far, so a quiet checkout is walked once per scope, not every
+// hour; any activity moves `updatedAt` and earns it a fresh look. Lost with the daemon, which costs one walk per quiet
+// checkout a boot.
+export type PrunedAt = Map<string, { readonly updatedAt: number; readonly scope: PruneScope }>;
+
+// Whether an earlier pass already did what this one would: at the same `updatedAt`, all of it, or the same scope.
+const alreadyPruned = (prunedAt: PrunedAt, agent: AgentSummary, scope: PruneScope): boolean => {
+    const earlier = prunedAt.get(agent.id);
+    return earlier !== undefined && earlier.updatedAt === agent.updatedAt && (earlier.scope === "all" || earlier.scope === scope);
+};
 
 export interface BuildOutputSweep {
     readonly now: number;
@@ -416,6 +500,9 @@ export interface BuildOutputSweep {
     // Asked after each checkout: true ends the pass (the disk has room again).
     readonly enough?: () => Promise<boolean>;
     readonly remove?: (path: string) => Promise<void>;
+    // A conversation's overlays dir (isolation.ts overlaysDir), where a shared Cargo target's layers keep what its
+    // builds wrote (cargo-warm.ts); absent, only the checkout itself is swept.
+    readonly overlaysOf?: (id: string) => string;
 }
 
 export interface SweptCheckout {
@@ -424,8 +511,8 @@ export interface SweptCheckout {
 }
 
 // The one checkout's pass: undefined when it is not this pass's to sweep.
-const sweepOne = async (deps: AgentArchiveDeps, agent: AgentSummary, pass: BuildOutputSweep): Promise<SweptCheckout | undefined> => {
-    if (pass.prunedAt.get(agent.id) === agent.updatedAt || deps.conversations.running(agent.id)) {
+const sweepOne = async (deps: AgentArchiveDeps, agent: AgentSummary, pass: BuildOutputSweep, scope: PruneScope): Promise<SweptCheckout | undefined> => {
+    if (alreadyPruned(pass.prunedAt, agent, scope) || deps.conversations.running(agent.id)) {
         return undefined;
     }
     const entry = deps.agents.entry(agent.id);
@@ -440,14 +527,19 @@ const sweepOne = async (deps: AgentArchiveDeps, agent: AgentSummary, pass: Build
     let unfinished = false;
     // A big `target/` takes a while to remove; a turn that opened meanwhile keeps whatever is left.
     const proceed = (): boolean => !deps.conversations.running(agent.id);
-    const options: PruneOptions = { proceed, paceMs: pass.paceMs ?? 0, remove: pass.remove ?? removeQuietly };
+    const options: PruneOptions = { scope, proceed, paceMs: pass.paceMs ?? 0, remove: pass.remove ?? removeQuietly };
     for (const { repo } of entry.placement.repos) {
         const result = await pruneBuildOutputs(deps.agentWorktrees.worktreeDir(agent.id, repo), options);
         removed.push(...result.removed.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
         unfinished ||= result.failed.length > 0 || result.skipped.length > 0;
     }
+    if (pass.overlaysOf !== undefined) {
+        const warm = await releaseWarmLayers(pass.overlaysOf(agent.id), { scope, proceed, remove: pass.remove ?? removeQuietly });
+        removed.push(...warm.removed);
+        unfinished ||= warm.failed.length > 0 || warm.skipped.length > 0;
+    }
     if (!unfinished) {
-        pass.prunedAt.set(agent.id, agent.updatedAt);
+        pass.prunedAt.set(agent.id, { updatedAt: agent.updatedAt, scope });
     }
     if (removed.length > 0) {
         deps.logger.info({ id: agent.id, removed }, "agents: removed build output from a settled checkout; the next build regenerates it");
@@ -472,16 +564,36 @@ export const sweepBuildOutputs = async (deps: AgentArchiveDeps, pass: BuildOutpu
     const swept: SweptCheckout[] = [];
     const due = deps.agents
         .list()
-        .filter((agent) => buildOutputsQuiet(agent, pass.now, pass.quiet))
-        .toSorted(reapOrder);
-    for (const agent of due) {
+        .flatMap((agent) => {
+            const scope = buildOutputsDue(agent, pass.now, pass.quiet);
+            return scope === undefined ? [] : [{ agent, scope }];
+        })
+        .toSorted((left, right) => reapOrder(left.agent, right.agent));
+    for (const { agent, scope } of due) {
         if (pass.enough !== undefined && (await pass.enough())) {
             break;
         }
-        const one = await sweepOne(deps, agent, pass);
+        const one = await sweepOne(deps, agent, pass, scope);
         if (one !== undefined && one.removed.length > 0) {
             swept.push(one);
         }
     }
     return swept;
+};
+
+// One conversation's build output on a person's press, whatever its age (the Storage card's per-conversation row).
+export const reapOneBuildOutput = async (
+    deps: AgentArchiveDeps,
+    runningJobs: RunningJobs,
+    id: string,
+    remove: (path: string) => Promise<void> = removeQuietly,
+    overlaysOf?: (id: string) => string,
+): Promise<SweptCheckout> => {
+    const agent = deps.agents.list().find((card) => card.id === id);
+    if (agent === undefined || !buildOutputsReapable(deps, runningJobs, agent, Date.now())) {
+        throw new CheckoutBusy("something still runs in the conversation, or it waits on work that would build again");
+    }
+    const pass: BuildOutputSweep = { now: Date.now(), quiet: NO_QUIET, runningJobs, prunedAt: new Map(), remove, ...(overlaysOf === undefined ? {} : { overlaysOf }) };
+    const one = await sweepOne(deps, agent, pass, "all");
+    return one ?? { id, removed: [] };
 };
