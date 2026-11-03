@@ -41,6 +41,19 @@ if [ "${SANDBOX_VM:-}" = "1" ]; then
     cd /work
 fi
 
+# THE HOST GPU'S LIBRARIES, OFF EVERY PROCESS'S LIBRARY PATH (2026-11-03). An engine older than 2026-11-03 put WSL's GPU
+# driver libraries on the whole container's LD_LIBRARY_PATH, so the daemon, every agent shell and every browser loaded
+# Mesa's d3d12 driver and rendered on the owner's display GPU without asking; one GPU hang powered rog off. They come off
+# here, before anything starts, and their place is kept for `gpu-run`, the one way a command asks for the GPU
+# (bin/gpu-run; the daemon does the same for itself in bootstrap/daemon-env.ts, for a start that skips this script).
+case ":${LD_LIBRARY_PATH:-}:" in
+    *:/usr/lib/wsl/lib:* | *:/usr/lib/wsl/lib/:*)
+        export INTENTIC_GPU_LIBRARY_PATH="${INTENTIC_GPU_LIBRARY_PATH:-/usr/lib/wsl/lib}"
+        LD_LIBRARY_PATH="$(printf '%s\n' "$LD_LIBRARY_PATH" | tr ':' '\n' | grep -vxE '/usr/lib/wsl/lib/?' | paste -sd: -)"
+        if [ -n "$LD_LIBRARY_PATH" ]; then export LD_LIBRARY_PATH; else unset LD_LIBRARY_PATH; fi
+        ;;
+esac
+
 # Reachability belongs to the daemon's outbound tunnel, using the signed grant and ingress URL from its environment.
 # The edge derives sandbox ownership from the hostname's ID; replacing a tunnel displaces the old one without hub-side provisioning.
 

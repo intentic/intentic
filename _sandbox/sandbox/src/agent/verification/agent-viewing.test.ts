@@ -13,6 +13,9 @@ describe("what counts as looking", () => {
         "browser_evaluate",
         "mcp__web__browser_console_messages",
         "mcp__web__browser_find",
+        "mcp__rog__browser_screenshot",
+        "mcp__rog__browser_console",
+        "mcp__rog__browser_frames",
     ])("%s observes the page", (name) => {
         expect(isObservingCall(name)).toBe(true);
     });

@@ -559,6 +559,11 @@ One word per idea on screen and in code. The retired spellings are refused by
 The status bar still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
 every reader's open panel.
 
+Plan answers are pinned above the composer (`ChatWaitingBar.vue`). With text or files staged, **Approve with notes**
+sends those instructions together with the approval, so execution receives them at the gate. **Keep planning** sends
+revision feedback. Interrupted tool cards stop spinning and show “interrupted”; a summary hand-off that falls back
+shows its failure reason.
+
 ## Layout
 
 The directories under `src/` are layered, lowest first, and a value import may only reach its own layer or a lower

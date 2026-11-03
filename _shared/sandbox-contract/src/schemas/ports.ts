@@ -55,6 +55,18 @@ export const PortSummarySchema = z.object({
         })
         .optional()
         .describe("The background job an agent left running for you on this port, when that is what answers here."),
+    // (2026-11-03) In the owner's shinobi workspace 53 conversations ran ss and pgrep to find whose server held a port,
+    // and one agent's scratch server sat on the owner's 7878, which the desktop mirror put on his own localhost.
+    owner: z
+        .object({
+            conversationId: z.string().describe("The conversation whose agent opened it, in its shell or a background job."),
+            jobId: z.string().optional().describe("The background job serving it, when one job of that conversation can be named."),
+            label: z.string().optional().describe("What that job is, in the agent's own words when it gave any."),
+        })
+        .optional()
+        .describe(
+            "Which conversation's agent is listening here, when it can be told. Such a port stays off the owner's computers (the desktop mirror leaves it out) unless the job was left running for them (`job`) or the owner asks for it there.",
+        ),
     forwarded: z.boolean().describe("Whether it is currently reachable from outside."),
     // `https://port-<slot>-<sandboxId>.<zone>`.
     previewUrl: z.string().optional().describe("Where to open it. Present only while forwarded, and only on a sandbox that has an outside address."),

@@ -24,7 +24,17 @@ export interface PortJob {
 // `jobOn` answers from the background-job registry (agent/tools/jobs/background-jobs.ts), handed in by the router rather than
 // imported, which would tie this subsystem to the agent's in a cycle.
 export type PortsRoutesDeps = Pick<Services, "auth" | "config" | "deviceTunnels" | "portForwards" | "previewGuards" | "scanPorts" | "serviceProcesses" | "workspace"> &
-    ExtensionHost & { readonly jobOn: (port: number) => PortJob | undefined };
+    ExtensionHost & {
+        readonly jobOn: (port: number) => PortJob | undefined;
+        // The conversation whose agent listens there, by its jobs or its shell's tmux session (agent/tools/jobs/port-owners.ts).
+        readonly ownerOn?: (listener: { readonly port: number; readonly session?: string | undefined }) => PortOwner | undefined;
+    };
+
+export interface PortOwner {
+    readonly conversationId: string;
+    readonly jobId?: string;
+    readonly label?: string;
+}
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
@@ -52,7 +62,9 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
                         // A server an agent's turn left running for the person, which Preview offers by its job's name.
                         const handed = services.jobOn(listener.port);
                         const job = handed === undefined ? {} : { job: handed };
-                        const summary = Object.assign({ forwarded: slot !== undefined }, listener, identifyPort(listener, attribution), job);
+                        const owner = services.ownerOn?.(listener);
+                        const owned = owner === undefined ? {} : { owner };
+                        const summary = Object.assign({ forwarded: slot !== undefined }, listener, identifyPort(listener, attribution), job, owned);
                         return url === undefined ? summary : Object.assign(summary, { previewUrl: url });
                     }),
             };

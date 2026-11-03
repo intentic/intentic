@@ -6,8 +6,18 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import { createTurnMounts, type TurnLease } from "../../agent/tools/turn-mounts.js";
 import type { BrowserRouterFactory, RouterManifest } from "./browser-router.js";
-import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, WEBMCP_LAUNCH_ARG, writeBrowserConfig } from "./browser-tools.js";
-import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
+import {
+    ACTION_TIMEOUT_MS,
+    browserServerSpec,
+    browserServersOf,
+    isolatedBrowserSpec,
+    NAVIGATION_TIMEOUT_MS,
+    prepareBrowserOwner,
+    WEBMCP_LAUNCH_ARG,
+    writeBrowserConfig,
+} from "./browser-tools.js";
+import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS } from "../sessions/software-rendering.js";
+import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH, releaseDisplay } from "../cast/display.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessions/session-store.js";
@@ -34,6 +44,12 @@ const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: 
 
 // Any owner works: these tests check wiring, not device values.
 const anyDevice = async (): Promise<Awaited<ReturnType<typeof browserFingerprint>>> => browserFingerprint(tempRoot(), "reddit");
+
+// The prepare tests start real X servers (detached, so they would outlive this process); none spawns a backend to hold one.
+afterAll(() => {
+    releaseDisplay("web");
+    releaseDisplay("reddit-work");
+});
 
 // CI images may lack Chromium; shape assertions stay version-independent regardless.
 const chromiumInstalled = async (): Promise<boolean> => (await browserServersOf([], tempRoot(), BRIDGE())).servers.length > 0;
@@ -110,6 +126,26 @@ test("an unbound config carries no proxy, and still carries the sandbox's clock"
     expect(config.browser.contextOptions.timezoneId).toBe(device.timezoneId);
 });
 
+// The credential-free browser carries no identity: no seeded clock or language, the sandbox's own.
+test("a config with no fingerprint sets no clock, language or Accept-Language", async () => {
+    const path = await writeBrowserConfig(`plain-${process.hrtime.bigint()}`, 41_243, undefined, DISPLAY);
+    const config = JSON.parse(readFileSync(path, "utf8")) as { browser: { contextOptions: Record<string, unknown> } };
+    expect(config.browser.contextOptions).toEqual({ viewport: null });
+});
+
+// Software-rendered game frames take seconds: upstream's 5s action timeout failed screenshots and clicks on them.
+test("every config renders in software and waits long enough for a software-rendered frame", async () => {
+    const path = await writeBrowserConfig(`software-${process.hrtime.bigint()}`, 41_244, await anyDevice(), DISPLAY);
+    const config = JSON.parse(readFileSync(path, "utf8")) as {
+        browser: { launchOptions: { args: string[] } };
+        timeouts: { action: number; navigation: number; settle: number };
+    };
+    expect(config.browser.launchOptions.args).toEqual(expect.arrayContaining([...SOFTWARE_GL_ARGS]));
+    expect(config.browser.launchOptions.args).toContain("--use-angle=swiftshader");
+    expect(config.timeouts).toEqual({ settle: 350, action: ACTION_TIMEOUT_MS, navigation: NAVIGATION_TIMEOUT_MS });
+    expect(ACTION_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+});
+
 // A reissued port must get its own config file rather than colliding with the old one still on disk (owner+port
 // naming).
 test("a recycled port writes its own config instead of colliding with the old one", async () => {
@@ -156,7 +192,7 @@ test("each mount is a router in the daemon, reached at the MCP door under its na
     expect(web?.token).toBe(routed?.token);
     expect(mounts.resolve(web?.token, "browser")).toMatchObject({ target: { kind: "browser" }, conversationId: "conversation-1" });
     // A page can take minutes; the bound rides with the server so every runtime can apply it.
-    expect(web?.timeoutMs).toBe(120_000);
+    expect(web?.timeoutMs).toBe(300_000);
     // The backends a router spawns carry the turn's stamp, so the process scan charges them to the conversation.
     expect(opened.slice(before).map((manifest) => manifest.backendEnv)).toEqual([
         { INTENTIC_TURN_OWNER: "conversation-1" },
@@ -207,29 +243,49 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
 test("every browser server bounds a single tool call", () => {
     const specs = [
         browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", DISPLAY, "/tmp/cfg.json", "/out"),
-        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", DISPLAY, "/tmp/cfg.json"),
+        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", DISPLAY, "/tmp/cfg.json"),
     ] as { timeout?: number }[];
     for (const spec of specs) {
-        expect(spec.timeout).toBeGreaterThan(60_000); // clears @playwright/mcp's own 60s navigation timeout
-        expect(spec.timeout).toBeLessThanOrEqual(180_000); // still ends a wedged call within a turn
+        expect(spec.timeout).toBeGreaterThanOrEqual(180_000); // a game booting on SwiftShader took up to 180s
+        expect(spec.timeout).toBeLessThanOrEqual(300_000); // still ends a wedged call within a turn
     }
 });
 
-// No identity, so it can exist without login and run two turns at once.
-// Still headed and fingerprinted: a WAF blocks headless regardless of login, and SwiftShader is a tell either way.
-test("isolatedBrowserSpec keeps the profile in memory and still passes for a real browser", () => {
+// A `--gpus` sandbox's environment points loaders at the host's GPU; no browser here may inherit it.
+test("every browser server is spawned without the GPU-selecting environment", () => {
+    const saved = { ...process.env };
+    Object.assign(process.env, { LD_LIBRARY_PATH: "/usr/lib/wsl/lib", GALLIUM_DRIVER: "d3d12", MESA_D3D12_DEFAULT_ADAPTER_NAME: "NVIDIA", VK_ICD_FILENAMES: "/usr/share/vulkan/icd.d/nvidia.json" });
+    try {
+        const specs = [
+            browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", DISPLAY, "/tmp/cfg.json", "/out"),
+            isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", DISPLAY, "/tmp/cfg.json"),
+            isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", undefined, "/tmp/cfg.json"),
+        ] as { env: Record<string, string> }[];
+        for (const { env } of specs) {
+            expect(env["LD_LIBRARY_PATH"]).toBeUndefined();
+            expect(env["GALLIUM_DRIVER"]).toBeUndefined();
+            expect(env["MESA_D3D12_DEFAULT_ADAPTER_NAME"]).toBeUndefined();
+            // No SwiftShader ICD beside a made-up binary, so no Vulkan driver list at all rather than the host's.
+            expect(env["VK_ICD_FILENAMES"]).toBeUndefined();
+        }
+    } finally {
+        process.env = saved;
+    }
+});
+
+// No identity, so it can exist without login and run two turns at once. Headed when there is a display, and with no
+// init script: nothing to disguise, so WebGL reports the SwiftShader it renders on rather than a seeded desktop GPU.
+test("isolatedBrowserSpec keeps the profile in memory and disguises nothing", () => {
     const spec = isolatedBrowserSpec(
         "cli.js",
         "/ms/chrome",
         `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
-        `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/web.stealth.js`,
         DISPLAY,
         "/tmp/cfg.json",
     ) as { args: string[]; env: Record<string, string> };
     expect(spec.args).toContain("--isolated");
     expect(spec.args).not.toContain("--headless");
-    expect(spec.args).toContain("--init-script");
-    expect(spec.args).toContain("/work/.intentic/local/browser/web.stealth.js");
+    expect(spec.args).not.toContain("--init-script");
     expect(spec.args).toContain("--output-dir");
     expect(spec.args).toContain("/work/.intentic/records/artifacts/browser");
     // In memory: no profile on disk to lock, which is what lets two concurrent turns each have one.
@@ -240,7 +296,7 @@ test("isolatedBrowserSpec keeps the profile in memory and still passes for a rea
 // No Xvfb until an account is connected; falls back to headless rather than failing to look at a URL.
 // DISPLAY is stripped, not merely unset: an inherited value would point Chromium at an X server that isn't there.
 test("with no display the credential-free browser falls back to headless rather than vanishing", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", undefined, "/tmp/cfg.json") as {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", undefined, "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };
@@ -332,24 +388,37 @@ test("preparing an owner writes its config and binds its own profile directory",
         browser: { launchOptions: { args: string[] } };
     };
     expect(config.browser.launchOptions.args).toContain("--remote-debugging-port=41999");
-    // A signed-in profile keeps Chrome's stock surface: a modelContext on every site would set it apart.
+    // A signed-in profile keeps Chrome's stock surface: a modelContext on every site would set it apart, and so would
+    // a WebGPU adapter desktop Linux Chrome does not offer.
     expect(config.browser.launchOptions.args).not.toContain(WEBMCP_LAUNCH_ARG);
+    expect(config.browser.launchOptions.args).not.toContain(SOFTWARE_WEBGPU_ARGS[0]);
+    expect(config.browser.launchOptions.args).toEqual(expect.arrayContaining([...SOFTWARE_GL_ARGS]));
+    // Still disguised: the stealth script rides on every signed-in profile.
+    expect(args).toContain("--init-script");
 });
 
-// The credential-free browser is where an agent exercises the WebMCP tools of a site it is building.
-test("preparing the credential-free browser turns WebMCP on", async () => {
+// The credential-free browser is where an agent exercises the WebMCP tools, and the WebGPU path, of what it builds.
+test("preparing the credential-free browser turns WebMCP and software WebGPU on, and writes no stealth script", async () => {
     if (!(await chromiumInstalled())) {
         return;
     }
-    const prepared = await prepareBrowserOwner([], tempRoot(), "web", 41_997);
+    const root = tempRoot();
+    const prepared = await prepareBrowserOwner([], root, "web", 41_997);
     if ("refusal" in prepared) {
         throw new Error(`expected a spawn spec, got a refusal: ${prepared.refusal}`);
     }
     const args = [...prepared.args];
+    // SAFETY: the spec always carries --config and a path after it, and the file is the JSON writeBrowserConfig wrote.
     const config = JSON.parse(readFileSync(args[args.indexOf("--config") + 1] as string, "utf8")) as {
-        browser: { launchOptions: { args: string[] } };
+        browser: { launchOptions: { args: string[] }; contextOptions: Record<string, unknown> };
     };
     expect(config.browser.launchOptions.args).toContain(WEBMCP_LAUNCH_ARG);
+    expect(config.browser.launchOptions.args).toEqual(expect.arrayContaining([...SOFTWARE_GL_ARGS, ...SOFTWARE_WEBGPU_ARGS]));
+    expect(config.browser.contextOptions["timezoneId"]).toBeUndefined();
+    expect(args).not.toContain("--init-script");
+    expect(existsSync(join(root, ".intentic", "local", "browser", "web.stealth.js"))).toBe(false);
+    // Vulkan can open Chromium's own SwiftShader driver and nothing else.
+    expect(prepared.env["VK_DRIVER_FILES"]).toMatch(/vk_swiftshader_icd\.json$/);
 });
 
 test("preparing an owner whose profile a login window holds refuses instead of racing it", async () => {
@@ -361,6 +430,7 @@ test("preparing an owner whose profile a login window holds refuses instead of r
     expect(acquireProfileLock("reddit")).toBe(true);
     const prepared = await prepareBrowserOwner([reddit], root, "reddit", 41_998);
     releaseProfileLock("reddit");
+    // SAFETY: a refusal is asserted; anything else fails the toContain below.
     expect((prepared as { refusal: string }).refusal).toContain("login window");
 });
 

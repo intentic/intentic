@@ -248,10 +248,20 @@ fn stash_plan(live_containers: bool, in_trash: bool) -> Stash {
 /// nowhere.
 pub fn stash(slug: &str) -> std::result::Result<(), String> {
     settle_parked(slug);
-    let present: Vec<(String, String)> = container_pairs(slug)
-        .into_iter()
-        .filter(|(live, _)| docker::container_exists(live))
-        .collect();
+    // Docker's answer for each live name; one it did not answer about could be the sandbox itself, and marking its data
+    // as the trash's would put a live sandbox's volumes on the purge clock.
+    let mut present: Vec<(String, String)> = Vec::new();
+    for (live, trashed) in container_pairs(slug) {
+        match docker::container_presence(&live) {
+            docker::Presence::Exists => present.push((live, trashed)),
+            docker::Presence::Absent => {}
+            docker::Presence::Unknown(why) => {
+                return Err(format!(
+                    "docker did not answer about {live} ({why}), so nothing of {slug} was moved"
+                ))
+            }
+        }
+    }
     match stash_plan(!present.is_empty(), !markers_for(slug).is_empty()) {
         Stash::AlreadyTrashed => return Ok(()),
         Stash::MarkOnly if mark(slug) => {
@@ -336,10 +346,12 @@ fn settle_parked(slug: &str) {
         return;
     }
     let live = crate::sandbox::container_of(slug);
-    if docker::container_exists(&live) {
-        docker::quiet(&["rm", "-f", &parked]);
-    } else {
-        docker::quiet(&["rename", &parked, &live]);
+    // Decided on docker's answer only: removing the parked container is right only beside a live one it SAW, and an
+    // engine that did not answer leaves both where they are (stash then refuses on the same silence).
+    match docker::container_presence(&live) {
+        docker::Presence::Exists => docker::quiet(&["rm", "-f", &parked]),
+        docker::Presence::Absent => docker::quiet(&["rename", &parked, &live]),
+        docker::Presence::Unknown(_) => return,
     }
     if let Ok(record) = crate::record::read(slug) {
         if record.swap.is_some() {
@@ -400,10 +412,11 @@ fn trash_names(slug: &str) -> [String; 3] {
     container_pairs(slug).map(|(_, trashed)| trashed)
 }
 
-/// Whether the slug runs on this device, under its own name or parked by a swap.
+/// Whether the slug may run on this device, under its own name or parked by a swap: true unless docker says both names
+/// are empty, since a purge refused on an engine that did not answer is retried, and one let through deletes a sandbox.
 fn is_live(slug: &str) -> bool {
-    docker::container_exists(&crate::sandbox::container_of(slug))
-        || docker::container_exists(&crate::sandbox::parked_of(slug))
+    !(docker::container_absent(&crate::sandbox::container_of(slug))
+        && docker::container_absent(&crate::sandbox::parked_of(slug)))
 }
 
 /// Deletes one removed sandbox for good: its containers in the trash and its data. Idempotent: every step no-ops on

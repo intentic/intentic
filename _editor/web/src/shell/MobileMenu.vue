@@ -4,6 +4,7 @@ import { Avatar, PageHeader, Row, RowGroup, SandboxLogo, SurfaceGround } from "@
 import { computed, onMounted } from "vue";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
+import { useDiskPressure } from "../features/sandbox/overview/storage/useDiskPressure";
 import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
@@ -41,6 +42,9 @@ const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
 // the card's step, which says why wherever the press is not offered.
 const rebuildOffer = useRebuildOffer();
 const { offered: rebuildOffered, busy: rebuildBusy, notice: rebuildNotice } = rebuildOffer;
+// The disk row's press: settled checkouts' build output, removed from here without opening the Disk card.
+const disk = useDiskPressure();
+const { cleaning: diskCleaning, cleanNotice: diskCleanNotice } = disk;
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -92,6 +96,14 @@ const resumeSetup = (id: string) => finishOnHome(id);
                         :title="t(`sandbox.words.rebuildNow`)"
                         :description="rebuildNotice?.title ?? t(`sandbox.hostedRebuild.buildMinutesCountAgainst`)"
                         @press="rebuildBusy || rebuildOffer.start()"
+                    />
+                    <MenuRow
+                        v-if="item.action === `clean`"
+                        :icon="diskCleaning ? `spinner` : `trash`"
+                        :tone="diskCleanNotice ? `danger` : `default`"
+                        :title="t(`sandbox.sandboxAttention.cleanBuildOutput`)"
+                        :description="diskCleanNotice?.title ?? t(`sandbox.sandboxAttention.cleanBuildOutputDetail`)"
+                        @press="diskCleaning || disk.clean()"
                     />
                 </template>
             </RowGroup>

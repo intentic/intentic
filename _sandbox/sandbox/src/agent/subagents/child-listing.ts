@@ -1,3 +1,4 @@
+import { modelRungOf } from "@intentic/sandbox-contract/models/model-order";
 import { within } from "@intentic/base/async";
 import { isIsolated } from "../../conversations/registry/agents-store.js";
 import { landingPaths } from "../../conversations/land/landing-paths.js";
@@ -47,10 +48,7 @@ export const elsewhereFor = async (
     }
     const spent = mentionsSpentAllowance(failure);
     const [providers, work] = await Promise.all([spent ? listingWithin(services, "child failure") : undefined, workSoFar(services, childId)]);
-    const room = (providers ?? [])
-        .filter((provider) => provider.models.length > 0 && provider.id !== spec.provider)
-        .map((provider) => `${provider.id}/${provider.models[0]?.id ?? ""}`)
-        .slice(0, 4);
+    const room = childAlternatives(providers ?? [], spec);
     const where =
         providers === undefined
             ? ``
@@ -58,6 +56,18 @@ export const elsewhereFor = async (
               ? ` Nothing else connected has measured room right now, so moving it would be refused too.`
               : ` With room right now: ${room.join(", ")} (\`agents providers\` for the rest).`;
     return `${work} send(child: "${childId}", message, provider, model) carries it on elsewhere in that worktree; merge(child: "${childId}") brings it into your checkout as it stands; a fresh spawn would start over.${where}`;
+};
+
+/** Keep the child's model on another account first, then its capability tier on another provider. */
+export const childAlternatives = (providers: readonly SpawnableProvider[], spec: ChildSpawnSpec): readonly string[] => {
+    const candidates = providers.flatMap((provider) => provider.models.map((model) => ({ provider: provider.id, model: model.id })));
+    const rung = modelRungOf(spec.model);
+    return candidates.toSorted((a, b) =>
+        Number(b.model === spec.model) - Number(a.model === spec.model) ||
+        Math.abs(modelRungOf(a.model) - rung) - Math.abs(modelRungOf(b.model) - rung))
+        .filter((candidate, index, sorted) => sorted.findIndex((other) => other.provider === candidate.provider) === index)
+        .slice(0, 4)
+        .map((candidate) => `${candidate.provider}/${candidate.model}`);
 };
 
 /** What a child already did, as its parent reads it before deciding where its task goes: files changed in its worktree. */
@@ -123,9 +133,22 @@ export const mergeOutcome = (result: LandResult, where: string, childId: string)
                     : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
         };
     }
-    const blocked = (result.conflicts ?? []).flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
+    const reasons = {
+        workspace: "conflicts with uncommitted edits in the destination checkout",
+        diverged: "conflicts with changes to the shared tree (including files modified on one side and deleted on the other)",
+        binary: "cannot be merged as text (binary content)",
+    } as const;
+    const pathsByReason = new Map<keyof typeof reasons, string[]>();
+    for (const { repo, paths } of result.conflicts ?? []) {
+        for (const { path, reason } of paths) {
+            const group = pathsByReason.get(reason) ?? [];
+            group.push(repo === "root" ? path : `${repo}/${path}`);
+            pathsByReason.set(reason, group);
+        }
+    }
+    const blocked = [...pathsByReason].map(([reason, paths]) => `${namedPaths(paths)}: ${reasons[reason]}`);
     return {
         ok: false,
-        message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : `${namedPaths(blocked)} could not take conflict markers (a binary, or uncommitted edits that keep changing)`}. Its work stays on its branch \`agent/${childId}\`.`,
+        message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : blocked.join("; ")}. Its work stays on its branch \`agent/${childId}\`.`,
     };
 };

@@ -38,6 +38,8 @@
 # and the global per-pane log hooks (src/logs/log-files.ts) already own it — creating the window triggers
 # those hooks, so commands land in the terminal history logs for free.
 set -u
+read -r clock_up _ </proc/uptime 2>/dev/null || clock_up=0.00
+clock_started=$((10#${clock_up/./}))
 
 envflags=()
 envnames=()
@@ -66,6 +68,7 @@ if [ -n "$cmdfile" ]; then
     name="${name:-run}"
     agentcmd="$(cat "$cmddir/said" 2>/dev/null)"
     callsoft="$(cat "$cmddir/soft" 2>/dev/null)"
+    callwall="$(cat "$cmddir/wall" 2>/dev/null)"
 else
     cmd="$2"
     name="${3:-run}"
@@ -243,7 +246,7 @@ if [ -n "$door" ]; then
 else
     first="$(printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on \\; set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null' "$epitaph")"
 fi
-printf '%s\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$first" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
+printf '%s\nexport INTENTIC_QUEUE_CAPTURE_DIR=%q/queue\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$first" "$d" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean): the filter names its raw-output retention and cache after it. Path known only after the
@@ -376,23 +379,72 @@ soft="${INTENTIC_RUN_SOFT_TIMEOUT_S:-110}"
 # margin, instead of being returned at 110 seconds anyway: the hook writes the figure to `soft` beside the line. Measured
 # 2026-09-26..10-02: 922 commands came back at 110 s, and their agents spent 1,916 more calls polling the log.
 case "${callsoft:-}" in '' | *[!0-9]*) ;; *) soft="$callsoft" ;; esac
+case "$soft" in '' | *[!0-9]*) soft=0 ;; *) soft=$((10#$soft)) ;; esac
+# The SDK still caps a foreground call by wall time. Its hook raises that cap and leaves this margin below it.
+wall=0
+case "${callwall:-}" in '' | *[!0-9]*) ;; *) wall=$((10#$callwall)) ;; esac
 # A background job has no SDK Bash timeout to beat, and returning early would report it FINISHED to a caller
 # that asked to be told when it exits; it waits for the real status, and the turn ending is what releases it.
-[ -n "$jobdir" ] && soft=0
+[ -n "$jobdir" ] && { soft=0; wall=0; }
 # A foreground command sitting at a prompt (npx asking to install, git asking for a username, a `read`) comes back as
 # soon as the daemon is sure of it, instead of at the soft timeout: nothing in the agent's turn can type into this pane,
 # so every second held is wasted, and a prompt behind a `| tail` never showed the agent its own question. The daemon
 # writes `input-wait` beside the capture once a process of this pane has sat blocked reading the terminal with nothing
 # moving (src/agent/tools/jobs/input-wait.ts); its line names the process, and the hook turns the line into the advice.
+# Monotonic intervals from queue-run, merged so two concurrent waiters pause the clock once. Completed records
+# keep even a wait between reads visible. A killed waiter is closed on first observation of its death.
+declare -A queue_ended=()
+queued_cs=0
+elapsed_cs=0
+queue_note=""
+queue_clock() {
+    local up now file start end pid note intervals="" merged_start=0 merged_end=0
+    read -r up _ </proc/uptime 2>/dev/null || return 0
+    now=$((10#${up/./}))
+    elapsed_cs=$((now - clock_started))
+    queue_note=""
+    queued_cs=0
+    [ -d "$d/queue" ] || return 0
+    for file in "$d"/queue/wait.*; do
+        [ -f "$file" ] && [ ! -L "$file" ] || continue
+        { read -r start end pid; read -r note; } <"$file"
+        [[ "$start" =~ ^[0-9]+$ && "$end" =~ ^[0-9]+$ && "$pid" =~ ^[0-9]+$ ]] || continue
+        if [ "$end" = 0 ]; then
+            if kill -0 "$pid" 2>/dev/null; then
+                end=$now
+                queue_note="$note"
+            else
+                queue_ended[$pid]=${queue_ended[$pid]:-$now}
+                end=${queue_ended[$pid]}
+            fi
+        fi
+        intervals+="$start $end"$'\n'
+    done
+    while read -r start end; do
+        [ -n "$start" ] || continue
+        if [ "$start" -gt "$merged_end" ]; then
+            queued_cs=$((queued_cs + merged_end - merged_start))
+            merged_start=$start
+            merged_end=$end
+        elif [ "$end" -gt "$merged_end" ]; then
+            merged_end=$end
+        fi
+    done < <(sort -n <<<"$intervals")
+    queued_cs=$((queued_cs + merged_end - merged_start))
+}
 while [ ! -f "$d/status" ]; do
+    [ -z "$jobdir" ] && queue_clock
     if [ -z "$jobdir" ] && [ -f "$d/input-wait" ]; then
         emit running
         printf '\n--- waiting for input: %s\n' "$(head -n 1 "$d/input-wait" 2>/dev/null)"
+        [ -n "$queue_note" ] && printf -- '--- %s\n' "$queue_note"
         printf -- '--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"
         exit 0
     fi
-    if [ "$soft" -ge 1 ] 2>/dev/null && [ "$SECONDS" -ge "$soft" ]; then
+    if { [ "$soft" -ge 1 ] && [ "$((elapsed_cs - queued_cs))" -ge "$((soft * 100))" ]; } ||
+        { [ "$wall" -ge 1 ] && [ "$elapsed_cs" -ge "$((wall * 100))" ]; }; then
         emit running
+        [ -n "$queue_note" ] && printf '\n--- %s\n' "$queue_note"
         printf '\n--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"
         exit 0
     fi

@@ -9,6 +9,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { guidanceBlock, type GuidanceFacts, otherRuntime } from "../guidance.js";
 import { surroundingsNote } from "../surroundings.js";
 import { withRuntimeGuidance } from "../system-prompt.js";
+import { tmuxRunEnabled } from "../../tools/agent-terminals.js";
 
 /* THE GUIDANCE A RUNTIME OTHER THAN THE CLAUDE CODE LOOP IS TOLD, FROM WHAT ITS ARM MOUNTED.
 
@@ -26,6 +27,16 @@ const UI_SERVER = "ui";
 const WATCH_SERVER = "watch";
 const SUBAGENTS_SERVER = "subagents";
 const TERMINAL_SERVER = "terminal";
+
+// The loops whose shell runs through the terminal panel and files a command it hands back still running as a job: Codex's
+// command and Pi's bash through the one judged runner (runtimes/decorators/shell-line.ts), OpenCode's through its shell
+// door (runtimes/opencode/shell/opencode-shell.ts). An ACP agent's terminal is handed tmux-run's own words instead.
+const SHELL_JOB_RUNTIMES: ReadonlySet<AgentCapabilities["runtime"]> = new Set(["codex", "pi", "opencode", "opencode-gemini"]);
+
+// Whether this turn's long commands come back as jobs: its loop files them, its shell runs in the panel, and it has a
+// conversation to deliver a job's end to.
+const filesShellJobs = (capabilities: AgentCapabilities, request: AgentRequest): boolean =>
+    SHELL_JOB_RUNTIMES.has(capabilities.runtime) && capabilities.terminals && tmuxRunEnabled() && request.hooks.backgroundJobs !== undefined;
 
 export interface RuntimeGuidanceTurn {
     readonly capabilities: AgentCapabilities;
@@ -46,7 +57,7 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
     const [hostDevices, ownBrowsers, ownPhones] = await Promise.all([deps.hostReach(granted), deps.webextReach(granted), deps.phoneReach(granted)]);
     return {
         // How this runtime's tool list spells an MCP tool, as its arm said (TurnTools.mcpToolPrefix); absent is `mcp__<server>__<tool>`.
-        runtime: otherRuntime(capabilities.secrets, request.tools.mcpToolPrefix),
+        runtime: otherRuntime(capabilities.secrets, request.tools.mcpToolPrefix, filesShellJobs(capabilities, request)),
         unattended: request.policy.unattended === true,
         browserOutputDir: browsers ? browserOutputDir(deps.workspace.root) : undefined,
         anonymousBrowser: mounted.has(ANONYMOUS_BROWSER_SERVER),

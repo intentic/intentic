@@ -2,6 +2,7 @@ import { narrate } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
+import type { HostCrashEvent, HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import type { ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { implement, ORPCError } from "@orpc/server";
 import { audit } from "./audit.js";
@@ -15,6 +16,7 @@ import { stageArtifact } from "./tools/programs/artifacts.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { windowsMemory } from "../environments/windows-memory.js";
+import { windowsCrashEvents } from "../environments/windows-crash-events.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import {
     keyringCapture,
@@ -243,6 +245,13 @@ const keyringProcedures = (os: DeviceImplementer, keyring: KeyringLink) => ({
     keyringPhoneFill: os.keyringPhoneFill.handler(async ({ input }) => await keyringPhoneFill(keyring, input)),
 });
 
+// The heartbeat's answer as this agent builds it (the contract's DevicePingSchema).
+interface HeartbeatAnswer {
+    ok: true;
+    memory?: HostMemory;
+    crashes?: HostCrashEvent[];
+}
+
 export const createHostRouter = (runtime: HostRuntime) => {
     const os = implement(tolerantDeviceContract);
     // Switches a grant carried that this agent does not know, each said once per link rather than on every reconnect.
@@ -281,9 +290,19 @@ export const createHostRouter = (runtime: HostRuntime) => {
         }),
         // (2026-11-02) The Windows side says what memory Windows has with every heartbeat, which the sandbox's room gate
         // holds heavy work back on (schemas/hosts.ts, HostMemorySchema); every other side answers as before.
+        // (2026-11-03) It also says which GPU resets and crashes Windows logged in the last day
+        // (environments/windows-crash-events.ts), which the sandbox explains its restarts with and pauses GPU work on.
         ping: os.ping.handler(() => {
             const memory = windowsMemory();
-            return memory === undefined ? { ok: true as const } : { ok: true as const, memory };
+            const crashes = windowsCrashEvents(runtime.log);
+            const answer: HeartbeatAnswer = { ok: true };
+            if (memory !== undefined) {
+                answer.memory = memory;
+            }
+            if (crashes !== undefined && crashes.length > 0) {
+                answer.crashes = crashes;
+            }
+            return answer;
         }),
         // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and the tool it names, not by
         // this contract or the daemon. Run as this link's call, so what it does to the desktop is shown under its name.

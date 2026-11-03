@@ -1,4 +1,5 @@
 import { documentsOf } from "./produced-files.js";
+import { settleClone } from "./land/settle/nested-clone.js";
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ import { createReviewReader } from "./land/review/review-cache.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { standingsForRead } from "./standings-read.js";
-import { endingOf } from "./registry/turn-ending.js";
+import { endingOf } from "./registry/projection/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landByHandLeased, settleByHand } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
@@ -518,6 +519,8 @@ export const createAgentsRoutes = (services: Services) => {
             await copyIntoMain(dir, main, named);
             return { ok: true } as const;
         }),
+        // A clone of its own the card names (TurnReach.stranded), folded into its repository or moved into the workspace.
+        settleClone: i.settleClone.handler(async ({ input, context }) => settleClone(services, isolatedEntryOf(input.id, context), input)),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input, context }) => {
             // A home-only member reaches this press only when their home lands by itself (sandbox-contract protocol/member-reach.ts), and only on it.

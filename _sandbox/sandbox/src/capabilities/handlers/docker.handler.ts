@@ -11,6 +11,13 @@ import { textFile } from "../../store/plain-files/text-file.js";
 import { parseJsonOr } from "@intentic/base/json";
 import { COMPOSE_MANAGER } from "@intentic/sandbox-run";
 
+// The WSL driver libraries on one command's path, where the entrypoint took them off every other's. The variable is
+// hosts/gpu/gpu-state.ts GPU_LIBRARY_ENV, spelled here since capabilities do not import hosts.
+const gpuLibraryEnv = (): { env?: Record<string, string> } => {
+    const libraries = process.env["INTENTIC_GPU_LIBRARY_PATH"];
+    return libraries === undefined ? {} : { env: { LD_LIBRARY_PATH: libraries } };
+};
+
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
 // boot. No remove: de-privileging live engine state is too destructive to do silently.
@@ -164,9 +171,11 @@ const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise
 const gpuState = (): string | undefined => process.env["SANDBOX_GPU"];
 
 // `nvidia-smi -L` lists the GPUs the toolkit injects; it fails exactly when passthrough didn't really happen (a host
-// driver/toolkit mismatch, the case every earlier check missed).
+// driver/toolkit mismatch, the case every earlier check missed). The engine's nvidia-smi finds the WSL driver
+// libraries itself; an older engine's needs them on its own path, since the daemon no longer carries them (2026-11-03,
+// hosts/gpu/gpu-state.ts).
 const gpuVisible = async (): Promise<boolean> =>
-    forkedExec("nvidia-smi", ["-L"]).then(
+    forkedExec("nvidia-smi", ["-L"], gpuLibraryEnv()).then(
         () => true,
         () => false,
     );

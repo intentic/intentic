@@ -184,6 +184,17 @@ flowchart LR
   sandboxes also uses; `golden/update-probation.json` pins ic to it. `ic sandbox swaps --json` (`swaps.rs`) answers,
   without Docker, whether each swap's cutover is being done right now (its heartbeat is fresh). The machine agent
   defers its own restarts and the keeper on that answer rather than reading the records itself.
+- **A container is there, is not, or Docker did not say** (`docker.rs` `Presence`, 2026-11-03). Absence is only
+  Docker's own "No such container"; a timeout (every read has the 20-second `READ_LIMIT`) or any other engine error is
+  Unknown. The probation watch judges nothing on Unknown: no verdict, no strike, the record untouched, and it looks
+  again next round. Going back because the new version's container is gone needs it gone twice, ten seconds apart, with
+  `docker ps -a` agreeing (`container_gone`), and the health exec counts against the new version only when the engine
+  answered it. Every other decision that destroys something on absence (tidy and `remove` trashing orphan volumes, a
+  purge, a removal moving a sandbox to the trash, `prepare`/`update` and `connect --replace` putting a parked container
+  back) asks `container_absent` or the three-way answer and leaves things as they are when Docker did not say; plain
+  reads keep `container_exists`, where Unknown reads as not there. Rejected: one bool. On 2026-10-31 at 23:35 rog's
+  engine stalled ("running but stuck"), the watch's `docker inspect` failed, that read as "the new version's container
+  is gone", and a healthy 1.380.0 was rolled back to 1.378.2, killing every turn in flight.
 - **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
   are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
   keeps its data on is read directly, where the check used to skip), and `ic sandbox versions` lists them for

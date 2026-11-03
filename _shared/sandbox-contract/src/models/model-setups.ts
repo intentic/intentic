@@ -104,7 +104,10 @@ export const presetPins = (preset: PresetSetup, sources: readonly ModelSource[])
     sources
         .filter((source) => source.ready && !isEndpointProvider(source.provider))
         .flatMap((source) => {
-            const newest = newestOnRung(source.models, PRESET_RUNG[preset]);
+            // Cheap jobs are on the interaction path (titles, commits, summaries); an explicitly slow model is
+            // unsuitable for the automatic Low preset. An owner's written pins remain authoritative.
+            const models = preset === "low" ? source.models.filter((model) => !/(?:^|[-_])slow(?:$|[-_])/i.test(model)) : source.models;
+            const newest = newestOnRung(models, PRESET_RUNG[preset]);
             return newest === undefined ? [] : [{ provider: source.provider, model: newest }];
         })
         .slice(0, PRESET_LENGTH);

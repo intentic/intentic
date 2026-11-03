@@ -2,7 +2,7 @@ import { environmentName, HOST_NATIVE_ENVIRONMENT, hostConnectionKey, machinePre
 import { z } from "zod";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { Services } from "../composition.js";
-import type { PeerCallRoute } from "../peers/peer-routes.js";
+import type { PeerCallOrigin, PeerCallRoute } from "../peers/peer-routes.js";
 import { hostConnectionOf } from "./host-connection.js";
 
 // A CALL NAMING A DISTRO GOES TO THAT DISTRO WHILE THE WINDOWS SIDE IS DOWN (2026-10-15). A turn mounts one server per
@@ -50,8 +50,33 @@ export const partlyConnectedRefusal = (card: string, awake: readonly string[], n
     );
 };
 
-/** The hosts door's `route` (peers/peer-routes.ts): where a call to a card's mount actually goes. */
-export const hostCallRoute =
+// AN AGENT'S app_stop SAYS WHOSE IT IS (2026-11-03). The computer records who stopped a program and says it back
+// ("stopped by …", programs.ts appStop); a conversation's call carries its id there, whatever `by` the model wrote, so
+// an agent reading another's stop knows whose it was. In the owner's shinobi workspace one went hunting through other
+// conversations for a stop its own Run job had made, because every stop read "stopped by the agent".
+const AppStopCallSchema = z.object({ method: z.literal("tools/call"), params: z.object({ name: z.literal("app_stop"), arguments: z.looseObject({}) }) });
+
+/** The message with an app_stop's `by` set to the conversation it comes from; any other message as it is. */
+const stampedStop = (message: RpcMessage, conversationId: string | undefined): RpcMessage => {
+    const parsed = AppStopCallSchema.safeParse(message);
+    if (!parsed.success) {
+        return message;
+    }
+    const by = conversationId === undefined ? "app_stop from an agent" : `app_stop from conversation ${conversationId}`;
+    return { ...message, params: { ...message.params, arguments: { ...parsed.data.params.arguments, by } } };
+};
+
+/** The hosts door's `route` (peers/peer-routes.ts): where a call to a card's mount actually goes, and as what. */
+export const hostCallRoute = (services: Pick<Services, "hosts" | "hostHub">) => {
+    const crossing = crossingRoute(services);
+    return async (id: string, asked: RpcMessage, call: PeerCallOrigin = { conversationId: undefined }): Promise<PeerCallRoute | undefined> => {
+        const message = stampedStop(asked, call.conversationId);
+        return (await crossing(id, message)) ?? (message === asked ? undefined : { id, message });
+    };
+};
+
+// Where a call goes while the card's Windows side is down (above).
+const crossingRoute =
     (services: Pick<Services, "hosts" | "hostHub">) =>
     async (id: string, message: RpcMessage): Promise<PeerCallRoute | undefined> => {
         // The handshake and the tool list are answered for the card as before; only a call has somewhere else to go.

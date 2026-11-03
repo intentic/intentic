@@ -208,3 +208,17 @@ test("wait takes `targets` alone, and says what to name when given neither", asy
         { outcome: "unknown-target", note: expect.stringContaining("`targets`") },
     ]);
 });
+
+
+test("wait accepts a one-second request and clamps it instead of rejecting its schema", async () => {
+    const timers = jest.spyOn(globalThis, "setTimeout");
+    const call = await connect(subagentWaitServer({
+        conversationId: "parent", conversations: memoryFleet().conversations, signal: new AbortController().signal,
+    }));
+    const reply = await call("tools/call", { name: "wait", arguments: { target: "missing", timeoutSeconds: 1 } });
+    expect(timers.mock.calls.map((args) => args[1])).toContain(5_000);
+    timers.mockRestore();
+    expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([
+        { outcome: "unknown-target", note: "Nothing to wait for: no subagent or background command of this conversation is still running under that id, or its ending was already reported." },
+    ]);
+});

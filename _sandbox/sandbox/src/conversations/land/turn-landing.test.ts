@@ -14,8 +14,10 @@ import {
     askToLandHome,
     decideLanding,
     landTurn,
+    resolvesAtOnce,
     settleLandBooks,
 } from "./turn-landing.js";
+import { landConflictPrompt } from "@intentic/sandbox-contract/events/land-conflict";
 import { conversationEntry, isolatedAgent } from "../registry/agents-store.testing.js";
 import { unlinkedMessage } from "../worktrees/checkout-link.js";
 import { noteLandHeldForWake, takeLandHeldForWake } from "./wake-held.js";
@@ -82,7 +84,6 @@ const outcome = (change: Partial<LandOutcome>): LandOutcome => ({
     changed: true,
     repos: [],
     diff: { files: 1, insertions: 1, deletions: 0 },
-    adjudicated: false,
     ...change,
 });
 
@@ -92,6 +93,22 @@ test.each([
     ["neither", outcome({}), "conflict"],
 ] as const)("a changed land that is %s settles as %s", (_case, landed, settled) => {
     expect(landedOutcomeOf(landed)).toBe(settled);
+});
+
+// A clash that waited on its card for a Resolve press cost the agent its warm context: up to ten hours later on one
+// sandbox. Work meant to land by itself goes back at once; held work waits, as its land does.
+describe("a land's clash", () => {
+    const plain = isolatedAgent([], { id: "c" });
+    const home = isolatedAgent([], { id: "h", identity: { home: true } });
+    test.each([
+        ["an automatic land's", true, plain, "fix the bug", true],
+        ["a held land's", false, plain, "fix the bug", false],
+        ["a home's held land's", false, home, "fix the bug", true],
+        ["a resolve turn's own", true, plain, landConflictPrompt([{ repo: "root", clean: 0, paths: [{ path: "a.ts", reason: "diverged" }] }]), false],
+        ["a home's resolve turn's own", false, home, landConflictPrompt([]), false],
+    ] as const)("is %s sent back at once: %p", (_case, automatic, finished, prompt, sent) => {
+        expect(resolvesAtOnce(automatic, finished, prompt)).toBe(sent);
+    });
 });
 
 describe("the landed frame", () => {

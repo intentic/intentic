@@ -21,9 +21,10 @@ export interface StorageRoots {
 export type StorageRootKind = keyof StorageRoots;
 
 // How a clean removes what a cleanable category holds. `unit` is an entry directly below one of its folders, a single
-// file, or a whole store handed to the tool that owns it.
+// file, a whole store handed to the tool that owns it, or build output found inside conversation checkouts, which no
+// path rule can name and the build-output reaper removes by its own rules (conversations/worktrees/build-outputs/build-outputs.ts).
 export interface StorageRemoval {
-    readonly unit: "entry" | "file" | "prune";
+    readonly unit: "entry" | "file" | "prune" | "reap";
     // Anything changed more recently than this stays: today's logs, a turn's scratch, a capture it may still read back.
     readonly keepRecentMs?: number;
     // Only folders are units: the files beside them are account state their owner keeps (a connection's passkeys).
@@ -49,6 +50,8 @@ const REMOVALS: Readonly<Record<CleanableCategory, StorageRemoval>> = {
     // pnpm's own `store prune` decides, by its definition of what no project references.
     packageStores: { unit: "prune" },
     buildCaches: { unit: "file", keepRecentMs: DAY_MS },
+    // Only checkouts whose conversation has nothing running; the reaper asks, not the age of the files.
+    buildOutputs: { unit: "reap" },
 };
 
 const cleanable = (category: StorageCategoryId): category is CleanableCategory => STORAGE_CLEANABILITY[category] !== "none";
@@ -82,6 +85,8 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "exports/", category: "exports", depth: 1 },
     { root: "history", prefix: "logs/", category: "logs", depth: 1 },
     { root: "history", prefix: "gits/", category: "repositories", depth: 1 },
+    // The Rust recipe's sccache (seed-skills/environment): compiled crates every checkout's build reuses.
+    { root: "history", prefix: "cache/sccache/", category: "buildCaches", depth: 0 },
     // Turborepo drops its cache beside the git dirs it resolves a worktree's root through.
     { root: "history", prefix: "gits/.turbo/", category: "buildCaches", depth: 0 },
     { root: "history", prefix: "scopes/", category: "restorePoints", depth: 1, protected: true },
@@ -164,6 +169,12 @@ export interface StorageClassification {
     // Whether every path below classifies the same, category and item both, so a walk can stop asking.
     readonly settled: boolean;
 }
+
+// Build output found inside a checkout: the folder itself is the item, and everything below it is the same.
+export const buildOutputClassification = (rel: string): StorageClassification => ({ category: "buildOutputs", item: rel, unit: true, settled: true });
+
+// Whether a history-relative path lies inside one conversation's checkout, deep enough to hold a build tool's output.
+export const insideCheckout = (root: StorageRootKind, rel: string): boolean => root === "history" && rel.startsWith("worktrees/") && segments(rel).length > 2;
 
 // One path's category, keyed by the root it sits in; `rel` is root-relative with forward slashes.
 export const classifyStoragePath = (root: StorageRootKind, rel: string): StorageClassification => {

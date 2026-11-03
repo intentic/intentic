@@ -1,4 +1,4 @@
-import { checkPage } from "./page-check.js";
+import { harmlessPageError, checkPage } from "./page-check.js";
 
 // The agent's own look at a page, in the sandbox's headless Chromium. Where the image carries no browser the check says
 // so instead of failing, which is what these assert there too.
@@ -59,3 +59,24 @@ describe("checkPage", () => {
         expect(result.check.contentHeight).toBeLessThan(500);
     }, 60_000);
 });
+
+
+test("resize delivery warnings are harmless; application exceptions still fail the page", () => {
+    expect(harmlessPageError("ResizeObserver loop completed with undelivered notifications.")).toBe(true);
+    expect(harmlessPageError("ResizeObserver loop limit exceeded")).toBe(true);
+    expect(harmlessPageError("Error: cannot read properties of undefined")).toBe(false);
+    expect(harmlessPageError("application failed: ResizeObserver loop completed with undelivered notifications.")).toBe(false);
+});
+
+
+test("browser resize warnings do not block a page while its application errors are retained", async () => {
+    const result = await checkPage(`<p>ready</p><script>
+        window.dispatchEvent(new ErrorEvent("error", { message: "ResizeObserver loop completed with undelivered notifications." }));
+        window.dispatchEvent(new ErrorEvent("error", { message: "application failed" }));
+    </script>`);
+    if (!result.ok) {
+        expect(result.reason).toContain("browser");
+        return;
+    }
+    expect(result.check.errors).toEqual(["application failed"]);
+}, 60_000);

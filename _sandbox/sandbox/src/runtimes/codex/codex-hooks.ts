@@ -4,6 +4,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import type { TurnTools } from "../../agent/providers/agent-request.js";
+import type { BackgroundJobSeed } from "../../agent/tools/jobs/background-jobs.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import { toolAllowed } from "../../agent/tools/tool-allowlist.js";
 import type { EditReviewer } from "../../agent/verification/agent-diagnostics.js";
@@ -20,7 +21,8 @@ import { createShellLines, type ShellLineOutcome } from "../decorators/shell-lin
 // any of them on a card; PostToolUse marks the turn's taint bit and runs the edit checks; Stop runs the repositories'
 // end-of-turn checks once. What the gate lets a shell command through as, this module decides: through the terminal
 // panel's tmux wrapper, with its `{{secret:…}}` references resolved, and under the masking wrapper while the turn holds
-// stored secrets.
+// stored secrets. A command that comes back from the panel still running is filed as a background job after it returned
+// (PostToolUse, shell-line.ts settle), and the agent is told its id to `wait` on, as a Claude Code turn is.
 //
 // Codex runs a call whose hook failed (an error, a timeout, an answer it cannot parse): its hooks fail open. What keeps
 // that from being silent is the loop's (codex-agent.ts): the gate is confirmed connected before the turn starts, every
@@ -196,6 +198,8 @@ export interface CodexHookSessionOptions {
     readonly push: (event: AgentEvent) => void;
     // Whether shell commands run through the terminal panel's tmux wrapper; the image's own answer by default.
     readonly terminals?: boolean;
+    // Where a command that comes back still running is filed as a job (AgentRequest.hooks.backgroundJobs).
+    readonly jobs?: BackgroundJobSeed | undefined;
 }
 
 export interface CodexHookSession {
@@ -224,6 +228,7 @@ export const createCodexHookSession = (options: CodexHookSessionOptions): CodexH
         terminals: options.terminals ?? tmuxRunEnabled(),
         mask: true,
         onPanel: (session) => options.push({ kind: "terminal", session }),
+        jobs: options.jobs,
     });
     const shellRewrite = (command: string, call: GateCall): Promise<ShellLineOutcome> =>
         shell.line(command, { session: call.session, cwd: call.cwd ?? options.cwd, id: call.id }, AbortSignal.timeout(60_000));
@@ -255,8 +260,12 @@ export const createCodexHookSession = (options: CodexHookSessionOptions): CodexH
         return verdict.context === undefined ? { decision: "rewrite", input: rewritten } : { decision: "rewrite", input: rewritten, context: verdict.context };
     };
 
+    // A shell command the panel returned still running, filed as a job, with the id the agent waits on.
+    const settleShell = (call: GateCall): Promise<string | undefined> =>
+        call.tool === "Bash" && call.id !== undefined ? shell.settle(call.id, call.result ?? "", AbortSignal.timeout(60_000)) : Promise.resolve(undefined);
+
     // The `file.edited` checks on each file a patch added or changed, in the paths the agent wrote, resolved where it ran.
-    const afterTool = async (call: GateCall): Promise<string | undefined> => {
+    const editChecks = async (call: GateCall): Promise<string | undefined> => {
         const reviewers = options.editReviewers ?? [];
         if (call.tool !== "apply_patch" || reviewers.length === 0) {
             return undefined;
@@ -276,6 +285,8 @@ export const createCodexHookSession = (options: CodexHookSessionOptions): CodexH
         }
         return notes.length === 0 ? undefined : notes.join("\n\n");
     };
+
+    const afterTool = async (call: GateCall): Promise<string | undefined> => (await settleShell(call)) ?? (await editChecks(call));
 
     return {
         key,

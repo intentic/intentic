@@ -84,8 +84,13 @@ export const stampsOf = (environ: string): ProcessStamps => {
     };
 };
 
+const RUST_PROGRAMS = ["clippy-driver", "wasm-bindgen", "wasm-opt", "rust-lld", "rustdoc", "rustc", "cargo"] as const;
+// Only these native build steps inherit Rust attribution through the parent chain. Unrelated C builds keep their role.
+const NATIVE_BUILD_STEP = /^(?:[\w]+(?:-[\w]+)*-)?(?:cc|c\+\+|gcc|g\+\+|clang|clang\+\+|ld|ld\.lld|ld\.bfd|ld\.gold|collect2)(?:-\d+)?$/u;
+
 // A label is one of these words or nothing, never argv (a prompt, a path); longer first so `vue-tsc` is not read as `tsc`.
 const PROGRAMS = [
+    ...RUST_PROGRAMS,
     "vue-tsc",
     "vitest",
     "tsc",
@@ -139,6 +144,7 @@ export const programOf = (command: string): string | undefined => {
 
 // A turn's build, test or typecheck and the package manager driving it; native TypeScript's --lsp serves the editor.
 const TOOLCHAIN = [
+    ...RUST_PROGRAMS,
     "vue-tsc",
     "vitest",
     "tsc",
@@ -270,7 +276,22 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
                 identities.delete(pid);
             }
         }
-        return scanned;
+        const byPid = new Map(scanned.map((entry) => [entry.pid, entry]));
+        return scanned.map((entry) => {
+            if (entry.role !== "other" || !NATIVE_BUILD_STEP.test(entry.comm)) {
+                return entry;
+            }
+            const seen = new Set([entry.pid]);
+            let parent = byPid.get(entry.ppid);
+            while (parent !== undefined && !seen.has(parent.pid)) {
+                if (RUST_PROGRAMS.some((program) => parent?.program === program)) {
+                    return { ...entry, role: "toolchain" };
+                }
+                seen.add(parent.pid);
+                parent = byPid.get(parent.ppid);
+            }
+            return entry;
+        });
     };
 };
 

@@ -130,9 +130,11 @@ describe("clones of its own", () => {
         await git(join(checkout, "fork"), "commit", "-q", "-m", "fix");
         put(checkout, "notes.txt", "not a clone\n");
 
-        expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "fork", uncommitted: 2, unpushed: 1 }]);
+        expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "fork", uncommitted: 2, unpushed: 1, commits: 2, parent: "root" }]);
         // A project repo's clone is named from the workspace's top, through the repo it sits in.
-        expect(await strandedClones([{ repo: "intentic", dir: checkout }])).toStrictEqual([{ dir: "intentic/fork", uncommitted: 2, unpushed: 1 }]);
+        expect(await strandedClones([{ repo: "intentic", dir: checkout }])).toStrictEqual([
+            { dir: "intentic/fork", uncommitted: 2, unpushed: 1, commits: 2, parent: "intentic" },
+        ]);
     });
 
     test("commits ahead of the upstream it follows count, and none of the ones it already has", async () => {
@@ -144,7 +146,16 @@ describe("clones of its own", () => {
         put(join(checkout, "ext"), "A.md", "a\n");
         await git(join(checkout, "ext"), "add", "A.md");
         await git(join(checkout, "ext"), "commit", "-q", "-m", "a");
-        expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "ext", uncommitted: 0, unpushed: 1 }]);
+        expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "ext", uncommitted: 0, unpushed: 1, commits: 2, parent: "root" }]);
+    });
+
+    // What the card's Fold says it drops (land/nested-clone.ts): nothing, for a repository `git init` made in the copy.
+    test("one `git init` made and nothing committed in holds no commits", async () => {
+        const checkout = temp();
+        await repoAt(checkout, { "src/app.ts": "export {};\n" });
+        await git(checkout, "init", "-q", "integra");
+        put(join(checkout, "integra"), "Cargo.toml", "[workspace]\n");
+        expect(await strandedClones([{ repo: "root", dir: checkout }])).toStrictEqual([{ dir: "integra", uncommitted: 1, unpushed: 0, commits: 0, parent: "root" }]);
     });
 });
 

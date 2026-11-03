@@ -6,7 +6,8 @@ import type { McpToolSchema } from "./browser-router.js";
 // text: a model asking "up to ten seconds for 'Saved'" got ten seconds always, and five more if it had not come
 // (@playwright/mcp 0.0.83, wait.ts). The router sends it on as a text wait alone and sends it again until `time` has
 // passed, so it answers the moment the text is there (2026-10-20). A single text wait is bounded by the backend's own
-// action timeout (5s), so the wait can run that much past a shorter `time`, never past `time` plus one more.
+// action timeout, 30s since software-rendered pages needed it (browser-tools.ts ACTION_TIMEOUT_MS), so each attempt is
+// also cut off at the deadline here: its backend call is cancelled and the wait answers as a timeout at `time`.
 
 const WAIT_FOR_TOOL = "browser_wait_for";
 
@@ -62,22 +63,43 @@ export const describeBoundedWait = (tools: readonly McpToolSchema[]): McpToolSch
         return { ...tool, inputSchema: { ...schema, properties: { ...schema.properties, time: { ...time.data, description: TIME_DESCRIPTION } } } };
     });
 
+// The answer a text wait gets when its own time ran out before the backend's did, worded as upstream words a timeout so
+// it reads, and is matched, as one.
+const deadlineAnswer = (params: NonNullable<RpcMessage["params"]>, ms: number): RpcMessage => {
+    const args = z.looseObject({ text: z.string().optional(), textGone: z.string().optional() }).safeParse(params["arguments"]);
+    const what = args.success ? (args.data.text ?? args.data.textGone ?? "the text") : "the text";
+    return {
+        jsonrpc: "2.0",
+        result: { isError: true, content: [{ type: "text", text: `### Error\nTimeoutError: waiting for "${what}": Timeout ${ms}ms exceeded.` }] },
+    };
+};
+
 /**
  * Sends a call on through `send`; a timed text wait goes as the text wait alone, again each time it runs out, until its
- * time has passed or the caller hangs up.
+ * time has passed or the caller hangs up. An attempt still running at the deadline is cancelled through the signal
+ * `send` is handed, and answered as a timeout.
  */
 export const sendBoundingWait = async (
     params: NonNullable<RpcMessage["params"]>,
     signal: AbortSignal | undefined,
-    send: (params: NonNullable<RpcMessage["params"]>) => Promise<RpcMessage>,
+    send: (params: NonNullable<RpcMessage["params"]>, signal?: AbortSignal) => Promise<RpcMessage>,
+    now: () => number = Date.now,
 ): Promise<RpcMessage> => {
-    const bounded = boundedWaitOf(params);
+    const bounded = boundedWaitOf(params, now());
     if (bounded === undefined) {
-        return send(params);
+        return send(params, signal);
     }
+    const asked = bounded.deadline - now();
     for (;;) {
-        const answer = await send(bounded.params);
-        if (!waitTimedOut(answer) || Date.now() >= bounded.deadline || signal?.aborted === true) {
+        const cutoff = new AbortController();
+        const timer = setTimeout(() => cutoff.abort(), Math.max(0, bounded.deadline - now()));
+        const attempt = signal === undefined ? cutoff.signal : AbortSignal.any([signal, cutoff.signal]);
+        const answer = await send(bounded.params, attempt).finally(() => clearTimeout(timer));
+        // Cut off by its own time, not by the caller: what came back is the cancellation, or a timeout that raced it.
+        if (cutoff.signal.aborted && signal?.aborted !== true && (answer.error !== undefined || waitTimedOut(answer))) {
+            return deadlineAnswer(bounded.params, asked);
+        }
+        if (!waitTimedOut(answer) || now() >= bounded.deadline || signal?.aborted === true) {
             return answer;
         }
     }

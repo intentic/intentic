@@ -438,7 +438,8 @@ fn removal(slug: &str, now: bool, say: bool) -> std::result::Result<(), String> 
     };
     // Its pairings go once it has left the live namespace, whether or not every step after that went through, and so do
     // its egress rules (sandbox/egress).
-    if !docker::container_exists(&container_of(slug)) {
+    // Only once docker says the live name is empty: an engine that did not answer has not seen the sandbox leave.
+    if docker::container_absent(&container_of(slug)) {
         forget_pairings(slug);
         crate::sandbox::egress::forget(slug);
     }
@@ -623,8 +624,9 @@ pub(crate) fn sweep_orphans(now: bool) {
                 let Ok(Some(_held)) = lock::hold(&orphan.slug, Wait::Skip) else {
                     continue;
                 };
-                // Looked at once more: a setup that made its volumes a moment ago has a container by now.
-                if docker::container_exists(&container_of(&orphan.slug)) {
+                // Looked at once more: a setup that made its volumes a moment ago has a container by now. Only docker's own
+                // "no such container" lets the volumes go; an engine that did not answer leaves them for the next sweep.
+                if !docker::container_absent(&container_of(&orphan.slug)) {
                     continue;
                 }
                 if now {

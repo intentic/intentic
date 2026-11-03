@@ -2,7 +2,9 @@ import { join } from "node:path";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { dockerPruneChore } from "../capabilities/handlers/docker-prune.js";
 import { parkedRefRetentionChore } from "../conversations/land/parked-ref-retention.js";
-import { BUILD_OUTPUT_QUIET_MS, type PrunedAt, sweepAgedAgents, sweepBuildOutputs, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { sweepAgedAgents, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { type BuildOutputReaper, createBuildOutputReaper } from "../conversations/registry/build-output-sweep/build-output-reaper.js";
+import { reapTmpCargoTargets } from "../conversations/worktrees/build-outputs/tmp-cargo-targets.js";
 import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
 import { deleteAgedConversations } from "../conversations/registry/transcript-retention.js";
 import { cacheDirsOf, rawOutputDirsOf, type RetentionDeps, type RetentionKind, type RetentionPass, runRetentionSweep } from "../retention/retention-sweep.js";
@@ -15,12 +17,17 @@ import { clearStaleGitLocks, staleGitLocksChore } from "../git/ops/stale-git-loc
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { type Chore, DAY_MS, HOUR_MS, startChoreClock } from "../system/chore-clock.js";
 import { trashSweepChore } from "../system/resources/storage/trash-sweep.js";
+import { readHistorySpace } from "../system/resources/storage/checkout-admission.js";
+import { startDiskPressureWatch } from "../system/resources/storage/disk-pressure.js";
+import { readLastStorageScan } from "../system/resources/storage/disk-storage.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { diskLow } from "../push/notifications.js";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Persist housekeeping cadence in chore-clock.ts across restarts: git maintenance, storage/trash, dockerd and retention sweeps.
-// Log results; heavy cleanup waits for no running turn and dockerd cleanup never starts an idle engine.
+// Log results; git upkeep waits for no running turn, build output is swept per checkout (archive.ts) and dockerd cleanup never starts an idle engine.
 // Retention runs hourly (restore points daily) and after settings changes; all-zero settings disable data retention.
 // Scratch belongs to boot-sweeps, agent-* sessions to the reaper; keep unfinished queued jobs even if all panes are dead.
 const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
@@ -30,6 +37,8 @@ const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
         return key === undefined ? undefined : services.processes.runOf(key)?.finishedAt;
     },
 });
+
+const BUILD_OUTPUT_SWEEP_MS = 15 * 60_000;
 
 // The tick interval: how soon a changed retention setting takes effect.
 const RETENTION_SETTINGS_EVERY_MS = 5 * 60_000;
@@ -93,8 +102,14 @@ const dataRetentionChores = (phase: BootPhase): Chore[] => {
     ];
 };
 
-// Which quiet checkouts the build-output pass already emptied, for the daemon's life (archive.ts PrunedAt).
-const buildOutputsPrunedAt: PrunedAt = new Map();
+// One reaper per daemon, so the sweep and the disk-pressure watch share its memory of what is already emptied.
+let reaper: BuildOutputReaper | undefined;
+const reaperOf = ({ config, services }: BootPhase): BuildOutputReaper =>
+    (reaper ??= createBuildOutputReaper({
+        archive: services,
+        worktreesRoot: join(config.historyRoot, "worktrees"),
+        runningJobs: (id) => runningJobsOf(services.conversations, id).length,
+    }));
 
 export const retentionChores = (phase: BootPhase): Chore[] => {
     const { config, logger, role, services } = phase;
@@ -114,25 +129,23 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                   },
                   {
                       name: "agents-build-outputs",
-                      everyMs: HOUR_MS,
-                      // Removing gigabytes is heavy disk work; it waits for a moment no turn is running.
-                      when: () => services.conversations.liveSessionIds().length === 0,
-                      run: async (): Promise<void> => {
-                          await sweepBuildOutputs(
-                              services,
-                              Date.now(),
-                              BUILD_OUTPUT_QUIET_MS,
-                              (id) => runningJobsOf(services.conversations, id).length,
-                              buildOutputsPrunedAt,
-                          );
-                      },
+                      // Often enough that a landed checkout's output goes about an hour after the land.
+                      everyMs: BUILD_OUTPUT_SWEEP_MS,
+                      // No sandbox-wide quiet moment: each checkout is judged by its own conversation (archive.ts).
+                      run: async (): Promise<void> => void (await reaperOf(phase).sweep(Date.now())),
                   },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },
                   // Root-scoped: a guest sharing the history root prunes nothing.
                   { name: "log-retention", everyMs: HOUR_MS, run: () => pruneLogFiles(logsRoot(config.historyRoot)) },
               ]
             : []),
-        ...(role.container ? [{ name: "finished-terminal-sessions", everyMs: HOUR_MS, run: () => reapFinishedSessions(reapPolicyOf(phase)) }] : []),
+        ...(role.container
+            ? [
+                  { name: "finished-terminal-sessions", everyMs: HOUR_MS, run: () => reapFinishedSessions(reapPolicyOf(phase)) },
+                  // Cargo targets agents pointed into the container's /tmp, which no checkout sweep sees.
+                  { name: "tmp-cargo-targets", everyMs: HOUR_MS, run: async () => void (await reapTmpCargoTargets({ root: "/tmp", now: Date.now(), logger })) },
+              ]
+            : []),
     ];
 };
 
@@ -167,12 +180,34 @@ const choresOf = (phase: BootPhase): Chore[] => {
     ];
 };
 
+// The history volume looked at once a minute; short of room, settled checkouts' build output goes and the owner is told
+// (system/resources/storage/disk-pressure.ts).
+const startDiskPressure = (phase: BootPhase): (() => void) => {
+    const { config, logger, services } = phase;
+    const read = () => readHistorySpace(config.historyRoot);
+    return startDiskPressureWatch({
+        read,
+        reap: async (enough) => (await reaperOf(phase).reapUnderPressure(Date.now(), enough)).length,
+        lastScan: () => readLastStorageScan(config.historyRoot),
+        tell: async (level, state) => {
+            const notice = diskLow(level, state);
+            await (level === "critical" ? services.pushSender.notify(notice) : services.pushSender.notifyIfAway(notice));
+        },
+        changed: () => publishRuntimeChange("disk"),
+        logger,
+        now: Date.now,
+    });
+};
+
 export const startHousekeeping = (phase: BootPhase): void => {
     const { config, logger, role, shutdown } = phase;
     // A lock a killed git left blocks every later git, maintenance included, so it goes before the first chore runs;
     // only with no git process running (git/ops/stale-git-locks.ts).
     if (role.roots) {
         void clearStaleGitLocks(config.historyRoot, logger);
+    }
+    if (role.roots && config.historyRoot !== "") {
+        shutdown.push(startDiskPressure(phase));
     }
     const chores = choresOf(phase);
     if (chores.length === 0 || config.historyRoot === "") {

@@ -60,7 +60,7 @@ describe("settling a held child", () => {
     it("records its work as landed, writing nothing, and it is no longer held", async () => {
         const { services, recorded } = fleet([child("held")], { held: "conflict" });
         await expect(settleHeldChild(services, parent, "held")).resolves.toEqual({ ok: true, note: expect.stringContaining("Recorded as brought in") });
-        expect(recorded).toEqual([{ id: "held", outcome: expect.objectContaining({ landed: true, changed: false, adjudicated: true, conflicts: [] }) }]);
+        expect(recorded).toEqual([{ id: "held", outcome: expect.objectContaining({ landed: true, changed: false, conflicts: [] }) }]);
     });
 
     it("records nothing for a child whose work nothing holds", async () => {

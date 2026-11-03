@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { isGitCorruption } from "@intentic/base/git";
 import { UnlinkedCheckoutError } from "../worktrees/checkout-link.js";
 import { OffMainLineError } from "../../git/main-line-lock.js";
 
@@ -25,6 +26,11 @@ const runnerFailureCode = (said: string): string | undefined => {
     // allow(dependency-text): Node's maxBuffer error, by its message or its code spelled into it.
     if (/maxBuffer|ERR_CHILD_PROCESS_STDIO_MAXBUFFER/iu.test(said)) {
         return "output_limit";
+    }
+    // Damaged git storage (a crash zeroed an object): the sandbox is already checking every repository about it
+    // (git/integrity/crash-check.ts), and the card says so instead of quoting inflate errors.
+    if (isGitCorruption(said)) {
+        return "repo_corrupt";
     }
     // allow(dependency-text): our own git runner's sentence when its forker dies (@intentic/base/git).
     return /the forker exited/iu.test(said) ? "forker_exited" : undefined;

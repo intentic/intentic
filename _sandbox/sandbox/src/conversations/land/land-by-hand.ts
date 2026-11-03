@@ -1,3 +1,4 @@
+import { waitForRunBuilds } from "../../hosts/runs/run-builds.js";
 import { includeProducedFiles } from "../produced-files.js";
 import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { Services } from "../../composition.js";
@@ -20,7 +21,7 @@ import { mainTreeRepos } from "./branch/branch-repos.js";
 // child's press goes where its turn's own land goes (land-target.ts): into its parent's checkout, under the parent's
 // lease too, with none of the main tree's after-land. The same door is its parent's `merge`, in `merge` mode.
 
-export type LandByHandDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns" | "transcripts"> &
+export type LandByHandDeps = Pick<Services, "agentWorktrees" | "branchCheckouts" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns" | "transcripts" | "activity" | "runBuilds"> &
     Parameters<typeof settleLandingInBackground>[0];
 
 // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
@@ -61,6 +62,10 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
     if (into === undefined) {
         const repos = mainTreeRepos(entry.placement).map(({ repo }) => repo);
+        // A run's build compiling one of these repositories first (hosts/runs/run-builds.ts): it reads one version.
+        if (mode !== "measure") {
+            await waitForRunBuilds(services, entry.id, repos);
+        }
         await versionCommitsSettled(services, repos);
         // What file sync delivered since the turn ended, committed so the rebase below reaches it (version-landed.ts).
         await versionProjectFolders(services, repos);
@@ -192,8 +197,6 @@ const settle = async (deps: SettleDeps, entry: IsolatedAgent, git: GitRunner, no
         // Nothing reached a tree, so nothing is announced and no version is owed (land-marks.ts owesVersionCommit).
         changed: false,
         advanced: true,
-        // A verdict, so it replaces the stored refusal rather than carrying it across.
-        adjudicated: true,
         conflicts: [],
         repos,
         diff: entry.landing.diff ?? { files: 0, insertions: 0, deletions: 0 },

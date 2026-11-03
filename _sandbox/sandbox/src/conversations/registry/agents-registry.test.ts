@@ -236,7 +236,6 @@ describe("agents registry", () => {
             repos: [{ repo: "intentic", base: "b0" }],
             conflicts: [{ repo: "intentic", paths: [{ path: "a.ts", reason: "workspace" }], clean: 0 }],
             diff: { files: 0, insertions: 0, deletions: 0 },
-            adjudicated: true,
         });
         await registry.refreshStandings();
         expect(probes).toBe(settled + 1);
@@ -1603,7 +1602,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 12, insertions: 412, deletions: 96 },
-            adjudicated: true,
         });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(worktreeOf(store.saved().find((entry) => entry.id === "c1"))?.repos).toEqual([
@@ -1626,7 +1624,6 @@ describe("agents registry", () => {
                 changed: landed,
                 repos: [{ repo: "root", base: "a".repeat(40), landedTip: tip }],
                 diff: { files: 1, insertions: 1, deletions: 0 },
-                adjudicated: landed,
             });
         await landedAt("b".repeat(40), true);
         await registry.setLandedSubject("c1", { subject: "fix: cascading markers", note: "Markers stop cascading." });
@@ -1696,7 +1693,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
-            adjudicated: true,
             conflicts,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
@@ -1706,7 +1702,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
-            adjudicated: true,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
     });
@@ -1737,7 +1732,6 @@ describe("agents registry", () => {
             changed: true,
             repos,
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: false,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure?.code).toBe("unlinked");
 
@@ -1746,7 +1740,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
         });
         expect(registry.get("c1")?.landFailure).toBeUndefined();
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
@@ -1786,7 +1779,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
             conflicts: [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }],
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
@@ -1805,7 +1797,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "my-app", base: "a".repeat(40), landedTip: tip }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
         });
         await registry.recordLanded("c1", landed("b".repeat(40)));
         const delivery = {
@@ -1822,7 +1813,7 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.delivery).toEqual(delivery);
 
         // A measure that moves no tip is not a land: the delivery still speaks for the last one.
-        await registry.recordLanded("c1", { ...landed("b".repeat(40)), landed: false, held: true, adjudicated: false });
+        await registry.recordLanded("c1", { ...landed("b".repeat(40)), landed: false, held: true });
         expect(registry.get("c1")?.delivery).toEqual(delivery);
 
         await registry.recordLanded("c1", landed("c".repeat(40)));
@@ -1894,23 +1885,39 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
-            adjudicated: true,
             conflicts,
         });
 
-        // Turn ended (stopped/dismissed): books settle, but the delta stays on the branch.
+        // Turn ended (stopped/dismissed): books settle, the delta stays on the branch, and the measure's own verdict
+        // (the conflict still standing) is what the card keeps.
         await registry.recordLanded("c1", {
             landed: false,
             held: true,
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 4, insertions: 12, deletions: 1 },
-            adjudicated: false,
+            conflicts,
         });
         const settled = store.saved().find((entry) => entry.id === "c1");
         expect(settled?.landing.conflicts).toEqual(conflicts);
-        // The diffstat still refreshes; only the conflict report and land outcome are held.
         expect(settled?.landing.diff?.files).toBe(4);
+
+        // A measure that found the delta applies is a verdict too: held, and no longer refused.
+        await registry.recordLanded("c1", {
+            landed: false,
+            held: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 4, insertions: 12, deletions: 1 },
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 3, insertions: 10, deletions: 1 },
+            conflicts,
+        });
 
         // A real land still has the final say, clearing the conflict report.
         await registry.recordLanded("c1", {
@@ -1918,7 +1925,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 4, insertions: 12, deletions: 1 },
-            adjudicated: true,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
     });
@@ -1937,7 +1943,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
-            adjudicated: true,
             conflicts,
         });
         await registry.requestLand("c1", { email: "m@x.com", name: "Mo" }, 1_500);
@@ -1956,7 +1961,7 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 4, insertions: 12, deletions: 1 },
-            adjudicated: false,
+            conflicts,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
     });
@@ -2577,7 +2582,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "b1", landedTip: "t1", landedHead: "h1", landedAt: 3_000 }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
         });
 
         // A mismatched hash (a stale scan racing a newer land) is a no-op.
@@ -2604,7 +2608,6 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "b1", landedTip: "t2", landedHead: "h2", landedAt: 5_000 }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
         });
         expect(worktreeOf(registry.entry("c1"))?.repos[0]?.absorbed).toBeUndefined();
     });
@@ -2879,7 +2882,6 @@ describe("one write per fact", () => {
                     { repo: "root", base: "a".repeat(40), landedTip: "c".repeat(40) },
                 ],
                 diff: { files: 1, insertions: 1, deletions: 0 },
-                adjudicated: true,
             }),
         ).rejects.toThrow("UNIQUE constraint failed");
         expect(db.rowsOf("c1")).toEqual(before);
@@ -2889,7 +2891,6 @@ describe("one write per fact", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40), landedHead: "h".repeat(40), landedAt: 2_000 }],
             diff: { files: 1, insertions: 1, deletions: 0 },
-            adjudicated: true,
         });
         const landed = sqliteAgentsStore(db).load()[0];
         expect(worktreeOf(landed)?.repos).toEqual([

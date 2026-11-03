@@ -1,4 +1,4 @@
-import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import { CONTINUATION_NOTE } from "@intentic/sandbox-contract/events/resume";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
@@ -57,7 +57,7 @@ test("a conversation that simply ended carries on in its own session with the co
     const { services, started } = await fleetWith({ agent: "claude", model: "claude-sonnet-5-5" });
 
     expect(await resumeConversation(services, "presser", "target")).toMatchObject({ ok: true, resumed: "continued", on: { provider: "claude", model: "claude-sonnet-5-5" } });
-    expect(started[0]).toMatchObject({ conversationId: "target", agent: "claude", prompt: RESUME_NOTES.continued, resume: "continued", sessionId: "sess-1" });
+    expect(started[0]).toMatchObject({ conversationId: "target", agent: "claude", prompt: CONTINUATION_NOTE, resume: "continued", sessionId: "sess-1" });
 });
 
 test("refuses what a press cannot reach: an unknown handle, the presser itself, a running turn", async () => {

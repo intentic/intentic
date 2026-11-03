@@ -2,6 +2,7 @@ import { noticeCode, type ResumeNoticeReason } from "./sandbox-notice.js";
 import type { TranscriptRow, TurnNote } from "./transcript.js";
 
 // What a resumed turn's prompt says happened; lives on the wire since the client must recognise it too.
+export const RESTART_LOSSES = "The sandbox ended the turn's in-process helpers. Background jobs and dev servers ended on a container restart; a daemon-only restart may preserve kept jobs and terminal sessions. A container recreation clears /tmp, including scripts and screenshots; check before relying on any file there. Retained helper edits stay in .claude/worktrees/agent-*. Keep evidence that must survive in /work/.intentic/records/artifacts/.";
 
 // The shared prefix lets a joining window reuse the existing bubble, not render the note as a new message.
 // What follows the note is the original request repeated; `answered` carries the user's actual answer instead.
@@ -58,6 +59,8 @@ export const resumeNoteWith = (note: string, tail: string | undefined): string =
     const said = tail?.replaceAll(/\n\s*\n/g, "\n").trim();
     return said === undefined || said === "" ? note : `${note} ${said}`;
 };
+
+export const CONTINUATION_NOTE = resumeNoteWith(RESUME_NOTES.continued, `If the sandbox restarted: ${RESTART_LOSSES}`);
 
 // The user's own words inside a resumed prompt, note and explanation stripped. Returns the prompt unchanged when it
 // isn't a resume, so any attach head can pass through it. A note standing alone (`continued`) leaves no words, and a

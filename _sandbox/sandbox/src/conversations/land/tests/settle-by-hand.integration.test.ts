@@ -99,7 +99,7 @@ test("work adapted on its way in is still a conflict to the probe, and settling 
 
     expect(recorded).toHaveLength(1);
     const outcome = recorded[0];
-    expect(outcome).toMatchObject({ landed: true, changed: false, advanced: true, adjudicated: true, conflicts: [] });
+    expect(outcome).toMatchObject({ landed: true, changed: false, advanced: true, conflicts: [] });
     expect(outcome?.into).toBeUndefined();
     expect(outcome?.repos).toEqual([{ repo: "root", base: expect.any(String), landedTip: tip, landedAt: expect.any(Number) }]);
     expect(outcome?.repos[0]?.base).toBe(conversation.repos[0]?.base);

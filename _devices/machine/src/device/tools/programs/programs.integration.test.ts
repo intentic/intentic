@@ -96,8 +96,8 @@ test("a started program keeps running, its output is logged, and a stop ends it 
     expect(logs).toContain("oops on stderr");
     expect(await appLogs(id, 50, "oops", programs, SANDBOX)).not.toContain("ready on stdout");
     expect(await appStatus(undefined, programs, SANDBOX, noScreen)).toContain(`▶ ${id}`);
-    expect(await appStop(id, false, programs, SANDBOX)).toContain(`Stopped ${id}`);
-    expect(await appStatus(id, programs, SANDBOX, noScreen)).toContain("stopped by the agent");
+    expect(await appStop(id, false, programs, SANDBOX, "the Run dialog's Stop")).toContain(`Stopped ${id}`);
+    expect((await appStatus(id, programs, SANDBOX, noScreen)).split("\n")[0]).toContain(`■ ${id}  server  stopped by the Run dialog's Stop  (started `);
 });
 
 // A program that closes when asked can leave behind what it started outside its process group (on Windows, anything
@@ -182,6 +182,7 @@ test("a process tree is read from pid/parent rows, and Windows exit codes are sa
     expect(describeExit({ exitCode: -1073741819 })).toBe("exited with 0xC0000005: access violation (a crash)");
     expect(describeExit({ exitCode: 1 })).toBe("exited with code 1");
     expect(describeExit({})).toContain("unknown");
+    expect(describeExit({ stoppedBy: "app_stop from conversation coral-maple-kmq3", signal: "SIGTERM" })).toBe("stopped by app_stop from conversation coral-maple-kmq3");
 });
 
 // A forced stop says why, and waits the run's own grace (a target's stopGraceSeconds) rather than a fixed five seconds:

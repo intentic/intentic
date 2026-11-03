@@ -113,13 +113,14 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b.*\\brun\\b.*\\b(build|test|typecheck|check)\\b" },
         { id: "package-script", pattern: "\\b(pnpm|npm|yarn|bun)\\b.*\\b(test|typecheck|verify|check|build)\\b" },
-        { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b" },
+        { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b", size: "cargo-build" },
     ]),
 });
 
 // Every rule an earlier release shipped, as it shipped it (matched against the agent's shell line then). A stored rule
 // equal to one of these was seeded, not chosen, so converting a stored file drops it and the current rule takes over.
 const EARLIER_SHIPPED_RULES = Object.freeze([
+    { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b" },
     {
         id: "read-only",
         pattern: "^\\s*(grep|rg|iq|ag|cat|bat|head|tail|less|ls|find|fd|wc|which|echo|git\\s+(log|status|diff|show|blame))\\b",
@@ -342,6 +343,44 @@ const sizeArgs = (match, invocation) => {
     return ["vitest", "package-script"].includes(match.id) && targetedRun(invocation) ? ["--size", "targeted"] : [];
 };
 
+// Translate only known Cargo options. Unknown flags, aliases and help requests keep the original invocation.
+// Runtime arguments after `--` belong only to `run`; a toolchain selector belongs before either verb.
+const cargoBuildArgs = (args) => {
+    const prefix = args[0]?.startsWith("+") ? [args[0]] : [];
+    if (args[prefix.length] !== "run") {
+        return undefined;
+    }
+    const build = [...prefix, "build"];
+    const values = new Set([
+        "--package", "--bin", "--example", "--features", "--profile", "--target", "--target-dir", "--manifest-path",
+        "--jobs", "--color", "--message-format", "--config", "--lockfile-path", "-p", "-F", "-j", "-Z",
+    ]);
+    const switches = new Set([
+        "--release", "-r", "--all-features", "--no-default-features", "--locked", "--offline", "--frozen",
+        "--verbose", "--quiet", "-q", "--timings", "--future-incompat-report", "--ignore-rust-version", "--keep-going",
+    ]);
+    for (let i = prefix.length + 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "--") {
+            break;
+        }
+        if (switches.has(arg) || /^-v+$/u.test(arg) || /^-(p|F|j|Z).+/u.test(arg)) {
+            build.push(arg);
+        } else if (values.has(arg)) {
+            const value = args[++i];
+            if (value === undefined || value === "--" || (value.startsWith("-") && !(arg === "-j" || arg === "--jobs"))) {
+                return undefined;
+            }
+            build.push(arg, value);
+        } else if (arg.includes("=") && (values.has(arg.split("=")[0]) || arg.startsWith("--timings="))) {
+            build.push(arg);
+        } else {
+            return undefined;
+        }
+    }
+    return build;
+};
+
 // When a slot held this long is worth a line in the log: half of what its own rule lets it hold, never for a rule that
 // lets it hold forever.
 const holdWarnSeconds = (maxHold) => (maxHold > 0 ? maxHold / 2 : undefined);
@@ -363,4 +402,5 @@ module.exports = {
     holdWarnSeconds,
     ruleById,
     heldPoolsOf,
+    cargoBuildArgs,
 };

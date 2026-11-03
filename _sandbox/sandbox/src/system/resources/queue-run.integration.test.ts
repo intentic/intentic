@@ -16,11 +16,13 @@ interface Run {
 }
 
 // `bash <path>`, not the path itself: it's mode 644 in git, executable only after the Dockerfile's chmod.
-const queueRun = (dir: string, args: readonly string[], command: string, pathPrefix?: string): Promise<Run> =>
+const queueRun = (dir: string, args: readonly string[], command: string, pathPrefix?: string, extraEnv: NodeJS.ProcessEnv = {}): Promise<Run> =>
     new Promise((resolve) => {
         const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", command], {
             env: {
                 ...process.env,
+                INTENTIC_QUEUE_CAPTURE_DIR: "",
+                ...extraEnv,
                 INTENTIC_QUEUE_DIR: dir,
                 INTENTIC_QUEUE_POLL: "1",
                 ...(pathPrefix === undefined ? {} : { PATH: `${pathPrefix}:${process.env["PATH"] ?? ""}` }),
@@ -61,7 +63,7 @@ const body = (log: string, { together = 1, ms = 300 }: { together?: number; ms?:
 const holdSlot = async (queue: string, args: readonly string[], seconds: number): Promise<ChildProcess> => {
     const held = join(queue, "held");
     const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", `echo held > ${held}; sleep ${seconds}`], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
+        env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1" },
     });
     const deadline = Date.now() + RENDEZVOUS_SECONDS * 1000;
     while (Date.now() < deadline) {
@@ -242,7 +244,7 @@ PATH="\${PATH#*:}" exec flock "$@"
     );
     const holder = (name: string) => spawn(
         "bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", `readlink /proc/$$/fd/9 > '${join(queue, name)}'; read -r _`],
-        { env: { ...process.env, INTENTIC_QUEUE_DIR: queue } },
+        { env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue } },
     );
     const first = holder("first");
     const second = holder("second");
@@ -288,7 +290,7 @@ test("names who holds the pool while it waits, says so again as the wait goes on
     const queue = await dir();
     const held = join(queue, "held");
     const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${held}; sleep 5`], {
-        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
+        env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
     });
     for (let tries = 0; tries < RENDEZVOUS_SECONDS / POLL_SECONDS && !(await readdir(queue)).includes("held"); tries += 1) {
         await new Promise((resolve) => setTimeout(resolve, POLL_SECONDS * 1000));
@@ -351,7 +353,7 @@ test("an empty command line is not an error", async () => {
     const queue = await dir();
     const run = await new Promise<Run>((resolve) => {
         const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--"], {
-            env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
+            env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue },
         });
         let stderr = "";
         child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
@@ -459,6 +461,26 @@ test("an unknown deadline mode reads as run, so the wrapper is never the reason 
         const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--on-deadline", "later"], "echo ran");
         expect(ran.stdout.trim()).toBe("ran");
         expect(ran.stderr).toContain("starting anyway");
+    } finally {
+        holder.kill("SIGKILL");
+    }
+});
+
+test("a terminal capture retains the queue interval and its position and holders, closed on the skip deadline", async () => {
+    const queue = await dir();
+    const capture = join(queue, "terminal-waits");
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    try {
+        const result = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1", "--on-deadline", "skip"], "echo should-not-run", undefined, { INTENTIC_QUEUE_CAPTURE_DIR: capture });
+        expect(result.code).toBe(75);
+        expect(result.stdout).toBe("");
+        const entries = (await readdir(capture)).filter((name) => name.startsWith("wait."));
+        expect(entries).toHaveLength(1);
+        const [interval, note] = (await readFile(join(capture, entries[0] ?? ""), "utf8")).trim().split("\n");
+        const [start = 0, end = 0] = (interval ?? "").split(" ").map(Number);
+        expect(end - start).toBeGreaterThanOrEqual(100);
+        expect(note).toContain(`queued: position 1, behind pid ${String(holder.pid)}`);
+        expect(note).toContain("(pool p)");
     } finally {
         holder.kill("SIGKILL");
     }

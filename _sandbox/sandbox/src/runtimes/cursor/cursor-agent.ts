@@ -11,7 +11,7 @@ import { cursorRunErrorFrame, refusesAccount, SdkCodeSchema } from "./turn/curso
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../sessions/vocabulary/attachment-note.js";
-import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import type { CursorCatalog } from "./models/cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
@@ -684,7 +684,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                         // One session across phases (and the checks' follow-up): undefined keeps the emulation's seed.
                         return { sessionId: undefined, planText: outcome.planText, errored: outcome.errored };
                     },
-                    execute: () => send(EXECUTE_PROMPT, false),
+                    execute: (_sessionId, prompt) => send(prompt, false),
                 }),
                 () => send(basePrompt, false),
                 { followUp: (note) => send(note, false), editChecks: CURSOR.editChecks },

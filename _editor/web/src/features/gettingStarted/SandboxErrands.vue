@@ -4,17 +4,21 @@
      with the other errands of a first run, and the ring stays on the rail for them once the checklist is put away. -->
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
-import { browserOwnsClick, SectionHeader } from "@intentic/ui";
+import { browserOwnsClick, Button, SectionHeader } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { nextTick } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { SandboxAttentionItem } from "../sandbox/overview/sandboxAttention";
 import { useSandboxErrands } from "./useSandboxErrands";
 import { finishOnHome } from "../../models/sandbox/finishOnHome";
+import { useDiskPressure } from "../sandbox/overview/storage/useDiskPressure";
 
 const t = useT();
 const router = useRouter();
 const { needs, notes, unfinished } = useSandboxErrands();
+// The disk row's press (sandboxAttention.ts `clean`): settled checkouts' build output, without opening the Disk card.
+const disk = useDiskPressure();
+const { cleaning: diskCleaning } = disk;
 
 // `remove` hands the question up: the dialog must outlive this panel, which closes as the question is asked.
 const emit = defineEmits<{ done: []; remove: [option: SandboxSummary] }>();
@@ -57,20 +61,32 @@ const resumeSetup = (option: SandboxSummary) => finishOnHome(option.id);
         <!-- What would bite if left: the badge on the ring is the head of this list. -->
         <template v-if="needs.length > 0 || unfinished.length > 0">
             <SectionHeader :label="t(`shared.needs`)" density="dense" class="px-2 py-1.5" />
-            <RouterLink
-                v-for="item in needs"
-                :key="item.message"
-                :to="item.to"
-                data-menu-row
-                class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                @click="dismiss"
-            >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
-                    <Icon :name="item.icon" class="text-xs" />
-                </span>
-                <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
-                <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-            </RouterLink>
+            <template v-for="item in needs" :key="item.message">
+                <RouterLink
+                    :to="item.to"
+                    data-menu-row
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="dismiss"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
+                        <Icon :name="item.icon" class="text-xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                </RouterLink>
+                <!-- The disk row's own press, under it and indented to its text, so the link and the act stay apart. -->
+                <Button
+                    v-if="item.action === `clean`"
+                    class="ml-7 self-start"
+                    size="small"
+                    tier="boring"
+                    :label="t(`sandbox.sandboxAttention.cleanBuildOutput`)"
+                    :loading="diskCleaning"
+                    @click="disk.clean()"
+                >
+                    <template #icon><Icon name="trash" class="text-xs" /></template>
+                </Button>
+            </template>
             <RouterLink
                 v-for="option in unfinished"
                 :key="option.id"

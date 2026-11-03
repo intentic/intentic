@@ -239,6 +239,35 @@ export const MemberAudienceSchema = z.object({
 });
 export type MemberAudience = z.infer<typeof MemberAudienceSchema>;
 
+/* THE HOST GPU, FOR A SANDBOX WHOSE GPU SWITCH IS ON (2026-11-03). On a Windows PC that GPU is the owner's display GPU,
+   shared through WSL (/dev/dxg). Until 2026-11-03 the engine put its driver libraries on every process's library path,
+   so 65 conversations' browsers and shells rendered on it unasked, and one GPU hang powered rog off. Now nothing uses it
+   unless asked: `gpu-run <command>` runs one command with it (bin/gpu-run), and `shells: "all"` gives it to every
+   command an agent runs. Read by the daemon (gpu/gpu-state.ts), which hands gpu-run what it needs in a state file. */
+export const GpuShellsSchema = z.enum(["on-request", "all"]);
+export const GpuSettingsSchema = z.object({
+    shells: GpuShellsSchema.default("on-request").describe(
+        "Which of an agent's commands may use this sandbox's GPU. `on-request` (the default): only a command run through `gpu-run`, so a browser, a test run or a build never lands on your display GPU by accident. `all`: every command an agent runs, as if each one went through gpu-run.",
+    ),
+    timeoutMinutes: z
+        .number()
+        .int()
+        .min(0)
+        .max(24 * 60)
+        .default(0)
+        .describe("How long one gpu-run command may run before it is stopped, in minutes. Zero (the default) never stops it; `gpu-run --timeout` sets it for one command."),
+    // Written by the daemon when the computer this sandbox runs on reported a GPU reset (hosts/host-crashes.ts); cleared
+    // by the owner, which is the "resume" press. A sentence, so whoever reads the file sees why.
+    pausedFor: z
+        .string()
+        .max(400)
+        .optional()
+        .describe(
+            "Set by the sandbox when the computer it runs on reported that its GPU was reset or hung, naming the event: while it is set, gpu-run refuses, and every command runs without the GPU. Clear it once you have looked, to let agents use the GPU again.",
+        ),
+});
+export type GpuSettings = z.infer<typeof GpuSettingsSchema>;
+
 export const SandboxSettingsSchema = z.object({
     // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says
     // "at 09:00" instead of naming an instant. It is not a display preference: nothing formats through it, and an
@@ -557,6 +586,9 @@ export const SandboxSettingsSchema = z.object({
         ),
     // Speaking replies aloud (schemas/voice.ts): which voice speaks each language, and whether a hands-free turn is
     // answered out loud. Read by the daemon's voice engine on every utterance, so a change is heard on the next one.
+    gpu: GpuSettingsSchema.prefault({}).describe(
+        "This sandbox's use of the host GPU, where its GPU switch is on: whether agents' commands get it only through gpu-run or all of them do, how long one gpu-run command may run, and whether GPU work is paused after the host reported a GPU reset.",
+    ),
     voice: VoiceSettingsSchema.prefault({}).describe(
         "How the agent's replies are spoken aloud: whether a hands-free conversation is answered out loud, which voice speaks each language, and a speech provider of your own if you connected one.",
     ),

@@ -454,6 +454,7 @@
             "landProcessStopped": "El proceso de Git del espacio de trabajo se detuvo. Vuelve a intentar incorporar el trabajo de este agente.",
             "landTooManyPaths": "Este cambio incluye demasiadas rutas de archivos para incorporarlo de una vez. Reduce los cambios que se solapan en tu espacio de trabajo y vuelve a intentarlo.",
             "landOutputLimit": "Git devolvió más información de la que el espacio de trabajo pudo procesar. Reduce el tamaño del cambio y vuelve a intentarlo.",
+            "landRepoCorrupt": "El almacenamiento de Git de este repositorio se dañó, probablemente por una parada no limpia. La sandbox lo está revisando y reparando; vuelve a intentarlo en un minuto y, si una tarjeta del resumen de la sandbox indica objetos perdidos, léela primero.",
             "workspaceOverlap": "{count} archivos de tu espacio de trabajo se solapan con el trabajo de este agente. Confirma o descarta sus cambios y vuelve a intentarlo.",
             "couldntLand": "No se pudo integrar: {reason}",
             "lostLink": "la copia de este agente perdió su vínculo con el historial de tu espacio de trabajo",
@@ -880,7 +881,11 @@
             "pushedHere": "Subió a {target}",
             "upstream": "su upstream",
             "pushedMore": "{count} push más | {count} pushes más",
-            "more": "(+{count} más)"
+            "more": "(+{count} más)",
+            "fold": "Integrar en {parent}",
+            "foldDropping": "Integrar en {parent}, descartando {count} commit | Integrar en {parent}, descartando {count} commits",
+            "adopt": "Convertirlo en repositorio del espacio de trabajo",
+            "settleFailed": "No se pudo resolver {dir}"
         },
         "words": {
             "allKept": "Se conserva todo",
@@ -2981,7 +2986,6 @@
         },
         "chatContinueStrip": {
             "aboutTokens": "~{tokens} tokens",
-            "awaitingReset": "Esperando reinicio",
             "continueOn": "Continuar en {model}",
             "continueOnFresh": "Continuar en {model}, en una sesión nueva",
             "continueOnKeepingSession": "Continuar en {fallback}, conservando esta sesión",
@@ -3016,7 +3020,9 @@
             "continueAt": "Continuar a las {when}",
             "continueIn": "Continuar en {when}",
             "tryNow": "Probar ahora",
-            "tryNowNote": "La cuenta figura como agotada, y la hora de restablecimiento es solo una estimación del proveedor. Si sigue agotada, no se ejecuta nada y esto vuelve a esperar."
+            "tryNowNote": "La cuenta figura como agotada, y la hora de restablecimiento es solo una estimación del proveedor. Si sigue agotada, no se ejecuta nada y esto vuelve a esperar.",
+            "tryReadingNote": "Las lecturas van por detrás del proveedor. Si sigue rechazando, no se ejecuta nada y esto vuelve a esperar.",
+            "resting": "No se ejecutó nada: vuelve a intentarlo en un minuto"
         },
         "chatDocumentBody": {
             "clipped": "recortado"
@@ -3212,6 +3218,7 @@
                 "trimFrom": "Continuó en una copia recortada de la sesión (unos {tokens} tokens en lugar de {from}): se eliminó {cleared} salida antigua de herramienta y se conservaron todos los mensajes y llamadas a herramientas. | Continuó en una copia recortada de la sesión (unos {tokens} tokens en lugar de {from}): se eliminaron {cleared} salidas antiguas de herramientas y se conservaron todos los mensajes y llamadas a herramientas.",
                 "summary": "Continuó en una sesión nueva que empieza con un resumen de la conversación.",
                 "summaryBy": "Continuó en una sesión nueva que empieza con un resumen de la conversación escrito por {model}.",
+                "reason": "Motivo: {reason}",
                 "trimFellBack": "No se pudo recortar la sesión para el traspaso, así que se pasó entera.",
                 "summaryFellBack": "No se pudo escribir un resumen para el traspaso, así que la sesión nueva empezó con la conversación reciente y el estado del trabajo."
             },
@@ -4193,7 +4200,8 @@
             "resendMemoryNote": "Envía el mensaje solo en cuanto la memoria del sandbox lleve medio minuto libre, un chat retenido cada vez.",
             "waitMemoryNote": "No se envía nada por ti. El mensaje espera aquí hasta que alguien pulse Enviar de todos modos.",
             "goesWhenRoom": "Se envía solo cuando se libere memoria",
-            "allowanceBack": "el cupo vuelve {when}"
+            "allowanceBack": "el cupo vuelve {when}",
+            "waitsForPress": "solo Continuar lo retoma"
         },
         "words": {
             "connectAModel": "Conectar un modelo",
@@ -4498,6 +4506,7 @@
             "inMinutes": "en {minutes} min"
         },
         "toolPresentation": {
+            "interrupted": "interrumpido",
             "failed": "falló",
             "files": "{count} archivo | {count} archivos",
             "lines": "{count} línea | {count} líneas",
@@ -8180,6 +8189,7 @@
             "deletingIsRetention": "Archivar no borra nada. Cuánto se guardan las conversaciones y los puntos de restauración:"
         },
         "sandboxAttention": {
+            "gpuPaused": "El trabajo con la GPU está en pausa porque tu ordenador informó de un reinicio de la GPU",
             "agentProposedChangeTo": "El agente propuso un cambio en tu entorno",
             "desktopSyncStopped": "La sincronización de escritorio se detuvo en {devices}; su carpeta no se está sincronizando",
             "environmentBuilding": "Se está construyendo el nuevo entorno de tu sandbox",
@@ -8192,7 +8202,12 @@
             "rebuildNeededToFinish": "Hace falta reconstruir para terminar de preparar tus nuevas capacidades",
             "requiredSecretsMissing": "Falta {count} secreto obligatorio | Faltan {count} secretos obligatorios",
             "sandboxUpdateReadyTo": "Hay una actualización del sandbox lista para aplicar: un reinicio de medio minuto aproximadamente",
-            "peopleAskForAccess": "{count} persona pide acceso | {count} personas piden acceso"
+            "peopleAskForAccess": "{count} persona pide acceso | {count} personas piden acceso",
+            "cleanBuildOutput": "Limpiar resultados de compilación",
+            "cleanBuildOutputDetail": "Quita lo que dejaron las compilaciones en checkouts cuya conversación no está ejecutando nada; la próxima compilación lo vuelve a crear.",
+            "diskLow": "El disco está casi lleno: {free} libres ({percent} %)",
+            "diskReaped": "se quitaron {bytes} de resultados de compilación de {count} checkout terminado | se quitaron {bytes} de resultados de compilación de {count} checkouts terminados",
+            "diskUsing": "{category} es lo que más ocupa ({bytes})"
         },
         "sandboxBackupCard": {
             "detail": "Este sandbox se ejecuta en la nube y nada en este ordenador guarda una copia de sus archivos. La sincronización de escritorio mantiene aquí una carpeta a la par, para que el trabajo sobreviva a lo que le pase a la máquina.",
@@ -8454,7 +8469,13 @@
             "sleep": "Dormir cuando no se usa",
             "sleepOn": "Duerme cuando nadie lo usa, y se despierta para sus programaciones y al abrirlo",
             "sleepOff": "Sigue en ejecución aunque nadie lo use",
-            "sleepTipNote": "Libera su memoria mientras no se usa."
+            "sleepTipNote": "Libera su memoria mientras no se usa.",
+            "gpu": "GPU del equipo",
+            "gpuOnRequest": "Los agentes solo la usan en los comandos que ejecutan con gpu-run",
+            "gpuAll": "Cualquier comando de un agente puede usarla",
+            "gpuTipNote": "Tu GPU de pantalla, vía WSL.",
+            "gpuPaused": "El trabajo con la GPU está en pausa: {reason}",
+            "gpuResume": "Reanudar el trabajo con la GPU"
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "Las cuentas a través de las que habla siguen conectadas y con sesión iniciada. Cualquier automatización fijada a esta persona deja de publicar hasta que le des otra.",
@@ -9131,6 +9152,10 @@
             "buildCaches": {
                 "label": "Cachés de compilación",
                 "reason": "Resultados guardados de las herramientas de compilación, que se regeneran la próxima vez que hagan falta. Al limpiar se conservan los del último día."
+            },
+            "buildOutputs": {
+                "label": "Resultados de compilación en checkouts",
+                "reason": "Lo que dejaron las compilaciones dentro de los checkouts de las conversaciones, como una carpeta target de Rust. Al limpiar se quita de los checkouts cuya conversación no está ejecutando nada; la próxima compilación lo vuelve a crear y el checkout y su trabajo se quedan."
             }
         },
         "agentOffload": {
@@ -12803,6 +12828,8 @@
         "directoryRuns": {
             "agentTooOld": "El agente de {device} es demasiado antiguo para ejecutar programas. Actualízalo allí.",
             "buildsCommand": "Se compila aquí antes de cada ejecución",
+            "builtFrom": "Compilado desde {commit}",
+            "builtFromTip": "Lo que se ejecuta en {device} se compiló a las {at} desde el commit {commit}, con {changed} cambios sin commit en el árbol (el trabajo integrado queda sin commit hasta que alguien lo confirma).",
             "connectOne": "Conectar uno",
             "couldntFollow": "No se pudo seguir {target} en {device}.",
             "couldntRun": "No se pudo ejecutar {target} en {device}.",
@@ -12816,10 +12843,13 @@
             "foundProcfile": "De su Procfile",
             "foundStart": "El script start de su package.json",
             "isolated": "Windows Sandbox",
+            "landsSince": "{count} integración desde entonces | {count} integraciones desde entonces",
+            "landsSinceTip": "El trabajo integrado después de esta compilación no está en ella: Reiniciar lo compila.",
             "listFailed": "No se pudo leer qué se ejecuta en {device}, así que aquí no se puede saber si algo se ejecuta: {reason}",
             "log": "Registro",
             "logEmpty": "Todavía no ha escrito nada.",
             "mayBeRunning": "Puede que siga en marcha",
+            "movedDuringBuild": "El árbol cambió mientras se compilaba, así que puede mezclar dos versiones del código: Reiniciar compila una.",
             "noComputerFor": "{count} más solo se ejecuta en un ordenador, y no hay ninguno conectado a este sandbox. | {count} más solo se ejecutan en un ordenador, y no hay ninguno conectado a este sandbox.",
             "offline": "{device} no está conectado ahora mismo.",
             "openCard": "Abrir su tarjeta",

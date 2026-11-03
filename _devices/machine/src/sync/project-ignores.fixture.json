@@ -25,6 +25,16 @@
         "**/target/debug",
         "**/target/release",
         "**/target/*/debug",
-        "**/target/*/release"
+        "**/target/*/release",
+        "**/target/*/incremental",
+        "**/target/*/*/incremental",
+        "**/target/*/.fingerprint",
+        "**/target/*/*/.fingerprint",
+        "**/target/*/deps",
+        "**/target/*/*/deps",
+        "**/target/*/build",
+        "**/target/*/*/build",
+        "**/target/*/examples",
+        "**/target/*/*/examples"
     ]
 }

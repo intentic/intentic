@@ -11,9 +11,10 @@ import {
 import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import { cacheFile } from "../../../store/open-document.js";
-import { cleanCategory } from "./storage-clean.js";
+import { type CleanDeps, cleanCategory } from "./storage-clean.js";
+import { readHistorySpace } from "./checkout-admission.js";
 import type { StorageRoots } from "./storage-catalog.js";
-import { scanStorage } from "./storage-scan.js";
+import { type BuildOutputLookup, type ScanOptions, scanStorage } from "./storage-scan.js";
 import { isAbortError } from "./storage-walk.js";
 import type { RunningProgram } from "./running-programs.js";
 
@@ -39,6 +40,8 @@ export interface DiskStorageOptions {
     readonly logger: Logger;
     readonly programs: () => Promise<readonly RunningProgram[]>;
     readonly prune: (storeDir: string) => Promise<boolean>;
+    // Build output inside conversation checkouts, which the scan carves out of them and a clean hands to the reaper.
+    readonly buildOutputs?: BuildOutputLookup & { readonly reap: NonNullable<CleanDeps["reapBuildOutputs"]> };
     readonly now?: () => number;
     readonly budgetMs?: number;
 }
@@ -57,6 +60,9 @@ const lastScanFile = (historyRoot: string) =>
         parse: (raw) => StorageScanSchema.safeParse(raw).data,
         fallback: () => undefined,
     });
+
+// The last finished scan as kept on the history volume, for a reader outside this module (the disk-pressure watch).
+export const readLastStorageScan = (historyRoot: string): Promise<StorageScan | undefined> => lastScanFile(historyRoot).read();
 
 export const createDiskStorage = (options: DiskStorageOptions): DiskStorage => {
     const now = options.now ?? Date.now;
@@ -78,14 +84,15 @@ export const createDiskStorage = (options: DiskStorageOptions): DiskStorage => {
         await cleaning;
         try {
             const roots = await resolveStorageRoots(options.workspaceRoot, options.historyRoot);
-            last = await scanStorage({
+            const scan: ScanOptions = {
                 roots,
                 shown: { workspace: options.workspaceRoot, history: options.historyRoot },
                 now,
                 budgetMs: options.budgetMs ?? SCAN_BUDGET_MS,
                 signal: controller.signal,
                 programs: options.programs,
-            });
+            };
+            last = await scanStorage(options.buildOutputs === undefined ? scan : { ...scan, buildOutputs: options.buildOutputs });
             options.logger.info({ outcome: last.outcome, ms: last.finishedAt - last.startedAt, unreadable: last.unreadable }, "storage: scanned the disk");
             const measured = last;
             await kept.update(() => measured).catch((error: unknown) => options.logger.warn({ err: error }, "storage: could not keep the scan"));
@@ -126,7 +133,14 @@ export const createDiskStorage = (options: DiskStorageOptions): DiskStorage => {
             const work = (async (): Promise<StorageCleanResult> => {
                 await stopping;
                 const roots = await resolveStorageRoots(options.workspaceRoot, options.historyRoot);
-                return cleanCategory(category, { roots, now, programs: options.programs, prune: options.prune });
+                const deps: CleanDeps = { roots, now, programs: options.programs, prune: options.prune };
+                const outputs = options.buildOutputs;
+                return cleanCategory(
+                    category,
+                    outputs === undefined
+                        ? deps
+                        : { ...deps, reapBuildOutputs: outputs.reap, freeBytes: async () => (await readHistorySpace(options.historyRoot)).freeBytes },
+                );
             })();
             cleaning = work.catch(() => undefined);
             try {

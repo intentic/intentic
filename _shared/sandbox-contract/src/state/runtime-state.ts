@@ -70,6 +70,10 @@ const RUNTIME_DOMAINS = [
     // machine: what every page needs to hear before the sandbox goes quiet under it, wherever the reader is.
     { domain: "update", invalidates: [["update"]] },
 
+    // The disk watch's level moved or it removed build output to make room (system/resources/storage/disk-pressure.ts):
+    // the attention row and the Storage card read it, and no file under /work changes when the history volume fills.
+    { domain: "disk", invalidates: [["disk"]] },
+
     // A standing yes written or taken back outside a need's answer: a permission card's pass, a release, a purge. They
     // live under the auth root, which no file push watches, and the Allowed list must move with the card that wrote one.
     { domain: "grants", invalidates: [["grants"]] },

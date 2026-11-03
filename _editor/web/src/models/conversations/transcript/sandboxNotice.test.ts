@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { needWakePrompt } from "@intentic/sandbox-contract/events/need-wake";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { RESUME_NOTES, type ResumeReason, resumeDisclosure, resumeNoticeRow, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { RESTART_LOSSES, RESUME_NOTES, type ResumeReason, resumeDisclosure, resumeNoticeRow, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import { foldTurn, userRow } from "@intentic/sandbox-contract/transcript-fold";
@@ -73,6 +73,7 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `handoff`, mode: `summary`, model: `claude-haiku-5-5`, from: 431_000 }]),
     ...turn([{ kind: `handoff`, mode: `summary` }]),
     ...turn([{ kind: `handoff`, mode: `summary`, fellBack: true }]),
+    ...turn([{ kind: `handoff`, mode: `summary`, fellBack: true, reason: `All summary models refused` }]),
     // A home conversation's memory starting over, for each reason and each way the fresh session opened (handoff.ts).
     ...turn([{ kind: `fresh_start`, why: `budget`, from: 182_000, model: `claude-haiku-5-5`, summarized: true }]),
     ...turn([{ kind: `fresh_start`, why: `budget`, summarized: true }]),
@@ -102,7 +103,7 @@ const DAEMON: readonly TranscriptRow[] = [
     },
     {
         role: `notice`,
-        text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.`,
+        text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
         noticeCode: noticeCode({ code: `restartInterrupted` }),
     },
     // A turn moved onto another account before it ran (turn-plan.ts), for each reason a move has.

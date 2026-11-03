@@ -42,8 +42,6 @@ export interface LandOutcome extends LandResult {
     // The parent conversation whose checkout the work was written into instead of the main tree (land-target.ts).
     readonly into?: string;
     readonly diff: DiffStat;
-    // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
-    readonly adjudicated: boolean;
     // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
     readonly lockfileFailures?: readonly LockfileFailure[];
     // Each repo the land wrote into the main tree, for its derived files to be written again there once the land is
@@ -361,8 +359,6 @@ interface LandRun {
     readonly into: string | undefined;
     readonly mode: LandMode;
     readonly span: AgentSpan;
-    // Even a `measure` re-judges a stored refusal, or 'resolve' loops forever; only a verdict may replace a verdict.
-    readonly rejudging: boolean;
     readonly lines: BranchLines;
     readonly patchDir: string;
     readonly git: GitRunner;
@@ -422,10 +418,14 @@ const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: Repo
     return diffStatOf(changes, changes.length === 0 ? [] : await agentRepoModules(worktrees, entry, composed.repo), composed.repo);
 };
 
-// `measure`: an outstanding delta stays on the branch; an already-landed match still advances. A delta that now
-// applies retires the stored verdict; blocked paths report like the real gate.
+// `measure`: an outstanding delta stays on the branch; an already-landed match still advances. Every measure is a
+// verdict: the same `apply --check` a land's gate runs, so held work is never called ready to land while it would refuse
+// (2026-11: a measure judged only work a land had already refused, so every held card read "ready", and the press that
+// believed it found the conflict a minute later, 90 times on one sandbox). A delta that applies retires a stored
+// refusal; blocked paths report like the real gate. The check writes nothing, and a refusal costs the classifying reads
+// a land would spend on it anyway.
 const measureRepo = async (
-    { rejudging, patchDir, git }: LandRun,
+    { patchDir, git }: LandRun,
     composed: RepoRecord,
     target: RepoLandTarget,
     patchPath: string,
@@ -434,7 +434,7 @@ const measureRepo = async (
     if (await applies(main, patchPath, "reverse", git)) {
         return { plan: { next: await advancedRepo(target, git) } };
     }
-    const refused = rejudging ? await refusal(main, patchPath, "forward", git) : undefined;
+    const refused = await refusal(main, patchPath, "forward", git);
     const report = refused === undefined ? undefined : await classifyDelta(main, from, tip, patchDir, repo, refused, git);
     if (report !== undefined && report.blocked.length > 0) {
         return { plan: { next: composed }, conflict: await conflictOf(main, repo, report, git), held: true };
@@ -586,13 +586,11 @@ export const landAgent = async (
         into,
         mode,
         span,
-        rejudging: mode === "measure" && (entry.landing.conflicts?.length ?? 0) > 0,
         lines,
         // One temp dir for this run's patch files, removed whole in the finally.
         patchDir: await mkdtemp(join(tmpdir(), "intentic-land-")),
         git,
     };
-    const adjudicated = mode !== "measure" || run.rejudging;
     try {
         const lockfileFailures = await reconcileLockfiles(run);
         const outcome = await withRepoLocks<LandOutcome>(
@@ -613,16 +611,16 @@ export const landAgent = async (
                 // A refusal returns the original repo records, so a later land still applies the whole composed change.
                 const target = into === undefined ? {} : { into };
                 if (conflicts.length > 0) {
-                    return { landed: false, changed, repos: [...entry.placement.repos], diff, adjudicated, conflicts, ...target };
+                    return { landed: false, changed, repos: [...entry.placement.repos], diff, conflicts, ...target };
                 }
                 const written = await writePlans(plannings.map(({ plan }) => plan), run.patchDir, git);
                 const resolving = written.resolving.length > 0 ? { resolving: written.resolving } : {};
                 if (written.conflicts.length > 0) {
-                    return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
+                    return { landed: false, changed, repos: written.repos, diff, conflicts: written.conflicts, ...resolving, ...target };
                 }
                 // Every write went through: the main tree derives its own files from them, after this land (rederive.ts).
                 const rederive = opt("rederive", into === undefined ? rederiveWrites(plannings.map(({ plan }) => (plan.write?.onto === undefined ? plan.write : undefined))) : undefined);
-                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...target };
+                return { landed: !held, changed, repos: written.repos, diff, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

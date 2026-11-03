@@ -126,6 +126,22 @@ export const RunStartedSchema = z.object({ session: z.string() });
 export const DeviceRunStateSchema = z.enum(["running", "ended", "unknown"]);
 export type DeviceRunState = z.infer<typeof DeviceRunStateSchema>;
 
+// WHAT A RUN WAS BUILT FROM: the repository's commit and how much of its tree was uncommitted when `devices run` began
+// its build (in the owner's tree that is mostly landed work, since a land leaves its changes uncommitted), and whether
+// the tree moved while it compiled. With `landsSince` on the run, the Run dialog says whether the program on the
+// computer is the newest work or a restart would bring more.
+export const RunBuiltFromSchema = z.object({
+    // The full sha of HEAD when the build began.
+    commit: z.string().min(1).max(64),
+    // Paths with uncommitted changes then (`git status`): 0 is a clean tree.
+    changed: z.int().nonnegative(),
+    // When the build began.
+    at: z.string(),
+    // The tree changed while it compiled (a land that was already writing, the owner's own edits): it may mix versions.
+    movedDuringBuild: z.boolean().optional(),
+});
+export type RunBuiltFrom = z.infer<typeof RunBuiltFromSchema>;
+
 export const DeviceRunSchema = z.object({
     device: z.string(),
     // The run id the computer's app_status, app_logs and app_stop take.
@@ -133,7 +149,7 @@ export const DeviceRunSchema = z.object({
     name: z.string(),
     // `unknown`: its process is alive but the computer cannot tell whether it is still this run, so it will not stop it.
     state: DeviceRunStateSchema,
-    // The computer's own words for it: "running, pid 4120", "exited with code 101", "stopped by the agent".
+    // The computer's own words for it: "running, pid 4120", "exited with code 101", "stopped by the Run dialog's Stop".
     said: z.string(),
     // How it ended, when it exited by itself with a code.
     exitCode: z.int().optional(),
@@ -143,6 +159,12 @@ export const DeviceRunSchema = z.object({
     repo: z.string().optional(),
     // The computer's ports the sandbox reaches for it (the target's `reach`), open while it runs, closed when it stops.
     ports: z.array(z.int().min(1).max(65535)),
+    // Who started it, when this sandbox did since its last restart: "the Run dialog", "conversation <id>", "a terminal".
+    startedBy: z.string().optional(),
+    // What its build was made from, when `devices run` built it (RunBuiltFromSchema).
+    builtFrom: RunBuiltFromSchema.optional(),
+    // Lands into its repository since its build began, as far as this sandbox has seen since it came up.
+    landsSince: z.int().nonnegative().optional(),
 });
 export type DeviceRun = z.infer<typeof DeviceRunSchema>;
 

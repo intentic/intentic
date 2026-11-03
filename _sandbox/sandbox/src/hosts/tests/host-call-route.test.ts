@@ -80,3 +80,15 @@ test("the refusal names every side that is up, and the way into each", () => {
             `Every other tool reaches the Windows side only, so it waits until that side is back.`,
     );
 });
+
+// Whoever stops a program, the computer says so back: a conversation's app_stop carries its id, whatever `by` it wrote.
+test("an app_stop carries the conversation it comes from, to the side that serves it, and nothing else is touched", async () => {
+    const stop = (args: Record<string, unknown>) => ({ jsonrpc: "2.0" as const, id: 5, method: "tools/call", params: { name: "app_stop", arguments: args } });
+    const route = routeOver(["rog"]);
+    expect(await route("rog", stop({ id: "local-server-9639d9", by: "the owner" }), { conversationId: "coral-maple-kmq3" })).toEqual({
+        id: "rog",
+        message: stop({ id: "local-server-9639d9", by: "app_stop from conversation coral-maple-kmq3" }),
+    });
+    expect(await route("rog", stop({ id: "x-123456" }))).toEqual({ id: "rog", message: stop({ id: "x-123456", by: "app_stop from an agent" }) });
+    expect(await route("rog", call({ command: "ls" }), { conversationId: "coral-maple-kmq3" })).toBeUndefined();
+});

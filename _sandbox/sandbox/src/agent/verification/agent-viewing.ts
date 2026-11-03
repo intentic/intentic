@@ -11,7 +11,8 @@ import type { ToolCallStatus } from "@intentic/sandbox-contract/events/requests"
 const SURFACE_EXTENSIONS = new Set([".vue", ".astro", ".svelte", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".styl", ".tsx", ".jsx"]);
 
 // Tool verbs that observed the page, matched on the tail since the prefix is a deployment detail.
-const OBSERVING = ["navigate", "take_screenshot", "screenshot", "snapshot", "find", "evaluate", "console_messages", "read", "wait_for", "network_requests"];
+// `console` and `frames` are a connected computer's browser_console and browser_frames (the page on its own GPU).
+const OBSERVING = ["navigate", "take_screenshot", "screenshot", "snapshot", "find", "evaluate", "console_messages", "console", "frames", "read", "wait_for", "network_requests"];
 
 const BROWSER_TOOL = /(?:^|__)(?:browser|playwright|puppeteer)_/i;
 

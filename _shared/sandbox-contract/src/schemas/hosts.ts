@@ -122,9 +122,40 @@ const HostMemorySchema = z.object({
 });
 export type HostMemory = z.infer<typeof HostMemorySchema>;
 
-// The heartbeat's answer. `memory` is absent from an agent older than it and from every side but Windows (above); an
-// older daemon reads the `ok` and nothing else.
-export const DevicePingSchema = z.object({ ok: z.literal(true), memory: HostMemorySchema.optional() });
+/* THE HOST'S GPU RESETS AND CRASHES, ON EVERY HEARTBEAT (2026-11-03). On 2026-11-02 a sandbox agent rendered a page on
+   rog's display GPU through WSL (Mesa d3d12 over /dev/dxg); the driver lost the device (LiveKernelEvent 0x141) and the
+   PC powered off. All the sandbox could say afterwards was "killed without warning". So the Windows side's agent reads
+   Windows' own record of such events (the event log: a GPU timeout or reset, a bluescreen, an unexpected power-off) and
+   answers each heartbeat with those of the last day; the daemon keeps every one it has not seen, names them where it
+   explains a restart, and pauses GPU work after a GPU reset until the owner resumes it (`gpu.pausedFor` in settings). */
+export const HostCrashEventSchema = z.object({
+    // Stable across heartbeats, so the daemon keeps each once: the log and its record id (`System:48213`), or a WER
+    // report's own id (`WER:<guid>`), since Windows logs a queued report again every few minutes.
+    id: z.string().min(1).max(120),
+    // When it happened, ISO 8601 UTC: when Windows logged it, or a WER report's dump time. A Kernel-Power 41 is logged as
+    // Windows boots again, after the power-off.
+    at: z.string().min(1),
+    // `gpu-reset`: the display driver timed out or was reset (LiveKernelEvent 141/117/116, Display 4101, a 0x116/0x117
+    // bluescreen). `host-crash`: Windows itself went down (Kernel-Power 41, any other bluescreen).
+    kind: z.enum(["gpu-reset", "host-crash"]),
+    // Windows' name for it: "LiveKernelEvent 141", "Display 4101", "Kernel-Power 41", "BugCheck 0x116".
+    code: z.string().min(1).max(80),
+    // Windows' own first line about it, trimmed.
+    detail: z.string().max(400).optional(),
+});
+export type HostCrashEvent = z.infer<typeof HostCrashEventSchema>;
+
+// How far back the Windows side reports, and how many: a heartbeat answer stays small, and a day covers the reboot.
+export const HOST_CRASH_LOOKBACK_MS = 24 * 60 * 60_000;
+export const HOST_CRASHES_MAX = 20;
+
+// The heartbeat's answer. `memory` and `crashes` are absent from an agent older than them and from every side but Windows
+// (above); an older daemon reads the `ok` and nothing else.
+export const DevicePingSchema = z.object({
+    ok: z.literal(true),
+    memory: HostMemorySchema.optional(),
+    crashes: z.array(HostCrashEventSchema).max(HOST_CRASHES_MAX).optional(),
+});
 
 const GIB = 1024 ** 3;
 

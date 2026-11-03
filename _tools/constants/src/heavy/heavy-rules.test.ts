@@ -1,4 +1,5 @@
 import {
+    cargoBuildArgs,
     EARLIER_SHIPPED_RULES,
     type HeavyCommandOverrides,
     heldPoolsOf,
@@ -383,5 +384,34 @@ describe("the owner's overrides with the lane's keys", () => {
         const merged = mergeHeavyRules({ ruleEdits: [{ id: "editor-typecheck-here", cwd: "(" }] });
         expect(matchInvocation("pnpm run typecheck", merged, (detail) => problems.push(detail), { cwd: "/w/_editor/web" })?.id).toBe("package-script");
         expect(problems).toEqual([expect.stringMatching(/^editor-typecheck-here: cwd /u)]);
+    });
+});
+
+describe("the build before cargo run", () => {
+    test.each([
+        [["run"], ["build"]],
+        [["+nightly", "run", "--release", "-p", "game", "--bin=server", "--", "--watch", "a b"], ["+nightly", "build", "--release", "-p", "game", "--bin=server"]],
+        [["run", "--profile", "dev", "--example", "demo", "--features", "a,b", "--target", "wasm32-unknown-unknown", "--manifest-path", "a b/Cargo.toml", "-j", "2"], ["build", "--profile", "dev", "--example", "demo", "--features", "a,b", "--target", "wasm32-unknown-unknown", "--manifest-path", "a b/Cargo.toml", "-j", "2"]],
+        [["run", "-papp", "-Fweb", "-j2", "-vv", "--locked", "--offline", "--no-default-features", "--config", "build.rustflags=['--cfg', 'demo']", "--target-dir=/tmp/out", "--timings"], ["build", "-papp", "-Fweb", "-j2", "-vv", "--locked", "--offline", "--no-default-features", "--config", "build.rustflags=['--cfg', 'demo']", "--target-dir=/tmp/out", "--timings"]],
+    ])("translates %j", (args, expected) => {
+        expect(cargoBuildArgs(args)).toEqual(expected);
+    });
+    test.each([
+        ["run", "--future-option"], ["run", "--bin"], ["run", "--bin", "--release"], ["run", "--help"],
+        ["run", "-h"], ["r"], ["build"], ["--config", "x", "run"], ["run", "argument-without-separator"],
+    ])("preserves an invocation it cannot translate: %j", (...args) => {
+        expect(cargoBuildArgs(args)).toBeUndefined();
+    });
+    test("an earlier seeded Cargo rule picks up the current admission price", () => {
+        const previous = { id: "cargo", pattern: "^cargo\\s+(\\+\\S+\\s+)?(build|test|check|clippy|bench|doc)\\b" };
+        expect(overridesOf({ rules: [previous] })).toEqual({});
+        expect(matchInvocation("cargo build", mergeHeavyRules(overridesOf({ rules: [previous] })))?.size).toBe("cargo-build");
+    });
+    test("only the build takes a slot, priced as a Cargo build", () => {
+        const config = mergeHeavyRules();
+        const match = matchInvocation("cargo build --release", config);
+        expect(match?.id).toBe("cargo");
+        expect(match === undefined ? [] : sizeArgs(match, "cargo build --release")).toEqual(["--size", "cargo-build"]);
+        expect(matched("cargo run --release -- --watch")).toBeUndefined();
     });
 });

@@ -1208,7 +1208,7 @@ describe(`what the agent is doing, in the reader's words`, () => {
 });
 
 // Internal process names and OS limits cannot tell a person how to recover their finished work.
-it(`localizes land infrastructure failures and offers retry only for a stopped Git process`, () => {
+it(`localizes land infrastructure failures and offers retry only for a stopped Git process or damaged storage`, () => {
     const stopped: AgentStanding = { status: `error`, attention: none, landFailure: { reason: `the forker exited`, at: 1 } };
     expect(landFailure(stopped)).toBe(`The workspace's Git process stopped. Retry to land this agent's work.`);
     expect(retryLand(stopped)).toBe(true);
@@ -1220,6 +1220,14 @@ it(`localizes land infrastructure failures and offers retry only for a stopped G
         expect(retryLand(large)).toBe(false);
     }
     expect(landFailure({ ...stopped, landFailure: { reason: `stdout maxBuffer length exceeded`, at: 1 } })).toBe(`Git returned more information than the workspace could handle. Reduce the size of this change, then land again.`);
+    // The land on 10-31 06:00 quoted three lines of inflate errors; the code says what it means, and land again is offered.
+    const corrupt = {
+        ...stopped,
+        landFailure: { reason: `Command failed: git diff\nerror: inflate: data stream error (unknown compression method)\nfatal: loose object ff5612cb (stored in /history/gits/root/objects/ff/5612cb) is corrupt`, code: `repo_corrupt`, at: 1 },
+    };
+    expect(landFailure(corrupt)).toBe(`Git's own storage for this repository was damaged, most likely by an unclean stop. The sandbox is checking and repairing it now; land again in a minute, and if a card on the Sandbox overview says objects were lost, read it first.`);
+    expect(retryLand(corrupt)).toBe(true);
+    expect(retryLand({ ...corrupt, landFailure: { reason: corrupt.landFailure.reason, at: 1 } })).toBe(true);
     expect(workspaceOverlap(12_621)).toBe(`12,621 files in your workspace overlap this agent's work. Commit or discard them, then land again.`);
     expect(workspaceOverlap(3_000)).toBeUndefined();
 });

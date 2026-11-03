@@ -167,6 +167,30 @@ it(`says where its last turn put work outside its branch, and nothing when it pu
     expect(mount(ready(`idle`)).querySelector(`[data-reach]`)).toBeNull();
 });
 
+// "A clone of its own: they won't land" offers the way out on the card itself: fold it into the repository it sits in,
+// saying what that drops, or make it a workspace repository.
+it(`offers to fold a clone of its own into its repository or make it a workspace repo, naming the commits folding drops`, () => {
+    const el = mount({
+        ...ready(`idle`),
+        reach: {
+            at: 1,
+            stranded: [
+                { dir: `integra`, uncommitted: 40, unpushed: 0, commits: 0, parent: `root` },
+                { dir: `api/vendor`, uncommitted: 1, unpushed: 2, commits: 2, parent: `api` },
+            ],
+        },
+    });
+    const presses = [...el.querySelectorAll(`[data-stranded-clones] button`)].map((button) => button.textContent?.trim());
+    expect(presses).toEqual([
+        `Fold into root`,
+        `Make it a workspace repo`,
+        `Fold into api, dropping its 2 commits`,
+        `Make it a workspace repo`,
+    ]);
+    // Mid-turn the copy is the agent's: nothing is offered until it rests.
+    expect(mount({ ...ready(`running`), reach: { at: 1, stranded: [{ dir: `integra`, uncommitted: 1, unpushed: 0 }] } }).querySelector(`[data-stranded-clones]`)).toBeNull();
+});
+
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => /Land now|Landing/.test(button.textContent ?? ``));
 

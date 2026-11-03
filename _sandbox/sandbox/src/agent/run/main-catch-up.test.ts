@@ -70,6 +70,7 @@ describe("stopCatchUp", () => {
         const note = await step();
         expect(note).toBe(mainMovedNote([CONFLICT]));
         expect(note).toContain("`git rebase 0123456789ab`");
+        expect(note).toContain("1. `git add -A; git diff --cached --quiet || git commit -qm wip`");
         expect(note).toContain("  - src/app.ts");
         expect(pushed).toEqual([expect.objectContaining({ kind: "agent_notice", source: MAIN_MOVED_SOURCE, sent: note })]);
         // The second Stop is the model's answer; asking again would make it a gate.

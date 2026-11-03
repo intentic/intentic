@@ -19,6 +19,9 @@ import { type TurnPersona, turnPersona } from "../../personas/personas.js";
 import { turnWatchdog } from "../decorators/turn-watchdog.js";
 import { opt } from "../../opt.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
+import type { Said } from "../../seams/turn-starter.js";
+import { waitFor } from "@intentic/testing/bun";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { harnessServers, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
@@ -35,7 +38,7 @@ const SETTINGS = SandboxSettingsSchema.parse({});
 const OPEN = turnPersona({ personas: [], actsAs: undefined, unattended: false });
 const input = AgentTurnSchema.parse({ prompt: "do the thing", conversationId: "conv-1" });
 
-const deps: DaemonServersDeps = unstubbed<DaemonServersDeps>("deps", {
+const depsWith = (over: Partial<DaemonServersDeps> = {}): DaemonServersDeps => unstubbed<DaemonServersDeps>("deps", {
     // Holdings only, for the child-result door: this turn is no spawned child, so it is handed none.
     conversations: unstubbed<DaemonServersDeps["conversations"]>("conversations", { holdings: memoryFleet().conversations.holdings }),
     config: unstubbed<DaemonServersDeps["config"]>("config", { historyRoot: ROOT }),
@@ -43,7 +46,9 @@ const deps: DaemonServersDeps = unstubbed<DaemonServersDeps>("deps", {
     dependencies: unstubbed<DaemonServersDeps["dependencies"]>("dependencies", {}),
     agents: unstubbed<DaemonServersDeps["agents"]>("agents", { entry: () => undefined }),
     logger: pino({ level: "silent" }),
+    ...over,
 });
+const deps = depsWith();
 
 // A card registry whose one card is answered when the test says.
 const cardsAnswering = () => {
@@ -83,16 +88,17 @@ const contextOf = (cards: ParkedCards, children?: ChildSupervisor): TurnContext 
 
 const NO_BROWSER: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, passkeys: {} };
 
-const doorFor = (turn: Omit<DaemonServersTurn, "mounted">) => {
+const doorFor = (turn: Omit<DaemonServersTurn, "mounted">, served: DaemonServersDeps = deps) => {
     const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:8787/mcp" });
     const lease = mounts.lease("conv-1");
-    const built = daemonServersFor(deps, { ...turn, mounted: { browser: NO_BROWSER, desktop: false, lease } });
+    const built = daemonServersFor(served, { ...turn, mounted: { browser: NO_BROWSER, desktop: false, lease } });
     const app = new Hono<AppEnv>().all("/mcp/:mount", createTurnMountRoute(mounts, unstubbed<MountEndpoints>("endpoints", { daemon: daemonEndpoint })));
     const token = built.tools[0]?.token ?? "";
     let id = 0;
-    const rpc = async (name: string, method: string, params?: Record<string, unknown>) => {
+    const rpc = async (name: string, method: string, params?: Record<string, unknown>, signal?: AbortSignal) => {
         id += 1;
         const response = await app.request(`/mcp/${name}`, {
+            ...opt("signal", signal),
             method: "POST",
             headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
             body: JSON.stringify({ jsonrpc: "2.0", id, method, ...opt("params", params) }),
@@ -100,8 +106,8 @@ const doorFor = (turn: Omit<DaemonServersTurn, "mounted">) => {
         return AnswerSchema.parse(await response.json());
     };
     const toolsOf = async (name: string): Promise<string[]> => ((await rpc(name, "tools/list")).result?.tools ?? []).map((tool) => tool.name);
-    const call = async (name: string, tool: string, args: Record<string, unknown>): Promise<string> =>
-        ((await rpc(name, "tools/call", { name: tool, arguments: args })).result?.content ?? []).map((part) => part.text ?? "").join("\n");
+    const call = async (name: string, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> =>
+        ((await rpc(name, "tools/call", { name: tool, arguments: args }, signal)).result?.content ?? []).map((part) => part.text ?? "").join("\n");
     return { built, lease, toolsOf, call, names: built.tools.map((tool) => tool.name) };
 };
 
@@ -176,6 +182,63 @@ test("ask parks on a card: its frame waits for the loop, the watchdog is held wh
     expect(await asked).toContain("B");
     expect(seen.map((event) => event.kind)).toEqual(["question", "resolved"]);
     expect(clock.remaining()).toBeLessThan(Number.POSITIVE_INFINITY);
+});
+
+// 2026-11-02 (lively-cedar-3nsa): a Codex call to ask ended a minute after it asked, the owner answered on the card half an
+// hour later, and the agent never heard the answer. One that comes after its call stopped waiting is said into the turn.
+test("an answer given after the asking call's client stopped waiting is said into the conversation, not lost", async () => {
+    const { cards, answer } = cardsAnswering();
+    const said: Said[] = [];
+    const door = doorFor(
+        { input, context: contextOf(cards), persona: OPEN, granted: [], settings: SETTINGS },
+        depsWith({
+            agents: unstubbed<DaemonServersDeps["agents"]>("agents", { entry: (id: string) => (id === "conv-1" ? conversationEntry({ id }) : undefined) }),
+            turns: unstubbed<DaemonServersDeps["turns"]>("turns", {
+                say: async (words: Said) => {
+                    said.push(words);
+                    return { delivered: "steered" as const };
+                },
+            }),
+        }),
+    );
+    door.built.relay.attach({ push: () => {} });
+    const client = new AbortController();
+    const asked = door
+        .call("ui", "ask", { questions: [{ question: "Which tests stay?", header: "Removal rule", options: [{ label: "Only recorded catches", description: "a" }, { label: "Keep reproducers", description: "b" }] }] }, client.signal)
+        .catch(() => "");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The runtime gave up on the call, as Codex's code mode hands control back while the card stays open.
+    client.abort();
+    await asked;
+    answer({ kind: "question", requestId: "card-1", answers: { "Which tests stay?": ["Only recorded catches"] } });
+    await waitFor(() => expect(said).toHaveLength(1));
+    expect(said[0]?.voice).toBe("sandbox");
+    expect(said[0]?.turn.conversationId).toBe("conv-1");
+    expect(said[0]?.turn.prompt).toContain('the question you asked earlier ("Removal rule")');
+    expect(said[0]?.turn.prompt).toContain("Only recorded catches");
+    door.lease.release();
+});
+
+test("an answer its call was still waiting for goes back as the call's result alone", async () => {
+    const { cards, answer } = cardsAnswering();
+    const said: Said[] = [];
+    const door = doorFor(
+        { input, context: contextOf(cards), persona: OPEN, granted: [], settings: SETTINGS },
+        depsWith({
+            turns: unstubbed<DaemonServersDeps["turns"]>("turns", {
+                say: async (words: Said) => {
+                    said.push(words);
+                    return { delivered: "steered" as const };
+                },
+            }),
+        }),
+    );
+    door.built.relay.attach({ push: () => {} });
+    const asked = door.call("ui", "ask", { questions: [{ question: "Which?", header: "Pick", options: [{ label: "A", description: "a" }, { label: "B", description: "b" }] }] });
+    answer({ kind: "question", requestId: "card-1", answers: { "Which?": ["A"] } });
+    expect(await asked).toContain("A");
+    expect(said).toEqual([]);
+    door.lease.release();
 });
 
 test("the policy gate on the door refuses until the loop's gate attaches, then answers with it, marks taint and runs no checks it has none of", async () => {

@@ -12,6 +12,7 @@ import { errorCode, proven, routesClient } from "../harness/route-client.testing
 import { authSliceFake } from "../auth/auth-slice.testing.js";
 import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/jobs/background-jobs.js";
+import { portOwnerOf } from "../agent/tools/jobs/port-owners.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 import { createORPCClient } from "@orpc/client";
@@ -275,4 +276,40 @@ test("a port a device tunnel holds is never offered for mirroring", async () => 
         ),
     );
     expect((await client.list()).ports.map((entry) => entry.port)).toEqual([3000]);
+});
+
+// Whose server holds a port, answered on the list rather than by ss and pgrep: by the job running in the listener's
+// tmux session, else by the conversation whose shell that session is; nothing for a listener no agent's session holds.
+test("ports.list names the conversation, and its one running job, behind every agent's port", async () => {
+    const conversations = memoryFleet().conversations;
+    const tmp = mkdtempSync(join(tmpdir(), "ports-routes-test-"));
+    const job = openBackgroundJob(
+        { conversationId: "conv-scratch", profile: {}, conversations, tmp },
+        { command: "cargo run --bin server -- --port 7878", session: "agent-scratch1", description: "Scratch game server" },
+    );
+    if (job === undefined) {
+        throw new Error("the job dir could not be minted");
+    }
+    try {
+        const client = routesClient(
+            portsContract,
+            createPortsRoutes(
+                portsDeps({
+                    jobOn: (port) => portJobOf(conversations, port),
+                    ownerOn: (listener) => portOwnerOf(conversations, listener, (session) => (session === "agent-shell22" ? "conv-shell" : undefined)),
+                    scanPorts: async () => [
+                        { port: 7878, host: "127.0.0.1", forwardable: true, session: "agent-scratch1" },
+                        { port: 9000, host: "127.0.0.1", forwardable: true, session: "agent-shell22" },
+                        { port: 3000, host: "127.0.0.1", forwardable: true, session: "web-1" },
+                    ],
+                }),
+            ),
+        );
+        const owners = new Map((await client.list()).ports.map((port) => [port.port, port.owner]));
+        expect(owners.get(7878)).toEqual({ conversationId: "conv-scratch", jobId: job.id, label: "Scratch game server" });
+        expect(owners.get(9000)).toEqual({ conversationId: "conv-shell" });
+        expect(owners.get(3000)).toBeUndefined();
+    } finally {
+        rmSync(tmp, { recursive: true, force: true });
+    }
 });

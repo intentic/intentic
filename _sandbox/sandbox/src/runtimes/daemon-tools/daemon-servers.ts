@@ -32,6 +32,9 @@ import type { InProcessServer } from "../../agent/tools/turn-mounts.js";
 import { createTurnRelay, type TurnRelay } from "./turn-relay.js";
 import { ownedAgentSession, terminalHelpServer } from "../../terminal/terminal-help.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
+import type { Services } from "../../composition.js";
+import { conversationProfile } from "../../conversations/registry/agents-store.js";
+import { deliverWake } from "../../seams/wake-delivery.js";
 
 // The daemon's own tools for a runtime that is not the Claude Code loop: the same servers that loop mounts in-process
 // (harness-servers.ts, agent.ts), built for this turn, held to the same persona decisions, and served through the MCP door
@@ -39,7 +42,7 @@ import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 // they already read. What only exists once the loop runs (its stream, its watchdog, its gate) arrives through the turn's
 // relay (turn-relay.ts). DAEMON-TOOLS-WIRING.md is how a runtime takes them.
 
-export type DaemonServersDeps = HarnessServersDeps & HarnessHooksDeps;
+export type DaemonServersDeps = HarnessServersDeps & HarnessHooksDeps & Pick<Services, "turns">;
 
 export interface DaemonServersTurn {
     readonly input: AgentTurn;
@@ -106,9 +109,33 @@ const heldDoor = (server: InProcessServer, relay: TurnRelay): InProcessServer =>
     close: server.close,
 });
 
+// An answer that came after its call stopped waiting, said into the conversation by the one door for the sandbox's own
+// words: into the live turn as a steer, else as the opening of a turn of its own, else queued behind what runs.
+const lateAnswers =
+    (deps: Pick<DaemonServersDeps, "agents" | "turns" | "logger">, conversationId: string | undefined) =>
+    async (prompt: string): Promise<void> => {
+        const entry = conversationId === undefined ? undefined : deps.agents.entry(conversationId);
+        if (conversationId === undefined || entry === undefined) {
+            deps.logger.warn({ conversationId }, "card: an answer came after its call ended, and no conversation is on record to tell");
+            return;
+        }
+        try {
+            const receipt = await deliverWake(
+                { turns: deps.turns },
+                { conversationId, prompt, voice: "sandbox", source: "late-answer", profile: conversationProfile(entry) },
+            );
+            if (!("delivered" in receipt)) {
+                deps.logger.warn({ conversationId, receipt }, "card: an answer came after its call ended, and the conversation took nothing");
+            }
+        } catch (error) {
+            deps.logger.warn({ err: error, conversationId }, "card: an answer came after its call ended, and could not be said into the conversation");
+        }
+    };
+
 // The `ui` server: `ask` always, the page tools where the owner leaves them on. No rebase on an answer: that is the
-// harness's, for the only loop whose cards park long enough to need it (TurnContext.resync).
-const doorUiServer = (turn: DaemonServersTurn, relay: TurnRelay): McpSdkServerConfigWithInstance => {
+// harness's, for the only loop whose cards park long enough to need it (TurnContext.resync). An answer given after the
+// call's client stopped waiting reaches the conversation anyway (lateAnswers).
+const doorUiServer = (deps: DaemonServersDeps, turn: DaemonServersTurn, relay: TurnRelay): McpSdkServerConfigWithInstance => {
     const { spec, hooks, signal } = turn.context.base;
     return uiServer({
         pages: turn.settings.chatPages
@@ -122,7 +149,7 @@ const doorUiServer = (turn: DaemonServersTurn, relay: TurnRelay): McpSdkServerCo
                   signal,
               }
             : undefined,
-        ask: { cards: hooks.cards, conversationId: spec.conversationId, signal, cwd: spec.cwd, push: relay.push },
+        ask: { cards: hooks.cards, conversationId: spec.conversationId, signal, cwd: spec.cwd, push: relay.push, late: lateAnswers(deps, spec.conversationId) },
     });
 };
 
@@ -166,7 +193,7 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
     const accounts = accountsFactoryFor(deps, input, context, granted);
     const checks = checkHooksOf(deps, context, turn.settings);
     const servers = {
-        ui: doorUiServer(turn, relay),
+        ui: doorUiServer(deps, turn, relay),
         accounts: accounts?.(relay.push, signal),
         secrets: secretsServerFor(deps, {
             browser: turn.mounted.browser,

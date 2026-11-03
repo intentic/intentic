@@ -8,7 +8,7 @@ import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/age
 import type { AgentRequest, CodexCredential, CodexHostedProvider, TurnTools } from "../../agent/providers/agent-request.js";
 import { splitAttachments, withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import { opt } from "../../opt.js";
-import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
+import { type EmulatedPlan, planMode } from "../decorators/plan-mode.js";
 import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 import { codedFailure, type FailureRule } from "../../agent/run/frames/error-frames.js";
 import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
@@ -87,13 +87,25 @@ type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "names
 
 // Projects the turn's MCP servers into Codex's per-thread config: every remote mount (the daemon's MCP door's browsers,
 // machines and extension tools, and the mcp-kind cards) as a Streamable HTTP server, the one list every runtime reads.
+//
+// A server whose calls may run long (one with a bound of its own: a card waiting on a person, a wait on a child, a
+// browser page) is offered to the model directly, never from inside code mode's `exec` script. Codex 0.166 runs a model's
+// MCP calls from an `exec` cell that hands control back after 30 s ("Script running with cell ID …") while the call runs
+// on, and the model reads that as leave to go on: on 2026-11-02 a question card's answer, given 34 minutes later, reached
+// nothing, and the agent had decided the opposite rule itself 62 s after asking (lively-cedar-3nsa). Offered directly,
+// the call is the model's function call and `tool_timeout_sec` bounds it: checked against 0.166.0 with a 75 s call,
+// answered whole. OpenCode's mounts turn its code mode off for the same reason (opencode-mcp.ts). The gate's tools are
+// hooks' to call, not the model's, and stay as they are.
+const CODE_MODE_SURFACE = "code_mode";
 const codexMcpConfig = (tools: Pick<TurnTools, "remote">): Record<string, JsonValue> => {
     const config: Record<string, JsonValue> = {};
     for (const tool of tools.remote ?? []) {
+        const long = tool.timeoutMs !== undefined && tool.name !== GATE_SERVER;
         config[`mcp_servers.${tool.name}`] = {
             url: tool.url,
             ...(tool.token === undefined ? {} : { http_headers: { Authorization: `Bearer ${tool.token}` } }),
             ...(tool.timeoutMs === undefined ? {} : { tool_timeout_sec: Math.ceil(tool.timeoutMs / 1_000) }),
+            ...(long ? { omit_tools_from: [CODE_MODE_SURFACE] } : {}),
         };
     }
     return config;
@@ -1066,11 +1078,11 @@ const codexPlan = (request: CodexRequest, phase: ReturnType<typeof codexPhase>):
             images = [];
             return planPhaseOf(capture);
         },
-        async *execute(sessionId) {
+        async *execute(sessionId, prompt) {
             // Moves the mode as the Claude loop's approval does, so the composer's chip follows the turn out of planning.
             yield { kind: "mode", mode: POST_PLAN_MODE };
             return yield* phase({
-                prompt: EXECUTE_PROMPT,
+                prompt,
                 images,
                 sessionId,
                 sandboxMode: "danger-full-access",
@@ -1128,6 +1140,7 @@ const codexRunGate = (request: CodexRequest, guard: { readonly gate: CommandGuar
         tools: request.tools,
         editReviewers: request.hooks.editReviewers,
         push: inbox.push,
+        jobs: request.hooks.backgroundJobs,
     });
     const detach = relay.attach({ push: inbox.push, guard, gateHooks: session.gateHooks });
     const halted = new AbortController();

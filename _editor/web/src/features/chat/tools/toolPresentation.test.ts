@@ -332,3 +332,10 @@ describe(`readableToolName`, () => {
         expect(readableToolName(`mcp____wait`)).toBeUndefined();
     });
 });
+
+
+test("a turn's interrupted tool is labelled interrupted and does not present an unwritten document", () => {
+    const shown = present(withText("Bash", "", { status: "interrupted" }));
+    expect(shown.summary).toBe("interrupted");
+    expect(shown.document).toBeUndefined();
+});

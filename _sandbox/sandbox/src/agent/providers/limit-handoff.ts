@@ -1,5 +1,6 @@
+import { errorMessage } from "@intentic/base/errors";
 import { tokensOfChars } from "@intentic/base/format";
-import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentProvider, type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     type HandedOff,
@@ -10,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { estimateCopy, readSessionChain, writeSessionCopy } from "./claude/claude-session-copy.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { askRoleModel, roleModelIsSet } from "../models/role-model.js";
@@ -218,6 +220,7 @@ export const summaryNote = async (
         // What the model is asked to write; a held turn's hand-off by default, a home's own fresh start its own
         // (home/home-rollover.ts HOME_SUMMARY_INSTRUCTIONS).
         readonly instructions?: string;
+        readonly spentProvider?: AgentProvider;
     },
 ): Promise<{ readonly note?: TurnNote; readonly event: HandedOff }> => {
     const from = params.contextTokens;
@@ -232,7 +235,7 @@ export const summaryNote = async (
                 answer: SUMMARY_ANSWER,
             },
             params.signal ?? new AbortController().signal,
-            { conversationId: params.conversationId },
+            { conversationId: params.conversationId, ...opt("excludeProviders", params.spentProvider === undefined ? undefined : [params.spentProvider]) },
         );
         return {
             note: { title: SUMMARY_NOTE_TITLE, text: value },
@@ -240,6 +243,6 @@ export const summaryNote = async (
         };
     } catch (error) {
         services.logger.warn({ err: error, conversationId: params.conversationId }, "hand-off: no summary was written, opening with the record alone");
-        return { event: { mode: "summary", fellBack: true } };
+        return { event: { mode: "summary", fellBack: true, reason: errorMessage(error) } };
     }
 };

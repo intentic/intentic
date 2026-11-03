@@ -1,7 +1,6 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
-import { accountCovering, accountHostsOf, bareHost, signedInDoor } from "./account-hosts.js";
-import { withSignedInDoor } from "./browser-router.js";
+import { accountCovering, accountHostsOf, bareHost, signedInDoor, withSignedInDoor } from "./account-hosts.js";
 
 // Which signed-in account a page belongs to, and the door the two wrong browsers name instead of opening it blind.
 

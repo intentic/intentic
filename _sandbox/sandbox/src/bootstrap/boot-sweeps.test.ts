@@ -61,25 +61,28 @@ const phaseOf = (role: Pick<ContainerRole, "roots" | "container">, retentionDays
 
 const cadenceOf = (phase: BootPhase): readonly (readonly [string, number])[] => retentionChores(phase).map((chore) => [chore.name, chore.everyMs]);
 
-test("the retention passes are hourly chores, scoped by role", () => {
+test("the retention passes are periodic chores, scoped by role", () => {
     const hourly = (name: string): readonly [string, number] => [name, HOUR_MS];
+    // Build output is looked at every quarter hour, so a landed checkout's goes about an hour after its land.
+    const quarterHourly = (name: string): readonly [string, number] => [name, HOUR_MS / 4];
     // settings.retention's sweeps (retention/retention-sweep.ts): hourly, restore points daily, and a five-minute look
     // for a changed setting. Root-scoped like the rest: they delete what the root's history holds.
     const dataRetention = [hourly("data-retention"), ["data-retention-restore-points", 24 * HOUR_MS] as const, ["data-retention-settings", 5 * 60_000] as const];
     expect(cadenceOf(phaseOf({ roots: true, container: true }))).toEqual([
         ...dataRetention,
         hourly("agents-aged-archive"),
-        hourly("agents-build-outputs"),
+        quarterHourly("agents-build-outputs"),
         hourly("state-aged"),
         hourly("log-retention"),
         hourly("finished-terminal-sessions"),
+        hourly("tmp-cargo-targets"),
     ]);
-    // A guest sharing the history root prunes nothing of the root's.
-    expect(cadenceOf(phaseOf({ roots: false, container: true }))).toEqual([hourly("finished-terminal-sessions")]);
+    // A guest sharing the history root prunes nothing of the root's; the container's own /tmp is still its to tidy.
+    expect(cadenceOf(phaseOf({ roots: false, container: true }))).toEqual([hourly("finished-terminal-sessions"), hourly("tmp-cargo-targets")]);
     expect(cadenceOf(phaseOf({ roots: true, container: false }))).toEqual([
         ...dataRetention,
         hourly("agents-aged-archive"),
-        hourly("agents-build-outputs"),
+        quarterHourly("agents-build-outputs"),
         hourly("state-aged"),
         hourly("log-retention"),
     ]);

@@ -4,7 +4,7 @@ import type { LogFileEntry } from "@intentic/sandbox-contract/schemas/logs";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { forkedExec } from "@intentic/base/git";
 import { MARKER_FILE } from "../system/boot/restarts/boot-marker.js";
-import { RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
+import { HOST_CRASHES_FILE, RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
 import { logsRoot } from "../seams/logs-root.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -41,9 +41,10 @@ const GROUP_CAPS = new Map([
 const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl"]);
 
 // The restart record's own files (system/boot/): the previous run's exit marker, the intent a restart's asker left, and
-// the boot log the `restarts` tool reads, which its writer bounds itself. Read at boot and by `ic`, never cut or evicted,
-// however long the sandbox sat stopped.
-const KEPT = new Set([MARKER_FILE, RESTART_INTENT_FILE, RESTARTS_FILE]);
+// the boot log the `restarts` tool reads, which its writer bounds itself, and the host's crashes that explain a restart
+// (also bounded by its writer, hosts/gpu/host-crashes.ts). Read at boot and by `ic`, never cut or evicted, however long
+// the sandbox sat stopped.
+const KEPT = new Set([MARKER_FILE, RESTART_INTENT_FILE, RESTARTS_FILE, HOST_CRASHES_FILE]);
 
 // Extensions of files that are one JSON document rather than lines.
 const WHOLE_FILE = /\.(?:cpuprofile|heapprofile|heapsnapshot|json)$/;

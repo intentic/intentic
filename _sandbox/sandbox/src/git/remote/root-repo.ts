@@ -4,7 +4,7 @@ import { pathExists } from "@intentic/base/fs";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/base/git";
+import { defaultGit, gitInit, gitStageAll, type GitRunner, persistGitDurability } from "@intentic/base/git";
 import { repoGitDir, rootExcludes, syncRootExcludes } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
@@ -271,6 +271,7 @@ export const ensureRootRepo = async (
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
     await ignoreFileMode(workspace.root, git);
+    await persistGitDurability(workspace.root, git);
     // Exclude list lives in $GIT_DIR/info/exclude, outside /work, and is re-synced before every baseline commit. The
     // generated-skills block first, so the root rewrite carries the current one onto the history scope.
     await syncSkillLinkExcludes(workspace.root);

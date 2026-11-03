@@ -188,7 +188,7 @@ test("a targeted toolchain run needs a worker's cost, not the class's, plus a pe
 });
 
 test("the editor's full typecheck is priced at its measured peak, and a changed-files one at what it loads", () => {
-    expect(SIZE_BYTES).toEqual({ targeted: GIB / 2, "editor-typecheck": 7 * GIB, "scoped-typecheck": 4 * GIB });
+    expect(SIZE_BYTES).toEqual({ targeted: GIB / 2, "cargo-build": 7 * GIB, "editor-typecheck": 7 * GIB, "scoped-typecheck": 4 * GIB });
     const reading = { limitBytes: 16 * GIB, usedBytes: 9 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
     // 7 GiB free: a toolchain command's 1 GiB or a changed-files check's 4 with a person's turn fit, the editor's 7 does not.
     expect(judge(reading, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run", needBytes: 2 * GIB });
@@ -224,7 +224,7 @@ test("work nobody waits on waits while it would take the machine running the san
 });
 
 test("only a name the gate knows is a size; any other is priced as its class", () => {
-    expect(["targeted", "editor-typecheck", "scoped-typecheck"].filter((name) => isRoomSize(name))).toHaveLength(3);
+    expect(["targeted", "editor-typecheck", "scoped-typecheck", "cargo-build"].filter((name) => isRoomSize(name))).toHaveLength(4);
     expect(isRoomSize("huge")).toBe(false);
     expect(isRoomSize("toString")).toBe(false);
     expect(costBytesOf("service", "editor-typecheck")).toBe(costBytesOf("service"));
@@ -246,4 +246,10 @@ test("with no daemon to ask, a short box is waited on by the formula and started
         read: () => short,
     });
     expect(answer).toMatchObject({ verdict: "wait", source: "formula", diagnosis: "Sandbox memory is low: 9.9 GiB of 10.0 GiB used" });
+});
+
+test("two Cargo admission reservations fit an 18 GiB sandbox with a person reserve", () => {
+    expect(costBytesOf("toolchain", "cargo-build")).toBe(7 * GIB);
+    const reading = { limitBytes: 18 * GIB, usedBytes: GIB, swapBytes: 0, stallPercent: 0, oomKills: 0 };
+    expect(judge(reading, { workload: "toolchain", attended: false, size: "cargo-build", reservedBytes: 7 * GIB })).toMatchObject({ verdict: "run", needBytes: 8 * GIB });
 });

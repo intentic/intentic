@@ -55,10 +55,16 @@ const refusedCall = (message: RpcMessage, refusal: string): RpcMessage | undefin
 
 // The connection a message goes to and the message as it goes: the mounted id, unless the door routes it elsewhere.
 const destinationOf = async (
-    route: ((id: string, message: RpcMessage) => Promise<PeerCallRoute | undefined>) | undefined,
+    route: ((id: string, message: RpcMessage, call: PeerCallOrigin) => Promise<PeerCallRoute | undefined>) | undefined,
     id: string,
     message: RpcMessage,
-): Promise<PeerCallRoute> => (route === undefined ? undefined : await route(id, message)) ?? { id, message };
+    call: PeerCallOrigin,
+): Promise<PeerCallRoute> => (route === undefined ? undefined : await route(id, message, call)) ?? { id, message };
+
+// Who a call to a peer comes from: the conversation whose turn mounted it, when one did.
+export interface PeerCallOrigin {
+    readonly conversationId: string | undefined;
+}
 
 export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes, Extra> {
     readonly store: PeerStore<Extra>;
@@ -70,7 +76,7 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     // Which connection a message to `id` actually goes to; undefined sends it to `id` as always. Only the hosts door
     // supplies one: a card is one computer whose sides each hold a socket of their own, and a call naming a side that
     // is up should not wait on the side that is down (hosts/host-call-route.ts).
-    readonly route?: (id: string, message: RpcMessage) => Promise<PeerCallRoute | undefined>;
+    readonly route?: (id: string, message: RpcMessage, call: PeerCallOrigin) => Promise<PeerCallRoute | undefined>;
     // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
     // rest of that computer, and a connect must not wait on a download.
     readonly onConnected?: (id: string, facts: Facts) => void;
@@ -412,7 +418,7 @@ export const createPeerRoutes = <
         }
         // From here on `id` and `message` are where the call actually goes, which is the mounted id unless the door
         // routes it elsewhere; everything after (enrollment, the gate, the forward) is about that connection.
-        const destination = await destinationOf(deps.route, target.id, asked);
+        const destination = await destinationOf(deps.route, target.id, asked, { conversationId: call.conversationId });
         if ("refusal" in destination) {
             return refusedCall(asked, destination.refusal);
         }

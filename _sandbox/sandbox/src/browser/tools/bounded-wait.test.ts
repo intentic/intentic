@@ -49,6 +49,20 @@ describe("a timed text wait", () => {
         expect(calls).toBe(1);
     });
 
+    it("cuts an attempt off at its own time, cancelling it, and answers as a timeout", async () => {
+        const seen: AbortSignal[] = [];
+        const answer = await sendBoundingWait({ name: "browser_wait_for", arguments: { time: 0.05, text: "Saved" } }, undefined, (_params, signal) => {
+            if (signal !== undefined) {
+                seen.push(signal);
+            }
+            // A backend whose own action timeout is far longer: answers only once cancelled, as the router's forward does.
+            return new Promise<RpcMessage>((resolve) => signal?.addEventListener("abort", () => resolve({ error: { code: -32800, message: "cancelled" } })));
+        });
+        expect(seen[0]?.aborted).toBe(true);
+        expect(waitTimedOut(answer)).toBe(true);
+        expect(JSON.stringify(answer)).toContain('waiting for \\"Saved\\": Timeout 50ms exceeded');
+    });
+
     it("knows a timeout from any other failure", () => {
         expect(waitTimedOut(timedOut)).toBe(true);
         expect(waitTimedOut(found)).toBe(false);

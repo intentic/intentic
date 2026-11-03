@@ -1,4 +1,4 @@
-import { RESUME_NOTES, resumeDisclosure, resumeNoteWith, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
+import { CONTINUATION_NOTE, RESTART_LOSSES, RESUME_NOTES, resumeDisclosure, resumeNoteWith, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
 
 // Wrapping then unwrapping a resume note must return the exact original prompt; a mismatch leaks machine narration into
 // the user's own words on screen.
@@ -97,4 +97,10 @@ test("a carried-on turn's note stands alone, leaves no words, and records as a n
         text: "Carried on from where the last turn stopped.",
         noticeCode: { code: "resumed", params: { reason: "continued" } },
     });
+});
+
+
+test("a manual continuation explains what a sandbox restart can have lost", () => {
+    expect(CONTINUATION_NOTE).toContain(`If the sandbox restarted: ${RESTART_LOSSES}`);
+    expect(withoutResumeNote(CONTINUATION_NOTE)).toBe("");
 });

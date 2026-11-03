@@ -5,6 +5,7 @@ import { Button, DisclosureRow, Icon, Modal, Notice, RowGroup, toneDot, ui } fro
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
+import { formatDateTime } from "@intentic/ui/format";
 import { errorMessage } from "@intentic/base/errors";
 import { usePanels } from "../../../models/extensions/usePanels";
 import { composeAgent } from "../../../models/fleet/agentActions";
@@ -12,7 +13,7 @@ import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTab
 import { openPreviewBeside } from "../../../workbench/browsers/browsersSurface";
 import { stateOf, tintOf } from "../../preview/targetWords";
 import { usePreviewTargets } from "../../preview/usePreviewTargets";
-import { openingPlace, placesOf, type RunRow, runRowsOf, runsAt, SANDBOX } from "./runRows";
+import { openingPlace, placesOf, provenanceOf, type RunRow, runRowsOf, runsAt, SANDBOX } from "./runRows";
 import { rememberedPlace, rememberPlace } from "./runPlaceMemory";
 import { useDeviceRuns, useRunLog, useRunPresses, useRunTargets } from "../../../models/runs/useRunTargets";
 import type { DeviceRun } from "@intentic/sandbox-contract/schemas/run-targets";
@@ -249,6 +250,23 @@ const stateTone = (row: RunRow): string => {
     return current?.exitCode !== undefined && current.exitCode !== 0 ? `text-danger` : `text-muted`;
 };
 
+// What the row's run on the computer was built from, and the work that landed after it (schemas/run-targets.ts
+// RunBuiltFromSchema): so the owner can tell whether what runs there is the newest, or a Restart would bring more.
+const builtFromOf = (row: RunRow): { line: string; tip: string; stale: boolean } | undefined => {
+    const built = provenanceOf(deviceRun(row));
+    if (built === undefined || chosen.value === undefined) {
+        return undefined;
+    }
+    const { commit, changed, lands } = built;
+    const line = [t(`workspace.directoryRuns.builtFrom`, { commit }), ...(lands > 0 ? [t(`workspace.directoryRuns.landsSince`, { count: lands }, lands)] : [])].join(` · `);
+    const tip = [
+        t(`workspace.directoryRuns.builtFromTip`, { device: chosen.value.id, commit, changed, at: formatDateTime(built.at) }),
+        ...(lands > 0 ? [t(`workspace.directoryRuns.landsSinceTip`)] : []),
+        ...(built.moved ? [t(`workspace.directoryRuns.movedDuringBuild`)] : []),
+    ].join(` `);
+    return { line, tip, stale: built.stale };
+};
+
 // One row open at a time, by its key: its whole description, what it runs here, and on a computer the log of its newest
 // run there, followed while it is open.
 const openRow = ref<string | undefined>(undefined);
@@ -393,6 +411,13 @@ const placeClass = (id: string, online: boolean): string[] => [
                                     </span>
                                     <span v-if="stateWords(row) !== ``" :class="[STATE, stateTone(row)]">
                                         <Icon name="circle" class="text-[0.5rem]" />{{ stateWords(row) }}
+                                    </span>
+                                    <span
+                                        v-if="builtFromOf(row) !== undefined"
+                                        v-tooltip="builtFromOf(row)?.tip"
+                                        :class="[STATE, builtFromOf(row)?.stale === true ? `text-warning` : `text-subtle`]"
+                                    >
+                                        <Icon name="git-branch" />{{ builtFromOf(row)?.line }}
                                     </span>
                                     <span v-if="!inSandbox && row.isolated" :class="[STATE, `text-subtle`]">
                                         <Icon name="shield" />{{ t(`workspace.directoryRuns.isolated`) }}

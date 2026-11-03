@@ -44,7 +44,7 @@ export const waitForSubagents = (actors: Actors, conversationId: string, options
                 .of(conversationId)
                 .filter(subagentRunning)
                 .map((record) => record.id);
-        const watched = (): SubagentRecord[] => records.of(conversationId).filter((record) => ids.includes(record.id));
+        const watched = (): SubagentRecord[] => records.of(conversationId).filter((record) => (ids.includes(record.id) || (record.agentId !== undefined && ids.includes(record.agentId))));
         // oxlint-disable-next-line prefer-const -- A later branch assigns and clears this binding.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const settle = (result: SubagentsWaitOutcome): void => {

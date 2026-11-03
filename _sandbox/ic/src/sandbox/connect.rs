@@ -232,8 +232,15 @@ fn connect(
     /* A SANDBOX THIS MACHINE ALREADY HAS IS NOT SET UP AGAIN BY ACCIDENT. Connect is a whole install: run over a live
     sandbox it used to remove the container and start the stock image in its place, with none of what the sandbox was
     (its logins volume, its dev mounts, its web origin, its device), and -y skipped the one question (2026-10-07). */
+    let presences = [
+        docker::container_presence(&container),
+        docker::container_presence(&parked),
+    ];
+    if let Some(why) = presences.iter().find_map(docker::Presence::unknown) {
+        bail!("docker did not answer whether {slug} is already on this device ({why}), so nothing was set up. Run it again once docker answers.");
+    }
     let replacing = match existing(
-        docker::container_exists(&container) || docker::container_exists(&parked),
+        presences.iter().any(docker::Presence::exists),
         args.replace,
         args.yes,
         || {
@@ -945,7 +952,7 @@ impl Replacing {
     fn take(slug: &str, container: &str, parked: &str) -> Result<Replacing> {
         let held = lock::hold_for_person(slug)?;
         // A recreate that died with the sandbox parked left the name empty: the parked container is the sandbox.
-        if !docker::container_exists(container) {
+        if docker::container_absent(container) {
             docker::quiet(&["rename", parked, container]);
         }
         crate::record::read(slug)?;

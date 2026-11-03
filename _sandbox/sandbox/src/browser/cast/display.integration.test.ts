@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
-import { presenceOf } from "./display.js";
+import { displayAnswers, ensureDisplay, holdDisplay, presenceOf, releaseDisplay } from "./display.js";
 
 // Which display numbers the allocator may claim. Getting this wrong is silent: claiming a number a live server still
 // owns unlinks that server's socket, and every respawn then dies on "server already running" with the number gone for
@@ -77,5 +77,51 @@ describe("presenceOf", () => {
         await new Promise<void>((resolve) => child.once("exit", () => resolve()));
         expect(existsSync(path)).toBe(true);
         await expect(presenceOf(STALE)).resolves.toBe("free");
+    });
+});
+
+// browser_close ends Chromium and the session releases its display, but the @playwright/mcp backend lives on with
+// DISPLAY=:N and relaunches there on its next call: the X server must outlive the release while the backend holds it.
+describe("a held display", () => {
+    const KEY = `display-hold-test-${process.pid}`;
+    const gone = async (display: Parameters<typeof displayAnswers>[0]): Promise<boolean> => {
+        for (let waited = 0; waited < 3_000; waited += 50) {
+            if (!(await displayAnswers(display))) {
+                return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return false;
+    };
+
+    afterEach(() => releaseDisplay(KEY));
+
+    test("survives a release while held, and goes once the last hold does", async () => {
+        if (!existsSync("/usr/bin/Xvfb")) {
+            return;
+        }
+        const display = await ensureDisplay(KEY);
+        const first = holdDisplay(KEY);
+        const second = holdDisplay(KEY);
+        releaseDisplay(KEY);
+        expect(await displayAnswers(display)).toBe(true);
+        first();
+        first();
+        expect(await displayAnswers(display)).toBe(true);
+        second();
+        expect(await gone(display)).toBe(true);
+    });
+
+    test("a release nobody asked for while held stops nothing when the hold goes", async () => {
+        if (!existsSync("/usr/bin/Xvfb")) {
+            return;
+        }
+        const display = await ensureDisplay(KEY);
+        const hold = holdDisplay(KEY);
+        releaseDisplay(KEY);
+        // Wanted again (a login window on the same profile) after the deferred release: that release no longer stands.
+        expect(await ensureDisplay(KEY)).toEqual(display);
+        hold();
+        expect(await displayAnswers(display)).toBe(true);
     });
 });

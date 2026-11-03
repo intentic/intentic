@@ -221,7 +221,7 @@ export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 export const ToolKindSchema = z.enum(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "other"]);
 export type ToolKind = z.infer<typeof ToolKindSchema>;
 
-export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
+export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed", "interrupted"]);
 export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>;
 
 // A file a tool call touches. Workspace-root-relative, forward-slash; adapters normalize from the turn's cwd. `line` is

@@ -1,6 +1,6 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { planRevision } from "../../agent/prompt/plan-revision.js";
+import { planApproval, planRevision } from "../../agent/prompt/plan-revision.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { type TurnEnding, withEndingChecks } from "./ending-checks.js";
 
@@ -22,7 +22,7 @@ export interface PlanPhaseResult {
 }
 
 export type PlanPhase = (prompt: string, sessionId: string | undefined) => AsyncGenerator<AgentEvent, PlanPhaseResult>;
-export type ExecutePhase = (sessionId: string | undefined) => AsyncGenerator<AgentEvent, unknown>;
+export type ExecutePhase = (sessionId: string | undefined, prompt: string) => AsyncGenerator<AgentEvent, unknown>;
 
 // How a runtime runs each half of an emulated plan, and the planning phase's first message.
 export interface EmulatedPlan {
@@ -59,7 +59,7 @@ async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">
             return;
         }
         if (decision.approve) {
-            yield* checked(emulated.execute(sessionId));
+            yield* checked(emulated.execute(sessionId, planApproval(decision.feedback)));
             return;
         }
         prompt = planRevision(decision.feedback);

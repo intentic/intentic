@@ -68,17 +68,18 @@ test("a single path past the budget still gets a call of its own rather than bei
     expect(chunkPaths([huge, "a.ts"])).toEqual([[huge], ["a.ts"]]);
 });
 
-// commitOnly: diff check must be chunked, commit must use a pathspec file when paths exceed ARG_MAX.
+// commitOnly: the commit is a private index read from HEAD with the paths staged into it, never `commit --only`, which
+// re-reads them from disk under core.fileMode=false and drops a +x the staging recorded.
 
-// A git runner that answers rev-parse with `head`, records every call with args, and lets the caller decide which
-// diffs should report changes (by throwing on the diff check).
+// A git runner that answers rev-parse with `head`, records every call with its args and env, and lets the caller decide
+// whether the emptiness check reports changes (by throwing on it).
 const commitGit = (head: string, { diffThrows }: { diffThrows: boolean }) => {
-    const calls: string[][] = [];
-    const git: GitRunner = async (_dir, args) => {
+    const calls: { args: string[]; index: string | undefined }[] = [];
+    const git: GitRunner = async (_dir, args, env) => {
         if (args[0] === "rev-parse") {
             return { stdout: `${head}\n`, stderr: "" };
         }
-        calls.push([...args]);
+        calls.push({ args: [...args], index: env?.["GIT_INDEX_FILE"] });
         if (args.includes("--quiet") && diffThrows) {
             throw Object.assign(new Error("diff exit 1"), { code: 1 });
         }
@@ -87,39 +88,26 @@ const commitGit = (head: string, { diffThrows }: { diffThrows: boolean }) => {
     return { git, calls };
 };
 
-test("commitOnly chunks the diff check when paths exceed ARG_MAX", async () => {
-    // Generate enough 40 KiB paths that chunkPaths splits them into multiple runs.
+test("commitOnly stages the paths in both indexes and commits the private one whole, in chunks however many paths", async () => {
+    // Enough 40 KiB paths that chunkPaths splits them into several runs.
     const paths = Array.from({ length: 5 }, (_, i) => `${i}/${"p".repeat(40 * 1024)}`);
     const { git, calls } = commitGit("abc123", { diffThrows: true });
 
-    await commitOnly("/repo", paths, "chore: bulk", { name: "t", email: "t@t" }, git);
+    expect(await commitOnly("/repo", paths, "chore: bulk", { name: "t", email: "t@t" }, git)).toBe(true);
 
-    // The diff call should be chunked — only the first chunk needs to return (breaks early on diff).
-    const diffCalls = calls.filter((args) => args.includes("--quiet"));
-    expect(diffCalls.length).toBe(1);
-
-    // The commit call should use --pathspec-from-file since paths don't fit one argv.
-    const commitCalls = calls.filter((args) => args.includes("commit"));
-    expect(commitCalls.length).toBe(1);
-    const commitArgs = commitCalls[0]!;
-    expect(commitArgs.some((arg) => arg.startsWith("--pathspec-from-file="))).toBe(true);
-    expect(commitArgs).toContain("--pathspec-file-nul");
-});
-
-test("commitOnly uses inline paths when they fit a single argv", async () => {
-    const paths = ["src/a.ts", "src/b.ts"];
-    const { git, calls } = commitGit("abc123", { diffThrows: true });
-
-    await commitOnly("/repo", paths, "chore: small", { name: "t", email: "t@t" }, git);
-
-    // Small path list: commit should use -- paths directly, not a pathspec file.
-    const commitCalls = calls.filter((args) => args.includes("commit"));
-    expect(commitCalls.length).toBe(1);
-    const commitArgs = commitCalls[0]!;
-    expect(commitArgs).toContain("--");
-    expect(commitArgs).toContain("src/a.ts");
-    expect(commitArgs).toContain("src/b.ts");
-    expect(commitArgs.some((arg) => arg.startsWith("--pathspec-from-file="))).toBe(false);
+    const adds = calls.filter(({ args }) => args[0] === "add");
+    const ownAdds = adds.filter(({ index }) => index === undefined);
+    const privateAdds = adds.filter(({ index }) => index !== undefined);
+    expect(ownAdds.length).toBe(privateAdds.length);
+    expect(ownAdds.length).toBeGreaterThan(1);
+    expect(calls.filter(({ args }) => args.includes("--quiet")).map(({ index }) => index !== undefined)).toEqual([true]);
+    const read = calls.find(({ args }) => args[0] === "read-tree");
+    expect(read?.args).toEqual(["read-tree", "abc123"]);
+    const commits = calls.filter(({ args }) => args.includes("commit"));
+    expect(commits).toHaveLength(1);
+    expect(commits[0]?.index).toBe(read?.index);
+    expect(commits[0]?.args.slice(-4)).toEqual(["commit", "-q", "-m", "chore: bulk"]);
+    expect(commits[0]?.args).not.toContain("--only");
 });
 
 test("commitOnly returns false when the diff check shows no changes", async () => {

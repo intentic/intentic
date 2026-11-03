@@ -279,7 +279,8 @@ const ACCOUNT_MOVED = {
 const handedOffLine = (params: Extract<SandboxNotice, { code: "handedOff" }>["params"]): string => {
     const { mode, tokens, from, model } = params;
     if (params.fellBack === true) {
-        return mode === `trim` ? t(`chat.sandboxNotice.handedOff.trimFellBack`) : t(`chat.sandboxNotice.handedOff.summaryFellBack`);
+        const line = mode === `trim` ? t(`chat.sandboxNotice.handedOff.trimFellBack`) : t(`chat.sandboxNotice.handedOff.summaryFellBack`);
+        return params.reason === undefined ? line : `${line} ${t(`chat.sandboxNotice.handedOff.reason`, { reason: params.reason })}`;
     }
     if (mode === `carry`) {
         return tokens === undefined ? t(`chat.sandboxNotice.handedOff.carry`) : t(`chat.sandboxNotice.handedOff.carrySized`, { tokens });

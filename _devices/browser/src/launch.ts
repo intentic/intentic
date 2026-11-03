@@ -175,8 +175,11 @@ const findBrowser = async (platform: NodeJS.Platform = process.platform): Promis
     );
 
 // `--remote-debugging-port=0` has the browser pick a free port and write it, with its own target's path, into the
-// profile (ACTIVE_PORT_FILE): a fixed port could already be anybody's. The rest suppress a person-like UI (crash-restore
-// prompt, first-run tour, default-browser check).
+// profile (ACTIVE_PORT_FILE): a fixed port could already be anybody's. The next suppress a person-like UI (crash-restore
+// prompt, first-run tour, default-browser check). The last two keep rendering at full speed while the owner's own windows
+// cover this one (2026-11-03): Chrome otherwise stops drawing an occluded window and throttles a background renderer, so
+// a screenshot came back stale and a frame measurement timed nothing. Nothing here touches the GPU: the page renders on
+// the device's own, with Chrome's own watchdog, which is the point of measuring here.
 const flags = (binary: string, url: string | undefined): string[] => [
     "--remote-debugging-port=0",
     `--user-data-dir=${profileDir(binary)}`,
@@ -184,6 +187,8 @@ const flags = (binary: string, url: string | undefined): string[] => [
     "--no-default-browser-check",
     "--disable-session-crashed-bubble",
     "--restore-last-session=false",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
     ...(url === undefined ? [] : [url]),
 ];
 

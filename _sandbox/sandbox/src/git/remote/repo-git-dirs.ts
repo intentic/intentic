@@ -1,7 +1,7 @@
 import { cp, lstat, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { defaultGit, type GitRunner, persistGitDurability } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { freeGitDirFor } from "../../workspace/layout/git-dir-owners.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
@@ -88,7 +88,7 @@ const relocateOne = async (repo: string, repos: readonly string[], workspace: Wo
     logger.info({ repo, target }, "git dirs: relocated in-tree git dir off the workspace root");
 };
 
-// Converges every repo onto an out-of-tree git dir, unpinned, non-bare, mode-blind. Best-effort: one repo's failure
+// Converges every repo onto an out-of-tree git dir, unpinned, non-bare, mode-blind, and syncing its writes to disk. Best-effort: one repo's failure
 // costs only its own isolation, never the boot; repairs run on every repo so a stale pin can't persist.
 export const ensureRepoGitDirs = async (
     workspace: WorkspacePaths,
@@ -109,6 +109,9 @@ export const ensureRepoGitDirs = async (
         );
         await ignoreFileMode(join(workspace.root, repo), git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: could not persist core.fileMode=false, a terminal's git may see mode-only edits"),
+        );
+        await persistGitDurability(join(workspace.root, repo), git).catch((err) =>
+            logger.warn({ err, repo }, "git dirs: could not persist core.fsync, a terminal's git writes may not survive a host crash"),
         );
     }
 };

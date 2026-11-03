@@ -51,7 +51,8 @@ import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../../tools/agent
 import { sessionOfShell, terminalHelpServer } from "../../../terminal/terminal-help.js";
 import { EventQueue } from "../event-queue.js";
 import { insideRel } from "@intentic/base/contained";
-import { planRevision } from "../../prompt/plan-revision.js";
+import { planApprovalContext, type PlanApprovalContext } from "./planning/approval.js";
+import { planApprovalDecision } from "./planning/plan-decision.js";
 import { trialUnavailableFrame } from "../frames/error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../../providers/agent-request.js";
 import { harnessEnv } from "../../providers/harness-credentials.js";
@@ -473,6 +474,7 @@ const baseOptions = (
     push: (event: AgentEvent) => void,
     // Whether nothing of the turn is writing to its checkout (turnQuiet), for the mid-turn catch-up.
     quiet: () => Promise<boolean>,
+    approval: PlanApprovalContext,
 ): OauthRecoveryOptions => {
     // This turn's outside-content bit, set once here; the wrap hook sets it, the gate reads it per command.
     const taint = createTurnTaint(request.policy.outsideWake);
@@ -502,6 +504,7 @@ const baseOptions = (
         // Each callback timed for perf.jsonl (hook-timing.ts) when the turn says where to report.
         hooks: timedHooks(
             mergeHooks(
+                approval.hooks,
                 // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
                 // boilerplate.
                 commandGateHooks({
@@ -774,39 +777,16 @@ const permissionGate = (
     prose: TurnProse,
     // The posture as the SESSION holds it, which the CLI moves too, not only this gate (claude-code-stream.ts).
     posture: TurnPosture,
+    approval: PlanApprovalContext,
 ): CanUseTool => {
-    // The plan card: raised from the turn's latest prose, answered by the owner.
-    // Raised whoever started the turn: an unattended turn's plan waits for the owner's answer like any other card.
-    const decidePlan = async (input: Record<string, unknown>): Promise<PermissionResult> => {
-        const card = planRequest(documents, prose);
-        // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
-        if (card === undefined) {
-            return {
-                behavior: "deny",
-                message: "Write the complete plan in your response, then call ExitPlanMode again.",
-            };
-        }
-        const { id, wait } = request.hooks.cards.create("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
-        push({ kind: "plan", requestId: id, ...card });
-        const { reply, resolved } = await wait(request.signal);
-        push(resolved);
-        if (!reply.approve) {
-            // Framed as a rejection, so notes that read like consent ("proceed…") are not taken as leave to execute.
-            return { behavior: "deny", message: planRevision(reply.feedback) };
-        }
-        // Setting the mode on the session is what actually moves the SDK out of plan mode.
+    const decidePlan = planApprovalDecision(request, push, () => planRequest(documents, prose), async (feedback) => {
+        approval.accept(feedback);
         posture.mode = POST_PLAN_MODE;
         push({ kind: "mode", mode: POST_PLAN_MODE });
-        // Rebase before the agent builds on the plan, so it isn't working against a moved tree; the agent isn't
-        // told.
+        // Rebase before execution builds on the approved plan.
         await syncOnAnswer(conversations, request, push, shell, true);
-        return {
-            behavior: "allow",
-            updatedInput: input,
-            updatedPermissions: [{ type: "setMode", mode: POST_PLAN_MODE, destination: "session" }],
-            decisionClassification: "user_temporary",
-        };
-    };
+        return POST_PLAN_MODE;
+    });
     // The per-tool card: the turn parks here until somebody presses a button.
     const askOwner = async (toolName: string, input: Record<string, unknown>, options: Parameters<CanUseTool>[2]): Promise<PermissionResult> => {
         const { id, wait } = request.hooks.cards.create("permission", {
@@ -907,7 +887,7 @@ export async function* runAgent(
     const permissionMode: PermissionMode = request.policy.permissionMode ?? "bypassPermissions";
     // One posture for the turn, seeded with the mode it launched in: the stream writes every move the CLI makes onto
     // it, the gate decides on it.
-    const posture: TurnPosture = { mode: permissionMode };
+    const posture: TurnPosture & { approval: PlanApprovalContext } = { mode: permissionMode, approval: planApprovalContext() };
     const tmuxEnabled = tmuxRunEnabled();
     // Read after the SDK copy is pinned, since the intentic base is cut from that copy's own preset.
     const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(tmuxEnabled)), request.spec.cwd);
@@ -926,7 +906,7 @@ export async function* runAgent(
     const writing = new Map<string, RequestDocument>();
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, turnQuiet(conversations, request, shell)),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, turnQuiet(conversations, request, shell), posture.approval),
         // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
         // omitted.
         systemPrompt,
@@ -980,7 +960,7 @@ export async function* runAgent(
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(conversations, request, push, shell, documents, prose, posture),
+        canUseTool: permissionGate(conversations, request, push, shell, documents, prose, posture, posture.approval),
         ...profileOptions(request),
     };
 

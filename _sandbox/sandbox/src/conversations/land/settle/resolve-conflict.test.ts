@@ -1,10 +1,10 @@
 import { isLandConflict } from "@intentic/sandbox-contract/events/land-conflict";
 import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { unstubbed } from "@intentic/testing";
-import type { Services } from "../../composition.js";
-import { fakeTurns } from "../../seams/turn-starter.testing.js";
-import { conversationEntry } from "../registry/agents-store.testing.js";
-import { resolveHomeConflict } from "./home-conflict.js";
+import type { Services } from "../../../composition.js";
+import { fakeTurns } from "../../../seams/turn-starter.testing.js";
+import { conversationEntry } from "../../registry/agents-store.testing.js";
+import { resolveConflictNow } from "./resolve-conflict.js";
 
 const diverged: LandConflict[] = [{ repo: "root", clean: 2, mainBranch: "main", paths: [{ path: "src/app.ts", reason: "diverged" }] }];
 const theirsOnly: LandConflict[] = [{ repo: "root", clean: 0, paths: [{ path: "notes.md", reason: "workspace" }] }];
@@ -19,11 +19,12 @@ const servicesFor = (home: boolean) => {
     return { fake, services };
 };
 
-// A home's person only chats with it: its clash goes back to the home as the sandbox's resolve turn, never to them.
-describe("a home's land that clashed", () => {
+// A home's person only chats with it, and an auto-landing conversation's person pressed nothing: either clash goes
+// back to the conversation as the sandbox's resolve turn, never to them.
+describe("a land that clashed, handed back at once", () => {
     test("is handed back to the home as the sandbox's resolve turn", async () => {
         const { fake, services } = servicesFor(true);
-        await resolveHomeConflict(services, "home-1", diverged);
+        await resolveConflictNow(services, "home-1", diverged);
         expect(fake.started).toHaveLength(1);
         const [turn] = fake.started;
         expect(turn).toMatchObject({ conversationId: "home-1", errand: "land-conflict", speaker: { kind: "sandbox", source: "home-land" } });
@@ -34,13 +35,14 @@ describe("a home's land that clashed", () => {
 
     test("asks nothing when only the person's own edits block it, which no rebase reaches", async () => {
         const { fake, services } = servicesFor(true);
-        await resolveHomeConflict(services, "home-1", theirsOnly);
+        await resolveConflictNow(services, "home-1", theirsOnly);
         expect(fake.started).toHaveLength(0);
     });
 
-    test("asks nothing of a conversation that is not a home: its person presses Resolve", async () => {
+    test("is handed to any other conversation its caller sends, as the auto-land's resolve turn", async () => {
         const { fake, services } = servicesFor(false);
-        await resolveHomeConflict(services, "home-1", diverged);
-        expect(fake.started).toHaveLength(0);
+        await resolveConflictNow(services, "home-1", diverged);
+        expect(fake.started).toHaveLength(1);
+        expect(fake.started[0]).toMatchObject({ errand: "land-conflict", speaker: { kind: "sandbox", source: "auto-land" } });
     });
 });

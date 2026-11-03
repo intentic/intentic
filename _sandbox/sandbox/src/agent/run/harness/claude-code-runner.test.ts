@@ -577,7 +577,8 @@ const decide = async (
     turn: Parameters<typeof runAgent>[1],
     call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[]; prose?: string },
     answer: (event: DecidableCard) => AgentReply,
-): Promise<{ result: PermissionResult; card: DecidableCard; frames: AgentEvent[] }> => {
+): Promise<{ result: PermissionResult; card: DecidableCard; frames: AgentEvent[]; approvalContext: string | undefined }> => {
+    let approvalContext: string | undefined;
     let result: PermissionResult | null | undefined;
     let card: DecidableCard | undefined;
     const frames: AgentEvent[] = [];
@@ -592,6 +593,19 @@ const decide = async (
             message: { content: [{ type: "tool_use", id: `call-${call.tool}`, name: call.tool, input: call.input ?? {} }] },
         } as SDKMessage;
         result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
+        if (result.behavior === "allow" && call.tool === "ExitPlanMode") {
+            for (const matcher of args.options.hooks?.PostToolUse ?? []) {
+                if (matcher.matcher !== "^ExitPlanMode$") {
+                    continue;
+                }
+                for (const hook of matcher.hooks) {
+                    const output = await hook({ hook_event_name: "PostToolUse", tool_name: call.tool, tool_input: {}, tool_response: {}, tool_use_id: "call-ExitPlanMode", session_id: "s", transcript_path: "", cwd: WORKSPACE_ROOT }, "call-ExitPlanMode", { signal: turn.signal });
+                    if ("hookSpecificOutput" in output && output.hookSpecificOutput?.hookEventName === "PostToolUse") {
+                        approvalContext = output.hookSpecificOutput.additionalContext;
+                    }
+                }
+            }
+        }
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
     for await (const event of runAgent(actors, turn, query)) {
@@ -601,7 +615,7 @@ const decide = async (
             cards.resolve(answer(event));
         }
     }
-    return { result: result!, card: card!, frames };
+    return { result: result!, card: card!, frames, approvalContext };
 };
 
 test("'always' grants the whole tool for the session, alongside whatever the SDK suggested", async () => {
@@ -3227,4 +3241,15 @@ test("a turn that ends unstopped leaves nothing listening on its signal", async 
     const turn = new AbortController();
     await collect({ ...request, signal: turn.signal }, fakeQuery({ type: "result", subtype: "success", session_id: "s" }));
     expect(getEventListeners(turn.signal, "abort")).toHaveLength(0);
+});
+
+
+test("an approval carries its notes to Claude before releasing the plan gate", async () => {
+    const { result, approvalContext } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "plan" as const } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
+        (event) => ({ kind: "plan", requestId: event.requestId, approve: true, feedback: "Use the v2 endpoint" }),
+    );
+    expect(result.behavior).toBe("allow");
+    expect(approvalContext).toBe("The plan is approved. Follow these instructions while executing it:\nUse the v2 endpoint");
 });

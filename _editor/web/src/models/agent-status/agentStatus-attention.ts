@@ -137,17 +137,22 @@ export const landFailureCode = (reason: string, code?: string): string | undefin
     if (/E2BIG|argument list too long/iu.test(reason)) { return `too_many_paths`; }
     if (/maxBuffer|ERR_CHILD_PROCESS_STDIO_MAXBUFFER/iu.test(reason)) { return `output_limit`; }
     if (/the forker exited/iu.test(reason)) { return `forker_exited`; }
+    // allow(dependency-text): git's words for damaged storage (a crash zeroed an object), as @intentic/base/git's isGitCorruption reads them.
+    if (/\bis corrupt\b|unable to unpack [0-9a-f]+|inflate: data stream error|object file \S+ is empty|index file corrupt/iu.test(reason)) { return `repo_corrupt`; }
     return code;
 };
 
+// Worth another try: a git process that stopped, and damaged storage, which the sandbox repairs by itself as it sees it.
+const RETRYABLE = new Set([`forker_exited`, `repo_corrupt`]);
 export const retryLand = (agent: AgentStanding): boolean =>
-    landFailure(agent) !== undefined && landFailureCode(agent.landFailure?.reason ?? agent.failure ?? ``, agent.landFailure?.code) === `forker_exited`;
+    landFailure(agent) !== undefined && RETRYABLE.has(landFailureCode(agent.landFailure?.reason ?? agent.failure ?? ``, agent.landFailure?.code) ?? ``);
 
 const internalReason = (reason: string, code?: string): string | undefined => {
     switch (landFailureCode(reason, code)) {
         case `forker_exited`: return t(`agents.agentStatus.landProcessStopped`);
         case `too_many_paths`: return t(`agents.agentStatus.landTooManyPaths`);
         case `output_limit`: return t(`agents.agentStatus.landOutputLimit`);
+        case `repo_corrupt`: return t(`agents.agentStatus.landRepoCorrupt`);
         default: return undefined;
     }
 };

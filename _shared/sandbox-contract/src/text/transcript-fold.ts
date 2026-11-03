@@ -1,10 +1,10 @@
-import { cancelledRequests, settledRequests } from "../policy/request-status.js";
+import { interruptAssistant } from "./transcript-interruption.js";
+import { settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
 import { drawInline, type InlineEvent, supersedeEarlier } from "./transcript-inline.js";
 import {
     REQUEST_FIELDS,
     holdsRequest,
-    isAwaitingDecision,
     type TranscriptRequests,
     type TranscriptPatch,
     type TranscriptRow,
@@ -14,7 +14,7 @@ import {
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { isStartingFrame, startingRow } from "./notice-rows.js";
 import { isLandConflict } from "../events/land-conflict.js";
-import { turnedAwayCode } from "../policy/turned-away.js";
+import { turnedAwayCode } from "../policy/failure-codes.js";
 import { errorRow, RENEWAL_WITHDRAWN, RENEWING } from "../events/failure-rows.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
@@ -60,7 +60,7 @@ const resultWords = (tool: TranscriptTool): string =>
         .join("\n");
 
 // Whether a call's status is final: the moment it turns so is when its result arrived.
-const ended = (status: TranscriptTool["status"]): boolean => status === "completed" || status === "failed";
+const ended = (status: TranscriptTool["status"]): boolean => status === "completed" || status === "failed" || status === "interrupted";
 
 // `at` is the fold's clock reading as the call is seen, absent for a fold without one; a call that arrives already
 // finished started and ended in that same moment, as far as anyone here can tell.
@@ -493,8 +493,7 @@ export class TranscriptFold {
     finish(ending: TurnEnding): TranscriptPatch[] {
         const patches = this.closeBubble();
         for (const [index, row] of this.rows.entries()) {
-            if (row.role === "assistant" && isAwaitingDecision(row)) {
-                Object.assign(row, cancelledRequests(row));
+            if (interruptAssistant(row, this.now?.())) {
                 patches.push(this.replace(index));
             }
         }

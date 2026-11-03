@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { fileOverrunCommand, noteJobShell, openBackgroundJob } from "../../../tools/jobs/background-jobs.js";
+import { openSpawnedChild, settleSpawnedChild } from "../../subagents.js";
 import { subagentWaitServer } from "../subagent-wait.js";
 
 // The `stop` tool over real job dirs (made in the temp dir, hence an integration test); the rest of the server's tools
@@ -87,4 +88,27 @@ test("stop ends a background job by the sandbox's id or by the CLI's, and says w
     await expect(said("bnobody")).resolves.toMatchObject({ ok: false, outcome: "unknown" });
     rmSync(ran, { recursive: true, force: true });
     rmSync(backgrounded.dir, { recursive: true, force: true });
+});
+
+
+test("targets accepts a mix of Bash job ids and children and returns both endings", async () => {
+    const { conversations } = memoryFleet();
+    const call = await connect(subagentWaitServer({ conversationId: "mixed", conversations, signal: new AbortController().signal }));
+    const job = openBackgroundJob({ conversationId: "mixed", profile: {}, conversations }, { command: "build", session: "agent-mixed", toolUseId: "build-call" });
+    if (job === undefined) {
+        throw new Error("job not filed");
+    }
+    try {
+        noteJobShell(conversations, "build-call", "bash-build");
+        openSpawnedChild({ conversationId: "mixed", conversations, subagentsDir: undefined }, { id: "child", description: "fix" });
+        const waiting = call("tools/call", { name: "wait", arguments: { targets: ["bash-build", "child"], timeoutSeconds: 1 } });
+        writeFileSync(join(job.dir, "status"), "0\n");
+        settleSpawnedChild(conversations, "child", { status: "completed", report: "fixed" });
+        const reply = await waiting;
+        expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([
+            { outcome: "finished", agents: [{ id: "child", status: "completed" }], jobs: [{ id: "bash-build", exitCode: 0, running: false }] },
+        ]);
+    } finally {
+        rmSync(job.dir, { recursive: true, force: true });
+    }
 });

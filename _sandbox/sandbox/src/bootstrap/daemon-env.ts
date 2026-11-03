@@ -6,6 +6,7 @@ import type { Config } from "../env.config.js";
 import { createLogger } from "../logger.js";
 import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
 import { adoptDaemonGeneration, DAEMON_ONLY_ENV } from "../seams/workload-stamp.js";
+import { forgetGpuLibraryPath } from "../hosts/gpu/gpu-state.js";
 import { claimBootMarker } from "../system/boot/restarts/boot-marker.js";
 import { recordBoot } from "../system/boot/restarts/boot-history.js";
 import { fileRestartResume } from "../system/restart-resume.js";
@@ -60,6 +61,8 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
     // (system/boot/generation-sweep.ts). Fresh each boot, whatever this process inherited.
     adoptDaemonGeneration();
     forgetCompileCacheEnv();
+    // Nothing this daemon starts lands on the host GPU unasked; `gpu-run` hands it to a command that asks (2026-11-03).
+    forgetGpuLibraryPath();
     if (!traits.sharedTmux) {
         // Defaulted, not forced, so an operator can override.
         process.env["INTENTIC_AGENT_TMUX"] ??= "0";

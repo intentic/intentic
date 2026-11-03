@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# gpu-run [--timeout DURATION] [--] <command> [args...]   run one command with this sandbox's GPU
+# gpu-run --status                                         say whether the GPU is here, and whether GPU work is paused
+# gpu-run --if-available [--] <command> [args...]          (the daemon's, for settings gpu.shells = "all") the GPU when
+#                                                          it is here and not paused, else the command runs without it
+#
+# WHY A WRAPPER (2026-11-03). On a Windows PC a GPU sandbox's GPU is the owner's DISPLAY GPU, shared through WSL: the
+# device node /dev/dxg, and the driver's user-mode libraries in /usr/lib/wsl/lib, where Mesa's d3d12 driver (OpenGL
+# and Vulkan on WSL) and CUDA find them. The engine used to put that directory on every process's LD_LIBRARY_PATH,
+# so every browser, test run and shell in the sandbox rendered on the owner's screen's GPU without asking (65
+# conversations on rog did), and on 2026-11-02 a browser started with GPU flags hung it: LiveKernelEvent 0x141, and
+# the PC powered off. Now nothing gets the libraries unless it asks, and this is how a command asks. It is the whole
+# GPU, unthrottled: the same device and libraries, with no wall limit unless one is set (settings gpu.timeoutMinutes
+# or --timeout).
+#
+# WHAT IT REFUSES. A sandbox with no GPU (exit 69), with what to do. GPU work while it is paused (exit 75): the daemon
+# pauses it when the computer the sandbox runs on reported a GPU reset, and only the owner resumes it. A browser
+# flag that overrides the browser's own GPU safety list (exit 64): that is exactly the crash above, and a web page
+# that needs real GPU rendering belongs in the owner's own browser on their device.
+#
+# The daemon keeps what it knows in a small state file (src/gpu/gpu-state.ts): one `key=value` per line. No file
+# (a dev run, a daemon that has not started) is nothing paused and no limit.
+set -u
+
+STATE_FILE="${INTENTIC_GPU_STATE:-/run/intentic/gpu-state}"
+# The device nodes a GPU sandbox has: WSL's shared GPU, or a Linux host's NVIDIA control node.
+GPU_DEVICES="${INTENTIC_GPU_DEVICES:-/dev/dxg /dev/nvidiactl}"
+# Where the engine's CDI spec says the WSL driver libraries are (engine/rootfs/intentic-engine); WSL's own place
+# otherwise, for an engine older than the variable.
+WSL_LIBS="${INTENTIC_GPU_LIBRARY_PATH:-/usr/lib/wsl/lib}"
+
+say() { printf 'gpu-run: %s\n' "$*" >&2; }
+
+usage() {
+    say "usage: gpu-run [--timeout DURATION] [--] <command> [args...]   (or gpu-run --status)"
+    exit 2
+}
+
+# The device node this sandbox has, or nothing. WSL's counts only with its libraries mounted beside it: a privileged
+# container sees every device node of the VM, /dev/dxg included, and without the GPU switch nothing can drive it.
+gpu_device() {
+    local device
+    for device in $GPU_DEVICES; do
+        case "$device" in */dxg) [ -d "$WSL_LIBS" ] || continue ;; esac
+        if [ -e "$device" ]; then
+            printf '%s' "$device"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# One value of the state file, empty when it or the key is missing.
+state() {
+    local key value
+    [ -r "$STATE_FILE" ] || return 0
+    while IFS='=' read -r key value; do
+        if [ "$key" = "$1" ]; then
+            printf '%s' "$value"
+            return 0
+        fi
+    done <"$STATE_FILE"
+}
+
+no_gpu() {
+    say "this sandbox has no GPU: its GPU switch is off, or the computer it runs on has no NVIDIA GPU it can pass through."
+    say "To ask the owner for it: capabilities request docker --set gpu=on --why \"<what needs the GPU>\" (it rebuilds the sandbox)."
+    exit 69
+}
+
+paused() {
+    say "GPU work is paused: $1"
+    say "The owner resumes it in the sandbox's Overview (GPU), or by clearing gpu.pausedFor in .intentic/config/settings.json. Until then, run the work without the GPU, or ask the owner."
+    exit 75
+}
+
+# The environment the GPU needs: the WSL driver libraries first on the library path (only where the device is WSL's).
+gpu_env() {
+    if [ "${1##*/}" = "dxg" ]; then
+        export LD_LIBRARY_PATH="$WSL_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+    export INTENTIC_GPU_RUN=1
+}
+
+# A browser flag that switches off the browser's own judgement of the GPU.
+unsafe_flag() {
+    case "$1" in
+        --ignore-gpu-blocklist | --ignore-gpu-blacklist | --enable-unsafe-webgpu | --disable-gpu-watchdog | --disable-gpu-sandbox) return 0 ;;
+    esac
+    return 1
+}
+
+status() {
+    local device reason
+    if ! device="$(gpu_device)"; then
+        echo "no GPU in this sandbox"
+        exit 0
+    fi
+    echo "GPU: $device"
+    [ "${device##*/}" = "dxg" ] && echo "This is the owner's display GPU, shared through WSL: a GPU hang freezes their Windows."
+    reason="$(state paused)"
+    if [ -n "$reason" ]; then
+        echo "paused: $reason"
+    else
+        echo "available through gpu-run"
+    fi
+    local shells minutes
+    shells="$(state shells)"
+    echo "agent commands: ${shells:-on-request} (on-request: only what runs through gpu-run; all: every command)"
+    minutes="$(state timeout_minutes)"
+    case "$minutes" in '' | 0) echo "wall limit: none" ;; *) echo "wall limit: ${minutes}m" ;; esac
+    exit 0
+}
+
+timeout=""
+optional=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --status) status ;;
+        --if-available) optional=1; shift ;;
+        --timeout) [ $# -ge 2 ] || usage; timeout="$2"; shift 2 ;;
+        --timeout=*) timeout="${1#--timeout=}"; shift ;;
+        -h | --help) usage ;;
+        --) shift; break ;;
+        -*) say "unknown option $1"; usage ;;
+        *) break ;;
+    esac
+done
+[ $# -gt 0 ] || usage
+
+if [ -n "$optional" ]; then
+    # Every command an agent runs, by the owner's choice: the GPU when it may be had, the command itself either way.
+    if device="$(gpu_device)" && [ -z "$(state paused)" ]; then
+        gpu_env "$device"
+    fi
+    exec "$@"
+fi
+
+device="$(gpu_device)" || no_gpu
+reason="$(state paused)"
+[ -z "$reason" ] || paused "$reason"
+for arg in "$@"; do
+    if unsafe_flag "$arg"; then
+        say "refusing $arg: it overrides the browser's GPU safety list, and on this sandbox the GPU is the owner's display GPU, where a hang freezes their whole computer (a browser started that way powered rog off on 2026-11-02)."
+        say "Render pages that need a real GPU in the owner's own browser on their device (its browser tools), and let a browser here run on its software renderer."
+        exit 64
+    fi
+done
+gpu_env "$device"
+
+[ -n "$timeout" ] || timeout="$(state timeout_minutes)"
+case "$timeout" in
+    '' | 0 | 0m) exec "$@" ;;
+esac
+# A bare number is minutes, like the setting; otherwise timeout(1)'s own units (s, m, h, d).
+case "$timeout" in
+    *[!0-9]*) ;;
+    *) timeout="${timeout}m" ;;
+esac
+if ! [[ "$timeout" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
+    say "--timeout takes a number of minutes or a duration like 90s, 20m, 2h; got '$timeout'"
+    exit 2
+fi
+# Asked to end first, then forced half a minute later; 124 is timeout(1)'s own "it ran out".
+exec timeout --kill-after=30s "$timeout" "$@"

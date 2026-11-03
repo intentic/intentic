@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { z } from "zod";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
-import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RoutedScreenshot } from "./browser-router.js";
+import { opt } from "../../opt.js";
+import { type BackendSupport, type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RoutedScreenshot } from "./browser-router.js";
 import { callWebmcp, WEBMCP_CALL_TOOL, webmcpTargetOf } from "./webmcp-call.js";
 
 // Exercise routing against canary child processes: list without prepare, inject/strip account, prepare once and reject ungranted owners cleanly.
@@ -84,11 +85,13 @@ process.stdin.on("data", (chunk) => {
             // Text that shows on the third look; a wait still carrying \`time\` would have slept it first, upstream.
             waits += 1;
             const args = msg.params.arguments ?? {};
-            if (args.time !== undefined) reply({ content: [{ type: "text", text: "slept " + args.time + "s first" }] });
+            if (args.text === "Hang") { /* never answered, as a text that never shows under a long action timeout */ }
+            else if (args.time !== undefined) reply({ content: [{ type: "text", text: "slept " + args.time + "s first" }] });
             else if (args.text === "Saved" && waits >= 3) reply({ content: [{ type: "text", text: "### Result\\nWaited for Saved (look " + waits + ")" }] });
             else reply({ content: [{ type: "text", text: "### Error\\nTimeoutError: locator.waitFor: Timeout 5000ms exceeded." }], isError: true });
         }
         else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: "echo:" + marker + ":" + JSON.stringify(msg.params?.arguments ?? {}) }] });
+        else if (msg.method === "notifications/cancelled") fs.writeFileSync(marker + ".cancelled", String(msg.params?.requestId));
         else if (msg.id !== undefined) reply({});
     }
 });
@@ -114,7 +117,7 @@ afterEach(async () => {
     }
 });
 
-const startRouter = async (soleOwner?: string): Promise<Harness> => {
+const startRouter = async (soleOwner?: string, support?: BackendSupport): Promise<Harness> => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-router-test-"));
     const canaryPath = join(dir, "canary.cjs");
     await writeFile(canaryPath, CANARY);
@@ -143,7 +146,12 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
                 prepares.push(owner);
                 const refusal = refusals.get(owner);
                 return refusal === undefined
-                    ? { command: process.execPath, args: [canaryPath, markers[owner] as string], env: { ...process.env } as Record<string, string> }
+                    ? {
+                          command: process.execPath,
+                          args: [canaryPath, markers[owner] as string],
+                          env: { ...process.env } as Record<string, string>,
+                          ...opt("support", support),
+                      }
                     : { refusal };
             },
             screenshotTaken: (shot) => screenshots.push(shot),
@@ -561,8 +569,90 @@ test("a wait for text with a time goes as the text wait alone, sent again until 
         params: { name: "browser_wait_for", arguments: { time: 0.001, text: "Never" } },
     });
     expect(resultOf(never).isError).toBe(true);
-    expect(resultOf(never).content[0]?.text).toContain("Timeout 5000ms exceeded");
+    expect(resultOf(never).content[0]?.text).toMatch(/Timeout \d+ms exceeded/);
     // A time alone is a pause, and goes on as asked.
     const pause = await rpc(harness.router, { jsonrpc: "2.0", id: 42, method: "tools/call", params: { name: "browser_wait_for", arguments: { time: 2 } } });
     expect(resultOf(pause).content[0]?.text).toBe("slept 2s first");
+});
+
+// The backend's action timeout is 30s now (software-rendered frames), so a text wait is cut off at its own time here.
+test("a timed text wait still running at its time is cancelled at the backend and answers as a timeout", async () => {
+    const harness = await startRouter("web");
+    await handshake(harness);
+    const started = Date.now();
+    const answer = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 50,
+        method: "tools/call",
+        params: { name: "browser_wait_for", arguments: { time: 0.3, text: "Hang" } },
+    });
+    // SAFETY: a tools/call answer the router builds carries a ToolResult.
+    const result = answer["result"] as ToolResult;
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('waiting for "Hang": Timeout 300ms exceeded');
+    expect(Date.now() - started).toBeLessThan(5_000);
+    // SAFETY: a sole-owner harness always has a marker for its one owner.
+    const cancelled = `${harness.markers["web"] as string}.cancelled`;
+    for (let waited = 0; !(await exists(cancelled)) && waited < 2_000; waited += 25) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(await exists(cancelled)).toBe(true);
+});
+
+// A browser_close ends Chromium, not the backend, which relaunches on the next call against the same X display: the
+// display is held for the backend's life, and a backend whose display died is replaced rather than called.
+test("a backend holds its support while it lives, and one whose support fell is replaced on the next call", async () => {
+    const holds: string[] = [];
+    // How many checks to come answer that the display died: the next one only.
+    let falls = 0;
+    const support: BackendSupport = {
+        hold: () => {
+            holds.push("hold");
+            return () => holds.push("release");
+        },
+        standing: async () => {
+            falls -= 1;
+            return falls < 0;
+        },
+    };
+    const harness = await startRouter("web", support);
+    await handshake(harness);
+    const probe = (id: number): Promise<Record<string, unknown>> =>
+        rpc(harness.router, { jsonrpc: "2.0", id, method: "tools/call", params: { name: "browser_probe", arguments: {} } });
+    await probe(60);
+    await probe(61);
+    expect(harness.prepares).toEqual(["web"]);
+    expect(holds).toEqual(["hold"]);
+
+    falls = 1;
+    // SAFETY: a tools/call answer the router relays carries the backend's ToolResult.
+    expect(((await probe(62))["result"] as ToolResult).content[0]?.text).toContain("echo:");
+    expect(harness.prepares).toEqual(["web", "web"]);
+    for (let waited = 0; holds.length < 3 && waited < 5_000; waited += 25) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    // The old backend let its hold go when its process went; the new one holds its own.
+    expect(holds.toSorted()).toEqual(["hold", "hold", "release"]);
+
+    harness.router.close();
+    for (let waited = 0; holds.length < 4 && waited < 5_000; waited += 25) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(holds.filter((entry) => entry === "release")).toHaveLength(2);
+});
+
+test("a file:// navigation is refused with the way to serve it, before any backend is started", async () => {
+    const harness = await startRouter("web");
+    await handshake(harness);
+    const answer = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 70,
+        method: "tools/call",
+        params: { name: "browser_navigate", arguments: { url: "file:///work/game/index.html" } },
+    });
+    // SAFETY: a refusal is a ToolResult the router builds.
+    const result = answer["result"] as ToolResult;
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("python3 -m http.server");
+    expect(harness.prepares).toEqual([]);
 });

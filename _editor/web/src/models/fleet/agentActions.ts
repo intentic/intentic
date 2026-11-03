@@ -399,6 +399,13 @@ export const copyAgentIgnored = async (id: string, repo: string, paths: readonly
     await sandboxRpc.agents.copyIgnored({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
+// A clone of its own a turn left in its copy (AgentSummary.reach.stranded): folded into the repository around it, or made
+// a workspace repository. `dropCommits` is the count the press showed, the daemon's proof the reader saw what folding drops.
+export const settleAgentClone = async (id: string, dir: string, action: `fold` | `adopt`, dropCommits?: number): Promise<void> => {
+    // Zero commits is nothing to drop: the daemon is asked plainly.
+    await sandboxRpc.agents.settleClone({ id, dir, action, dropCommits: dropCommits === 0 ? undefined : dropCommits });
+};
+
 // The card a press acts on, from whichever roster it came from.
 const cardAt = (id: string, at: AgentReach): (AgentStanding & { readonly run?: string }) | undefined =>
     at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id);

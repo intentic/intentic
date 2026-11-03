@@ -524,8 +524,9 @@ pub fn run(dry_run: bool, as_json: bool, auto: bool) -> Result<()> {
                     tally.busy.push(orphan.slug.clone());
                     continue;
                 };
-                // Looked at once more: a setup that made its volumes a moment ago has a container by now.
-                if docker::container_exists(&container_of(&orphan.slug)) {
+                // Looked at once more: a setup that made its volumes a moment ago has a container by now. Only docker's own
+                // "no such container" lets the volumes go; an engine that did not answer leaves them for the next sweep.
+                if !docker::container_absent(&container_of(&orphan.slug)) {
                     continue;
                 }
                 if trash::adopt_orphan(&orphan.slug) {
@@ -590,9 +591,19 @@ fn backups(dry_run: bool, known: &dyn Fn(&str) -> bool, tally: &mut Tally) {
     let trashed: Vec<String> = trash::list().into_iter().map(|entry| entry.slug).collect();
     let now = now_ms();
     for slug in held {
-        let live = docker::container_exists(&container_of(&slug))
-            || docker::container_exists(&parked_of(&slug));
-        let standing = if live {
+        let presences = [
+            docker::container_presence(&container_of(&slug)),
+            docker::container_presence(&parked_of(&slug)),
+        ];
+        let live = presences.iter().any(docker::Presence::exists);
+        // A container docker did not answer about may be the live sandbox: whose the backup is stays unknown, and kept.
+        let standing = if !live
+            && presences
+                .iter()
+                .any(|presence| presence.unknown().is_some())
+        {
+            Standing::Unknown
+        } else if live {
             match side::keeper(&slug) {
                 Keeper::Here => Standing::Ours,
                 Keeper::Unknown => Standing::Unknown,

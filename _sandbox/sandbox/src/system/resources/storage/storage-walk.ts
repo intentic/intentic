@@ -16,8 +16,8 @@ export interface WalkedFile {
 }
 
 export interface TreeVisitor<T> {
-    // What a folder's contents inherit from it, or `skip` to leave it unwalked.
-    readonly folder: (path: string, parent: T) => T | "skip";
+    // What a folder's contents inherit from it, or `skip` to leave it unwalked; a promise where answering reads the disk.
+    readonly folder: (path: string, parent: T) => T | "skip" | Promise<T | "skip">;
     readonly file: (file: WalkedFile, folder: T) => void;
     // Reported, never followed: a running browser's lock is a link to nowhere.
     readonly link?: (path: string, folder: T) => void;
@@ -81,7 +81,7 @@ export const walkTree = async <T>(root: string, context: T, visitor: TreeVisitor
         }
         // Another filesystem mounted here (a container's layer, a namespace's overlay) is not this volume's to count.
         if (stats.isDirectory() && stats.dev === top.dev) {
-            const next = visitor.folder(path, inherited);
+            const next = await visitor.folder(path, inherited);
             if (next !== "skip") {
                 pending.push({ dir: path, context: next });
             }

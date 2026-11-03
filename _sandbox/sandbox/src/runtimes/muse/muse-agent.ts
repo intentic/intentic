@@ -10,7 +10,7 @@ import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { opt } from "../../opt.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
-import { EXECUTE_PROMPT, PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "../decorators/plan-mode.js";
+import { PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "../decorators/plan-mode.js";
 import {
     DEFAULT_TURN_TIMEOUTS,
     EXPIRED,
@@ -484,10 +484,10 @@ export const createMuseAgent = (options: MuseAgentOptions = {}) => {
                 () => ({
                     prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
                     plan: (planPrompt) => runPhase(run, { prompt: planPrompt, images: [], planning: true }),
-                    async *execute() {
+                    async *execute(_sessionId, prompt) {
                         // Moves the mode as the Claude loop's approval does, so the composer's chip follows the turn out of planning.
                         yield { kind: "mode", mode: POST_PLAN_MODE };
-                        return yield* runPhase(run, { prompt: EXECUTE_PROMPT, images: [], planning: false });
+                        return yield* runPhase(run, { prompt, images: [], planning: false });
                     },
                 }),
                 () => runPhase(run, { prompt, images: attached.images, planning: false }),

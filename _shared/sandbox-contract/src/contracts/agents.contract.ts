@@ -6,6 +6,7 @@ import { AgentAssignSchema, AgentAutoLandSchema, AgentBreakPolicySchema, AgentFi
 import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
 import { AgentsAttentionSchema, AgentsListSchema, HomeConversationSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
+import { AgentCloneSchema } from "../schemas/git/clone.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
@@ -379,6 +380,17 @@ export const agentsContract = {
                 "Takes files the review lists as ignored and copies each to the same path in your tree, making the folders it needs and replacing a different file already there. Nothing is staged or committed, and the conversation's copy keeps its own. Refused while a turn is running, for a path that leaves the repository, and for a path that is not an ignored file the conversation wrote. A file your tree already holds as it is is left alone.",
         })
         .input(AgentIgnoredSchema)
+        .output(OkSchema),
+    // A turn that ran `git init` inside its copy left its work in a repository no land carries (TurnReach.stranded).
+    settleClone: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/clones/settle",
+            summary: "Fold a conversation's clone of its own into its repository, or make it a workspace repository",
+            description:
+                "Settles a repository the conversation created or cloned inside its own copy, which no land carries. `fold` removes the clone's `.git` so its files become ordinary work of the repository around it and land with the rest; a clone holding commits is folded only when `dropCommits` names their count, since that history goes. `adopt` moves the clone into your workspace at the same folder as a repository of its own, its `.git` and every file git does not ignore, and takes it out of the conversation's copy; refused where your workspace already has that folder. Refused while a turn is running or landing, and for a folder that is not a clone inside the conversation's copy.",
+        })
+        .input(AgentCloneSchema)
         .output(OkSchema),
     land: procedure
         .route({

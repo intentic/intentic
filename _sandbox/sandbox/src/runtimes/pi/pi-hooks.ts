@@ -5,6 +5,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { z } from "zod";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { WITHHELD, redactionHooks, withheld } from "../../agent/tools/agent-redaction.js";
+import { ShellResultTextSchema } from "../../agent/tools/agent-terminals.js";
 import { createShellLines } from "../decorators/shell-line.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { mcpServerOf, sealOutside } from "../../guard/outside-results.js";
@@ -51,7 +52,14 @@ type Content = z.infer<typeof ContentSchema>;
 
 // What the extension posts, as far as an answer reads it.
 const ToolCallSchema = z.object({ tool: z.string(), id: z.string().optional(), input: ToolInputSchema, cwd: z.string().optional() });
-const ToolResultSchema = z.object({ tool: z.string(), input: ToolInputSchema, content: ContentSchema, isError: z.boolean().optional(), cwd: z.string().optional() });
+const ToolResultSchema = z.object({
+    tool: z.string(),
+    id: z.string().optional(),
+    input: ToolInputSchema,
+    content: ContentSchema,
+    isError: z.boolean().optional(),
+    cwd: z.string().optional(),
+});
 
 // The fields of a call's input this module reads.
 const CommandSchema = z.object({ command: z.string() });
@@ -163,6 +171,8 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
         mask: false,
         // The first line through the panel's session puts it in the panel, as ACP's first terminal does.
         onPanel: (session) => live?.push({ kind: "terminal", session }),
+        // A line the panel returned still running is filed as a job the agent waits on (toolResult below).
+        jobs: request.hooks.backgroundJobs,
     });
     const shellLine = async (input: ToolInput, id: string, cwd: string): Promise<{ readonly refuse: string } | { readonly input: ToolInput }> => {
         const command = CommandSchema.safeParse(input).data?.command;
@@ -223,14 +233,20 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
         return notes.filter((note): note is string => note !== undefined);
     };
 
+    // A shell line the panel returned still running, filed as a job, with the id the agent waits on. Read before the mask:
+    // what tmux-run printed of it names no stored value.
+    const overrunOf = (name: string, id: string | undefined, content: Content): Promise<string | undefined> =>
+        name === "Bash" && id !== undefined ? shell.settle(id, ShellResultTextSchema.parse(content), request.signal) : Promise.resolve(undefined);
+
     const toolResult = async (payload: JsonValue): Promise<HookAnswer> => {
         const parsed = ToolResultSchema.safeParse(payload);
         if (!parsed.success) {
             return { content: [textBlock(WITHHELD)] };
         }
-        const { tool, input, isError = false, cwd = request.spec.cwd } = parsed.data;
+        const { tool, id, input, isError = false, cwd = request.spec.cwd } = parsed.data;
         const name = piToolName(tool);
         let content = parsed.data.content;
+        const overran = await overrunOf(name, id, content);
         if (maskHook !== undefined) {
             const masked = saidBy(await maskHook(postToolUse(name, input, content, cwd), undefined, { signal: request.signal }))?.updatedToolOutput;
             // A result the secrets could not be read to mask comes back as one sentence in its place.
@@ -243,7 +259,7 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
             const sealed = sealOutside(name, input, unsealed, mark);
             content = sealed === unsealed ? content : (SealedSchema.safeParse(sealed).data?.content ?? content);
         }
-        const notes = isError ? [] : await editNotes(name, input, cwd);
+        const notes = [overran, ...(isError ? [] : await editNotes(name, input, cwd))].filter((note): note is string => note !== undefined);
         if (notes.length > 0) {
             content = [...content, textBlock(notes.join("\n\n"))];
         }

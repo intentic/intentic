@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use crate::docker;
+use crate::docker::{self, Presence};
 use crate::health::{CRASH_LOOP_RESTARTS, HEALTH_URL};
 use crate::logfile::Log;
 use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
@@ -309,13 +309,15 @@ pub fn step(verdict: Verdict, strikes: u32, over: bool) -> Step {
     }
 }
 
-/// One look at `container`, through docker alone: its state, its `/health`, and the boot failure its daemon left.
-pub fn look(container: &str, swap_at: u64) -> Look {
+/// One look at `container`, through docker alone: its state, its `/health`, and the boot failure its daemon left. Err with
+/// why when the engine did not answer the state read or the health exec: that is nothing known about the new version, and
+/// is never held against it (a stuck engine reads exactly like a dead container otherwise).
+pub fn look(container: &str, swap_at: u64) -> std::result::Result<Look, String> {
     let mut found = Look::default();
-    if let Some(state) = docker::inspect(
+    if let Some(state) = docker::container_read(
         container,
         "{{.State.Running}} {{.State.Restarting}} {{.RestartCount}}",
-    ) {
+    )? {
         let mut fields = state.split_whitespace();
         found.running = fields.next() == Some("true");
         found.restarting = fields.next() == Some("true");
@@ -327,7 +329,7 @@ pub fn look(container: &str, swap_at: u64) -> Look {
     if found.running {
         found.crash_loop = crate::health::crashing(container);
         if let Some(health) =
-            docker::exec_capture(container, &["curl", "-sf", "-m", "10", HEALTH_URL])
+            docker::exec_read(container, &["curl", "-sf", "-m", "10", HEALTH_URL])?
                 .and_then(|body| serde_json::from_str::<Value>(&body).ok())
         {
             found.answered = true;
@@ -343,7 +345,7 @@ pub fn look(container: &str, swap_at: u64) -> Look {
     found.boot_failure = boot_failure_since(container, swap_at);
     found.daemon_started =
         file_json(container, DAEMON_EXIT_FILE).and_then(|marker| daemon_started_of(&marker));
-    found
+    Ok(found)
 }
 
 /// When the daemon last started, off its boot marker. Pure.
@@ -525,11 +527,18 @@ pub fn watch_one(slug: &str) -> Result<Report> {
     let record = mirror::reconcile(slug);
     let container = container_of(slug);
     let parked = parked_of(slug);
-    let live = docker::container_exists(&container);
-    let has_parked = docker::container_exists(&parked);
+    let live = docker::container_presence(&container);
+    let has_parked = docker::container_presence(&parked);
+    if let Some(why) = engine_silence(&live, &has_parked) {
+        return Ok(unanswered(slug, &why));
+    }
+    let (live, has_parked) = (live.exists(), has_parked.exists());
     let Some(swap) = record.swap.clone() else {
         // A swap an ic from before the record's swap keys left parked with no replacement.
         if !live && has_parked {
+            if let Some(wait) = unless_gone(slug, docker::container_gone(&container)) {
+                return Ok(wait);
+            }
             let _why = crate::sandbox::intent::Reason::hold(
                 "an update was interrupted before the new version started, so the version it left is put back.",
                 &[],
@@ -546,6 +555,45 @@ pub fn watch_one(slug: &str) -> Result<Report> {
     match swap.phase {
         Phase::Cutover => recover_cutover(slug, &record, &swap, live, has_parked),
         Phase::Probation => judge_probation(slug, &record, &swap, live, has_parked),
+    }
+}
+
+/* NOTHING IS UNDONE ON AN ENGINE THAT DID NOT ANSWER (2026-11-03). On 2026-10-31 at 23:35 rog's engine stalled, this
+watch's `docker inspect` failed, and the failure read as "the new version's container is gone": a healthy 1.380.0 was
+rolled back to 1.378.2 and every turn in flight died. Docker's answers are three-valued now (docker.rs `Presence`): a
+read the engine did not answer is no look at all (no verdict, no strike, the record untouched) and the next round asks
+again; and going back because a container is gone needs it gone twice, a few seconds apart, with `docker ps -a`
+agreeing (`docker::container_gone`). */
+
+/// Why docker could not say what the watch needs to know about the two containers, when it could not. Pure.
+pub(crate) fn engine_silence(live: &Presence, parked: &Presence) -> Option<String> {
+    live.unknown()
+        .or_else(|| parked.unknown())
+        .map(str::to_string)
+}
+
+/// The report of a round the engine did not answer: watching still, with nothing judged or changed.
+pub(crate) fn unanswered(slug: &str, why: &str) -> Report {
+    Report::new(
+        slug,
+        "watching",
+        Some(format!(
+            "docker did not answer ({why}), so nothing was judged or changed; it is looked at again next round"
+        )),
+    )
+}
+
+/// Before anything is undone because the new version's container is gone: None when `gone` (docker::container_gone)
+/// confirmed it, else the report to give instead. Pure.
+pub(crate) fn unless_gone(slug: &str, gone: Presence) -> Option<Report> {
+    match gone {
+        Presence::Absent => None,
+        Presence::Exists => Some(Report::new(
+            slug,
+            "watching",
+            Some("the new version's container answered again".to_string()),
+        )),
+        Presence::Unknown(why) => Some(unanswered(slug, &why)),
     }
 }
 
@@ -570,6 +618,9 @@ fn recover_cutover(
     match (live, has_parked) {
         // Parked, and no replacement was started: put it back.
         (false, true) => {
+            if let Some(wait) = unless_gone(slug, docker::container_gone(&container)) {
+                return Ok(wait);
+            }
             undo(
                 slug,
                 record,
@@ -585,8 +636,21 @@ fn recover_cutover(
         }
         // A replacement exists beside the parked one: judge it like any new version on probation.
         (true, true) => {
-            let running =
-                docker::inspect(&container, "{{.State.Running}}").as_deref() == Some("true");
+            let running = match docker::container_read(&container, "{{.State.Running}}") {
+                Err(why) => return Ok(unanswered(slug, &why)),
+                // Gone between the two reads: the next round finds out how, rather than this one guessing.
+                Ok(None) => {
+                    return Ok(Report::new(
+                        slug,
+                        "watching",
+                        Some(
+                            "the new version's container went away while it was looked at"
+                                .to_string(),
+                        ),
+                    ))
+                }
+                Ok(Some(state)) => state == "true",
+            };
             if !running {
                 undo(
                     slug,
@@ -627,6 +691,9 @@ fn recover_cutover(
             ))
         }
         (false, false) => {
+            if let Some(wait) = unless_gone(slug, docker::container_gone(&container)) {
+                return Ok(wait);
+            }
             settle(slug, record, true)?;
             let _ = parked;
             Ok(Report::new(
@@ -647,6 +714,9 @@ fn judge_probation(
 ) -> Result<Report> {
     let container = container_of(slug);
     if !live {
+        if let Some(wait) = unless_gone(slug, docker::container_gone(&container)) {
+            return Ok(wait);
+        }
         if has_parked {
             undo(
                 slug,
@@ -669,7 +739,10 @@ fn judge_probation(
         ));
     }
     let now = now_ms();
-    let mut seen = look(&container, swap.at);
+    let mut seen = match look(&container, swap.at) {
+        Ok(seen) => seen,
+        Err(why) => return Ok(unanswered(slug, &why)),
+    };
     seen.held = record.held;
     let (daemon_start, daemon_restarts) = restarts_seen(
         swap,
@@ -745,6 +818,14 @@ fn unpark(container: &str, parked: &str) {
 fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &str) -> Result<()> {
     let container = container_of(slug);
     let parked = parked_of(slug);
+    // Which way back is decided on docker's answer, never on its silence: an unanswered read is not a parked container
+    // gone, and the pinned-image rollback it would start replaces the sandbox.
+    let parked_here = match docker::container_presence(&parked) {
+        Presence::Unknown(why) => crate::util::bail!(
+            "{slug}: nothing was undone, docker did not answer about {parked} ({why}); the next round looks again."
+        ),
+        presence => presence.exists(),
+    };
     let log = Log::create_named("recreate", "recreate-watch")?;
     log.section(&format!(
         "going back from {} ({reason})",
@@ -766,7 +847,7 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
         ),
         &[],
     );
-    if docker::container_exists(&parked) {
+    if parked_here {
         unpark(&container, &parked);
         let restored = ChannelRecord {
             swap: None,
@@ -1394,6 +1475,50 @@ mod tests {
         assert_eq!(
             Report::new("abc", "none", None).json(),
             r#"{"action":"none","slug":"abc"}"#
+        );
+    }
+
+    #[test]
+    fn a_round_the_engine_did_not_answer_judges_nothing_and_undoes_nothing() {
+        let stuck = Presence::Unknown("docker did not answer within 20 seconds".to_string());
+        assert_eq!(
+            engine_silence(&stuck, &Presence::Exists),
+            Some("docker did not answer within 20 seconds".to_string())
+        );
+        assert_eq!(
+            engine_silence(&Presence::Absent, &stuck),
+            Some("docker did not answer within 20 seconds".to_string())
+        );
+        assert_eq!(engine_silence(&Presence::Absent, &Presence::Exists), None);
+        assert_eq!(engine_silence(&Presence::Exists, &Presence::Absent), None);
+        let report = unanswered("abc", "docker did not answer within 20 seconds");
+        assert_eq!(
+            report,
+            Report::new(
+                "abc",
+                "watching",
+                Some("docker did not answer (docker did not answer within 20 seconds), so nothing was judged or changed; it is looked at again next round".to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn going_back_because_the_container_is_gone_waits_for_the_absence_to_be_confirmed() {
+        assert_eq!(unless_gone("abc", Presence::Absent), None);
+        assert_eq!(
+            unless_gone("abc", Presence::Exists),
+            Some(Report::new(
+                "abc",
+                "watching",
+                Some("the new version's container answered again".to_string())
+            ))
+        );
+        assert_eq!(
+            unless_gone(
+                "abc",
+                Presence::Unknown("docker ps -a did not answer".to_string())
+            ),
+            Some(unanswered("abc", "docker ps -a did not answer"))
         );
     }
 }

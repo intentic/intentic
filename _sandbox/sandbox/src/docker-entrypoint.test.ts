@@ -37,3 +37,14 @@ describe(`entrypoint compile cache`, () => {
         expect(entrypoint).toContain(`find "$node_compile_cache" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +`);
     });
 });
+
+/* An engine before 2026-11-03 put WSL's GPU libraries on the whole container's library path (bin/gpu-run says why). */
+describe(`entrypoint GPU libraries`, () => {
+    it(`takes them off before sshd or the daemon starts, keeping their place for gpu-run`, () => {
+        const strip = entrypoint.indexOf(`grep -vxE '/usr/lib/wsl/lib/?'`);
+        expect(strip).toBeGreaterThan(-1);
+        expect(entrypoint).toContain(`export INTENTIC_GPU_LIBRARY_PATH="\${INTENTIC_GPU_LIBRARY_PATH:-/usr/lib/wsl/lib}"`);
+        expect(entrypoint.indexOf("/usr/sbin/sshd")).toBeGreaterThan(strip);
+        expect(entrypoint.indexOf("exec /opt/sandbox/netd/intentic-netd")).toBeGreaterThan(strip);
+    });
+});

@@ -1,9 +1,9 @@
-import { BrowserError } from "./types.js";
+import { BrowserError, BrowserTimeoutError } from "./types.js";
 
 // Chrome DevTools Protocol subset for driving a page: HTTP handshake to find tabs, then one WebSocket per tab
 // carrying JSON-RPC. Hand-rolled because Bun's `connectOverCDP` cannot reach a browser (stalls on the WebSocket
-// upgrade); Bun's global WebSocket does connect. Correlates by request id; events (no `id`) are dropped since this only
-// asks questions.
+// upgrade); Bun's global WebSocket does connect. Correlates by request id; events (no `id`) go to the session's one
+// listener, which is how the page's console is collected (console.ts).
 
 // Generous enough for a slow navigation, short enough to fail legibly instead of hanging upstream.
 const CALL_TIMEOUT_MS = 30_000;
@@ -16,8 +16,15 @@ export interface CdpTarget {
     readonly webSocketDebuggerUrl?: string;
 }
 
+// A CDP method's parameters, or an event's: their shape is the protocol's, per method, and each caller reads its own.
+export type CdpParams = Record<string, unknown>;
+
+// A CDP event: a message the browser sends unasked, once its domain is enabled.
+export type CdpEventListener = (method: string, params: CdpParams) => void;
+
 export interface CdpSession {
-    readonly send: <T = Record<string, unknown>>(method: string, params?: Record<string, unknown>) => Promise<T>;
+    // `timeoutMs` replaces the default 30 s for a call that is allowed longer (an awaited page script with its own deadline).
+    readonly send: <T = CdpParams>(method: string, params?: CdpParams, timeoutMs?: number) => Promise<T>;
     readonly close: () => void;
 }
 
@@ -55,7 +62,7 @@ export const newTab = async (port: number, url: string): Promise<CdpTarget> => {
     return (await response.json()) as CdpTarget;
 };
 
-export const attach = async (wsUrl: string): Promise<CdpSession> => {
+export const attach = async (wsUrl: string, onEvent?: CdpEventListener): Promise<CdpSession> => {
     const socket = new WebSocket(wsUrl);
     const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
     let nextId = 1;
@@ -66,8 +73,17 @@ export const attach = async (wsUrl: string): Promise<CdpSession> => {
     });
 
     socket.addEventListener("message", (event) => {
-        const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown; error?: { message?: string } };
+        const message = JSON.parse(String(event.data)) as {
+            id?: number;
+            method?: string;
+            params?: CdpParams;
+            result?: unknown;
+            error?: { message?: string };
+        };
         if (message.id === undefined) {
+            if (message.method !== undefined) {
+                onEvent?.(message.method, message.params ?? {});
+            }
             return;
         }
         const waiter = pending.get(message.id);
@@ -93,13 +109,13 @@ export const attach = async (wsUrl: string): Promise<CdpSession> => {
     });
 
     return {
-        send: <T>(method: string, params: Record<string, unknown> = {}) =>
+        send: <T>(method: string, params: CdpParams = {}, timeoutMs = CALL_TIMEOUT_MS) =>
             new Promise<T>((resolvePromise, reject) => {
                 const id = nextId++;
                 const timer = setTimeout(() => {
                     pending.delete(id);
-                    reject(new BrowserError(`The page did not answer "${method}" within ${CALL_TIMEOUT_MS / 1000}s.`));
-                }, CALL_TIMEOUT_MS);
+                    reject(new BrowserTimeoutError(`The page did not answer "${method}" within ${Math.round(timeoutMs / 1000)}s.`));
+                }, timeoutMs);
                 pending.set(id, { resolve: resolvePromise as (value: unknown) => void, reject, timer });
                 socket.send(JSON.stringify({ id, method, params }));
             }),

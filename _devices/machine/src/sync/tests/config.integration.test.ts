@@ -15,6 +15,7 @@ const {
     retireLegacyPairings,
     setMirrorOff,
     setPortIgnored,
+    setPortIncluded,
     setSandboxGone,
     setUnreachableSince,
     updateState,
@@ -419,5 +420,24 @@ describe("a pairing written before holds", () => {
         expect(gone).toEqual({ ...web, goneSince: 5 });
         await setMirrorOff(web.sandboxId, true);
         expect(await readFile(syncStatePath, "utf8")).not.toContain("fileSync");
+    });
+});
+
+// The opposite answer for a port an agent's own job holds, which the mirror leaves off every device by default: held
+// the same way, and never in both lists at once.
+describe("setPortIncluded", () => {
+    it("mirrors one agent's port here, stops ignoring it, and is dropped again by ignoring it", async () => {
+        await upsertPairing(local);
+        await setPortIgnored(local.sandboxId, 7878, true);
+        await setPortIncluded(local.sandboxId, 7878, true);
+        const included = (await readState()).pairings[0];
+        expect([included?.includedPorts, included?.ignoredPorts]).toEqual([[7878], undefined]);
+
+        await setPortIgnored(local.sandboxId, 7878, true);
+        const ignored = (await readState()).pairings[0];
+        expect([ignored?.includedPorts, ignored?.ignoredPorts]).toEqual([undefined, [7878]]);
+
+        await setPortIgnored(local.sandboxId, 7878, false);
+        expect((await readState()).pairings[0]).toEqual(local);
     });
 });

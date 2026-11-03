@@ -105,7 +105,27 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/root/.cargo/registry \
     curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
+# sccache: compiled crates kept across checkouts, so a target/ the sandbox removed rebuilds from cache.
+RUN set -eu; v=0.10.0; arch="$(uname -m)"; \
+    curl -fsSL "https://github.com/mozilla/sccache/releases/download/v$v/sccache-v$v-$arch-unknown-linux-musl.tar.gz" \
+        | tar -xz -C /usr/local/bin --strip-components=1 "sccache-v$v-$arch-unknown-linux-musl/sccache"; \
+    printf '%s\n' '#!/bin/sh' \
+        '# sccache where its cache can be written; plain rustc where it cannot (a fenced turn sees no /history).' \
+        'mkdir -p "$SCCACHE_DIR" 2>/dev/null && [ -w "$SCCACHE_DIR" ] && exec sccache "$@"' \
+        'exec "$@"' > /usr/local/bin/rustc-cached; \
+    chmod 755 /usr/local/bin/rustc-cached
+ENV RUSTC_WRAPPER=/usr/local/bin/rustc-cached \
+    SCCACHE_DIR=/history/cache/sccache \
+    SCCACHE_CACHE_SIZE=30G
 ```
+
+Every Rust recipe gets the sccache lines. The sandbox removes a settled checkout's `target/` (an hour after it lands,
+six hours after it goes quiet, at once when the disk is short), and without a compiler cache the next build there
+compiles every dependency again: ten minutes on a big workspace, where sccache makes it about one. Keep its cache on
+`/history`, which outlives a restart (`/tmp` does not), and capped (`SCCACHE_CACHE_SIZE`); Settings → Storage counts
+it as a build cache. Don't share one `CARGO_TARGET_DIR` between checkouts instead: Cargo locks a target directory per
+build and keys its fingerprints by path, so two conversations building at once block each other or rebuild each
+other's crates, and one removed checkout's output disappears from under the other.
 
 Example (anything built with cmake — the ccache mount is what makes a rebuild cheap):
 
@@ -239,7 +259,20 @@ costs (a rebuild, a dockerd restart) and applies it with one press: `capabilitie
 - `could not select device driver "nvidia" with capabilities: [[gpu]]` → **GPU access**. Needs an NVIDIA GPU
   and nvidia-container-toolkit on the machine the sandbox runs on, plus a rebuild. Do NOT delete a
   `driver: nvidia` reservation from their compose file to make the error go away: it "works", runs everything
-  on CPU, and hides that it did.
+  on CPU, and hides that it did. Say in your `--why` that on a Windows PC this GPU is the owner's DISPLAY GPU,
+  shared through WSL: a GPU hang there freezes or powers off their computer (rog, 2026-11-02).
+
+## The host GPU, once GPU access is on
+
+Nothing in the sandbox uses the GPU unless it asks: a command gets it through `gpu-run <command…>` (the whole GPU,
+no wall limit unless `--timeout` or the owner's `gpu.timeoutMinutes`), and every other process, browsers
+included, runs on the CPU. `gpu-run --status` says whether it is there and whether GPU work is paused. The owner
+can give it to every agent command instead (settings `gpu.shells: "all"`, the Overview's Host GPU switch). After
+the computer reports a GPU reset (LiveKernelEvent 141/117/116, Display 4101) the sandbox pauses GPU work and
+gpu-run refuses until the owner resumes it from the Overview: do not route around it by setting
+`LD_LIBRARY_PATH=/usr/lib/wsl/lib` yourself. Never start a browser here with GPU flags (`--ignore-gpu-blocklist`,
+`--enable-unsafe-webgpu`, `GALLIUM_DRIVER=d3d12`); real GPU rendering of a web page belongs in the owner's own
+browser on their device.
 - pulls failing or crawling on a metered/air-gapped link → **Registry mirror**.
 - `http: server gave HTTP response to HTTPS client` from a LAN registry → **Insecure registries**.
 - containers up, but internal/VPN hosts unreachable from them → **Container address pool**. Docker's default

@@ -38,6 +38,8 @@ export const agentsDoors = {
     history: ({ id }) => historyOf(id),
     includeScratch: ({ id, repo, paths }) => okAfter(() => includeScratch(id, repo, paths)),
     deleteScratch: ({ id, repo, paths }) => okAfter(() => deleteScratch(id, repo, paths)),
+    // The demo strands no clone, so there is nothing to fold or move.
+    settleClone: () => ({ ok: true as const }),
     copyIgnored: ({ id, repo, paths }) => {
         copyAgentIgnored(id, repo, paths);
         return { ok: true as const };

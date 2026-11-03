@@ -206,6 +206,9 @@ fn recreate(
     };
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let parked = format!("{container}{PARKED_SUFFIX}");
+    if let Some(why) = docker::container_presence(&container).unknown() {
+        bail!("docker did not answer about {container} ({why}), so nothing was changed. Run it again once docker answers.");
+    }
     if !docker::container_exists(&container) {
         // A recreate that died between parking the old container and starting its replacement leaves the
         // name empty and the sandbox parked — put it back rather than sending the owner to the wizard.

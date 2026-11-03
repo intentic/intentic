@@ -8,22 +8,29 @@ import { systemContract } from "@intentic/sandbox-contract/contracts/system.cont
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../../app-env.js";
 import type { Services } from "../../../composition.js";
-import { createDiskStorage } from "./disk-storage.js";
+import { createDiskStorage, type DiskStorageOptions } from "./disk-storage.js";
+import { activeDiskPressure } from "./disk-pressure.js";
 import { readRunningPrograms } from "./running-programs.js";
 
 export type StorageRoutesDeps = Pick<Services, "config" | "workspace" | "logger">;
 
 // The `system.*storage*` procedures, merged into `system` by router.ts, which also hands down `prune` (the workspace
-// janitor's) from above both subsystems. One DiskStorage per router, so every caller shares one scan and one clean.
-export const createStorageRoutes = (services: StorageRoutesDeps, prune: (storeDir: string) => Promise<boolean>) => {
+// janitor's) and the checkouts' build-output reaper from above both subsystems. One DiskStorage per router, so every
+// caller shares one scan and one clean.
+export const createStorageRoutes = (
+    services: StorageRoutesDeps,
+    prune: (storeDir: string) => Promise<boolean>,
+    buildOutputs?: DiskStorageOptions["buildOutputs"],
+) => {
     const i = implement(systemContract).$context<OrpcContext>();
-    const storage = createDiskStorage({
+    const options: DiskStorageOptions = {
         workspaceRoot: services.workspace.root,
         historyRoot: services.config.historyRoot,
         logger: services.logger,
         programs: () => readRunningPrograms(),
         prune,
-    });
+    };
+    const storage = createDiskStorage(buildOutputs === undefined ? options : { ...options, buildOutputs });
     const warnings = async () => {
         const historyDisk = await readHistorySpace(services.config.historyRoot)
             .then((space) => {
@@ -52,6 +59,7 @@ export const createStorageRoutes = (services: StorageRoutesDeps, prune: (storeDi
     return {
         storage: i.storage.handler(async () => ({ ...(await storage.report()), ...(await warnings()) })),
         scanStorage: i.scanStorage.handler(async () => ({ ...(await storage.scan()), ...(await warnings()) })),
+        diskPressure: i.diskPressure.handler(() => activeDiskPressure()),
         cancelStorageScan: i.cancelStorageScan.handler(() => {
             storage.cancel();
             return { ok: true } as const;

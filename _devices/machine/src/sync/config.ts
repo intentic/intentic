@@ -73,7 +73,7 @@ export const isSandboxContainerName = (name: string | undefined): name is string
     name.length > SANDBOX_CONTAINER_PREFIX.length;
 
 // Pairing key sandboxId namespaces SSH, Mutagen and ports; enrollment syncToken authorizes ports, self-revoke and transport.
-// mirrored/skipped ports are reconcile baselines; ignoredPorts is durable user choice. autoHealOff controls cleanup of ignored build residue.
+// mirrored/skipped ports are reconcile baselines; ignoredPorts and includedPorts are durable user choice. autoHealOff controls cleanup of ignored build residue.
 // remoteDir defaults to /work; project pairings target /work/<name>, omit state/git backup and alone admit direction/container/deliver options.
 // Compute whether sync runs from observed holds (holds.ts), never a second running flag; pairingProblem enforces project/transport invariants.
 export interface Pairing {
@@ -86,6 +86,8 @@ export interface Pairing {
     readonly mirroredPorts?: readonly MirroredPort[];
     readonly skippedPorts?: readonly SkippedPort[];
     readonly ignoredPorts?: readonly number[];
+    // Ports an agent's own job listens on that the owner asked for here anyway (mirror.ts mirrorsByDefault).
+    readonly includedPorts?: readonly number[];
     readonly mirrorOff?: boolean | undefined;
     readonly autoHealOff?: boolean | undefined;
     readonly remoteDir?: string | undefined;
@@ -451,6 +453,11 @@ const updatePairing = async (key: string, change: (held: Pairing) => Pairing): P
 export const setMirrorOff = async (key: string, off: boolean): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, mirrorOff: off ? true : undefined }));
 
+// A pairing with its two per-port answers: a list is absent rather than empty, so a pairing carrying the resting state
+// carries no field for it.
+const withPortChoices = (rest: Omit<Pairing, "ignoredPorts" | "includedPorts">, ignoredPorts: readonly number[], includedPorts: readonly number[]): Pairing =>
+    Object.assign({ ...rest }, ignoredPorts.length > 0 ? { ignoredPorts } : undefined, includedPorts.length > 0 ? { includedPorts } : undefined);
+
 // One port this device is not to take, the per-port form of the switch above. Machine-side because the conflict is
 // the device's: a number is contended on THIS localhost and free on the next one, so the same sandbox mirrors it
 // everywhere else. Stored sorted and deduped, since it is read as a set and shown as a list.
@@ -458,10 +465,23 @@ export const setPortIgnored = async (key: string, port: number, ignored: boolean
     await updatePairing(key, (held) => {
         // Destructured away rather than set to undefined: the key is absent when nothing is ignored, so a
         // pairing carrying the resting state carries no field for it either.
-        const { ignoredPorts = [], ...rest } = held;
+        const { ignoredPorts = [], includedPorts = [], ...rest } = held;
         const kept = ignoredPorts.filter((held_port) => held_port !== port);
         const next = ignored ? [...kept, port].toSorted((a, b) => a - b) : kept;
-        return next.length === 0 ? rest : { ...rest, ignoredPorts: next };
+        const including = ignored ? includedPorts.filter((held_port) => held_port !== port) : includedPorts;
+        return withPortChoices(rest, next, including);
+    });
+
+// One port an agent's own job holds, mirrored here all the same: the opposite answer to the default (mirror.ts
+// mirrorsByDefault), kept the way an ignored port is. Including a port also stops ignoring it, and ignoring one stops
+// including it, so the two lists never both hold a number.
+export const setPortIncluded = async (key: string, port: number, included: boolean): Promise<void> =>
+    await updatePairing(key, (held) => {
+        const { includedPorts = [], ignoredPorts = [], ...rest } = held;
+        const kept = includedPorts.filter((held_port) => held_port !== port);
+        const next = included ? [...kept, port].toSorted((a, b) => a - b) : kept;
+        const ignoring = included ? ignoredPorts.filter((held_port) => held_port !== port) : ignoredPorts;
+        return withPortChoices(rest, ignoring, next);
     });
 
 // Clearing derived residue, off. Local and durable for the same reason mirroring's switch is: it decides what this

@@ -142,6 +142,10 @@ flowchart LR
   injectable `GitRunner`, and `locks.ts` clears a lock only while no git process runs. (2026-10-06: moved here from
   `@intentic/scaffold`, which is named for the workspace skeleton; a new package was rejected because a name npm has
   never seen fails the release plan until it is registered by hand.)
+- Every git the runner starts syncs its writes (`git/durability.ts`: `core.fsync=all`, `core.fsyncMethod=batch`, and
+  `persistGitDurability` for a repository's own config, which a terminal's git reads), and one that fails on damaged
+  storage (`isGitCorruption`) is told to the listener `onGitCorruption` sets, which the daemon uses to start a
+  repair. (2026-11-03: a host crash kept loose objects' sizes and lost their bytes; git's default syncs packs only.)
 
 ## Key files
 

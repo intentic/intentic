@@ -9,7 +9,8 @@ import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { placeArtifact, placedNote, SCREENSHOT_VERB, writesFilename } from "../cast/browser-artifacts.js";
 import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
-import { accountCovering, signedInDoor } from "./account-hosts.js";
+import { withSignedInDoor } from "./account-hosts.js";
+import { fileUrlRefusal, withSandboxNotes } from "./tool-notes.js";
 import { settleTargets } from "./element-targets.js";
 import { callWebmcp, WEBMCP_CALL_SCHEMA, WEBMCP_CALL_TOOL, type WebmcpTarget, webmcpTargetOf } from "./webmcp-call.js";
 
@@ -36,6 +37,15 @@ export interface BrowserBackendSpec {
     readonly command: string;
     readonly args: readonly string[];
     readonly env: Record<string, string>;
+    // Its X display: held for the backend's whole life, since it relaunches Chromium there after a `browser_close`.
+    readonly support?: BackendSupport;
+}
+
+// `hold` when the backend spawns, its release once the process is gone. `standing` before each call to a running
+// backend: one whose display died is ended and brought up again, rather than handed a call it can only fail.
+export interface BackendSupport {
+    readonly hold: () => () => void;
+    readonly standing: () => Promise<boolean>;
 }
 
 export type Prepared = BrowserBackendSpec | { readonly refusal: string };
@@ -182,6 +192,7 @@ export const createSchemaCache = (timeoutMs = 30_000) => {
 
 interface Backend {
     readonly child: ChildProcess;
+    readonly support: BackendSupport | undefined;
     // Backend-side request id to the resolver of its answer.
     readonly pending: Map<number, (message: RpcMessage) => void>;
     nextId: number;
@@ -198,26 +209,7 @@ const toolRefusal = (id: RpcMessage["id"], text: string): RpcMessage => ({
     result: { content: [{ type: "text", text }], isError: true },
 });
 
-const NAVIGATE_VERB = "browser_navigate";
-// The two fields of a navigation this reads: where it went, and the answer's content to put a paragraph ahead of.
-const NavigationSchema = z.looseObject({ name: z.literal(NAVIGATE_VERB), arguments: z.looseObject({ url: z.string() }) });
 const ContentAnswerSchema = z.looseObject({ content: z.array(z.unknown()) });
-
-// A navigation's answer with a first paragraph naming the signed-in door, when it went to a site an account covers;
-// anything else as it came.
-export const withSignedInDoor = (hosts: Readonly<Record<string, string>> | undefined, params: RpcMessage["params"], answer: RpcMessage): RpcMessage => {
-    const navigation = hosts === undefined ? undefined : NavigationSchema.safeParse(params);
-    const result = ContentAnswerSchema.safeParse(answer.result);
-    if (hosts === undefined || navigation?.success !== true || !result.success) {
-        return answer;
-    }
-    const covered = accountCovering(hosts, navigation.data.arguments.url);
-    if (covered === undefined) {
-        return answer;
-    }
-    const note = `WRONG BROWSER: this is the \`web\` browser. ${signedInDoor(covered.account, covered.host)}`;
-    return { ...answer, result: { ...result.data, content: [{ type: "text", text: note }, ...result.data.content] } };
-};
 
 // A call naming a file its tool writes (browser-artifacts.ts writesFilename says which do).
 const WritingCallSchema = z.looseObject({ name: z.string().refine(writesFilename), arguments: z.looseObject({ filename: z.string().min(1) }) });
@@ -319,10 +311,22 @@ const forward = async (wire: Wire, backend: Backend, params: NonNullable<RpcMess
     if (clientId !== undefined && clientId !== null) {
         wire.inflight.set(clientId, { backend, id: sent.id });
     }
-    const hangUp = (): void => wire.send(backend, { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: sent.id, reason: "client went away" } });
+    // A cancelled call is answered here and now: the backend sends nothing for a request it was told to drop (the MCP
+    // SDK's cancellation), so awaiting its answer would wait for the backend's exit.
+    let hangUp = (): void => undefined;
+    const cancelled = new Promise<RpcMessage>((resolve) => {
+        hangUp = (): void => {
+            wire.send(backend, { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: sent.id, reason: "client went away" } });
+            backend.pending.delete(sent.id);
+            resolve(rpcError(clientId, -32800, "the call was cancelled"));
+        };
+    });
+    if (signal?.aborted === true) {
+        hangUp();
+    }
     signal?.addEventListener("abort", hangUp, { once: true });
     try {
-        return await sent.answer;
+        return await Promise.race([sent.answer, cancelled]);
     } finally {
         signal?.removeEventListener("abort", hangUp);
         if (clientId !== undefined && clientId !== null) {
@@ -374,10 +378,12 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
     const spawnBackend = (owner: string, spec: BrowserBackendSpec): Backend => {
         // A service: the browser it drives is restarted on the next call, and Chromium raises its own renderers above it.
         const child = spawnAs({ class: "service" }, spec.command, [...spec.args], { env: { ...spec.env, ...manifest.backendEnv }, stdio: ["pipe", "pipe", "ignore"] });
+        const unhold = spec.support?.hold();
         let markReady: () => void = () => undefined;
-        const backend: Backend = { child, pending: new Map(), nextId: 1, ready: new Promise((resolve) => (markReady = resolve)) };
+        const backend: Backend = { child, support: spec.support, pending: new Map(), nextId: 1, ready: new Promise((resolve) => (markReady = resolve)) };
         backends.set(owner, backend);
         const gone = (): void => {
+            unhold?.();
             if (backends.get(owner) === backend) {
                 backends.delete(owner);
             }
@@ -421,10 +427,22 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
 
     // One prepare per owner even under concurrent calls; a refused owner is not remembered as refused, since the
     // reason (a login window open, an exit still dialling) can pass before the turn ends.
-    const backendFor = (owner: string, port: number): Promise<{ readonly backend: Backend } | { readonly refusal: string }> => {
+    const backendFor = async (owner: string, port: number): Promise<{ readonly backend: Backend } | { readonly refusal: string }> => {
         const existing = backends.get(owner);
         if (existing !== undefined) {
-            return Promise.resolve({ backend: existing });
+            if (existing.support === undefined || (await existing.support.standing())) {
+                return { backend: existing };
+            }
+            // Every browser it launched would die on "Missing X server": ended, and brought up again below.
+            if (backends.get(owner) === existing) {
+                backends.delete(owner);
+                existing.child.kill("SIGTERM");
+            }
+            // A racing call already brought its replacement up while this one was checking.
+            const replaced = backends.get(owner);
+            if (replaced !== undefined) {
+                return { backend: replaced };
+            }
         }
         const pending = preparing.get(owner);
         if (pending !== undefined) {
@@ -477,9 +495,10 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         // A file the call writes goes where every runtime's files go, whatever name the model gave it.
         const { params, note } = await placeWrittenFile(shaped.asked, deps.outputDir, deps.taken);
         // Screened here, for every owner, since this is the one place every browser's answer passes (network-redaction.ts
-        // says what is cut and why `web` is not exempt). A refused call costs no bring-up.
+        // says what is cut and why `web` is not exempt), as is a file:// navigation (tool-notes.ts). A refused call costs
+        // no bring-up.
         const network = networkCallOf(params);
-        const refusal = network === undefined ? undefined : networkCallRefusal(network);
+        const refusal = network === undefined ? fileUrlRefusal(params) : networkCallRefusal(network);
         if (refusal !== undefined) {
             return toolRefusal(message.id, refusal);
         }
@@ -490,7 +509,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
             return toolRefusal(message.id, ready.refusal);
         }
         await ready.backend.ready;
-        const toBackend = (sent: CallParams): Promise<RpcMessage> => forward({ request, send, inflight }, ready.backend, sent, message.id, signal);
+        const toBackend = (sent: CallParams, bound: AbortSignal | undefined = signal): Promise<RpcMessage> =>
+            forward({ request, send, inflight }, ready.backend, sent, message.id, bound);
         // A page tool is looked up in the page as it stands (webmcp-call.ts); a timed text wait goes as the text wait it
         // means, answering the moment the text is there (bounded-wait.ts).
         const answer = webmcp === undefined ? await sendBoundingWait(params, signal, toBackend) : await callWebmcp(webmcp, params, toBackend, deps.webmcpGraceMs);
@@ -521,7 +541,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
             case "tools/list":
                 try {
                     const probed = await deps.toolSchemas();
-                    const listed = describeBoundedWait(probed);
+                    const listed = withSandboxNotes(describeBoundedWait(probed));
                     const tools = listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA];
                     return {
                         jsonrpc: "2.0",

@@ -3,6 +3,7 @@
 // each vendor stops differently.
 
 import { within } from "@intentic/base/async";
+import { CAP_WHILE_ACTIVE } from "../../agent/run/frames/cap-words.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 export interface TurnTimeouts {
@@ -99,7 +100,7 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
                 // Said as how long the quiet lasted, never as when the turn ended: "cap after 1m 47s with nothing from
                 // the loop" read as a turn that died at 1m 47s (2026-10-17).
                 return quiet < CAP_STILL_ACTIVE_MS
-                    ? `the turn reached its ${duration(timeouts.maxTurnMs)} cap while still active (${silent})`
+                    ? `the turn reached its ${duration(timeouts.maxTurnMs)} ${CAP_WHILE_ACTIVE} (${silent})`
                     : `the turn reached its ${duration(timeouts.maxTurnMs)} cap, ${duration(now - startedAt)} in, the loop having sent nothing for the last ${duration(quiet)}`;
             }
             if (now >= inactivityDeadline) {
@@ -113,7 +114,8 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
 /**
  * What an expired watchdog ends a turn with, the same for every loop: silence past its window is a provider that stopped
  * answering mid-turn, coded `provider-outage` so the daemon re-runs it on backoff; the hard cap is the turn's own ceiling,
- * coded `turn-cap` as the Claude Code loop's is, its work perhaps half done and the next move the user's. `said` puts the
+ * coded `turn-cap` as the Claude Code loop's is, its work perhaps half done: carried on by itself where the turn was still
+ * working (agent/run/frames/cap-continuation.ts), the next move the user's otherwise. `said` puts the
  * loop's own words around why it stopped. 2026-10-25: Muse called both an outage, OpenCode threw the cap uncoded, and
  * ACP and Pi coded neither.
  */

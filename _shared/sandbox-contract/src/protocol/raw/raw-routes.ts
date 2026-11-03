@@ -179,6 +179,11 @@ export const RAW_ROUTES = {
     "POST /devices/{name}/apps/stop": { agent: true, control: "never" },
     "GET /devices/{name}/apps/{id}/output": { agent: true, control: "never" },
     "GET /devices/runs": { agent: true },
+    // A `devices run` building in the owner's tree holds lands into that repository until its build ends
+    // (hosts/runs/run-builds.ts): any shell's, since the run grant and the conversation each say whose build it is.
+    "POST /devices/builds": { agent: true, control: "never" },
+    "POST /devices/builds/{id}/renew": { agent: true, control: "never" },
+    "DELETE /devices/builds/{id}": { agent: true, control: "never" },
     "POST /devices/{name}/tunnels": { agent: true, control: "never" },
     "DELETE /devices/{name}/tunnels/{port}": { agent: true, control: "never" },
     "GET /devices/tunnels": { agent: true },

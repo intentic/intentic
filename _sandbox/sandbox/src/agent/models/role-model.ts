@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type ModelChoice, modelPinKey, type ModelSource, readyChain } from "@intentic/sandbox-contract/models/model-pins";
-import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { ladderIsEmpty, ladderPins, roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
@@ -203,11 +203,24 @@ const askRung = (
 export interface RoleModelOptions {
     // Caller-supplied snapshot of this role's setup instead of a fresh read; absent means read settings now.
     readonly ladder?: SetupLadder | undefined;
+    // A hand-off cannot ask the provider whose allowance just ended the turn, even on the retry pass.
+    readonly excludeProviders?: readonly AgentProvider[];
     readonly onProgress?: RoleModelProgress | undefined;
     // The conversation the job is for, where it has one (a land's commit subject, a chat's title): a provider the owner
     // let read that conversation reads this job about it too.
     readonly conversationId?: string | undefined;
 }
+
+const eligiblePins = (resolved: readonly ModelPin[], role: ModelRole, excluded: readonly AgentProvider[] | undefined): readonly ModelPin[] => {
+    if (resolved.length === 0) {
+        throw new RoleModelUnsetError(role);
+    }
+    const pinned = resolved.filter((pin) => !excluded?.includes(pin.provider));
+    if (pinned.length === 0) {
+        throw new Error(`Every configured model for this job uses an excluded provider: ${excluded?.join(", ")}.`);
+    }
+    return pinned;
+};
 
 export const askRoleModel = async <T>(
     services: Services,
@@ -226,10 +239,7 @@ export const askRoleModel = async <T>(
         throw new RoleModelUnsetError(role);
     }
     const sources = await modelSources(services);
-    const pinned = ladderPins(ladder, sources);
-    if (pinned.length === 0) {
-        throw new RoleModelUnsetError(role);
-    }
+    const pinned = eligiblePins(ladderPins(ladder, sources), role, options.excludeProviders);
     const chain = readyChain(sources, pinned);
     if (chain.length === 0) {
         throw new Error(`Every model set for this job names an account this sandbox no longer has: set one in Sandbox ▸ Agent ▸ Models.`);

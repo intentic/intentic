@@ -7,6 +7,7 @@
 //   run     all of it from the repository's `.intentic/run.json`: build, push, reach, start (and, attached, follow it)
 //   stop    stop a program started there, with the ports opened for it
 //   attach  follow a program already running there (Ctrl+C stops it, Ctrl+D leaves it)
+//   ports   every port listening in this sandbox, and whose it is
 //
 // It reads the bytes HERE, in this shell's own view of /work, which is the conversation's own checkout during an
 // isolated turn: the build that goes is the one this shell made. The daemon relays everything over the device link and
@@ -17,7 +18,7 @@
 // node:http rather than fetch: an upload streams from disk with back-pressure, and a 100 MB build over a tunnel takes
 // longer than undici's default timeouts like.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { request } from "node:http";
@@ -36,12 +37,16 @@ const RUN_FILE = ".intentic/run.json";
 
 const USAGE = `devices — run a program built here on one of the owner's connected computers
 
-  devices run [<target>] [--device <device>] [--no-build] [--repo <dir>] [--attach | --detach]
+  devices run [<target>] [--device <device>] [--no-build] [--repo <dir>] [--attach | --detach] [--replace]
       Everything a repository's ${RUN_FILE} declares for <target> (the only one, when there is one): run its build
       here, carry the result to the computer, stop the target's run already going there, open the ports it says the
       sandbox needs, start it there. Prints the run id the computer's app_status, app_logs and app_stop take, and
       \`devices stop\` does. A target with only a "command" runs in the sandbox (the Run dialog's Sandbox, or Start in
       Browsers), not here.
+      While a build runs in the owner's tree, lands into that repository wait for it, so it compiles one version of
+      the source; the run records the commit it was built from, which the Run dialog shows.
+      From an agent's shell it refuses to replace a run of the target this conversation did not start (the owner's,
+      from the Run dialog): ask the owner, then pass --replace.
       --attach stays with the program: prints what it prints, ends when it does, Ctrl+C stops it there and Ctrl+D
       leaves it running. --detach leaves it running and returns at once. Attached is the default in a terminal a
       person types in, detached in an agent's shell.
@@ -63,6 +68,11 @@ const USAGE = `devices — run a program built here on one of the owner's connec
   devices start <device> <program> [--isolated] [--no-network] [--name <name>] [-- <args>…]
       Start a program on <device> (a path push printed, or the .exe inside a pushed folder) and keep it running.
       --isolated runs it inside Windows Sandbox, a throwaway VM (Windows Pro/Enterprise with the feature on).
+
+  devices ports
+      Every port listening in this sandbox and whose it is: a conversation's agent (and its job), a terminal, a panel.
+      Answers "whose server holds 7878?" without ss or pgrep. A port an agent's own shell or job holds stays off the
+      owner's computers (desktop sync does not mirror it) unless the job was left running for them.
 
   devices reach <device> <port> [--as <port>]      open the computer's 127.0.0.1:<port> at 127.0.0.1:<as|port> here
   devices reach <device> <port> --off              close it
@@ -303,6 +313,34 @@ const reach = async (args) => {
     say(`${device}'s 127.0.0.1:${tunnel.devicePort} answers here at ${tunnel.url} (until the daemon restarts, or --off).`);
 };
 
+// Whose each listening port is (the daemon's ports list, ports/ports.routes.ts), one line each.
+const ports = async () => {
+    const { ports: listed } = await answered("GET", "/ports");
+    const shown = listed.filter((port) => port.kind === "workspace");
+    if (shown.length === 0) {
+        say("Nothing of anyone's work is listening in this sandbox.");
+        return;
+    }
+    for (const port of shown.toSorted((a, b) => a.port - b.port)) {
+        const owner = port.job ?? port.owner;
+        const whose =
+            owner !== undefined
+                ? `conversation ${owner.conversationId}${owner.label === undefined ? "" : `, job "${owner.label}"`}`
+                : port.origin === "terminal"
+                  ? "a terminal of the owner's"
+                  : port.origin === "panel"
+                    ? "a panel"
+                    : port.session === undefined
+                      ? "no terminal this sandbox knows"
+                      : `terminal session ${port.session}`;
+        const where = port.owner !== undefined && port.job === undefined ? "stays in the sandbox" : "mirrored to the owner's computers by desktop sync";
+        say(`${String(port.port).padEnd(5)}  ${port.title}  · ${whose} · ${where}${port.forwarded ? ` · public at ${port.previewUrl ?? "its forward"}` : ""}`);
+        if (port.command !== undefined) {
+            say(`       ${port.command.slice(0, 160)}`);
+        }
+    }
+};
+
 // --- run: the repository's declared targets ----------------------------------------------------------------------
 
 const repoRoot = (given) => {
@@ -403,7 +441,7 @@ const programIn = (pushedPath, localFolder, target) => {
 };
 
 const run = async (args) => {
-    const { options, rest } = parse(args, { flags: ["--no-build", "--attach", "--detach"], values: ["--device", "--repo"] });
+    const { options, rest } = parse(args, { flags: ["--no-build", "--attach", "--detach", "--replace"], values: ["--device", "--repo"] });
     if (options.attach === true && options.detach === true) {
         die("--attach and --detach: pick one");
     }
@@ -427,13 +465,10 @@ const run = async (args) => {
     if (device === undefined) {
         die(`${target.name} names no device: pass --device <name>`);
     }
-    if (target.build !== undefined && options["no-build"] !== true) {
-        say(`▸ building ${target.name}: ${target.build}`);
-        const built = spawnSync("sh", ["-c", target.build], { cwd: root, stdio: "inherit" });
-        if (built.status !== 0) {
-            die(`the build failed (exit ${built.status ?? built.signal}); nothing was pushed`, 1);
-        }
+    if (options.replace !== true) {
+        await refuseReplacingAnothers(device, target);
     }
+    const builtFrom = target.build !== undefined && options["no-build"] !== true ? await build(root, target, device) : undefined;
     const staged = stage(root, target);
     let programPath;
     try {
@@ -464,6 +499,7 @@ const run = async (args) => {
         ...(target.env === undefined ? {} : { env: target.env }),
         ...(target.isolated === true ? { isolated: true } : {}),
         ...(target.stopGraceSeconds === undefined ? {} : { stopGraceSeconds: target.stopGraceSeconds }),
+        ...(builtFrom === undefined ? {} : { builtFrom }),
     });
     say(started.text);
     if (started.ended === true) {
@@ -476,12 +512,149 @@ const run = async (args) => {
     }
 };
 
+// --- the build: one version of the source, and what it was built from ----------------------------------------------
+
+// The tree as git sees it: HEAD, how many paths are uncommitted, and a print of them that changes when any of their
+// contents does (a land rewrites the files it carries; so does an edit). Read without git's optional locks, so it never
+// takes index.lock from a land writing this tree. Undefined outside a git repository.
+const treeState = (root) => {
+    const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+    const head = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8", env });
+    if (head.status !== 0) {
+        return undefined;
+    }
+    const status = spawnSync("git", ["-C", root, "status", "--porcelain=v1", "-z", "-uall"], { encoding: "utf8", env, maxBuffer: 256 * 1024 * 1024 });
+    if (status.status !== 0) {
+        return undefined;
+    }
+    const entries = status.stdout.split("\0").filter((entry) => entry !== "");
+    const paths = [];
+    for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index];
+        paths.push(entry.slice(3));
+        // A rename or copy is followed by its source path, without a status of its own.
+        if (entry[0] === "R" || entry[0] === "C") {
+            index += 1;
+        }
+    }
+    const print = createHash("sha256").update(head.stdout).update(status.stdout);
+    for (const path of paths) {
+        try {
+            const stats = statSync(join(root, path));
+            print.update(`${path}\0${stats.mtimeMs}\0${stats.size}\0`);
+        } catch {
+            // allow(silent-catch): a path git lists as deleted has no stats; its status line is already in the print.
+            print.update(`${path}\0gone\0`);
+        }
+    }
+    return { commit: head.stdout.trim(), changed: paths.length, print: print.digest("hex") };
+};
+
+// While the build runs in the owner's tree, the daemon holds lands into that repository (hosts/runs/run-builds.ts);
+// renewed while it runs, so a build killed with this command lets lands go within a minute. Undefined when nothing is
+// held: an agent's own checkout, which nothing lands into, or a daemon that does not hold builds.
+const holdLands = async (root, target, device) => {
+    const repo = process.env.INTENTIC_RUN_REPO;
+    const reply = await call("POST", "/devices/builds", { dir: root, target: target.name, device, ...(repo === undefined ? {} : { repo }) }).catch(() => undefined);
+    if (reply === undefined || reply.status < 200 || reply.status >= 300) {
+        return undefined;
+    }
+    const hold = JSON.parse(reply.text);
+    if (hold.held !== true) {
+        return undefined;
+    }
+    const renew = setInterval(() => void call("POST", `/devices/builds/${encodeURIComponent(hold.id)}/renew`).catch(() => undefined), hold.renewEveryMs ?? 20_000);
+    return {
+        repo: hold.repo,
+        release: async () => {
+            clearInterval(renew);
+            const done = await call("DELETE", `/devices/builds/${encodeURIComponent(hold.id)}`).catch(() => undefined);
+            return done === undefined || done.status !== 200 ? undefined : JSON.parse(done.text);
+        },
+    };
+};
+
+// The build's own process, its output on this terminal. Asynchronous, so the hold above is renewed while it compiles;
+// Ctrl+C reaches the build (it shares the terminal) and ends it, which reads here as a failed build.
+const runBuild = (root, command) =>
+    new Promise((done) => {
+        const child = spawn("sh", ["-c", command], { cwd: root, stdio: "inherit" });
+        const ignore = () => undefined;
+        process.on("SIGINT", ignore);
+        const hangUp = () => child.kill("SIGHUP");
+        process.on("SIGHUP", hangUp);
+        process.on("SIGTERM", hangUp);
+        const settle = (status, signal) => {
+            process.off("SIGINT", ignore);
+            process.off("SIGHUP", hangUp);
+            process.off("SIGTERM", hangUp);
+            done({ status, signal });
+        };
+        child.on("error", (error) => {
+            say(`${COMMAND}: could not start the build: ${error.message}`);
+            settle(127, null);
+        });
+        child.on("exit", settle);
+    });
+
+// Builds the target, holding lands into the owner's tree while it does, and answers what it was built from.
+const build = async (root, target, device) => {
+    const before = treeState(root);
+    const at = new Date().toISOString();
+    const hold = await holdLands(root, target, device);
+    if (hold !== undefined) {
+        say(`▸ lands into ${hold.repo} wait until this build ends, so it compiles one version of the source`);
+    }
+    say(`▸ building ${target.name}${before === undefined ? "" : ` from ${before.commit.slice(0, 10)}${before.changed === 0 ? "" : ` + ${before.changed} uncommitted path(s)`}`}: ${target.build}`);
+    let built;
+    let released;
+    try {
+        built = await runBuild(root, target.build);
+    } finally {
+        released = await hold?.release();
+    }
+    const after = treeState(root);
+    const moved = before !== undefined && after !== undefined && before.print !== after.print;
+    if ((released?.waited ?? 0) > 0) {
+        say(`▸ ${released.waited} land(s) waited for this build and go ahead now`);
+    }
+    if (moved) {
+        const lands = released?.landedDuring ?? 0;
+        say(
+            `▸ the tree changed while it compiled (${lands > 0 ? `${lands} land(s) reached it` : "edits made outside a land"}): this build may mix two versions of the source; Run again to build one`,
+        );
+    }
+    if (built.status !== 0) {
+        die(`the build failed (exit ${built.status ?? built.signal}); nothing was pushed`, 1);
+    }
+    return before === undefined ? undefined : { commit: before.commit, changed: before.changed, at, ...(moved ? { movedDuringBuild: true } : {}) };
+};
+
+// An agent's `devices run` must not replace the owner's run of the target with a build of its own, which may be work
+// that has not landed, unless it was told to (--replace). A run this conversation started is its own to replace.
+const refuseReplacingAnothers = async (device, target) => {
+    if (CONVERSATION === "" || RUN_GRANT !== "") {
+        return;
+    }
+    const { runs } = await answered("GET", deviceRoute(device, "/apps"));
+    const own = `conversation ${CONVERSATION}`;
+    const theirs = runs.find((entry) => entry.name === target.name && entry.state === "running" && entry.startedBy !== own);
+    if (theirs === undefined) {
+        return;
+    }
+    const built = theirs.builtFrom === undefined ? "" : `, built from ${theirs.builtFrom.commit.slice(0, 10)}`;
+    die(
+        `${target.name} is already running on ${device} (${theirs.id}, started by ${theirs.startedBy ?? "someone other than this conversation"}${built}), and this run would replace it with this conversation's build. Ask the owner first; with their yes, run again with --replace. To look without replacing it: devices attach ${theirs.id} --device ${device}.`,
+        1,
+    );
+};
+
 // --- stop, and following a run --------------------------------------------------------------------------------------
 
 const stoppedLines = (stopped) => stopped.map((entry) => entry.text);
 
 const stopNamed = async (device, name) => {
-    const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { name });
+    const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { name, why: "replace" });
     for (const line of stoppedLines(stopped)) {
         say(`▸ ${line}`);
     }
@@ -498,7 +671,7 @@ const stop = async (args) => {
     }
     if (RUN_ID.test(what)) {
         const device = options.device ?? (await answered("GET", `/devices/runs?${new URLSearchParams({ id: what })}`)).device;
-        const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { id: what, ...(options.force === true ? { force: true } : {}) });
+        const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { id: what, why: "stop", ...(options.force === true ? { force: true } : {}) });
         stoppedLines(stopped).forEach(say);
         return;
     }
@@ -508,7 +681,7 @@ const stop = async (args) => {
     if (device === undefined) {
         die(`${declared === undefined ? `"${what}" is neither a run id nor a target ${RUN_FILE} declares` : `${what} names no device`}: pass --device <name>`);
     }
-    const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { name: what });
+    const { stopped } = await answered("POST", deviceRoute(device, "/apps/stop"), { name: what, why: "stop" });
     say(stopped.length === 0 ? `Nothing called ${what} was running on ${device}.` : stoppedLines(stopped).join("\n"));
 };
 
@@ -543,7 +716,7 @@ const follow = async (device, id) => {
             return;
         }
         say(`\n▸ stopping ${id} on ${device}: asked to close, forced after 5 seconds if it does not…`);
-        stopping = call("POST", deviceRoute(device, "/apps/stop"), { id })
+        stopping = call("POST", deviceRoute(device, "/apps/stop"), { id, why: "interrupt" })
             .then((reply) => {
                 if (reply.status >= 200 && reply.status < 300) {
                     say(stoppedLines(JSON.parse(reply.text).stopped).map((line) => `■ ${line}`).join("\n"));
@@ -647,7 +820,7 @@ if (verb === undefined || verb === "--help" || verb === "-h" || verb === "help")
     say(USAGE);
     process.exit(verb === undefined ? 2 : 0);
 }
-const verbs = { push, start, reach, run, stop, attach };
+const verbs = { push, start, reach, run, stop, attach, ports };
 if (verbs[verb] === undefined) {
     die(`unknown command "${verb}"\n\n${USAGE}`);
 }

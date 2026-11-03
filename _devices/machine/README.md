@@ -40,6 +40,17 @@ flowchart LR
   pasted or set into a field that the command classifier reads as destructive needs "Run destructive commands",
   as running it would. The sandbox also judges that text with the owner's safety policy before it crosses
   (`hosts/host-command-guard.ts`, `typedInCall`).
+- (2026-11-03) **A web page on this machine's own GPU** ([`tools/browser/`](src/device/tools/browser), schemas in
+  `tools.ts`). A sandbox renders WebGL and WebGPU in software: the shinobi sandbox's agents waited 176 s for a
+  game to load, timed 6-11 s a frame, hand-built raw CDP clients in `/tmp`, and could not see a bug that showed only on
+  the owner's NVIDIA card. Four tools answer from the agent's own tab in this machine's browser instead:
+  `browser_screenshot` (the page or one element, from the compositor's surface, so a canvas shows what the GPU drew),
+  `browser_console` (what the page logged and threw, and what the browser logged about it), `browser_evaluate` (an
+  expression's value as JSON, within a deadline) and `browser_frames` (N animation frames as median, p95 and worst
+  frame times, and the WebGPU adapter and WebGL renderer that drew them, after an optional `until` condition).
+  Looking needs `screen`; a script in the page (`browser_evaluate`, a `until`) needs `control`, as a click does. The
+  device skill's recipe opens the sandbox's dev server at its mirrored `http://localhost:<port>`, a secure context,
+  so the page is offered WebGPU.
 - An Android phone attached to the machine over adb, by USB or wireless debugging, gets its own tools
   ([`tools/android.ts`](src/device/tools/android.ts), its parsers in `android-parse.ts`): `android_devices`,
   `android_screenshot`, `android_ui_elements`, `android_act`, `android_shell`, `android_install` and
@@ -62,6 +73,10 @@ flowchart LR
   on Windows starts it through `intentic-launch --wait` (Node's `detached` gives it none); without the launcher it
   starts as before. A run's grace is `app_start`'s `stopGraceSeconds` (a run target's in `run.json`), else 5 s, and a
   forced stop says whether the program could not be asked or was asked and had not finished.
+- (2026-11-03) **A stop says who made it.** `app_stop` takes a `by`, which the sandbox fills in (the Run dialog's Stop,
+  Run pressed again there, Ctrl+C in a run's terminal, `devices stop` or `app_stop` from a named conversation), and the
+  run's record says "stopped by <by>" ever after; a stop with none says "stopped by app_stop". It replaced "stopped by
+  the agent" for every stop, which once sent an agent hunting another conversation for a stop its own Run job made.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
   logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"
@@ -247,6 +262,19 @@ flowchart LR
   sandbox's heartbeat (`ping`) with Windows' available and total memory, which the sandbox's heavy-command gate holds
   work back on while this PC is the one running it ([sandbox README](../../_sandbox/sandbox/README.md)); a distro's agent
   and other platforms answer `{ ok: true }` as before.
+- (2026-11-03) The same heartbeat answer carries the GPU resets and crashes Windows logged in the last day
+  (`crashes`, [`environments/windows-crash-events.ts`](src/environments/windows-crash-events.ts)). On 2026-11-02 a
+  sandbox's browser rendered on rog's display GPU through WSL, the driver lost the device (LiveKernelEvent 0x141) and
+  the PC powered off, and the sandbox could only say it had been killed without warning. One PowerShell, at most once a
+  minute and never two at once, reads the event log: System's Display 4101 (a GPU timeout the driver recovered from),
+  Kernel-Power 41 (rebooted without a clean shutdown) and WER-SystemErrorReporting 1001 (a bugcheck; 0x116, 0x117 and
+  0x141 are the display driver's), and Application's Windows Error Reporting 1001 for a LiveKernelEvent whose P1 is
+  141, 117 or 116. P1 193 is left out: rog writes a benign 193 live dump every few days. Each is a `gpu-reset` or a
+  `host-crash` with its time, code and Windows' first line; the sandbox names them where it explains a restart and
+  pauses GPU work after a reset. A failing read keeps the last answer and is logged once. A WER report is one event
+  by its report id and dated by its dump's name (`WATCHDOG-20261102-2030.dmp`), not by the log entry: Windows logs a
+  queued report again every few minutes until it uploads, and on rog on 2026-11-03 the 0x141 and three 0x117s from
+  July to September were all logged anew at 12:34, which read by record would have been four fresh GPU resets.
 - The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
   is what the desktop app's tray reads.
 
@@ -261,6 +289,12 @@ put on localhost is still reported, with its reason:
 - `held-by-sandbox`: another sandbox paired here already mirrors it.
 - `ignored`: this device was told to leave the number alone, by `intentic-machine sync mirror ignore --sandbox <id>
   --port <n>` (without `--sandbox`, for every pairing). `unignore` hands it back, and it is mirrored once it is free.
+
+(2026-11-03) **An agent's own server stays in the sandbox.** A port the sandbox's list names an agent's (`owner`: its
+shell, or a background job it ran) is not mirrored and not reported, unless the agent left the job running for the
+owner (`job`) or the owner asked for it on this device with `sync mirror include --port <n>` (`exclude` restores the
+default). In the owner's shinobi workspace an agent's scratch server sat on 7878, the port his own game client dials,
+and the mirror put it on his localhost.
 
 Two rules cover what a bind probe cannot see, a holder that is down for a moment:
 

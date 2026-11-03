@@ -62,3 +62,10 @@ describe("a home's fresh start", () => {
         });
     });
 });
+
+
+test("a failed summary carries its reason into both the notice and readable line", () => {
+    const event = { mode: "summary", fellBack: true, reason: "Every summary model is out of allowance" } as const;
+    expect(handedOffNotice(event)).toEqual({ code: "handedOff", params: event });
+    expect(handedOffLine(event)).toBe("Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead. Reason: Every summary model is out of allowance");
+});

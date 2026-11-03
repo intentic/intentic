@@ -6,8 +6,10 @@ import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog"
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../../models/providers/providerCatalog";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
-import { effectScope } from "vue";
+import { effectScope, shallowRef } from "vue";
+import type { GpuSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { UPDATE_ACTION_ANCHOR } from "../../../models/sandbox/updateAnchor";
+import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
@@ -30,6 +32,15 @@ jest.mock(`../../../models/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ updateAvailable: { value: update.available }, updateStaged: { value: update.staged } }),
 }));
 
+// The settings' GPU part: nothing paused unless a test says the host reported a GPU reset.
+const gpu: Partial<GpuSettings> = {};
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
+    useSandboxSettings: () => ({ settings: { value: { gpu: { shells: `on-request`, timeoutMinutes: 0, ...gpu } } } }),
+}));
+// The disk watch's last reading, none unless a test sets one.
+const disk = shallowRef<DiskPressure | undefined>();
+jest.mock(`./storage/useDiskPressure`, () => ({ useDiskPressure: () => ({ pressure: disk }) }));
+
 const TRIAL_ENDPOINT = { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` } as const;
 
 // A sandbox that has finished reading both halves and holds no credential of any kind: the state a new workspace
@@ -42,6 +53,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    delete gpu.pausedFor;
+    disk.value = undefined;
     pending.value = undefined;
     hostedBuild.value = undefined;
     unbacked.value = false;
@@ -142,4 +155,46 @@ it(`says the environment is building instead of asking for a rebuild while one r
     expect(list.notes.value.map((item) => [item.message, item.to])).toEqual([
         [`Your sandbox's new environment is building`, `/sandbox/environment#sandbox-rebuild`],
     ]);
+});
+
+// rog, 2026-11-02: the GPU hung under an agent's page and the PC powered off. The daemon pauses GPU work and only the
+// owner's resume lifts it, so the owner is told first.
+it(`heads the list with GPU work paused after the computer reported a GPU reset`, async () => {
+    gpu.pausedFor = `rog reported a GPU reset at 2026-11-02T19:30:52Z (LiveKernelEvent 141).`;
+    const needs = (await attention()).needs.value;
+    expect(needs[0]).toEqual({
+        icon: `exclamation-triangle`,
+        tone: `warning`,
+        message: `GPU work is paused after your computer reported a GPU reset`,
+        to: `/sandbox`,
+        kind: `needs`,
+    });
+    delete gpu.pausedFor;
+    expect(await messages()).not.toContain(`GPU work is paused after your computer reported a GPU reset`);
+});
+
+// 2026-11-02: shinobi's disk reached 0 MB free and the only word was Claude Code's own banner. Under 10% the row heads
+// the list, says what is left, what the sandbox already removed and what holds the most, and carries the clean press.
+it(`heads the list with a nearly full disk, saying what went and what holds the most`, async () => {
+    const GB = 1_000_000_000;
+    disk.value = {
+        level: `low`,
+        freeBytes: 80 * GB,
+        totalBytes: 1000 * GB,
+        measuredAt: 1,
+        reaped: { bytes: 12 * GB, checkouts: 3, at: 1 },
+        using: [{ id: `buildOutputs`, bytes: 400 * GB }],
+    };
+    unbacked.value = true;
+    const needs = (await attention()).needs.value;
+    expect(needs[0]).toMatchObject({ to: `/sandbox#sandbox-storage`, action: `clean`, kind: `needs`, tone: `warning` });
+    expect(needs[0]?.message).toMatch(
+        /^The disk is nearly full: .+ free \(8%\); removed .+ of build output from 3 finished checkouts; Build output in checkouts holds the most \(.+\)$/,
+    );
+});
+
+// Between 10% and 15% the daemon is making room by itself: nothing to ask of the owner.
+it(`says nothing of a disk the sandbox is still clearing by itself`, async () => {
+    disk.value = { level: `reaping`, freeBytes: 120, totalBytes: 1000, measuredAt: 1, using: [] };
+    expect((await attention()).needs.value.map((item) => item.action)).not.toContain(`clean`);
 });

@@ -98,3 +98,14 @@ test(`per-job lists become setups every job runs exactly as before on`, () => {
     // A job that never had a list, or had an empty one, ran on nothing and is on none.
     expect([settings.roleSetups[`loop-iteration`], settings.roleSetups[`safety-judge`]]).toEqual([undefined, undefined]);
 });
+
+
+test("Low skips explicitly slow models and keeps the fast capable alternatives", () => {
+    expect(presetPins("low", [
+        { provider: "devin", ready: true, models: ["swe-1-6-slow", "swe-1-6-fast-slow", "swe-1-6-fast"] },
+        CLAUDE,
+    ])).toEqual([
+        { provider: "devin", model: "swe-1-6-fast" },
+        { provider: "claude", model: "claude-haiku-4-5-20251001" },
+    ]);
+});

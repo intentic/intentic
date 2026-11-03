@@ -45,6 +45,7 @@ import type { ConversationView } from "../../../../models/conversations/panel/us
 import { useFreshAgentSend } from "./freshAgentSend";
 import { useContinueLater } from "./continueLater";
 import { spentUntilOf } from "../../../../models/conversations/accounts/runServing";
+import { pressGoes } from "../../../../models/conversations/endings/pressWay";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
 // (what it says, whether it may, what Stop and the queue will do); the doing is the press itself, in the precedence
@@ -112,20 +113,18 @@ const nameBlockedAccount = (view: ConversationView, block: SendBlock | undefined
 // Whether a press may go at all: the sandbox answers, and the reader may drive this chat.
 const pressable = (host: Pick<SendHost, "reachable" | "canDrive">): boolean => host.reachable.value && host.canDrive.value;
 
-// The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
-// unwinding behind it, so what is typed next is the next turn's (TurnClient.say waits the unwind out), never words for
-// the ended one or an answer to a card it took with it.
-const composerTurn = ({ streaming, ending, awaitingDecision, pendingPlanMessage }: ConversationView) => ({
-    live: computed(() => streaming.value && ending.value === undefined),
+// The turn as the composer treats it: live as the card says it too (ConversationView.turnLive), a run to stop or steer only
+// where one goes (never a resume, whose words wait behind it); one a person ended is over here from the press, so what is
+// typed next is the next turn's (TurnClient.say waits the unwind out), never words for it or an answer to its card.
+const composerTurn = ({ turnLive, turnStoppable, ending, awaitingDecision, pendingPlanMessage }: ConversationView) => ({
+    live: computed(() => turnLive.value && ending.value === undefined),
+    stoppable: computed(() => turnStoppable.value && ending.value === undefined),
     parked: computed(() => awaitingDecision.value && ending.value === undefined),
     planMessage: computed(() => (ending.value === undefined ? pendingPlanMessage.value : undefined)),
 });
 
-// The plan's Approve, from the bar pinned above the box (ChatWaitingBar). With notes in the box it is "approve with these
-// notes": the plan reply carries no words beside a yes (its feedback is a rejection's), so the approval goes first and
-// the notes follow as an ordinary message, which the running turn takes mid-turn or right after. The box empties at the
-// press and gets its words back if the approval did not land. And its "keep planning": the box's notes when it holds
-// any (what Send does here), else a bare no. These two are the plan's only answers; its card in the transcript has none.
+// Approval carries the composer's notes into execution. Restore the notes if the decision was refused.
+// Keep planning sends the same notes as revision feedback.
 const planAnswers = (
     host: SendHost,
     planMessage: Readonly<Ref<ChatMessage | undefined>>,
@@ -141,14 +140,17 @@ const planAnswers = (
         const text = draft.value.trim();
         const staging = attachments.value;
         const files = host.staging.snapshot();
-        const context = editorContext.forSend();
         const notes = text.length > 0 || files.length > 0;
         if (notes) {
             attachments.value = [];
             editorContext.include.value = false;
             composer.settle();
         }
-        const approved = await view.conversation.value.requests.reply(plan.requestId, { kind: `plan`, approve: true });
+        const approved = await view.conversation.value.requests.reply(plan.requestId, {
+            kind: `plan`,
+            approve: true,
+            feedback: notes ? planFeedback(text, files) : undefined,
+        });
         if (!notes) {
             return;
         }
@@ -157,7 +159,6 @@ const planAnswers = (
             attachments.value = staging;
             return;
         }
-        void view.send(text, files, context);
         if (text.length > 0) {
             history.value?.record(text);
         }
@@ -286,6 +287,7 @@ const reopenReadings = (on: {
     readonly continueOffer: Readonly<Ref<boolean>>;
     readonly spentUntil: Readonly<Ref<number | undefined>>;
     readonly now: Readonly<Ref<number>>;
+    readonly goes: Readonly<Ref<boolean>>;
 }) => {
     // How the strip's turn goes on at the reopen: the press that books or arms it, or that it already goes then.
     const atReopen = computed(() => on.situation.value.pickUp?.atReopen);
@@ -296,11 +298,8 @@ const reopenReadings = (on: {
         reopenPress,
         // What the time-labelled button says on an empty box with a turn to continue: that press, or that it is already set.
         reopenShown: computed(() => (on.intent.value === `scheduled` && continueVisible(on.situation.value) ? atReopen.value : undefined)),
-        // Whether the strip's own press would get through now (a held turn always would; it is the account that may not,
-        // and a blocked reading keeps it back too: only words in the box go anyway).
-        pressable: computed(
-            () => on.situation.value.pickUp?.ready === true && on.situation.value.accountBlock === undefined && sendRefusal(on.situation.value) === undefined,
-        ),
+        // Whether the strip's own press goes now, by the rule the strip and the card read too (pressWay.ts), unless the box refuses.
+        pressable: computed(() => on.goes.value && sendRefusal(on.situation.value) === undefined),
         // What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
         keyHint: computed(() => continueKeyHintOf(on.continueOffer.value, on.spentUntil.value, reopenPress.value, on.now.value)),
     };
@@ -333,7 +332,7 @@ const stopPress = (host: Pick<SendHost, "mobile">, words: Readonly<Ref<ComposerW
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
-    const { live, parked, planMessage } = composerTurn(view);
+    const { live, stoppable, parked, planMessage } = composerTurn(view);
     const t = useT();
     const later = laterPick(host);
     // Running only while something counts down to a named instant (an allowance reset, a booked time); nothing else here
@@ -369,7 +368,7 @@ export const useComposerSend = (host: SendHost) => {
         streaming: live.value,
         awaitingDecision: parked.value,
         waitingOnYou: view.waitingOnYou.value,
-        steerable: view.steerable.value,
+        steerable: view.steerable.value && stoppable.value,
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp:
             pickUp.value === undefined
@@ -390,17 +389,17 @@ export const useComposerSend = (host: SendHost) => {
     const refusal = computed(() => sendRefusal(situation.value));
     const anyway = anywayReadings(situation, refusal);
     const continueOffer = computed(() => continueOffered(situation.value));
-    const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow });
+    const goes = computed(() => pressGoes(pickUp.value, host.reachable.value, view.conversation.value.turn.continuing.value, paneNow.value));
+    const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow, goes });
     const { reopenPress, reopenShown } = reopen;
     // Nothing to send with is a disabled Send that says why (sendHint), never a press that opens something else.
     const canSend = computed(() => connected.value && sendable(situation.value, intent.value, refusal.value));
     // Everything a press needs: voice and edit intercept before `canSend`.
     const readyToSend = computed(() => connected.value && staged.value && refusal.value === undefined);
 
-    // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on), so nothing
-    // joins the recall ring.
+    // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on): nothing joins the recall ring.
     const continueTurn = (options?: ContinueOptions): void => {
-        if (!pressable(host) || sendBlockOf(view.servingState.value, paneNow.value) !== undefined) {
+        if (!pressable(host) || !reopen.pressable.value) {
             return;
         }
         void view.continueTurn(options);
@@ -563,9 +562,9 @@ export const useComposerSend = (host: SendHost) => {
         pickUpPressable: reopen.pressable,
         atReopen: reopen.atReopen,
         continueKeyHint: reopen.keyHint,
-        // Typed text always has somewhere to go mid-turn, but an empty box has none, so Stop takes the slot until the
-        // first keystroke; gated on `staged`, so a refused send keeps its greyed button and tooltip.
-        sendShown: computed(() => !live.value || staged.value),
+        // Typed text always has somewhere to go mid-turn, but an empty box has none, so Stop (never over a resume, which runs
+        // nothing to end) takes the slot until the first keystroke; gated on `staged`, so a refused send keeps its hint.
+        sendShown: computed(() => !stoppable.value || staged.value),
         composerPlaceholder: computed(() => {
             const plain = words.value.plain === true;
             // Nothing to send with: the box still takes the task, without naming a vendor nobody chose.

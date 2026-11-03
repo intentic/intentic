@@ -397,6 +397,30 @@ test("restarts reads the restart log newest first and says why each run ended, w
     expect(await call(deps, "restarts", { sinceMinutes: 120 })).toContain("2 daemon boots");
 });
 
+// 2026-11-02 on rog: the GPU hung under a page an agent rendered, the PC powered off, and the restart said only "killed".
+test("restarts names the host's crash as the end of a run killed without warning, by what Windows reported", async () => {
+    const crash = (minutesAgo: number, kind: string, code: string, id: string): string =>
+        JSON.stringify({ id, at: at(minutesAgo), kind, code, host: "rog", heardAt: at(minutesAgo - 5) });
+    const deps = await setup({
+        "restarts.jsonl": [
+            JSON.stringify({ at: at(200), boot: { pid: 40 }, previous: { ended: "killed", graceful: false, startedAt: at(900) } }),
+            JSON.stringify({ at: at(60), boot: { pid: 61 }, previous: { ended: "killed", graceful: false, startedAt: at(200), containerRestarted: true } }),
+        ],
+        "host-crashes.jsonl": [
+            crash(70, "gpu-reset", "LiveKernelEvent 141", "Application:9001"),
+            crash(64, "host-crash", "Kernel-Power 41", "System:48213"),
+            // Long before either run: explains neither.
+            crash(5000, "gpu-reset", "Display 4101", "System:100"),
+        ],
+    });
+
+    const text = await call(deps, "restarts", {});
+    expect(text).toContain(
+        `booted pid 61; the run before was killed when the computer it runs on went down after a GPU reset: Windows reported its GPU reset at ${at(70)} (LiveKernelEvent 141); it went down at ${at(64)} (Kernel-Power 41); the container restarted too`,
+    );
+    expect(text).toContain("booted pid 40; the run before was killed without warning (");
+});
+
 test("restarts falls back to bare boot times on a daemon that keeps no restart log", async () => {
     const deps = await setup({
         // Uptime starts over between these two samples: a boot 2 minutes before the second.

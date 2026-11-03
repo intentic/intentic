@@ -76,7 +76,7 @@ const CURSOR_SERVED: ReadonlySet<string> = new Set(["ui", "code", "subagents"]);
 export type CursorPlanDeps = TurnToolsDeps &
     HarnessServersDeps &
     HarnessHooksDeps &
-    Pick<Services, "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "sandboxSettings">;
+    Pick<Services, "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "sandboxSettings" | "turns">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
 // daemon-wide, unlike Codex's or OpenCode's processes.

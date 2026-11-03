@@ -22,7 +22,7 @@ import { describeText } from "./tools/describe.js";
 import { DEFAULT_LOG_LINES as DEFAULT_DEVICE_LOG_LINES, deviceLogs, MAX_LOG_LINES as MAX_DEVICE_LOG_LINES } from "./tools/logs/logs.js";
 import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
-import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
+import { browserTools } from "./tools/browser/tools.js";
 import {
     createAndroid,
     DEFAULT_LOG_LINES as DEFAULT_ANDROID_LOG_LINES,
@@ -314,70 +314,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 ? textResult(await writeClipboard(screenOf(), text, scopes))
                 : textResult(await readClipboard(screenOf(), scopes)),
     }),
-    tool({
-        name: "browser_open",
-        description:
-            "Open a page in a browser on this device and answer with what is on it: the page's title, its URL, and every element you can click or type into, each with a reference like [e12]. THIS IS THE RIGHT WAY TO USE A WEBSITE, act on elements by reference, never by clicking pixels, because references survive scrolling, resizing and re-rendering. The browser is a separate instance with its own profile, so the user's own tabs and session are untouched; the first time it opens they may need to sign in. Requires the 'Run commands' permission.",
-        effect: "write",
-        input: z.object({ url: required.describe("The page to open. A bare host like example.com is fine.") }),
-        run: async ({ url }, scopes) => textResult(await openPage(web(), url, scopes)),
-    }),
-    tool({
-        name: "browser_snapshot",
-        description:
-            "What the current page shows right now, with fresh [e…] references. Take one after anything that might have changed the page: references from an older snapshot are refused rather than clicking the wrong thing. Requires the 'See the screen' permission.",
-        effect: "read",
-        input: NO_ARGS,
-        run: async (_args, scopes) => textResult(await snapshotPage(web(), scopes)),
-    }),
-    tool({
-        name: "browser_read",
-        description:
-            "The current page as readable text: what a person would get by selecting all of it. Use this to ANSWER QUESTIONS about a page; use browser_snapshot when you intend to act on it. Requires the 'See the screen' permission.",
-        effect: "read",
-        input: NO_ARGS,
-        run: async (_args, scopes) => textResult(await readPage(web(), scopes)),
-    }),
-    tool({
-        name: "browser_click",
-        description:
-            "Click an element by its [e…] reference from the last snapshot. Answers with the page as it stands afterwards, so you see the result without asking. Requires the 'Use the mouse and keyboard' permission.",
-        // A click can buy, send or delete on any site the owner signed into in that browser.
-        effect: "destructive",
-        input: z.object({ ref: required }),
-        run: async ({ ref }, scopes) => textResult(await clickElement(web(), ref, scopes)),
-    }),
-    tool({
-        name: "browser_fill",
-        description:
-            "Type into a field by its [e…] reference: replaces what is there, and fires the events a page's own JavaScript listens for (setting a value without them is how a filled form submits empty). Set submit to press Enter afterwards. Requires the 'Use the mouse and keyboard' permission.",
-        // Replaces what the field held, and `submit` sends the form.
-        effect: "destructive",
-        input: z.object({
-            ref: required,
-            text: z.string(),
-            submit: z.boolean().default(false).describe("Submit the form after typing. Default false."),
-        }),
-        run: async ({ ref, text, submit }, scopes) => textResult(await fillElement(web(), ref, text, submit, scopes)),
-    }),
-    tool({
-        name: "browser_key",
-        description:
-            'Press a key on the page as a whole: "Return", "Escape", "Tab". For typing into a field use browser_fill. Requires the \'Use the mouse and keyboard\' permission.',
-        // Enter submits and Delete deletes, whatever has focus.
-        effect: "destructive",
-        input: z.object({ key: required }),
-        run: async ({ key }, scopes) => textResult(await pressKey(web(), key, scopes)),
-    }),
-    tool({
-        name: "browser_tabs",
-        description:
-            "Every tab open in that browser, and which one these tools are acting on. Pass an id to `select` to switch. Reading the list needs 'See the screen'; switching needs 'Use the mouse and keyboard'.",
-        // Listing reads, but `select` switches the tab every other browser tool acts on.
-        effect: "write",
-        input: z.object({ select: required.optional().describe("The id of the tab to switch to. Omit to just list them.") }),
-        run: async ({ select }, scopes) => textResult(select === undefined ? await listTabs(web(), scopes) : await selectTab(web(), select, scopes)),
-    }),
+    // browser_open … browser_frames: the agent's own browser on this device, by element and by what its GPU drew (tools/browser/tools.ts).
+    ...browserTools(web),
     tool({
         name: "device",
         description:
@@ -616,8 +554,17 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         description:
             "Stop a program started with app_start, together with every process it started. It is asked to close first, as its close button would (on Windows: WM_CLOSE to a program with a window, a Ctrl-Break to a console program; elsewhere SIGTERM), and forced after its grace (app_start's stopGraceSeconds, default five seconds); `force` skips the asking. A forced stop says why: the program could not be asked, or it was asked and had not finished.",
         effect: "write",
-        input: z.object({ id: required.describe("The run id from app_start."), force: z.boolean().default(false) }),
-        run: async ({ id, force }, scopes) => textResult(await appStop(id, force, scopes, callerSandbox())),
+        input: z.object({
+            id: required.describe("The run id from app_start."),
+            force: z.boolean().default(false),
+            by: z
+                .string()
+                .min(1)
+                .max(200)
+                .optional()
+                .describe("Who is stopping it, as app_status will say (\"stopped by <by>\"). The sandbox fills this in; leave it out."),
+        }),
+        run: async ({ id, force, by }, scopes) => textResult(await appStop(id, force, scopes, callerSandbox(), by)),
     }),
     tool({
         name: "list_sandboxes",

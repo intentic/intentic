@@ -243,6 +243,23 @@ say_holders() {
 # saw them, rewritten when one starts waiting, every SAY_EVERY seconds, and when it stops. Both written whole under a
 # temporary name and renamed over the old, never opened by their own name: the directory is shared with fenced turns
 # (see above), and a rename replaces a planted link instead of writing through it.
+# tmux-run discounts the union of these intervals, including concurrent waiters in one pane. The record outlives
+# the waiter, so a wait that starts and finishes between two reads still counts. Each publication is atomic.
+queue_capture="${INTENTIC_QUEUE_CAPTURE_DIR:-}"
+read -r queue_up _ </proc/uptime 2>/dev/null || queue_up=0
+queue_since=$((10#${queue_up/./}))
+queue_record() {
+    [ -n "$queue_capture" ] && [ ! -L "$queue_capture" ] || return 0
+    mkdir -p "$queue_capture" 2>/dev/null || return 0
+    local tmp end=0 up
+    if [ "${1:-}" = leaving ]; then
+        read -r up _ </proc/uptime 2>/dev/null || up=$queue_since
+        end=$((10#${up/./}))
+    fi
+    tmp=$(mktemp "$queue_capture/.tmp.XXXXXX" 2>/dev/null) || return 0
+    printf '%s %s %s\n%s\n' "$queue_since" "$end" "$$" "${queue_note:-queued: waiting for pool $pool}" >"$tmp"
+    mv -f "$tmp" "$queue_capture/wait.$$" 2>/dev/null || rm -f "$tmp"
+}
 waiting_since=$(date +%s)
 owner_here=${INTENTIC_TURN_OWNER:-}
 put() {
@@ -251,9 +268,10 @@ put() {
     printf '%s\n' "$2" >"$tmp" && mv -f "$tmp" "$dir/$1" 2>/dev/null || rm -f "$tmp"
 }
 write_state() {
-    local holders_json="" waiters_json="" slot pid age owner rule command file entry
+    local holders_json="" waiters_json="" slot pid age owner rule command file entry since position=1 behind=""
     while IFS="$sep" read -r slot pid age owner rule command; do
         [ -n "$slot" ] || continue
+        behind="$behind${behind:+; }pid $pid${owner:+ for conversation $owner}: $command"
         holders_json="$holders_json${holders_json:+,}{\"slot\":$(json_string "$slot"),\"pid\":$pid,\"holderAgeSeconds\":$age,\"conversation\":$(json_string "$owner"),\"rule\":$(json_string "$rule"),\"command\":$(json_string "$command")}"
     done < <(holders)
     for file in "$dir"/wait.*; do
@@ -265,11 +283,18 @@ write_state() {
         fi
         [ "$pid" = "$$" ] && [ "${1:-}" = leaving ] && continue
         entry=$(head -c 2000 "$file" 2>/dev/null)
+        since=$(printf '%s' "$entry" | sed -n 's/.*"since":\([0-9]*\).*/\1/p')
+        if [[ "$since" =~ ^[0-9]+$ && "$pid" =~ ^[0-9]+$ ]] && { [ "$since" -lt "$waiting_since" ] || { [ "$since" = "$waiting_since" ] && [ "$pid" -lt "$$" ]; }; }; then
+            position=$((position + 1))
+        fi
         waiters_json="$waiters_json${waiters_json:+,}$entry"
     done
+    queue_note="queued: position $position, behind ${behind:-no readable holders} (pool $pool)"
+    [ "${1:-}" = leaving ] || queue_record
     put state.json "{\"pool\":$(json_string "$pool"),\"limit\":$limit,\"updatedAt\":$(date +%s),\"holders\":[$holders_json],\"waiters\":[$waiters_json]}"
 }
 stop_waiting() {
+    queue_record leaving
     stop_flocks
     rm -f "$dir/wait.$$"
     write_state leaving
@@ -360,9 +385,10 @@ next_slot() {
 say_every=$(number "${INTENTIC_QUEUE_SAY_EVERY:-30}" 30)
 [ "$say_every" -lt 1 ] && say_every=30
 put "wait.$$" "{\"pid\":$$,\"label\":$(json_string "$label"),\"conversation\":$(json_string "$owner_here"),\"since\":$waiting_since,\"command\":$(json_string "$(printf '%s ' "$@" | cut -c1-120)")}"
-trap 'rm -f "$dir/wait.$$"' EXIT
+trap 'queue_record leaving; rm -f "$dir/wait.$$"' EXIT
 trap 'stop_waiting; exit 130' INT
 trap 'stop_waiting; exit 143' TERM
+queue_record
 write_state
 printf '[queue-run] %s: waiting for a free slot in pool "%s" (limit %s), held by:\n' "$label" "$pool" "$limit" >&2
 holders | say_holders

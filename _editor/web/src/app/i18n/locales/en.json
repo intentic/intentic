@@ -454,6 +454,7 @@
             "landProcessStopped": "The workspace's Git process stopped. Retry to land this agent's work.",
             "landTooManyPaths": "This change includes too many file paths to land at once. Reduce the overlap in your workspace, then land again.",
             "landOutputLimit": "Git returned more information than the workspace could handle. Reduce the size of this change, then land again.",
+            "landRepoCorrupt": "Git's own storage for this repository was damaged, most likely by an unclean stop. The sandbox is checking and repairing it now; land again in a minute, and if a card on the Sandbox overview says objects were lost, read it first.",
             "workspaceOverlap": "{count} files in your workspace overlap this agent's work. Commit or discard them, then land again.",
             "couldntLand": "Couldn't land: {reason}",
             "lostLink": "this agent's copy lost its link to your workspace's history",
@@ -880,7 +881,11 @@
             "pushedHere": "Pushed to {target}",
             "upstream": "its upstream",
             "pushedMore": "{count} more push | {count} more pushes",
-            "more": "(+{count} more)"
+            "more": "(+{count} more)",
+            "fold": "Fold into {parent}",
+            "foldDropping": "Fold into {parent}, dropping its {count} commit | Fold into {parent}, dropping its {count} commits",
+            "adopt": "Make it a workspace repo",
+            "settleFailed": "Couldn't settle {dir}"
         },
         "words": {
             "allKept": "Everything kept",
@@ -2981,7 +2986,6 @@
         },
         "chatContinueStrip": {
             "aboutTokens": "~{tokens} tokens",
-            "awaitingReset": "Awaiting reset",
             "continueOn": "Continue on {model}",
             "continueOnFresh": "Continue on {model}, in a fresh session",
             "continueOnKeepingSession": "Continue on {fallback}, keeping this session",
@@ -3016,7 +3020,9 @@
             "continueAt": "Continue at {when}",
             "continueIn": "Continue in {when}",
             "tryNow": "Try now",
-            "tryNowNote": "The account reads spent, and the reset time is only the provider's estimate. If it is still spent, nothing runs and this waits again."
+            "tryNowNote": "The account reads spent, and the reset time is only the provider's estimate. If it is still spent, nothing runs and this waits again.",
+            "tryReadingNote": "Readings lag the provider. If it still refuses, nothing runs and this waits again.",
+            "resting": "Nothing ran: try again in a minute"
         },
         "chatDocumentBody": {
             "clipped": "clipped"
@@ -3115,7 +3121,7 @@
             "planApproved": "Plan approved.",
             "keptPlanning": "Kept planning.",
             "watching": "Watching for {note}, checked every {every}.",
-            "restartInterrupted": "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
+            "restartInterrupted": "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. The sandbox ended the turn's in-process helpers. Background jobs and dev servers ended on a container restart; a daemon-only restart may preserve kept jobs and terminal sessions. A container recreation clears /tmp, including scripts and screenshots; check before relying on any file there. Retained helper edits stay in .claude/worktrees/agent-*. Keep evidence that must survive in /work/.intentic/records/artifacts/.",
             "depsInstalling": "Installing {count} dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity. | Installing {count} dependencies it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
             "depsQueued": "{count} dependency it added or changed is being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity. | {count} dependencies it added or changed are being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.",
             "retrying": "{message} Retrying by itself: attempt {attempt} of {of}.",
@@ -3212,6 +3218,7 @@
                 "trimFrom": "Continued in a trimmed copy of the session (about {tokens} tokens instead of {from}): {cleared} older tool output cleared, every message and tool call kept. | Continued in a trimmed copy of the session (about {tokens} tokens instead of {from}): {cleared} older tool outputs cleared, every message and tool call kept.",
                 "summary": "Continued in a fresh session opened with a summary of the conversation.",
                 "summaryBy": "Continued in a fresh session opened with a summary of the conversation written by {model}.",
+                "reason": "Reason: {reason}",
                 "trimFellBack": "Could not trim the session for the hand-off, so it was carried whole.",
                 "summaryFellBack": "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead."
             },
@@ -4193,7 +4200,8 @@
             "resendMemoryNote": "Sends the message by itself once the sandbox's memory has stayed free for half a minute, one held chat at a time.",
             "waitMemoryNote": "Nothing is sent for you. The message waits here until somebody presses Send anyway.",
             "goesWhenRoom": "Goes by itself once memory frees up",
-            "allowanceBack": "allowance back {when}"
+            "allowanceBack": "allowance back {when}",
+            "waitsForPress": "only Continue carries it on"
         },
         "words": {
             "connectAModel": "Connect a model",
@@ -4498,6 +4506,7 @@
             "inMinutes": "in {minutes}m"
         },
         "toolPresentation": {
+            "interrupted": "interrupted",
             "failed": "failed",
             "files": "{count} file | {count} files",
             "lines": "{count} line | {count} lines",
@@ -8180,6 +8189,7 @@
             "deletingIsRetention": "Archiving deletes nothing. How long conversations and restore points are kept:"
         },
         "sandboxAttention": {
+            "gpuPaused": "GPU work is paused after your computer reported a GPU reset",
             "agentProposedChangeTo": "The agent proposed a change to your environment",
             "desktopSyncStopped": "Desktop sync stopped on {devices}, its folder isn't syncing",
             "environmentBuilding": "Your sandbox's new environment is building",
@@ -8192,7 +8202,12 @@
             "rebuildNeededToFinish": "Rebuild needed to finish setting up your new capabilities",
             "requiredSecretsMissing": "{count} required secret missing | {count} required secrets missing",
             "sandboxUpdateReadyTo": "A sandbox update is ready to apply — a restart of about half a minute",
-            "peopleAskForAccess": "{count} person asks for access | {count} people ask for access"
+            "peopleAskForAccess": "{count} person asks for access | {count} people ask for access",
+            "cleanBuildOutput": "Clean build output",
+            "cleanBuildOutputDetail": "Removes what builds left in checkouts whose conversation has nothing running; the next build makes it again.",
+            "diskLow": "The disk is nearly full: {free} free ({percent}%)",
+            "diskReaped": "removed {bytes} of build output from {count} finished checkout | removed {bytes} of build output from {count} finished checkouts",
+            "diskUsing": "{category} holds the most ({bytes})"
         },
         "sandboxBackupCard": {
             "detail": "This sandbox runs in the cloud and nothing on this computer holds a copy of its files. Desktop sync keeps a folder here in step with it, so the work survives anything that happens to the machine.",
@@ -8454,7 +8469,13 @@
             "sleep": "Sleep when unused",
             "sleepOn": "Sleeps when nobody uses it, and wakes for its schedules and when opened",
             "sleepOff": "Stays running even when nobody uses it",
-            "sleepTipNote": "Frees its memory while unused."
+            "sleepTipNote": "Frees its memory while unused.",
+            "gpu": "Host GPU",
+            "gpuOnRequest": "Agents use it only for commands they run through gpu-run",
+            "gpuAll": "Every command an agent runs can use it",
+            "gpuTipNote": "Your display GPU, through WSL.",
+            "gpuPaused": "GPU work is paused: {reason}",
+            "gpuResume": "Resume GPU work"
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "The accounts it speaks through stay connected and signed in. Any automation pinned to this persona stops posting until you give it another one.",
@@ -9131,6 +9152,10 @@
             "buildCaches": {
                 "label": "Build caches",
                 "reason": "Build tools' saved outputs, made again the next time they are needed. Cleaning keeps the last day's."
+            },
+            "buildOutputs": {
+                "label": "Build output in checkouts",
+                "reason": "What builds left inside conversation checkouts, such as a Rust target folder. Cleaning removes it from checkouts whose conversation has nothing running; the next build makes it again, and the checkout and its work stay."
             }
         },
         "agentOffload": {
@@ -12803,6 +12828,8 @@
         "directoryRuns": {
             "agentTooOld": "The agent on {device} is too old to run programs. Update it there.",
             "buildsCommand": "Built here before each run",
+            "builtFrom": "Built from {commit}",
+            "builtFromTip": "What runs on {device} was built at {at} from commit {commit}, with {changed} uncommitted changes in the tree (landed work stays uncommitted until someone commits it).",
             "connectOne": "Connect one",
             "couldntFollow": "Couldn't follow {target} on {device}.",
             "couldntRun": "Couldn't run {target} on {device}.",
@@ -12816,10 +12843,13 @@
             "foundProcfile": "From its Procfile",
             "foundStart": "The start script in its package.json",
             "isolated": "Windows Sandbox",
+            "landsSince": "{count} land since | {count} lands since",
+            "landsSinceTip": "Work that landed after this build is not in it: Restart builds it.",
             "listFailed": "Couldn't read what runs on {device}, so this can't say whether anything does: {reason}",
             "log": "Log",
             "logEmpty": "Nothing printed yet.",
             "mayBeRunning": "May be running",
+            "movedDuringBuild": "The tree changed while it compiled, so it may mix two versions of the source: Restart builds one.",
             "noComputerFor": "{count} more runs only on a computer, and none is connected to this sandbox. | {count} more run only on a computer, and none is connected to this sandbox.",
             "offline": "{device} isn't connected right now.",
             "openCard": "Open its card",

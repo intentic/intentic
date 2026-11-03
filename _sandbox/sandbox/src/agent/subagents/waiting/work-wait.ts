@@ -16,10 +16,11 @@ import {
 } from "../../tools/jobs/background-jobs.js";
 import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
 import { followRun } from "../../tools/jobs/input-wait-follow.js";
-import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "../subagents.js";
+import { type SubagentWaitOptions, type SubagentWaitUntil, listSubagentSessions, waitForSubagent } from "../subagents.js";
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../../conversations/actor/conversation-holdings.js";
+import { ROSTER } from "../../../conversations/actor/subagent-roster.js";
 import { opt } from "../../../opt.js";
 import { withdrawQueuedReport } from "./queued-reports.js";
 
@@ -207,6 +208,58 @@ export const waitForChildren = async (
         return result;
     } finally {
         heard.abort();
+    }
+};
+
+/** Explicit targets may mix runtime agent ids, spawned children and Bash job ids. */
+export interface NamedWorkOutcome {
+    readonly outcome: SubagentsWaitOutcome["outcome"] | "message";
+    readonly agents: readonly SubagentSession[];
+    readonly jobs: readonly JobReport[];
+    readonly matched?: SubagentSession;
+    readonly job?: JobReport;
+}
+
+export const waitForNamedWork = async (
+    actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
+    conversationId: string,
+    options: SubagentWaitOptions & { readonly targets: readonly string[] },
+): Promise<NamedWorkOutcome> => {
+    const targets = [...new Set(options.targets)];
+    if (targets.length === 0) {
+        return { outcome: "unknown-target", agents: [], jobs: [] };
+    }
+    const ended = new AbortController();
+    const signal = anySignal(ended.signal, options.signal);
+    const jobs = targets.flatMap((id) => backgroundJobOf(actors, conversationId, id) ?? []);
+    const children = targets.filter((id) => backgroundJobOf(actors, conversationId, id) === undefined);
+    try {
+        const result = await new Promise<WorkWaitOutcome>((resolve, reject) => {
+            let remaining = targets.length;
+            for (const target of targets) {
+                void waitForWork(actors, conversationId, { ...options, target, signal }).then((answer) => {
+                    remaining -= 1;
+                    const failed = answer.agent?.status === "failed" || answer.agent?.status === "killed" ||
+                        (answer.job?.exitCode !== undefined && answer.job.exitCode !== 0);
+                    const paused = answer.agent?.status === "paused";
+                    if (answer.outcome !== "finished" || failed || paused || remaining === 0) {
+                        resolve(answer);
+                    }
+                }, reject);
+            }
+        });
+        const failed = result.agent?.status === "failed" || result.agent?.status === "killed" ||
+            (result.job?.exitCode !== undefined && result.job.exitCode !== 0);
+        return {
+            outcome: failed ? "failed" : result.agent?.status === "paused" ? "blocked" : result.outcome,
+            agents: listSubagentSessions(actors).filter((agent) => agent.conversationId === conversationId &&
+                children.some((id) => id === agent.id || actors.holdings(ROSTER).get(agent.id)?.agentId === id)),
+            jobs: await Promise.all([...new Set(jobs)].map((job) => jobReport(actors, job))),
+            ...opt("matched", result.agent),
+            ...opt("job", result.job),
+        };
+    } finally {
+        ended.abort();
     }
 };
 

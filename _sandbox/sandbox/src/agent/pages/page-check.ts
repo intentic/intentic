@@ -206,6 +206,10 @@ const measuredInFrame = async (page: Page): Promise<number> => {
         .catch(() => 0);
 };
 
+// The browser reports this deferred resize delivery as an error although the next frame delivers it.
+export const harmlessPageError = (message: string): boolean =>
+    /^(?:Error: )?ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)\.?$/.test(message.trim());
+
 // The page laid out and pictured, or why it could not be. `cap` is the tallest the agent let the frame grow.
 export const checkPage = async (
     html: string,
@@ -240,7 +244,7 @@ export const checkPage = async (
                 messages.push({ level, text: clip(message.text()) });
             });
             page.on("pageerror", (error) => {
-                if (errors.length < MAX_MESSAGES) {
+                if (!harmlessPageError(error.message) && errors.length < MAX_MESSAGES) {
                     errors.push(clip(error.stack?.split("\n").slice(0, 2).join(" ") ?? error.message));
                 }
             });
@@ -262,7 +266,7 @@ export const checkPage = async (
             const png = await page.screenshot({ type: "png", fullPage: true, clip: { x: 0, y: 0, width, height: capturedHeight } });
             // What the page's own bridge caught, beside what the browser saw thrown; each said once.
             for (const error of (await reportedOf(page)).errors) {
-                if (!errors.includes(error) && errors.length < MAX_MESSAGES) {
+                if (!harmlessPageError(error) && !errors.includes(error) && errors.length < MAX_MESSAGES) {
                     errors.push(clip(error));
                 }
             }

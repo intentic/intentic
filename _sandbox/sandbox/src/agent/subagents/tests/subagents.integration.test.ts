@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { waitForSubagents } from "../waiting/subagent-waits.js";
 import { noteChildWork } from "../child-verification.js";
 import { endTurnSubagents, findSubagentRecord, recordInto } from "../subagent-transcript.js";
-import { closeSubagents, listSubagentSessions, noteSpawnedChild, noteSubagentSpawn, noteSubagentTask, openSpawnedChild, pairLiveSubagents, resetSubagents, settleSpawnedChild, subagentHooks, subagentInParentTree, subagentEndingReported, KEEP_SETTLED, waitForSubagent, type SubagentTaskMessage, type SubagentTurn } from "../subagents.js";
+import { closeSubagents, pair, listSubagentSessions, noteSpawnedChild, noteSubagentSpawn, noteSubagentTask, openSpawnedChild, pairLiveSubagents, resetSubagents, settleSpawnedChild, subagentHooks, subagentInParentTree, subagentEndingReported, KEEP_SETTLED, waitForSubagent, type SubagentTaskMessage, type SubagentTurn } from "../subagents.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
@@ -711,4 +712,27 @@ describe("how a subagent ends", () => {
         settleSpawnedChild(actors, "sub-late-1", { status: "failed", report: "", error: "exit 1" });
         expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "failed", summary: "All done.", error: "exit 1" }]);
     });
+});
+
+
+test("wait resolves a Claude agentId and retains its snapshot on timeout, within its own parent only", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subagent-alias-"));
+    try {
+        const handle = turn();
+        noteSubagentTask(handle, started());
+        const agentId = "a0123456789abcdef";
+        await writeFile(join(dir, `agent-${agentId}.meta.json`), JSON.stringify({ toolUseId: "call-1" }));
+        await pair(actors, dir, "conv-1");
+        expect(await waitForSubagent(actors, "conv-1", { target: agentId, until: ["finished"], timeoutMs: 1 }))
+            .toMatchObject({ outcome: "timeout", matched: { id: "call-1", status: "running" } });
+        expect(await waitForSubagent(actors, "other", { target: agentId, until: ["finished"], timeoutMs: 1 }))
+            .toEqual({ outcome: "unknown-target" });
+        const many = waitForSubagents(actors, "conv-1", { targets: [agentId], timeoutMs: 5_000 });
+        closeSubagents(actors, "conv-1");
+        expect(await many).toMatchObject({ outcome: "failed", matched: { id: "call-1", status: "killed" }, agents: [{ id: "call-1", status: "killed" }] });
+        expect(await waitForSubagent(actors, "conv-1", { target: agentId, until: ["finished"], timeoutMs: 1 }))
+            .toMatchObject({ outcome: "finished", matched: { id: "call-1", status: "killed" } });
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });

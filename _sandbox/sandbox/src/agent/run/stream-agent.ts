@@ -1,3 +1,4 @@
+import { continueCappedTurn } from "./frames/cap-continuation.js";
 import { recordSurroundingsSaid } from "../prompt/surroundings.js";
 import { randomUUID } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
@@ -24,7 +25,7 @@ import { type PersistedAgent, worktreeOf } from "../../conversations/registry/ag
 import { holdAccount } from "../providers/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
-import { resolveHomeConflict } from "../../conversations/home/home-conflict.js";
+import { resolveConflictNow } from "../../conversations/land/settle/resolve-conflict.js";
 import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { childRerunHorizonMs } from "../subagents/child-records.js";
@@ -56,7 +57,7 @@ import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { sessionToResume, handoffOf, attachmentsOf } from "./turn/turn-preflight-input.js";
 import { trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
-import { carriedOffOf, keptHandoffOf, type Replaced, replaceHeld } from "./turn/holds/handoff-way.js";
+import { carriedOffOf, keptHandoffOf, type Replaced, replaceHeld, withUnsentWords } from "./turn/holds/handoff-way.js";
 import { continuationInput, continuationOf, continuationTrim, type HomeContinuation, homeContinuationOf } from "./turn/holds/turn-continuation.js";
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
@@ -216,7 +217,7 @@ const placementOf = (
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId, land) => settleLandingInBackground(services, conversationId, land),
-            resolveConflict: (conversationId, conflicts) => void resolveHomeConflict(services, conversationId, conflicts),
+            resolveConflict: (conversationId, conflicts) => void resolveConflictNow(services, conversationId, conflicts),
         },
     );
 };
@@ -579,7 +580,7 @@ const preflight = async (
     const history = await handoffOf(services, turnInput, resumed);
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
-    const going = await continuationOf(services, execution, { input, history, held, way, rollover, resumed, delivery, signal });
+    const going = await continuationOf(services, execution, { input, history, held, way, rollover, resumed, delivery, signal, localCwd });
     clock.mark("history");
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
@@ -700,6 +701,8 @@ async function* mainTreeCheckpoint(services: Services, turn: SnapshotTurn | unde
 
 // A planned turn, ready to run: the plan, the request as the runtime gets it, and where it runs.
 interface PreparedTurn {
+    // The turn as the model is asked it (withUnsentWords), which a failure holds, so a press sends all of it again.
+    readonly asked: RoutedTurn;
     readonly plan: PlannedTurn;
     readonly request: AgentRequest;
     readonly isolation: TurnPlacement | undefined;
@@ -734,7 +737,9 @@ async function* prepareTurn(
             text: rollover === undefined ? "Writing a summary of the conversation for the hand-off…" : "Starting a fresh session: writing a summary of the conversation…",
         };
     }
-    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis, replaced, rollover);
+    // A person's words the held turn never got to the model go ahead of their new ones (handoff-way.ts).
+    const asked = withUnsentWords(input, replaced.held);
+    const ready = await preflight(services, asked, executionScope, signal, worktree, steering, clock, coldTrimBasis, replaced, rollover);
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
@@ -749,7 +754,7 @@ async function* prepareTurn(
     if (ready.freshStart !== undefined) {
         yield { kind: "fresh_start", ...ready.freshStart };
     }
-    const planned = await planTurn(services, input, ready.context);
+    const planned = await planTurn(services, asked, ready.context);
     const plan = planned.ok ? { ...planned, experiments: { ...planned.experiments, ...ready.coldTrimStamps } } : planned;
     if (!plan.ok) {
         // The outer preparation scope owns release, including a generator return while disclosing this refusal.
@@ -774,7 +779,7 @@ async function* prepareTurn(
     clock.mark("snapshot");
     clock.report(services.logger);
     const { isolation, effectiveCwd, frames, carriedOff } = ready;
-    return { plan, request: wire.request, isolation, effectiveCwd, frames, carriedOff, keptHandoff: keptHandoffOf(replaced) };
+    return { asked, plan, request: wire.request, isolation, effectiveCwd, frames, carriedOff, keptHandoff: keptHandoffOf(replaced) };
 }
 
 // Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
@@ -857,7 +862,9 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     performFailureWrites(services, failure.writes);
     frames.hold(failure.held);
     // Shown as words, after classification read the raw text: a vendor's JSON body is replaced by the message it carries.
-    const frame = { ...failure.frame, message: readableProviderText(failure.frame.message) };
+    // A cap reached mid-work carries on by itself once this run settles (cap-continuation.ts), and its notice says so.
+    const capped = continueCappedTurn(services, failure.frame, turn);
+    const frame = { ...capped, message: readableProviderText(capped.message) };
     // The account that actually served (or was refused for) the turn rides on its frame, so no window guesses it.
     return turn.account === undefined || frame.account !== undefined ? frame : { ...frame, account: turn.account };
 };
@@ -923,7 +930,7 @@ async function* runTurn(
         if (prepared === undefined) {
             return;
         }
-        yield* runPreparedTurn(services, input, signal, worktree, prepared, reach);
+        yield* runPreparedTurn(services, prepared.asked, signal, worktree, prepared, reach);
     } catch (error) {
         if (!(error instanceof AgentDomainRefusedError)) { throw error; }
         // Log once per refusal with the structured check that failed, so a repeating persona/startIn mismatch is diagnosable.

@@ -198,7 +198,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .describe(
                 "Whether to go ahead. Approving means the plan then runs without a prompt per tool, because being asked whether a plan you just approved may run its first command is not a question worth having.",
             ),
-        feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
+        feedback: z.string().optional().describe("Instructions to follow while executing an approved plan, or changes requested when rejecting it."),
     }),
     // Keyed by question text, valued by chosen option label(s), including free-text "Other".
     z.object({

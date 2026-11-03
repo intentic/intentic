@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { sleep } from "../async.js";
 import { stderrOf } from "../errors.js";
 import { untranslatedEnv } from "../node/untranslated-env.js";
+import { GIT_DURABILITY_ARGS, reportGitFailure } from "./durability.js";
 import type { ForkRequest, ForkResponse } from "./forker.js";
 import { clearStaleLock } from "./locks.js";
 
@@ -13,8 +14,9 @@ import { clearStaleLock } from "./locks.js";
 // allow(primitive-tiers): this is the git door itself, the one promisified execFile every short git call goes through.
 export const exec = promisify(execFile);
 
-// core.fileMode=false ignores upload-flattened permissions.
-const GIT_CONFIG_ARGS = ["-c", "core.fileMode=false"] as const;
+// core.fileMode=false ignores upload-flattened permissions; the durability pairs sync every object, ref and index write
+// before git reports it done (durability.ts says why).
+const GIT_CONFIG_ARGS = ["-c", "core.fileMode=false", ...GIT_DURABILITY_ARGS] as const;
 // --no-optional-locks keeps status off index.lock.
 export const GIT_GLOBAL_ARGS = ["--no-optional-locks", ...GIT_CONFIG_ARGS] as const;
 
@@ -443,6 +445,7 @@ const runGit = async (
             }
             if (attempt >= RETRY_ATTEMPTS || !isLockContention(error) || signal?.aborted === true) {
                 observe(attempt, true);
+                reportGitFailure(dir, stderrOf(error));
                 throw error;
             }
             // Outside the bulk slot (already released); a caller backing off index.lock isn't using the machine.

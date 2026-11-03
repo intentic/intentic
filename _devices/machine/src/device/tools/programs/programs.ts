@@ -38,7 +38,10 @@ export interface AppRun {
     readonly endedAt?: string;
     readonly exitCode?: number;
     readonly signal?: string;
-    readonly stoppedByAgent?: boolean;
+    // Who stopped it through app_stop, as the caller said (the sandbox names the door: the Run dialog's Stop, Run pressed
+    // again, Ctrl+C in a run's terminal, `devices stop`, app_stop from conversation X); "app_stop" when it said nothing.
+    // Read back as "stopped by <it>": an agent once went hunting another conversation over a stop its own Run job made.
+    readonly stoppedBy?: string;
     // Run inside Windows Sandbox (isolated.ts): `pid` is the launcher's, `log` the program's output inside the VM, and
     // it is running while a Windows Sandbox is open.
     readonly isolated?: true;
@@ -201,9 +204,9 @@ const NTSTATUS: Readonly<Record<number, string>> = {
     0x40010004: "closed by a debugger or killed",
 };
 
-export const describeExit = (run: Pick<AppRun, "exitCode" | "signal" | "stoppedByAgent">): string => {
-    if (run.stoppedByAgent === true) {
-        return "stopped by the agent";
+export const describeExit = (run: Pick<AppRun, "exitCode" | "signal" | "stoppedBy">): string => {
+    if (run.stoppedBy !== undefined) {
+        return `stopped by ${run.stoppedBy}`;
     }
     if (run.signal !== undefined) {
         return `ended by signal ${run.signal}`;
@@ -543,7 +546,10 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
 export const waitGone = async (run: AppRun, ms: number, signal?: AbortSignal): Promise<boolean> =>
     await waitForEnd({ timeoutMs: ms, exit: endings.get(run.id), isEnded: async () => (await runState(run)) === "ended", signal });
 
-export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, sandboxUrl: string): Promise<string> => {
+// Who a stop is recorded as coming from when its caller did not say.
+const UNNAMED_STOPPER = "app_stop";
+
+export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, sandboxUrl: string, by: string = UNNAMED_STOPPER): Promise<string> => {
     assertEither(scopes);
     await refreshIsolated(sandboxUrl);
     const { run, state } = await judged(sandboxUrl, await findRun(id, sandboxUrl));
@@ -560,7 +566,7 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
     if (run.isolated === true) {
         await stopWindowsSandbox();
         await updateRuns(sandboxUrl, (runs) =>
-            runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedByAgent: true } : entry)),
+            runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedBy: by } : entry)),
         );
         return `Closed the Windows Sandbox ${run.id} ran in; everything inside it is gone.`;
     }
@@ -573,7 +579,7 @@ export const appStop = async (id: string, force: boolean, scopes: DeviceScopes, 
         throw new Error(`${run.id} (pid ${run.pid}) is still running after being forced to stop: something holds it (a debugger, an elevated child).`);
     }
     await updateRuns(sandboxUrl, (runs) =>
-        runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedByAgent: true } : entry)),
+        runs.map((entry) => (entry.id === id ? { ...entry, endedAt: entry.endedAt ?? new Date().toISOString(), stoppedBy: by } : entry)),
     );
     const left = await tree.endSurvivors();
     if (left.length > 0) {

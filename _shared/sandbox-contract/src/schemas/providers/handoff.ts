@@ -90,6 +90,7 @@ export const HandedOffSchema = z.object({
     cleared: z.number().optional().describe("Older tool outputs a trimmed copy cleared."),
     model: z.string().optional().describe("The model that wrote the summary."),
     fellBack: z.boolean().optional(),
+    reason: z.string().optional().describe("Why the requested hand-off could not be built."),
 });
 export type HandedOff = z.infer<typeof HandedOffSchema>;
 
@@ -102,15 +103,17 @@ export const handedOffNotice = (event: HandedOff): Extract<SandboxNotice, { code
         ...(event.cleared === undefined ? {} : { cleared: event.cleared }),
         ...(event.model === undefined ? {} : { model: event.model }),
         ...(event.fellBack === true ? { fellBack: true } : {}),
+        ...(event.reason === undefined ? {} : { reason: event.reason }),
     },
 });
 
 /** The transcript's line for how a held turn continued. */
 export const handedOffLine = (event: HandedOff): string => {
     if (event.fellBack === true) {
-        return event.mode === "trim"
+        const line = event.mode === "trim"
             ? "Could not trim the session for the hand-off, so it was carried whole."
             : "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead.";
+        return event.reason === undefined ? line : `${line} Reason: ${event.reason}`;
     }
     const tokens = event.tokens === undefined ? undefined : tokensLabel(event.tokens);
     switch (event.mode) {

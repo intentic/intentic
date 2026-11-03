@@ -233,6 +233,9 @@ export const STORAGE_CLEANABILITY = {
     packageStores: "safe",
     // Build tools' output caches.
     buildCaches: "safe",
+    // What builds left inside conversation checkouts (a Rust `target/`, Gradle and Flutter output): only checkouts whose
+    // conversation has nothing running are cleaned, and their next build makes it again. The checkout itself stays.
+    buildOutputs: "safe",
 } as const satisfies Record<string, StorageCleanability>;
 export type StorageCategoryId = keyof typeof STORAGE_CLEANABILITY;
 export const StorageCategoryIdSchema = z.enum(Object.keys(STORAGE_CLEANABILITY) as StorageCategoryId[]);
@@ -302,6 +305,31 @@ export const StorageReportSchema = z.object({
         .describe("Live repositories' checkout costs, cached per repository and commit. Repositories without a readable HEAD are omitted."),
 });
 export type StorageReport = z.infer<typeof StorageReportSchema>;
+
+// How close the history volume is to full, as the daemon's disk-pressure watch last read it (GET /system/disk-pressure).
+// `reaping`: under 15% free, settled checkouts' build output is being removed; `low` and `critical` are under 10% and
+// 5%, which the owner is told about once each.
+export const DiskPressureLevelSchema = z.enum(["ok", "reaping", "low", "critical"]);
+export type DiskPressureLevel = z.infer<typeof DiskPressureLevelSchema>;
+
+export const DiskPressureSchema = z.object({
+    level: DiskPressureLevelSchema,
+    freeBytes: z.number().describe("Space available on the history volume at the last reading."),
+    totalBytes: z.number().describe("The history volume's size."),
+    measuredAt: z.number().describe("When it was read, in milliseconds; 0 before the first reading."),
+    reaped: z
+        .object({
+            bytes: z.number().describe("Space the removals gave back, as the volume measured it before and after."),
+            checkouts: z.number().describe("How many conversation checkouts had build output removed."),
+            at: z.number().describe("When that pass ended, in milliseconds."),
+        })
+        .optional()
+        .describe("The last pass that removed build output because the disk was short. Absent until one has."),
+    using: z
+        .array(z.object({ id: StorageCategoryIdSchema, bytes: z.number() }))
+        .describe("The biggest categories in the last finished storage scan, largest first, at most three; empty before a scan."),
+});
+export type DiskPressure = z.infer<typeof DiskPressureSchema>;
 
 export const StorageCleanInputSchema = z.object({
     category: StorageCategoryIdSchema.describe("The category to clean; one whose cleanability is `none` is refused."),

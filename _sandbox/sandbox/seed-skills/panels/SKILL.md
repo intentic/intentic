@@ -33,6 +33,11 @@ connected computer, then each target is one row with one Run.
 - **`artifact`: runs on one of the owner's computers**: `build` here, carry the artifact, start it there (the device
   skill; `devices run <target>` is the same run an agent types). Running it again stops the run already going there;
   the Run dialog shows its state with Stop, Restart and its log, and `devices stop <target>` ends it from a shell.
+  While the build runs in the owner's tree, lands into that repository wait for it, and the dialog says what the
+  running program was built from ("Built from abc1234 · 3 lands since"), so a Restart is the way to the newest work.
+  From an agent's shell `devices run` will not replace a run of the target the conversation did not start: ask the
+  owner, then pass `--replace`. A long-lived program on a computer always goes through `devices run`/`devices start` or
+  `app_start`, never `nohup … &` through `run_command`, which leaves it on no list anything can stop.
   A stop asks the program to close first (WM_CLOSE to a window, a Ctrl-Break to a Windows console program, SIGTERM
   elsewhere) and forces it after 5 seconds; `"stopGraceSeconds": 60` gives one that saves on exit longer.
 - A target with both runs in either place.
@@ -120,7 +125,8 @@ export default defineConfig({ plugins: [/* your framework plugin, */ viteSingleF
 ```
 
 `pnpm build` then writes `dist/index.html` with every script, style and small asset inlined. Check it the
-honest way — open it with the browser tools from `file://` and look — and hand it over by path, or copy it
+honest way — serve `dist/` (`python3 -m http.server 8000 --bind 127.0.0.1` in it; the browser tools refuse
+`file://`), open `http://localhost:8000/` with them and look — and hand it over by path, or copy it
 under `public/` **only** when a link was asked for, saying plainly that `public/` is served on the open
 internet. Fonts and images referenced by URL still leave; inline them (base64) or use system fonts if the
 file must work offline. A framework that cannot build to static (a server-rendered app) cannot be handed over

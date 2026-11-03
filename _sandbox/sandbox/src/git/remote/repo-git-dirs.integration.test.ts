@@ -145,3 +145,13 @@ test("a synced executable bit reads as no edit to a terminal's git, as it alread
     expect(await git(repo, "config", "--local", "--get", "core.fileMode")).toBe("false");
     expect(await git(repo, "status", "--porcelain")).toBe("");
 });
+
+// A terminal's git never sees the daemon's `-c` flags, so the sync has to be in the repo's own config to cover it.
+test("every repo's own config syncs objects, refs and the index before git reports a write done", async () => {
+    const { root, historyRoot, repo } = await workspace();
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    expect(await git(repo, "config", "--local", "--get", "core.fsync")).toBe("all");
+    expect(await git(repo, "config", "--local", "--get", "core.fsyncMethod")).toBe("batch");
+});

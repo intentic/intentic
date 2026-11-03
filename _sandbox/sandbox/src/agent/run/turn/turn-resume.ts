@@ -9,11 +9,11 @@ import {
     type TurnBreak,
 } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
-import { RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { CONTINUATION_NOTE, RESTART_LOSSES, RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { errorMessage } from "@intentic/base/errors";
 import { replaceRejectedToken } from "../../providers/claude/claude-credentials.js";
-import { planRevision } from "../../prompt/plan-revision.js";
+import { planApproval, planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript, recordUnrecordedRuns, runLogFor } from "../../../sessions/turn-transcript.js";
 import { carriedRun, drawnOf, dropRunLog, saidMidTurn } from "./recovery/cut-turn-rows.js";
@@ -192,7 +192,7 @@ export const carryOnTurn = async (
     const { prompt: _words, attachments: _files, mentions: _mentions, editorContext: _looking, messageId: _id, sessionId: _asked, ...rest } = turn;
     const started = await services.turns.start(
         held === undefined
-            ? { ...rest, prompt: RESUME_NOTES.continued, resume: "continued", ...opt("sessionId", sessionFor(services, turn)) }
+            ? { ...rest, prompt: CONTINUATION_NOTE, resume: "continued", ...opt("sessionId", sessionFor(services, turn)) }
             : rerunOf(held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model), ...opt("effort", turn.effort) }),
     );
     return started === "busy" || started === "archived" ? undefined : started;
@@ -209,7 +209,9 @@ const resumedTurn = (
     const sessionId = fresh === true ? undefined : (failure.sessionId ?? carried);
     const resume = restate === true ? reason : (failure.input.resume ?? reason);
     // The tail belongs to this re-run's own note; a note the prompt already carries keeps its own words.
-    const note = resume === reason ? resumeNoteWith(RESUME_NOTES[resume], tail) : RESUME_NOTES[resume];
+    const losses = resume === "restart" || resume === "answered" ? RESTART_LOSSES : undefined;
+    const detail = [losses, resume === reason ? tail : undefined].filter(Boolean).join(" ");
+    const note = resumeNoteWith(RESUME_NOTES[resume], detail);
     return {
         ...rest,
         prompt: withResumeNote(restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt, note),
@@ -440,16 +442,21 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
             await rerun(services, held);
         },
     },
-    // A bounded ladder, since it fires repeatedly: spent, it stands down and says so, leaving the hold for a press.
+    // A bounded ladder, since it fires repeatedly: spent, it stands down and says so, leaving the hold for a press. A hold
+    // for a press alone (a turn that reached its own ceiling, held-turn.ts pressOnly) is never on it, whatever the answer:
+    // re-run by a clock, it is the runaway the ceiling exists to stop.
     stopped: {
         verdict: (held, now) => {
+            if (held.pressOnly === true) {
+                return undefined;
+            }
             const dueAt = stopRungAt(held.recordedAt, held.tries);
             if (dueAt === undefined) {
                 return { armedBy: "stopped", gaveUp: STOP_LADDER_GAVE_UP };
             }
             return dueAt <= now ? { armedBy: "stopped" } : undefined;
         },
-        nextAt: (held) => stopRungAt(held.recordedAt, held.tries),
+        nextAt: (held) => (held.pressOnly === true ? undefined : stopRungAt(held.recordedAt, held.tries)),
         spent: "ladder-spent",
         fire: dispatch(true),
     },
@@ -644,7 +651,7 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn, dr
     const { messageId: _prompt, ...asked } = entry.turn;
     const resumed = (answer: string, mode?: AgentTurn["permissionMode"]): TurnInput & { conversationId: string } => ({
         ...asked,
-        prompt: withResumeNote(answer, RESUME_NOTES.answered),
+        prompt: withResumeNote(answer, resumeNoteWith(RESUME_NOTES.answered, RESTART_LOSSES)),
         resume: "answered",
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(mode !== undefined ? { permissionMode: mode } : {}),
@@ -655,7 +662,7 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn, dr
         if (request.kind === "plan" && reply.kind === "plan") {
             // Approval runs in POST_PLAN_MODE as a live approval would; rejection returns to plan mode with the
             // feedback, framed as the live gate frames it, so notes that read like consent are never leave to execute.
-            return reply.approve ? resumed("The user approved the plan: proceed with it.", POST_PLAN_MODE) : resumed(planRevision(reply.feedback), "plan");
+            return reply.approve ? resumed(planApproval(reply.feedback), POST_PLAN_MODE) : resumed(planRevision(reply.feedback), "plan");
         }
         if (request.kind === "question" && reply.kind === "question") {
             return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply, services.workspace.root));

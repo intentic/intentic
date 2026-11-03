@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, type ExecFileException } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,9 +46,10 @@ const publish = async (name: string): Promise<string> => {
 
 // A stand-in for queue-run or offload-run: records its argv, then (queue-run) runs what follows `--` with the slot named,
 // or (offload-run, whose command is for another machine) stops there.
-const standIn = async (name: string, runs = true): Promise<string> => {
+const standIn = async (name: string, runs = true, lockSlot = false): Promise<string> => {
     const path = join(dir, name);
-    const then = runs ? `while [ "$1" != "--" ]; do shift; done; shift\nINTENTIC_QUEUE_SLOT=${JSON.stringify(join(dir, "slot.1"))} exec "$@"\n` : "exit 0\n";
+    const lock = lockSlot ? `exec 9>>${JSON.stringify(join(dir, "slot.1"))}\nflock 9\n` : "";
+    const then = runs ? `${lock}while [ "$1" != "--" ]; do shift; done; shift\nINTENTIC_QUEUE_SLOT=${JSON.stringify(join(dir, "slot.1"))} exec "$@"\n` : "exit 0\n";
     await writeFile(path, `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > ${JSON.stringify(join(dir, `${name}.args`))}\n${then}`);
     await chmod(path, 0o755);
     return path;
@@ -169,5 +170,77 @@ describe.skipIf(!kernel.runs)(kernel.title("a native program behind its wrapper"
         // A line no rule names; an install is no longer one, it queues in the `dependency-install` lane.
         const light = JSON.parse((await run(wrapper, ["--version"], { env: common })).stdout.trim()) as Record<string, unknown>;
         expect(light).toMatchObject({ argv: ["--version"], oom: inherited, held: null });
+    });
+});
+
+describe.skipIf(!kernel.runs)(kernel.title("cargo run behind its wrapper"), () => {
+    const cargoRun = async (args: string[], buildExit = 0, heavyOverrides: Record<string, unknown> = {}) => {
+        const bin = join(dir, "real-bin");
+        const shims = join(dir, "shims");
+        await mkdir(bin);
+        await mkdir(shims);
+        await copyFile(join(SHIMS, "cargo"), join(shims, "cargo"));
+        await chmod(join(shims, "cargo"), 0o755);
+        await writeFile(join(dir, "cargo.cjs"), `
+const { appendFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(join(dir, "calls"))}, JSON.stringify({ args, held: process.env.INTENTIC_HEAVY_HELD ?? null, slot: process.env.INTENTIC_QUEUE_SLOT ?? null }) + "\\n");
+if (args.includes("build")) process.exit(${buildExit});
+// The run can acquire the same lock before it starts serving, proving the build slot was released.
+if (require("node:child_process").spawnSync("flock", ["-n", ${JSON.stringify(join(dir, "slot.1"))}, "true"]).status !== 0) process.exit(98);
+console.log("server-started");
+`);
+        await writeFile(join(bin, "cargo"), `#!/bin/sh\nexec node ${JSON.stringify(join(dir, "cargo.cjs"))} "$@"\n`);
+        await chmod(join(bin, "cargo"), 0o755);
+        const queueRun = await standIn("queue-run", true, true);
+        const { INTENTIC_QUEUE_SLOT: _slot, INTENTIC_HEAVY_HELD: _held, ...env } = process.env;
+        let code = 0;
+        try {
+            await run(join(shims, "cargo"), args, { env: {
+                ...env, NODE_OPTIONS: "", PATH: `${shims}:${bin}:${env["PATH"] ?? ""}`, INTENTIC_HEAVY_EXEC: EXEC,
+                INTENTIC_HEAVY: spec({ queue: true, queueRun, ...heavyOverrides }),
+            } });
+        } catch (error) {
+            // SAFETY: promisified execFile rejects with its callback's ExecFileException.
+            code = Number((error as ExecFileException).code);
+        }
+        const calls = (await readFile(join(dir, "calls"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        return { calls, code, queueArgs: await readFile(join(dir, "queue-run.args"), "utf8").catch(() => "") };
+    };
+
+    test("queues the selected build and starts the original program without a slot or held class", async () => {
+        const args = ["+nightly", "run", "--release", "--bin", "web server", "--", "--watch", "a b", "$(literal)"];
+        const result = await cargoRun(args);
+        expect(result.code).toBe(0);
+        expect(result.calls).toEqual([
+            { args: ["+nightly", "build", "--release", "--bin", "web server"], held: "cargo", slot: join(dir, "slot.1") },
+            { args, held: null, slot: null },
+        ]);
+        expect(result.queueArgs.split("\n").slice(0, 18)).toEqual([
+            "--pool", "heavy", "--limit", "2", "--wait", "900", "--memory-gate", "120", "--max-hold", "1800",
+            "--on-deadline", "run", "--label", "cargo", "--size", "cargo-build", "--", join(dir, "real-bin", "cargo"),
+        ]);
+    });
+
+    test("a failed build returns its code and never starts the program", async () => {
+        const result = await cargoRun(["run", "--bin", "server"], 42);
+        expect(result.code).toBe(42);
+        expect(result.calls).toEqual([{ args: ["build", "--bin", "server"], held: "cargo", slot: join(dir, "slot.1") }]);
+    });
+
+    test.each([["run", "--future-option"], ["run", "--help"]])("an unsafe translation runs unchanged: %j", async (...args) => {
+        const result = await cargoRun(args);
+        expect(result.code).toBe(0);
+        expect(result.calls).toEqual([{ args, held: null, slot: null }]);
+        expect(result.queueArgs).toBe("");
+    });
+
+    test("the prebuild stays local when ordinary Cargo builds are offloaded, warming the local run", async () => {
+        const result = await cargoRun(["run"], 0, { offload: { cargo: "runner" } });
+        expect(result.calls).toEqual([
+            { args: ["build"], held: "cargo", slot: join(dir, "slot.1") },
+            { args: ["run"], held: null, slot: null },
+        ]);
+        expect(result.queueArgs).toContain("cargo-build");
     });
 });

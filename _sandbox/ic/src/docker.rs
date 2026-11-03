@@ -817,8 +817,155 @@ pub fn bind_mounts(container: &str) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/* A CONTAINER IS THERE, IS NOT, OR DOCKER DID NOT SAY (2026-11-03). `container_exists` was one `docker inspect` read as
+a bool, so an engine that answered nothing read as a container that is gone: on 2026-10-31 at 23:35 rog's engine stalled
+("running but stuck"), the probation watch's inspect failed, and it rolled a healthy 1.380.0 back to 1.378.2 because "the
+new version's container is gone", killing every turn in flight. Absence is now only what docker itself says ("No such
+container" / "No such object"); a timeout, a refused connection or any other error is Unknown, and nothing destructive is
+decided on Unknown: it waits for the next look. A destructive decision on absence also confirms it (`container_gone`). */
+
+/// What docker says about one container.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Presence {
+    Exists,
+    /// Docker answered that there is no such container.
+    Absent,
+    /// Docker did not answer, or answered with an error that is not about the container (a stuck or stopped engine, a
+    /// timeout): nothing is known, and nothing may be undone on it.
+    Unknown(String),
+}
+
+impl Presence {
+    pub fn exists(&self) -> bool {
+        matches!(self, Presence::Exists)
+    }
+
+    pub fn absent(&self) -> bool {
+        matches!(self, Presence::Absent)
+    }
+
+    /// Why docker could not say, when it could not.
+    pub fn unknown(&self) -> Option<&str> {
+        match self {
+            Presence::Unknown(why) => Some(why),
+            _ => None,
+        }
+    }
+}
+
+/// How one container read ended, three ways: exited 0, docker's own "no such container", anything else. Pure.
+pub(crate) fn presence_of(code: Option<i32>, timed_out: bool, stderr: &str) -> Presence {
+    if timed_out {
+        return Presence::Unknown(format!(
+            "docker did not answer within {} seconds",
+            READ_LIMIT.as_secs()
+        ));
+    }
+    if code == Some(0) {
+        return Presence::Exists;
+    }
+    let said = stderr.to_ascii_lowercase();
+    if said.contains("no such container") || said.contains("no such object") {
+        return Presence::Absent;
+    }
+    Presence::Unknown(refusal_of(stderr.as_bytes()).unwrap_or_else(|| match code {
+        Some(code) => format!("docker exited with {code} and said nothing"),
+        None => "docker ended without an exit code".to_string(),
+    }))
+}
+
+/// One `docker container inspect --format` read under [`READ_LIMIT`]: Ok(Some) with what it printed, Ok(None) when docker
+/// says there is no such container, Err with why when docker did not say.
+pub fn container_read(name: &str, format: &str) -> std::result::Result<Option<String>, String> {
+    let ran = capture_bounded(
+        &["container", "inspect", "--format", format, name],
+        READ_LIMIT,
+    )
+    .map_err(|err| err.0)?;
+    match presence_of(ran.code, ran.timed_out, &ran.stderr) {
+        Presence::Exists => Ok(Some(ran.stdout)),
+        Presence::Absent => Ok(None),
+        Presence::Unknown(why) => Err(why),
+    }
+}
+
+pub fn container_presence(name: &str) -> Presence {
+    match container_read(name, "{{.Name}}") {
+        Ok(Some(_)) => Presence::Exists,
+        Ok(None) => Presence::Absent,
+        Err(why) => Presence::Unknown(why),
+    }
+}
+
+/// True only when docker answered that the container is there. Unknown reads as false, so this is for reads and for
+/// acting on presence; a decision that destroys something when a container is NOT there asks [`container_absent`] (or
+/// [`container_gone`]) instead.
 pub fn container_exists(name: &str) -> bool {
-    ok(&["inspect", name])
+    container_presence(name).exists()
+}
+
+/// True only when docker answered that there is no such container: an engine that did not answer is not an absence.
+pub fn container_absent(name: &str) -> bool {
+    container_presence(name).absent()
+}
+
+/// How far apart the two reads that confirm a container gone are taken.
+pub const GONE_RECHECK: Duration = Duration::from_secs(10);
+
+/// Absence confirmed for a decision that undoes something on it (the probation watch going back): docker says no such
+/// container twice, [`GONE_RECHECK`] apart, and `docker ps -a` does not list the name either. Anything else is what the
+/// first read that disagreed said, and a `ps -a` that lists it or does not answer is Unknown.
+pub fn container_gone(name: &str) -> Presence {
+    confirm_gone(
+        name,
+        || container_presence(name),
+        || listed_names(name),
+        || std::thread::sleep(GONE_RECHECK),
+    )
+}
+
+/// `docker ps -a` names matching `name` under [`READ_LIMIT`]; None when docker did not answer.
+fn listed_names(name: &str) -> Option<Vec<String>> {
+    let filter = format!("name={name}");
+    let ran = capture_bounded(
+        &["ps", "-a", "--filter", &filter, "--format", "{{.Names}}"],
+        READ_LIMIT,
+    )
+    .ok()?;
+    (ran.code == Some(0) && !ran.timed_out).then(|| {
+        ran.stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
+}
+
+/// [`container_gone`] over its three reads, so the rule is testable without docker.
+pub(crate) fn confirm_gone(
+    name: &str,
+    mut presence: impl FnMut() -> Presence,
+    listed: impl FnOnce() -> Option<Vec<String>>,
+    pause: impl FnOnce(),
+) -> Presence {
+    let first = presence();
+    if !first.absent() {
+        return first;
+    }
+    pause();
+    let second = presence();
+    if !second.absent() {
+        return second;
+    }
+    match listed() {
+        None => Presence::Unknown("docker ps -a did not answer".to_string()),
+        // The name filter matches a part of a name, so only an exact name disagrees.
+        Some(names) if names.iter().any(|listed| listed == name) => Presence::Unknown(format!(
+            "docker inspect says there is no {name}, but docker ps -a lists it"
+        )),
+        Some(_) => Presence::Absent,
+    }
 }
 
 /// One value out of a container's env, empty read as absent. Works on a stopped container, like the framed read
@@ -874,6 +1021,45 @@ pub fn exec_stdin_ok(container: &str, cmd: &[&str], input: &[u8]) -> bool {
         let _ = stdin.write_all(input);
     }
     child.wait().map(|status| status.success()).unwrap_or(false)
+}
+
+/// Whether docker's CLI said the ENGINE failed the request (it could not be reached, or stopped answering), rather than
+/// the request failing on its own merits. Pure.
+pub(crate) fn engine_trouble(stderr: &str) -> bool {
+    let said = stderr.to_ascii_lowercase();
+    [
+        "error during connect",
+        "cannot connect to the docker daemon",
+        "is the docker daemon running",
+        "context deadline exceeded",
+        "i/o timeout",
+        "connection refused",
+        "the system cannot find the file specified",
+        "unexpected eof",
+    ]
+    .iter()
+    .any(|words| said.contains(words))
+}
+
+/// [`exec_capture`] under [`READ_LIMIT`], told apart for a judgement: Ok(Some) with what the command printed, Ok(None) when
+/// it ran and failed (or the container refused the exec), Err with why when the engine did not answer it.
+pub fn exec_read(container: &str, cmd: &[&str]) -> std::result::Result<Option<String>, String> {
+    let mut args = vec!["exec", container];
+    args.extend_from_slice(cmd);
+    let ran = capture_bounded(&args, READ_LIMIT).map_err(|err| err.0)?;
+    if ran.timed_out {
+        return Err(format!(
+            "docker exec did not answer within {} seconds",
+            READ_LIMIT.as_secs()
+        ));
+    }
+    if ran.code == Some(0) {
+        return Ok(Some(ran.stdout));
+    }
+    if engine_trouble(&ran.stderr) {
+        return Err(refusal_of(ran.stderr.as_bytes()).unwrap_or_default());
+    }
+    Ok(None)
 }
 
 pub fn exec_capture(container: &str, cmd: &[&str]) -> Option<String> {
@@ -1320,10 +1506,151 @@ fn observe_pull(line: &str) {
 #[cfg(test)]
 mod tests {
     use super::{
-        docker_last_words, gone_engine, gone_stop, mount_source_format, pull_refusal,
-        pull_retrying, pull_stop, refusal_of, too_old_to_unpack, wrong_container_platform,
-        PullRefusal, Streamed,
+        confirm_gone, docker_last_words, engine_trouble, gone_engine, gone_stop,
+        mount_source_format, presence_of, pull_refusal, pull_retrying, pull_stop, refusal_of,
+        too_old_to_unpack, wrong_container_platform, Presence, PullRefusal, Streamed,
     };
+
+    #[test]
+    fn a_container_is_absent_only_when_docker_says_so_and_an_engine_that_did_not_answer_is_unknown()
+    {
+        assert_eq!(presence_of(Some(0), false, ""), Presence::Exists);
+        assert_eq!(
+            presence_of(
+                Some(1),
+                false,
+                "Error response from daemon: No such container: intentic-sandbox-x"
+            ),
+            Presence::Absent
+        );
+        assert_eq!(
+            presence_of(Some(1), false, "Error: No such object: intentic-sandbox-x"),
+            Presence::Absent
+        );
+        // rog, 2026-10-31 23:35: the engine was running and stuck, and inspect failed without saying the container was gone.
+        assert_eq!(
+            presence_of(
+                Some(1),
+                false,
+                "error during connect: Get \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.47/containers/x/json\": context deadline exceeded"
+            ),
+            Presence::Unknown(
+                "error during connect: Get \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.47/containers/x/json\": context deadline exceeded"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            presence_of(None, true, ""),
+            Presence::Unknown("docker did not answer within 20 seconds".to_string())
+        );
+        assert_eq!(
+            presence_of(Some(125), false, ""),
+            Presence::Unknown("docker exited with 125 and said nothing".to_string())
+        );
+        assert_eq!(
+            presence_of(Some(0), true, ""),
+            Presence::Unknown("docker did not answer within 20 seconds".to_string())
+        );
+    }
+
+    #[test]
+    fn an_exec_that_failed_on_its_own_is_told_apart_from_an_engine_that_did_not_answer() {
+        assert!(engine_trouble(
+            "error during connect: Get \"http://%2F%2F.%2Fpipe%2Fdocker_engine/v1.47/exec\": EOF"
+        ));
+        assert!(engine_trouble(
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+        ));
+        assert!(engine_trouble(
+            "Error response from daemon: context deadline exceeded"
+        ));
+        assert!(!engine_trouble(""));
+        assert!(!engine_trouble(
+            "Error response from daemon: container 0123 is not running"
+        ));
+        assert!(!engine_trouble(
+            "OCI runtime exec failed: exec failed: unable to start container process"
+        ));
+    }
+
+    #[test]
+    fn a_container_is_gone_only_after_two_absent_reads_a_pause_apart_and_ps_agreeing() {
+        let reads = |answers: Vec<Presence>| {
+            let mut answers = answers.into_iter();
+            move || answers.next().expect("asked once too often")
+        };
+        let mut paused = 0;
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Absent, Presence::Absent]),
+                || Some(vec!["c-parked".to_string()]),
+                || paused += 1
+            ),
+            Presence::Absent
+        );
+        assert_eq!(paused, 1);
+        // The first read decides alone when it is not an absence: nothing is paused for, nothing else asked.
+        let unknown = Presence::Unknown("docker did not answer within 20 seconds".to_string());
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![unknown.clone()]),
+                || panic!("ps asked"),
+                || panic!("paused")
+            ),
+            unknown
+        );
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Exists]),
+                || panic!("ps asked"),
+                || panic!("paused")
+            ),
+            Presence::Exists
+        );
+        // Back on the second look, or the engine stalling between the two: not gone.
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Absent, Presence::Exists]),
+                || panic!("ps asked"),
+                || ()
+            ),
+            Presence::Exists
+        );
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Absent, unknown.clone()]),
+                || panic!("ps asked"),
+                || ()
+            ),
+            unknown
+        );
+        // ps disagreeing, or not answering, is not a confirmation.
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Absent, Presence::Absent]),
+                || Some(vec!["c".to_string()]),
+                || ()
+            ),
+            Presence::Unknown(
+                "docker inspect says there is no c, but docker ps -a lists it".to_string()
+            )
+        );
+        assert_eq!(
+            confirm_gone(
+                "c",
+                reads(vec![Presence::Absent, Presence::Absent]),
+                || None,
+                || ()
+            ),
+            Presence::Unknown("docker ps -a did not answer".to_string())
+        );
+    }
     use crate::engine::Kind;
     #[test]
     fn a_docker_engine_older_than_23_is_told_to_update_before_it_downloads_a_zstd_sandbox_image() {

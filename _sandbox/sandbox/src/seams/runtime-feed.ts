@@ -13,6 +13,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     browsers: 1000,
     // A window opening or closing is one change, and a program that opens three at once is still one piece of news.
     desktop: 250,
+    // The disk watch moves at most once a minute; nothing to fold.
+    disk: 1000,
     // Every SDK task_progress tick (a token count, a tool use) patches a child and publishes here, and each frame makes
     // every open board re-read the roster; a second folds that chatter. A child being born or ending is not chatter: it
     // goes out at once through publishRuntimeMilestone (2026-10-20, down from 2000 so a transcript pane refetching on

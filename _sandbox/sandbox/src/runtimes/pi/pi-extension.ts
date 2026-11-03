@@ -125,7 +125,7 @@ export const PI_EXTENSION_SOURCE = [
     `        try {`,
     `            const answer = await ask(`,
     `                "/tool-result",`,
-    `                { tool: event.toolName, input: event.input, content: event.content, isError: event.isError === true, cwd: ctx && ctx.cwd },`,
+    `                { tool: event.toolName, id: event.toolCallId, input: event.input, content: event.content, isError: event.isError === true, cwd: ctx && ctx.cwd },`,
     `                ctx && ctx.signal,`,
     `            );`,
     `            content = Array.isArray(answer.content) ? answer.content : event.content;`,

@@ -45,6 +45,14 @@ interface Server {
 }
 
 const running = new Map<string, Server>();
+
+// Keys whose display something outlives a single browser on: an agent's @playwright/mcp server, which keeps DISPLAY=:N
+// for its whole life and launches a new Chromium there on the next call after `browser_close`. The release that close
+// sets off (browser-sessions.ts finishing the session) waits in `deferred` until the last hold goes, instead of
+// killing an X server the next launch is about to need: it did, and the next call died on "Missing X server" for the
+// rest of the turn (2026-11-03, 10 conversations).
+const holds = new Map<string, number>();
+const deferred = new Set<string>();
 // One spawn per key even with concurrent callers; dropped once settled, so a later death starts a fresh spawn.
 const starting = new SingleFlight<string, Display>();
 
@@ -193,6 +201,8 @@ const start = async (key: string, size: DisplaySize): Promise<Display> => {
 // dead stays remembered as up. Same key always lands on the same display, login window and later tools alike. `size`
 // applies when a server is started; one already running keeps the size it has.
 export const ensureDisplay = async (key: string, size: DisplaySize = BROWSER_SIZE): Promise<Display> => {
+    // Someone wants this display now, so a release asked for while it was held no longer stands; they release it later.
+    deferred.delete(key);
     const existing = running.get(key);
     if (existing !== undefined && (await answers(Number(existing.display.name.slice(1))))) {
         return existing.display;
@@ -229,9 +239,17 @@ export const adoptDisplay = async (key: string): Promise<Display | undefined> =>
     return undefined;
 };
 
+// Whether a display still answers: what a browser started against it needs before it is driven again.
+export const displayAnswers = (display: Display): Promise<boolean> => answers(Number(display.name.slice(1)));
+
 // Stops the display for `key` once its browser is gone. Best-effort, never awaited on a path that matters; an adopted
 // display is only forgotten, since killing a server this process didn't start could take down whatever else is on it.
+// A held display is not stopped yet: the release is remembered and carried out when the last hold goes.
 export const releaseDisplay = (key: string): void => {
+    if ((holds.get(key) ?? 0) > 0) {
+        deferred.add(key);
+        return;
+    }
     const server = running.get(key);
     running.delete(key);
     if (server?.child === undefined) {
@@ -244,4 +262,25 @@ export const releaseDisplay = (key: string): void => {
     } catch {
         // already gone, which is the outcome asked for
     }
+};
+
+// Keeps `key`'s display up until the returned release is called; the release is safe to call more than once.
+export const holdDisplay = (key: string): (() => void) => {
+    holds.set(key, (holds.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        const left = (holds.get(key) ?? 1) - 1;
+        if (left > 0) {
+            holds.set(key, left);
+            return;
+        }
+        holds.delete(key);
+        if (deferred.delete(key)) {
+            releaseDisplay(key);
+        }
+    };
 };

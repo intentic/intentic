@@ -579,8 +579,8 @@ test("measure with nothing to measure stays changed:false, like any other no-op 
     expect(result.held).toBeUndefined();
 });
 
-// With auto-land held, every turn ends in `measure`, and a `measure` with no verdict can never retire a conflict the
-// agent already fixed.
+// With auto-land held, every turn ends in `measure`, so a measure is a verdict: it retires a conflict the agent fixed,
+// and calls held work that would refuse a conflict, never "ready".
 
 test("measure re-judges a stored refusal, so a resolved conflict stops outliving its cause", async () => {
     const { work, worktrees, conversation } = await setup();
@@ -593,8 +593,7 @@ test("measure re-judges a stored refusal, so a resolved conflict stops outliving
     await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
     const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { landing: { conflicts: refused.conflicts } }), "measure");
 
-    // A verdict lets `recordLanded` replace the stored one; an empty verdict is what clears it.
-    expect(settled.adjudicated).toBe(true);
+    // An empty verdict is what clears the stored one.
     expect(settled.conflicts).toBeUndefined();
     // Still held: re-judging reports what the tree now makes of the delta, it does not land it.
     expect(settled).toMatchObject({ landed: false, held: true });
@@ -609,7 +608,6 @@ test("a re-judged refusal that still stands is reported again, not quietly retir
 
     const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { landing: { conflicts: refused.conflicts } }), "measure");
 
-    expect(settled.adjudicated).toBe(true);
     expect(settled.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
     // A conflict is the louder fact, reported exactly as a real land would report it for this tree.
     expect(settled.held).toBeUndefined();
@@ -619,16 +617,33 @@ test("a re-judged refusal that still stands is reported again, not quietly retir
     expect(await sh(work, "status", "--porcelain")).toBe("M app.ts");
 });
 
-test("an agent nothing refuses is not re-judged, so an ordinary measure still offers no verdict", async () => {
+test("an ordinary measure that applies is held work with no refusal: ready to land", async () => {
     const { worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "measure");
 
-    // An agent nothing refuses reaches no gate, so it gets no verdict and can't retire a later one.
-    expect(result.adjudicated).toBe(false);
     expect(result).toMatchObject({ landed: false, held: true });
     expect(result.conflicts).toBeUndefined();
+});
+
+// The held card read "ready" while its land would refuse: a measure judged only work a land had already refused, so the
+// owner found each conflict by pressing Land.
+test("a measure of held work the main line moved under reports the conflict before anyone presses Land", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    await writeFile(join(work, "app.ts"), "line one MAIN\nline two\nline three\n");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "main moved");
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "measure");
+
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0, mainBranch: "main" }]);
+    expect(result.landed).toBe(false);
+    // Measured, never written.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one MAIN\nline two\nline three\n");
+    expect(await sh(work, "status", "--porcelain")).toBe("");
 });
 
 test("deletes and renames land; a conflicted land keeps landedTip so recovery applies the same delta", async () => {

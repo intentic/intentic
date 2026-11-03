@@ -330,7 +330,13 @@ test("the turn's remote MCP servers ride Codex's per-thread config as http serve
     });
 
     expect(calls[0]!.config).toEqual({
-        "mcp_servers.browser": { url: "http://127.0.0.1:8787/mcp/browser", http_headers: { Authorization: "Bearer bearer" }, tool_timeout_sec: 120 },
+        // A call that may run long is the model's own function call, never one an `exec` cell hands back after 30 s.
+        "mcp_servers.browser": {
+            url: "http://127.0.0.1:8787/mcp/browser",
+            http_headers: { Authorization: "Bearer bearer" },
+            tool_timeout_sec: 120,
+            omit_tools_from: ["code_mode"],
+        },
         "mcp_servers.saldeo": { url: "https://saldeo.example/mcp" },
         "tools.experimental_request_user_input.enabled": true,
         project_doc_max_bytes: 0,

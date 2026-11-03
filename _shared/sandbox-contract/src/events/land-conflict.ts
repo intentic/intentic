@@ -2,7 +2,7 @@ import type { LandConflict, LandConflictReason } from "../schemas/agents.js";
 import { withoutResumeNote } from "./resume.js";
 
 // The turn sent to a conversation whose land refused, asking it to rebase and resolve, recognised by its opening. The
-// app sends it on a Resolve press and the daemon to a home conversation (home/home-conflict.ts), so it is composed here,
+// app sends it on a Resolve press and the daemon at once where nobody would press it (land/settle/resolve-conflict.ts), so it is composed here,
 // where the fold must recognise it as well: that turn's own rebase notice would otherwise tell the reader the thing the
 // turn was sent to fix.
 
@@ -59,6 +59,10 @@ const sharedMainBranch = (conflicts: readonly LandConflict[] | undefined): strin
     return only === undefined || only === "" ? undefined : only;
 };
 
+// Step 1 of both prompts. Never `&&`: the land usually committed the worktree already, and a `git commit` with nothing
+// staged exits 1, which killed the rebase chained after it in 20 of 90 resolve turns on one sandbox (2026-11).
+export const COMMIT_FIRST = "1. `git add -A; git diff --cached --quiet || git commit -qm wip`: a rebase refuses to start on a dirty tree, and this commits only when something is left to commit.";
+
 /**
  * The turn that asks a conversation to rebase and resolve a land that refused: sent by the app's Resolve press, and by
  * the daemon to a home conversation, whose person is never asked to. Required for the turn to succeed: commit first
@@ -71,7 +75,7 @@ export const landConflictPrompt = (conflicts: readonly LandConflict[] | undefine
     return [
         LAND_CONFLICT_OPENING,
         [
-            "1. `git add -A && git commit`: a rebase refuses to start on a dirty tree.",
+            COMMIT_FIRST,
             main === undefined
                 ? "2. `git rebase <branch>`, where `<branch>` is the one in brackets on the FIRST line of `git worktree list`, the user's main line. If the rebase gets away from you: `git rebase --abort`, then `git merge <branch>` instead."
                 : `2. \`git rebase ${main}\`, that is the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge ${main}\` instead.`,
@@ -87,7 +91,7 @@ export const landConflictPrompt = (conflicts: readonly LandConflict[] | undefine
 };
 
 const STAY_INSIDE =
-    "Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends, stop once the rebase is clean.";
+    "Stay inside your own worktree: never edit, stage or commit in the user's checkout. Stop once the rebase is clean: when your turn ends the app checks your branch against the main line again, and lands it where this conversation's work lands by itself, or keeps it on its branch, ready for the user to land from its review.";
 
 /**
  * The same turn for a land the user's own deletion held: they deleted files this conversation changed, chose to keep
@@ -100,7 +104,7 @@ export const keepDeletedPrompt = (deleted: readonly Blocker[], mainBranch: strin
     return [
         LAND_CONFLICT_OPENING,
         [
-            "1. `git add -A && git commit`: a rebase refuses to start on a dirty tree.",
+            COMMIT_FIRST,
             mainBranch === undefined || mainBranch === ""
                 ? "2. `git rebase <branch>`, where `<branch>` is the one in brackets on the FIRST line of `git worktree list`, the user's main line."
                 : `2. \`git rebase ${main}\`, that is the user's main line.`,

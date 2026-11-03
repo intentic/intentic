@@ -5,7 +5,7 @@ import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { type AttachedImage, loadAttachments } from "../../agent/prompt/attachment-images.js";
-import { EXECUTE_PROMPT, PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "./plan-mode.js";
+import { PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { vendorTurnGate } from "./vendor-gate.js";
 
 // A vendor loop that opens something to run its turn on, a connection or a process, and serves the turn there.
@@ -71,7 +71,7 @@ export async function* textPlanTurn(
         () => ({
             prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
             plan: (prompt, sessionId) => phase(prompt, [], sessionId, true),
-            execute: (sessionId) => phase(EXECUTE_PROMPT, [], sessionId, false),
+            execute: (sessionId, prompt) => phase(prompt, [], sessionId, false),
         }),
         () => phase(withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]), attached.images, request.spec.sessionId, false),
         { followUp: (note, sessionId) => phase(note, [], sessionId, false), editChecks: capabilities.editChecks },

@@ -135,6 +135,26 @@ describe(`a message sent later`, () => {
         send.submit();
         expect(say).toHaveBeenCalledTimes(1);
     });
+
+    // A pick left standing once its words were cleared, over a turn that stopped short: the greyed Send reads as the picked
+    // time (composerIntent.ts sendable), so an empty Enter continuing the turn now, or booking it at a reopen, did the
+    // opposite of what the press beside it said, and its hint taught it. The strip's own Continue is the way on.
+    it(`leaves a stopped turn alone on an empty Enter while a picked time stands`, () => {
+        const { chat, send } = composerOf();
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
+        chat.sendLater.value = { kind: `at`, at: Date.now() + 3 * 60 * 60 * 1_000 };
+
+        expect(send.intent.value).toBe(`later`);
+        expect(send.canSend.value).toBe(false);
+        expect(send.continueKeyHint.value).toBeUndefined();
+        send.submit();
+
+        expect(continued).not.toHaveBeenCalled();
+        // The strip's press still goes.
+        expect(send.continueStrip.value).toBe(true);
+        expect(send.pickUpPressable.value).toBe(true);
+    });
 });
 
 describe(`a scheduled send`, () => {
@@ -389,7 +409,7 @@ describe(`a plan waiting on an answer`, () => {
         expect(send.composerPlaceholder.value).toBe(`Write notes to keep planning, or approve above…`);
     });
 
-    it(`approves with the notes in the box, which follow the approval as a message`, async () => {
+    it(`approves with the notes and file paths carried in the approval`, async () => {
         const { chat, say, send } = withPlan();
         const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
         chat.draft.value = `use the v2 endpoint`;
@@ -397,8 +417,8 @@ describe(`a plan waiting on an answer`, () => {
 
         await send.approvePlan();
 
-        expect(reply.mock.calls).toEqual([[`d1`, { kind: `plan`, approve: true }]]);
-        expect(say.mock.calls).toEqual([[`use the v2 endpoint`, [{ name: `shot.png`, path: CHIP.path }], undefined]]);
+        expect(reply.mock.calls).toEqual([[`d1`, { kind: `plan`, approve: true, feedback: `use the v2 endpoint\n@${CHIP.path}` }]]);
+        expect(say.mock.calls).toEqual([]);
         expect(chat.draft.value).toBe(``);
         expect(chat.attachments.value).toEqual([]);
     });
@@ -414,7 +434,7 @@ describe(`a plan waiting on an answer`, () => {
 
         expect(reply.mock.calls).toEqual([
             [`d1`, { kind: `plan`, approve: true }],
-            [`d1`, { kind: `plan`, approve: true }],
+            [`d1`, { kind: `plan`, approve: true, feedback: `use the v2 endpoint\n@${CHIP.path}` }],
         ]);
         expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`use the v2 endpoint`);
@@ -658,7 +678,9 @@ describe(`availability through the real selection`, () => {
         expect(send.intent.value).toBe(`idle`);
     });
 
-    it.each([`no-reset`, `reauth`, `admin`] as const)(`sends text anyway on %s, naming the account, but refuses continuation, queue and edit`, async (kind) => {
+    // The bare Enter keeps its stricter offer over the reading; the strip's own press goes, a quiet Try now past it
+    // (pressWay.ts), as the words do: a reading lags the provider, and a refused try costs nothing.
+    it.each([`no-reset`, `reauth`, `admin`] as const)(`sends text anyway on %s, naming the account, refusing the bare continuation, queue and edit but not the strip's try`, async (kind) => {
         const { chat, send, say, view } = composerOf();
         const entry = { id: `a1`, label: `Claude`, connectedAt: 1 };
         providerAccounts.value = { ...providerAccounts.value, claude: [{ ...entry,
@@ -688,9 +710,11 @@ describe(`availability through the real selection`, () => {
         expect(chat.draft.value).toBe(``);
         chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
         expect(send.continueOffer.value).toBe(false);
-        expect(send.pickUpPressable.value).toBe(false);
+        expect(send.pickUpPressable.value).toBe(true);
         send.submit();
+        expect(continued).not.toHaveBeenCalled();
         send.continueTurn();
+        expect(continued).toHaveBeenCalledTimes(1);
         chat.queue.value = { revision: 1, paused: `refused`, items: [{ id: `m1`, text: `held`, voice: `person`, queuedAt: 1, revision: 1 }] };
         expect(send.canSend.value).toBe(false);
         send.submit();
@@ -704,7 +728,7 @@ describe(`availability through the real selection`, () => {
         expect(chat.transcript.editing.value?.id).toBe(1);
         expect(rewind).not.toHaveBeenCalled();
         expect(say).toHaveBeenCalledTimes(1);
-        expect(continued).not.toHaveBeenCalled();
+        expect(continued).toHaveBeenCalledTimes(1);
     });
 
     it(`keeps the edit intact with a known reset, even under an explicit later booking`, async () => {

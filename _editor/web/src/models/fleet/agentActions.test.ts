@@ -136,7 +136,7 @@ jest.mock("../../client/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 
-const { askAgentToResolve, landAgent, startAgent } = await import("./agentActions");
+const { askAgentToResolve, landAgent, settleAgentClone, startAgent } = await import("./agentActions");
 const { useAudience } = await import("../../app/useAudience");
 const { setProjectScope } = await import("../../app/projectScope");
 // The board's own roster, which the errand reads the agent's settings off; written per test, cleared with the tabs.
@@ -523,4 +523,19 @@ it("never opens the errand when a later press replaced it while the chat was sti
     expect(chat.enqueued).toEqual([]);
     // The report read the press started is let go rather than left to finish for nobody.
     expect(sent.filter((request) => request.url.endsWith(`/agents/a1/conflicts`)).map((request) => request.signal.aborted)).toEqual([true]);
+});
+
+// The card's way out of "a clone of its own: it won't land": the daemon folds a clone holding commits only with the count
+// the press showed, and is asked plainly for one that holds none.
+it("settles a clone of its own with the count of commits the press showed, and none for a clone that has none", async () => {
+    stubDaemon({ [`POST /agents/a1/clones/settle`]: { ok: true } });
+    await settleAgentClone(`a1`, `integra`, `fold`, 3);
+    await settleAgentClone(`a1`, `integra`, `fold`, 0);
+    await settleAgentClone(`a1`, `tools/vendored`, `adopt`);
+    const bodies = await Promise.all(sent.map(async (request) => request.json()));
+    expect(bodies).toEqual([
+        { dir: `integra`, action: `fold`, dropCommits: 3 },
+        { dir: `integra`, action: `fold` },
+        { dir: `tools/vendored`, action: `adopt` },
+    ]);
 });

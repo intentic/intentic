@@ -1,5 +1,6 @@
-import type { DeviceRun, DeviceRunState, RunOutput } from "@intentic/sandbox-contract/schemas/run-targets";
+import type { DeviceRun, DeviceRunState, RunBuiltFrom, RunOutput } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { Logger } from "pino";
+import { opt } from "../../opt.js";
 import type { DeviceTunnels } from "../device-tunnels.js";
 
 // PROGRAMS RUNNING ON THE OWNER'S COMPUTERS, AS THE SANDBOX SEES THEM: what a device run (`devices run`, the Run
@@ -19,7 +20,7 @@ const RUN_ID = String.raw`[A-Za-z0-9._-]+-[0-9a-f]{6}`;
 const RUN_LINE = new RegExp(String.raw`^(▶|■|\?) (${RUN_ID}) {2}(.+?) {2}(.+) {2}\(started ([^,)]+)(?:, ended ([^)]+))?\)$`);
 const stateOf = (glyph: string): DeviceRunState => (glyph === "▶" ? "running" : glyph === "■" ? "ended" : "unknown");
 
-export type ListedRun = Omit<DeviceRun, "device" | "repo" | "ports">;
+export type ListedRun = Omit<DeviceRun, "device" | "repo" | "ports" | "startedBy" | "builtFrom" | "landsSince">;
 
 const parseRunLine = (line: string): ListedRun | undefined => {
     const match = RUN_LINE.exec(line.trim());
@@ -126,25 +127,59 @@ interface Held {
     readonly repo: string | undefined;
     readonly ports: readonly number[];
     readonly stopGraceSeconds: number | undefined;
+    readonly startedBy: string | undefined;
+    readonly builtFrom: RunBuiltFrom | undefined;
     ended: boolean;
+}
+
+// What the door knows of a run it just started (device-door.routes.ts).
+export interface StartedRun {
+    readonly name: string;
+    readonly repo?: string | undefined;
+    readonly ports: readonly number[];
+    readonly ended?: boolean;
+    readonly stopGraceSeconds?: number | undefined;
+    readonly startedBy?: string | undefined;
+    readonly builtFrom?: RunBuiltFrom | undefined;
+}
+
+// A stop's options: `by` is who asked, as the computer records it ("stopped by <by>": programs.ts appStop).
+export interface StopAsk {
+    readonly force?: boolean;
+    readonly by?: string | undefined;
 }
 
 export interface DeviceRuns {
     // A run the door just started: which repository it came from and the ports opened for it.
-    readonly started: (
-        device: string,
-        id: string,
-        held: { name: string; repo?: string | undefined; ports: readonly number[]; ended?: boolean; stopGraceSeconds?: number | undefined },
-    ) => void;
+    readonly started: (device: string, id: string, held: StartedRun) => void;
     readonly list: (device: string) => Promise<DeviceRun[]>;
     // The computer's sentence; throws its refusal.
-    readonly stop: (device: string, id: string, force?: boolean) => Promise<string>;
+    readonly stop: (device: string, id: string, ask?: StopAsk) => Promise<string>;
     // Every running program called `name` on the computer, stopped.
-    readonly stopNamed: (device: string, name: string) => Promise<{ id: string; text: string }[]>;
+    readonly stopNamed: (device: string, name: string, by?: string) => Promise<{ id: string; text: string }[]>;
     readonly output: (device: string, id: string, read: { since?: number | undefined; lines: number }) => Promise<RunOutput>;
     // Which computer holds a run this sandbox started, for a stop that names only the run.
     readonly deviceOf: (id: string) => string | undefined;
 }
+
+// A listed run with what this sandbox holds of it: its repository, ports, starter, provenance and the lands since.
+const seenRun = (own: Held | undefined, device: string, run: ListedRun, landsSince: ((repo: string, since: number) => number) | undefined): DeviceRun => {
+    const seen: DeviceRun = { ...run, device, ports: own === undefined || own.ended ? [] : [...own.ports] };
+    if (own?.repo !== undefined) {
+        seen.repo = own.repo;
+    }
+    if (own?.startedBy !== undefined) {
+        seen.startedBy = own.startedBy;
+    }
+    if (own?.builtFrom !== undefined) {
+        seen.builtFrom = own.builtFrom;
+        const since = Date.parse(own.builtFrom.at);
+        if (own.repo !== undefined && landsSince !== undefined && !Number.isNaN(since)) {
+            seen.landsSince = landsSince(own.repo, since);
+        }
+    }
+    return seen;
+};
 
 const keyOf = (device: string, id: string): string => `${device}\n${id}`;
 
@@ -152,6 +187,8 @@ export const createDeviceRuns = (deps: {
     readonly call: DeviceToolCall;
     readonly tunnels: () => Pick<DeviceTunnels, "close">;
     readonly logger: Pick<Logger, "info">;
+    // Lands into a repository since a moment (run-builds.ts), for a run's `landsSince`.
+    readonly landsSince?: (repo: string, since: number) => number;
 }): DeviceRuns => {
     const held = new Map<string, Held>();
 
@@ -163,14 +200,7 @@ export const createDeviceRuns = (deps: {
         return text;
     };
 
-    const withHeld = (device: string, run: ListedRun): DeviceRun => {
-        const own = held.get(keyOf(device, run.id));
-        const seen: DeviceRun = { ...run, device, ports: own === undefined || own.ended ? [] : [...own.ports] };
-        if (own?.repo !== undefined) {
-            seen.repo = own.repo;
-        }
-        return seen;
-    };
+    const withHeld = (device: string, run: ListedRun): DeviceRun => seenRun(held.get(keyOf(device, run.id)), device, run, deps.landsSince);
 
     // A run that ended gives back the ports opened for it, unless another of this sandbox's runs there still holds one.
     const release = async (device: string, id: string): Promise<void> => {
@@ -195,28 +225,37 @@ export const createDeviceRuns = (deps: {
         return runs.map((run) => withHeld(device, run));
     };
 
-    const stop = async (device: string, id: string, force = false): Promise<string> => {
+    const stop = async (device: string, id: string, ask: StopAsk = {}): Promise<string> => {
         const own = held.get(keyOf(device, id));
         const grace = own === undefined ? UNKNOWN_GRACE_SECONDS : (own.stopGraceSeconds ?? DEFAULT_GRACE_SECONDS);
-        const text = await asked(device, "app_stop", { id, force }, STOP_MS + grace * 1000);
+        const args = { id, force: ask.force === true, ...opt("by", ask.by) };
+        const text = await asked(device, "app_stop", args, STOP_MS + grace * 1000);
         await release(device, id);
         return text;
     };
 
     return {
         started: (device, id, run) => {
-            held.set(keyOf(device, id), { name: run.name, repo: run.repo, ports: [...run.ports], stopGraceSeconds: run.stopGraceSeconds, ended: false });
+            held.set(keyOf(device, id), {
+                name: run.name,
+                repo: run.repo,
+                ports: [...run.ports],
+                stopGraceSeconds: run.stopGraceSeconds,
+                startedBy: run.startedBy,
+                builtFrom: run.builtFrom,
+                ended: false,
+            });
             if (run.ended === true) {
                 void release(device, id);
             }
         },
         list,
         stop,
-        stopNamed: async (device, name) => {
+        stopNamed: async (device, name, by) => {
             const running = (await list(device)).filter((run) => run.name === name && run.state === "running");
             const stopped: { id: string; text: string }[] = [];
             for (const run of running) {
-                stopped.push({ id: run.id, text: await stop(device, run.id) });
+                stopped.push({ id: run.id, text: await stop(device, run.id, { by }) });
             }
             return stopped;
         },

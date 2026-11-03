@@ -108,3 +108,32 @@ test("a clean stops a scan in flight first, so no size it reports was measured m
     expect(await scanning).toEqual({ scanning: false });
     expect(await cleaning).toEqual({ category: "trash", freedBytes: 500, removed: 1, kept: 0, failed: 0 });
 });
+
+// Build output inside conversation checkouts: carved out of "checkouts" by the folder the lookup recognises, sized as
+// cleanable only where its conversation is settled, and cleaned by handing the press to the reaper.
+test("build output inside a checkout is its own category, cleanable where its conversation has nothing running", async () => {
+    const { roots } = await storageTree();
+    const settled = join(roots.history, "worktrees", "settled", "integra", "target");
+    const busy = join(roots.history, "worktrees", "busy", "integra", "target");
+    await plant(join(settled, "debug", "app"), 700, NOW, OLD);
+    await plant(join(busy, "debug", "app"), 300, NOW, OLD);
+    await plant(join(roots.history, "worktrees", "settled", "integra", "src", "main.rs"), 40, NOW, OLD);
+    const reaped: string[] = [];
+    const storage = storageOver(roots, {
+        buildOutputs: {
+            detect: async (dir) => dir.endsWith("/target"),
+            reapable: (path) => path === settled,
+            reap: async () => {
+                reaped.push("pressed");
+                return { removed: 1, failed: 0 };
+            },
+        },
+    });
+    const report = await storage.scan();
+    const byId = new Map(report.scan?.categories.map((category) => [category.id, category]));
+    expect(byId.get("buildOutputs")).toMatchObject({ bytes: 1000, cleanableBytes: 700, cleanability: "safe" });
+    expect(byId.get("buildOutputs")?.items.map((item) => item.path).toSorted()).toEqual([busy, settled]);
+    expect(byId.get("checkouts")).toMatchObject({ bytes: 40 });
+    expect(await storage.clean("buildOutputs")).toMatchObject({ category: "buildOutputs", removed: 1, failed: 0 });
+    expect(reaped).toEqual(["pressed"]);
+});

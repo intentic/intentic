@@ -23,6 +23,7 @@ const {
     fetchWorkspacePorts,
     handOver,
     markPrepared,
+    mirrorsByDefault,
     othersHolding,
     pollBackoffMs,
     pollDue,
@@ -828,5 +829,18 @@ describe("the sync loop's heartbeat", () => {
             await updateState(() => before);
             await stopHeartbeat();
         }
+    });
+});
+
+// An agent's own server stays in the sandbox: a scratch server took the owner's 7878 on his own localhost.
+describe("mirrorsByDefault", () => {
+    it("leaves out a port an agent's shell or job holds, unless the job was left running for the owner", () => {
+        const owner = { conversationId: "wise-cinder-95ng" };
+        expect([
+            mirrorsByDefault({}),
+            mirrorsByDefault({ owner }),
+            mirrorsByDefault({ owner: { ...owner, jobId: "j1", label: "Scratch server" } }),
+            mirrorsByDefault({ owner, job: { ...owner, jobId: "j1", label: "Dev server" } }),
+        ]).toEqual([true, false, false, true]);
     });
 });

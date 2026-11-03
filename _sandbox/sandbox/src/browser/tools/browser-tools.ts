@@ -15,10 +15,11 @@ import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import type { TurnLease } from "../../agent/tools/turn-mounts.js";
 import { type BrowserBackendSpec, type BrowserRouterFactory, createSchemaCache, type McpToolSchema, type RouterManifest } from "./browser-router.js";
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";
-import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display.js";
+import { chromiumWindowArgs, type Display, displayAnswers, ensureDisplay, holdDisplay } from "../cast/display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
 import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
+import { SOFTWARE_GL_ARGS, SOFTWARE_WEBGPU_ARGS, softwareRenderingEnv } from "../sessions/software-rendering.js";
 import { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "./browser-servers.js";
 
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
@@ -121,12 +122,21 @@ const freePort = async (): Promise<number> => {
 // profile, a modelContext on every site is a trait real Chrome users don't share, one more thing to fingerprint.
 export const WEBMCP_LAUNCH_ARG = "--enable-blink-features=WebMCP";
 
+// What every agent browser waits on one action, and on one navigation. Upstream's 5s action default timed out on a page
+// that renders a game in software: a SwiftShader frame takes 1-3s, and a screenshot waits for one (82 "Timeout 5000ms
+// exceeded" screenshots, 52 clicks, types and waits in one sandbox's audit, 2026-11-03). 30s still ends a click on an
+// element that will never be there inside one call.
+export const ACTION_TIMEOUT_MS = 30_000;
+export const NAVIGATION_TIMEOUT_MS = 60_000;
+
 // A nonce, not owner+port: a port can recur before its old config file expires, and wx would collide on the name.
 // Owner and port stay in the name for reading a directory by eye.
+// `fingerprint` is the device a signed-in profile presents; the credential-free browser has none and runs with the
+// sandbox's own clock and language.
 export const writeBrowserConfig = async (
     server: string,
     port: number,
-    fingerprint: BrowserFingerprint,
+    fingerprint: BrowserFingerprint | undefined,
     // Display this browser is headed on, if headed at all; its size becomes the window's, absent means headless.
     display?: Display | undefined,
     exit?: ProfileExit | undefined,
@@ -134,19 +144,30 @@ export const writeBrowserConfig = async (
 ): Promise<string> => {
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const path = join(configDir, `${server}-${port}-${randomBytes(4).toString("hex")}.json`);
+    const clock =
+        fingerprint === undefined
+            ? undefined
+            : {
+                  locale: fingerprint.locale,
+                  timezoneId: fingerprint.timezoneId,
+                  extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
+              };
     // contextOptions carries clock/language, read before JS runs; Accept-Language is explicit to match languages.
     // viewport: null fills the window instead of CDP emulating a size; window-position pins it for Xvfb.
     const config = {
         browser: {
             launchOptions: {
-                args: [`--remote-debugging-port=${port}`, ...(display === undefined ? [] : chromiumWindowArgs(display)), ...extraArgs],
+                args: [
+                    `--remote-debugging-port=${port}`,
+                    ...(display === undefined ? [] : chromiumWindowArgs(display)),
+                    ...SOFTWARE_GL_ARGS,
+                    ...extraArgs,
+                ],
                 ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
             },
             contextOptions: {
                 ...(display === undefined ? {} : { viewport: null }),
-                locale: fingerprint.locale,
-                timezoneId: fingerprint.timezoneId,
-                extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
+                ...clock,
             },
         },
         // The pause @playwright/mcp takes after every click, type, key, evaluate, drag, upload and dialog (its
@@ -157,7 +178,7 @@ export const writeBrowserConfig = async (
         // change made on a bare 300ms timer was not. 350, not 150: a 250-300ms debounce (a search box, a menu) is
         // common, and an agent that acts on the snapshot from before it costs a round trip of its own, far more than
         // the 200ms saved. A change a page makes on a bare timer past ~330ms is for browser_wait_for on its text.
-        timeouts: { settle: 350 },
+        timeouts: { settle: 350, action: ACTION_TIMEOUT_MS, navigation: NAVIGATION_TIMEOUT_MS },
     };
     await writeFile(path, JSON.stringify(config), { flag: "wx", mode: 0o600 });
     return path;
@@ -194,17 +215,19 @@ export const browserServerSpec = (
         "--output-dir",
         outputDir,
     ],
-    env: { ...process.env, DISPLAY: display.name },
+    env: { ...softwareRenderingEnv(process.env, executablePath), DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
 });
 
 // --isolated keeps it credential-free and lets concurrent turns each have one, unlike a shared profile directory.
-// Headed like the logged-in browsers (a WAF blocks headless regardless of identity); headless only with no display.
+// Headed like the logged-in browsers when there is a display; headless only with none.
+// No init script: this browser carries no identity, so there is nothing to disguise, and what it is mostly pointed at is
+// the agent's own localhost. The stealth script it used to get reported a seeded desktop GPU ("ANGLE (NVIDIA GeForce
+// GTX 1650 ...)") over SwiftShader, and agents benchmarking a game took that for the hardware it ran on (2026-11-03).
 export const isolatedBrowserSpec = (
     cli: string,
     executablePath: string,
     outputDir: string,
-    stealthPath: string,
     display: Display | undefined,
     configPath: string,
 ): McpServerConfig => ({
@@ -221,22 +244,22 @@ export const isolatedBrowserSpec = (
         "--no-sandbox",
         "--isolated",
         ...(display === undefined ? ["--headless"] : []),
-        "--init-script",
-        stealthPath,
         "--output-dir",
         outputDir,
     ],
     // DISPLAY is stripped, not left unset, so a headless Chromium can't inherit one pointing at the wrong X server.
     env:
         display === undefined
-            ? (Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>)
-            : { ...process.env, DISPLAY: display.name },
+            ? Object.fromEntries(Object.entries(softwareRenderingEnv(process.env, executablePath)).filter(([key]) => key !== "DISPLAY"))
+            : { ...softwareRenderingEnv(process.env, executablePath), DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
     // Not alwaysLoad: tools stay out of the prompt until ToolSearch pulls them in; system append names the server.
 });
 
-// Bounds browser_evaluate, which awaits a page promise Playwright never times out on its own.
-const BROWSER_CALL_TIMEOUT_MS = 120_000;
+// Bounds browser_evaluate and browser_run_code_unsafe, which await a page promise Playwright never times out on its own.
+// Five minutes, not two: a WebGPU or WebGL game booting on SwiftShader took 30-180s to its first frame, and an evaluate
+// waiting on it died at 120s with the game nearly up.
+const BROWSER_CALL_TIMEOUT_MS = 300_000;
 
 // Budget for bringing a bound owner's cold exit up; paid once by the first turn after a cold start.
 const EXIT_START_BUDGET_MS = 10_000;
@@ -272,9 +295,16 @@ export interface BrowserTurnTools {
     readonly passkeys: Record<string, string>;
 }
 
-const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refusal: string } =>
+// `display`, with the key it is held under: the backend holds it for its whole life (browser-router.ts BackendSupport),
+// since it relaunches Chromium there on the call after a browser_close.
+const backendOf = (spec: McpServerConfig, display?: { readonly key: string; readonly display: Display }): BrowserBackendSpec | { readonly refusal: string } =>
     spec.type === "stdio"
-        ? { command: spec.command, args: spec.args ?? [], env: spec.env ?? {} }
+        ? {
+              command: spec.command,
+              args: spec.args ?? [],
+              env: spec.env ?? {},
+              ...opt("support", display === undefined ? undefined : { hold: () => holdDisplay(display.key), standing: () => displayAnswers(display.display) }),
+          }
         : { refusal: "the browser server came back with a transport nothing here can spawn" };
 
 export const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, passkeys: {} };
@@ -315,16 +345,18 @@ export const prepareBrowserOwner = async (
         // The only browser allowed to fall back to headless: it carries no identity, so nothing is fingerprinted as a
         // bot on an account's behalf.
         const webDisplay = await ensureDisplay(ANONYMOUS_BROWSER_SERVER).catch(() => undefined);
-        const fingerprint = await browserFingerprint(root, ANONYMOUS_BROWSER_SERVER);
+        // WebGPU on SwiftShader here and not on the signed-in profiles: this is the browser an agent tests its own game
+        // in, and a signed-in profile presents desktop Linux Chrome, where WebGPU is off and a SwiftShader adapter beside
+        // its disguised WebGL renderer would contradict it.
         return backendOf(
             isolatedBrowserSpec(
                 runtime.cli,
                 runtime.executablePath,
                 browserOutputDir(root),
-                await ensureStealthScript(root, ANONYMOUS_BROWSER_SERVER, fingerprint),
                 webDisplay,
-                await writeBrowserConfig(ANONYMOUS_BROWSER_SERVER, port, fingerprint, webDisplay, undefined, [WEBMCP_LAUNCH_ARG]),
+                await writeBrowserConfig(ANONYMOUS_BROWSER_SERVER, port, undefined, webDisplay, undefined, [WEBMCP_LAUNCH_ARG, ...SOFTWARE_WEBGPU_ARGS]),
             ),
+            webDisplay === undefined ? undefined : { key: ANONYMOUS_BROWSER_SERVER, display: webDisplay },
         );
     }
     // Taken by the login window since this turn's manifest was written; two Chromiums on one profile corrupt it.
@@ -358,6 +390,7 @@ export const prepareBrowserOwner = async (
             await writeBrowserConfig(owner, port, fingerprint, display, exit),
             browserOutputDir(root),
         ),
+        { key: owner, display },
     );
 };
 

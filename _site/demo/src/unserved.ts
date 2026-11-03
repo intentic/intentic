@@ -29,6 +29,8 @@ export const UNSERVED = {
     "ALL /privacy/gateway/{session}/*": NOT_THE_EDITORS,
     "ALL /privacy/mcp/{session}": NOT_THE_EDITORS,
     "ALL /system/runners/translator/*": NOT_THE_EDITORS,
+    // A `devices run` holding lands while it builds in the owner's tree (hosts/runs/run-builds.ts).
+    "DELETE /devices/builds/{id}": NOT_THE_EDITORS,
     "DELETE /devices/{name}/tunnels/{port}": NOT_THE_EDITORS,
     "DELETE /system/authorized-key": NOT_THE_EDITORS,
     "DELETE /system/hosts/{id}": NOT_THE_EDITORS,
@@ -91,6 +93,8 @@ export const UNSERVED = {
     "POST /ci/webhook/{host}": NOT_THE_EDITORS,
     // The rest of the agent's `devices` command (a shell's app_start, a device port reached from the sandbox), and where
     // the device dials back with a tunnel's ticket.
+    "POST /devices/builds": NOT_THE_EDITORS,
+    "POST /devices/builds/{id}/renew": NOT_THE_EDITORS,
     "POST /devices/{name}/apps": NOT_THE_EDITORS,
     "POST /devices/{name}/apps/stop": NOT_THE_EDITORS,
     "POST /devices/{name}/artifacts": NOT_THE_EDITORS,

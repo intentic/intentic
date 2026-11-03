@@ -454,6 +454,7 @@
             "landProcessStopped": "Der Git-Prozess des Arbeitsbereichs wurde beendet. Versuche erneut, die Arbeit dieses Agenten zu übernehmen.",
             "landTooManyPaths": "Diese Änderung enthält zu viele Dateipfade, um sie auf einmal zu übernehmen. Reduziere die Überschneidungen in deinem Arbeitsbereich und versuche es erneut.",
             "landOutputLimit": "Git hat mehr Informationen zurückgegeben, als der Arbeitsbereich verarbeiten konnte. Verkleinere die Änderung und versuche es erneut.",
+            "landRepoCorrupt": "Der Git-Speicher dieses Repositorys wurde beschädigt, vermutlich durch ein unsauberes Beenden. Die Sandbox prüft und repariert ihn gerade. Versuche es in einer Minute erneut, und lies zuerst die Karte in der Sandbox-Übersicht, falls sie verlorene Objekte meldet.",
             "workspaceOverlap": "{count} Dateien in deinem Arbeitsbereich überschneiden sich mit der Arbeit dieses Agenten. Committe oder verwirf ihre Änderungen und versuche es erneut.",
             "couldntLand": "Landen fehlgeschlagen: {reason}",
             "lostLink": "die Kopie dieses Agenten hat ihre Verbindung zur Historie Ihres Workspace verloren",
@@ -880,7 +881,11 @@
             "pushedHere": "Nach {target} gepusht",
             "upstream": "seinen Upstream",
             "pushedMore": "{count} weiterer Push | {count} weitere Pushes",
-            "more": "(+{count} weitere)"
+            "more": "(+{count} weitere)",
+            "fold": "In {parent} einfalten",
+            "foldDropping": "In {parent} einfalten, verwirft {count} Commit | In {parent} einfalten, verwirft {count} Commits",
+            "adopt": "Zum Workspace-Repo machen",
+            "settleFailed": "{dir} konnte nicht übernommen werden"
         },
         "words": {
             "allKept": "Alles bleibt erhalten",
@@ -2981,7 +2986,6 @@
         },
         "chatContinueStrip": {
             "aboutTokens": "~{tokens} Tokens",
-            "awaitingReset": "Wartet auf Reset",
             "continueOn": "Auf {model} fortsetzen",
             "continueOnFresh": "Auf {model} fortsetzen, in einer frischen Session",
             "continueOnKeepingSession": "Auf {fallback} fortsetzen, diese Session behalten",
@@ -3016,7 +3020,9 @@
             "continueAt": "Um {when} fortsetzen",
             "continueIn": "In {when} fortsetzen",
             "tryNow": "Jetzt versuchen",
-            "tryNowNote": "Das Konto gilt als aufgebraucht, und die Rücksetzzeit ist nur eine Schätzung des Anbieters. Ist es noch aufgebraucht, läuft nichts und dies wartet erneut."
+            "tryNowNote": "Das Konto gilt als aufgebraucht, und die Rücksetzzeit ist nur eine Schätzung des Anbieters. Ist es noch aufgebraucht, läuft nichts und dies wartet erneut.",
+            "tryReadingNote": "Abfragen hinken dem Anbieter hinterher. Lehnt er weiter ab, läuft nichts und dies wartet erneut.",
+            "resting": "Nichts lief: in einer Minute erneut versuchen"
         },
         "chatDocumentBody": {
             "clipped": "gekürzt"
@@ -3212,6 +3218,7 @@
                 "trimFrom": "In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens statt {from}): {cleared} ältere Werkzeugausgabe gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten. | In einer gekürzten Kopie der Sitzung fortgesetzt (etwa {tokens} Tokens statt {from}): {cleared} ältere Werkzeugausgaben gelöscht, jede Nachricht und jeder Werkzeugaufruf behalten.",
                 "summary": "In einer neuen Sitzung fortgesetzt, die mit einer Zusammenfassung der Unterhaltung beginnt.",
                 "summaryBy": "In einer neuen Sitzung fortgesetzt, die mit einer von {model} geschriebenen Zusammenfassung der Unterhaltung beginnt.",
+                "reason": "Grund: {reason}",
                 "trimFellBack": "Die Sitzung konnte für die Übergabe nicht gekürzt werden, daher wurde sie vollständig mitgenommen.",
                 "summaryFellBack": "Für die Übergabe konnte keine Zusammenfassung geschrieben werden, daher beginnt die neue Sitzung stattdessen mit der jüngsten Unterhaltung und dem aktuellen Stand der Arbeit."
             },
@@ -4193,7 +4200,8 @@
             "resendMemoryNote": "Sendet die Nachricht von selbst, sobald der Speicher der Sandbox eine halbe Minute lang frei geblieben ist, ein zurückgehaltener Chat nach dem anderen.",
             "waitMemoryNote": "Für Sie wird nichts gesendet. Die Nachricht wartet hier, bis jemand „Trotzdem senden“ drückt.",
             "goesWhenRoom": "Geht von selbst los, sobald Speicher frei wird",
-            "allowanceBack": "Kontingent zurück {when}"
+            "allowanceBack": "Kontingent zurück {when}",
+            "waitsForPress": "nur „Fortsetzen“ setzt ihn fort"
         },
         "words": {
             "connectAModel": "Modell verbinden",
@@ -4498,6 +4506,7 @@
             "inMinutes": "in {minutes} Min."
         },
         "toolPresentation": {
+            "interrupted": "unterbrochen",
             "failed": "fehlgeschlagen",
             "files": "{count} Datei | {count} Dateien",
             "lines": "{count} Zeile | {count} Zeilen",
@@ -8180,6 +8189,7 @@
             "deletingIsRetention": "Archivieren löscht nichts. Wie lange Unterhaltungen und Wiederherstellungspunkte aufbewahrt werden:"
         },
         "sandboxAttention": {
+            "gpuPaused": "GPU-Arbeit ist pausiert, nachdem dein Computer einen GPU-Reset gemeldet hat",
             "agentProposedChangeTo": "Der Agent hat eine Änderung an Ihrer Umgebung vorgeschlagen",
             "desktopSyncStopped": "Desktop-Synchronisierung auf {devices} gestoppt, sein Ordner wird nicht synchronisiert",
             "environmentBuilding": "Die neue Umgebung Ihrer Sandbox wird gebaut",
@@ -8192,7 +8202,12 @@
             "rebuildNeededToFinish": "Ein Neubau ist nötig, um Ihre neuen Fähigkeiten fertig einzurichten",
             "requiredSecretsMissing": "{count} erforderliches Secret fehlt | {count} erforderliche Secrets fehlen",
             "sandboxUpdateReadyTo": "Ein Sandbox-Update ist bereit — ein Neustart von etwa einer halben Minute",
-            "peopleAskForAccess": "{count} Person bittet um Zugriff | {count} Personen bitten um Zugriff"
+            "peopleAskForAccess": "{count} Person bittet um Zugriff | {count} Personen bitten um Zugriff",
+            "cleanBuildOutput": "Build-Ausgabe bereinigen",
+            "cleanBuildOutputDetail": "Entfernt, was Builds in Checkouts hinterlassen haben, deren Unterhaltung gerade nichts ausführt; der nächste Build erzeugt es neu.",
+            "diskLow": "Die Festplatte ist fast voll: {free} frei ({percent} %)",
+            "diskReaped": "{bytes} Build-Ausgabe aus {count} fertigen Checkout entfernt | {bytes} Build-Ausgabe aus {count} fertigen Checkouts entfernt",
+            "diskUsing": "{category} belegt am meisten ({bytes})"
         },
         "sandboxBackupCard": {
             "detail": "Diese Sandbox läuft in der Cloud, und auf diesem Computer liegt keine Kopie ihrer Dateien. Desktop-Sync hält hier einen Ordner mit ihr im Gleichschritt, damit die Arbeit alles überlebt, was der Maschine zustößt.",
@@ -8454,7 +8469,13 @@
             "sleep": "Schlafen, wenn ungenutzt",
             "sleepOn": "Schläft, wenn niemand sie nutzt, und wacht für ihre Zeitpläne und beim Öffnen auf",
             "sleepOff": "Läuft weiter, auch wenn niemand sie nutzt",
-            "sleepTipNote": "Gibt ihren Speicher frei, solange sie ungenutzt ist."
+            "sleepTipNote": "Gibt ihren Speicher frei, solange sie ungenutzt ist.",
+            "gpu": "Host-GPU",
+            "gpuOnRequest": "Agenten nutzen sie nur für Befehle, die sie über gpu-run ausführen",
+            "gpuAll": "Jeder Befehl eines Agenten kann sie nutzen",
+            "gpuTipNote": "Deine Bildschirm-GPU, über WSL.",
+            "gpuPaused": "GPU-Arbeit ist pausiert: {reason}",
+            "gpuResume": "GPU-Arbeit fortsetzen"
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "Die Konten, über die sie spricht, bleiben verbunden und angemeldet. Jede Automation, die an diese Persona geheftet ist, hört auf zu posten, bis Sie ihr eine andere geben.",
@@ -9131,6 +9152,10 @@
             "buildCaches": {
                 "label": "Build-Caches",
                 "reason": "Gespeicherte Ergebnisse von Build-Werkzeugen, die beim nächsten Bedarf neu erzeugt werden. Beim Bereinigen bleiben die vom letzten Tag erhalten."
+            },
+            "buildOutputs": {
+                "label": "Build-Ausgabe in Checkouts",
+                "reason": "Was Builds in den Checkouts der Unterhaltungen hinterlassen haben, etwa ein Rust-Ordner target. Beim Bereinigen wird es aus Checkouts entfernt, deren Unterhaltung gerade nichts ausführt; der nächste Build erzeugt es neu, Checkout und Arbeit bleiben."
             }
         },
         "agentOffload": {
@@ -12803,6 +12828,8 @@
         "directoryRuns": {
             "agentTooOld": "Der Agent auf {device} ist zu alt, um Programme auszuführen. Aktualisieren Sie ihn dort.",
             "buildsCommand": "Vor jedem Lauf hier gebaut",
+            "builtFrom": "Gebaut aus {commit}",
+            "builtFromTip": "Was auf {device} läuft, wurde um {at} aus Commit {commit} gebaut, mit {changed} nicht committeten Änderungen im Baum (gelandete Arbeit bleibt uncommittet, bis jemand sie committet).",
             "connectOne": "Einen verbinden",
             "couldntFollow": "{target} auf {device} konnte nicht verfolgt werden.",
             "couldntRun": "{target} ließ sich auf {device} nicht ausführen.",
@@ -12816,10 +12843,13 @@
             "foundProcfile": "Aus seinem Procfile",
             "foundStart": "Das start-Skript in seiner package.json",
             "isolated": "Windows Sandbox",
+            "landsSince": "{count} Landung seitdem | {count} Landungen seitdem",
+            "landsSinceTip": "Arbeit, die nach diesem Build gelandet ist, ist nicht darin: Neu starten baut sie.",
             "listFailed": "Was auf {device} läuft, konnte nicht gelesen werden, daher lässt sich hier nicht sagen, ob etwas läuft: {reason}",
             "log": "Log",
             "logEmpty": "Noch keine Ausgabe.",
             "mayBeRunning": "Läuft vielleicht",
+            "movedDuringBuild": "Der Baum hat sich während des Kompilierens geändert, der Build kann also zwei Versionen des Quelltexts mischen: Neu starten baut eine.",
             "noComputerFor": "{count} weiteres läuft nur auf einem Computer, und mit dieser Sandbox ist keiner verbunden. | {count} weitere laufen nur auf einem Computer, und mit dieser Sandbox ist keiner verbunden.",
             "offline": "{device} ist gerade nicht verbunden.",
             "openCard": "Seine Karte öffnen",

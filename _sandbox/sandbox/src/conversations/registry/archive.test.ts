@@ -16,6 +16,9 @@ import {
     heldCheckoutByAge,
     buildOutputsQuiet,
     BUILD_OUTPUT_QUIET_MS,
+    LANDED_BUILD_OUTPUT_QUIET_MS,
+    NO_QUIET,
+    reapOrder,
     agedFamilies,
     archivable,
     archivableByAge,
@@ -391,18 +394,36 @@ describe("sweepAgedAgents", () => {
 test("build output goes only from a settled card quiet past the window, with nothing waiting on its checkout", () => {
     const now = BUILD_OUTPUT_QUIET_MS;
     for (const status of ["idle", "stopped", "ready", "landed", "conflict", "error", "interrupted"] as const) {
-        expect(buildOutputsQuiet(card({ status }), now, BUILD_OUTPUT_QUIET_MS)).toBe(true);
+        expect(buildOutputsQuiet(card({ status }), now)).toBe(true);
     }
     // In flight: a turn, a question, or a land reading the checkout.
     for (const status of ["running", "awaiting", "stopping", "dismissing", "resuming", "landing"] as const) {
-        expect(buildOutputsQuiet(card({ status }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
+        expect(buildOutputsQuiet(card({ status }), now)).toBe(false);
+        expect(buildOutputsQuiet(card({ status }), now, NO_QUIET)).toBe(false);
     }
-    expect(buildOutputsQuiet(card({ status: "landed", updatedAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
-    expect(buildOutputsQuiet(card({ status: "landed", archivedAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
-    expect(buildOutputsQuiet(card({ status: "landed", unsentAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
-    expect(
-        buildOutputsQuiet(card({ status: "landed", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }), now, BUILD_OUTPUT_QUIET_MS),
-    ).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "idle", updatedAt: 1 }), now)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", archivedAt: 1 }), now)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", unsentAt: 1 }), now)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }), now)).toBe(false);
+});
+
+test("a landed card's build output goes an hour after the land, the rest after six, and under pressure at once", () => {
+    const landedAt = 10 * DAY;
+    expect(buildOutputsQuiet(card({ status: "landed", updatedAt: landedAt }), landedAt + LANDED_BUILD_OUTPUT_QUIET_MS - 1)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", updatedAt: landedAt }), landedAt + LANDED_BUILD_OUTPUT_QUIET_MS)).toBe(true);
+    expect(buildOutputsQuiet(card({ status: "idle", updatedAt: landedAt }), landedAt + LANDED_BUILD_OUTPUT_QUIET_MS)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "idle", updatedAt: landedAt }), landedAt + BUILD_OUTPUT_QUIET_MS)).toBe(true);
+    expect(buildOutputsQuiet(card({ status: "idle", updatedAt: landedAt }), landedAt, NO_QUIET)).toBe(true);
+});
+
+test("under pressure landed checkouts go first, then the longest idle", () => {
+    const cards = [
+        card({ id: "idle-new", status: "idle", updatedAt: 30 }),
+        card({ id: "landed-new", status: "landed", updatedAt: 20 }),
+        card({ id: "idle-old", status: "idle", updatedAt: 5 }),
+        card({ id: "landed-old", status: "landed", updatedAt: 10 }),
+    ];
+    expect(cards.toSorted(reapOrder).map(({ id }) => id)).toEqual(["landed-old", "landed-new", "idle-old", "idle-new"]);
 });
 
 test("held checkout retention leaves every live, watched, queued or unsent conversation alone", () => {

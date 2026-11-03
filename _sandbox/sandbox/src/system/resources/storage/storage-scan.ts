@@ -1,5 +1,5 @@
 import { statfs } from "node:fs/promises";
-import { basename, join, relative } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import {
     STORAGE_CLEANABILITY,
     type StorageCategoryId,
@@ -9,7 +9,9 @@ import {
 import { BROWSER_LOCK, type CleanCandidate, inFlight, planClean } from "./clean-plan.js";
 import { namedByProgram, type RunningProgram } from "./running-programs.js";
 import {
+    buildOutputClassification,
     classifyStoragePath,
+    insideCheckout,
     locateStoragePath,
     removalOf,
     type StorageClassification,
@@ -56,6 +58,13 @@ export interface ScanOptions {
     readonly budgetMs: number;
     readonly signal: AbortSignal;
     readonly programs: () => Promise<readonly RunningProgram[]>;
+    // Build output inside conversation checkouts: how a folder is recognised as one, and whether a clean may take it now.
+    readonly buildOutputs?: BuildOutputLookup;
+}
+
+export interface BuildOutputLookup {
+    readonly detect: (dir: string) => Promise<boolean>;
+    readonly reapable: (path: string) => boolean;
 }
 
 const emptyItem = (): ItemTally => ({ bytes: 0, freeable: 0, newestMs: 0, busy: false, folder: false });
@@ -86,9 +95,25 @@ const shownPath = (options: ScanOptions, path: string): string => {
     return located === undefined || base === undefined ? path : join(base, located.rel);
 };
 
+// What the reaper would take now: the build output of checkouts whose conversation has nothing running.
+const reapCleanable = (items: ReadonlyMap<string, ItemTally>, options: ScanOptions): number =>
+    [...items].reduce((total, [path, item]) => total + (options.buildOutputs?.reapable(path) === true ? item.freeable : 0), 0);
+
+const cleanableOf = (category: StorageCategoryId, tally: CategoryTally, options: ScanOptions, running: readonly RunningProgram[]): number | undefined => {
+    switch (removalOf(category)?.unit) {
+        case "entry":
+            return entryCleanable(category, tally.items, options, running);
+        case "file":
+            return tally.cleanable;
+        case "reap":
+            return reapCleanable(tally.items, options);
+        default:
+            return undefined;
+    }
+};
+
 const usageOf = (category: StorageCategoryId, tally: CategoryTally, options: ScanOptions, running: readonly RunningProgram[]): StorageCategoryUsage => {
-    const unit = removalOf(category)?.unit;
-    const cleanable = unit === "entry" ? entryCleanable(category, tally.items, options, running) : unit === "file" ? tally.cleanable : undefined;
+    const cleanable = cleanableOf(category, tally, options, running);
     return {
         id: category,
         cleanability: STORAGE_CLEANABILITY[category],
@@ -141,15 +166,21 @@ export const scanStorage = async (options: ScanOptions): Promise<StorageScan> =>
         }
     };
     const visitor: TreeVisitor<WalkContext> = {
-        folder: (path, parent) => {
+        folder: async (path, parent) => {
             // Another root nested inside this one is walked as itself, never twice.
             if (bases.has(path)) {
                 return "skip";
             }
+            const rel = relative(parent.base, path).split(sep).join("/");
+            // A build tool's output inside a checkout is carved out of it, by its folder rather than any path rule.
+            const inCheckout = parent.settled === undefined || parent.settled.category === "checkouts";
+            if (inCheckout && options.buildOutputs !== undefined && insideCheckout(parent.root, rel) && (await options.buildOutputs.detect(path))) {
+                return { ...parent, settled: buildOutputClassification(rel) };
+            }
             if (parent.settled !== undefined) {
                 return parent;
             }
-            const classified = classifyStoragePath(parent.root, relative(parent.base, path));
+            const classified = classifyStoragePath(parent.root, rel);
             return classified.settled ? { ...parent, settled: classified } : parent;
         },
         file: (file, context) => count(context, file),

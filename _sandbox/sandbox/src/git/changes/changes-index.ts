@@ -1,4 +1,5 @@
-import { lstat, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, rm, rmdir } from "node:fs/promises";
+import { pathExists } from "@intentic/base/fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
@@ -36,9 +37,11 @@ export const chunkPaths = (paths: readonly string[]): readonly (readonly string[
 };
 
 // Runs one git command per chunk, sequentially: concurrent writers would race for `index.lock`.
-const overPaths = async (dir: string, paths: readonly string[], argsFor: (chunk: readonly string[]) => string[], git: GitRunner): Promise<void> => {
+// `env` names a private index (GIT_INDEX_FILE) where the caller stages into one instead of the repo's own.
+type IndexEnv = Readonly<Record<string, string>> | undefined;
+const overPaths = async (dir: string, paths: readonly string[], argsFor: (chunk: readonly string[]) => string[], git: GitRunner, env?: IndexEnv): Promise<void> => {
     for (const chunk of chunkPaths(paths)) {
-        await git(dir, argsFor(chunk));
+        await git(dir, argsFor(chunk), env);
     }
 };
 
@@ -67,7 +70,7 @@ const beyondSymlink = async (dir: string, path: string, seen: Map<string, Promis
 
 // Stages exactly `paths`: adds, edits, and deletions (`-A` covers a removal, which a bare `add` skips). A path beyond a
 // symbolic link can only be a removal, which leaves the index through `rm --cached`, the one verb that takes it.
-export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
+export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit, env?: IndexEnv): Promise<void> => {
     const seen = new Map<string, Promise<boolean>>();
     const beyond = new Set<string>();
     for (const path of paths) {
@@ -76,10 +79,10 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
         }
     }
     const reachable = beyond.size === 0 ? paths : paths.filter((path) => !beyond.has(path));
-    await overPaths(dir, reachable, (chunk) => ["add", "-A", "--", ...chunk], git);
-    await overPaths(dir, [...beyond], (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk], git);
+    await overPaths(dir, reachable, (chunk) => ["add", "-A", "--", ...chunk], git, env);
+    await overPaths(dir, [...beyond], (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk], git, env);
     for (const chunk of chunkPaths(reachable)) {
-        await recordGainedExecutableBits(dir, ["--", ...chunk], git);
+        await recordGainedExecutableBits(dir, ["--", ...chunk], git, env);
     }
 };
 
@@ -87,9 +90,13 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
 // - --ignore-errors: one unreadable file doesn't abandon the rest (an agent may be writing while you stage).
 // - advice.addEmbeddedRepo=false: a nested repo is scanned here, not warned about as a gitlink.
 export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<void> => {
-    await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
-    // Unscoped: the diff reads only the index, which scratch, being untracked and unstaged, is never in.
-    await recordGainedExecutableBits(dir, [], git);
+    try {
+        await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
+    } finally {
+        // Unscoped: the diff reads only the index, which scratch, being untracked and unstaged, is never in. Run even
+        // where `add` reported a file it could not read: everything else it staged still owes its bits.
+        await recordGainedExecutableBits(dir, [], git);
+    }
 };
 
 // The daemon reads modes with core.fileMode=false (GIT_GLOBAL_ARGS), so a bit an upload or a Windows sync stripped is
@@ -97,10 +104,21 @@ export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = []
 // executable here reached every other checkout (a conversation's worktree, a clone, CI) as "permission denied". After
 // staging, a file executable on disk that the index holds as 100644 is recorded 100755: a bit gained is kept, a bit lost
 // still is not. `--raw` against the worktree under core.fileMode=true names exactly those, from the index's stat cache.
-const recordGainedExecutableBits = async (dir: string, pathspecArgs: readonly string[], git: GitRunner): Promise<void> => {
-    const { stdout } = await git(dir, ["-c", "core.fileMode=true", "diff", "--raw", "-z", "--no-renames", "--no-abbrev", ...pathspecArgs]);
+const recordGainedExecutableBits = async (dir: string, pathspecArgs: readonly string[], git: GitRunner, env?: IndexEnv): Promise<void> => {
+    const { stdout } = await git(dir, ["-c", "core.fileMode=true", "diff", "--raw", "-z", "--no-renames", "--no-abbrev", ...pathspecArgs], env);
     const gained = gainedExecutablePaths(stdout);
-    await overPaths(dir, gained, (chunk) => ["update-index", "--chmod=+x", "--", ...chunk], git);
+    await overPaths(dir, gained, (chunk) => ["update-index", "--chmod=+x", "--", ...chunk], git, env);
+};
+
+// Every tracked file the index holds as 100644 that is executable on disk: what a repair records +x (exec-bit-repair.ts).
+export const executableOnDiskPaths = async (dir: string, git: GitRunner = defaultGit): Promise<readonly string[]> => {
+    const { stdout } = await git(dir, ["-c", "core.fileMode=true", "diff", "--raw", "-z", "--no-renames", "--no-abbrev"]);
+    return gainedExecutablePaths(stdout);
+};
+
+// Records +x in the index for `paths`, nothing else: the repair's write, an ordinary staged mode change.
+export const markExecutable = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
+    await overPaths(dir, paths, (chunk) => ["update-index", "--chmod=+x", "--", ...chunk], git);
 };
 
 // `diff --raw -z` rows: `:<src mode> <dst mode> <src sha> <dst sha> <status>` NUL `<path>` NUL (no renames asked for).
@@ -157,10 +175,11 @@ export const commitIndex = async (
 };
 
 // Commits the working-tree state of exactly `paths` (adds, edits, deletions), disregarding whatever else is staged and
-// leaving that staging as it was. The paths are staged first, since `commit` refuses a path git has never seen, then
-// `--only` records them alone; the index reads clean on them afterwards. False when they already match HEAD. The diff
-// check is chunked through `chunkPaths` to stay under ARG_MAX; the commit itself cannot be chunked (`--only` records
-// a single snapshot), so paths are fed via a pathspec file when they wouldn't fit a single argv.
+// leaving that staging as it was. The paths are staged in the repo's own index (the panel reads them clean afterwards)
+// and, the commit's own copy, in a private index read from HEAD, which is committed whole; false when they already
+// match HEAD. Never `commit --only`: it re-reads the paths from disk under core.fileMode=false, so a script the staging
+// had just recorded +x was committed 100644, and every checkout cut from that commit ran it as "Permission denied"
+// (2026-11, 30 conversations on one sandbox). A partial commit during a merge is refused, as `--only` refused it.
 export const commitOnly = async (
     dir: string,
     paths: readonly string[],
@@ -172,37 +191,28 @@ export const commitOnly = async (
         return false;
     }
     await stagePaths(dir, paths, git);
+    const gitDir = (await git(dir, ["rev-parse", "--absolute-git-dir"])).stdout.trim();
+    if (await pathExists(join(gitDir, "MERGE_HEAD"))) {
+        throw new Error("fatal: cannot do a partial commit during a merge.");
+    }
     const head = await headSha(dir, git);
-    // Check whether the staged paths differ from HEAD at all; chunked to stay under ARG_MAX.
-    let anyDiff = false;
-    for (const chunk of chunkPaths(paths)) {
+    const scratch = await mkdtemp(join(tmpdir(), "intentic-commit-only-"));
+    const env = { GIT_INDEX_FILE: join(scratch, "index") };
+    try {
+        await git(dir, head === undefined ? ["read-tree", "--empty"] : ["read-tree", head], env);
+        await stagePaths(dir, paths, git, env);
         try {
-            await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE, "--", ...chunk]);
+            await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE], env);
+            return false;
+            // allow(silent-catch): `diff --quiet` exits 1 exactly when the private index differs from HEAD, the answer.
         } catch {
-            anyDiff = true;
-            break;
+            // The private index differs from HEAD: commit it.
         }
+        await git(dir, [...identity(author), "commit", "-q", "-m", message], env);
+        return true;
+    } finally {
+        await rm(scratch, { recursive: true, force: true });
     }
-    if (!anyDiff) {
-        return false;
-    }
-    // `commit --only` records one atomic snapshot so it cannot be chunked; when the path list would exceed ARG_MAX,
-    // feed it through a temporary pathspec file instead, matching the pattern in scratch.ts:withScratchExcluded.
-    const chunks = chunkPaths(paths);
-    if (chunks.length === 1) {
-        // Small enough for a single argv.
-        await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, "--", ...paths]);
-    } else {
-        const specs = await mkdtemp(join(tmpdir(), "intentic-commit-paths-"));
-        try {
-            const file = join(specs, "pathspecs");
-            await writeFile(file, paths.map((p) => `:(literal)${p}`).join("\0"));
-            await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, `--pathspec-from-file=${file}`, "--pathspec-file-nul"]);
-        } finally {
-            await rm(specs, { recursive: true, force: true });
-        }
-    }
-    return true;
 };
 
 // Discards uncommitted work: everything, or exactly `paths`; tracked content returns to HEAD, untracked is deleted.

@@ -1,6 +1,7 @@
 // agents: the conversation fleet
 import { LandingDeliverySchema } from "./project-delivery.js";
 import { AgentNextSchema } from "./agent-next.js";
+import { AgentPressSchema } from "./agent-press.js";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema, FreshSessionSchema } from "./agent.js";
 import { FROM_BRANCHES_DESCRIPTION } from "./conversation-links.js";
@@ -9,6 +10,7 @@ import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
 import { AgentNeedSchema } from "./needs.js";
+import { StrandedCloneSchema } from "./stranded-clone.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
 import { ReviewTallySchema, TurnProofSchema } from "./work-assurance.js";
@@ -137,13 +139,7 @@ export const TurnReachSchema = z.object({
         ),
     liveMore: z.number().optional().describe("How many more such files there were beyond the ones listed. Absent when all are listed."),
     stranded: z
-        .array(
-            z.object({
-                dir: z.string().describe("The clone, as a folder relative to its own copy of the workspace."),
-                uncommitted: z.number().describe("Files changed in it and never committed."),
-                unpushed: z.number().describe("Commits in it its upstream does not have, or that no remote has when it follows none."),
-            }),
-        )
+        .array(StrandedCloneSchema)
         .max(TURN_REACH_LIST_MAX)
         .optional()
         .describe(
@@ -303,6 +299,10 @@ export const AgentSummarySchema = z.object({
     // The one answer to "does it go by itself, and when" (agent-next.ts), derived from what it holds every time it is read.
     next: AgentNextSchema.optional().describe(
         "What carries it on next with nobody pressing anything, and when: a held turn re-run, a message held for memory, or messages booked for later. Absent when only a press moves it.",
+    ),
+    // And what a press does instead (agent-press.ts): the daemon's one reading, which every chat window's strip follows.
+    press: AgentPressSchema.optional().describe(
+        "The daemon's one reading of what a person's Continue does now: carry on from how the last turn ended, or nothing. Every summary a sandbox that knows it writes carries it, `none` included, so its absence means a sandbox older than it.",
     ),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
@@ -537,7 +537,7 @@ export const AgentSummarySchema = z.object({
                 .string()
                 .optional()
                 .describe(
-                    "Which kind of failure it was, when the sandbox could tell: unlinked when its copy lost its link to the workspace, off_main_line when the shared workspace was moved off its main line and the work waits until it is back. Absent otherwise.",
+                    "Which kind of failure it was, when the sandbox could tell: unlinked when its copy lost its link to the workspace, off_main_line when the shared workspace was moved off its main line and the work waits until it is back, repo_corrupt when the repository's own git storage is damaged (the sandbox checks and repairs it by itself). Absent otherwise.",
                 ),
             at: z.number().describe("When it failed, in milliseconds."),
         })

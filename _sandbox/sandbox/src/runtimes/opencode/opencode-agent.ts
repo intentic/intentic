@@ -13,7 +13,7 @@ import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
-import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { type EmulatedPlan, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { DEFAULT_TURN_TIMEOUTS, EXPIRED, expiredFrame, type TurnTimeouts, type TurnWatchdog, turnWatchdog, withTurnCap } from "../decorators/turn-watchdog.js";
 import { modelUnavailableFrame } from "../../agent/run/frames/error-frames.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
@@ -995,7 +995,7 @@ const openCodePlan = (context: StreamContext, run: ReturnType<typeof phaseRun>, 
             images = [];
             return planPhaseOf(capture);
         },
-        execute: (sessionId) => run({ prompt: EXECUTE_PROMPT, images: [], sessionId, agent: "build" }, context),
+        execute: (sessionId, prompt) => run({ prompt, images: [], sessionId, agent: "build" }, context),
     };
 };
 
@@ -1037,6 +1037,8 @@ const shellOf = (request: AgentRequest, env: Readonly<Record<string, string>> | 
         return shellRouteOf({
             ...opt("secrets", request.tools.secrets),
             ...opt("pane", pane),
+            // A command the pane returned still running becomes a job the agent waits on, as a Claude Code turn's does.
+            jobs: request.hooks.backgroundJobs,
             surfaced: () => {
                 if (pane !== undefined && !shown.has(pane.session)) {
                     shown.add(pane.session);

@@ -31,10 +31,14 @@ flowchart LR
   on any Node an agent's project pins. A rule may also match the program's working directory (`cwd`), name its memory
   price (`size`), and be judged under a program that already holds a slot (`nests`): the editor's `vue-tsc` takes the
   `vue-typecheck` lane, one at a time, from under a `pnpm -r typecheck`. Only a pool no `nests` rule names may wait on
-  one that does, so the waits cannot form a cycle.
+  one that does, so the waits cannot form a cycle. `cargoBuildArgs` translates supported `cargo run` options into
+  a build; `heavy-exec.cjs` queues that build in a child and starts the original run once its slot is released.
+  Unknown arguments retain the original invocation. The prebuild stays local even when ordinary Cargo builds
+  are offloaded, so its artifacts warm the original run.
 - `memory-room`'s `SIZE_BYTES` prices a toolchain command by its measured shape instead of its class: `targeted` (a test
   run aimed at named files), `editor-typecheck` (the editor's full `vue-tsc`, 7 GiB) and `scoped-typecheck` (`lsp diag`
-  on a Vue package, 4 GiB).
+  on a Vue package, 4 GiB), and `cargo-build` (7 GiB per admission, based on Shinobi's 2026-11-02 Rust build peaks).
+  Two Cargo reservations fit an 18 GiB sandbox with headroom; the price does not cap compiler RSS.
 - `memory-room` is the one formula for whether the sandbox has room (limit, used, free, stall, and what each workload
   class costs). The daemon's resource budget judges by it, and it is also the `memory-room` command `queue-run` asks:
   it asks the daemon's room socket, and applies the formula itself where no daemon answers. (2026-11-02) A reading may

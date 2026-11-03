@@ -94,19 +94,24 @@ fi
 # PATH at start (daemon/devices_nvidia_linux.go), and it needs a spec that declares nvidia.com/gpu=all. Without the
 # hook it falls through to AMD's CDI driver: "failed to discover GPU vendor from CDI", or "AMD CDI spec not found".
 # So the keeper writes the spec nvidia-ctk's WSL mode would write, minus its hooks (the device node, the driver
-# libraries mounted where WSL keeps them and found through LD_LIBRARY_PATH, nvidia-smi on the PATH), and a hook stub
-# that this spec never calls. A spec someone generated with the real toolkit is left in charge. Two specs that
+# libraries mounted where WSL keeps them, nvidia-smi on the PATH), and a hook stub that this spec never calls.
+# (2026-11-03) The spec names where the libraries are (INTENTIC_GPU_LIBRARY_PATH) and does NOT put them on the
+# container's LD_LIBRARY_PATH. With them there, every process in a sandbox (the daemon, every agent shell, its
+# browsers) loaded Mesa's d3d12 driver and rendered on the owner's display GPU unasked: 65 conversations on rog did,
+# and one hung the GPU (LiveKernelEvent 0x141) and powered the PC off. A sandbox hands the path to the one command that
+# asks (`gpu-run`), and nvidia-smi is a wrapper that sets it for itself alone. A spec someone generated with the real toolkit is left in charge. Two specs that
 # declare the same device make CDI refuse both, and the real toolkit's spec calls the real hook, so in that case
 # the keeper writes neither file and removes the stub it wrote earlier.
 # ---------------------------------------------------------------------------------------------------------------------
 NVIDIA_SPEC="/etc/cdi/intentic-nvidia-wsl.yaml"
 NVIDIA_HOOK="/usr/local/bin/nvidia-cdi-hook"
 NVIDIA_HOOK_MARK="# intentic-engine: stub"
+NVIDIA_SMI="/etc/intentic-engine/nvidia-smi"
 nvidia_gpu() {
   ours_hook=""
   grep -qF "$NVIDIA_HOOK_MARK" "$NVIDIA_HOOK" 2>/dev/null && ours_hook=1
   if [ ! -c /dev/dxg ] || [ ! -e /usr/lib/wsl/lib/libcuda.so.1 ] || [ ! -e /usr/lib/wsl/lib/nvidia-smi ]; then
-    rm -f "$NVIDIA_SPEC"
+    rm -f "$NVIDIA_SPEC" "$NVIDIA_SMI"
     [ -n "$ours_hook" ] && rm -f "$NVIDIA_HOOK"
     return 0
   fi
@@ -114,12 +119,20 @@ nvidia_gpu() {
     [ -f "$spec" ] && [ "$spec" != "$NVIDIA_SPEC" ] || continue
     if grep -qE '^kind:[[:space:]]*"?nvidia\.com/gpu"?[[:space:]]*$' "$spec"; then
       say "an NVIDIA CDI spec is already there ($spec): leaving the GPU to it"
-      rm -f "$NVIDIA_SPEC"
+      rm -f "$NVIDIA_SPEC" "$NVIDIA_SMI"
       [ -n "$ours_hook" ] && rm -f "$NVIDIA_HOOK"
       return 0
     fi
   done
-  mkdir -p /etc/cdi
+  mkdir -p /etc/cdi /etc/intentic-engine
+  # nvidia-smi as a container runs it: the driver's own binary, with the driver's libraries on its library path only.
+  # The sandbox image has /bin/sh; ic's probe (`--entrypoint=nvidia-smi ... -L`) and the daemon's both run this.
+  cat >"$NVIDIA_SMI" <<'EOF'
+#!/bin/sh
+# intentic-engine: nvidia-smi with the WSL GPU libraries on its own library path, not the container's.
+LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec /usr/lib/wsl/lib/nvidia-smi "$@"
+EOF
+  chmod 755 "$NVIDIA_SMI"
   cat >"$NVIDIA_SPEC" <<'EOF'
 # Written by the intentic-engine keeper at every start: the NVIDIA GPU WSL hands this distro, for `docker run --gpus=all`.
 cdiVersion: "0.5.0"
@@ -131,12 +144,12 @@ devices:
         - path: /dev/dxg
 containerEdits:
   env:
-    - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+    - INTENTIC_GPU_LIBRARY_PATH=/usr/lib/wsl/lib
   mounts:
     - hostPath: /usr/lib/wsl
       containerPath: /usr/lib/wsl
       options: [ro, nosuid, nodev, rbind, rprivate]
-    - hostPath: /usr/lib/wsl/lib/nvidia-smi
+    - hostPath: /etc/intentic-engine/nvidia-smi
       containerPath: /usr/bin/nvidia-smi
       options: [ro, nosuid, nodev, bind]
 EOF

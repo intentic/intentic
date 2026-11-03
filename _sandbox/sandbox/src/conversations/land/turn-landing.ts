@@ -1,3 +1,4 @@
+import { waitForRunBuilds } from "../../hosts/runs/run-builds.js";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
@@ -98,6 +99,7 @@ export type LandingDeps = Pick<
     | "auth"
     | "members"
     | "ownerEmail"
+    | "runBuilds"
 >;
 
 // What settling a conversation's land books reads: its record, its checkouts, and the branch checkouts it lands onto.
@@ -108,7 +110,8 @@ export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock. `land` names the land
     // as its transcript row does, where a home files the commit (version-landed.ts fileHomeCommit).
     readonly settleLanding: (conversationId: string, land?: string) => void;
-    // Hands a home conversation's clash with the main tree back to it to resolve (home/home-conflict.ts), off the turn's clock.
+    // Hands a clash with the main tree back to its conversation to resolve while it is warm (settle/resolve-conflict.ts), off
+    // the turn's clock.
     readonly resolveConflict: (conversationId: string, conflicts: LandOutcome["conflicts"]) => void;
 }
 
@@ -164,6 +167,10 @@ const landUnderLease = async (
     // nor a branch's, which takes its land committed (branch-land.ts).
     if (target.kind === "main") {
         const repos = mainTreeRepos(finished.placement).map(({ repo }) => repo);
+        // A run's build compiling one of these repositories first (hosts/runs/run-builds.ts): it reads one version.
+        if (mode !== "measure") {
+            await waitForRunBuilds(deps, id, repos);
+        }
         await versionCommitsSettled(deps, repos);
         // What file sync delivered since the turn opened, committed so the rebase below reaches it (version-landed.ts).
         await versionProjectFolders(deps, repos);
@@ -195,6 +202,13 @@ const landingFacts = async (
     return { repos: span.map(({ repo }) => repo), paths, outcome: "clean" };
 };
 
+// Whether a land's clash goes straight back to its conversation (settle/resolve-conflict.ts) rather than waiting on its card:
+// where the work was meant to land by itself, and for a home, whose person presses nothing. Held work's clash waits for
+// a Resolve press, as its land waits for a Land press. A resolve turn's own clash is never sent back, recognised by its
+// prompt whoever sent it, so a clash that outlives one resolve cannot loop.
+export const resolvesAtOnce = (automatic: boolean, finished: Pick<IsolatedAgent, "identity">, prompt: string): boolean =>
+    (automatic || finished.identity.home === true) && !isLandConflict(prompt);
+
 // A land that changed something: recorded, verified against the whole repository off the turn's clock where it reached
 // the tree, reported, and announced. One into a parent's checkout is recorded and framed only: the main tree did not
 // move, and the parent's own land is what reaches it.
@@ -205,6 +219,8 @@ async function* recordLand(
     finished: IsolatedAgent,
     books: LandBooks,
     landed: LandOutcome,
+    // The land was meant to reach the main tree by itself: its clash is resolved at once rather than waiting on a press.
+    automatic: boolean,
 ): AsyncGenerator<AgentEvent> {
     const id = turn.conversationId;
     await deps.agents.recordLanded(id, landed);
@@ -229,8 +245,7 @@ async function* recordLand(
         if (books.outcome === "conflict") {
             deps.perf.record("agent.land-conflict", 0, { id, resolveTurn: isLandConflict(turn.prompt) });
         }
-        // A resolve turn's own clash is not sent back: recognised by its prompt, whoever sent it.
-        if (books.outcome === "conflict" && finished.identity.home === true && !isLandConflict(turn.prompt)) {
+        if (books.outcome === "conflict" && resolvesAtOnce(automatic, finished, turn.prompt)) {
             hooks.resolveConflict(id, landed.conflicts);
         }
         return;
@@ -343,7 +358,7 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     books.reconciled = true;
     performLandingWrites(deps, id, decision.writes);
     if (landed.changed) {
-        yield* recordLand(deps, hooks, turn, finished, books, landed);
+        yield* recordLand(deps, hooks, turn, finished, books, landed, target.kind === "main" && decision.mode === "check");
         return;
     }
     // A tip that moved with nothing written (a net-zero delta: an edit and its revert) is kept on the books but never

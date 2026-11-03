@@ -12,7 +12,7 @@ import {
 } from "../schemas/devices.js";
 import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
-import { SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
+import { DiskPressureSchema, SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
 import { AutoUpdateInputSchema, AutoUpdateSchema, SkipUpdateInputSchema } from "../schemas/updates.js";
@@ -190,6 +190,17 @@ export const systemContract = {
             description: "Stops a running scan. Whoever was waiting on it gets the previous measurement back; nothing is lost but the time.",
         })
         .output(OkSchema),
+    // Answered from the watch's last reading, never by reading the disk; the `disk` runtime domain says when it moved.
+    diskPressure: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/disk-pressure",
+            summary: "How close the disk is to full",
+            description:
+                "The history volume's free space as the sandbox's disk watch last read it, a minute ago at most, and what it did about it: under 15% free it removes build output from checkouts whose conversation has nothing running, and under 10% and 5% it tells the owner. Also the biggest categories of the last storage scan, so a warning can say what is using the space.",
+        })
+        .meta({ floor: "maintainer" })
+        .output(DiskPressureSchema),
     // Re-classifies every path right before removing it; one clean at a time, and it cancels a running scan first.
     cleanStorage: systemRoute
         .route({

@@ -25,7 +25,25 @@ export interface AskToolDeps {
     readonly document?: () => RequestDocument | undefined;
     // What follows an answer the agent then acts on (the harness's rebase), told whether anything was answered.
     readonly answered?: (answered: boolean) => Promise<void>;
+    // Where an answer goes that came after the call asking for it had already ended (its client stopped waiting: a
+    // runtime's own tool timeout, a script that handed control back): into the turn as words of their own, so the agent
+    // reads it after all. Absent, such an answer is only the card's.
+    readonly late?: (prompt: string) => Promise<void>;
 }
+
+// The call's own signal, which the MCP server hands every handler: it ends when the client stops waiting for the answer.
+const CallExtraSchema = z.object({ signal: z.instanceof(AbortSignal) });
+
+/**
+ * The words a late answer reaches the turn with: what was asked, what was answered, and that the agent may have gone on
+ * without it. 2026-11-02 (lively-cedar-3nsa): a Codex turn's call ended 62 s after it asked, the owner answered 34 minutes
+ * later on the card, and the agent never heard it: it kept 50 tests where the answer meant about 8.
+ */
+const lateAnswerPrompt = (questions: readonly AskQuestion[], answers: string): string =>
+    `The owner has now answered the question you asked earlier (${questions.map((question) => `"${question.header}"`).join(", ")}), ` +
+    "after your call to ask had already returned without it, so you have not read this answer yet:\n\n" +
+    `${answers}\n\n` +
+    "Act on it. If you went ahead on another assumption in the meantime, revisit that work so it matches the answer.";
 
 // The API's own ceiling on one picture, base64; a bigger one stays a path for the Read tool, which downsizes.
 const MAX_ANSWER_IMAGE_BASE64 = 5 * 1024 * 1024;
@@ -54,7 +72,8 @@ export const askTool = (deps: AskToolDeps) =>
                 .min(1)
                 .max(4),
         },
-        async (args) => {
+        async (args, extra) => {
+            const call = CallExtraSchema.safeParse(extra).data?.signal;
             // SAFETY: the schema above is AskQuestion's own shape, multiSelect defaulted; zod spells an absent preview
             // `string | undefined` where AskQuestion leaves it out.
             const questions = args.questions as AskQuestion[];
@@ -74,7 +93,12 @@ export const askTool = (deps: AskToolDeps) =>
             // names every file either way, and an unreadable or oversized one only by path.
             const { images } = await loadAttachments({ attachments: answerFiles(questions, reply, deps.cwd) }, true);
             const seen = images.filter((image) => image.data.length <= MAX_ANSWER_IMAGE_BASE64).map(imageBlock);
-            return { content: [{ type: "text" as const, text: formatAnswers(questions, reply, deps.cwd) }, ...seen] };
+            const text = formatAnswers(questions, reply, deps.cwd);
+            // The call's client stopped waiting while the card stayed open: what it returns now reaches nobody.
+            if (call?.aborted === true && !reply.cancelled && reply.answers !== undefined) {
+                await deps.late?.(lateAnswerPrompt(questions, text));
+            }
+            return { content: [{ type: "text" as const, text }, ...seen] };
         },
         // An answer rebases the conversation's tree (the harness's `answered`), so it must not run beside reads.
         { annotations: toolAnnotations("write") },

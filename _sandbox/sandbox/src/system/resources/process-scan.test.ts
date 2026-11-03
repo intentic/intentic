@@ -1,5 +1,5 @@
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
-import { classifyProcess, ownerOf, parseAuxv, programOf } from "./process-scan.js";
+import { classifyProcess, createProcessScanner, ownerOf, parseAuxv, programOf } from "./process-scan.js";
 
 describe("what a process is", () => {
     test("the owner is read out of a NUL-separated environ and ignores every other variable", () => {
@@ -42,6 +42,16 @@ describe("what a process is", () => {
             "searchEngine",
         ],
         ["node /opt/sandbox/node_modules/@intentic/iq-engine/dist/host/child.js", "searchEngine"],
+        ["cargo /usr/local/cargo/bin/cargo build --release", "toolchain"],
+        ["rustc /root/.rustup/toolchains/stable/bin/rustc --crate-name server", "toolchain"],
+        ["rustdoc rustdoc --test src/lib.rs", "toolchain"],
+        ["rust-lld /root/.rustup/toolchains/stable/bin/rust-lld -flavor gnu", "toolchain"],
+        ["clippy-driver clippy-driver src/lib.rs", "toolchain"],
+        ["wasm-bindgen wasm-bindgen target/game.wasm", "toolchain"],
+        ["wasm-opt wasm-opt -Oz game.wasm", "toolchain"],
+        ["rust-analyzer rust-analyzer", "languageServer"],
+        ["cc cc test.c", "other"],
+        ["ld ld test.o", "other"],
         ["node dist/main.js", "other"],
     ] as const)("classifies %s as %s", (command, role) => {
         expect(classifyProcess(command)).toBe(role);
@@ -57,6 +67,13 @@ describe("what a process is", () => {
     });
 
     test.each([
+        ["cargo /usr/local/cargo/bin/cargo build", "cargo"],
+        ["rustc /root/.rustup/toolchains/stable/bin/rustc lib.rs", "rustc"],
+        ["rust-lld rust-lld", "rust-lld"],
+        ["clippy-driver clippy-driver", "clippy-driver"],
+        ["wasm-bindgen wasm-bindgen", "wasm-bindgen"],
+        ["wasm-opt wasm-opt", "wasm-opt"],
+        ["rustdoc rustdoc", "rustdoc"],
         ["MainThread node ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit", "vue-tsc"],
         ["MainThread node /x/.pnpm/vitest@4.0.9/node_modules/vitest/dist/workers/forks.js", "vitest"],
         ["MainThread node /work/intentic/_site/demo/node_modules/vite/bin/vite.js", "vite"],
@@ -110,4 +127,30 @@ describe("procfs units", () => {
         // A vector that names neither falls back to what every shipped platform uses, rather than to a zero divisor.
         expect(parseAuxv(Buffer.alloc(0), true)).toEqual({ pageBytes: 4096, ticksPerSecond: 100 });
     });
+});
+
+test("native compilers and linkers count as toolchain only beneath a Rust process in the same scan", async () => {
+    const rows = [
+        [1, 0, "cargo"], [2, 1, "cc"], [3, 2, "collect2"], [4, 3, "ld"], [5, 1, "game-server"],
+        [6, 0, "cc"], [7, 6, "ld"], [8, 99, "cc"], [9, 10, "cc"], [10, 9, "ld"],
+    ] as const;
+    const texts: Record<string, string> = {};
+    for (const [pid, ppid, comm] of rows) {
+        const fields = Array.from({ length: 22 }, () => "0");
+        fields[0] = "S";
+        fields[1] = String(ppid);
+        fields[2] = String(pid);
+        fields[19] = String(pid);
+        texts[`/proc/${pid}/stat`] = `${pid} (${comm}) ${fields.join(" ")}`;
+        texts[`/proc/${pid}/cmdline`] = `${comm}\0`;
+    }
+    const scan = createProcessScanner({ listPids: async () => rows.map(([pid]) => pid), readText: async (path) => texts[path] });
+    const roles = async () => (await scan()).sort((a, b) => a.pid - b.pid).map(({ pid, role }) => [pid, role]);
+    expect(await roles()).toEqual([
+        [1, "toolchain"], [2, "toolchain"], [3, "toolchain"], [4, "toolchain"], [5, "other"],
+        [6, "other"], [7, "other"], [8, "other"], [9, "other"], [10, "other"],
+    ]);
+    // Cached identities do not retain a role inherited from a parent that has since disappeared.
+    delete texts["/proc/1/stat"];
+    expect((await roles()).slice(0, 3)).toEqual([[2, "other"], [3, "other"], [4, "other"]]);
 });

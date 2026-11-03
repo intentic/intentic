@@ -136,8 +136,8 @@ export interface FingerprintPlace {
     readonly languages: readonly string[];
 }
 
-// Device for one profile owner, including `web` (the credential-free browser), which still needs a plausible GPU rather
-// than announcing it has none.
+// Device for one profile owner, or for the person's own window. Not for `web`, the credential-free browser: it has no
+// identity to disguise and reports the SwiftShader it really renders on (browser-tools.ts isolatedBrowserSpec).
 export const browserFingerprint = async (root: string, owner: string, place?: FingerprintPlace | undefined): Promise<BrowserFingerprint> => {
     const seed = await sandboxSeed(root);
     const gpu = pick(GPUS, draw(seed, owner, "gpu"));

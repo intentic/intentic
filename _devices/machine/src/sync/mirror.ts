@@ -126,6 +126,14 @@ export const fetchWorkspacePorts = async (base: string, syncToken: string): Prom
     return PortsListSchema.parse(await response.json()).ports.filter((port) => port.kind === "workspace" && port.forwardable);
 };
 
+// AN AGENT'S OWN SERVER STAYS IN THE SANDBOX (2026-11-03). A port the sandbox names an agent's (PortSummary.owner: its
+// shell, or a background job it ran) is left off this device's localhost, unless the agent left it running for the
+// owner (`job`) or the owner asked for it here (`intentic sync mirror include --port`). In the owner's shinobi
+// workspace an agent's scratch server took 7878, the port his own game client dials, and the mirror put it on his
+// localhost in place of the server he meant to reach. Left out of the wanted set altogether, so it is neither
+// mirrored nor reported as skipped: the sandbox's ports list says whose it is.
+export const mirrorsByDefault = (port: Pick<PortSummary, "owner" | "job">): boolean => port.owner === undefined || port.job !== undefined;
+
 // Whether the local port is free; called only after terminating this pairing's own prior forward and ruling out
 // other pairings, so a conflict is genuinely foreign. One instant's answer: a holder in the middle of a restart reads
 // as free, which is what `LocalHolds` is for.
@@ -463,10 +471,12 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
         return [];
     }
     const ignored = new Set(pairing.ignoredPorts ?? []);
+    const included = new Set(pairing.includedPorts ?? []);
+    const wanted = ports.filter((port) => mirrorsByDefault(port) || included.has(port.port));
     const holds = await holdsFor(holders, pairing);
-    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, ignored, holds, log);
+    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, wanted, claimedBy, ignored, holds, log);
     // Named off every sibling's forwards, not only those of the pairings this tick has passed (`recordedForwards`).
-    const skipped = skippedPortsOf(ports, next, othersHolding(holding, pairing.sandboxId), ignored);
+    const skipped = skippedPortsOf(wanted, next, othersHolding(holding, pairing.sandboxId), ignored);
     // Either set changing triggers a write, even a port flipping mirrored-to-contended without changing set size.
     if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
         await savePorts(pairingKey(pairing), next, skipped);

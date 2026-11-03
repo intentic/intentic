@@ -79,7 +79,7 @@ const enter = (): void => {
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
 // What has not reached the workspace yet. Its person never lands anything (the daemon lands and commits whatever the home
 // merged, turn-landing.ts homeOverride), so this says why, and presses nothing: a clash the home is sent back to resolve
-// (`conflict`, the daemon's home-conflict.ts), one only the person's own uncommitted edits make, which no rebase reaches, or work
+// (`conflict`, the daemon's land/settle/resolve-conflict.ts), one only the person's own uncommitted edits make, which no rebase reaches, or work
 // held for a maintainer because its person may not land here (`ready`, useRole `canLandHome`).
 const { canLandHome } = useRole();
 const homeCard = computed(() => registry.value.find((agent) => agent.id === conversation.value?.conversationId));

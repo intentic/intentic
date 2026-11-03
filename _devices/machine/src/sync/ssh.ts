@@ -32,6 +32,9 @@ import { syncSshPort, syncSshPorts } from "./tunnel.js";
 // Every name here is frozen into a session at its creation, so changing the list replaces every session this agent
 // holds, each from a settled state (mutagen.ts readyForReplacement). A project folder's share of it (PROJECT_IGNORES) is
 // also `project-ignores.fixture.json`, which the desktop app's NOT_SYNCED is held to: change them together.
+// The folders Cargo fills inside a profile folder that no run starts from.
+const CARGO_PROFILE_CACHES = ["incremental", ".fingerprint", "deps", "build", "examples"] as const;
+
 export const IGNORES = [
     "node_modules",
     "dist",
@@ -95,6 +98,13 @@ export const IGNORES = [
     "**/target/release",
     "**/target/*/debug",
     "**/target/*/release",
+    // Every other profile's (a custom `--profile fast` lands in `target/fast`) caches, natively and under a triple:
+    // the incremental state, fingerprints, compiled dependencies, build-script output and examples. Measured on the
+    // owner's shinobi workspace, 2026-11: `target/fast` alone was 1.2-1.9 GB of these, carried both ways on every
+    // build. The profile folder's own top level (the finished binary, its `.d` file) still travels, so a build made on
+    // one side can be started by hand on the other; a device run never needs it, since `devices run` pushes its
+    // artifact over the device link (sandbox bin/devices).
+    ...CARGO_PROFILE_CACHES.flatMap((cache) => [`**/target/*/${cache}`, `**/target/*/*/${cache}`]),
 ];
 
 // The two entries above that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder

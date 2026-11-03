@@ -1095,3 +1095,32 @@ test("staging records an executable bit a file gained, never one it lost", async
     await stagePaths(dir, ["picked.sh"]);
     expect(await mode("picked.sh")).toBe("100755");
 });
+
+// `commit --only` re-read the paths from disk under core.fileMode=false: the version commit of a land recorded every new
+// script 100644, and each checkout cut from it ran the script as "Permission denied".
+test("commitOnly commits a file executable on disk +x, new or already tracked, and never records a lost bit", async () => {
+    const dir = await tempRepo();
+    const committed = async (path: string): Promise<string> => (await sh(dir, "ls-tree", "HEAD", "--", path)).split(" ")[0]!;
+    await writeFile(join(dir, "old.sh"), "#!/bin/sh\n");
+    await writeFile(join(dir, "kept.sh"), "#!/bin/sh\n");
+    await chmod(join(dir, "kept.sh"), 0o755);
+    await sh(dir, "add", "old.sh", "kept.sh");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "seed");
+    await writeFile(join(dir, "other.txt"), "staged by someone else\n");
+    await sh(dir, "add", "other.txt");
+
+    await writeFile(join(dir, "new.sh"), "#!/bin/sh\necho new\n");
+    await chmod(join(dir, "new.sh"), 0o755);
+    await chmod(join(dir, "old.sh"), 0o755);
+    await writeFile(join(dir, "kept.sh"), "#!/bin/sh\necho edited\n");
+    await chmod(join(dir, "kept.sh"), 0o644);
+    expect(await commitOnly(dir, ["new.sh", "old.sh", "kept.sh"], "feat: scripts", author)).toBe(true);
+
+    expect(await committed("new.sh")).toBe("100755");
+    expect(await committed("old.sh")).toBe("100755");
+    expect(await committed("kept.sh")).toBe("100755");
+    // Someone else's staging is neither committed nor dropped, and the committed paths read clean.
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("other.txt");
+    expect(await sh(dir, "-c", "core.fileMode=false", "status", "--porcelain")).toBe("A  other.txt");
+    expect(await commitOnly(dir, ["new.sh", "old.sh"], "nothing", author)).toBe(false);
+});

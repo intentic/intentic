@@ -5,6 +5,7 @@ import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { EGRESS_FENCE_GUIDANCE, egressFenced } from "./guidance/egress-fence.js";
+import { hostGpu, hostGpuGuidance } from "./guidance/host-gpu.js";
 import { type GuidanceFacts, toolName } from "./guidance/guidance-facts.js";
 import {
     browserFull,
@@ -106,7 +107,9 @@ const askText = (facts: EntryFacts): string => {
 
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
 // `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Both tools are named in full: "the
-// `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26).
+// `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26). A loop whose
+// shell files a long command as a job (RuntimeFacts.shellJobs) is told it gets an id to wait on; one that does not is
+// told nothing about background commands: until 2026-11-02 every such loop was told to `wait` on one it had no id for.
 const waitingText = (facts: EntryFacts): string => {
     const watch = facts.watch !== false ? toolName(facts, "watch", "start") : undefined;
     const wait = toolName(facts, "subagents", "wait");
@@ -137,7 +140,13 @@ const waitingText = (facts: EntryFacts): string => {
               "check command and end your turn; it wakes this conversation when the check passes.",
         facts.subagents === false
             ? undefined
-            : `A subagent or background command you started is waited on with ${wait}, never by re-reading its log on a timer.`,
+            : facts.runtime.shellJobs
+              ? `A command still running when the sandbox hands it back (after about two minutes, or at once if it sits at a prompt) ` +
+                "keeps running as a background job, and its result names the job's id: wait on it with " +
+                `${wait} (target that id), which returns with its exit code and output tail when it ends, or end it early with ${stop}. ` +
+                "Never re-read its output file on a timer and never run it again beside the live one. A subagent you started is " +
+                `waited on with ${wait} the same way.`
+              : `A subagent you started is waited on with ${wait}, never by re-reading its log on a timer.`,
         "Do not detach a process yourself (setsid, nohup, `&` with disown): once this conversation stops, whatever it left " +
             "running is reclaimed.",
     ]
@@ -335,6 +344,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     // Only while ic says the owner's fence is enforced here (guidance/egress-fence.ts).
     { id: "egress", when: () => egressFenced(), text: EGRESS_FENCE_GUIDANCE },
+    // Only where this sandbox has the host's GPU (guidance/host-gpu.ts): on a Windows PC, the owner's display GPU.
+    { id: "gpu", when: () => hostGpu(), text: () => hostGpuGuidance() },
     {
         id: "outside",
         // Envelopes reach every runtime (Cursor seals tool results, automations and webchat wrap the message itself).

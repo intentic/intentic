@@ -1,5 +1,6 @@
 import type { TurnNote,TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import type { FreshStart, HandedOff, HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../../composition.js";
 import { HOME_SUMMARY_INSTRUCTIONS, type HomeRollover, homeRolloverFor, homeWorkNote } from "../../../../conversations/home/home-rollover.js";
@@ -7,6 +8,7 @@ import { roleModelIsSet } from "../../../models/role-model.js";
 import type { RoutedTurn } from "../../../../seams/turn-starter.js";
 import type { AgentExecutionContext } from "../../../../workload/agent-execution.js";
 import { opt } from "../../../../opt.js";
+import { continuationHelperNote } from "../../../subagents/recovery/lost-helpers.js";
 import { summaryNote } from "../../../providers/limit-handoff.js";
 import { type ColdTrimBasis, resumeTrimTurn } from "../cold-trim.js";
 import type { TurnExperimentStamps } from "../turn-plan.js";
@@ -58,36 +60,46 @@ export interface Continuation {
     readonly stamps: TurnExperimentStamps;
 }
 
-/** What the session the turn opens is told of how it goes on, and the frame and ledger stamps that say so. */
-export const continuationOf = async (
-    services: Services,
-    execution: AgentExecutionContext,
-    params: {
-        readonly input: RoutedTurn;
-        readonly history: readonly TranscriptRow[];
-        readonly held: HeldTurn | undefined;
-        readonly way: HandoffMode | undefined;
-        readonly rollover: HomeContinuation | undefined;
-        readonly resumed: string | undefined;
-        readonly delivery: Pick<Trimmed, "event" | "stamps">;
-        readonly signal: AbortSignal | undefined;
-    },
-): Promise<Continuation> => {
-    const { input, history, held, way, rollover, delivery } = params;
+interface ContinuationParams {
+    readonly input: RoutedTurn;
+    readonly history: readonly TranscriptRow[];
+    readonly localCwd?: string;
+    readonly held: HeldTurn | undefined;
+    readonly way: HandoffMode | undefined;
+    readonly rollover: HomeContinuation | undefined;
+    readonly resumed: string | undefined;
+    readonly delivery: Pick<Trimmed, "event" | "stamps">;
+    readonly signal: AbortSignal | undefined;
+}
+
+const summaryForContinuation = (services: Services, execution: AgentExecutionContext, params: ContinuationParams) => {
+    const { input, history, held, way, rollover } = params;
     const conversationId = input.conversationId;
-    const summarized =
-        (way === "summary" || rollover?.summarize === true) && history.length > 0 && conversationId !== undefined
-            ? await summaryNote(services, execution, {
+    return (way === "summary" || rollover?.summarize === true) && history.length > 0 && conversationId !== undefined
+            ? summaryNote(services, execution, {
                   conversationId,
                   rows: history,
                   contextTokens: rollover?.from ?? held?.contextTokens,
                   signal: params.signal,
+                  ...opt("spentProvider", held?.reason === "limit" ? withRuntimeDefaults(held.input).agent : undefined),
                   ...opt("instructions", rollover === undefined ? undefined : HOME_SUMMARY_INSTRUCTIONS),
               })
             : undefined;
+};
+
+/** What the session the turn opens is told of how it goes on, and the frame and ledger stamps that say so. */
+export const continuationOf = async (
+    services: Services,
+    execution: AgentExecutionContext,
+    params: ContinuationParams,
+): Promise<Continuation> => {
+    const { input, held, way, rollover, delivery } = params;
+    const conversationId = input.conversationId;
+    const helpers = await continuationHelperNote(services, params);
+    const summarized = await summaryForContinuation(services, execution, params);
     if (rollover === undefined) {
         return {
-            notes: summarized?.note === undefined ? [] : [summarized.note],
+            notes: [summarized?.note, helpers].filter((note): note is TurnNote => note !== undefined),
             handedOff: delivery.event ?? summarized?.event ?? carriedHandoff(way, held, params.resumed),
             freshStart: undefined,
             stamps: delivery.stamps,
@@ -97,7 +109,7 @@ export const continuationOf = async (
     const work = conversationId === undefined ? undefined : homeWorkNote(services, conversationId);
     const written = summarized?.note;
     return {
-        notes: [written, work].filter((note): note is TurnNote => note !== undefined),
+        notes: [written, work, helpers].filter((note): note is TurnNote => note !== undefined),
         handedOff: undefined,
         freshStart: {
             why: rollover.why,

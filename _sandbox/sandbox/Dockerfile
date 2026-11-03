@@ -397,6 +397,7 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/on-screen \
     _sandbox/sandbox/bin/sandboxes \
     _sandbox/sandbox/bin/preview \
+    _sandbox/sandbox/bin/gpu-run \
     /usr/local/bin/
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY --chmod=755 _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

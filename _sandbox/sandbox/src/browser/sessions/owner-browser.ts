@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { watchWindowFailures } from "./window-failures.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
+import { softwareRenderingEnv } from "./software-rendering.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { parseJsonWith } from "@intentic/base/json";
 import { readTextIfExists } from "@intentic/base/fs";
@@ -229,8 +230,11 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
     // Ranked as a service for the OOM killer: after an agent's command, before a turn's runtime.
     const child = spawnAs({ class: "service" }, options.executablePath, ownerBrowserArgs(options), {
         // Stamped, so a window its daemon left open when it died is ended at the next boot (system/boot/generation-sweep.ts).
+        // Never the GPU a `--gpus` sandbox inherited (software-rendering.ts). The environment only, not the agent browsers'
+        // ANGLE switches: this window's flags are kept to what a plain desktop start passes, since sign-in risk checks
+        // tell launches apart, and without the host's libraries and ICDs there is no GPU left for it to find.
         env: {
-            ...process.env,
+            ...softwareRenderingEnv(process.env, options.executablePath),
             ...detachedStamp("login-browser"),
             DISPLAY: options.display,
             TZ: options.fingerprint.timezoneId,

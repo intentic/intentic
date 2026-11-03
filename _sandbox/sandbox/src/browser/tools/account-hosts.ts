@@ -1,4 +1,6 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { z } from "zod";
+import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
 /* WHICH SIGNED-IN ACCOUNT A PAGE BELONGS TO.
 
@@ -63,3 +65,24 @@ export const signedInDoor = (account: string, host: string): string =>
     `\`account: "${account}"\`, and pass the same \`account\` on every call after it. The \`web\` browser is signed into ` +
     `nothing, and the owner's own browser is theirs, for what no sandbox account covers. If the account's browser shows ` +
     `a login page, its session expired: call \`request_help\` on the \`accounts\` server, never switch browsers.`;
+
+const NAVIGATE_VERB = "browser_navigate";
+// The two fields of a navigation this reads: where it went, and the answer's content to put a paragraph ahead of.
+const NavigationSchema = z.looseObject({ name: z.literal(NAVIGATE_VERB), arguments: z.looseObject({ url: z.string() }) });
+const ContentAnswerSchema = z.looseObject({ content: z.array(z.unknown()) });
+
+// A navigation's answer with a first paragraph naming the signed-in door, when it went to a site an account covers;
+// anything else as it came.
+export const withSignedInDoor = (hosts: Readonly<Record<string, string>> | undefined, params: RpcMessage["params"], answer: RpcMessage): RpcMessage => {
+    const navigation = hosts === undefined ? undefined : NavigationSchema.safeParse(params);
+    const result = ContentAnswerSchema.safeParse(answer.result);
+    if (hosts === undefined || navigation?.success !== true || !result.success) {
+        return answer;
+    }
+    const covered = accountCovering(hosts, navigation.data.arguments.url);
+    if (covered === undefined) {
+        return answer;
+    }
+    const note = `WRONG BROWSER: this is the \`web\` browser. ${signedInDoor(covered.account, covered.host)}`;
+    return { ...answer, result: { ...result.data, content: [{ type: "text", text: note }, ...result.data.content] } };
+};

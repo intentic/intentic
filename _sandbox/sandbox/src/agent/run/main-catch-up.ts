@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { MAIN_MOVED_SOURCE } from "@intentic/sandbox-contract/events/agent-ui";
+import { COMMIT_FIRST } from "@intentic/sandbox-contract/events/land-conflict";
 
 /* KEEPING A RUNNING TURN ON THE MAIN LINE, so another conversation's land costs it no separate conflict turn. */
 
@@ -53,7 +54,7 @@ export const mainMovedNote = (conflicts: readonly StopConflict[]): string =>
     [
         "Before you stop: the main line moved while you worked, and your branch no longer rebases onto it cleanly, so this work would not land as it stands. Resolve it now, in this turn. In each repo below (`root` is your working directory, any other name that subdirectory of it):",
         [
-            "1. `git add -A && git commit -m wip`: a rebase refuses to start on a dirty tree.",
+            COMMIT_FIRST,
             "2. Rebase onto the commit named for that repo, the main line as it stands now. If the rebase gets away from you: `git rebase --abort`, then `git merge` that commit instead.",
             "3. Resolve each conflict keeping the intent of BOTH sides: your change and what moved underneath it.",
         ].join("\n"),

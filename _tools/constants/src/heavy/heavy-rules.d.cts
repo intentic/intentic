@@ -95,3 +95,6 @@ export function holdWarnSeconds(maxHold: number): number | undefined;
 export function ruleById(config: HeavyCommands, id: string): HeavyCommandRule | undefined;
 // The pools the programs above one already hold slots of, from INTENTIC_HEAVY_HELD and INTENTIC_QUEUE_SLOT.
 export function heldPoolsOf(env: Readonly<Record<string, string | undefined>>, config: HeavyCommands): string[];
+
+// The build before a cargo run, or undefined when its arguments cannot be translated safely.
+export function cargoBuildArgs(args: readonly string[]): string[] | undefined;

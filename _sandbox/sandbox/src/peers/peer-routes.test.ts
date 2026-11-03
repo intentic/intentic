@@ -264,7 +264,8 @@ test("a call the door routes elsewhere is judged and forwarded as routed", async
         method: "tools/call",
         params: { name: "run_command", arguments: { command: "ls", in: "wsl:arch" } },
     });
-    expect(route).toHaveBeenCalledWith("laptop", expect.objectContaining({ id: 11 }));
+    // Told which conversation the call comes from, which the hosts door stamps on an app_stop (host-call-route.ts).
+    expect(route).toHaveBeenCalledWith("laptop", expect.objectContaining({ id: 11 }), { conversationId: "conv-1" });
     expect(beforeCall).toHaveBeenCalledWith(routed, { id: "laptop::wsl:arch", conversationId: "conv-1" });
     expect(mcp).toHaveBeenCalledWith("laptop::wsl:arch", routed);
 });

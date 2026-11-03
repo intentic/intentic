@@ -17,6 +17,10 @@ export interface CleanDeps {
     readonly programs: () => Promise<readonly RunningProgram[]>;
     // Hands a store to its own tool's prune; resolves whether that ran.
     readonly prune: (storeDir: string) => Promise<boolean>;
+    // Removes the build output of every checkout whose conversation has nothing running; absent where no reaper runs.
+    readonly reapBuildOutputs?: () => Promise<{ readonly removed: number; readonly failed: number }>;
+    // The history volume's free bytes, read before and after a reap: its folders are not listed, so the disk says what went.
+    readonly freeBytes?: () => Promise<number>;
 }
 
 type Measured = Omit<CleanCandidate, "path">;
@@ -190,8 +194,19 @@ const removeTargets = async (
     return { result: { ...result, freedBytes, removed, kept, failed }, gone };
 };
 
+const reapOutputs = async (category: StorageCategoryId, deps: CleanDeps): Promise<StorageCleanResult> => {
+    const freeBytes = deps.freeBytes ?? (() => Promise.resolve(0));
+    const before = await freeBytes();
+    const reaped = (await deps.reapBuildOutputs?.()) ?? { removed: 0, failed: 0 };
+    const after = await freeBytes();
+    return { category, freedBytes: Math.max(0, after - before), removed: reaped.removed, kept: 0, failed: reaped.failed };
+};
+
 export const cleanCategory = async (category: StorageCategoryId, deps: CleanDeps): Promise<StorageCleanResult> => {
     const removal = removalOf(category)?.unit;
+    if (removal === "reap") {
+        return reapOutputs(category, deps);
+    }
     const running = await deps.programs();
     const candidates = removal === "file" ? await fileCandidates(category, deps.roots) : await itemCandidates(category, deps, running);
     const plan = planClean(category, candidates, deps.roots, deps.now());

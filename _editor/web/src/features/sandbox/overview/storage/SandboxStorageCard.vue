@@ -9,6 +9,7 @@ import { NEAR_LIMIT } from "../../../../models/sandbox/liveMetrics";
 import { storageCategoryLabel, storageCategoryText } from "./storageCategories";
 import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 import { useSandboxStorage } from "./useSandboxStorage";
+import { STORAGE_ANCHOR } from "./storageAnchor";
 
 // What is filling this sandbox's disk, by what the space is for, with a way to free what may go. A scan is asked for,
 // never started by opening the page: it reads every file on the volumes, and the last one stays on screen meanwhile.
@@ -131,7 +132,13 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 </script>
 
 <template>
-    <Card v-if="storage.available.value" data-setting="overview-disk" class="@container/storage flex min-w-0 flex-col gap-3">
+    <Card
+        v-if="storage.available.value"
+        :id="STORAGE_ANCHOR"
+        tabindex="-1"
+        data-setting="overview-disk"
+        class="@container/storage flex min-w-0 flex-col gap-3 outline-none"
+    >
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div class="flex min-w-0 items-center gap-2">
                 <Icon name="database" class="shrink-0 text-link" />

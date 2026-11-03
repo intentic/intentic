@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pruneBuildOutputs } from "./build-outputs.js";
+import { isBuildOutputPath, pruneBuildOutputs, removeQuietly } from "./build-outputs.js";
 
 let root: string;
 
@@ -69,6 +69,23 @@ test("removes ignored build output beside its build file and nothing else", asyn
 
 test("a second pass finds nothing left, and a missing checkout is no error", async () => {
     await pruneBuildOutputs(root);
-    expect(await pruneBuildOutputs(root)).toEqual({ removed: [], failed: [] });
-    expect(await pruneBuildOutputs(join(root, "gone"))).toEqual({ removed: [], failed: [] });
+    expect(await pruneBuildOutputs(root)).toEqual({ removed: [], failed: [], skipped: [] });
+    expect(await pruneBuildOutputs(join(root, "gone"))).toEqual({ removed: [], failed: [], skipped: [] });
+});
+
+test("a pass told to stop leaves the rest for later, and a scan's one-folder question agrees with the sweep", async () => {
+    let asked = 0;
+    const { removed, skipped } = await pruneBuildOutputs(root, { proceed: () => asked++ === 0 });
+    expect(removed).toHaveLength(1);
+    expect(skipped).toHaveLength(4);
+    expect(await isBuildOutputPath(join(root, "apps/flutter/.dart_tool"))).toBe(true);
+    expect(await isBuildOutputPath(join(root, "docs/target"))).toBe(false);
+    put("tmp/cargo-out/CACHEDIR.TAG", "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n");
+    expect(await isBuildOutputPath(join(root, "tmp/cargo-out"))).toBe(true);
+});
+
+test("removes at low priority through rm, and a folder already gone is no error", async () => {
+    await removeQuietly(join(root, "apps/android/build"));
+    expect(existsSync(join(root, "apps/android/build"))).toBe(false);
+    await removeQuietly(join(root, "never-there"));
 });

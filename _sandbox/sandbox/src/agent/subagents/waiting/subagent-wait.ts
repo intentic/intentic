@@ -15,11 +15,11 @@ import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child
 import { HALF_A_MOVE } from "../child-words.js";
 import { SETTLE_WORDS } from "../child-held.js";
 import type { SubagentWaitUntil } from "../subagents.js";
-import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
+import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForNamedWork, waitForWork, workWaitAnswer } from "./work-wait.js";
 import { opt } from "../../../opt.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { backgroundJobOf, jobFinished, keepBackgroundJob, type KeepOutcome, stopBackgroundJob } from "../../tools/jobs/background-jobs.js";
-import { jobReport } from "../../tools/jobs/job-report.js";
+import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -285,10 +285,10 @@ const WAIT_WORDS =
     "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
     "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
     "giving its task to another agent. " +
-    'To wait on several children as one, name them in `targets` (or pass target "all" for every child ' +
+    'To wait on several children or commands as one, name them in `targets` (or pass target "all" for every child ' +
     "still running): the wait comes back early only for trouble (a child blocked on a question, paused, " +
     "failed or stopped, as `agent`), and otherwise once every one has finished, each in `agents` with its " +
-    "whole report, so a fan-out costs you one wake instead of one per child. " +
+    "whole report (commands in `jobs`), so a fan-out costs you one wake instead of one per child. " +
     "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
     "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
     "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
@@ -304,16 +304,29 @@ const waitOnMany = async (
     conversationId: string,
     targets: readonly string[] | undefined,
     timeoutMs: number,
-): Promise<ChildrenWaitAnswer> => {
-    const many = await waitForChildren(deps.conversations, conversationId, { ...opt("targets", targets), timeoutMs, signal: deps.signal });
-    const said = childrenWaitAnswer(many, {
+): Promise<ChildrenWaitAnswer & { readonly jobs?: readonly JobReport[]; readonly job?: JobReport }> => {
+    const mixed = targets?.some((id) => backgroundJobOf(deps.conversations, conversationId, id) !== undefined) === true;
+    const many = mixed && targets !== undefined
+        ? await waitForNamedWork(deps.conversations, conversationId, { targets, until: ["blocked", "finished"], timeoutMs, signal: deps.signal })
+        : await waitForChildren(deps.conversations, conversationId, { ...opt("targets", targets), timeoutMs, signal: deps.signal });
+    const lookups = {
         pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
         report: (childId) => reportOf(deps, childId),
         landing: (childId) => deps.children?.landing(childId),
         machine: (childId) => deps.children?.machine?.(childId),
         result: (childId) => deps.children?.result(childId),
-    });
-    return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
+    } satisfies import("./work-wait.js").ChildLookups;
+    const said = childrenWaitAnswer(many, lookups);
+    const command = "job" in many && many.job !== undefined
+        ? workWaitAnswer({ outcome: many.outcome === "failed" ? "finished" : many.outcome, job: many.job }, lookups)
+        : {};
+    return {
+        ...said,
+        ...command,
+        outcome: said.outcome,
+        ...("jobs" in many ? { jobs: many.jobs, ...opt("job", many.job) } : {}),
+        ...(many.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
+    };
 };
 
 // The background commands' own tools, beside wait: keep one running for the person, or stop one.
@@ -535,19 +548,19 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         .min(1)
                         .optional()
                         .describe(
-                            'The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running. Leave it out when you name `targets`.',
+                            'The subagent\'s id (its call\'s, Claude\'s agentId, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running. Leave it out when you name `targets`.',
                         ),
                     targets: z
                         .array(z.string().min(1))
                         .min(1)
                         .optional()
-                        .describe("Several children's ids, waited on as one; `target` is then ignored. Returns early only for trouble."),
+                        .describe("Several subagent or background command ids, waited on as one; `target` is then ignored. Returns early only for trouble."),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
-                    timeoutSeconds: z.number().min(5).max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}`),
+                    timeoutSeconds: z.number().max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}; values below 5 are clamped to 5 seconds`),
                 },
                 async (args) => {
                     const until: readonly SubagentWaitUntil[] = args.until ?? ["blocked", "finished"];
-                    const timeoutMs = Math.round((args.timeoutSeconds ?? DEFAULT_TIMEOUT_S) * 1000);
+                    const timeoutMs = Math.round(Math.max(5, args.timeoutSeconds ?? DEFAULT_TIMEOUT_S) * 1000);
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }

@@ -8,7 +8,8 @@ import { opt } from "../opt.js";
 import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
 import { openDocument } from "../store/open-document.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
-import { describePreviousRun, type PreviousRun, RESTARTS_FILE, type RunEnding } from "../system/boot/restarts/restart-record.js";
+import { crashesDuring, describePreviousRun, type PreviousRun, RESTARTS_FILE, type RunEnding } from "../system/boot/restarts/restart-record.js";
+import { type HostCrashRow, readHostCrashes } from "../system/boot/restarts/host-crash-rows.js";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { compactRecord } from "./diagnostics-shape.js";
 import { type LevelName, readLogLines } from "./diagnostics.js";
@@ -49,6 +50,7 @@ const RestartRowSchema = z.object({
         z.object({
             ended: loose(z.enum(["stopped", "exited", "crashed", "killed", "unknown"])),
             graceful: loose(z.boolean()),
+            startedAt: loose(z.string()),
             uptimeSeconds: loose(z.number()),
             signal: loose(z.string()),
             exitCode: loose(z.number()),
@@ -77,7 +79,9 @@ type RestartRow = z.infer<typeof RestartRowSchema>;
 const endingOf = (previous: NonNullable<RestartRow["previous"]>): RunEnding =>
     previous.ended ?? (previous.graceful === true ? "stopped" : previous.graceful === false ? "killed" : "unknown");
 
-const restartText = (row: RestartRow): string => {
+// The row's boot at `at`; `crashes` what the host reported of its own crashes (hosts/gpu/host-crashes.ts), by which a
+// run killed without warning is said to have died with its host.
+const restartText = (row: RestartRow, at: number, crashes: readonly HostCrashRow[]): string => {
     const build = [row.boot.version, row.boot.commit?.slice(0, 12)].filter((part) => part !== undefined).join(" ");
     const booted = `booted${row.boot.pid === undefined ? "" : ` pid ${row.boot.pid}`}${build === "" ? "" : ` (${build})`}`;
     const previous = row.previous;
@@ -97,7 +101,7 @@ const restartText = (row: RestartRow): string => {
         ...opt("containerRestarted", previous.containerRestarted),
         ...opt("tmpCleared", previous.tmpCleared),
     };
-    return `${booted}; the run before ${describePreviousRun(run)}.`;
+    return `${booted}; the run before ${describePreviousRun(run, crashesDuring(crashes, previous.startedAt, new Date(at).toISOString()))}.`;
 };
 
 // Boots where the resource series' uptime starts over: reaches back as far as the series (a week), where
@@ -133,10 +137,11 @@ const bareBoots = async (historyRoot: string, sinceMs: number | undefined): Prom
 
 export const readRestarts = async (historyRoot: string, query: { readonly sinceMs?: number | undefined }): Promise<RestartsResult> => {
     const rows: BootRow[] = [];
+    const crashes = await readHostCrashes(logsRoot(historyRoot));
     const coverage = await scanNewestFirst([join(logsRoot(historyRoot), RESTARTS_FILE)], { sinceMs: query.sinceMs, budgetBytes: BUDGET_BYTES }, (raw, at) => {
         const row = RestartRowSchema.safeParse(parseRecord(raw));
         if (row.success && at !== undefined) {
-            rows.push({ at, text: restartText(row.data) });
+            rows.push({ at, text: restartText(row.data, at, crashes) });
         }
     });
     if (coverage.files.length > 0) {

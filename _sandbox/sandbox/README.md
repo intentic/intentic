@@ -191,6 +191,21 @@ flowchart LR
   with the ticket the owner's browser got and the grant the daemon holds. A browser opening the sandbox's own address
   is sent to the app's `/open` on it (`GET /`, `system/boot/open-in-app.ts`). (2026-10-02) It used to give up after
   ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
+- (2026-11-03) A run on one of the owner's computers (`bin/devices run`, the Run dialog's Run on <device>) builds
+  in the owner's own tree, the tree every land writes into, so while its build runs it holds that repository's lands
+  (`hosts/runs/run-builds.ts`): a land into it waits (`conversations/land/turn-landing.ts` and `land-by-hand.ts` call
+  `waitForRunBuilds`, and the conversation's activity says which run it waits for) and goes ahead when the build ends.
+  The command renews the hold every 20 s; one not renewed for a minute, or held for 30 minutes, lapses, so a hung or
+  killed build never holds lands for good. An isolated conversation's build is in its own checkout and holds nothing.
+  The command reads the tree before and after its build and says when it moved anyway (a land already writing, the
+  owner's own edits). Each run keeps the commit and uncommitted-path count it was built from (`builtFrom`), who started
+  it and the lands since, which the Run dialog shows as "Built from abc1234 · 3 lands since". (2026-11-02, in the
+  owner's shinobi workspace: a build read half-old, half-new source while agents landed, 13 failed calls in 11
+  minutes.) A stop says who made it (the dialog's Stop, Run again, Ctrl+C, `devices stop` or `app_stop` from a named
+  conversation, stamped on an agent's app_stop in `hosts/host-call-route.ts`), and from an agent's shell `devices run`
+  refuses to replace a run of the target that its conversation did not start unless it is passed `--replace`. The
+  ports list names the conversation and job behind every agent's port (`agent/tools/jobs/port-owners.ts`), which
+  `devices ports` prints and the desktop mirror reads to leave an agent's own server off the owner's localhost.
 - A device, desktop sync or a server joins with a command that carries a short code, never a token
   (`peers/redeem-codes.ts`). The code is 8 characters, single-use and expires in 10 minutes. The device's script spends
   it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry.
@@ -490,6 +505,23 @@ flowchart LR
 - A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.
+- The agents' browsers (`browser/tools/`) are Microsoft's @playwright/mcp behind two routers in the daemon: `web`,
+  credential-free (`--isolated`, no profile), and `browser`, one backend per signed-in profile owner. Each backend is
+  headed on an X display of its own (`browser/cast/display.ts`) and holds it for its whole life, not its Chromium's: a
+  `browser_close` ends Chromium, and the backend launches the next one on that same display, so the release the closed
+  session sets off waits until the backend exits (`holdDisplay`); a backend whose display died anyway is replaced on its
+  next call. Every one renders in software, on purpose: the GPU-selecting environment a `--gpus` sandbox carries
+  (`LD_LIBRARY_PATH`, `MESA_*`, `VK_*`, …) is dropped, WebGL runs on ANGLE/SwiftShader and Vulkan may open only
+  Chromium's own SwiftShader driver (`browser/sessions/software-rendering.ts`). `web` also offers WebGPU, on a SwiftShader
+  fallback adapter, and carries no stealth script: it reports the SwiftShader it renders on. The signed-in profiles keep
+  their per-owner disguise (`fingerprint.ts`, `stealth.ts`) and no WebGPU, as desktop Linux Chrome has none. An action
+  waits 30 s and a navigation 60 s, since a software-rendered game frame takes seconds; one call is cut off at 5 minutes.
+  The router adds what upstream's tool descriptions cannot know (`tool-notes.ts`): frame times measured here are the
+  container's CPU, never the owner's GPU; `browser_run_code_unsafe` is a Playwright `async (page) => …` function with no
+  Node in reach; and a `file://` navigation is refused before any browser starts, with the way to serve the files over
+  http instead. (2026-11-03: `web` used to carry the stealth script, and agents read its seeded GPU name as the hardware
+  a game ran on. `file://` stays off rather than turning on @playwright/mcp's `allowUnrestrictedFileAccess`, which has no
+  `/work` scope and lifts its limits on uploads and written files too; WASM and WebGPU need an http origin anyway.)
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
   openbox on it, for programs with a window and no other way in. A turn whose persona may drive a browser and run programs
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser
@@ -571,6 +603,12 @@ flowchart LR
   Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words. A rule may
   name its memory price (`size`, which `queue-run --size` hands the gate by name), and the editor's typecheck has a lane
   of its own, one at a time at 7 GiB, taken even under a `pnpm -r typecheck` that already holds a heavy slot.
+  Supported `cargo run` invocations build under the queue at the `cargo-build` price (7 GiB), then start the original
+  run with the build slot released. This prebuild stays local to warm its artifacts; unknown options keep the original invocation.
+  `queue-run` records wait intervals in the terminal capture directory; `tmux-run` excludes their union from the
+  foreground window and names the queue position and holders if it returns while still queued. The Bash hook gives
+  queue waits room under the SDK's ten-minute ceiling and returns at 590 wall seconds; explicit short deadlines stay. Process metrics
+  classify Rust tools and native compilers and linkers beneath them as toolchain.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`. (2026-11-02) That reading is the sandbox's cgroup
@@ -723,6 +761,21 @@ flowchart LR
   `keptJobSessions`, adopted by the boot's session sweep), and archiving, purging or discarding a conversation cancels
   the subagents it spawned (`agent/subagents/family-cancel.ts`); a paused child's end is kept in
   `/history/paused-children.json` so a restart still tells its parent (2026-10-05).
+- Git survives a host crash (2026-11-03). On 10-30 rog lost power under WSL2 and came back with 45 loose objects and
+  `refs/stash` in `/history/gits/root` all NUL at their right size, and 22 files of one checkout the same; the next
+  checkpoint committed the zeroed files and a land died 15 hours later on `inflate: data stream error`. Now every
+  git the daemon starts, and every managed repo's own config (`repo-git-dirs.ts`, `root-repo.ts`), sets
+  `core.fsync=all` with `core.fsyncMethod=batch` (`@intentic/base/git` `durability.ts`), so a write git reports done is
+  on disk. After a boot whose previous run was `killed` or `unknown`, and whenever a git fails on damaged storage,
+  `git/integrity/crash-check.ts` reads every repository through in the background (ten-minute budget): loose objects
+  are inflated and hashed against their names and the bad ones moved to `<git dir>/intentic-quarantine/<time>/`,
+  zeroed refs go back to their reflog's last sha, `fsck --connectivity-only` names what is missing, and each missing
+  blob is written again from any checkout file that still hashes to it (each missing tree from an index that still
+  describes it, `write-tree`). What is still lost is one row per repository on the settings-problems card, filed on
+  `/history/gits`. A checkpoint leaves a tracked text file that became all NUL at HEAD's size, or empty, out of its
+  commit and tells the conversation (`git/integrity/zeroed-files.ts`), and a land that fails on corruption is kept
+  with code `repo_corrupt`, which the board words and offers to land again. Only the plain `fsck` was rejected: it
+  passes a zeroed blob (it only checks that the file exists), which is why the bytes are read.
 - A restart storm resumes nothing (2026-10-05): each boot is recorded in `/history/boot-history.json`
   (`system/boot/restarts/boot-history.ts`), and the third within 30 minutes honours neither a resume ask (which `ic` now writes
   before every restart) nor autoResumeOnRestart, says so in the log and on the settings-problems card, and leaves the
@@ -773,6 +826,26 @@ flowchart LR
   container restarted and whether `/tmp` was emptied), appends it to `/history/logs/restarts.jsonl` (newest 500) and
   spends the intent. `/health` carries `build` (version, source commit from `build-info.json` or `INTENTIC_COMMIT`, and
   build time; `system/boot/build-info.ts`).
+  (2026-11-03) A run killed without warning is explained by its host where the host can say: the Windows side's machine
+  agent answers each device heartbeat with the GPU resets and crashes Windows logged in the last day (LiveKernelEvent
+  141/117/116, Display 4101, a bugcheck, Kernel-Power 41; `DevicePingSchema.crashes`), `hosts/gpu/host-crashes.ts` keeps
+  each one from the computer running this sandbox once in `/history/logs/host-crashes.jsonl` (newest 200), and the
+  diagnostics `restarts` tool says "was killed when the computer it runs on went down after a GPU reset: Windows
+  reported …" for a run whose life holds one (from its start to 15 minutes after the next boot).
+- The host GPU is used on request (2026-11-03). With the GPU switch on, a sandbox on a Windows PC has the owner's display
+  GPU through WSL (`/dev/dxg`, the driver's libraries in `/usr/lib/wsl/lib`). The engine used to put those libraries on
+  the whole container's `LD_LIBRARY_PATH`, so the daemon, every agent shell and every browser rendered on that GPU
+  unasked (65 conversations on rog); on 2026-11-02 a browser started with `--ignore-gpu-blocklist` hung it
+  (LiveKernelEvent 0x141) and powered the PC off. Now the engine's CDI spec only names where the libraries are
+  (`INTENTIC_GPU_LIBRARY_PATH`), the entrypoint and `bootstrap/daemon-env.ts` take them off any path an older engine
+  still sets, and a command gets the GPU through `gpu-run <command…>` (`bin/gpu-run`): the same device and libraries,
+  unthrottled, with no wall limit unless `--timeout` or settings `gpu.timeoutMinutes` sets one. Settings `gpu.shells:
+  "all"` gives it to every agent command instead (`gpu-run --if-available` in front of each line,
+  `agent/tools/agent-terminals.ts`; Claude Code turns only). The first fresh GPU reset the host reports pauses GPU work
+  (`gpu.pausedFor`, written by `hosts/gpu/host-crashes.ts`): gpu-run refuses with the event's words, the Overview's Host
+  GPU row and the attention list say so, and only the owner's resume clears it. gpu-run reads what it needs from
+  `/run/intentic/gpu-state` (`hosts/gpu/gpu-state.ts`, rewritten on every settings write), and refuses browser flags
+  that override the GPU safety list. A turn on such a sandbox is told all of this (`agent/prompt/guidance/host-gpu.ts`).
 - A turn parked on a person comes back after a restart as the same run (2026-10-06): while a card is up, the turn
   journal's `run` column holds the run's id and the rows it has drawn (`store/journals/turn-journal.ts`), and the boot
   carries that run on with its own id, start time and rows, raising each card again on the row it already had
@@ -794,12 +867,27 @@ flowchart LR
   `heldCheckoutDays` quiet days (7 by default, zero disables), on the hourly archive pass. Work is committed first;
   the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,
   running turns, queued messages and unsent drafts prevent reclaim.
-- Build output leaves a checkout that has sat settled for 6 hours (`conversations/worktrees/build-outputs.ts`,
-  2026-10-21), hourly while no turn runs: cargo `target/`, gradle and flutter `build/`, `.gradle/` and `.dart_tool/`,
-  each only beside the file that makes its tool build there, ignored by git and holding nothing git tracks. The
-  checkout itself stays; the conversation's next build regenerates what went. `node_modules` and `dist` are never
-  touched, since in an isolated checkout they are overlay mount points. Measured before it: 38 GB across finished
-  checkouts, a Tauri `target/` of 9-14 GB in each that built the desktop app.
+- Build output leaves a settled checkout (`conversations/worktrees/build-outputs/build-outputs.ts`, `conversations/registry/build-output-sweep/build-output-reaper.ts`): a
+  landed one's an hour after the land, any other's after 6 quiet hours, swept every 15 minutes. Each checkout is
+  judged by its own conversation alone: a live turn, a background command or a child still at work in it keeps it,
+  and nothing waits for the whole sandbox to be idle (2026-11-03: shinobi's twenty conversations kept a turn running
+  67% of the time, the old idle gate never opened, and 51 checkouts grew 424 GiB of Rust `target/`). Build output is
+  cargo `target/` and any folder Cargo tagged with its `CACHEDIR.TAG` whatever its name, gradle and flutter `build/`,
+  `.gradle/` and `.dart_tool/` beside the file that makes their tool build there; each only if git ignores it and
+  tracks nothing in it. Removal runs `rm` in a child at the command class's niceness and best-effort IO 7
+  (`workload/workload-class.ts`), paced between folders. The checkout itself stays; the next build regenerates what
+  went, and the Rust recipe's sccache (seed-skills/environment) makes that minutes rather than ten. `node_modules` and
+  `dist` are never touched, since in an isolated checkout they are overlay mount points.
+- The disk-pressure watch (`system/resources/storage/disk-pressure.ts`, 2026-11-03) reads the history volume once a
+  minute. Under 15% free it removes settled checkouts' build output at once, landed ones first and then the longest
+  idle, until the volume is back over 15%. Under 10% and under 5% it tells the owner once per level, with a push
+  (`notifyIfAway` at 10%, `notify` at 5%) and a "disk is nearly full" row at the head of the sandbox's attention
+  list, saying what is left, what it removed and what holds the most, with a Clean press; it says so again only after
+  the disk has been back over 15%. `GET /system/disk-pressure` answers from its last reading, and the `disk` runtime
+  domain says when that moved. Hourly, a Cargo-tagged folder in `/tmp` (an agent's `CARGO_TARGET_DIR`) that no build
+  wrote to for a day and that no running process names (argv, cwd or `CARGO_TARGET_DIR`) is removed the same way
+  (`conversations/worktrees/build-outputs/tmp-cargo-targets.ts`). Not on archive of the conversation that made it: every Claude
+  Code turn writes the shared `/tmp` as the same user, so a folder there cannot be traced to its conversation.
 - Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
   each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
   value is 0 by default except restore points, which default to 30 days. Zero runs nothing.
@@ -919,8 +1007,29 @@ other runtimes also bypass the daemon door. Claude’s callback still covers the
 
 Subagent `wait` bounds each child's report separately at 12,000 characters before serializing its
 answer, with a file handle for the full report. Its status, verification and landing fields stay
-structured. This bound also applies when general output cleaning is off. Device shell collection
+structured. It accepts Claude's `agentId` as well as the spawning call's id. Explicit `targets` may mix
+child ids and background command ids; the answer includes children in `agents` and commands in `jobs`, returning early
+for trouble. Waits shorter than five seconds are clamped to five seconds. This bound also applies when general output
+cleaning is off. Device shell collection
 keeps its existing limits; only the model-facing copy is cleaned in the daemon.
+
+After a restart or allowance hand-off, continuation notes name in-process helpers that ended with the previous turn
+and point to retained `.claude/worktrees/agent-*` edits, saved helper cards and output records. A container restart ends
+background jobs and dev servers; a daemon-only restart can preserve kept jobs and terminal sessions. Container recreation
+also clears `/tmp`, including scripts and screenshots. Keep evidence in `/work/.intentic/records/artifacts/`.
+
+Plan approval carries optional execution instructions in the same decision. Claude receives them with the
+`ExitPlanMode` result; emulated planning runtimes receive them in the execution prompt, and restored plan cards carry
+them into the resumed turn. Rejection feedback still requests another plan.
+
+Hand-off summaries skip the provider whose allowance ended the preceding turn. A failed summary's notice includes
+the failure reason. The automatic Low model preset excludes explicitly slow models; written model pins keep their order.
+A failed child's alternatives prefer its own model, then its capability tier. Merge refusals name the recorded conflict
+cause for the affected paths.
+
+The page checker ignores the browser's harmless ResizeObserver delivery warning while retaining application errors.
+When a turn ends, open tool calls, including nested helper calls, become `interrupted`; restart recovery does the same
+for cards recovered from the run log.
 
 Cold Claude Code follow-ups can resume a trimmed session copy under the `coldTrim` experiment; both eligible arms
 are measured on opening prompt size and failed calls. The cache clock includes keep-warm refreshes; unknown clocks
@@ -932,6 +1041,13 @@ the daemon's own writes can take, so a root daemon counts the filesystem's reser
 conversation: its next try checks out past it (Send anyway), though never past a checkout the disk cannot hold at all,
 and a reading with room again resets the warning. Existing checkouts and workspace conversations keep running. Storage reports current history space and each live repository's tracked
 blob sizes at HEAD, cached per repository and commit, so a large repository's cost is visible before another copy.
+A Cargo repository (a `Cargo.toml` at its top or one folder below) is priced at what its checkouts grow to as well
+(`conversations/worktrees/build-outputs/build-output-estimate.ts`, 2026-11-03): main's own build output, measured in the background
+and kept six hours, or 8 GiB, the median shinobi's checkouts reached, until main has a measured one. Its tracked files
+were about 0.3 GB of a checkout that went on to hold 8-23 GB of `target/`.
+Storage lists build output inside checkouts as its own category, `buildOutputs`, carved out of the protected
+checkouts by the folders the sweep would remove; its Clean hands the press to the build-output reaper, which takes only
+checkouts whose conversation has nothing running, and the checkouts themselves stay protected.
 
 ## Commands
 

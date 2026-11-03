@@ -27,7 +27,7 @@ const COUNT_LIMIT: u64 = 60_000;
 /// What a project folder's sync leaves on this computer, at any depth (`PROJECT_IGNORES` in
 /// `_devices/machine/src/sync/ssh.ts`, which is what the sync actually does): skipped by the count as they are by
 /// the sync. Held to that list by `project-ignores.fixture.json`, which both sides' tests read.
-const NOT_SYNCED: [&str; 26] = [
+const NOT_SYNCED: [&str; 36] = [
     "node_modules",
     "dist",
     ".turbo",
@@ -54,6 +54,16 @@ const NOT_SYNCED: [&str; 26] = [
     "**/target/release",
     "**/target/*/debug",
     "**/target/*/release",
+    "**/target/*/incremental",
+    "**/target/*/*/incremental",
+    "**/target/*/.fingerprint",
+    "**/target/*/*/.fingerprint",
+    "**/target/*/deps",
+    "**/target/*/*/deps",
+    "**/target/*/build",
+    "**/target/*/*/build",
+    "**/target/*/examples",
+    "**/target/*/*/examples",
 ];
 
 /// Whether the file or folder at `relative` (under the project folder, `/`-separated) stays on this computer: a

@@ -6,10 +6,12 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
 import { startWindowsRevival } from "../hosts/environment-bootstrap.js";
+import { startGitIntegrity } from "../git/integrity/crash-check.js";
 import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
+import { previousRun } from "../system/boot/restarts/boot-marker.js";
 import { DAY_MS } from "../system/chore-clock.js";
 import { sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -69,6 +71,15 @@ const startRootSweeps = (phase: BootPhase): void => {
     void sweepVanishedWorktrees(phase).catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
     void sweepOrphanUnits(phase).catch((error: unknown) => logger.warn({ err: error }, "conversations: boot directory sweep failed"));
     void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) => logger.warn({ err: error }, "state janitor: boot sweep failed"));
+    // Only over the git dirs this daemon keeps (a workspace the owner's own git owns is theirs to fsck). A run that left
+    // no clean exit may have lost what it wrote last (git/integrity/crash-check.ts).
+    if (phase.traits.relocateGitDirs) {
+        const ended = previousRun()?.ended;
+        const scope = { workspaceRoot: services.workspace.root, historyRoot: phase.config.historyRoot, logger };
+        void startGitIntegrity(scope, ended === "killed" || ended === "unknown")?.catch((err) =>
+            logger.warn({ err }, "git integrity: the check after an unclean stop failed"),
+        );
+    }
     // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later. The
     // owner's ssh agent socket only where the tmux server is the container's: a daemon on someone's own machine shares
     // their tmux, and their own agent is theirs.

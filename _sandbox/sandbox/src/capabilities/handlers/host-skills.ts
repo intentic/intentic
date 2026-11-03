@@ -39,6 +39,10 @@ the ones you need). Then:
 | \`mcp__\${id}__browser_read\` | The page as readable text: for answering questions about it. |
 | \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
+| \`mcp__\${id}__browser_screenshot\` | The page, or one element (\`selector: "canvas"\`), as this machine's GPU drew it, WebGL and WebGPU canvases included. |
+| \`mcp__\${id}__browser_console\` | What the page logged, threw and had the browser log about it since the tools attached to its tab. |
+| \`mcp__\${id}__browser_evaluate\` | Run a JavaScript expression in the page and get its value back as JSON, within a deadline. |
+| \`mcp__\${id}__browser_frames\` | Time N animation frames (median, p95, worst, fps) and name the GPU that drew them; \`until\` waits for a condition first. |
 | \`mcp__\${id}__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
 | \`mcp__\${id}__android_devices\` | The Android phones and Wear OS watches attached to this machine over adb (USB or wireless debugging): serial, state, model, form (phone, watch, tablet…), Android version, screen size. |
 | \`mcp__\${id}__android_ui_elements\` | The phone or watch screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
@@ -132,7 +136,35 @@ browser_fill  { ref: "e1", text: "…", submit: true }
   The first time it opens somewhere that needs a login, say so and let the user sign in; do not go hunting for
   their credentials on the machine.
 - If a site genuinely cannot be driven this way (a canvas app, a PDF viewer), fall back to \`device\`, but say
-  why you are doing it.
+  why you are doing it. To SEE a canvas, \`browser_screenshot\` is enough.
+
+## Seeing a web game on this machine's own GPU
+
+The sandbox has no GPU to render with: WebGL and WebGPU run in software there, at seconds a frame if they run at all,
+and a bug that shows only on this machine's graphics card cannot be seen from there. What a web game looks like and how
+fast it runs is answered here, in this machine's browser, on its real GPU and under the browser's own GPU watchdog.
+Never render on the host GPU from inside the sandbox to find out, and never build a CDP or Playwright harness of your
+own for it: these tools are that harness.
+
+1. Serve the game from the sandbox on a port (\`trunk serve --port 8080\`, \`vite --port 5173\`). When this machine
+   syncs or mirrors your sandbox, every port the sandbox listens on answers at the same port on this machine's
+   localhost within about five seconds.
+2. \`browser_open { url: "http://localhost:8080" }\`. Use localhost: it is a secure context, so the page is offered
+   WebGPU, which a LAN address over plain http is not. If nothing answers, the port is not mirrored here (no pairing,
+   or the number is busy on this machine): check with \`run_command\` (\`curl -sI http://localhost:8080\`), or open the
+   https preview address of that port instead, once the owner has forwarded it in the Ports view.
+3. \`browser_frames { until: "window.game?.ready", count: 300 }\`: frame times (median, p95, worst, with fps), the
+   hitches, and the WebGPU adapter and WebGL renderer that drew them. A renderer naming SwiftShader, or a FALLBACK
+   adapter, means the GPU did NOT draw it.
+4. \`browser_screenshot { selector: "canvas" }\` to see what the GPU drew, \`browser_console { errorsOnly: true }\` for
+   validation errors, a lost device or a shader that failed to compile, \`browser_evaluate\` to read the game's own
+   state. After a rebuild, reload with \`browser_evaluate { expression: "location.reload()" }\` rather than opening
+   another tab, and measure again.
+
+\`browser_frames\` and \`browser_screenshot\` bring the agent's tab to the front, since a hidden tab draws nothing, so
+the owner sees that window come forward. Looking (\`browser_screenshot\`, \`browser_console\`, \`browser_frames\`)
+needs "See the screen"; \`browser_evaluate\` and \`browser_frames\`'s \`until\` run your script in the page and need
+"Use the mouse and keyboard"; opening needs "Run commands".
 
 ## Driving the screen
 
@@ -219,14 +251,20 @@ A Windows (or macOS, or Linux desktop) program built in the sandbox runs here, n
    It prints the path it landed at on this machine. The same build pushed twice is not sent twice, and each build
    gets its own folder, so a running copy is never overwritten.
 2. \`app_start\` with that path (for a folder, the .exe inside it). It answers a run id, or, when the program dies at
-   once, its exit code in words (a DLL not found, a 32/64-bit mismatch) and its last output.
+   once, its exit code in words (a DLL not found, a 32/64-bit mismatch) and its last output. Anything that should
+   keep running here (a server, an app) starts this way or with \`devices start\`/\`devices run\`, never as
+   \`nohup … &\` or \`Start-Process\` through \`run_command\`: a program started that way is on no list, so nothing
+   can show it, stop it or say whose it is, and it keeps holding its port after you are gone.
 3. \`app_status <id>\` lists its windows: pass a window id to \`screenshot\` and \`ui_elements\` to look at it and drive it.
    \`app_logs\` reads what it printed. \`app_stop\` ends it with every process it started; do that when you are done.
 
 When the repository has a \`${RUN_TARGETS_FILE}\`, \`devices run [<target>] --device \${id}\` does steps 1 and 2 in one go:
 its build, the push (an .exe gathered with the sidecars and resource folders it expects beside it), the ports it says
-the sandbox needs, the start. It first stops the target's run already going here (the new one would only fail on its
-port), and prints the run id; \`devices stop <run id or target> --device \${id}\` ends it and closes the ports opened for
+the sandbox needs, the start. While it builds in the owner's tree, lands into that repository wait for it, so the build
+reads one version of the source. It first stops the target's run already going here (the new one would only fail on its
+port), and prints the run id. It will not replace a run of the target that this conversation did not start (the
+owner's, from the Run dialog: your build may be work that has not landed): it says whose run it is and stops. Ask the
+owner, and only with their yes run it again with \`--replace\`; \`devices stop <run id or target> --device \${id}\` ends it and closes the ports opened for
 it. In your shell it returns once the program has started (\`--attach\` stays and prints what it prints instead). The
 owner's Run dialog (the ▷ on the repository's row in the file tree), with this computer picked, runs the very same
 command attached in a terminal (Ctrl+C there stops the program, Ctrl+D leaves it running; \`devices attach <run id or
@@ -239,6 +277,12 @@ more than once.
   Windows Sandbox, a throwaway VM that sees only the build, read-only, and is discarded by \`app_stop\`. It needs Windows
   Pro or Enterprise with the feature on, runs one at a time, and its window is the VM's: screenshot that window, since
   ui_elements cannot reach inside. Prefer it for anything you would not run on the owner's own profile.
+- **Who stopped it:** \`app_status\` says "stopped by …" with the door it came through: the Run dialog's Stop, Run
+  pressed again there, Ctrl+C in a run's terminal, \`devices stop\` or \`app_stop\` from a named conversation. Read
+  that before looking for who did it.
+- **Whose port is it:** \`devices ports\` lists every port listening in the sandbox with the conversation and job
+  behind it, instead of \`ss\` and \`pgrep\`. A port your own shell or job opens stays in the sandbox: desktop sync
+  does not put it on the owner's localhost, so a scratch server cannot take a port the owner's program dials.
 - **Its ports, from the sandbox:** \`devices reach \${id} <port>\` makes this machine's \`127.0.0.1:<port>\` (the app's
   local API, a server only it runs) answer at the same port in the sandbox, so a test there can call it.
   \`devices reach --list\` shows what is open, \`--off\` closes one.

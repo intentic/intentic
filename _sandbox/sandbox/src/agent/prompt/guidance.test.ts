@@ -142,6 +142,17 @@ test("the waiting paragraph names the wait and keep tools in full on every runti
     expect(guidanceBlock(EVERYTHING_MOUNTED, "rg")).toContain("`mcp__subagents__stop`");
 });
 
+// 2026-11-02: Codex and OpenCode turns were told to wait on a background command they had no id for, and guessed 87
+// targets. A loop whose long commands come back as jobs is told how; one whose do not is not told they do.
+test("a long command is said to come back as a job only on a loop that files it as one", () => {
+    const filing = guidanceBlock({ ...OTHER_MOUNTED, runtime: otherRuntime("shell", undefined, true) }, "rg");
+    expect(filing).toContain("keeps running as a background job, and its result names the job's id: wait on it with `mcp__subagents__wait` (target that id)");
+    expect(filing).toContain("end it early with `mcp__subagents__stop`");
+    const plain = guidanceBlock(OTHER_MOUNTED, "rg");
+    expect(plain).toContain("A subagent you started is waited on with `mcp__subagents__wait`, never by re-reading its log on a timer.");
+    expect(plain).not.toContain("background command");
+});
+
 test("an MCP tool is spelled as this runtime's tool list spells it", () => {
     const opencode = guidanceBlock({ ...OTHER_MOUNTED, runtime: otherRuntime("shell", "intentic_ab12cd34_") }, "rg");
     expect(opencode).toContain("`intentic_ab12cd34_browser_browser_navigate`");

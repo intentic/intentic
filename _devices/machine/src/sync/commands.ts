@@ -28,6 +28,7 @@ import {
     setMirrorOff,
     setOwnerPaused,
     setPortIgnored,
+    setPortIncluded,
     type SyncMode,
     type SyncState,
     upsertPairing,
@@ -752,12 +753,40 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
         },
     );
 
+// One port an agent's own job listens on, mirrored here anyway: the sandbox leaves such a port off every device by
+// default (mirror.ts mirrorsByDefault), so a scratch server cannot take a port the owner's own programs dial.
+const mirrorIncludeSwitch = (brief: string, included: boolean) =>
+    pairingCommand<MirrorPortFlags>(
+        brief,
+        { ...sandboxFlag, port: { kind: "parsed", parse: parsePort, brief: "The port number, as the sandbox serves it" } },
+        NONE_TO_MIRROR,
+        async (selected, flags, ui) => {
+            ui.act(included ? `Mirroring port ${flags.port} even while an agent's job holds it` : `Leaving an agent's port ${flags.port} in the sandbox again`);
+            const mutagen = await ensureMutagen();
+            for (const pairing of selected) {
+                // state is a single file; serial keeps the writes ordered
+                await setPortIncluded(pairingKey(pairing), flags.port, included);
+                if (!included) {
+                    // one pairing's teardown at a time, as everywhere else here
+                    await retireMirroredPort(mutagen, pairing.sandboxId, flags.port);
+                }
+            }
+            ui.done(
+                included
+                    ? `Port ${flags.port} is mirrored for ${named(selected)} whoever serves it there.`
+                    : `Port ${flags.port} stays in the sandbox for ${named(selected)} while an agent's job serves it.`,
+            );
+        },
+    );
+
 const mirror = buildRouteMap({
     routes: {
         off: mirrorSwitch("Stop putting a sandbox's ports on this device's localhost (file syncing continues)", true),
         on: mirrorSwitch("Put a sandbox's ports back on this device's localhost", false),
         ignore: mirrorPortSwitch("Leave ONE port off this device's localhost, mirroring every other port as usual", true),
         unignore: mirrorPortSwitch("Mirror a port this device was told to leave alone", false),
+        include: mirrorIncludeSwitch("Mirror ONE port an agent's own job holds, which stays in the sandbox by default", true),
+        exclude: mirrorIncludeSwitch("Leave a port an agent's own job holds in the sandbox again (the default)", false),
     },
     docs: { brief: "Turn this device's port mirroring off or on, for a whole sandbox or for one port of it" },
 });

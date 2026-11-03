@@ -174,12 +174,12 @@ test("Stop ends the run's terminal and stops the target's program on the compute
     const { fake, aborted } = runner();
     const stopped: string[] = [];
     const deviceRuns: Partial<DeviceRuns> = {
-        stop: async (_device, id) => {
-            stopped.push(id);
+        stop: async (_device, id, ask) => {
+            stopped.push(`${id} by ${ask?.by ?? "nobody"}`);
             return `Stopped ${id}, with everything it started.`;
         },
-        stopNamed: async (_device, name) => {
-            stopped.push(`name:${name}`);
+        stopNamed: async (_device, name, by) => {
+            stopped.push(`name:${name} by ${by ?? "nobody"}`);
             return [{ id: "desktop-abc123", text: "Stopped desktop-abc123, with everything it started." }];
         },
     };
@@ -189,7 +189,7 @@ test("Stop ends the run's terminal and stops the target's program on the compute
     expect(await call(runs.stop, input)).toEqual({ stopped: [{ id: "desktop-abc123", text: expect.stringContaining("Stopped") }] });
     expect(aborted).toEqual([session]);
     await call(runs.stop, { ...input, id: "desktop-def456" });
-    expect(stopped).toEqual(["name:desktop", "desktop-def456"]);
+    expect(stopped).toEqual(["name:desktop by the Run dialog's Stop", "desktop-def456 by the Run dialog's Stop"]);
 });
 
 test("a computer that cannot answer lists nothing and says why, never an empty list that reads as nothing running", async () => {

@@ -1,12 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { z } from "zod";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { codexAllowlistConfig, codexHooksConfig, codexListName, createCodexHookSession, patchFiles } from "./codex-hooks.js";
 import { maskScript } from "../decorators/mask-script.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { backgroundJobOf } from "../../agent/tools/jobs/background-jobs.js";
 
 // What a Codex thread's hooks ask the door's gate, and what this run does with the gate's answer.
 
@@ -120,6 +123,34 @@ describe("a run's side of the gate", () => {
         expect(await session.gateHooks.afterTool?.({ tool: "Bash", input: { command: "ls" }, id: "c1" })).toBeUndefined();
         await session.dispose();
     });
+});
+
+// 2026-11-02: 116 commands in 30 Codex conversations came back from the panel still running with no job filed, so the agent
+// had no id to wait on. The command Codex runs is the panel's, and its PostToolUse hook files the job.
+test("a command the panel returned still running is filed as a job after it ran, and the agent is told its id", async () => {
+    const actors = memoryFleet().conversations;
+    const session = createCodexHookSession({
+        cwd: WORKSPACE_ROOT,
+        tools: {},
+        push: () => {},
+        terminals: true,
+        conversationId: "conv-codex-overrun",
+        jobs: { conversationId: "conv-codex-overrun", profile: {}, conversations: actors },
+    });
+    const call = { tool: "Bash", input: { command: "cargo build" }, id: "exec-1", session: "3f2a9b1c-0000-0000-0000-000000000000", cwd: WORKSPACE_ROOT };
+    const verdict = await session.gateHooks.settle?.(call, { decision: "allow" }, false);
+    const line = verdict?.decision === "rewrite" ? (z.object({ command: z.string() }).safeParse(verdict.input).data?.command ?? "") : "";
+    const dir = dirname((/ -f (\S+) /u.exec(line)?.[1] ?? "").replaceAll("'", ""));
+    writeFileSync(join(dir, "cmd"), "cargo build\n");
+
+    const told =
+        (await session.gateHooks.afterTool?.({ ...call, result: `Compiling\n--- command still running in tmux window run · output so far: ${dir}/out` })) ?? "";
+
+    const id = /background job (\S+)\./u.exec(told)?.[1] ?? "";
+    expect(backgroundJobOf(actors, "conv-codex-overrun", id)?.dir).toBe(dir);
+    expect(told).toContain(`target "${id}"`);
+    rmSync(dir, { recursive: true, force: true });
+    await session.dispose();
 });
 
 // The wrapper Codex runs, under node as Codex would run it: a stored value in the output reads as its reference, even

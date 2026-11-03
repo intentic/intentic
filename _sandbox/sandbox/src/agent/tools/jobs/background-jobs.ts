@@ -146,7 +146,7 @@ export interface JobRecord {
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
-const JOBS: Holding<JobRecord> = { name: "background jobs" };
+export const JOBS: Holding<JobRecord> = { name: "background jobs" };
 // How its recent jobs ended, by job id, newest last: apart from JOBS, which forgets a job the moment nothing depends on
 // it.
 const ENDINGS: Holding<AgentJob> = { name: "job endings" };

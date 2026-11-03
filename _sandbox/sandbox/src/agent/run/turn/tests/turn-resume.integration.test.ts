@@ -6,7 +6,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { ParkedRequest } from "@intentic/sandbox-contract/events/requests";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
-import { RESUME_NOTES, withResumeNote, withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { RESTART_LOSSES, RESUME_NOTES, withResumeNote, withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
 import { RETRY_LADDER_MS, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
@@ -986,7 +986,7 @@ test("a cut turn's re-run is told what the restart cost it, and its words still 
     await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, { resume: true, asked: false }, cost);
 
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toBe(`${RESUME_NOTES.restart} ${cost}\n\nfinish the report`);
+    expect(prompts[0]).toBe(`${RESUME_NOTES.restart} ${RESTART_LOSSES} ${cost}\n\nfinish the report`);
     expect(withoutResumeNote(prompts[0] ?? "")).toBe("finish the report");
 });
 
@@ -1205,7 +1205,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         {
             role: "notice",
-            text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
+            text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
             noticeCode: { code: "restartInterrupted" },
         },
     ]));
@@ -1337,7 +1337,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
         { role: "assistant", text: "two chapters in, on s-partial since 10000" },
         {
             role: "notice",
-            text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
+            text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`,
             noticeCode: { code: "restartInterrupted" },
         },
     ]));
@@ -1387,7 +1387,7 @@ test("a re-run cut by a second restart records its notice, not its repeated prom
     expect((await fileTranscriptRecord(root).read("rs-again")).map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off." },
         { role: "assistant", text: "chapter three" },
-        { role: "notice", text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree." },
+        { role: "notice", text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}` },
     ]);
 });
 
@@ -1573,10 +1573,10 @@ test("approving the restored plan resumes the session in the posture a live appr
     await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
     await cardsUp(observed, "plan");
 
-    expect(services.cards.resolve({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
+    expect(services.cards.resolve({ kind: "plan", requestId: "r-plan", approve: true, feedback: "Keep the API compatible" })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
-    expect(prompts[0]).toMatch(/approved.*plan/i);
+    expect(prompts[0]).toContain("The plan is approved. Follow these instructions while executing it:\nKeep the API compatible");
     // bypassPermissions is POST_PLAN_MODE; a restart must not re-add per-tool prompts a live approval already spared.
     expect(inputs[0]).toMatchObject({ conversationId: "pk-plan", sessionId: "s-parked", permissionMode: "bypassPermissions" });
     expect(observed.map((event) => event.kind)).toContain("mode");
@@ -1879,7 +1879,9 @@ test("a parked turn given up records the rows it had drawn, its card frozen as n
     const asked = questionRequest("r-given");
     const card = { requestId: "r-given", questions: asked.kind === "question" ? asked.questions : [], status: "pending" as const };
     const opened: TranscriptRow = { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report", run: "run-given" };
-    const asking: TranscriptRow = { role: "assistant", text: "Two chapters in.", question: card, run: "run-given" };
+    const asking: TranscriptRow = { role: "assistant", text: "Two chapters in.", question: card, run: "run-given",
+        tools: [{ id: "unfinished", name: "Bash", category: "execute", status: "in_progress" }],
+    };
     await services.turnJournal.recordTurn(
         parkedEntry("pk-given", [asked], { attempts: MAX_PARKED_RESTORES, run: { id: "run-given", rows: [opened, asking] } }),
     );
@@ -1887,7 +1889,9 @@ test("a parked turn given up records the rows it had drawn, its card frozen as n
 
     const [prompt, work, notice] = await fileTranscriptRecord(root).read("pk-given");
     expect(prompt).toEqual({ ...opened, rowId: ROW_ID });
-    expect(work).toEqual({ ...asking, question: { ...card, status: "cancelled" }, rowId: ROW_ID });
+    expect(work).toEqual({ ...asking, question: { ...card, status: "cancelled" }, rowId: ROW_ID,
+        tools: [{ id: "unfinished", name: "Bash", category: "execute", status: "interrupted" }],
+    });
     expect(notice).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
 });
 

@@ -34,6 +34,10 @@ export const TARGETED_RUN_BYTES = 512 * MIB;
 // `size`, which queue-run passes as `--size <name>`). One name per measured shape:
 export const SIZE_BYTES = Object.freeze({
     targeted: TARGETED_RUN_BYTES,
+    // Shinobi resource-metrics.jsonl, 2026-11-02: `other` RSS peaked at 12.70 GiB at 19:25 with one cargo slot held,
+    // and 13.88 GiB at 23:14 with two. Rust was unclassified then, so this includes other work and unqueued runs.
+    // Admission estimate per slot: two fit the 18 GiB sandbox with headroom. Cargo's jobs still bound its fan-out.
+    "cargo-build": 7 * GIB,
     // The editor's full typecheck, `vue-tsc` over `_editor/web`, or `_site/demo`'s, which compiles the same source:
     // 6.8 GiB at its peak (measured 2026-10-26, cold and warm alike), under the 8 GiB heap its script gives it.
     "editor-typecheck": 7 * GIB,

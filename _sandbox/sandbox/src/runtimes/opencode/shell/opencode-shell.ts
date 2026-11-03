@@ -7,7 +7,8 @@ import type { JsonValue } from "@intentic/base/fetch-json";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
-import { NO_PROMPTS, PIPESTATUS_TRAP } from "../../../agent/tools/agent-terminals.js";
+import { followForeground, type ForegroundCall, NO_PROMPTS, PIPESTATUS_TRAP, settleForeground } from "../../../agent/tools/agent-terminals.js";
+import type { BackgroundJobSeed } from "../../../agent/tools/jobs/background-jobs.js";
 import { maskDeep, maskTargets, withheld } from "../../../agent/tools/agent-redaction.js";
 import { writeRunFile } from "../../../agent/tools/jobs/run-files.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../../secrets/secret-access.js";
@@ -29,14 +30,24 @@ import { SHELL_SCRIPT_NAME, shellScript } from "./opencode-shell-script.js";
 // - the command runs in the conversation's tmux session through tmux-run, the way the Claude loop's Bash does
 //   (agent/tools/agent-terminals.ts), so the terminal panel watches it live and the output filter cleans it;
 // - what it prints comes back here to be masked, each stored value to its reference, before OpenCode (and so the model)
-//   reads it. Only the shell's output: a file the read tool opens, a fetched page and an MCP result are not masked.
+//   reads it. Only the shell's output: a file the read tool opens, a fetched page and an MCP result are not masked;
+// - a pane command tmux-run returned still running (its soft timeout, or a prompt) is filed as a background job when the
+//   script says it is done, and the script prints the note naming the job's id to `wait` on after what the command
+//   printed, as a Claude Code turn's PostToolUse hook adds it (agent-terminals.ts settleForeground). 2026-11-02: 18 such
+//   returns in 8 OpenCode conversations told the agent only where the output was.
 
-// What one shell call runs: refused with a sentence, or an argv, and whether its output is masked on the way back.
-export type ShellPlan = { readonly refused: string } | { readonly argv: readonly string[]; readonly masked: boolean };
+// What one shell call runs: refused with a sentence, or an argv, whether its output is masked on the way back, and the
+// pane call it went to, settled once the script says it is done.
+export type ShellPlan =
+    | { readonly refused: string }
+    | { readonly argv: readonly string[]; readonly masked: boolean; readonly pane?: ForegroundCall | undefined };
 
 export interface ShellRoute {
     readonly prepare: (call: { readonly command: string; readonly cwd: string }) => Promise<ShellPlan>;
     readonly mask: (text: string) => Promise<string>;
+    // A pane call that returned, by the run id the door gave it: the note the agent reads after its output, where it came
+    // back still running and was filed as a job.
+    readonly settle: (pane: ForegroundCall, run: string) => string | undefined;
 }
 
 // The pane a turn's commands run in: its tmux session, the agent session stamped on its processes, the environment names
@@ -59,6 +70,9 @@ export interface ShellRouteOptions {
     readonly surfaced?: () => void;
     // Where a call's run files are written; the system temp dir by default.
     readonly runRoot?: string;
+    // Where a pane command that comes back still running is filed as a job (AgentRequest.hooks.backgroundJobs); absent, it
+    // is let go as tmux-run left it, still running with nothing to wait on.
+    readonly jobs?: BackgroundJobSeed | undefined;
 }
 
 // The bash every command runs in, by its own path: the daemon's script is named `bash` (so OpenCode's description and
@@ -83,7 +97,7 @@ const windowOf = (command: string): string => {
 const forwardFlags = (names: readonly string[]): string[] => names.flatMap((name) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? ["-e", name] : []));
 
 // The pane's run, by file as the Claude loop's hook writes it, so no command rides an argv a `pkill -f` could match.
-const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: string): string[] => {
+const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: string) => {
     const dir = mkdtempSync(join(runRoot, "intentic-run-"));
     const agent = join(dir, "agent");
     writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
@@ -91,7 +105,7 @@ const paneArgv = (pane: ShellPane, said: string, executed: string, runRoot: stri
     writeRunFile(dir, "line", `${AGENT_SESSION_ENV}=${shellQuote(pane.agentSession)} ${owner}${POLITE}${NO_PROMPTS}bash ${shellQuote(agent)}\n`);
     writeRunFile(dir, "said", said);
     writeRunFile(dir, "name", windowOf(said));
-    return [TMUX_RUN_BIN, ...forwardFlags(pane.forward), "-f", join(dir, "line"), pane.session];
+    return { argv: [TMUX_RUN_BIN, ...forwardFlags(pane.forward), "-f", join(dir, "line"), pane.session], dir };
 };
 
 export const shellRouteOf = (options: ShellRouteOptions): ShellRoute => ({
@@ -104,10 +118,16 @@ export const shellRouteOf = (options: ShellRouteOptions): ShellRoute => ({
         if (options.pane === undefined) {
             return { argv: [REAL_BASH, "-c", resolved.command], masked };
         }
-        const argv = paneArgv(options.pane, command, resolved.command, options.runRoot ?? tmpdir());
+        const { argv, dir } = paneArgv(options.pane, command, resolved.command, options.runRoot ?? tmpdir());
         options.surfaced?.();
-        return { argv, masked };
+        // Followed for a prompt from the start, as a Claude Code turn's foreground call is, where a job could be filed.
+        const pane =
+            options.jobs === undefined
+                ? undefined
+                : followForeground({ dir, command, session: options.pane.session, description: undefined, startedAt: Date.now() }, options.pane.owner);
+        return { argv, masked, pane };
     },
+    settle: (pane, run) => (options.jobs === undefined ? undefined : settleForeground(options.jobs, pane, run, undefined)),
     // Read per call, so a credential stored mid-turn masks from the next stretch of output on.
     mask: async (text) => {
         if (options.secrets === undefined) {
@@ -146,7 +166,7 @@ const RUN_HELD_MS = 24 * 3_600_000;
 
 /**
  * The daemon's end of the script: `/prepare` turns a session's command into what to run, `/output` masks what it
- * printed, `/done` lets go of the run. A session no turn registered (OpenCode's own command interpolation, a session the
+ * printed, `/done` lets go of the run and answers the note for a pane call that came back still running. A session no turn registered (OpenCode's own command interpolation, a session the
  * daemon is not driving) runs its command as written, unmasked, as its permission asks get the standing yes. A masked
  * run is masked by the route it was prepared with for as long as it prints, even past its turn's end (a stopped turn's
  * command that is still printing, whose result OpenCode keeps for the session's next turn), and withheld if that route is
@@ -154,10 +174,11 @@ const RUN_HELD_MS = 24 * 3_600_000;
  * from there on.
  */
 export const shellDoor = (routeOf: (session: string) => ShellRoute | undefined, now: () => number = Date.now) => {
-    const runs = new Map<string, { readonly route: ShellRoute; readonly at: number }>();
+    const runs = new Map<string, { readonly route: ShellRoute; readonly at: number; readonly masked: boolean; readonly pane: ForegroundCall | undefined }>();
     const forgetStale = (): void => {
         for (const [run, held] of runs) {
             if (now() - held.at > RUN_HELD_MS) {
+                held.pane?.unfollow();
                 runs.delete(run);
             }
         }
@@ -171,13 +192,15 @@ export const shellDoor = (routeOf: (session: string) => ShellRoute | undefined, 
                 if ("refused" in plan) {
                     return { refused: plan.refused };
                 }
-                if (!plan.masked || route === undefined) {
+                const pane = "pane" in plan ? plan.pane : undefined;
+                const masked = plan.masked && route !== undefined;
+                if (route === undefined || (!masked && pane === undefined)) {
                     return { argv: [...plan.argv], masked: false };
                 }
                 forgetStale();
                 const run = randomUUID();
-                runs.set(run, { route, at: now() });
-                return { argv: [...plan.argv], masked: true, run };
+                runs.set(run, { route, at: now(), masked, pane });
+                return { argv: [...plan.argv], masked, run };
             },
             unreadable: { refused: NOT_PREPARED },
             failed: () => ({ refused: NOT_PREPARED }),
@@ -194,10 +217,15 @@ export const shellDoor = (routeOf: (session: string) => ShellRoute | undefined, 
             unreadable: {},
             failed: (error) => ({ withheld: withheld(error) }),
         },
+        // The run let go of; a pane call that came back still running is filed as a job here, and its note answered for the
+        // script to print after the command's output.
         "/done": {
             answer: (payload: JsonValue): HookAnswer => {
-                runs.delete(DoneSchema.parse(payload).run);
-                return {};
+                const { run } = DoneSchema.parse(payload);
+                const held = runs.get(run);
+                runs.delete(run);
+                const note = held?.pane === undefined ? undefined : held.route.settle(held.pane, run);
+                return note === undefined ? {} : { note };
             },
             unreadable: {},
         },

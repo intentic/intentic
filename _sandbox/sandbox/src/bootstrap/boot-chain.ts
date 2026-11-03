@@ -12,6 +12,7 @@ import { adoptLegacySshKeys, linkSshHosts } from "../capabilities/ssh-hosts.js";
 import type { Services } from "../composition.js";
 import { ensureProjectRepo } from "../git/remote/project-repo.js";
 import { ensureRepoGitDirs } from "../git/remote/repo-git-dirs.js";
+import { repairWorkspaceExecutableBits } from "../git/exec-bits/exec-bit-repair.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "../git/remote/root-repo.js";
 import { applyEventsPath, applyRunLive } from "../intentic/apply-events.js";
 import { checkEventsDir } from "../intentic/check-run.js";
@@ -351,6 +352,16 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         when: ({ role }) => role.roots,
         run: async ({ services }) => settlePendingVersions(services),
         failure: "lands a restart cut were not versioned, their paths stay uncommitted in the main tree",
+    },
+    // Once per repository, in the background under each repo's lock: a diff of the whole tree, which a big repository
+    // takes seconds over, and nothing before the gate needs it.
+    {
+        key: "execBits",
+        label: "Repairing scripts stored without their executable bit",
+        when: ({ role, traits }) => role.roots && traits.relocateGitDirs,
+        run: async ({ services, logger }) => {
+            void repairWorkspaceExecutableBits(services, logger);
+        },
     },
     { key: "skills", label: "Converging agent skills", when: ({ role, traits }) => role.roots && traits.ownsWorkspaceConfig, run: convergeSkills },
     // Before the baseline, so a fresh root's first commit already holds the note.

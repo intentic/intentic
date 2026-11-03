@@ -1,4 +1,4 @@
-import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import { CONTINUATION_NOTE } from "@intentic/sandbox-contract/events/resume";
 import { type AgentHarness, type AgentProvider, DEFAULT_PROVIDER, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../composition.js";
 import type { StartedRun } from "../../seams/turn-starter.js";
@@ -106,7 +106,7 @@ const carryOn = async (services: Services, conversationId: string, routing: Retu
     const started = await services.turns.start({
         ...routing,
         conversationId,
-        prompt: RESUME_NOTES.continued,
+        prompt: CONTINUATION_NOTE,
         resume: "continued",
         // Who pressed, in the vocabulary the registry uses for a spawned child's starter.
         actor: `agent:${from ?? "(unstamped)"}`,

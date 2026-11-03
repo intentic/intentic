@@ -90,11 +90,21 @@ So on a PC with an NVIDIA GPU (`/dev/dxg`, `libcuda.so.1` and `nvidia-smi` under
 writes two files before dockerd starts:
 
 - `/etc/cdi/intentic-nvidia-wsl.yaml` declares `nvidia.com/gpu=all`. It is what `nvidia-ctk cdi generate --mode=wsl`
-  writes, minus its hooks: the device node, `/usr/lib/wsl` mounted read-only at the same path with
-  `LD_LIBRARY_PATH=/usr/lib/wsl/lib`, and `nvidia-smi` at `/usr/bin/nvidia-smi`. A container's own
-  `LD_LIBRARY_PATH` is replaced by that one; a sandbox image sets none.
+  writes, minus its hooks: the device node, `/usr/lib/wsl` mounted read-only at the same path, and `nvidia-smi` at
+  `/usr/bin/nvidia-smi`. It names where the driver libraries are (`INTENTIC_GPU_LIBRARY_PATH=/usr/lib/wsl/lib`) and
+  leaves the container's `LD_LIBRARY_PATH` alone, and the `nvidia-smi` it mounts is `/etc/intentic-engine/nvidia-smi`,
+  a wrapper that puts the libraries on its own library path and runs the driver's binary.
 - `/usr/local/bin/nvidia-cdi-hook` is a stub that exits 0, marked as the keeper's. It exists only so that dockerd
   registers the NVIDIA driver; the spec never calls it.
+
+Until 2026-11-03 the spec set `LD_LIBRARY_PATH=/usr/lib/wsl/lib` for the whole container, as nvidia-ctk's does. Every
+process in a GPU sandbox then found Mesa's d3d12 driver: the daemon, every agent shell and its browsers rendered on the
+owner's display GPU without asking for it (65 conversations on rog), and on 2026-11-02 a browser one agent started
+with GPU flags hung the GPU (LiveKernelEvent 0x141) and powered the PC off. The GPU is still the whole GPU (the same
+device node and libraries, nothing throttled); a sandbox hands the library path to the one command that asks for it,
+`gpu-run <command>` (`_sandbox/sandbox/bin/gpu-run`), or to all of an agent's commands where the owner's settings say
+so. Rejected: keeping the variable and unsetting it in the sandbox. A container nobody unsets it in (another image,
+`docker exec` of a shell) is back on the GPU, and the engine is the one place that serves every container.
 
 If another file in `/etc/cdi` or `/var/run/cdi` already declares `nvidia.com/gpu` (someone installed the real toolkit),
 the keeper writes neither file and removes its stub: CDI refuses a device that two specs declare. On a PC with no NVIDIA

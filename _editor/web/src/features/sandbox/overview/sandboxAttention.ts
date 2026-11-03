@@ -24,6 +24,13 @@ import { t } from "@intentic/ui/i18n";
 import { MODELS_PATH } from "../../../lib/routes/modelsPath";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import { useAccessRequests } from "../../../client/sandbox/access/accessRequest";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
+import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
+import { formatBytes } from "@intentic/ui/format";
+import { STORAGE_ANCHOR } from "./storage/storageAnchor";
+import { storageCategoryLabel } from "./storage/storageCategories";
+import { diskPressing, freePercent } from "./storage/diskPressureView";
+import { useDiskPressure } from "./storage/useDiskPressure";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the getting-started ring on the desktop rail (gettingStarted/SandboxErrands.vue) and the mobile menu so they agree.
@@ -61,9 +68,9 @@ export interface SandboxAttentionItem {
     // Lets a `note` badge the chip when no `needs` does; only a staged update qualifies today, since acting on it is
     // one click.
     readonly badges?: boolean;
-    // A press a surface may offer beside the row itself, where it is safe to take from there: only the rebuild today,
-    // and only where useRebuildOffer says so. The row's link to the step stays either way.
-    readonly action?: "rebuild";
+    // A press a surface may offer beside the row itself, where it is safe to take from there: the rebuild, only where
+    // useRebuildOffer says so, and the disk's clean of settled checkouts' build output. The row's link stays either way.
+    readonly action?: "rebuild" | "clean";
 }
 
 // Both update notes point at the update card's button rather than at the page (updateAnchor.ts).
@@ -115,6 +122,28 @@ const useRebuildUnderWay = (pending: ReturnType<typeof useEnvironment>[`pending`
     });
 };
 
+// GPU work the daemon paused after the computer it runs on reported a GPU reset (settings `gpu.pausedFor`), first since
+// a GPU hang can freeze that computer: only the owner's resume on the Overview's GPU row (SandboxGpuRow.vue) lifts it.
+const gpuPausedItems = (paused: boolean): SandboxAttentionItem[] =>
+    paused ? [{ icon: `exclamation-triangle`, tone: `warning`, message: t(`sandbox.sandboxAttention.gpuPaused`), to: `/sandbox`, kind: `needs` }] : [];
+// The history volume under 10% free (system/resources/storage/disk-pressure.ts): how much is left, what the sandbox
+// already removed, and what holds the most, with the press that removes the rest of the settled build output. Worst
+// first in the list: a full disk fails every turn's writes, the land's rebase included.
+const diskItems = (pressure: DiskPressure | undefined): SandboxAttentionItem[] => {
+    if (!diskPressing(pressure)) {
+        return [];
+    }
+    const free = t(`sandbox.sandboxAttention.diskLow`, { free: formatBytes(pressure.freeBytes), percent: freePercent(pressure) });
+    const reaped =
+        pressure.reaped === undefined || pressure.reaped.bytes === 0
+            ? ``
+            : `; ${t(`sandbox.sandboxAttention.diskReaped`, { bytes: formatBytes(pressure.reaped.bytes), count: pressure.reaped.checkouts }, pressure.reaped.checkouts)}`;
+    const biggest = pressure.using[0];
+    const using =
+        biggest === undefined ? `` : `; ${t(`sandbox.sandboxAttention.diskUsing`, { category: storageCategoryLabel(biggest.id), bytes: formatBytes(biggest.bytes) })}`;
+    return [{ icon: `database`, tone: `warning`, message: `${free}${reaped}${using}`, to: `/sandbox#${STORAGE_ANCHOR}`, kind: `needs`, action: `clean` }];
+};
+
 export function useSandboxAttention() {
     const { isGuest, role } = useRole();
     const { pending, proposal } = useEnvironment();
@@ -133,6 +162,8 @@ export function useSandboxAttention() {
     // People waiting on the owner's answer to what they asked for, from where they were refused: the owner's alone to
     // grant, so read and counted only on the owner's own page.
     const { requests: accessRequests } = useAccessRequests(computed(() => role.value === `owner`));
+    const { settings } = useSandboxSettings();
+    const { pressure: diskPressure } = useDiskPressure();
 
     // Declared worst-first: the head sets the badge, the rest fills the popover. A row is its condition and its
     // item side by side rather than a spread ternary, so adding one is a line and reading the order is a column.
@@ -264,9 +295,9 @@ export function useSandboxAttention() {
             },
         ];
         return (
-            rows
-                .filter((row) => row.when)
-                .map((row) => row.item)
+            diskItems(diskPressure.value)
+                .concat(gpuPausedItems(settings.value?.gpu?.pausedFor !== undefined))
+                .concat(rows.filter((row) => row.when).map((row) => row.item))
                 // Split by whether the update is already downloaded (updateItems); then who waits on the owner's answer.
                 .concat(updateItems(updateAvailable.value, updateStaged.value), accessRequestItems(accessRequests.value.length))
         );

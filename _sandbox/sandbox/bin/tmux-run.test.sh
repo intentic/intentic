@@ -31,11 +31,13 @@ mkdir -p "$INTENTIC_TERMINAL_LOGS_DIR"
 # One cleanup for the whole run — a second `trap ... EXIT` later would silently replace this one, not add to it.
 DS=agent-selfdoor
 DOORPID=""
+QUEUEHOLDER=""
 cleanup() {
     tmux kill-session -t "$S" 2>/dev/null
     tmux kill-session -t "$R" 2>/dev/null
     tmux kill-session -t "$DS" 2>/dev/null
     [ -n "$DOORPID" ] && kill "$DOORPID" 2>/dev/null
+    [ -n "$QUEUEHOLDER" ] && kill "$QUEUEHOLDER" 2>/dev/null
     rm -rf "$LOGS" ${F:+"$F"}
 }
 trap cleanup EXIT
@@ -127,6 +129,45 @@ C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
 printf 'sleep 2; echo late; exit 4\n' > "$C/line"; printf '5\n' > "$C/soft"
 out="$(INTENTIC_RUN_FILTER=0 INTENTIC_RUN_SOFT_TIMEOUT_S=1 bash "$W" -f "$C/line" "$S")"; rc=$?
 [ "$out" = late ] && [ "$rc" = 4 ] || { echo "FAIL: soft file did not extend the wait, got out='$out' rc=$rc (want late/4)"; exit 1; }
+
+# Queue waiting pauses the foreground window. Real locks and the real queue-run exercise the record handover.
+# The shared tmux server can predate this worktree's mount. /tmp carries the script under test into its pane.
+Q="$LOGS/queue-run"
+cp "$(dirname "$W")/queue-run" "$Q"
+queue="$LOGS/queue"
+mkdir -p "$queue/heavy"
+hold_queue() {
+    rm -f "$queue/held"
+    ( exec 9>>"$queue/heavy/slot.1"; flock 9; touch "$queue/held"; exec sleep "$1" ) &
+    QUEUEHOLDER=$!
+    for _ in $(seq 100); do [ -f "$queue/held" ] && return; sleep 0.05; done
+    echo "FAIL: fixture never held the queue"; exit 1
+}
+queue_cmd="$(printf 'INTENTIC_QUEUE_DIR=%q bash %q --pool heavy --limit 1 --wait 30 --label cargo --' "$queue" "$Q")"
+hold_queue 4
+out="$(INTENTIC_RUN_SOFT_TIMEOUT_S=2 bash "$W" "$S" "$queue_cmd bash -c 'echo built; exit 7'" queue-finish)"; rc=$?
+[ "$rc" = 7 ] || { echo "FAIL: a queued command lost its execution window: rc=$rc '$out'"; exit 1; }
+case "$out" in *built*) ;; *) echo "FAIL: queued command never ran: '$out'"; exit 1;; esac
+wait "$QUEUEHOLDER"; QUEUEHOLDER=""
+
+# Concurrent waits discount their overlap once. Double-counting would let the final sleep finish inside the window.
+hold_queue 5
+out="$(INTENTIC_RUN_SOFT_TIMEOUT_S=3 bash "$W" "$S" "$queue_cmd true & $queue_cmd true & wait; echo body-ready; sleep 5; echo body-finished" queue-overlap)"; rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: overlapping queue run exited $rc"; exit 1; }
+case "$out" in *body-ready*'still running'*) ;; *) echo "FAIL: overlapping waits did not preserve execution timeout: '$out'"; exit 1;; esac
+case "$out" in *body-finished*) echo "FAIL: overlapping waits were counted twice: '$out'"; exit 1;; esac
+wait "$QUEUEHOLDER"; QUEUEHOLDER=""
+
+# The SDK's separate wall ceiling returns while still queued, saying explicitly that nothing has run.
+hold_queue 30
+C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
+printf '%s true\n' "$queue_cmd" > "$C/line"
+printf '2\n' > "$C/wall"
+out="$(INTENTIC_RUN_SOFT_TIMEOUT_S=2 bash "$W" -f "$C/line" "$S")"; rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: queued overrun exited $rc"; exit 1; }
+case "$out" in *'queued: position 1, behind pid '*"$QUEUEHOLDER"*'still running'*) ;; *) echo "FAIL: queued overrun omitted position/holder: '$out'"; exit 1;; esac
+tmux kill-window -t "=$S:run" 2>/dev/null
+kill "$QUEUEHOLDER"; wait "$QUEUEHOLDER" 2>/dev/null; QUEUEHOLDER=""
 
 # With the output filter on PATH: failures pass through verbatim; command-matched noise is stripped on
 # success with the footer naming the elision.

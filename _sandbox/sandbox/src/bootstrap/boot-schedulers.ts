@@ -28,10 +28,12 @@ import type { BootPhase } from "./boot-phase.js";
 import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
 import { hostRoomSource } from "../hosts/host-memory.js";
+import { startGpuWatch } from "../hosts/gpu/gpu-watch.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { announceUnwatchedWrite, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { projectDirOf } from "../system/project-dir.js";
+import { countLandsForRuns } from "../hosts/runs/run-builds.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
 // killed runtime reads, and where the child's work went.
@@ -191,8 +193,10 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
 
     // Open needs outlive every turn and every restart (docs/architecture/needs.md): their cards are told what they wait
     // on, answers a restart interrupted are delivered, and the checks against the world start.
+    // gpu-run's state, and the host's GPU resets and crashes, ride the same start (hosts/gpu/, 2026-11-03).
     if (role.container) {
         shutdown.push(services.needs.start());
+        shutdown.push(startGpuWatch(services, logger));
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
@@ -214,6 +218,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
+    shutdown.push(countLandsForRuns(services));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
     startProjectDelivery({ role, services, shutdown });
     startLinks({ role, services, logger, shutdown });

@@ -1,4 +1,4 @@
-import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
+import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type SessionOwner, type TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { planParts } from "@intentic/sandbox-contract/text/title";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
@@ -16,6 +16,7 @@ import { parentOfActor } from "../../auth/principal.js";
 import { liveRunOf, turnComing } from "../actor/conversation-holdings.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
 import { nextOf } from "../actor/conversation-next.js";
+import { pressOf } from "./projection/turn-ending.js";
 import { limitHold, reportedFailure, switchedEntry } from "./limit-ending.js";
 import { type WallAnswersSource, wallAnswersFollower } from "../actor/wall-answers.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
@@ -187,6 +188,14 @@ const standingIn =
         return entry === undefined || entry.placement.kind === "main" ? "idle" : standings.of(id);
     };
 
+// A reach with one stranded clone taken off it; undefined once nothing is left in it to say.
+const withoutStranded = (reach: TurnReach, dir: string): TurnReach | undefined => {
+    const { stranded, ...rest } = reach;
+    const left = (stranded ?? []).filter((clone) => clone.dir !== dir);
+    const next = { ...rest, ...opt("stranded", left.length > 0 ? left : undefined) };
+    return Object.keys(next).length === 0 ? undefined : next;
+};
+
 // The books' `book`, over the fleet's own reader and writer.
 const bookInto =
     (entryOf: (id: string) => PersistedAgent | undefined, replace: (entry: PersistedAgent) => void): ConversationBooks["book"] =>
@@ -341,6 +350,9 @@ export interface AgentsRegistry {
     readonly recordDelivery: (id: string, delivery: LandingDelivery) => Promise<void>;
     // Files one of a home conversation's lands as committed, keeping the newest HOME_COMMITS_KEPT (AgentSummary.commits).
     readonly recordHomeCommit: (id: string, commit: HomeCommit) => Promise<void>;
+    // Takes a clone of its own off the card's reach once it was folded in or made a workspace repo (land/nested-clone.ts):
+    // what it named is no longer stranded. The rest of the reach stands.
+    readonly forgetStranded: (id: string, dir: string) => Promise<void>;
     // Marks (or, undefined, clears) that a home's next turn opens a fresh session, and why (home/home-rollover.ts).
     // Leaves `updatedAt` alone: a person asking for a fresh start is not the conversation doing something.
     readonly setFreshPending: (id: string, why: "asked" | "cleared" | undefined) => Promise<AgentSummary | undefined>;
@@ -784,13 +796,10 @@ export const createFleet = (
         const state = conversations.state(entry.id);
         // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
         const parked = parkedKinds(state);
-        const status = conversationStatus(
-            state,
-            endingStatus(entry.ending),
-            entry.placement.kind === "main" ? "idle" : standings.of(entry.id),
-            turnComing(conversations, entry.id),
-        );
-        return {
+        const standing = entry.placement.kind === "main" ? "idle" : standings.of(entry.id);
+        const coming = turnComing(conversations, entry.id);
+        const status = conversationStatus(state, endingStatus(entry.ending), standing, coming);
+        const card: AgentSummary = {
             id: entry.id,
             status,
             updatedAt: state !== undefined && activityLive(state) ? Math.max(entry.updatedAt, state.turn.lastAt ?? 0) : entry.updatedAt,
@@ -826,6 +835,16 @@ export const createFleet = (
             ...queueClause(entry),
             ...landingClause(entry, status),
         };
+        // What a press does now, off the card's own fields and the turn the actor holds (turn-ending.ts): the very ending
+        // the record states, so a chat's strip cannot say otherwise than its card. A land runs beside the turn's ending,
+        // never instead of it: while its lease shows (`landing`), the press is still what the turn left, read as the card
+        // reads once the land lets go, or the strip would go for the length of every land and come back after it.
+        const resting =
+            status === "landing" && state !== undefined
+                ? conversationStatus({ ...state, turn: { ...state.turn, landing: false } }, endingStatus(entry.ending), standing, coming)
+                : status;
+        const facts = resting === status ? card : { ...card, status: resting, ...reportedFailure(entry.ending, resting, limitHold(state)) };
+        return { ...card, press: pressOf(facts, state?.resume.held) };
     };
 
     const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
@@ -1051,9 +1070,8 @@ export const createFleet = (
                 return;
             }
             const { placement, landing } = entry;
-            // Only a verdict may replace a verdict: a measure land touches no conflict gate and reports none, so it
-            // carries the stored report across rather than reading silence as resolved.
-            const verdict = outcome.adjudicated ? outcome.conflicts : (outcome.conflicts ?? landing.conflicts);
+            // Every land is a verdict, a `measure` included (land.ts measureRepo): its silence is what clears a report.
+            const verdict = outcome.conflicts;
             // A land that ran to a verdict (through, or refused with its own report) retires the one that broke before
             // it; a measure that held the work on its branch says nothing of whether a land would now go through.
             const broke = outcome.landed || (outcome.conflicts?.length ?? 0) > 0 ? undefined : landing.failure;
@@ -1093,6 +1111,16 @@ export const createFleet = (
         recordDelivery: deliveryRecorder({ entryOf, replace, persist, broadcast }),
         recordHomeCommit: async (id, commit) => {
             await amend(id, (entry) => ({ ...entry, commits: [...(entry.commits ?? []), commit].slice(-HOME_COMMITS_KEPT) }));
+        },
+        forgetStranded: async (id, dir) => {
+            const reach = entryOf(id)?.reach;
+            if (reach?.stranded?.some((clone) => clone.dir === dir) !== true) {
+                return;
+            }
+            await amend(id, (entry) => {
+                const { reach: _was, ...rest } = entry;
+                return { ...rest, ...opt("reach", withoutStranded(reach, dir)) };
+            });
         },
         setFreshPending: (id, why) =>
             amend(id, (entry) => {

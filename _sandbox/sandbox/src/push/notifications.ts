@@ -2,6 +2,7 @@ import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run
 import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
+import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
 
 // Every notification's fixed wording, kept out of the subsystems that trigger it so the vocabulary a user can receive
 // lives in one place.
@@ -112,6 +113,25 @@ export const pushRefused = (run: PushRun): PushNotification => ({
     tag: `push-${run.repo}`,
     requireInteraction: true,
 });
+
+const gigabytes = (bytes: number): string => `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+
+// The history volume under 10% or 5% free (system/resources/storage/disk-pressure.ts): how much is left, and what the
+// sandbox already removed to make room. One tag, so the 5% word replaces the 10% one.
+export const diskLow = (level: "low" | "critical", state: DiskPressure): PushNotification => {
+    const percent = state.totalBytes > 0 ? Math.floor((state.freeBytes / state.totalBytes) * 100) : 0;
+    const reaped =
+        state.reaped === undefined || state.reaped.bytes === 0
+            ? "No build output was left to remove."
+            : `Removed ${gigabytes(state.reaped.bytes)} of build output from ${String(state.reaped.checkouts)} finished checkout(s).`;
+    return {
+        title: level === "critical" ? "The sandbox's disk is almost full" : "The sandbox's disk is getting full",
+        body: `${gigabytes(state.freeBytes)} free (${String(percent)}%). ${reaped} Storage shows what is using the rest.`,
+        url: "/sandbox",
+        tag: "disk-low",
+        requireInteraction: level === "critical",
+    };
+};
 
 // An automation has no title of its own; uses its prompt, the same label the Automations page shows.
 export const automationPending = (automationId: string, prompt: string): PushNotification => ({

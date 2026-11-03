@@ -495,3 +495,20 @@ test("an overrun's note names the stop tool for its id, and TaskStop is only fol
     expect(hooks.PostToolUse?.map((matcher) => matcher.matcher)).toEqual(["TaskStop|KillShell|KillBash", "Bash"]);
     rmSync(dir, { recursive: true, force: true });
 });
+
+test("foreground calls leave room for queue waits under the SDK ceiling, preserving explicit short deadlines", async () => {
+    for (const timeout of [undefined, 120_000, 300_000]) {
+        const specific = syncHookOutput(await preToolUse({ command: "cargo build", timeout })).hookSpecificOutput;
+        const updated = specific?.hookEventName === "PreToolUse" ? specific.updatedInput : undefined;
+        expect(updated?.["timeout"]).toBe(600_000);
+        const dir = dirname((/ -f (\S+) /u.exec(String(updated?.["command"]))?.[1] ?? "").replaceAll("'", ""));
+        expect(readFileSync(join(dir, "wall"), "utf8")).toBe("590\n");
+        rmSync(dir, { recursive: true, force: true });
+    }
+    const specific = syncHookOutput(await preToolUse({ command: "cargo build", timeout: 5000 })).hookSpecificOutput;
+    const updated = specific?.hookEventName === "PreToolUse" ? specific.updatedInput : undefined;
+    expect(updated?.["timeout"]).toBe(5000);
+    const dir = dirname((/ -f (\S+) /u.exec(String(updated?.["command"]))?.[1] ?? "").replaceAll("'", ""));
+    expect(existsSync(join(dir, "wall"))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+});

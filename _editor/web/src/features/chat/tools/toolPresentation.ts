@@ -258,6 +258,9 @@ const iconOf = (tool: TranscriptTool, presenter: Presenter, document: RequestDoc
 // its output turned out to be; anything else asks its presenter.
 const summaryOf = (tool: TranscriptTool, presenter: Presenter, body: ToolBody | undefined, text: string): string | undefined => {
     const shell = body?.kind === `command` ? body.shell : undefined;
+    if (tool.status === `interrupted`) {
+        return t(`chat.toolPresentation.interrupted`);
+    }
     if (tool.status === `failed`) {
         return shell?.exitCode === undefined ? t(`chat.toolPresentation.failed`) : t(`chat.toolPresentation.exit`, { code: shell.exitCode });
     }
@@ -268,7 +271,7 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
     const presenter = presenterFor(tool.name);
     const content = tool.content ?? [];
     // A failed call has no document: its content is what the agent meant to write, not what happened.
-    const document = tool.status === `failed` ? undefined : documentOf(tool.name, content);
+    const document = tool.status === `failed` || tool.status === `interrupted` ? undefined : documentOf(tool.name, content);
     const diffs = content.filter((entry) => entry.type === `diff`).filter((entry) => entry.path !== document?.path);
     const images = content.filter((entry) => entry.type === `image`);
     const text = content

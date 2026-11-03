@@ -110,6 +110,7 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
             cleared: count.optional(),
             model: z.string().optional(),
             fellBack: z.boolean().optional(),
+            reason: z.string().optional(),
         }),
     }),
     // A home conversation going on in a fresh session (schemas/providers/handoff.ts FreshStartSchema): `why` it did,

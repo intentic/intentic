@@ -1,5 +1,5 @@
 import type { PanelStartSource, PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
-import type { RepoRunTargets } from "@intentic/sandbox-contract/schemas/run-targets";
+import type { DeviceRun, RepoRunTargets } from "@intentic/sandbox-contract/schemas/run-targets";
 import { appTargetId, type PreviewTarget, repoTargetId } from "../../../models/preview/previewModel";
 
 /* WHAT THE RUN DIALOG LISTS FOR ONE REPOSITORY, and where each can run. Pure: the repository's .intentic/run.json, its
@@ -113,4 +113,25 @@ export const defaultPlace = (rows: readonly RunRow[], devices: readonly string[]
         return first.device;
     }
     return devices.find(ready) ?? devices[0] ?? SANDBOX;
+};
+
+// What a run on a computer was built from, as its row says it: the commit (short), the uncommitted changes then, the work
+// that landed since, and whether the tree moved while it compiled. Stale when a Restart would build something newer.
+export interface RunProvenance {
+    readonly commit: string;
+    readonly changed: number;
+    readonly at: number;
+    readonly lands: number;
+    readonly moved: boolean;
+    readonly stale: boolean;
+}
+
+export const provenanceOf = (run: DeviceRun | undefined): RunProvenance | undefined => {
+    const built = run?.builtFrom;
+    if (run === undefined || built === undefined) {
+        return undefined;
+    }
+    const lands = run.landsSince ?? 0;
+    const moved = built.movedDuringBuild === true;
+    return { commit: built.commit.slice(0, 7), changed: built.changed, at: Date.parse(built.at), lands, moved, stale: lands > 0 || moved };
 };

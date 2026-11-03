@@ -11,6 +11,7 @@ import { createRunGrants, type RunGrants } from "./device-door.js";
 import { createDeviceTunnels, type DeviceTunnels } from "./device-tunnels.js";
 import { callTool } from "./device-reports.js";
 import { createDeviceRuns, type DeviceRuns } from "./runs/device-runs.js";
+import { createRunBuilds, type RunBuilds } from "./runs/run-builds.js";
 import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./host-peer.js";
 import { hostDeviceReach, type HostDeviceReach } from "./self-host.js";
 
@@ -38,6 +39,8 @@ export interface HostsSlice {
     readonly runGrants: RunGrants;
     // The programs a device run left running on a computer: their state, output and Stop (device-runs.ts).
     readonly deviceRuns: DeviceRuns;
+    // A run's build holding lands into the repository it compiles, and the lands since a run was built (run-builds.ts).
+    readonly runBuilds: RunBuilds;
 }
 
 export const hostsSlice = defineSlice<HostsSlice>({
@@ -53,10 +56,12 @@ export const hostsSlice = defineSlice<HostsSlice>({
         enrollTokens: pairings(),
         deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
         runGrants: createRunGrants(),
+        runBuilds: createRunBuilds(),
         deviceRuns: createDeviceRuns({
             call: (device, tool, args, timeoutMs) => callTool(whole(), device, tool, { ...args }, AbortSignal.timeout(timeoutMs)),
             tunnels: () => whole().deviceTunnels,
             logger,
+            landsSince: (repo, since) => whole().runBuilds.landsSince(repo, since),
         }),
     }),
 });

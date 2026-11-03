@@ -86,6 +86,24 @@ describe("the project ignore list, as Mutagen reads it", () => {
         }
     });
 
+    // A custom profile (`--profile fast`) keeps its finished binary on both sides and leaves its caches behind.
+    it("leaves out every other profile's caches, natively and under a target triple, and keeps the profile's own files", () => {
+        for (const path of [
+            "target/fast/incremental/game-1x2y/s-abc/dep-graph.bin",
+            "target/fast/.fingerprint/game-0123/lib-game",
+            "target/fast/deps/libbevy-0123.rlib",
+            "crates/game/target/fast/build/wgpu-0123/out/x.rs",
+            "target/fast/examples/demo",
+            "target/x86_64-pc-windows-msvc/fast/deps/game-0123.exe",
+            "target/x86_64-pc-windows-gnu/profiling/incremental/a",
+        ]) {
+            expect([path, ignored(path)]).toEqual([path, true]);
+        }
+        for (const path of ["target/fast/game", "target/fast/game.d", "target/x86_64-pc-windows-msvc/fast/game.exe", "src/deps/index.ts", "src/build/x"]) {
+            expect([path, ignored(path)]).toEqual([path, false]);
+        }
+    });
+
     it("leaves out Mutagen's own scratch files, which it never syncs", () => {
         expect(ignored("src/.mutagen-temporary-cross-device-rename-1")).toBe(true);
     });

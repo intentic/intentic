@@ -8,7 +8,9 @@ import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
 import { createAgentsRoutes } from "./conversations/agents.routes.js";
 import { createAttentionRoutes } from "./conversations/attention.routes.js";
 import { createHomeFreshRoutes } from "./conversations/home/home-fresh.routes.js";
-import { portJobOf } from "./agent/tools/jobs/background-jobs.js";
+import { portJobOf, runningJobsOf } from "./agent/tools/jobs/background-jobs.js";
+import { portOwnerOf } from "./agent/tools/jobs/port-owners.js";
+import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { probeDockerGpu } from "./hosts/docker-gpu-probe.js";
@@ -20,6 +22,7 @@ import { createCiRoutes } from "./ci/ci.routes.js";
 import { createComplianceRoutes } from "./compliance/compliance.routes.js";
 import { createDiffRoutes } from "./git/changes/diff-derived.js";
 import type { Services } from "./composition.js";
+import { join } from "node:path";
 import { createApprovalsRoutes } from "./approvals/approvals.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
@@ -55,6 +58,8 @@ import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
 import { createAreasRoutes } from "./areas/areas.routes.js";
 import { createStorageRoutes } from "./system/resources/storage/storage.routes.js";
+import { createBuildOutputReaper } from "./conversations/registry/build-output-sweep/build-output-reaper.js";
+import { isBuildOutputPath } from "./conversations/worktrees/build-outputs/build-outputs.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
@@ -75,6 +80,25 @@ import { pruneStore } from "./workspace/watch/state-janitor.js";
 // outgrew what the compiler will write into a declaration file (TS7056), and naming the contract also checks here that
 // every procedure it declares is served.
 export type SandboxRouter = Router<typeof sandboxContract, OrpcContext>;
+
+
+// What the Storage card needs of build output in checkouts: how its scan recognises a folder as one, whether a clean may
+// take it now, and the clean itself, over a reaper of its own (a press ignores what earlier passes remember anyway).
+const storageBuildOutputs = (services: Services) => {
+    const reaper = createBuildOutputReaper({
+        archive: services,
+        worktreesRoot: join(services.config.historyRoot, "worktrees"),
+        runningJobs: (id) => runningJobsOf(services.conversations, id).length,
+    });
+    return {
+        detect: isBuildOutputPath,
+        reapable: (path: string) => reaper.reapable(path, Date.now()),
+        reap: async () => {
+            const swept = await reaper.reapAll(Date.now());
+            return { removed: swept.reduce((total, one) => total + one.removed.length, 0), failed: 0 };
+        },
+    };
+};
 
 export const createRouter = (services: Services): SandboxRouter => ({
     accessProfiles: createAccessProfilesRoutes(services),
@@ -122,7 +146,18 @@ export const createRouter = (services: Services): SandboxRouter => ({
     pages: createPagesRoutes(services),
     panels: createPanelsRoutes(services),
     // A server an agent left running for the person is named on its port's row by its job.
-    ports: createPortsRoutes({ ...services, jobOn: (port) => portJobOf(services.conversations, port) }),
+    // Every other agent's port by its conversation, from its jobs or its shell's tmux session (agent/tools/jobs/port-owners.ts).
+    ports: createPortsRoutes({
+        ...services,
+        jobOn: (port) => portJobOf(services.conversations, port),
+        ownerOn: (listener) =>
+            portOwnerOf(services.conversations, listener, (session) =>
+                services.agents.ids().find((id) => {
+                    const sessionId = services.conversations.sessionIdOf(id);
+                    return sessionId !== undefined && agentSessionName(sessionId) === session;
+                }),
+            ),
+    }),
     // A repository's programs run on the owner's own computers: its declared targets, and the button that runs one.
     runs: createRunsRoutes(services),
     public: createPublicRoutes(services),
@@ -149,7 +184,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     system: {
         ...createSystemRoutes(services),
         ...createDeviceSystemRoutes(services),
-        ...createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger)),
+        ...createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger), storageBuildOutputs(services)),
     },
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),

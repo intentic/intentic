@@ -640,3 +640,17 @@ test("logs a role's failed chain once with every rung's refusal, a repeat as a c
     expect(ownLines().map((line) => line.message)).toEqual([`role model: handoff-summary failed on every model in its chain`, `role model: handoff-summary answered again, on gpt-5.6`]);
     expect(ownLines()[1]?.fields).toMatchObject({ repeated: 1 });
 });
+
+
+test("a hand-off excludes the exhausted provider even when its quota snapshot still says room", async () => {
+    const answer = await askRoleModel(fakeServices(["claude:claude-haiku-4-5", "gemini:gemini-3-flash-lite"]), execution, ROLE, DRAFT, signal(), { excludeProviders: ["claude"] });
+    expect(answer.choice.provider).toBe("gemini");
+    expect(oneShot.mock.calls).toEqual([]);
+    expect(geminiOneShot.mock.calls).toHaveLength(1);
+});
+
+test("the retry pass never reintroduces the provider exhausted by the parent turn", async () => {
+    await expect(askRoleModel(fakeServices(["claude:claude-haiku-4-5"]), execution, ROLE, DRAFT, signal(), { excludeProviders: ["claude"] }))
+        .rejects.toThrow("Every configured model for this job uses an excluded provider: claude.");
+    expect(oneShot.mock.calls).toEqual([]);
+});

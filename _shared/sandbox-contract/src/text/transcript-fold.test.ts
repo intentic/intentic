@@ -32,7 +32,7 @@ describe("foldTurn", () => {
         ];
         expect(foldOf("look", events).slice(1)).toEqual([
             { role: "assistant", text: "I'll look" },
-            { role: "assistant", text: "found it", tools: [{ id: "t1", name: "Read", category: "read", status: "in_progress" }] },
+            { role: "assistant", text: "found it", tools: [{ id: "t1", name: "Read", category: "read", status: "interrupted" }] },
             { role: "assistant", text: "and here's why" },
         ]);
     });
@@ -100,9 +100,9 @@ describe("foldTurn", () => {
         expect(Object.keys(bash ?? {})).not.toContain("input");
     });
 
-    it("leaves an unanswered call in progress", () => {
+    it("marks an unanswered call interrupted when the turn ends", () => {
         const events: AgentEvent[] = [{ kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" }];
-        expect(foldOf("run", events).at(-1)?.tools?.[0]?.status).toBe("in_progress");
+        expect(foldOf("run", events).at(-1)?.tools?.[0]?.status).toBe("interrupted");
     });
 
     it("nests a subagent's calls, thinking and live state under the card that spawned them", () => {
@@ -121,7 +121,7 @@ describe("foldTurn", () => {
                 id: "task-1",
                 name: "Agent",
                 category: "other",
-                status: "in_progress",
+                status: "interrupted",
                 thinking: "hmm",
                 children: [{ id: "t2", name: "Read", category: "read", status: "completed" }],
                 subagent: { kind: "subagent", agentType: "Explore", background: true, status: "completed", toolUses: 1 },
@@ -294,7 +294,7 @@ describe("foldTurn", () => {
                     { content: "step 2", status: "in_progress", activeForm: "Running step 2" },
                     { content: "step 3", status: "pending" },
                 ],
-                tools: [{ id: "t1", name: "Bash", category: "execute", status: "in_progress" }],
+                tools: [{ id: "t1", name: "Bash", category: "execute", status: "interrupted" }],
             },
         ]);
     });
@@ -863,6 +863,7 @@ describe("patches", () => {
             "replace",
             "replace",
             "replace",
+            "replace",
         ]);
     });
 
@@ -892,9 +893,9 @@ describe("patches", () => {
             { op: "toolThinking", index: 1, id: "task-1", text: "in" },
             { op: "toolThinking", index: 1, id: "task-1", text: "ner" },
         ]);
-        const update = patches.at(-1);
+        const update = patches.findLast((patch) => patch.op === "tool");
         expect(update?.op === "tool" ? update.tool : undefined).toEqual({ id: "task-1", name: "Agent", category: "other", status: "completed" });
-        expect(applied[1]?.tools?.[0]).toMatchObject({ status: "completed", thinking: "inner", children: [{ id: "t2" }] });
+        expect(applied[1]?.tools?.[0]).toMatchObject({ status: "completed", thinking: "inner", children: [{ id: "t2", status: "interrupted" }] });
     });
 
     // The other half of the wake's delivery: a live turn takes it as a steer. It is the daemon's own words either way,
@@ -1452,4 +1453,17 @@ describe("transcriptIncidents", () => {
         });
         expect(sandboxNoticeOf(accountMovedRow({ why: "cold", from: "Work", to: "Home" }))).toEqual({ code: "accountMoved", params: { why: "cold", from: "Work", to: "Home" } });
     });
+});
+
+
+test.each(["settled", "stopped"] as const)("%s interrupts open top-level and nested calls and leaves completed calls intact", (ending) => {
+    const fold = new TranscriptFold([], () => 123);
+    fold.apply({ kind: "tool_call", id: "parent", name: "Agent", category: "execute", status: "in_progress" });
+    fold.apply({ kind: "tool_call", id: "nested", name: "Bash", category: "execute", status: "pending", parentToolUseId: "parent" });
+    fold.apply({ kind: "tool_call", id: "done", name: "Read", category: "read", status: "completed" });
+    fold.finish(ending);
+    expect(fold.rows[0]?.tools).toMatchObject([
+        { id: "parent", status: "interrupted", endedAt: 123, children: [{ id: "nested", status: "interrupted", endedAt: 123 }] },
+        { id: "done", status: "completed" },
+    ]);
 });

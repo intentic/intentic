@@ -67,7 +67,10 @@ try { ... } finally { detach?.(); release(); }
 The relay holds the watchdog for the whole of every door call (`heldDoor`). A question card, a page, an accounts card or
 a 30-minute `subagents.wait` is not read as a silent turn. Each mount's `timeoutMs` (24 h for card servers, 35 min for
 `subagents`/`deps`) is what the runtime's MCP client should wait per call: Codex `tool_timeout_sec`, ACP per-server
-timeouts.
+timeouts, OpenCode `timeout.execution`. A runtime that scripts tool calls (Codex's and OpenCode's code mode) must offer
+such a server's tools directly, or its script hands control back before the answer: Codex `omit_tools_from =
+["code_mode"]`, OpenCode `codemode: false`. And an answer to `ask` given after the call's client stopped waiting is said
+into the conversation (`ui-server.ts` `late`, wired by `daemon-servers.ts` `lateAnswers`), so it is never only the card's.
 
 ## 3. Gate call site
 

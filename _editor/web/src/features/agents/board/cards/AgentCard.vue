@@ -22,6 +22,7 @@ import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import CardLandPresses from "./CardLandPresses.vue";
+import CardStrandedClones from "./CardStrandedClones.vue";
 import { useCardRequests } from "./cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
@@ -755,6 +756,8 @@ const grab = (event: PointerEvent): void => {
                 <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ reach.text }}</span>
             </p>
+            <!-- A clone of its own the reach names: folded into its repository, or made a workspace repo (CardStrandedClones). -->
+            <CardStrandedClones v-if="reach !== undefined" :agent="agent" />
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />

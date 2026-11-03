@@ -666,8 +666,9 @@ export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.
 // Files on the daemon's own volume whose unreadable records are reported too, named by their absolute path there: the
 // conversation registry's rows, one of which this build could not read costs that conversation until a build that can
 // runs. Reported, never repaired from the card (no route edits them), and refreshed whenever the card is fetched. The
-// boot record (2026-10-05) is reported when a restart storm kept a boot from resuming the turns it cut.
-export const REPORTED_VOLUME_FILES: readonly string[] = [`${HISTORY_ROOT}/conversations.db`, `${HISTORY_ROOT}/boot-history.json`];
+// boot record (2026-10-05) is reported when a restart storm kept a boot from resuming the turns it cut, and the git dirs
+// (2026-11-03) when a check after an unclean stop found objects nothing could rebuild (git/integrity/crash-check.ts).
+export const REPORTED_VOLUME_FILES: readonly string[] = [`${HISTORY_ROOT}/conversations.db`, `${HISTORY_ROOT}/boot-history.json`, `${HISTORY_ROOT}/gits`];
 
 // Accepts either separator; the daemon holds these as platform paths and normalizing at every call site is what
 // eventually gets forgotten.

@@ -1,7 +1,7 @@
 import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 import { RunTargetsFileSchema, type RepoRunTargets } from "@intentic/sandbox-contract/schemas/run-targets";
 import { appTargets, appTargetId, repoTargets, repoTargetId } from "../../../models/preview/previewModel";
-import { defaultPlace, FOUND, openingPlace, placesOf, runRowsOf, runsAt, SANDBOX } from "./runRows";
+import { defaultPlace, FOUND, openingPlace, placesOf, provenanceOf, runRowsOf, runsAt, SANDBOX } from "./runRows";
 
 // The Run dialog's rows: every target the repository's run.json declares, each runnable where it says (a command in the
 // sandbox, an artifact on a computer), and, when the file says nothing for the sandbox, what Start finds there.
@@ -101,4 +101,24 @@ test(`an open row says what it runs: the command in the sandbox, the build made 
         [],
     );
     expect(rows[0]).toMatchObject({ command: `cargo run`, build: `cargo build --release` });
+});
+
+// "Am I running the up-to-date version?": a run says what it was built from, and is stale once work landed after it.
+test("a computer's run says the commit it was built from, and is stale once work landed after it or the tree moved under it", () => {
+    const run = {
+        device: `rog`,
+        id: `server-1a2b3c`,
+        name: `server`,
+        state: `running` as const,
+        said: `running, pid 1`,
+        startedAt: `2026-11-02T15:30:00.000Z`,
+        ports: [],
+        builtFrom: { commit: `abc1234def567`, changed: 3, at: `2026-11-02T15:29:00.000Z` },
+    };
+    expect(provenanceOf(run)).toEqual({ commit: `abc1234`, changed: 3, at: Date.parse(`2026-11-02T15:29:00.000Z`), lands: 0, moved: false, stale: false });
+    expect(provenanceOf({ ...run, landsSince: 2 })).toMatchObject({ lands: 2, stale: true });
+    expect(provenanceOf({ ...run, builtFrom: { ...run.builtFrom, movedDuringBuild: true } })).toMatchObject({ lands: 0, moved: true, stale: true });
+    // A run built before this sandbox last came up, or not by `devices run`, says nothing about it.
+    expect(provenanceOf({ ...run, builtFrom: undefined })).toBeUndefined();
+    expect(provenanceOf(undefined)).toBeUndefined();
 });

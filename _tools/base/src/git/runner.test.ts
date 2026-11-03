@@ -78,6 +78,11 @@ test("the global args carry no process-wide pathspec flag", () => {
     expect(GIT_GLOBAL_ARGS).not.toContain("--literal-pathspecs");
 });
 
+// A host crash keeps a file's name and size and loses its bytes unless git synced it (durability.ts).
+test("every git the runner starts syncs what it writes", () => {
+    expect(GIT_GLOBAL_ARGS).toEqual(["--no-optional-locks", "-c", "core.fileMode=false", "-c", "core.fsync=all", "-c", "core.fsyncMethod=batch"]);
+});
+
 // The daemon's slow-git log names commands by this label, so a credential anywhere in argv must not survive it.
 test("a command's label drops every -c value and a URL's credentials, keeping the subcommand", () => {
     expect(gitCommandLabel(["-c", "http.extraheader=Authorization: Basic c2VjcmV0", "clone", "https://example.com/x.git", "x"])).toBe(

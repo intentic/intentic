@@ -936,7 +936,7 @@ export const waitForSubagent = (actors: Actors, conversationId: string, options:
         const waiters = actors.holdings(WAITERS);
         const waiter = randomUUID();
         const candidates = (): SubagentRecord[] =>
-            records.of(conversationId).filter((record) => options.target === undefined || record.id === options.target);
+            records.of(conversationId).filter((record) => options.target === undefined || (record.id === options.target || record.agentId === options.target));
         // oxlint-disable-next-line prefer-const -- A later branch assigns and clears this binding.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const settle = (result: SubagentWaitOutcome): void => {
@@ -970,7 +970,7 @@ export const waitForSubagent = (actors: Actors, conversationId: string, options:
         }
         options.signal?.addEventListener("abort", onAbort, { once: true });
         timer = setTimeout(() => {
-            const snapshot = options.target !== undefined ? records.get(options.target) : undefined;
+            const snapshot = options.target !== undefined ? candidates()[0] : undefined;
             settle({ outcome: "timeout", ...(snapshot !== undefined ? { matched: wire(snapshot) } : {}) });
         }, options.timeoutMs);
         timer.unref();

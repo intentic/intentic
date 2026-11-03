@@ -24,6 +24,9 @@ export interface RuntimeFacts {
     readonly checklist: boolean;
     // Bash takes `run_in_background`, and `wait` and `keep` act on those commands.
     readonly backgroundShell: boolean;
+    // A shell command still running when the terminal panel hands it back (tmux-run's soft timeout, or a prompt) is filed
+    // as a background job whose id the result names, for `wait` and `stop` (agent-terminals.ts settleForeground).
+    readonly shellJobs: boolean;
     // A secret reference written in a shell command resolves there (AgentCapabilities.secrets is not "none").
     readonly secretRefs: boolean;
     // What this runtime's tool list puts before `<server>_<tool>` (OpenCode's per-conversation prefix); absent, every
@@ -42,6 +45,7 @@ export const claudeCodeRuntime = (deferredTools: boolean): RuntimeFacts => ({
     planMode: true,
     checklist: true,
     backgroundShell: true,
+    shellJobs: true,
     secretRefs: true,
 });
 
@@ -49,14 +53,16 @@ export const claudeCodeRuntime = (deferredTools: boolean): RuntimeFacts => ({
 export const CLAUDE_CODE_RUNTIME: RuntimeFacts = claudeCodeRuntime(true);
 
 // Any other loop: the shared mounts and nothing of the Claude Code loop's own; whether a secret reference resolves is
-// the runtime's own record (AgentCapabilities.secrets).
-export const otherRuntime = (secrets: "masked" | "shell" | "none", toolPrefix?: string): RuntimeFacts => {
+// the runtime's own record (AgentCapabilities.secrets), and whether a long command comes back as a job is the turn's
+// (runtime-guidance.ts).
+export const otherRuntime = (secrets: "masked" | "shell" | "none", toolPrefix?: string, shellJobs = false): RuntimeFacts => {
     const facts: RuntimeFacts = {
         deferredTools: false,
         nativeAsk: false,
         planMode: false,
         checklist: false,
         backgroundShell: false,
+        shellJobs,
         secretRefs: secrets !== "none",
     };
     return toolPrefix === undefined ? facts : { ...facts, toolPrefix };

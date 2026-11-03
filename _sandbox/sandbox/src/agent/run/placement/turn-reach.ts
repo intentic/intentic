@@ -6,6 +6,7 @@ import { isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";
 import type { Services } from "../../../composition.js";
+import { cloneCommits } from "../../../conversations/land/settle/nested-clone.js";
 import { headSha } from "../../../git/changes/changes.js";
 import { scratchOf } from "../../../git/changes/scratch.js";
 import { composeReach, type ReachFrames, type StrandedClone } from "../../verification/agent-reach.js";
@@ -125,17 +126,19 @@ export const strandedClones = async (
                     .filter((entry) => entry.reason === "checkout")
                     .map(async (entry): Promise<StrandedClone | undefined> => {
                         const clone = join(dir, entry.path);
-                        const [status, unpushed] = await Promise.all([
+                        const [status, unpushed, commits] = await Promise.all([
                             git(clone, ["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"]).then(
                                 ({ stdout }) => dirtyFiles(stdout).length,
                             ),
                             unpushedIn(clone, git),
-                        ]).catch(() => [0, 0]);
+                            // What folding it from the card would drop (land/nested-clone.ts).
+                            cloneCommits(clone, git),
+                        ]).catch(() => [0, 0, 0]);
                         if (status === 0 && unpushed === 0) {
                             return undefined;
                         }
                         const within = entry.path.replace(/\/$/, "");
-                        return { dir: repo === "root" ? within : `${repo}/${within}`, uncommitted: status, unpushed };
+                        return { dir: repo === "root" ? within : `${repo}/${within}`, uncommitted: status, unpushed, commits, parent: repo };
                     }),
             );
             return clones.filter((clone): clone is StrandedClone => clone !== undefined);

@@ -5,6 +5,7 @@ import {
     ReadRestartIntentSchema,
     type RestartAction as ContractRestartAction,
 } from "@intentic/sandbox-contract/schemas/restart-intent";
+import type { HostCrashEvent } from "@intentic/sandbox-contract/schemas/hosts";
 import { opt } from "../../../opt.js";
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 
@@ -18,6 +19,9 @@ import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 
 export const RESTART_INTENT_FILE = "restart-intent.json";
 export const RESTARTS_FILE = "restarts.jsonl";
+// What the computer this sandbox runs on reported of its own crashes and GPU resets (hosts/gpu/host-crashes.ts), one
+// event per line, by which a run that was killed without warning is explained once the computer is back.
+export const HOST_CRASHES_FILE = "host-crashes.jsonl";
 // Enough to read months of restarts in, small enough to rewrite whole on each boot.
 export const RESTARTS_KEPT = 500;
 // How long an intent can still explain a stop: a rebuild builds for many minutes after it is asked for, but one that
@@ -174,8 +178,43 @@ const ENDINGS = {
     unknown: () => "unknown: it left no exit marker (a first boot, or the marker was lost)",
 } satisfies Record<RunEnding, (run: PreviousRun) => string>;
 
-/** The previous run's end in one sentence, for the boot's log line and a resumed turn's account of the restart. */
-export const describePreviousRun = (run: PreviousRun): string => {
+// How long after a boot the host's own record of the crash before it may still be dated: Windows logs Kernel-Power 41 as
+// it boots again, and its error reporting files a GPU reset's LiveKernelEvent minutes later.
+export const CRASH_REPORTED_WITHIN_MS = 15 * 60_000;
+
+/** The host's crashes that fall in a run's life: from its start to just after the boot that followed it. */
+export const crashesDuring = (crashes: readonly HostCrashEvent[], startedAt: string | undefined, bootAt: string): HostCrashEvent[] => {
+    const from = startedAt === undefined ? Number.NEGATIVE_INFINITY : Date.parse(startedAt);
+    const until = Date.parse(bootAt) + CRASH_REPORTED_WITHIN_MS;
+    return crashes.filter((crash) => {
+        const at = Date.parse(crash.at);
+        return at >= from && at <= until;
+    });
+};
+
+const CRASH_WORDS = { "gpu-reset": "its GPU reset", "host-crash": "it went down" } satisfies Record<HostCrashEvent["kind"], string>;
+
+/**
+ * A killed run's end by the host's own reports: "was killed when the computer it runs on went down after a GPU reset:
+ * Windows reported its GPU reset at … (LiveKernelEvent 141); it went down at … (Kernel-Power 41)". A GPU reset with no
+ * crash of the computer is said beside the kill, not as its cause: Windows can recover from one.
+ */
+export const hostCrashText = (crashes: readonly HostCrashEvent[]): string => {
+    const ordered = crashes.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const reset = ordered.some((crash) => crash.kind === "gpu-reset");
+    const down = ordered.some((crash) => crash.kind === "host-crash");
+    const events = ordered.map((crash) => `${CRASH_WORDS[crash.kind]} at ${crash.at} (${crash.code})`).join("; ");
+    return down
+        ? `was killed when the computer it runs on went down${reset ? " after a GPU reset" : ""}: Windows reported ${events}`
+        : `was killed without warning while the computer it runs on had a GPU reset: Windows reported ${events}`;
+};
+
+/**
+ * The previous run's end in one sentence, for the boot's log line and a resumed turn's account of the restart. `crashes`
+ * are the host's own reports of the run's life (crashesDuring): a run killed without warning is then said to have died
+ * with its host, by the event Windows named.
+ */
+export const describePreviousRun = (run: PreviousRun, crashes: readonly HostCrashEvent[] = []): string => {
     const why =
         run.intent !== undefined
             ? `; ${initiatorText(run.intent)}`
@@ -190,7 +229,8 @@ export const describePreviousRun = (run: PreviousRun): string => {
             : run.tmpCleared === true
               ? "; /tmp was emptied"
               : "";
-    return `${ENDINGS[run.ended](run)}${why}${lost}`;
+    const ending = crashes.length > 0 && (run.ended === "killed" || run.ended === "unknown") ? hostCrashText(crashes) : ENDINGS[run.ended](run);
+    return `${ending}${why}${lost}`;
 };
 
 /**

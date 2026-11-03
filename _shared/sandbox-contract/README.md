@@ -151,7 +151,12 @@ the reading when either arm has samples.
 
 New sandbox settings place every model job on its suggested Low, Medium or High setup, derived from
 `MODEL_ROLES` (`src/models/model-roles.ts`). Saved `roleSetups` maps stay as written, including jobs left off
-and empty maps; connecting an account fills the preset model lists without requiring a placement step.
+and empty maps; connecting an account fills the preset model lists without requiring a placement step. The automatic
+Low preset excludes models whose id explicitly says `slow`, while written pins stay as the owner set them.
+
+A plan reply's optional `feedback` holds execution instructions on approval and revision requests on rejection.
+A hand-off notice's optional `reason` explains a fallback. Tool status `interrupted` closes calls that never returned
+before their turn ended, including nested calls and cards recovered after a restart.
 
 ## Imports
 

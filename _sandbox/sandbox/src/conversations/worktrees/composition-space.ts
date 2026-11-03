@@ -6,6 +6,7 @@ import type { GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { branchSha } from "../../git/agent-refs.js";
 import { checkoutCost } from "../../system/resources/storage/checkout-cost.js";
+import { buildOutputEstimate } from "./build-outputs/build-output-estimate.js";
 import { reserveCheckoutSpace } from "../../system/resources/storage/checkout-admission.js";
 import { CheckoutSpaceRefused, type HistorySpace } from "../../system/resources/storage/checkout-space.js";
 
@@ -22,6 +23,8 @@ interface CompositionSpaceOptions {
     readonly logger: Logger;
     readonly historyRoot: string;
     readonly historySpace?: () => Promise<HistorySpace>;
+    // What a checkout of the repository at main's dir grows to in build output; build-output-estimate.ts by default.
+    readonly buildOutputs?: (mainDir: string) => Promise<number>;
 }
 
 // Reserve only the checkouts ensure will write. Standing ones need no space reading or tree-size walk.
@@ -32,6 +35,7 @@ export const reserveCompositionSpace = async (
     options: CompositionSpaceOptions,
 ): Promise<() => void> => {
     const { mainDir, worktreeDir, git, logger, head, historyRoot, historySpace } = options;
+    const buildOutputs = options.buildOutputs ?? ((dir: string) => buildOutputEstimate(dir));
     const candidates = [...new Set([...recorded.map(({ repo }) => repo), ...live.map(({ repo }) => repo)])];
     const missing = (
         await Promise.all(
@@ -56,10 +60,12 @@ export const reserveCompositionSpace = async (
                 }
                 // A size that could not be read is left out rather than failing the turn: the guard is for a disk known
                 // to be short, and a checkout of unknown size still meets the floor below.
-                return await checkoutCost(mainDir(repo), sha, git).catch((error: Error) => {
+                const files = await checkoutCost(mainDir(repo), sha, git).catch((error: Error) => {
                     logger.warn({ err: error, repo }, "agents: could not size a checkout before writing it");
                     return undefined;
                 });
+                // What its builds will add: a Rust checkout's `target/` dwarfs its files (build-output-estimate.ts).
+                return files === undefined ? undefined : files + (await buildOutputs(mainDir(repo)));
             }),
         );
         const known = costs.filter((cost) => cost !== undefined);

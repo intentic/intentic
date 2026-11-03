@@ -4,6 +4,7 @@ import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { type TurnChecks, turnCheckReports, turnChecksNote } from "../../agent/run/turn-checks.js";
 import { sdk } from "../../engines/claude-sdk.js";
+import { ShellResultTextSchema } from "../../agent/tools/agent-terminals.js";
 import { sealOutside } from "../../guard/outside-results.js";
 import { consultPolicy, guardFailed, type PolicyCall, type PolicyInput, type PolicyTurn, type PolicyVerdict } from "./policy-gate.js";
 
@@ -27,6 +28,8 @@ export interface GateCall {
     readonly id?: string | undefined;
     // The runtime's session the call belongs to (Codex's thread id), when the hook passes one.
     readonly session?: string | undefined;
+    // What the tool returned, as text (ShellResultTextSchema), on a call that already ran: `post_tool_use` only.
+    readonly result?: string | undefined;
 }
 
 // What the loop adds to the gate once it runs (turn-relay.ts `gateHooks`), each optional.
@@ -175,7 +178,7 @@ export const gateServer = (deps: GateServerDeps): McpSdkServerConfigWithInstance
                         // Only the mark: a door server's result was already sealed at the door, and Codex takes no
                         // rewritten output from a hook, so content from outside sets the turn's taint bit and no more.
                         const hooks = deps.hooks?.();
-                        const ran: GateCall = { tool: tool_name, input: tool_input, id: tool_use_id };
+                        const ran: GateCall = { tool: tool_name, input: tool_input, id: tool_use_id, result: ShellResultTextSchema.parse(tool_response) };
                         const call = { ...ran, input: hooks?.original?.(ran) ?? tool_input };
                         sealOutside(tool_name, call.input, tool_response, deps.mark);
                         const note = await hooks?.afterTool?.(call);

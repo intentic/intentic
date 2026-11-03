@@ -56,6 +56,8 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     "ci-runs": [`ci.runs`],
     desktop: [`system.desktop`],
     devices: [`system.devices`],
+    // The disk watch: the attention row's level and the Storage card's measurement.
+    disk: [`system.diskPressure`, `system.storage`],
     extensions: [`extensions.list`],
     "git/changes": WORKING_REVIEW,
     // A standing yes written by a card or taken back, outside any need's answer: only the Allowed list reads them.

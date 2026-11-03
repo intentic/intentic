@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
@@ -16,6 +16,7 @@ import { isNoTmuxTarget } from "../../terminal/tmux-server.js";
 import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, heavyEnvPrefix, QUEUE_RUN_BIN, queueRunEnabled } from "../../workload/heavy-commands.js";
 import { shellPrefix } from "../../workload/workload-class.js";
+import { gpuShellPrefix } from "../../hosts/gpu/gpu-state.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import {
     type BackgroundJob,
@@ -29,6 +30,7 @@ import {
 } from "./jobs/background-jobs.js";
 import { followRun } from "./jobs/input-wait-follow.js";
 import { writeRunFile } from "./jobs/run-files.js";
+import { opt } from "../../opt.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
@@ -158,9 +160,6 @@ const CallFieldsSchema = z.object({
     timeout: z.number().optional().catch(undefined),
 });
 
-// A Bash call's result as the CLI hands it to PostToolUse: its stdout, or the text itself in an older shape.
-const BashResultSchema = z.union([z.string(), z.object({ stdout: z.string() }).transform((result) => result.stdout)]).catch("");
-
 // The line bin/tmux-run ends an early return with, while the command runs on in its pane.
 const STILL_RUNNING = "--- command still running in tmux window ";
 
@@ -178,7 +177,7 @@ export const overrunNote = (job: BackgroundJob, waiting?: string): string =>
         : `That command is waiting for input: ${waiting} is blocked reading its terminal and nothing has moved since, so it will sit there until something types into it, and nothing in your turn can. It is still running as background job ${job.id}: stop it with the \`stop\` tool (target "${job.id}"; TaskStop does not know this id), then run it so it cannot ask (a flag that answers for it such as --yes or --no-input, its answer piped in, or prompting turned off: npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them the terminal with request_help instead. A \`| tail\` or \`| head\` after it holds back the question itself until the command exits. Output so far: ${jobOutputPath(job)}`;
 
 // A foreground call on its way to the pane, kept until its result shows whether it came back early.
-interface ForegroundCall {
+export interface ForegroundCall {
     readonly dir: string;
     readonly command: string;
     readonly session: string;
@@ -188,23 +187,95 @@ interface ForegroundCall {
     readonly unfollow: () => void;
 }
 
+/**
+ * Follows a foreground call for an input wait from the moment it goes to the pane, so one sitting at a prompt comes back
+ * as soon as that is clear rather than at its soft timeout: the marker it is followed for is what tmux-run returns on.
+ */
+export const followForeground = (call: Omit<ForegroundCall, "unfollow">, owner: string | undefined): ForegroundCall => ({
+    ...call,
+    unfollow: followRun(call.dir, undefined, { owner }),
+});
+
 // Beside the line, how long tmux-run waits on this call before returning early; and the call itself, kept for its result
-// where a job could be filed for it. Followed meanwhile, so a call sitting at a prompt comes back as soon as that is
-// clear rather than at its soft timeout: the marker it is followed for is what tmux-run returns on.
+// where a job could be filed for it, followed meanwhile (followForeground).
 const holdForeground = (
     call: Omit<ForegroundCall, "unfollow"> & { readonly toolUseId: string; readonly timeoutMs: number | undefined; readonly owner: string | undefined },
     foreground: Map<string, ForegroundCall> | undefined,
-): void => {
+): number | undefined => {
+    // The soft clock excludes queue waits. Leave a wall deadline below the SDK ceiling so a queued call can
+    // return a follow handle before the SDK kills it. Explicit short deadlines retain the caller's timeout.
+    const waitThroughQueue = call.timeoutMs === undefined || call.timeoutMs >= BASH_DEFAULT_TIMEOUT_MS;
+    if (waitThroughQueue) {
+        writeRunFile(call.dir, "wall", `${String(BASH_MAX_TIMEOUT_MS / 1000 - SOFT_MARGIN_S)}\n`);
+    }
     const soft = softTimeoutOf(call.timeoutMs);
     if (soft !== undefined) {
         writeRunFile(call.dir, "soft", `${String(soft)}\n`);
     }
     if (foreground !== undefined) {
-        foreground.set(call.toolUseId, { ...call, unfollow: followRun(call.dir, undefined, { owner: call.owner }) });
+        foreground.set(call.toolUseId, followForeground(call, call.owner));
+    }
+    return waitThroughQueue ? BASH_MAX_TIMEOUT_MS : call.timeoutMs;
+};
+
+// The prompt a call came back at, from the line tmux-run printed or, where its output never passed the daemon, the
+// marker it returned on (input-wait.ts writes it beside the capture).
+const waitingOf = (call: ForegroundCall, result: string | undefined): string | undefined => {
+    if (result !== undefined) {
+        return WAITING_FOR_INPUT.exec(result)?.[1];
+    }
+    try {
+        const line = readFileSync(join(call.dir, "input-wait"), "utf8").split("\n")[0]?.trim();
+        return line === "" ? undefined : line;
+    } catch {
+        // allow(silent-catch): no marker is the ordinary case, a call that came back at its soft timeout
+        return undefined;
     }
 };
 
-// A foreground call that came back early becomes a job the agent waits on (fileOverrunCommand). Only calls this turn's
+/**
+ * A foreground call that came back, settled: one that came back early becomes a job the agent waits on
+ * (fileOverrunCommand), with its card row and the note the agent reads; every other one is let go and answers undefined.
+ * `result` is what the call returned, where the caller saw it; undefined reads the run's own dir alone, which tmux-run
+ * removes once the command finished, so a dir with a started command and no status is one still running. Every runtime
+ * whose shell goes through the pane settles its calls here: the Claude loop's hook below, a judged shell's line
+ * (shell-line.ts), OpenCode's shell (opencode-shell.ts).
+ */
+export const settleForeground = (jobs: BackgroundJobSeed, call: ForegroundCall, toolUseId: string, result: string | undefined): string | undefined => {
+    // Filed before the call lets go, so the job takes over what the call's follower already saw.
+    const job = result === undefined || result.includes(STILL_RUNNING) ? fileOverrunCommand(jobs, { ...call, toolUseId }) : undefined;
+    const waiting = job === undefined ? undefined : waitingOf(call, result);
+    call.unfollow();
+    if (job === undefined) {
+        return undefined;
+    }
+    turnRunOf(jobs.conversations, job.conversationId)?.note({
+        role: "notice",
+        text: `Background job: ${job.label}`,
+        backgroundJob: { id: job.id, label: job.label, command: jobCommandLine(call.command), startedAt: job.startedAt },
+    });
+    return overrunNote(job, waiting);
+};
+
+// Every string a runtime's own result object carries, in order.
+const StringLeavesSchema: z.ZodType<string[]> = z.lazy(() =>
+    z.union([
+        z.string().transform((text) => [text]),
+        z.array(StringLeavesSchema).transform((parts) => parts.flat()),
+        z.record(z.string(), StringLeavesSchema).transform((fields) => Object.values(fields).flat()),
+        z.unknown().transform((): string[] => []),
+    ]),
+);
+
+// The text of a shell call's result as any runtime hands it to its after-tool hook: the CLI's own shapes, or every string
+// a runtime's own result object carries, one per line.
+export const ShellResultTextSchema = z.union([
+    z.string(),
+    z.object({ stdout: z.string() }).transform((result) => result.stdout),
+    StringLeavesSchema.transform((parts) => parts.join("\n")),
+]);
+
+// A foreground call that came back early becomes a job the agent waits on (settleForeground). Only calls this turn's
 // PreToolUse sent to a pane are looked at, and each once.
 const overrunHooks = (jobs: BackgroundJobSeed, foreground: Map<string, ForegroundCall>): HookCallbackMatcher => ({
     matcher: "Bash",
@@ -218,19 +289,8 @@ const overrunHooks = (jobs: BackgroundJobSeed, foreground: Map<string, Foregroun
             if (call === undefined) {
                 return {};
             }
-            const result = BashResultSchema.parse(input.tool_response);
-            // Filed before the call lets go, so the job takes over what the call's follower already saw.
-            const job = result.includes(STILL_RUNNING) ? fileOverrunCommand(jobs, { ...call, toolUseId: input.tool_use_id }) : undefined;
-            call.unfollow();
-            if (job === undefined) {
-                return {};
-            }
-            turnRunOf(jobs.conversations, job.conversationId)?.note({
-                role: "notice",
-                text: `Background job: ${job.label}`,
-                backgroundJob: { id: job.id, label: job.label, command: jobCommandLine(call.command), startedAt: job.startedAt },
-            });
-            return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: overrunNote(job, WAITING_FOR_INPUT.exec(result)?.[1]) } };
+            const note = settleForeground(jobs, call, input.tool_use_id, ShellResultTextSchema.parse(input.tool_response));
+            return note === undefined ? {} : { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: note } };
         },
     ],
 });
@@ -385,23 +445,23 @@ export const bashTmuxHooks = (
                         const agentFile = join(dir, "agent");
                         // Through run-files.ts: for a fenced turn this dir is in the turn's own temp dir.
                         writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
-                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}bash ${shellQuote(agentFile)}`;
+                        // gpu-run in front only where the owner gave every agent command the GPU (settings gpu.shells).
+                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}${gpuShellPrefix()}bash ${shellQuote(agentFile)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
                         const inner = `${stamp}${paneHop(isolation)}${run}`;
                         writeRunFile(dir, "line", `${inner}\n`);
                         writeRunFile(dir, "said", command);
                         writeRunFile(dir, "name", windowSlug(tool.description));
-                        if (job === undefined) {
-                            const { description, timeout } = CallFieldsSchema.parse(tool);
-                            holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout, owner }, foreground);
-                        }
+                        const { description, timeout } = CallFieldsSchema.parse(tool);
+                        const foregroundTimeout = job === undefined ? holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout, owner }, foreground) : undefined;
                         const jobFlag = job === undefined ? "" : `-b ${shellQuote(job.dir)} `;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
                                 updatedInput: {
                                     ...(tool as Record<string, unknown>),
+                                    ...opt("timeout", foregroundTimeout),
                                     command: `${TMUX_RUN_BIN} ${envFlags}${jobFlag}-f ${shellQuote(join(dir, "line"))} ${session}`,
                                 },
                             },

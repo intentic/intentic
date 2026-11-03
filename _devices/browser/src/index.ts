@@ -1,5 +1,8 @@
 import { attach, type CdpSession, listTargets, newTab } from "./cdp.js";
+import { ConsoleLog } from "./console.js";
+import { framesScript } from "./frames.js";
 import { ensureBrowser, ownEndpoint } from "./launch.js";
+import { captureScreenshot, evaluateWithin, measureFrames } from "./measure.js";
 import { type PageState, type RawSnapshot, refIndex, toPageState } from "./page.js";
 import { type PageAnswer, type RunInPage, settleAfterAction, settleAfterOpen } from "./settle.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
@@ -8,7 +11,9 @@ import { type Browser, BrowserError } from "./types.js";
 export { browserCandidates, ensureBrowser, ownEndpoint, profileDir } from "./launch.js";
 export { SNAPSHOT_SCRIPT } from "./snapshot.js";
 export { renderPage, refIndex, toPageState, type RawSnapshot, type PageElement, type PageState } from "./page.js";
-export { BrowserError, type Browser } from "./types.js";
+export { BrowserError, BrowserTimeoutError, type Browser, type PageShot } from "./types.js";
+export { CONSOLE_CAP, consoleEntryOf, type ConsoleEntry, type ConsoleLevel, type ConsoleRead } from "./console.js";
+export { frameStats, STALL_MS, type FramesOptions, type FrameStats, type GpuInfo, type RawFrames } from "./frames.js";
 
 // Browser as one object a caller holds; keeps at most one CDP session, re-attached on demand so failures surface
 // at the request, not later as a stray socket error. Actions go through the page (real click/focus+input events),
@@ -54,9 +59,38 @@ const withElement = (ref: string, body: string): string => {
 })()`;
 };
 
+// Focus the element, put the text in, and fire the events a page's own JavaScript listens for.
+const fillScript = (ref: string, text: string, submit: boolean): string => {
+    const literal = JSON.stringify(text);
+    return withElement(
+        ref,
+        `el.focus();
+  if (el.isContentEditable) { el.textContent = ${literal}; }
+  else { el.value = ${literal}; }
+  // The events a page's own JavaScript listens for. Setting .value alone updates the DOM and leaves every
+  // framework's state untouched, which is how a filled form submits empty.
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  ${submit ? "if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }" : ""}`,
+    );
+};
+
+// Key events go through CDP; a page won't believe a synthetic KeyboardEvent it didn't get from the browser.
+const pressCombo = async (live: CdpSession, combo: string): Promise<void> => {
+    const key = combo.split("+").pop() ?? combo;
+    const descriptor = NAMED_KEYS.get(key) ?? { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) };
+    const modifiers = (combo.includes("ctrl") ? 2 : 0) | (combo.includes("shift") ? 8 : 0) | (combo.includes("alt") ? 1 : 0);
+    for (const type of ["keyDown", "keyUp"] as const) {
+        await live.send("Input.dispatchKeyEvent", { type, ...descriptor, windowsVirtualKeyCode: descriptor.keyCode, modifiers });
+    }
+};
+
 export const browser = (): Browser => {
     let session: CdpSession | undefined;
     let targetId: string | undefined;
+    // The console of the tab the session is attached to; a new session (another tab, a reconnect) starts a new one, and
+    // Chrome's replay on Runtime.enable refills it with what that page logged before.
+    let consoleLog = new ConsoleLog();
 
     // This package's own browser's debugging port, found again whenever it is needed without a session: the browser may
     // have been restarted on another port since, and whatever else answers on some port is never driven (launch.ts).
@@ -78,8 +112,12 @@ export const browser = (): Browser => {
             throw new BrowserError(preferred === undefined ? "The browser has no open page." : `There is no tab "${preferred}" any more.`);
         }
         session?.close();
-        session = await attach(target.webSocketDebuggerUrl);
+        const log = new ConsoleLog();
+        session = await attach(target.webSocketDebuggerUrl, (method, params) => log.take(method, params));
+        consoleLog = log;
         targetId = target.id;
+        // allow(silent-catch): without these the console stays empty, which browser_console says; every other action still works
+        await Promise.all([session.send("Runtime.enable"), session.send("Log.enable")]).catch(() => undefined);
         return session;
     };
 
@@ -110,33 +148,10 @@ export const browser = (): Browser => {
         },
 
         fill: async (ref, text, submit) => {
-            const literal = JSON.stringify(text);
-            await evaluate(
-                await connect(targetId),
-                withElement(
-                    ref,
-                    `el.focus();
-  if (el.isContentEditable) { el.textContent = ${literal}; }
-  else { el.value = ${literal}; }
-  // The events a page's own JavaScript listens for. Setting .value alone updates the DOM and leaves every
-  // framework's state untouched, which is how a filled form submits empty.
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-  ${submit === true ? "if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }" : ""}`,
-                ),
-            );
+            await evaluate(await connect(targetId), fillScript(ref, text, submit === true));
         },
 
-        // Key events go through CDP; a page won't believe a synthetic KeyboardEvent it didn't get from the browser.
-        press: async (combo) => {
-            const live = await connect(targetId);
-            const key = combo.split("+").pop() ?? combo;
-            const descriptor = NAMED_KEYS.get(key) ?? { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) };
-            const modifiers = (combo.includes("ctrl") ? 2 : 0) | (combo.includes("shift") ? 8 : 0) | (combo.includes("alt") ? 1 : 0);
-            for (const type of ["keyDown", "keyUp"] as const) {
-                await live.send("Input.dispatchKeyEvent", { type, ...descriptor, windowsVirtualKeyCode: descriptor.keyCode, modifiers });
-            }
-        },
+        press: async (combo) => await pressCombo(await connect(targetId), combo),
 
         text: async () => {
             const body = ((await evaluate<string>(await connect(targetId), "document.body ? document.body.innerText : ''")) ?? "").replace(/\n{3,}/g, "\n\n");
@@ -144,9 +159,21 @@ export const browser = (): Browser => {
             return body.length <= MAX_TEXT ? body : `${body.slice(0, MAX_TEXT)}\n\n(Cut here: the page's text goes on for ${body.length - MAX_TEXT} more characters.)`;
         },
 
-        screenshot: async () => {
-            const shot = await (await connect(targetId)).send<{ data: string }>("Page.captureScreenshot", { format: "png" });
-            return Buffer.from(shot.data, "base64");
+        screenshot: async (selector) => await captureScreenshot(await connect(targetId), selector),
+
+        console: async () => {
+            await connect(targetId);
+            return consoleLog.read();
+        },
+
+        evaluate: async (expression, timeoutMs) => await evaluateWithin(await connect(targetId), expression, timeoutMs),
+
+        frames: async (options) => {
+            const live = await connect(targetId);
+            // A background tab gets no animation frames at all: the one being measured has to be the one in front.
+            // allow(silent-catch): a browser that will not bring it forward is measured as it stands, and the answer says it is hidden
+            await live.send("Page.bringToFront").catch(() => undefined);
+            return await measureFrames(live, framesScript(options), options);
         },
 
         tabs: async () =>

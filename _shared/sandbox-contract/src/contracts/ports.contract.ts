@@ -20,8 +20,9 @@ export const portsContract = {
             summary: "What is listening inside the sandbox",
             description: "Every port something is answering on, and whether each one is reachable from outside.",
         })
-        // The desktop-sync watcher's poll, and the machine's check-in.
-        .meta({ sync: "poll" })
+        // The desktop-sync watcher's poll, and the machine's check-in; and `devices ports`, an agent's answer to whose
+        // server holds which port.
+        .meta({ sync: "poll", agent: true })
         .output(PortsListSchema),
     forward: procedure
         .route({

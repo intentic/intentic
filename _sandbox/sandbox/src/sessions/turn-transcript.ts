@@ -1,10 +1,11 @@
+import { interruptTools } from "@intentic/sandbox-contract/text/transcript-interruption";
 import { randomUUID } from "node:crypto";
 import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
+import { RESTART_LOSSES, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { opt } from "../opt.js";
@@ -232,7 +233,7 @@ const keptRuns = async (services: Pick<Services, "config" | "logger">, conversat
 };
 
 // Message a died-under turn's record ends with, kept beside the write it closes.
-export const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.";
+export const RESTART_INTERRUPTED = `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree. ${RESTART_LOSSES}`;
 
 // Recovers what an interrupted turn wrote from the provider's own session store, the only place it exists once a turn
 // never settles to disk. The opening row is restamped to the turn's start so its clock matches every other row's.
@@ -267,7 +268,10 @@ const interruptedTurnRows = async (
 
 // A card on a turn that died: its waiter went with the daemon, so it is nobody's decision, as a run's own end freezes it
 // (TranscriptFold.finish); left pending, the record would offer an answer that goes nowhere, for ever.
-const frozenCards = (row: TranscriptRow): TranscriptRow => (isAwaitingDecision(row) ? { ...row, ...cancelledRequests(row) } : row);
+const frozenCards = (row: TranscriptRow): TranscriptRow => {
+    interruptTools(row.tools ?? [], undefined);
+    return isAwaitingDecision(row) ? { ...row, ...cancelledRequests(row) } : row;
+};
 
 // Writes a turn the daemon died under, at the boot that still finds its journal entry (turn-resume.ts); prefers the rows
 // the run journalled while it waited on a person (`drawn`), then recovered session rows, over the prompt-alone fallback

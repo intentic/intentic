@@ -75,7 +75,8 @@ describe(`resolvePrompt`, () => {
     const prompt = resolvePrompt(conflicts);
 
     it(`tells the agent to commit first: a rebase refuses to start on the dirty worktree it always has`, () => {
-        expect(prompt).toContain(`git add -A && git commit`);
+        // Never `&&` to the commit: the land has usually committed already, and an empty commit exits 1.
+        expect(prompt).toContain("`git add -A; git diff --cached --quiet || git commit -qm wip`");
         expect(prompt).toContain(`dirty`);
     });
 
