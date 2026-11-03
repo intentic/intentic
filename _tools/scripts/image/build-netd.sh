@@ -5,6 +5,7 @@
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/docker-config.sh"
+. "$(dirname "$0")/../lib/buildkit-retry.sh"
 cd "$(repo_root)"
 
 out="${1:-.image-out/netd}"
@@ -19,7 +20,7 @@ if ! docker buildx version >/dev/null 2>&1; then
     exit 1
 fi
 # `relay` (_shared/relay) is the one tree outside netd it compiles from, passed as a named context.
-docker buildx build --file _sandbox/netd/build.Dockerfile --build-context relay=_shared/relay \
+buildkit_retry docker buildx build --file _sandbox/netd/build.Dockerfile --build-context relay=_shared/relay \
     --output "type=local,dest=$out" _sandbox/netd
 [ -x "$out/intentic-netd" ] || { echo "$out/intentic-netd was not produced" >&2; exit 1; }
 echo "netd built at $out/intentic-netd"
