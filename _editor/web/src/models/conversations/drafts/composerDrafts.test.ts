@@ -2,6 +2,7 @@
 // sandbox from the revision it read, words from another device come back, an edit is never written over unseen, an
 // older sandbox leaves the copy as the only one, and the per-browser set drafts used to live in is taken in once.
 import { resetSandboxScope } from "@intentic/extension-api";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import type { ComposerDraft, DraftWrite } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { waitFor } from "@intentic/testing/bun";
 import { ref } from "vue";
@@ -16,6 +17,10 @@ let refuseAll = false;
 // Set to hold every write until it resolves, as a sandbox slow to answer does.
 let gate: Promise<void> | undefined;
 let reads = 0;
+// The reader's marks on conversations not started yet, and every press the sandbox was asked for.
+const marks = new Map<string, AgentReaction[]>();
+const presses: { id: string; emoji: string; on: boolean }[] = [];
+const ME = { email: `ada@example.com`, at: 1 };
 
 const refusing = (): never => {
     throw new SandboxHttpError(404, `Request failed (404).`);
@@ -24,7 +29,14 @@ const refusing = (): never => {
 const agents = {
     drafts: async () => {
         reads += 1;
-        return refuseAll ? refusing() : { drafts: [...sandbox], revision };
+        return refuseAll ? refusing() : { drafts: [...sandbox], revision, reactions: Object.fromEntries(marks) };
+    },
+    reactDraft: async (press: { id: string; emoji: string; on: boolean }) => {
+        presses.push(press);
+        const others = (marks.get(press.id) ?? []).filter((chip) => chip.emoji !== press.emoji);
+        const reactions = press.on ? [...others, { emoji: press.emoji, by: [ME] }] : others;
+        marks.set(press.id, reactions);
+        return { reactions };
     },
     writeDraft: async (write: DraftWrite) => {
         if (refuseAll) {
@@ -78,7 +90,8 @@ Object.defineProperty(globalThis, `localStorage`, {
 const { closedDraftsKey, composerDraftsKey } = await import("../../../app/storage/browserStorage");
 const { useSandbox } = await import("../../../client/sandbox/useSandbox");
 const { receiveChatNote } = await import("../run/chatChannel");
-const { draftOf, draftsMoved, heldDrafts, ORPHANED_AFTER_MS, sandboxKeepsDrafts, sentFrom, writeDraft } = await import("./composerDrafts");
+const { discardDraft, draftOf, draftReactions, draftsMoved, heldDrafts, markDraft, ORPHANED_AFTER_MS, sandboxKeepsDrafts, sentFrom, writeDraft } =
+    await import("./composerDrafts");
 
 const words = (text: string) => ({ text, attachments: [] });
 
@@ -89,6 +102,8 @@ beforeEach(() => {
     refuseAll = false;
     gate = undefined;
     reads = 0;
+    marks.clear();
+    presses.length = 0;
     useSandbox().activeSandboxId.value = `sb1`;
     stored.clear();
     resetSandboxScope();
@@ -291,4 +306,24 @@ test(`takes the words chats were closed with before drafts were the sandbox's in
     // Read once: a later scope finds them in the copy itself, not imported a second time.
     resetSandboxScope();
     expect(heldDrafts.value.map((draft) => draft.conversationId)).toEqual([`old-1`]);
+});
+
+// Marks on a conversation not started yet ride beside the words, never in them: a composer emptied by hand keeps them,
+// and only a discard of the conversation takes them back.
+test(`holds the marks the sandbox lists and a press answers, keeps them through emptied words, and takes them back on a discard`, async () => {
+    marks.set(`c1`, [{ emoji: `🎉`, by: [ME] }]);
+    draftsMoved();
+    await waitFor(() => expect(draftReactions.value.get(`c1`)?.map((chip) => chip.emoji)).toEqual([`🎉`]));
+
+    expect((await markDraft(`c1`, `👍`, true)).map((chip) => chip.emoji)).toEqual([`🎉`, `👍`]);
+    expect(draftReactions.value.get(`c1`)?.map((chip) => chip.emoji)).toEqual([`🎉`, `👍`]);
+
+    writeDraft(`c1`, words(`fix the login`));
+    writeDraft(`c1`, words(``));
+    expect(draftReactions.value.get(`c1`)).toHaveLength(2);
+
+    discardDraft(`c1`);
+    expect(draftReactions.value.has(`c1`)).toBe(false);
+    await waitFor(() => expect(presses.filter((press) => !press.on).map((press) => press.emoji)).toEqual([`🎉`, `👍`]));
+    expect(marks.get(`c1`)).toEqual([]);
 });

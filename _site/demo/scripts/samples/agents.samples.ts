@@ -21,6 +21,8 @@ export const agentsSamples: GroupSamples<`agents`> = ({ fleet }) => ({
     writeDraft: { id: fleet.AWAITING_AGENT_ID, text: `and one more thing` },
     clearDraft: { id: fleet.AWAITING_AGENT_ID },
     react: { id: fleet.AWAITING_AGENT_ID, emoji: `👍`, on: true },
+    // A conversation nobody has started: the board's cards are `react`'s.
+    reactDraft: { id: `smoke-unstarted-draft`, emoji: `👍`, on: true },
     assign: { id: fleet.AWAITING_AGENT_ID, to: `grace@acme.dev` },
     autoLand: { id: fleet.AWAITING_AGENT_ID, autoLand: true },
     breakPolicy: { id: fleet.AWAITING_AGENT_ID, ending: `limit`, policy: null },

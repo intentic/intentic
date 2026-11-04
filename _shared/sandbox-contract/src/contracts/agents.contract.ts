@@ -10,7 +10,7 @@ import { AgentCloneSchema } from "../schemas/git/clone.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
-import { ComposerDraftsSchema, DraftClearSchema, DraftWriteSchema, DraftWrittenSchema } from "../schemas/composer-drafts.js";
+import { ComposerDraftsSchema, DraftClearSchema, DraftReactionsSchema, DraftWriteSchema, DraftWrittenSchema } from "../schemas/composer-drafts.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
@@ -274,6 +274,20 @@ export const agentsContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(DraftClearSchema)
         .output(DraftWrittenSchema),
+    // A conversation no turn has started has no entry for `react` to mark, so its writer's marks wait beside their draft
+    // (composer-drafts.ts) and move onto the card with the first turn. Floored as the draft is: a mark here is on your
+    // own unsent conversation, which only someone who may start one ever holds.
+    reactDraft: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/draft/react",
+            summary: "Mark a conversation you have not started yet",
+            description:
+                "Puts your mark on a conversation no turn has started yet, or takes it back. Only you see it until the conversation's first turn, which carries your marks onto its card for everyone sharing the sandbox. Writing or clearing the draft's words leaves the marks alone. Refused for a conversation that has started: mark that one with `react`.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(AgentReactSchema)
+        .output(DraftReactionsSchema),
     // A finer-grained ask (watch this, not that) goes through the chat, not a per-watch id here.
     stopWatching: procedure
         .route({

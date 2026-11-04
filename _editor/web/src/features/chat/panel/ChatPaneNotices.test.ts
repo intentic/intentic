@@ -238,7 +238,7 @@ it(`turns into the way out once today's allowance is gone, saying when it comes 
     expect(element.textContent).toContain(`Switching models keeps this chat's work`);
     expect(named(element, `Continue with another model`)?.tagName).toBe(`BUTTON`);
     expect(named(element, `Connect a model`)).toBeUndefined();
-    expect(named(element, `Review changes`)).toBeUndefined();
+    expect(named(element, `View changes`)).toBeUndefined();
     expect(element.textContent).not.toContain(`Google`);
 });
 
@@ -250,8 +250,8 @@ it(`offers the changes the run already made once the trial stops it`, () => {
 
     const element = mount();
 
-    const review = named(element, `Review changes`);
-    expect(review?.textContent?.trim()).toBe(`Review changes (2 files)`);
+    const review = named(element, `View changes`);
+    expect(review?.textContent?.trim()).toBe(`View changes (2 files)`);
     expect(review?.getAttribute(`href`)).toBe(`/agents/agent-1`);
     expect(review?.parentElement).toBe(named(element, `Continue with another model`)?.parentElement);
 });

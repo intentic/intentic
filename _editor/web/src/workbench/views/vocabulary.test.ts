@@ -27,7 +27,7 @@ describe(`the vocabulary table`, () => {
         // The card's standing around the same press, which the desktop app and a browser tab once named two ways.
         expect(vocabularyFor(`developer`).readyToLand).toBe(`Ready to land`);
         expect(vocabularyFor(`maker`).readyToLand).toBe(`Ready to accept`);
-        expect(vocabularyFor(`developer`).reviewAndLand).toBe(`Review & land`);
+        expect(vocabularyFor(`developer`).reviewAndLand).toBe(`View & land`);
         expect(vocabularyFor(`maker`).reviewAndLand).toBe(`Look & accept`);
         expect(vocabularyFor(`maker`).landed).toBe(`Accepted`);
         expect(vocabularyFor(`maker`).couldntLand).toBe(`Couldn't accept`);

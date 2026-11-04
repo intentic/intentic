@@ -71,7 +71,7 @@ const closeRows = (agent: FleetAgent, act: MenuActions): MenuItem[] =>
 // The card's own presses, beside the name they act on.
 const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
     ...(rename === undefined ? [] : [{ label: t(`ui.action.rename`), icon: `pencil`, command: () => rename() }]),
-    ...(react === undefined ? [] : [{ label: t(`agents.agentReactions.addReaction`), icon: `plus`, command: () => react() }]),
+    ...(react === undefined ? [] : [{ label: t(`agents.agentReactions.addReaction`), icon: `face-smile`, command: () => react() }]),
 ];
 
 // The card's drill-in. A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the
@@ -81,7 +81,7 @@ const drillRows = (agent: FleetAgent, review: string | undefined, facts: MenuFac
     if (review === undefined) {
         return [];
     }
-    const diffRow = { label: t(`agents.agentStatus.reviewChanges`), icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) };
+    const diffRow = { label: t(`agents.agentStatus.viewChanges`), icon: `diff`, url: facts.href(), command: () => act.reviewAgent(agent) };
     if (drillTarget(agent) === `chat` && facts.here) {
         return [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }, ...(reviewBesideDrill(agent) ? [diffRow] : [])];
     }

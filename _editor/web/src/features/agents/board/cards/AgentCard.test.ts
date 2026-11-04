@@ -24,6 +24,11 @@ jest.mock("../../../../models/conversations/panel/useChat-strip", () => ({
     previewOf: (id: string) => (id === `a4` ? `rename the landing page hero` : undefined),
 }));
 
+// A reader the daemon takes every press from, so the card offers what an owner sees (a code review of its work among them).
+jest.mock("../../../../client/sandbox/access/useAccess", () => ({
+    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+}));
+
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
@@ -235,7 +240,7 @@ it(`offers Land now without a separate review button for unread work`, () => {
     const changes = jest.fn();
     const landed = jest.fn();
     const el = mount(written(), undefined, { onChanges: changes, onLand: landed });
-    expect(buttonNamed(el, `Review changes`)).toBeUndefined();
+    expect(buttonNamed(el, `View changes`)).toBeUndefined();
     expect(landButton(el)?.textContent?.trim()).toBe(`Land now`);
     landButton(el)!.click();
     expect(changes).toHaveBeenCalledTimes(0);
@@ -246,7 +251,7 @@ it(`offers the same land press once every file is marked reviewed`, () => {
     setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], true);
     try {
         const el = mount(written());
-        expect(buttonNamed(el, `Review changes`)).toBeUndefined();
+        expect(buttonNamed(el, `View changes`)).toBeUndefined();
         expect(landButton(el)?.textContent?.trim()).toBe(`Land now`);
     } finally {
         setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], false);
@@ -254,14 +259,14 @@ it(`offers the same land press once every file is marked reviewed`, () => {
 });
 
 it(`offers no review for a Ready card with nothing counted to read`, () => {
-    expect(buttonNamed(mount(ready()), `Review changes`)).toBeUndefined();
+    expect(buttonNamed(mount(ready()), `View changes`)).toBeUndefined();
 });
 
 it(`opens the diff from the change count, a named press that does not also open the chat`, () => {
     const changes = jest.fn();
     const opened = jest.fn();
     const el = mount(written(), undefined, { onChanges: changes, onOpen: opened });
-    const count = buttonLabelled(el, `Review changes: 20 lines added, 2 removed`)!;
+    const count = buttonLabelled(el, `View changes: 20 lines added, 2 removed`)!;
     expect(count.textContent?.replace(/\s+/g, ` `).trim()).toBe(`+20 −2`);
     count.click();
     expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
@@ -272,7 +277,7 @@ it(`opens the diff from the change count, a named press that does not also open 
 it(`keeps what a card cost off its face, and its change count always`, async () => {
     const spent: FleetAgent = { ...written(), costUsd: 3.26 };
     const plain = mount(spent);
-    expect([plain.textContent?.includes(`3.26`), buttonLabelled(plain, `Review changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
+    expect([plain.textContent?.includes(`3.26`), buttonLabelled(plain, `View changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
     showLiveMetrics.value = true;
     try {
         await nextTick();
@@ -284,7 +289,7 @@ it(`keeps what a card cost off its face, and its change count always`, async () 
 
 it(`draws no separate review press beside a stranded card's chat-bound drill-in`, () => {
     const stranded: FleetAgent = { ...written(), status: `error`, failureCode: `rate_limit` };
-    expect(buttonNamed(mount(stranded), `Review changes`)).toBeUndefined();
+    expect(buttonNamed(mount(stranded), `View changes`)).toBeUndefined();
 });
 
 // The card's own face, which is also the press that opens the chat.
@@ -347,15 +352,36 @@ it(`withholds the reaction press from a card with no entry to attach one to`, ()
     expect(buttonLabelled(mount(ready(`landed`)), `Add reaction`)).not.toBeUndefined();
 });
 
-// It rides in the header's affordance row, where the seats are reserved and the title takes what is left, rather than
-// among the marks themselves: revealing a control in the stats row moved the line below it for good.
-it(`reveals that press with the card's other actions, by fading rather than by appearing`, () => {
+// A draft has no roster entry either, but its marks are kept with the draft (agents.reactDraft) until its first turn.
+it(`offers a draft the reaction press, and draws the marks its draft holds`, () => {
+    const draft: FleetAgent = { ...refused(), status: `draft`, reactions: [{ emoji: `🔥`, by: [{ email: `ada@acme.dev`, at: 1 }] }] };
+    const card = mount(draft);
+    expect(buttonLabelled(card, `Add reaction`)).not.toBeUndefined();
+    expect(card.textContent).toContain(`🔥`);
+});
+
+// It rides in the hover bar floated over the card's top edge (CardHoverBar), with the card's other presses: the bar takes
+// no width at rest, so the title keeps the whole row, and revealing it resizes nothing.
+it(`reveals that press in the floating bar, by fading rather than by appearing`, () => {
     const press = buttonLabelled(mount(ready(`landed`)), `Add reaction`)!;
-    expect(press.className).toContain(`opacity-0`);
-    expect(press.className).toContain(`group-hover:opacity-100`);
-    // Tailwind's whole `transition`, which fades the opacity and the hover fill alike.
-    expect(press.className.split(/\s+/)).toContain(`transition`);
-    expect(press.className).not.toContain(`hidden`);
+    const bar = press.closest(`[data-card-bar]`)!;
+    expect(bar.className).toContain(`opacity-0`);
+    expect(bar.className).toContain(`group-hover:opacity-100`);
+    expect(bar.className).toContain(`absolute`);
+    expect(bar.className).not.toContain(`hidden`);
+});
+
+// The bar's quick reactions sit beside the picker, so the common ones need no panel.
+it(`offers the quick reactions beside the picker`, () => {
+    const card = mount(ready(`landed`));
+    expect([`👍`, `👎`, `👀`].map((emoji) => buttonLabelled(card, `React with ${emoji}`) !== undefined)).toEqual([true, true, true]);
+});
+
+// The diff is "View changes" and the fresh session is "Code review": never two presses both called review.
+it(`names a card's diff and its code review apart`, () => {
+    const card = mount({ ...ready(`landed`), diff: { files: 2, insertions: 20, deletions: 2 } });
+    expect(buttonLabelled(card, `View changes`)).not.toBeUndefined();
+    expect(buttonLabelled(card, `Code review`)).not.toBeUndefined();
 });
 
 // A `resuming` agent (its turn restarting after e.g. a credential rotation) must render as work in flight, not as

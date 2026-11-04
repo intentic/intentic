@@ -16,6 +16,10 @@ export const ACTION_GLYPHS = {
     "chevron-up": { outline: `m6 15 6-6 6 6` },
     "collapse-all": { outline: `M4 12h16 M8 3l4 4 4-4 M8 21l4-4 4 4` },
     copy: { outline: `M8 8h11l2 2v11H8Z M4 16H2V3h12v2` },
+    // A page with a line added and a line taken away: what a change set is, without borrowing git's own fork mark.
+    diff: { outline: `M5 3h10l4 4v14H5Z M12 7v6 M9 10h6 M9 17h6` },
+    // The press that leaves a reaction: a face rather than a plus, since a plus beside a card reads as "new card".
+    "face-smile": { outline: `M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M8 14c1 1.5 2.3 2.3 4 2.3s3-.8 4-2.3`, solid: `M8 8h2v2H8Z M14 8h2v2h-2Z` },
     download: { outline: `M12 3v12 M7 10l5 5 5-5 M3 17v4h18v-4` },
     upload: { outline: `M12 16V4 M7 9l5-5 5 5 M3 17v4h18v-4` },
     "external-link": { outline: `M13 3h8v8 M21 3 10 14 M8 5H3v16h16v-5` },

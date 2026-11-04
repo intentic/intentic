@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ATTACHMENT_LIMIT, ConversationIdSchema, ForkOfSchema, FreshOfSchema, QueuedServingSchema } from "./agent.js";
+import { AgentReactionSchema } from "./agent-people.js";
 
 // A PERSON'S UNSENT WORDS FOR ONE CONVERSATION, held by the sandbox. Until 2026-10-20 a composer's words lived only in the
 // browser: in each window's tab snapshot, moved into a per-browser "closed drafts" set when the tab closed and back out
@@ -47,6 +48,12 @@ export const ComposerDraftsSchema = z.object({
         .describe(
             "The newest revision handed out when this list was read. A draft you hold at a revision past it was written after the read, so its absence here says nothing about it.",
         ),
+    reactions: z
+        .record(z.string(), z.array(AgentReactionSchema))
+        .optional()
+        .describe(
+            "Your marks on conversations no turn has started yet (`agents.reactDraft`), by conversation, each mark wearing only you. Kept apart from the words: a conversation may carry marks with no draft at all. Absent from a sandbox that keeps none.",
+        ),
 });
 export type ComposerDrafts = z.infer<typeof ComposerDraftsSchema>;
 
@@ -84,3 +91,13 @@ export const DraftClearSchema = z.object({
         .describe("Clear it only while it is still this revision, so words written since in another window survive. Leave it out to clear whatever is there."),
 });
 export type DraftClear = z.infer<typeof DraftClearSchema>;
+
+// A MARK ON A CONVERSATION NOBODY HAS STARTED YET. The registry keeps a conversation's reactions (`agents.react`), and has
+// no entry until the first turn, so until then the sandbox keeps the person's marks beside their draft: private as the
+// draft is, never touched by a write or a clear of the words, and moved onto the conversation's own card by its first turn.
+export const DraftReactionsSchema = z.object({
+    reactions: z
+        .array(AgentReactionSchema)
+        .describe("Your marks on the conversation as they now stand, one entry per emoji in the order you first used them, each wearing only you. Empty once you have taken back the last one."),
+});
+export type DraftReactions = z.infer<typeof DraftReactionsSchema>;

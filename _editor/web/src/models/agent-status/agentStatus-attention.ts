@@ -208,7 +208,8 @@ const endingReasons = (): Partial<Record<AgentStatus | ClientAgentStatus, string
 
 // The card's drill-in label (desktop): names the destination rather than a generic "Open". A draft has no
 // worktree yet, so no review detail. Order: a pending park first, then a special ending, then the diff, falling
-// back to "Review".
+// back to "Details". Nothing that opens the diff says "review": that word belongs to the fresh Code review session
+// (freshSession.ts), and the two sat side by side in one menu reading as the same press (2026-11-04).
 export const reviewAction = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): string | undefined => {
     if (unregistered(agent.status) || agent.branch === undefined) {
         return undefined;
@@ -218,7 +219,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (park !== undefined) {
         return attentionWords()[park].verb;
     }
-    if (retryLand(agent)) { return t(`agents.agentStatus.reviewChanges`); }
+    if (retryLand(agent)) { return t(`agents.agentStatus.viewChanges`); }
     // A spent allowance is not an error to view: there's nothing to diagnose in the transcript, and the destination is
     // the conversation itself. Checked before the `error` branch below, which it would otherwise fall into.
     // Neither is a held message: the press that sends it is in the conversation. Nor a bare park on a browser or a
@@ -234,7 +235,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     return (
         endingActions()[agent.status] ??
-        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`agents.words.review`))
+        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.viewChanges`) : t(`agents.words.details`))
     );
 };
 
@@ -256,7 +257,7 @@ export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
 };
 
 // Whether a card whose drill-in leads to the chat (a spent allowance, an ask, a classified failure) still has written
-// work worth reading on its own: then it offers "Review changes" beside that drill-in, so partial work can be inspected
+// work worth reading on its own: then it offers "View changes" beside that drill-in, so partial work can be inspected
 // without first answering or resuming. A draft has no branch to read, and a card that drills into the review already
 // leads there.
 export const reviewBesideDrill = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): boolean =>

@@ -241,6 +241,10 @@ flowchart LR
   and it is written once the sandbox is back. (2026-10-20) Before, the words lived in each window's tab snapshot, moved
   into a per-browser "closed drafts" set on close and back out on reopen, and travelled between windows as previews:
   each move could drop or double them, and no other device ever saw them. The old set is read into the copy once.
+  A draft card takes reactions too (`reactToDraft` in `models/fleet/agentActions.ts`, `agents.reactDraft`): the
+  sandbox keeps the reader's marks beside the draft, not in it, so emptying the composer keeps them, and the first turn
+  moves them onto the card. The copy holds them as listed (`draftReactions`), both draft card builders wear them as
+  `reactions`, and a discard takes each back, since the sandbox cannot tell a discard from an emptied composer.
 - **Work a person starts outlives the view that started it.** Adding a runner on a laptop, cloning a repo, landing an
   agent or moving a hosted plan keeps running on the server whatever the reader opens next. So its state (running or
   not, the lines it streamed, the answer, the refusal) is kept in the operations ledger

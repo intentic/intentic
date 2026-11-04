@@ -35,6 +35,10 @@ const reached = (): string[] => Object.entries(daemon).flatMap(([name, procedure
 // The unsent-words report the fleet sends by itself whenever a composer's words come or go. Always answered, and kept
 // out of `daemon` so a reset never leaves it answering nothing and `reached()` still counts only what a case asked for.
 const reportUnsent = jest.fn().mockResolvedValue(undefined);
+// A mark on a card no turn has started, answered as the sandbox would: the caller's one mark, the emoji pressed.
+const reactDraft = jest.fn(async ({ emoji, on }: { id: string; emoji: string; on: boolean }) => ({
+    reactions: on ? [{ emoji, by: [{ email: `ada@example.com`, at: 1 }] }] : [],
+}));
 jest.mock("../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: {
@@ -44,6 +48,7 @@ jest.mock("../../client/sandbox/sandboxRpc", () => ({
             archive: daemon.archive,
             unarchive: daemon.unarchive,
             unsent: reportUnsent,
+            reactDraft,
         },
         automations: { approve: daemon.approve, reject: daemon.reject },
     }),
@@ -55,7 +60,7 @@ import { AgentsListSchema } from "@intentic/sandbox-contract/schemas/agents-list
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { nextTick, ref } from "vue";
-import { discardDraft, heldDrafts, writeDraft } from "../conversations/drafts/composerDrafts";
+import { discardDraft, heldDrafts, markDraft, writeDraft } from "../conversations/drafts/composerDrafts";
 import type { ChatNote } from "../conversations/run/chatChannel";
 import { previewOf } from "../conversations/panel/useChat-strip";
 import { Conversation } from "../conversations/session/conversation";
@@ -988,6 +993,21 @@ describe("draft cards", () => {
                 updatedAt: 0,
             },
         ]);
+    });
+
+    // A card no turn has started wears the reader's marks the same way a registered card wears the roster's, whether an
+    // open chat draws it (an empty new chat has no draft at all) or only its draft does.
+    it("puts the reader's marks on a draft's card, open or closed", async () => {
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
+        writeDraft(`set-aside`, { text: `fix the login redirect`, attachments: [] });
+
+        await markDraft(`fresh`, `👍`, true);
+        await markDraft(`set-aside`, `🎉`, true);
+
+        const reactions = (id: string) => useAgents().lanes.value.active.find((card) => card.id === id)?.reactions?.map((chip) => chip.emoji);
+        expect([reactions(`fresh`), reactions(`set-aside`)]).toEqual([[`👍`], [`🎉`]]);
+        await markDraft(`fresh`, `👍`, false);
+        expect(useAgents().lanes.value.active.find((card) => card.id === `fresh`)).not.toHaveProperty(`reactions`);
     });
 
     // It gives way to the tab the instant one exists; drawing both would show the same message twice.

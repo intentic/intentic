@@ -1,7 +1,7 @@
 import { useAudience } from "../../app/useAudience";
 import type { AgentChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentReaction, AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import { type AgentRunChoice, useDevice } from "@intentic/ui";
 import type { Conversation } from "../conversations/session/conversation";
 import type { ChatAttachment } from "../conversations/transcript/transcript";
@@ -9,6 +9,7 @@ import { errands } from "../conversations/run/errands";
 import { summonChat, summonTurn } from "../conversations/run/summon";
 import { spentUntilOf } from "../conversations/accounts/runServing";
 import { reopenBooking, type TurnBooking } from "../conversations/drafts/sendLater";
+import { markDraft } from "../conversations/drafts/composerDrafts";
 import { useChat } from "../conversations/run/useChat";
 import { transcriptShown } from "../conversations/run/useChat-sessions";
 import { composingConversation, draftConversation } from "../conversations/panel/useChat-reveal";
@@ -217,6 +218,12 @@ export const assignAgent = (id: string, to: string, at: AgentReach = undefined):
 // says who. `on` states which, rather than flipping what's stored, so a double press lands where one did.
 export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<AgentSummary> =>
     sandboxRpc.agents.react({ id, emoji, on }, { context: { at } });
+
+// The same press on a card no turn has started yet (a draft, an open new chat), which has no registry entry for `react`
+// to mark: the sandbox keeps the caller's marks beside their draft until the first turn carries them onto the card.
+// Answered with the marks it now carries; rejects, saying why, against a sandbox too old to keep them.
+export const reactToDraft = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<readonly AgentReaction[]> =>
+    markDraft(id, emoji, on, at);
 
 // Hands a land conflict back to the agent to resolve in its own worktree, rather than making the user merge by hand or
 // discarding the work. An ordinary turn: it lands in the transcript, a running turn takes it as steering, and Stop

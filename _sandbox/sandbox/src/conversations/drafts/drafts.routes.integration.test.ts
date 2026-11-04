@@ -7,10 +7,11 @@ import { join } from "node:path";
 import { waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
-import { clientFor, proven, rejectForbidden } from "../../harness/route-client.testing.js";
+import { clientFor, errorCode, proven, rejectForbidden } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { testConfig } from "../../env.config.testing.js";
+import { MAX_REACTION_KINDS } from "../registry/agents-registry.js";
 
 // Composer drafts over the daemon's own HTTP surface, as two members' browsers write them: each person reads back only
 // their own, sending clears exactly the revision the words were sent from, and a card says it holds unsent words for as
@@ -18,7 +19,7 @@ import { testConfig } from "../../env.config.testing.js";
 
 interface Board {
     readonly client: ContractRouterClient<typeof sandboxContract>;
-    readonly actAs: (email: string, role?: MemberRole) => void;
+    readonly actAs: (email: string, role?: MemberRole, name?: string) => void;
 }
 
 const board = (): Board => {
@@ -32,7 +33,15 @@ const board = (): Board => {
             members: { list: async () => [{ email: `bob@example.com`, role: `collaborator` }], add: async () => {}, remove: async () => {} },
         }),
     );
-    return { client: clientFor(app, { bearer: `member` }), actAs: (email, role = `owner`) => void (caller = proven(email, role)) };
+    return {
+        client: clientFor(app, { bearer: `member` }),
+        actAs: (email, role = `owner`, name) => {
+            caller = proven(email, role);
+            if (name !== undefined) {
+                caller = { ...caller, name };
+            }
+        },
+    };
 };
 
 test("a member reads back only their own drafts, never a colleague's words for the same conversation", async () => {
@@ -76,4 +85,38 @@ test("a conversation's card holds unsent words while a draft for it stands, and 
     expect((await client.agents.unsent({ id: "conv-1", at: null })).unsentAt).toBe(4242);
     await client.agents.clearDraft({ id: "conv-1", revision: draft?.revision });
     await waitFor(async () => expect((await client.agents.get({ id: "conv-1" })).unsentAt).toBeUndefined());
+});
+
+test("a mark on a conversation not started yet is its marker's alone, outlives the words, and moves onto the card with the first turn", async () => {
+    const { client, actAs } = board();
+    actAs(`ada@example.com`, `owner`, `Ada Lovelace`);
+    const ada = { email: "ada@example.com", name: "Ada Lovelace", at: expect.any(Number) };
+    expect(await client.agents.reactDraft({ id: "conv-2", emoji: "👍", on: true })).toEqual({ reactions: [{ emoji: "👍", by: [ada] }] });
+
+    // The words come and go (empty words clear the draft) and the mark stays where it was.
+    const words = (await client.agents.writeDraft({ id: "conv-2", text: "fix the login" })).draft;
+    await client.agents.writeDraft({ id: "conv-2", text: "", base: words?.revision });
+    expect((await client.agents.drafts()).reactions).toEqual({ "conv-2": [{ emoji: "👍", by: [ada] }] });
+
+    // Private as the draft is: a colleague reads none of it.
+    actAs(`bob@example.com`, `collaborator`);
+    expect((await client.agents.drafts()).reactions).toEqual({});
+
+    actAs(`ada@example.com`, `owner`, `Ada Lovelace`);
+    await runAgentTurn(client, { prompt: "fix the login", conversationId: "conv-2" });
+    expect((await client.agents.get({ id: "conv-2" })).reactions).toEqual([{ emoji: "👍", by: [ada] }]);
+    expect((await client.agents.drafts()).reactions).toEqual({});
+    // Started now, so its marks are the card's: this route refuses it.
+    expect(await errorCode(client.agents.reactDraft({ id: "conv-2", emoji: "🎉", on: true }))).toBe("CONFLICT");
+});
+
+test("a draft's marks stop at the kinds cap, and taking one back makes room", async () => {
+    const { client } = board();
+    const filled = Array.from({ length: MAX_REACTION_KINDS }, (_, index) => String.fromCodePoint(0x1_f600 + index));
+    for (const emoji of filled) {
+        await client.agents.reactDraft({ id: "conv-3", emoji, on: true });
+    }
+    expect(await errorCode(client.agents.reactDraft({ id: "conv-3", emoji: "🚀", on: true }))).toBe("BAD_REQUEST");
+    expect((await client.agents.reactDraft({ id: "conv-3", emoji: filled[0]!, on: false })).reactions).toHaveLength(MAX_REACTION_KINDS - 1);
+    expect((await client.agents.reactDraft({ id: "conv-3", emoji: "🚀", on: true })).reactions).toHaveLength(MAX_REACTION_KINDS);
 });

@@ -1,6 +1,7 @@
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { ForkOfSchema, FreshOfSchema, QueuedServingSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { RepoBranchSchema } from "@intentic/sandbox-contract/schemas/shared";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import type { DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { computed, type ComputedRef } from "vue";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { closedDraftsKey, composerDraftsKey, removeStoredValue, storedJson, storedValue, storeJson } from "../../../app/storage/browserStorage";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
-import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { staleDaemonReason, supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { onChatNote, postChatNote } from "../run/chatChannel";
 import { readStoredTabs, type StoredTab } from "../tabs/tabSnapshot";
@@ -215,6 +216,58 @@ export const draftPreviews: ComputedRef<DraftPreviews> = computed(() =>
     ),
 );
 
+/* ---- the reader's marks on conversations not started yet ---- */
+
+// As the sandbox last listed them (`agents.drafts` `reactions`) or answered a press, by conversation. Apart from the
+// words on purpose: words clear with every emptied composer, and an open new chat has none, yet its marks stay until the
+// first turn carries them onto the card. Not kept in storage: every hello and every `drafts` push reads them back.
+const marks = sandboxShallowRef<ReadonlyMap<string, readonly AgentReaction[]>>(() => new Map());
+
+const heardMarks = (conversationId: string, reactions: readonly AgentReaction[]): void => {
+    const next = new Map(marks.value);
+    if (reactions.length === 0) {
+        next.delete(conversationId);
+    } else {
+        next.set(conversationId, reactions);
+    }
+    marks.value = next;
+};
+
+/** The reader's marks on each conversation no turn has started yet, as a draft card wears them (`reactions`). */
+export const draftReactions: ComputedRef<ReadonlyMap<string, readonly AgentReaction[]>> = computed(() => marks.value);
+
+/**
+ * Puts the reader's mark on a conversation no turn has started yet, or takes it back (`agents.reactDraft`), answered with
+ * the marks it now carries. `at` names another sandbox's conversation; only the one in view's marks are held here, so an
+ * answer from another is the caller's to show.
+ */
+export const markDraft = async (conversationId: string, emoji: string, on: boolean, at?: string): Promise<readonly AgentReaction[]> => {
+    if (!supportsRoute(`agents.reactDraft`)) {
+        throw new Error(staleDaemonReason(`agents.reactDraft`));
+    }
+    const sandbox = held.value.sandbox;
+    const { reactions } = await sandboxRpc.agents.reactDraft({ id: conversationId, emoji, on }, { context: { at } });
+    if (at === undefined && held.value.sandbox === sandbox) {
+        heardMarks(conversationId, reactions);
+    }
+    return reactions;
+};
+
+// A discard takes the marks with the words: the sandbox cannot tell a discard from a composer emptied by hand (both clear
+// the words, and the empty one must leave the marks alone), so the press says it, one `on: false` per mark. Every window
+// applies the same discard; the ones after the first find nothing left to take back.
+const takeBackMarks = (conversationId: string): void => {
+    const worn = marks.value.get(conversationId) ?? [];
+    if (worn.length === 0) {
+        return;
+    }
+    heardMarks(conversationId, []);
+    for (const { emoji } of worn) {
+        // allow(silent-catch): a take-back that does not land leaves a mark on a conversation that is gone; the next read shows it again.
+        void sandboxRpc.agents.reactDraft({ id: conversationId, emoji, on: false }).catch(() => undefined);
+    }
+};
+
 /** The revision of the sandbox's draft a message sent now goes out from, which the sandbox clears as it takes it. */
 export const sentFrom = (conversationId: string): number | undefined => held.value.drafts.get(conversationId)?.synced?.revision;
 
@@ -338,6 +391,11 @@ const pull = async (): Promise<void> => {
         if (held.value.sandbox !== sandbox) {
             return;
         }
+        // A sandbox older than marks on drafts lists none, and holds none to list.
+        const listed = new Map(Object.entries(list.reactions ?? {}));
+        if (JSON.stringify([...listed]) !== JSON.stringify([...marks.value])) {
+            marks.value = listed;
+        }
         const next = pulled(held.value.drafts, list, Date.now());
         const changes = new Map<string, HeldDraft | undefined>();
         for (const [id, draft] of next) {
@@ -413,9 +471,10 @@ export const writeDraft = (conversationId: string, words: DraftWords, options: {
     writeSoon(conversationId);
 };
 
-/** Drops a conversation's unsent message everywhere, as a close of the conversation itself does. */
+/** Drops a conversation's unsent message everywhere, as a close of the conversation itself does, and the reader's marks on it. */
 export const discardDraft = (conversationId: string): void => {
     writeDraft(conversationId, { text: ``, attachments: [] }, { box: held.value.drafts.get(conversationId)?.box });
+    takeBackMarks(conversationId);
 };
 
 // Guards against a hot update re-running this module into an orphaned instance.

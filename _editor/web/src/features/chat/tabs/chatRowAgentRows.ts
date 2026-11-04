@@ -27,7 +27,7 @@ import { navigateInApp } from "../../../workbench/window/mainWindow";
 // carry it (landFromMenu). The menu itself, with the chat's own rows around these, is useChatRowActions'.
 
 export interface ChatRowAgentRows {
-    // Review changes and Land now, leading the menu.
+    // View changes and Land now, leading the menu.
     readonly review: MenuItem[];
     readonly fresh: MenuItem[];
     // Copy session name, beside the chat's own Rename and Share.
@@ -53,7 +53,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
         archive: (ids) => archive(ids),
     };
     // The agent's review page, under the words the card's own drill-in wears when that is where it goes (reviewAction),
-    // and as Review changes beside one that goes to the chat (reviewBesideDrill): this row IS the chat, so a drill-in into
+    // and as View changes beside one that goes to the chat (reviewBesideDrill): this row IS the chat, so a drill-in into
     // it would go nowhere.
     const reviewRows = (agent: FleetAgent): MenuItem[] => {
         const open = (): void => navigateInApp(router, `/agents/${encodeURIComponent(agent.id)}`);
@@ -61,7 +61,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
             const label = reviewAction(agent);
             return label === undefined ? [] : [{ label, icon: `copy`, command: open }];
         }
-        return reviewBesideDrill(agent) ? [{ label: t(`agents.agentStatus.reviewChanges`), icon: `copy`, command: open }] : [];
+        return reviewBesideDrill(agent) ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, command: open }] : [];
     };
     return (conversation: Conversation): ChatRowAgentRows => {
         // Only this sandbox's roster answers here: another box's chat offers none of its agent's rows.

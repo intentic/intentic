@@ -96,7 +96,7 @@ const developer = (): Vocabulary => ({
     landAgain: t(`agents.words.landAgain`),
     landed: t(`agents.agentStatus.landed`),
     readyToLand: t(`agents.agentStatus.readyToLand`),
-    reviewAndLand: t(`agents.agentStatus.reviewLand`),
+    reviewAndLand: t(`agents.agentStatus.viewAndLand`),
     couldntLand: t(`agents.agentStatus.couldntLandChip`),
     landRequested: t(`views.vocabulary.landRequested`),
     requestLand: t(`views.vocabulary.requestLand`),

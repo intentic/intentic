@@ -1,3 +1,4 @@
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import type { ComposerDraft, DraftWrite, DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { ForkOfSchema, FreshOfSchema, QueuedServingSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { openDocument } from "../../store/open-document.js";
 import { opt } from "../../opt.js";
 import { publishRuntimeChangeTo } from "../../seams/runtime-feed.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
+import { dropMarksIn, markedBy, markIn, marksIn, reactionsOf, type StoredMark, StoredMarkSchema } from "./draft-marks.js";
 import { actorOf, type Principal } from "../../auth/principal.js";
 import type { Caller } from "../../auth/auth.js";
 import type { OrpcContext } from "../../app-env.js";
@@ -35,6 +37,9 @@ const ComposerDraftsFileSchema = z.object({
     revision: z.number().int().nonnegative(),
     // By person (who wrote them, as authorization verified them), then by conversation.
     people: z.record(z.string(), z.record(z.string(), StoredDraftSchema)),
+    // Each person's marks on conversations no turn has started yet, by person then conversation (draft-marks.ts): beside
+    // the words, never in them, so no write or clear of the words moves them. Absent while nobody holds any.
+    marks: z.record(z.string(), z.record(z.string(), z.array(StoredMarkSchema))).optional(),
 });
 export type DraftsFile = z.infer<typeof ComposerDraftsFileSchema>;
 
@@ -147,11 +152,17 @@ export const draftOwnerOf = (context: { readonly identity?: Caller | undefined; 
 /**
  * The answer to a send, once the draft its words were sent from has gone with the message the sandbox just took: only
  * that revision, so words typed since in another window stay, and a resend under the same id finds it already gone.
- * The message is taken whatever the clear does: a clear that fails is logged and the send still answers as taken, since
- * an error here would hand the words back to a composer whose turn is already running.
+ * The sender's marks on the conversation move onto its card too, now that the send has opened its entry if it was the
+ * first (turn-admission.ts `book`/`admit`). The message is taken whatever the clear does: a clear that fails is logged and
+ * the send still answers as taken, since an error here would hand the words back to a composer whose turn is already
+ * running.
  */
 export const answeredAfterDraft = async <T>(
-    services: { readonly drafts: Pick<ComposerDrafts, "clear">; readonly logger: Pick<Logger, "warn"> },
+    services: {
+        readonly drafts: Pick<ComposerDrafts, "clear" | "marks" | "dropMarks">;
+        readonly agents: Pick<AgentsRegistry, "entry" | "react">;
+        readonly logger: Pick<Logger, "warn">;
+    },
     context: Pick<OrpcContext, "identity" | "principal">,
     sent: { readonly conversationId: string; readonly draft: number | undefined },
     answer: T,
@@ -161,23 +172,86 @@ export const answeredAfterDraft = async <T>(
             .clear(draftOwnerOf(context), sent.conversationId, sent.draft)
             .catch((error: Error) => services.logger.warn({ err: error, conversationId: sent.conversationId }, "drafts: a sent message's draft could not be cleared"));
     }
+    await adoptDraftMarks(services, context, sent.conversationId);
     return answer;
 };
 
+/**
+ * Moves the caller's marks on a conversation that was not started onto its card, once its first turn has registered it:
+ * each keeps the instant it was pressed and is attributed to the caller by address and name, then they leave the drafts
+ * file, so the card is the one record from here on. A conversation still unregistered (a send refused before its entry
+ * opened) keeps them waiting for the next send. Never throws: the message is taken whatever happens to its marks.
+ */
+export const adoptDraftMarks = async (
+    services: {
+        readonly drafts: Pick<ComposerDrafts, "marks" | "dropMarks">;
+        readonly agents: Pick<AgentsRegistry, "entry" | "react">;
+        readonly logger: Pick<Logger, "warn">;
+    },
+    context: Pick<OrpcContext, "identity" | "principal">,
+    conversationId: string,
+): Promise<void> => {
+    // A mark is only ever left by a verified person (the route refuses anyone else), so nobody else has any to move.
+    const identity = context.identity;
+    if (identity === undefined || services.agents.entry(conversationId) === undefined) {
+        return;
+    }
+    const person = draftOwnerOf(context);
+    try {
+        const marks = await services.drafts.marks(person, conversationId);
+        if (marks.length === 0) {
+            return;
+        }
+        // Onto the card first, then out of the file: a write that fails between the two leaves a mark in both, and the
+        // card's `react` is idempotent, so the next send moves it again harmlessly instead of losing it.
+        for (const mark of marks) {
+            await services.agents.react(conversationId, mark.emoji, { email: identity.email, ...opt("name", mark.name ?? identity.name) }, true, mark.at);
+        }
+        await services.drafts.dropMarks(person, conversationId);
+    } catch (error: unknown) {
+        services.logger.warn({ err: error, conversationId }, "drafts: marks on a conversation not started yet could not be moved onto its card");
+    }
+};
+
 export interface ComposerDrafts {
-    // With the newest revision handed out as it was read, so a reader can tell "gone" from "written after this read".
-    readonly list: (person: string) => Promise<{ readonly drafts: readonly ComposerDraft[]; readonly revision: number }>;
+    // With the newest revision handed out as it was read, so a reader can tell "gone" from "written after this read", and
+    // the person's marks on conversations not started yet, by conversation.
+    readonly list: (person: string) => Promise<{
+        readonly drafts: readonly ComposerDraft[];
+        readonly revision: number;
+        readonly reactions: Readonly<Record<string, readonly AgentReaction[]>>;
+    }>;
     readonly write: (person: string, write: DraftWrite) => Promise<DraftWritten>;
     readonly clear: (person: string, conversationId: string, revision?: number) => Promise<DraftWritten>;
     /** Since when anybody has held a draft for the conversation. */
     readonly heldSince: (conversationId: string) => Promise<number | undefined>;
+    /**
+     * Puts the person's mark on a conversation not started yet, or takes it back; `full` when a new kind is over `cap`
+     * (the registry's, which the route hands in so this module, which the state registry loads, never loads the registry).
+     */
+    readonly react: (
+        person: string,
+        conversationId: string,
+        press: { readonly emoji: string; readonly name?: string | undefined; readonly on: boolean },
+        cap: number,
+    ) => Promise<readonly AgentReaction[] | "full">;
+    /** The person's marks on one conversation. */
+    readonly marks: (person: string, conversationId: string) => Promise<readonly StoredMark[]>;
+    /** Forgets the person's marks on one conversation: they are on its card now, or it is gone for good. */
+    readonly dropMarks: (person: string, conversationId: string) => Promise<void>;
 }
 
 /**
  * The store, telling `moved` each conversation whose drafts changed and whose they are, after the write is on disk: the
- * card's `unsentAt` and the `drafts` push both follow from that one call.
+ * card's `unsentAt` and the `drafts` push both follow from that one call. A change to someone's marks tells `marked`,
+ * which only pushes: marks say nothing about unsent words.
  */
-const fileComposerDrafts = (path: string, moved: (conversationId: string, person: string) => void, now: () => number = Date.now): ComposerDrafts => {
+const fileComposerDrafts = (
+    path: string,
+    moved: (conversationId: string, person: string) => void,
+    marked: (person: string) => void,
+    now: () => number = Date.now,
+): ComposerDrafts => {
     const file = openDocument(composerDraftsDocument, path, { fallback: (): DraftsFile => ({ revision: 0, people: {} }), mode: 0o600 });
     const apply = async (conversationId: string, person: string, step: (current: DraftsFile) => DraftStep): Promise<DraftWritten> => {
         let change: DraftChange = { answer: {}, changed: false };
@@ -194,11 +268,41 @@ const fileComposerDrafts = (path: string, moved: (conversationId: string, person
     return {
         list: async (person) => {
             const current = await file.read();
-            return { drafts: draftsOf(current, person), revision: current.revision };
+            return { drafts: draftsOf(current, person), revision: current.revision, reactions: markedBy(current, person) };
         },
         write: (person, write) => apply(write.id, person, (current) => writeIn(current, person, write, now())),
         clear: (person, conversationId, revision) => apply(conversationId, person, (current) => clearIn(current, person, conversationId, revision)),
         heldSince: async (conversationId) => heldSinceIn(await file.read(), conversationId),
+        react: async (person, conversationId, press, cap) => {
+            let full = false;
+            let changed = false;
+            let marks: readonly StoredMark[] = [];
+            await file.update((current) => {
+                const step = markIn(current, person, conversationId, press, now(), cap);
+                if ("full" in step) {
+                    full = true;
+                    return current;
+                }
+                ({ marks, changed } = step);
+                return step.file;
+            });
+            if (changed) {
+                marked(person);
+            }
+            return full ? "full" : reactionsOf(person, marks);
+        },
+        marks: async (person, conversationId) => marksIn(await file.read(), person, conversationId),
+        dropMarks: async (person, conversationId) => {
+            let changed = false;
+            await file.update((current) => {
+                const next = dropMarksIn(current, person, conversationId);
+                changed = next !== current;
+                return next;
+            });
+            if (changed) {
+                marked(person);
+            }
+        },
     };
 };
 
@@ -213,12 +317,16 @@ export const registryDrafts = (
     agents: Pick<AgentsRegistry, "entry" | "setUnsent">,
     warn: (error: Error, conversationId: string) => void,
 ): ComposerDrafts => {
-    const drafts: ComposerDrafts = fileComposerDrafts(join(historyRoot, composerDraftsDocument.path), (conversationId, person) => {
-        publishRuntimeChangeTo(person, "drafts");
-        void drafts
-            .heldSince(conversationId)
-            .then((since) => (agents.entry(conversationId)?.social.unsentAt === since ? undefined : agents.setUnsent(conversationId, since ?? null)))
-            .catch((error: Error) => warn(error, conversationId));
-    });
+    const drafts: ComposerDrafts = fileComposerDrafts(
+        join(historyRoot, composerDraftsDocument.path),
+        (conversationId, person) => {
+            publishRuntimeChangeTo(person, "drafts");
+            void drafts
+                .heldSince(conversationId)
+                .then((since) => (agents.entry(conversationId)?.social.unsentAt === since ? undefined : agents.setUnsent(conversationId, since ?? null)))
+                .catch((error: Error) => warn(error, conversationId));
+        },
+        (person) => publishRuntimeChangeTo(person, "drafts"),
+    );
     return drafts;
 };

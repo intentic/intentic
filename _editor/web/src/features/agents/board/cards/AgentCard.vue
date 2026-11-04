@@ -21,6 +21,8 @@ import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
+import CardHoverBar from "./CardHoverBar.vue";
+import { BAR_EMOJI } from "./reactions";
 import CardLandPresses from "./CardLandPresses.vue";
 import CardStrandedClones from "./CardStrandedClones.vue";
 import CardDiskUse from "./CardDiskUse.vue";
@@ -36,11 +38,13 @@ import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { archiveTip, barFiling as barFilingOf, closeTip, type ReactionsStrip, restoreTip, toolPresses } from "./cardPresses";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { cardLine, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, agentStatusMeta, contextPct, cornerInk, cornerStandingShown, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
-import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardStamps from "../../../../parts/fleet/CardStamps.vue";
 import { useCardStamps } from "../../../../models/fleet/board/useCardStamps";
@@ -148,8 +152,6 @@ const { user } = useAuth();
 const provenance = computed(() => sessionMark(props.agent, user.value?.email, presenceOthers.value));
 // The conversation that spawned this one; a card only a child standing apart from its parent wears (ParentMark).
 const parent = computed(() => parentOf(props.agent.startedBy));
-// Whether this card's archive or restore moves its children with it, as a run's takes its steps.
-const takesFamily = computed(() => (props.family ?? 0) > 0);
 // A refusal the conversation has moved past rests as an idle card does: the red error glyph beside "Moved to …" said the
 // opposite of the line under it (cardLine).
 const meta = computed(() => (failure.value?.moved === true ? agentStatusMeta(`idle`) : agentStandingMeta(props.agent)));
@@ -198,33 +200,6 @@ const archivable = computed(() => localOnly.value && canArchive(props.agent));
 // drop are all unavailable to it.
 // Without this, a broken send would sit unrecoverable in the Active lane, surviving reloads with the tab.
 const closable = computed(() => unregistered(props.agent.status));
-// What closing actually destroys differs: a `starting` turn keeps running daemon-side (only this window's view of it
-// closes).
-// A draft holding unsent text is the one case where closing does lose something, so the hint has to name it.
-const closeHint = computed(
-    (): Tip => ({
-        title: t(`ui.action.close`),
-        note:
-            props.agent.status === `starting`
-                ? t(`agents.agentCard.closeKeepsRunning`)
-                : props.agent.unsent
-                  ? t(`agents.agentCard.closeDropsUnsent`)
-                  : t(`agents.agentCard.closeNothingKept`),
-    }),
-);
-// Archive and restore say how many children ride along, when any do; archive also that nothing is lost by it.
-const familyRows = computed(() => (takesFamily.value ? [{ label: t(`agents.words.childAgents`), value: props.family ?? 0 }] : []));
-// Everything is kept, except what would go by itself: a message scheduled in it is cancelled (the sandbox's archive.ts),
-// since at its time it would only meet a conversation filed away. Said before the press, as the one thing it loses.
-const archiveHint = computed((): Tip => {
-    const cancels = bookedGroups(props.agent.queue).reduce((count, group) => count + group.messages.length, 0);
-    return {
-        title: t(`agents.agentCard.archive`),
-        rows: familyRows.value,
-        note: cancels > 0 ? t(`agents.agentCard.archiveCancelsScheduled`, { count: cancels }, cancels) : t(`agents.words.allKept`),
-    };
-});
-const restoreHint = computed((): TooltipValue => (takesFamily.value ? { title: t(`ui.action.restore`), rows: familyRows.value } : t(`ui.action.restore`)));
 // The filter's own key for opening the card its id names, drawn as the key cap the tip wears.
 const enterKey = formatChord(`enter`, isApplePlatform());
 // Drill-in label, undefined for a draft (nothing to review); desktop only, since a mobile tap navigates there.
@@ -367,11 +342,13 @@ const working = computed(() => turnWorking(props.agent));
 // Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
 // readout takes the same slot.
 const dated = computed(() => props.agent.archivedAt !== undefined || (!working.value && props.agent.updatedAt > 0));
-// Whether a mark can be addressed to this card at all: a draft, a refused start or a chat reopened from history has no
-// registry entry, so the daemon would answer a press with 404.
-const reactable = computed(() => !unregistered(props.agent.status));
+// Whether a mark can be addressed to this card at all. A registered one keeps its marks in the roster; a draft of this
+// sandbox's keeps the reader's own with the draft (agents.reactDraft) until its first turn carries them onto the card. A
+// refused start or a chat reopened from history has neither, and another sandbox's draft marks are not read back here.
+const draftMarks = computed(() => props.agent.status === `draft` && localOnly.value && supportsRoute(`agents.reactDraft`));
+const reactable = computed(() => !unregistered(props.agent.status) || draftMarks.value);
 // The strip lives in the summary row and the press that opens its picker in the header, so the header reaches it here.
-const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`reactionsStrip`);
+const reactionsStrip = useTemplateRef<ReactionsStrip>(`reactionsStrip`);
 // The card's own element: the permission row raises the held command off its hover.
 const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
@@ -380,7 +357,8 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
 // once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
-const summary = computed(() => rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
+// A draft is undated and idle, so marks are what opens the row for it: an unmarked draft keeps no empty row.
+const summary = computed(() => rowDrill.value || resendable.value || dated.value || working.value || (reactable.value && ((props.agent.reactions?.length ?? 0) > 0 || !draftMarks.value)));
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What vouches for its work, as stamps in its corner (useCardStamps.ts): its own last check, then each kind of check a
 // fresh session ran on it.
@@ -465,21 +443,26 @@ const openPage = (): void => {
     emit(`changes`);
 };
 
-// One shared class for the header's icon affordances (rename, archive, etc), differing only by glyph and opacity rule.
-// Ink stays 20px, but `touch-target` widens the hit area to 44 on a coarse pointer, so four icons still fit a narrow
-// row on a phone.
+// One shared class for the header's icon affordances on a touch screen (a phone's ⋯ or lone press, a tablet's ⋯), where
+// there is no hover for the bar (CardHoverBar) to appear on. Ink stays 20px, but `touch-target` widens the hit area to 44.
 // Hover fill is an ink tint, not `bg-overlay`: these glyphs sit ON the card.
 // A surface-named fill would vanish on a selected card (whose own fill is that overlay) and in the light scheme, where
 // overlay equals card.
 const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-content/10 hover:text-content`;
-// Hidden until the card is hovered or one of them is focused, since at rest they are forty cards of glyphs; a phone has
-// no hover, so what it keeps of them (one ⋯, or a lone press) stays drawn, quieter than the ink around it.
-const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value || coarse.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);
+// Always drawn, quieter than the ink around it: with no hover to reveal it on, a hidden press is one nobody finds.
+const actionClass = `${HOVER_ACTION} opacity-60`;
 
-// Every press the header offers, in the order the row draws them; the drill-in closes the row. Keep open lives in the
-// card's menu only. Adding a mark rides with the card's other
-// actions, not with the marks themselves: this row reserves its seats and lets the title take what is left, so
-// revealing it resizes nothing, while the stats row below has no seat to spare.
+// What the card leads somewhere with (cardPresses.toolPresses).
+const { can } = useAccess();
+const toolActions = computed(() =>
+    toolPresses(props.agent, { review: review.value, rowDrill: rowDrill.value, mayRun: can(`agent.run`), drillIn: reviewCard, openChanges: () => emit(`changes`) }),
+);
+
+// Every press the card offers on its own, in the order a phone's sheet lists them; the tools close the list. Keep open
+// lives in the card's menu only. Adding a mark rides with the card's other actions, not with the marks themselves: the
+// stats row below has no seat to spare, and a control revealed there moved the line under it.
+const closeHint = computed(() => closeTip(props.agent));
+const archiveHint = computed(() => archiveTip(props.agent, props.family ?? 0));
 const cardActions = computed((): ActionItem[] => {
     const actions: ActionItem[] = [];
     if (localOnly.value) {
@@ -508,33 +491,29 @@ const cardActions = computed((): ActionItem[] => {
         });
     }
     if (props.agent.archivedAt !== undefined) {
-        actions.push({ id: `restore`, label: t(`agents.agentCard.restoreAgent`), icon: `undo`, hint: restoreHint.value, disabled: busy.value, run: () => emit(`restore`) });
+        actions.push({ id: `restore`, label: t(`agents.agentCard.restoreAgent`), icon: `undo`, hint: restoreTip(props.family ?? 0), disabled: busy.value, run: () => emit(`restore`) });
     }
     if (reactable.value) {
-        actions.push({ id: `react`, label: t(`agents.agentReactions.addReaction`), icon: `plus`, run: (from) => reactionsStrip.value?.open(from) });
+        actions.push({ id: `react`, label: t(`agents.agentReactions.addReaction`), icon: `face-smile`, run: (from) => reactionsStrip.value?.open(from) });
     }
-    // An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip (and the sheet).
-    if (review.value !== undefined && lane.value !== `attention`) {
-        actions.push({ id: `review`, label: review.value, icon: `arrow-right`, run: () => reviewCard() });
-    }
+    actions.push(...toolActions.value);
     return actions;
 });
 
-// THE HEADER RESERVES TWO SEATS, NOT FIVE. Every press it drew kept a 20px seat and a 10px gap at rest, hidden or not, so
-// on a card about 300px wide (three lanes on a small laptop) the title kept some 60px. Where the board offers its menu
-// (`menus`), which names every press in words, the header keeps the presses that are one click on purpose: a look's
-// keep, with its deadline, and the filing press (archive, close or restore) a lane is tidied with; rename, react and the
-// drill-in move behind one ⋯ opening that menu, and a double-click opens the agent's page. A touch screen with the room of
-// a tablet has no hover to reveal glyphs on and swipes a card to file it (cardSwipe.ts), so there the ⋯ alone stays,
-// drawn. A phone folds them into its own sheet (OverflowActions).
-const DIRECT_PRESSES: ReadonlySet<string> = new Set([`keep`, `archive`, `close`, `restore`]);
+// THE HEADER RESERVES NO SEATS FOR PRESSES. Every press it drew kept a 20px seat and a 10px gap at rest, hidden or not, so
+// on a card about 300px wide (three lanes on a small laptop) the title kept some 60px. With a fine pointer every press
+// floats over the card's top edge on hover instead (CardHoverBar), so the title keeps the whole row (2026-11-04). A touch
+// screen with the room of a tablet has no hover and swipes a card to file it (cardSwipe.ts), so there the ⋯ opening the
+// board's menu alone stays, drawn. A phone folds the presses into its own sheet (OverflowActions).
+const hoverBar = computed(() => !mobile.value && !coarse.value);
 const menuFolds = computed(() => props.menus === true && !mobile.value);
-const headerActions = computed((): ActionItem[] => {
-    if (!menuFolds.value) {
-        return cardActions.value;
-    }
-    return coarse.value ? [] : cardActions.value.filter((action) => DIRECT_PRESSES.has(action.id));
-});
+const headerActions = computed((): ActionItem[] => (menuFolds.value ? [] : cardActions.value));
+const barFiling = computed(() => barFilingOf(cardActions.value, props.menus === true));
+const barReactions = computed(() =>
+    reactable.value ? { quick: BAR_EMOJI, worn: reactionsStrip.value?.worn ?? new Set<string>(), busy: reactionsStrip.value?.busy ?? false } : undefined,
+);
+const openPicker = (from: HTMLElement): void => reactionsStrip.value?.open(from);
+const reactQuick = (emoji: string): void => void reactionsStrip.value?.toggle(emoji);
 // What the board's menu offers on this card's behalf: renaming and reacting are the card's own, and so are their fields.
 const ownPresses = computed(
     (): CardOwnPresses => ({
@@ -590,7 +569,7 @@ const grab = (event: PointerEvent): void => {
         ref="cardRoot"
         role="group"
         :aria-label="displayTitle"
-        class="session-card group flex w-full select-none flex-col rounded-2xl border text-left"
+        class="session-card group relative flex w-full select-none flex-col rounded-2xl border text-left"
         :class="[
             /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
@@ -608,6 +587,17 @@ const grab = (event: PointerEvent): void => {
         @dblclick="openPage"
         @contextmenu="openMenu"
     >
+        <!-- The card's presses, floated over its top edge on hover (CardHoverBar); never while its title is being edited. -->
+        <CardHoverBar
+            v-if="hoverBar && !edit.editing"
+            :reactions="barReactions"
+            :tools="toolActions"
+            :filing="barFiling"
+            :menu="menus === true"
+            @react="reactQuick"
+            @pick="openPicker"
+            @menu="openMenu"
+        />
         <!-- THE TITLE COMES FIRST: it keeps a readable width (basis-28) and what trails it (the presses, the chip, the marks)
              wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
              letter or two beside a long chip and the press seats. -->
@@ -657,7 +647,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
                      phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->
                 <span
-                    v-if="!edit.editing && (headerActions.length > 0 || menuFolds)"
+                    v-if="!hoverBar && !edit.editing && (headerActions.length > 0 || menuFolds)"
                     class="flex shrink-0 items-center"
                     :class="coarse ? 'gap-2.5' : 'gap-0.5'"
                 >
@@ -815,8 +805,8 @@ const grab = (event: PointerEvent): void => {
                         v-if="diffShown && agent.diff !== undefined"
                         type="button"
                         class="shrink-0 rounded-sm font-mono tabular-nums hover:underline"
-                        :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
-                        v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
+                        :aria-label="t(`agents.agentCard.viewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
+                        v-tooltip.top="t(`agents.agentStatus.viewChanges`)"
                         @click.stop="emit('changes')"
                     >
                         <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
@@ -927,6 +917,7 @@ const grab = (event: PointerEvent): void => {
                         :reactions="agent.reactions"
                         :sandbox-id="agent.sandboxId"
                         :dense="true"
+                        :draft="draftMarks"
                     />
 
                     <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
@@ -965,6 +956,16 @@ const grab = (event: PointerEvent): void => {
                         />
                     </span>
                 </div>
+                <!-- An unmarked draft opens no summary row, but its bar's picker still hangs off this: a dense strip with no marks draws no box. -->
+                <AgentReactions
+                    v-else-if="reactable"
+                    ref="reactionsStrip"
+                    :agent-id="agent.id"
+                    :reactions="agent.reactions"
+                    :sandbox-id="agent.sandboxId"
+                    :dense="true"
+                    :draft="draftMarks"
+                />
             </div>
         </div>
         <ResponsiveOverlay v-model="warmOpen" :anchor="warmAnchor" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">

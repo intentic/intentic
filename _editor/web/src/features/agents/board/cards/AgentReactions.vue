@@ -12,7 +12,7 @@ import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import { ResponsiveOverlay, ui } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { reactToAgent } from "../../../../models/fleet/agentActions";
+import { reactToAgent, reactToDraft } from "../../../../models/fleet/agentActions";
 import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
@@ -25,6 +25,7 @@ const {
     reactions,
     sandboxId,
     dense = false,
+    draft = false,
 } = defineProps<{
     agentId: string;
     /** The marks the card carries now; absent means nobody has left one. */
@@ -36,6 +37,11 @@ const {
      * the presses that add one are left to the host (`open`). A page with room passes nothing and gets both.
      */
     dense?: boolean;
+    /**
+     * A conversation no turn has started yet: its marks are the reader's own, kept with their draft (`agents.reactDraft`)
+     * until its first turn moves them onto the card the sandbox opens for it.
+     */
+    draft?: boolean;
 }>();
 
 const { presentedEmail } = useSandboxSession();
@@ -74,9 +80,14 @@ const press = async (emoji: string, on: boolean): Promise<void> => {
     // Nobody to attribute the mark to yet (a session still being established): the chip waits for the daemon's word.
     ahead.value = me === undefined ? undefined : { baseline, marks: withPress(reactions, { emoji, on }, { email: me, at: Date.now() }) };
     try {
-        const answer = await reactToAgent(agentId, emoji, on, sandboxId);
-        ahead.value = { baseline, marks: answer.reactions };
-        await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
+        if (draft) {
+            // The draft store takes the answer itself (composerDrafts.markDraft), and the card is drawn from it: no roster to re-read.
+            ahead.value = { baseline, marks: [...(await reactToDraft(agentId, emoji, on, sandboxId))] };
+        } else {
+            const answer = await reactToAgent(agentId, emoji, on, sandboxId);
+            ahead.value = { baseline, marks: answer.reactions };
+            await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
+        }
     } catch (caught) {
         ahead.value = undefined;
         notice.value = messageOr(caught, t(`agents.agentReactions.couldNotReact`));
@@ -98,7 +109,12 @@ const open = (from: HTMLElement): void => {
     anchor.value = from;
     picker.value = !picker.value;
 };
-defineExpose({ open });
+// The host's quick reactions (the board card's hover bar): the same press a chip makes, so a mark left from there is
+// drawn ahead of the daemon's answer exactly as one left here is, and `worn` lights the reactions the reader wears.
+const toggle = (emoji: string): Promise<void> => press(emoji, !worn(emoji));
+const wornSet = computed(() => new Set(chips.value.filter((chip) => chip.mine).map((chip) => chip.emoji)));
+const busy = computed(() => pending.value !== undefined);
+defineExpose({ open, toggle, worn: wornSet, busy });
 
 // On a page (not a card) the two quick answers stand beside the chips; one already worn is a chip, and drawing it
 // twice would offer the same press in two places.

@@ -191,9 +191,9 @@ const record = async () => {
     // The delta lives on its own branch until this press; that's why the board has a Finished lane, not a done toast.
     chapter("Back to the board", "one is finished and holding its work");
     await click(page, railLink("/agents"), { after: 1_400 });
-    // Hover first: `Review & land` is a hover-reveal outside the attention lane, framing the next click.
+    // Hover first: `View & land` is a hover-reveal outside the attention lane, framing the next click.
     await hover(page, cardBody("Soft-delete the users table"), { dwell: 900 });
-    await click(page, board.getByRole("button", { name: "Review & land" }), { after: 1_600, flight: 420 });
+    await click(page, board.getByRole("button", { name: "View & land" }), { after: 1_600, flight: 420 });
 
     chapter("Read the diff it wants to land", "file by file, on its own branch");
     // Wheel over the diff pane scrolls the review's file list, not the code, so glide there first.

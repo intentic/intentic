@@ -327,6 +327,13 @@ flowchart LR
   archive leaves a conversation somebody is still writing to. 2026-10-27: until then the push went to every window,
   so each member's typing made every member's every window re-read drafts that had not moved. A draft never goes by itself
   (`next` never names one), and no model reads it until it is sent, when the privacy shield judges it as the message.
+- A conversation no turn has started has no registry entry for `agents.react` to mark, so `agents.reactDraft` keeps
+  the caller's marks on it in the same file, beside the words but never in them (`conversations/drafts/draft-marks.ts`):
+  no write or clear of the words moves them, the empty-words clear included, since an open new chat has no draft at
+  all. They are per person like the draft, capped at the registry's kinds, listed by `agents.drafts` (`reactions`), and
+  pushed as the same `drafts` domain. `agent.run` moves the sender's marks onto the entry its send opened, by name and
+  at the instant each was pressed, and drops them from the file. The route refuses a registered conversation. A
+  discard is the client's to say (one `on: false` per mark): the daemon cannot tell it from a composer emptied by hand.
 - Nothing the resume pass sends goes into an allowance the records call spent. Before it fires any hold, it asks the
   allowance wall in front of the account the turn would go on (`allowanceWall` in `usage/serviceability/`, the one
   answer the allowance gate and an account pick read too). A spent allowance's booking is read with that wall on every

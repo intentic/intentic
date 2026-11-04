@@ -1,12 +1,12 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
-import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentReaction, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
 import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
 import { awaitingUser, blocked, type ClientAgentStatus, goesBySelf, heardByParent, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
 import { answeredAt } from "../agent-status/answeredAt";
-import { draftFacts, type DraftFacts, sandboxKeepsDrafts } from "../conversations/drafts/composerDrafts";
+import { draftFacts, type DraftFacts, draftReactions, sandboxKeepsDrafts } from "../conversations/drafts/composerDrafts";
 import { type TabFacts, unasked } from "../conversations/tabs/tabFacts";
 import { rememberedProviderFor } from "../conversations/run/turnDefaults";
 import { useChat } from "../conversations/run/useChat";
@@ -101,6 +101,11 @@ const spendOf = (serves: QueuedServing | undefined): Pick<FleetAgent, "model" | 
     ...(serves?.effort === undefined ? {} : { effort: serves.effort }),
     ...(serves?.account === undefined ? {} : { account: serves.account }),
 });
+
+// A card no turn has started wears the reader's own marks on it (composerDrafts `draftReactions`), as a registered card
+// wears the registry's: `reactions` reads the same either way. None leaves the field absent, as the roster does.
+const wearing = (card: FleetAgent, reactions: readonly AgentReaction[] | undefined): FleetAgent =>
+    reactions === undefined || reactions.length === 0 ? card : { ...card, reactions: [...reactions] };
 
 const closedCard = (id: string, draft: DraftFacts): FleetAgent => {
     const card: FleetAgent = {
@@ -239,6 +244,7 @@ export const fleet = computed<FleetAgent[]>(() => {
     const openIds = new Set(strip.tabs.map((tab) => tab.id));
     const carded = new Set(registry.value.map((agent) => agent.id));
     const unsent = unsentTabs.value;
+    const marks = draftReactions.value;
     // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
     // (`sendingNow`), or that a person just ended one (`endedHere`).
     const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
@@ -250,13 +256,13 @@ export const fleet = computed<FleetAgent[]>(() => {
     const leaving = new Set(strip.tabs.filter((tab) => leavesWithItsMessage(tab, rows.get(tab.id))).map((tab) => tab.id));
     const drafts = strip.tabs
         .filter((tab) => (leaving.has(tab.id) || (!tab.registered && !carded.has(tab.id))) && !unasked(tab))
-        .map((tab): FleetAgent => endedHere(draftCard(tab, unsent.get(tab.id)), tab));
+        .map((tab): FleetAgent => endedHere(wearing(draftCard(tab, unsent.get(tab.id)), marks.get(tab.id)), tab));
     // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
     // Drafts with nothing else to draw them: no roster row, archive entry, or open tab.
     const setAside = [...draftFacts.value]
         .filter(([id]) => !openIds.has(id) && !carded.has(id) && !archivedIds.has(id))
-        .map(([id, draft]): FleetAgent => closedCard(id, draft));
+        .map(([id, draft]): FleetAgent => wearing(closedCard(id, draft), marks.get(id)));
     const built = [
         ...registry.value.flatMap((agent): FleetAgent[] => {
             if (leaving.has(agent.id)) {
