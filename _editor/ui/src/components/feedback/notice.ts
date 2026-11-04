@@ -1,6 +1,6 @@
 import { tv } from "tailwind-variants";
 import type { IconName } from "../../icons/iconSets.js";
-import { toneInk, toneTint } from "../../lib/tone.js";
+import { toneFill, toneInk, toneRim } from "../../lib/tone.js";
 
 // Notice model behind <Notice>/<NoticeStack>: a sentence the app wrote (`title`), the raw cause below it (`detail`),
 // and at most one way out (`action`). `tone` also orders several notices on screen.
@@ -29,17 +29,19 @@ export interface NoticeModel {
 // `md`: the default, in a form or a card. `lg`: a page's own banner, read at body size.
 export type NoticeSize = "xs" | "sm" | "md" | "lg";
 
-// The box and its glyph as one recipe. The tone's colours are the kit's (tone.ts), at the strong weight every notice
-// speaks at, with the tone's own ink; the size is the box's. `strip` is the same notice laid along a pane's top edge
-// (a file that changed on disk, a truncated diff): full width, no radius, a rule only underneath.
+// The box and its glyph as one recipe. The box is a quiet card in every tone: a raised neutral surface on a hairline,
+// with the sentence in the content colour. Only the glyph wears the tone. A tinted fill, a tone rim and toned text
+// together made every notice read as an alarm laid over the pane, not part of it. The size is the box's. `strip` is
+// the same notice laid along a pane's top edge (a file that changed on disk, a truncated diff): full width, no radius,
+// a rule only underneath.
 const noticeRecipe = tv({
-    slots: { box: `flex border text-left`, icon: `shrink-0` },
+    slots: { box: [`flex border text-left text-content`, toneFill(`neutral`), toneRim(`neutral`, `soft`)], icon: `shrink-0` },
     variants: {
         tone: {
-            danger: { box: [toneTint(`danger`), toneInk(`danger`)] },
-            warning: { box: [toneTint(`warning`), toneInk(`warning`)] },
-            info: { box: [toneTint(`info`), toneInk(`info`)] },
-            success: { box: [toneTint(`success`), toneInk(`success`)] },
+            danger: { icon: toneInk(`danger`) },
+            warning: { icon: toneInk(`warning`) },
+            info: { icon: toneInk(`info`) },
+            success: { icon: toneInk(`success`) },
         },
         size: {
             xs: { box: `gap-1 rounded px-2 py-0.5 text-2xs`, icon: `text-[0.6rem]` },

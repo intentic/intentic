@@ -376,7 +376,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <SectionHeader label="Notice" :heading="2" />
                 <p class="text-xs text-muted">
-                    The app's one tinted message box. `:of` when the message is data, the slot when the view wrote it: both wear the same box.
+                    The app's one message box: a quiet card whose glyph carries the tone. `:of` when the message is data, the slot when the view wrote it: both wear the same box.
                 </p>
                 <div class="flex max-w-read-lg flex-col gap-2">
                     <Notice :of="{ tone: `danger`, title: `Couldn't reach the sandbox.`, detail: `fetch failed: ECONNREFUSED 127.0.0.1:6480` }" />

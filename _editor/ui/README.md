@@ -126,7 +126,7 @@ flowchart LR
   source. `MarkdownFigure.vue` draws each one with the kit's own charts and palette. A fence that does not parse
   renders as an ordinary code block. `MarkdownParts.vue` draws a rendered document's prose runs and figures in order,
   inside whatever `.md-prose` box the caller owns: `Markdown.vue` and chat's answer, plan and document cards all use it.
-- **Messages in place of content.** `Notice` is the one tinted message box (four sizes, an `#actions` slot for the
+- **Messages in place of content.** `Notice` is the one message box, a quiet card whose glyph alone wears the tone (four sizes, an `#actions` slot for the
   view's own buttons). `EmptyState` is the centred block a pane or page shows instead of its content: nothing yet, a
   read that failed, a wait. Both are on the design kit page.
 - **Dialogs.** `Modal` is the one dialog, and `ConfirmDialog` and `InfoDialog` are built on it. Every dialog follows
