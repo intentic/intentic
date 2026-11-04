@@ -22,6 +22,7 @@ import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
 import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
 import ChatTurnDeliverables from "../../transcript/deliverables/ChatTurnDeliverables.vue";
 import ChatHeldMessages from "../../transcript/held/ChatHeldMessages.vue";
+import ChatSendingMessages from "../../transcript/held/ChatSendingMessages.vue";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
@@ -45,7 +46,7 @@ const props = defineProps<{
     subagent?: boolean;
 }>();
 
-const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
+const { conversation, messages, streaming, ending, awaitingDecision, sending } = usePaneView();
 // A reader who follows this chat without driving it reads every card the agent parks on, and is told who answers it
 // instead of being handed answers the daemon would refuse (ChatCard).
 const driveRefusal = useDriveRefusal(() => conversation.value.conversationId);
@@ -59,7 +60,8 @@ const { agentById } = useAgents();
 const refresh = computed(() => conversation.value.transcript.refresh.value);
 // Something already waits in this chat's queue (a first message booked for later, one held for memory): drawn below by
 // ChatHeldMessages, so the empty invitation to start a conversation would sit right on top of the message that started it.
-const queued = computed(() => (conversation.value.queue.value?.items.length ?? 0) > 0);
+// Words on their way count too: a first message booked for later stands as sending until the queue has it.
+const queued = computed(() => (conversation.value.queue.value?.items.length ?? 0) > 0 || sending.value.length > 0);
 const {
     turns,
     turnShots,
@@ -274,6 +276,8 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         <ChatTurnStatus v-if="showTurnStatus" />
         <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->
         <ChatHeldMessages />
+        <!-- Words just sent that neither the transcript nor the queue above shows yet: after it, since they join its end. -->
+        <ChatSendingMessages />
         <p v-if="error !== undefined" class="min-w-0 text-xs text-danger">{{ error }}</p>
         <!-- A read of a painted chat that has not answered: what is shown is the saved copy, said quietly, not as the error line. A live stream is fresher than either. -->
         <p v-if="staleness" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle" role="status">

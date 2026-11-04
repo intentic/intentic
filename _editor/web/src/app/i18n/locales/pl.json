@@ -3688,6 +3688,10 @@
             "nightPicked": "Twoje godziny nocne trwały (do {until}), więc agent poszedł za własną rekomendacją. Napisz na czacie, jeśli chcesz to zmienić.",
             "nightSaved": "Twoje godziny nocne trwały (do {until}), więc nikogo nie zapytano. Agent pracował dalej bez odpowiedzi i kończy tym pytaniem."
         },
+        "chatSending": {
+            "sending": "Wysyłanie…",
+            "stillSending": "Wciąż wysyłam: sandbox jest zajęty"
+        },
         "chatQueue": {
             "edit": "Edytuj",
             "editLabel": "Edytuj oczekującą wiadomość",

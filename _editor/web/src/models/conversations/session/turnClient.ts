@@ -2,7 +2,6 @@ import { Latest, sleep, within } from "@intentic/base/async";
 import type { ConversationQueue, EditorContext, MessageReceipt, PermissionMode, QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { deriveTitle } from "@intentic/sandbox-contract/text/title";
 import { errandOfPrompt } from "@intentic/sandbox-contract/events/errands";
-import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { TurnErrand } from "@intentic/sandbox-contract/schemas/speaker";
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
@@ -16,12 +15,13 @@ import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandbox
 import { postTurn } from "./turnPost";
 import type { OutboxEntry } from "./sendOutbox";
 import { TurnOutbox, unsentOf } from "./turnOutbox";
+import { SendingList } from "./sendingWords";
+import { messageRequestBody } from "../run/messageRequest";
 import type { AgentStatusEntry, PageDraftView } from "./turnLiveState";
 import { bookContinue, chipOf, heldRouting, newerQueue, queueRefusal, repeatsNudge, takeBackInto, withBooked } from "./queueCalls";
-import { accountIntent, type ForkLink, openingAnswers, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../drafts/sendLater";
 import { bookingOfMessage, holdOfQueue, perMessage, unbookedOf } from "../drafts/bookings";
-import { sentFrom } from "../drafts/composerDrafts";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../../providers/accountsOutdated";
 import { type ContinueOptions, type PressedOn, withHandoffChosen } from "../endings/pickUp";
@@ -137,6 +137,10 @@ export class TurnClient {
     // `answered`'s, below.
     readonly outbox: TurnOutbox;
 
+    // Words sent into a live turn (or behind one ending) that nothing here draws yet (sendingWords.ts): from the press
+    // until the sandbox's row or queue shows them.
+    readonly sending: SendingList;
+
     // An account pick the daemon refused to move the conversation to, because a turn held it (one parked on a card
     // included): asked again as that turn settles (askMoveAgain), so what the daemon then does by itself (a booked
     // re-run, a wake, a kept turn sent again as it was) runs on the pick too, not only this window's presses.
@@ -151,6 +155,13 @@ export class TurnClient {
             post: (body) => this.post(body, new AbortController().signal),
             answered: (entry, receipt, bubble) => this.answered(entry, receipt, bubble),
             giveBack: (sent, messageId) => this.giveBack(sent, messageId),
+        });
+        this.sending = new SendingList({
+            queue: host.queue,
+            // Read when used, as the outbox's is.
+            get messages() {
+                return host.transcript.messages;
+            },
         });
     }
 
@@ -205,6 +216,8 @@ export class TurnClient {
             }
             return;
         }
+        // Drawn as sending until something else draws them: the wait for an ended turn below, or the send itself.
+        const sending = this.sending.begin(trimmed, attachments);
         // Words typed after a Stop are the next turn's, not the ended one's: said into it, the daemon would queue them
         // behind the stop, which holds its queue.
         if (this.unwinding) {
@@ -212,16 +225,19 @@ export class TurnClient {
         }
         // Earlier words still wait to go out: these go behind them, in the order they were written, never ahead.
         if (this.outbox.entries.value.length > 0) {
+            this.sending.end(sending);
             this.nameAfter(trimmed, attachments);
             const sent = { text: trimmed, attachments };
-            this.outbox.keep(unsentOf(this.requestBody({ ...sent, messageId: this.messageIdFor(trimmed), editorContext }), sent), undefined);
+            this.outbox.keep(unsentOf(messageRequestBody(this.host, { ...sent, messageId: this.messageIdFor(trimmed), editorContext }), sent), undefined);
             await this.outbox.flush();
             return;
         }
         if (this.streaming.value) {
-            await this.sayInto(trimmed, attachments, editorContext);
+            await this.sayInto(trimmed, attachments, editorContext, undefined, sending);
             return;
         }
+        // The turn's own bubble draws them from here, in the same frame.
+        this.sending.end(sending);
         const settings = this.host.selection.turnSettings();
         await this.deliverTurn(this.openTurn(trimmed, attachments, settings), trimmed, attachments, settings, editorContext);
     }
@@ -417,7 +433,7 @@ export class TurnClient {
         const messageId = this.messageIdFor(text);
         this.message = messageId;
         let elsewhere: LeftTo | undefined;
-        const body = this.requestBody({ text, attachments, messageId, editorContext }, { opened: { settings, session }, forkOf, errand });
+        const body = messageRequestBody(this.host, { text, attachments, messageId, editorContext }, { opened: { settings, session }, forkOf, errand });
         try {
             const receipt = await this.post(body, controller.signal);
             if (receipt instanceof SandboxHttpError) {
@@ -477,24 +493,31 @@ export class TurnClient {
     }
 
     // Words for the turn this window follows: the daemon says them into it where it takes words, or queues them behind
-    // it; nothing is drawn here, since the daemon's own row, or the queue every window shows, is where they appear.
+    // it. No row is drawn here (one under the streaming answer would split it): the words stand as sending at the
+    // transcript's foot (`sending`) until the daemon's own row, or the queue every window shows, has them.
     private async sayInto(
         text: string,
         attachments: readonly ChatAttachment[],
         editorContext: EditorContext | undefined,
         booking: TurnBooking | undefined = undefined,
+        sending: string = this.sending.begin(text, attachments),
     ): Promise<void> {
         const { host } = this;
         const settings = host.selection.turnSettings();
         const attachmentPaths = attachments.map((file) => file.path);
         const messageId = this.messageIdFor(text);
+        this.sending.named(sending, messageId);
         const sent: SentMessage = { text, attachments };
-        const body = this.requestBody({ text, attachments, messageId, editorContext }, { booking });
+        const body = messageRequestBody(this.host, { text, attachments, messageId, editorContext }, { booking });
         try {
             const receipt = await this.post(body, new AbortController().signal);
             if (receipt instanceof SandboxHttpError) {
+                this.sending.end(sending);
                 this.turnedAway(receipt, undefined, sent, messageId);
-            } else if (receipt.delivered === `started`) {
+                return;
+            }
+            this.sending.taken(sending);
+            if (receipt.delivered === `started`) {
                 // The turn it was typed into ended meanwhile, so these words opened one of their own on the settings.
                 this.ranOn(settings);
                 // A scheduled send the daemon started after all (what it waited for had come): this window follows it.
@@ -506,47 +529,10 @@ export class TurnClient {
             }
         } catch {
             // allow(silent-catch): no answer at all is what the outbox is for: the words wait where they were sent, and go
-            // again once the sandbox is back.
+            // again once the sandbox is back, drawn as waiting there instead.
+            this.sending.end(sending);
             this.outbox.keep(unsentOf(body, sent), undefined);
         }
-    }
-
-    // The request one message goes out as. A send names the settings and session its turn opened on (`opened`); words
-    // said beside a live turn, or queued behind words still waiting, go on the composer's as they stand. Chips and
-    // @-mentions ride apart, since only a chip was chosen; mentions skip chips, already visible inline.
-    private requestBody(
-        message: { readonly text: string; readonly attachments: readonly ChatAttachment[]; readonly messageId: string; readonly editorContext: EditorContext | undefined },
-        occasion: {
-            readonly opened?: { readonly settings: TurnSettings; readonly session: SessionRef | undefined };
-            readonly forkOf?: ForkLink | undefined;
-            readonly errand?: TurnErrand | undefined;
-            readonly booking?: TurnBooking | undefined;
-        } = {},
-    ): ProcedureInput<`agent.run`> {
-        const { host } = this;
-        const attachmentPaths = message.attachments.map((file) => file.path);
-        return turnRequestBody({
-            messageId: message.messageId,
-            text: message.text,
-            conversationId: host.conversationId,
-            title: host.title.value,
-            isolated: host.isolated.value,
-            runner: host.runner.value,
-            box: host.box.value,
-            mode: host.selection.mode.value,
-            settings: occasion.opened?.settings ?? host.selection.turnSettings(),
-            registered: host.registered.value,
-            session: occasion.opened === undefined ? host.session.value : occasion.opened.session,
-            forkOf: occasion.forkOf,
-            attachmentPaths,
-            mentionedPaths: mentionPaths(message.text).filter((path) => !attachmentPaths.includes(path)),
-            editorContext: message.editorContext,
-            errand: occasion.errand,
-            booking: occasion.booking,
-            ...openingAnswers(host),
-            // Read as the words leave: the draft they were typed into, which the daemon clears with them.
-            draft: sentFrom(host.conversationId),
-        });
     }
 
     // Where a sent turn's request or stream threw. A user-initiated Stop aborts the fetch, which is expected, not an error

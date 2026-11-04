@@ -3688,6 +3688,10 @@
             "nightPicked": "Your night hours were on (until {until}), so the agent went with its own recommendation. Say so in the chat to change it.",
             "nightSaved": "Your night hours were on (until {until}), so nobody was asked. The agent went on without an answer and ends with this question."
         },
+        "chatSending": {
+            "sending": "Sending…",
+            "stillSending": "Still sending: the sandbox is busy"
+        },
         "chatQueue": {
             "edit": "Edit",
             "editLabel": "Edit waiting message",

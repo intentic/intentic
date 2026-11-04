@@ -2,6 +2,7 @@ import type { Services } from "../../composition.js";
 import { isIsolated, type PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { checkpointWorktree } from "./checkpoint-worktree.js";
 import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
+import { captureBehind } from "../../sessions/steer-captures.js";
 
 // A steered message's before-state checkpoint is reserved as an empty box the instant the turn accepts it; it fills in
 // once the capture resolves. The boxes are the conversation's actor's (`steer-reserved`, `steers-taken`), in the order
@@ -31,10 +32,11 @@ const stateNow = async (
     }
 };
 
-// Reserves its box synchronously, before the first await, so the Nth box pairs with the Nth steered row. The box is
-// always taken, even if it stays empty: skipping one would shift every later message's index. A remote conversation
-// fills none: its local mirror is stale, and a wrong state is worse than none.
-export const checkpointSteeredMessage = async (
+// Reserves its box synchronously, in the caller's own breath, so the Nth box pairs with the Nth steered row; the capture
+// that fills it runs behind any still running (sessions/steer-captures.ts), and the returned promise is that capture. The box is always
+// taken, even if it stays empty: skipping one would shift every later message's index. A remote conversation fills
+// none: its local mirror is stale, and a wrong state is worse than none.
+export const checkpointSteeredMessage = (
     services: Pick<Services, "agents" | "conversations" | "agentWorktrees" | "history" | "logger">,
     conversationId: string,
 ): Promise<void> => {
@@ -42,10 +44,16 @@ export const checkpointSteeredMessage = async (
     const entry = services.agents.entry(conversationId);
     // No box past the cap, nothing to checkpoint against, or the conversation's state is on another machine.
     if (slot === undefined || entry === undefined || (entry.placement.kind === "worktree" && entry.placement.runner !== undefined)) {
-        return;
+        return Promise.resolve();
     }
-    const checkpoint = await stateNow(services, conversationId, entry);
-    if (checkpoint !== undefined) {
-        services.conversations.send(conversationId, { kind: "steer-captured", slot, checkpoint });
-    }
+    return captureBehind(conversationId, async () => {
+        const checkpoint = await stateNow(services, conversationId, entry);
+        try {
+            if (checkpoint !== undefined) {
+                services.conversations.send(conversationId, { kind: "steer-captured", slot, checkpoint });
+            }
+        } catch (error) {
+            services.logger.warn({ err: error, conversationId }, "checkpoints: filing a steered message's state failed");
+        }
+    });
 };

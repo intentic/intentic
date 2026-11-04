@@ -184,6 +184,8 @@ const queueReadings = (conversation: ComputedRef<Conversation>) => ({
     waiting: computed(() => unbookedOf(shownQueue(conversation.value))),
     queuePaused: computed(() => holdOfQueue(shownQueue(conversation.value))),
     bookedGroups: computed(() => bookedGroups(shownQueue(conversation.value))),
+    // Words this window sent that neither the transcript nor the queue shows yet (sendingWords.ts).
+    sending: computed(() => conversation.value.turn.sending.shown.value),
 });
 
 // The signed-in person, as a prompt names its author (promptAuthor.ts); undefined with nobody signed in.

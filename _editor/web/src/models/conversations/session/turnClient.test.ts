@@ -680,6 +680,75 @@ describe(`saying something`, () => {
         expect(host.error.value).toBeNull();
     });
 
+    /* WORDS ON THEIR WAY (sendingWords.ts). On a loaded sandbox the answer to a send into a running turn took seconds, and
+       the words were gone from the composer with nothing on screen until the daemon's row came: they stand as sending
+       from the press until the queue or the transcript has them under their id. */
+    it(`shows words said into a running turn as sending until the daemon's queue lists them`, async () => {
+        const { client, host } = parked();
+        let answer!: (receipt: MessageReceipt) => void;
+        run.mockImplementationOnce(() => new Promise<MessageReceipt>((settle) => (answer = settle)));
+
+        const said = client.say(`and the docs too`, [FILE]);
+        expect(client.sending.shown.value.map(({ text, attachments }) => ({ text, attachments }))).toEqual([{ text: `and the docs too`, attachments: [FILE.path] }]);
+
+        await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+        const id = run.mock.calls[0]?.[0].messageId;
+        answer({ delivered: `queued` });
+        await said;
+        // Taken, but nothing here shows it yet: still on its way.
+        expect(client.sending.shown.value).toHaveLength(1);
+
+        host.queue.value = { items: [{ id: id!, text: `and the docs too`, voice: `person`, revision: 1, queuedAt: 1 }], revision: 1 };
+        expect(client.sending.shown.value).toEqual([]);
+        host.queue.value = undefined;
+        // Gone for good once seen: the queue letting it go as a turn does not bring it back.
+        expect(client.sending.shown.value).toEqual([]);
+    });
+
+    it(`shows words steered into a running turn as sending until its row under their id is drawn`, async () => {
+        const { client, host } = parked();
+        answers({ delivered: `steered`, run: `run-1` });
+
+        await client.say(`skip the changelog`);
+        expect(client.sending.shown.value.map(({ text }) => text)).toEqual([`skip the changelog`]);
+
+        const id = run.mock.calls[0]?.[0].messageId;
+        host.transcript.adopt([...host.transcript.messages.value, { id: 3, role: `user`, text: `skip the changelog`, messageId: id }]);
+        expect(client.sending.shown.value).toEqual([]);
+    });
+
+    it(`stops showing words as sending once the door refuses them, handing them back`, async () => {
+        const { client, host } = parked();
+
+        await client.say(`and the docs too`);
+
+        expect(client.sending.shown.value).toEqual([]);
+        expect(host.draft.value).toBe(`and the docs too`);
+    });
+
+    it(`hands words no answer came back for to the outbox's waiting bubble rather than showing them twice`, async () => {
+        const { client } = parked();
+        run.mockImplementation(async () => {
+            throw new TypeError(`Failed to fetch`);
+        });
+
+        await client.say(`and the docs too`);
+
+        expect(client.sending.shown.value).toEqual([]);
+        expect(client.outbox.entries.value.map(({ text }) => text)).toEqual([`and the docs too`]);
+    });
+
+    it(`shows nothing as sending for a send that opens its own turn, whose bubble draws it`, async () => {
+        const { client, host } = clientOf();
+        answers({ delivered: `queued` });
+        attach.mockImplementation(async () => attached(`r-other`, 3_000, `the other window's ask`));
+
+        const said = client.say(`and the docs too`);
+        expect(client.sending.shown.value).toEqual([]);
+        expect(host.transcript.messages.value.map(({ text }) => text)).toEqual([`and the docs too`]);
+        await said;
+    });
+
     // Another window's turn holds the conversation: the words went to the daemon, so the bubble drawn here goes, and
     // this window follows the turn that will carry them.
     it(`drops its own bubble for a send the daemon queued behind another turn, and follows that turn`, async () => {

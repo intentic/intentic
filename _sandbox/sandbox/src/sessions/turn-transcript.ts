@@ -8,7 +8,9 @@ import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { RESTART_LOSSES, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
+import { within } from "@intentic/base/async";
 import { opt } from "../opt.js";
+import { steerCapturesSettled } from "./steer-captures.js";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
@@ -137,6 +139,10 @@ const recordedCount = async (services: Pick<Services, "transcripts">, agent: Tra
     }
 };
 
+// How long a turn's record waits for its steers' captures to file their boxes: a git status and commit per repo, which
+// a loaded machine queues for tens of seconds at worst.
+const STEER_CAPTURE_WAIT_MS = 30_000;
+
 // Files a steer's pinned state under the row index it landed on, computed only once the turn settles. Drains the queue
 // regardless, since a leftover would be misfiled under the next turn's rows; never throws.
 const recordSteerAnchors = async (
@@ -150,6 +156,9 @@ const recordSteerAnchors = async (
     if (services.conversations.state(conversationId) === undefined) {
         return;
     }
+    // A steer said just before the turn ended may still be capturing its state (steerPerson no longer waits for it):
+    // its box is filled before it is taken, unless the capture hangs, when the box goes empty rather than hold the record.
+    await within(steerCapturesSettled(conversationId), STEER_CAPTURE_WAIT_MS, undefined, { unref: true });
     const anchors = services.conversations.send(conversationId, { kind: "steers-taken" }).reply;
     if (base === undefined) {
         return;

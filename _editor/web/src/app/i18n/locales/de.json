@@ -3688,6 +3688,10 @@
             "nightPicked": "Deine Nachtruhe galt (bis {until}), also ist der Agent seiner eigenen Empfehlung gefolgt. Sag es im Chat, wenn du es ändern willst.",
             "nightSaved": "Deine Nachtruhe galt (bis {until}), also wurde niemand gefragt. Der Agent hat ohne Antwort weitergemacht und endet mit dieser Frage."
         },
+        "chatSending": {
+            "sending": "Wird gesendet…",
+            "stillSending": "Wird noch gesendet: die Sandbox ist ausgelastet"
+        },
         "chatQueue": {
             "edit": "Bearbeiten",
             "editLabel": "Wartende Nachricht bearbeiten",

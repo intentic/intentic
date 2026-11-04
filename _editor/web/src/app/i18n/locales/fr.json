@@ -3688,6 +3688,10 @@
             "nightPicked": "Vos heures de nuit étaient actives (jusqu'à {until}) : l'agent a donc suivi sa propre recommandation. Dites-le dans le chat pour la changer.",
             "nightSaved": "Vos heures de nuit étaient actives (jusqu'à {until}) : personne n'a été sollicité. L'agent a continué sans réponse et termine par cette question."
         },
+        "chatSending": {
+            "sending": "Envoi…",
+            "stillSending": "Envoi en cours : le sandbox est occupé"
+        },
         "chatQueue": {
             "edit": "Modifier",
             "editLabel": "Modifier le message en attente",

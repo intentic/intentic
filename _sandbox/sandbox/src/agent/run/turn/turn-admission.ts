@@ -77,8 +77,10 @@ export const steerPerson = async (services: Services, conversationId: string, st
         messageId: steer.messageId ?? randomUUID(),
         ...((steer.attachments ?? []).length > 0 ? { attachments: [...(steer.attachments ?? [])] } : {}),
     });
-    // Reserves this steer's rewind slot in the same synchronous breath as the frame.
-    await checkpointSteeredMessage(services, conversationId);
+    // Reserves this steer's rewind slot in the same synchronous breath as the frame. The capture that fills it is not
+    // waited for: under load its git queued for seconds, and the answer to the person's message with it. The settle
+    // waits for it instead (steerCapturesSettled), so the slot is still filled before the turn takes it.
+    void checkpointSteeredMessage(services, conversationId);
     // Indexed here, since the prompt index reads a session file once and would miss this.
     const sessionId = services.conversations.sessionIdOf(conversationId);
     recordConversationPrompt(conversationId, steer.text);

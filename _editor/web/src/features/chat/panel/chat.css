@@ -175,6 +175,19 @@
     background-image: none;
     box-shadow: none;
 }
+/* WORDS ON THEIR WAY (ChatSendingMessages): held back a moment, then faded in, so a send the sandbox answers at once
+   shows nothing and only a slow one says it is going. `both` keeps it invisible through the delay. */
+.chat-sending {
+    animation: chat-sending-in 160ms ease-out 300ms both;
+}
+@keyframes chat-sending-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
 /* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. */
 .chat-skeleton {
     mask-image: linear-gradient(to bottom, transparent, black 4rem);

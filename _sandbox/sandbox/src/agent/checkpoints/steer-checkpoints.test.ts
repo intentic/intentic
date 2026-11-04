@@ -1,9 +1,10 @@
 import { conversationEntry, isolatedAgent } from "../../conversations/registry/agents-store.testing.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { steerCapturesSettled } from "../../sessions/steer-captures.js";
 import { checkpointSteeredMessage } from "./steer-checkpoints.js";
 
-// Pins that a steered message's position is fixed when the turn accepts it, before its snapshot resolves; a queue that
-// reordered by finish time would file one message's state under another's index.
+// Pins that a steered message's position is fixed when the turn accepts it, before its snapshot resolves, and that its
+// captures run one after another, so a state is always filed under the index of the message that took it.
 
 const logger = { warn: jest.fn() } as never;
 
@@ -40,23 +41,44 @@ const taken = (deps: { readonly conversations: ReturnType<typeof memoryFleet>["c
 // A main-tree conversation: no branch, so its before-state is a workspace checkpoint.
 const mainTree = { agents: { entry: () => conversationEntry() } };
 
-test("a slow capture keeps its place, so states stay paired with the messages that took them", async () => {
-    // The first steer's capture resolves after the second's has been filed: what a finish-order queue would reorder.
-    const captures = history(["snap-1", "snap-2"]);
+test("a second capture waits for the first, and each files its state under the box its message took", async () => {
+    const captures = history(["snap-1"]);
     const deps = services(mainTree.agents, { history: captures.history });
 
     const first = checkpointSteeredMessage(deps, "c1");
     const second = checkpointSteeredMessage(deps, "c1");
-    captures.release("snap-2");
-    await second;
+    // Both boxes are taken in the callers' own breath, before either capture has run.
+    await Promise.resolve();
+    expect(captures.finished).toEqual([]);
     captures.release("snap-1");
-    await first;
+    await Promise.all([first, second]);
 
-    expect(captures.finished).toEqual(["snap-2", "snap-1"]);
+    expect(captures.finished).toEqual(["snap-1", "snap-2"]);
     expect(taken(deps, "c1")).toEqual([
         { kind: "tree", snapshot: "snap-1" },
         { kind: "tree", snapshot: "snap-2" },
     ]);
+});
+
+// The steer's answer no longer waits for its capture, so the turn's settle does: a box taken before its capture filed
+// it would cost the message its rewind point.
+test("says when every capture started for a conversation has filed its box", async () => {
+    const captures = history(["snap-1"]);
+    const deps = services(mainTree.agents, { history: captures.history });
+
+    void checkpointSteeredMessage(deps, "c1");
+    let settled = false;
+    const waited = steerCapturesSettled("c1").then(() => {
+        settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    // Another conversation's captures are nothing to wait for.
+    await steerCapturesSettled("c9");
+
+    captures.release("snap-1");
+    await waited;
+    expect(taken(deps, "c1")).toEqual([{ kind: "tree", snapshot: "snap-1" }]);
 });
 
 // Skipping a box would shift every later message's index in the turn; an empty box, not no box, keeps positions
