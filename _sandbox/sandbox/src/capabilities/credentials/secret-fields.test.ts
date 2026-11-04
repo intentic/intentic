@@ -152,7 +152,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         {
             id: "my-chrome",
             kind: "webext",
-            config: { platform: "chrome", read: "on", act: "on", screenshot: "on", cookies: "on", confirm: "always" },
+            config: { platform: "chrome", read: "on", act: "on", screenshot: "on", cookies: "on", scripts: "on", confirm: "always" },
         },
     ],
     // Every phone field is a permission, not a credential; the echo must be total or a switch is vaulted.

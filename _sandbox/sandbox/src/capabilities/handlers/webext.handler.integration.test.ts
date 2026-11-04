@@ -40,7 +40,7 @@ const host: ExtensionHost = {
 const chrome: Capability = {
     id: "my-chrome",
     kind: "webext",
-    config: { platform: "chrome", read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" },
+    config: { platform: "chrome", read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" },
 };
 const skillPath = (root: string): string => join(root, ".agents", "skills", "my-chrome", "SKILL.md");
 
@@ -95,6 +95,7 @@ test("echoConfig renders the grant back and webext holds no manifest secret", ()
         act: "on",
         screenshot: "off",
         cookies: "off",
+        scripts: "off",
         confirm: "sensitive",
     });
     expect(secretField(chrome, new Map())).toBeUndefined();

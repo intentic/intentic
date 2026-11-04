@@ -3,11 +3,13 @@ import type { GroupSamples } from "./context.ts";
 // Sent in this order against one live fixture, so each write is undone by a later one: a folder made, moved, copied and
 // deleted; the dropped archive unpacked and removed; a repository cloned in, which the per-repo apps, tests and graph
 // samples then read.
-export const workspaceSamples: GroupSamples<`workspace`> = () => ({
+export const workspaceSamples: GroupSamples<`workspace`> = ({ fleet }) => ({
     tree: {},
     children: { path: `web` },
     file: { path: `web/src/lib/checkout.ts` },
     dimensions: { paths: [`web/public/logo.svg`] },
+    // The featured conversation's own copy of the file the reader has open, watched while it is on screen.
+    followCheckout: { agent: fleet.FEATURED_AGENT_ID, paths: [`web/src/lib/checkout.ts`] },
     resolve: { path: `lib/checkout.ts` },
     derived: { path: `drop/brand-kit.zip` },
     derive: { path: `drop/brand-kit.zip` },

@@ -121,7 +121,7 @@ test("the owner's own browser reaches a turn only as an account does", () => {
     const chrome: Capability = {
         id: "chrome",
         kind: "webext",
-        config: { platform: "chrome", read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" },
+        config: { platform: "chrome", read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" },
     };
     const cast = [personaOf("marketing", ["x"]), personaOf("browsing", ["chrome"])];
     expect(turnPersona({ personas: cast, actsAs: undefined, unattended: false }).allows(chrome)).toBe(true);
