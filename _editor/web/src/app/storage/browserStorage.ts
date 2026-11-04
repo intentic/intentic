@@ -39,6 +39,8 @@ export const googleCredentialKey = accountKeys(`intentic.gid.`);
 
 // Which sandbox this browser last had open: the account's, so the next person to sign in is not put on it.
 export const ACTIVE_SANDBOX_KEY = accountKey(`intentic.activeSandboxId`);
+// The sandboxes this browser last reached over loopback, by row id (client/endpoint/onThisComputer.ts).
+export const ON_THIS_COMPUTER_KEY = accountKey(`intentic.onThisComputer`);
 
 // The chat's tabs, per sandbox (models/conversations/tabs/tabSnapshot.ts).
 export const chatTabsKey = sandboxKeys(`intentic.chatTabs.`);

@@ -11,8 +11,8 @@ import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
 import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { sandboxAvailabilityVisual } from "../overview/availability";
-import { placementOf, type SandboxPlacement } from "../overview/placement";
-import { useSandboxPlacement } from "../overview/useSandboxPlacement";
+import type { SandboxPlacement } from "../overview/placement";
+import { rowPlacement, useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { switchableSandboxes } from "../../../models/sandbox/live/roster";
 import { useRequestAddSandbox, warmAddSandbox } from "../../../models/sandbox/addSandbox";
@@ -139,7 +139,7 @@ const answerFor = (option: SandboxSummary): NotePart | undefined =>
 // The same fact per row, and the ACTIVE row borrows the refined one above rather than deriving its own: the tile and
 // the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
-    isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
+    isActive(option) && placement.value !== undefined ? placement.value : rowPlacement(option);
 
 // THE ROW'S SECOND LINE: where it runs, then whatever else is true of it, each fact in its own ink so a warning colours
 // only the words that warn. On the ACTIVE row it is what the logo's own marks say (the hover card the logo used to

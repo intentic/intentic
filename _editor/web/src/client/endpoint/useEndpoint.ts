@@ -4,6 +4,7 @@ import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { measuredProtocol, setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../../lib/streamBudget";
 import { useSandbox } from "../sandbox/useSandbox";
 import { rememberedLocalId } from "../directory/deviceDirectory";
+import { rememberRoute } from "./onThisComputer";
 
 // Transport half of `useSandbox`: calls resolve through `daemonBase` here, while `daemonUrl` remains the sandbox's
 // identity used elsewhere. Resolution stays off the critical path: the tunnel serves first paint, and a background
@@ -152,6 +153,8 @@ const resolve = async (): Promise<void> => {
             // Stamped even when the answer is unchanged, so a still-missing certificate still buys another interval.
             resolvedAt.set(id, Date.now());
             endpoints.value = { ...endpoints.value, [id]: endpoint };
+            // Kept past this visit, so the switcher's other rows can still say which sandboxes run here.
+            rememberRoute(id, endpoint);
             // A better route is a fresh start: plain HTTP again later has to make a stream wait again to be said.
             if (endpoint.kind !== `local-insecure` && starvedOn.value === id) {
                 starvedOn.value = undefined;

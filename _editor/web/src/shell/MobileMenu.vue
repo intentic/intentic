@@ -11,8 +11,8 @@ import { useSandbox } from "../client/sandbox/useSandbox";
 import { switchableSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
 import { useRequestAddSandbox } from "../models/sandbox/addSandbox";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
-import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
-import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
+import type { SandboxPlacement } from "../features/sandbox/overview/placement";
+import { rowPlacement, useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
 import { usePushNotifications } from "../workbench/push/usePushNotifications";
@@ -63,11 +63,11 @@ const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // Where each box runs. The active row borrows the refined answer (a named device, this very computer); the others
-// have only what the platform lists, which still separates Intentic's cloud from hardware of the owner's own.
+// have what the platform lists plus this browser's memory of reaching them over loopback (onThisComputer.ts).
 const placement = useSandboxPlacement();
 const isActive = (option: SandboxSummary): boolean => option.id === sandbox.activeSandboxId.value;
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
-    isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
+    isActive(option) && placement.value !== undefined ? placement.value : rowPlacement(option);
 
 // A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
 const resumeSetup = (id: string) => finishOnHome(id);
