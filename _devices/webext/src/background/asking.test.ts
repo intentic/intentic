@@ -35,7 +35,7 @@ const flashes = (): unknown[] => browser.calls.filter(([api, , info]) => api ===
 
 beforeEach(async () => {
     browser = installBrowser();
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "always" });
     await store.setMode("https://app.example/*", "act");
     await store.setMode("https://mail.example/*", "act");
 });

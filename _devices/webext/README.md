@@ -51,6 +51,24 @@ flowchart LR
   `http://localhost:<port>/…` redirect is handed back to the sandbox, which checks it, and the dead-end tab closes. It
   needs no new permission, so it works only where the owner allowed this extension on `http://localhost` like any
   other site, and `describe` advertises `loopback-catch` only then.
+- **User scripts** (behind the card's `scripts` switch, off by default): the agent writes a script under a
+  Tampermonkey-style `// ==UserScript==` header, tries it once in a tab (`script_try`, via `userScripts.execute`, after
+  the person's yes for that site), and asks to install it. The request waits in the popup with its code, sites, the
+  hosts it may reach and its hash, and only the person's click installs it; an update shows as a diff unless they let
+  that script update without asking and its sites and hosts stay the same. Chrome's `chrome.userScripts` then runs it
+  on every visit to its sites, with the sandbox offline too. It needs Chrome 135, the optional `userScripts`
+  permission (popup → Scripts → "Turn on scripts") and the browser's own "Allow User Scripts" switch on the
+  extension's details page ("Developer mode" before Chrome 138). Until both are on, the script tools and `describe`'s
+  `Scripts:` line name what is missing; once they are, the facts carry the feature `user-scripts`.
+- Each script runs in a `USER_SCRIPT` world of its own, named after it, whose content security policy allows only
+  its own sites and `@connect` hosts. Measured on Chrome 156, that policy blocks its fetches and loads to any other
+  host, and the page's own policy does not apply to the world, so the script's own requests reach only the hosts the
+  person was shown. (A policy does not cover navigation: a script that sends the page elsewhere does it in view.)
+  Its messages to the worker carry a secret of its own, since Chrome does not say which world a message came from.
+  A script is unregistered while it is off, scripts are unavailable, the browser is paused, or one of its sites is no
+  longer allowed in read and act, and comes back when that changes. Chrome clears registrations when the extension
+  updates, so the worker registers them again from `chrome.storage.local`. Installed scripts are the person's: they
+  stay and keep running when the sandbox that wrote them disconnects, and only its pending request is dropped.
 - Chrome kills an idle MV3 worker, so the worker holds no state: everything lives in `chrome.storage.local`, and an
   alarm redials a dropped link.
 - **Passwords (optional):** a separate "Turn on" in the popup asks once for `nativeMessaging` and all-site access.
@@ -74,6 +92,13 @@ flowchart LR
 - [src/page/overlay.ts](src/page/overlay.ts) — what a tab shows the person: the action banner and the in-page Allow/No question.
 - [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.
 - [src/popup/sandboxes-section.ts](src/popup/sandboxes-section.ts) — the popup's list of paired sandboxes, and pairing another.
+- [src/background/tools/scripts.ts](src/background/tools/scripts.ts) — the script tools, and the person's answers to install and update requests.
+- [src/background/scripts/header.ts](src/background/scripts/header.ts) — reads a `// ==UserScript==` header, and the rules on `@match` and `@connect`.
+- [src/background/scripts/kept.ts](src/background/scripts/kept.ts) — installed scripts, pending requests, logs and each script's storage.
+- [src/background/scripts/runtime.ts](src/background/scripts/runtime.ts) — registrations, each script's world and its policy, and what a script may say to the worker.
+- [src/background/scripts/view.ts](src/background/scripts/view.ts) — the popup's picture of scripts.
+- [src/popup/scripts-section.ts](src/popup/scripts-section.ts) — the popup's Scripts section: turning scripts on, install requests, the installed list.
+- [src/popup/line-diff.ts](src/popup/line-diff.ts) — the line diff an update is reviewed as.
 - [src/background/native.ts](src/background/native.ts) — the one native-messaging port to Passwords on this computer, requests correlated by id.
 - [src/background/passwords.ts](src/background/passwords.ts) — registers the passwords content script and routes capture/fill.
 - [src/content/password-capture.ts](src/content/password-capture.ts) — capture, toast, and fill UI injected on sites while Passwords is on.

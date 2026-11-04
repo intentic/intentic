@@ -14,6 +14,14 @@ declare namespace chrome {
             ) => void;
         };
         function sendMessage(message: unknown): Promise<unknown>;
+        // Messages from user scripts arrive here, never on onMessage; present only while the userScripts API is.
+        const onUserScriptMessage:
+            | {
+                  addListener: (
+                      callback: (message: UserScriptMessageIn, sender: { tab?: { id?: number }; url?: string; frameId?: number }, respond: (answer: UserScriptAnswer) => void) => boolean | void,
+                  ) => void;
+              }
+            | undefined;
         function connectNative(name: string): Port;
         interface Port {
             postMessage(message: unknown): void;
@@ -25,6 +33,17 @@ declare namespace chrome {
             tab?: tabs.Tab;
             url?: string;
         }
+    }
+
+    // What a user script's world sent: a less-trusted context, so nothing reads a field of it before
+    // background/scripts/runtime.ts has parsed it.
+    type UserScriptMessageIn = unknown;
+    // What the worker answers a user script: JSON only, since it crosses into the page's world.
+    type UserScriptJson = string | number | boolean | null | readonly UserScriptJson[] | { readonly [key: string]: UserScriptJson };
+    interface UserScriptAnswer {
+        readonly ok: boolean;
+        readonly message?: string;
+        readonly value?: UserScriptJson;
     }
 
     namespace extension {
@@ -56,8 +75,8 @@ declare namespace chrome {
         // agent cannot grant itself a site, and asks the popup to ask the person instead.
         function request(request: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
         function remove(request: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
-        const onRemoved: { addListener: (callback: (removed: { origins?: string[] }) => void) => void };
-        const onAdded: { addListener: (callback: (added: { origins?: string[] }) => void) => void };
+        const onRemoved: { addListener: (callback: (removed: { origins?: string[]; permissions?: string[] }) => void) => void };
+        const onAdded: { addListener: (callback: (added: { origins?: string[]; permissions?: string[] }) => void) => void };
     }
 
     namespace tabs {
@@ -146,6 +165,41 @@ declare namespace chrome {
         function unregisterContentScripts(filter: { ids: string[] }): Promise<void>;
         function getRegisteredContentScripts(filter: { ids: string[] }): Promise<RegisteredContentScript[]>;
     }
+
+    // User scripts (background/scripts/): code the agent wrote and the person installed. Undefined until the extension
+    // holds the optional `userScripts` permission AND the person turned on "Allow User Scripts" on its details page
+    // (Developer mode before Chrome 138), so it is read as possibly absent everywhere.
+    interface UserScriptSource {
+        code: string;
+    }
+    interface RegisteredUserScript {
+        id: string;
+        matches?: string[];
+        excludeMatches?: string[];
+        js?: UserScriptSource[];
+        runAt?: "document_start" | "document_end" | "document_idle";
+        allFrames?: boolean;
+        world?: "USER_SCRIPT" | "MAIN";
+        // Chrome 133: each script in a world of its own, so one script's globals and content security policy are its own.
+        worldId?: string;
+    }
+    interface UserScriptsApi {
+        register(scripts: RegisteredUserScript[]): Promise<void>;
+        update(scripts: RegisteredUserScript[]): Promise<void>;
+        unregister(filter?: { ids?: string[] }): Promise<void>;
+        getScripts(filter?: { ids?: string[] }): Promise<RegisteredUserScript[]>;
+        configureWorld(properties: { worldId?: string; csp?: string; messaging?: boolean }): Promise<void>;
+        resetWorldConfiguration?(worldId?: string): Promise<void>;
+        // Chrome 135: once, in one tab. A script that throws, or does not parse, answers `result: null` with no `error`
+        // (measured on Chrome 156), which is why script_try reports from inside the page (scripts/runtime.ts).
+        execute?(injection: {
+            target: { tabId: number; frameIds?: number[] };
+            js: UserScriptSource[];
+            worldId?: string;
+            injectImmediately?: boolean;
+        }): Promise<{ documentId?: string; frameId: number; result?: unknown; error?: string }[]>;
+    }
+    const userScripts: UserScriptsApi | undefined;
 
     namespace cookies {
         interface Cookie {

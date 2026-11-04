@@ -8,7 +8,7 @@ import { store } from "./store.js";
 
 const FIRST = "https://sandbox-1.example.dev";
 const SECOND = "https://sandbox-2.example.dev";
-const ON = { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" } as const;
+const ON = { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" } as const;
 
 let browser: FakeBrowser;
 

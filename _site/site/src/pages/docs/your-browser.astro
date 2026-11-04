@@ -22,6 +22,11 @@ const switches = [
         detail: `The one switch that copies a credential rather than borrowing the browser holding it. Needs your click on the page every single time as well.`,
     },
     {
+        name: `Run scripts it writes`,
+        state: `off`,
+        detail: `Lets the agent write scripts that change the sites you allow for good; none of them runs until you have read it and installed it from the extension.`,
+    },
+    {
         name: `Ask before acting`,
         state: `sensitive`,
         detail: `When you are asked in the page first: on anything that smells of money, deletion or a password (the default), on everything, or never.`,
@@ -114,6 +119,34 @@ const switches = [
     <p>
         It needs the switch on the card, your confirmation on the page every time, and it never shows the agent what moved — the answer it gets
         back is a count and a site name. Worth knowing before you use it: some sites end a session that starts appearing from a second place.
+    </p>
+
+    <h2>Scripts that stay</h2>
+    <p>
+        Some changes you want on every visit to a site: a panel hidden, a column added, a page restyled or its dates written your way. For those
+        the agent can write you a user script, the same kind of small program Tampermonkey runs. Once you install it, your browser runs it on every
+        visit to its sites, also while your sandbox is offline.
+    </p>
+    <p>
+        It needs <strong>Run scripts it writes</strong> on the card, and two switches in the browser, turned on once: <strong>Turn on scripts</strong>
+        under <strong>Scripts</strong> in the popup, and the browser's own <strong>Allow User Scripts</strong> on the extension's details page
+        (<strong>Developer mode</strong> before Chrome 138). Scripts need Chrome 135 or later.
+    </p>
+    <p>
+        Nothing installs without your click. While the agent writes a script it may try it once on a page you have open, after asking you (by
+        default once per site every fifteen minutes). When it is ready, it waits in the popup with its code, the sites it runs on, the other hosts
+        it may reach, and when in the page load it runs. An update shows you what changed, line by line, unless you let the agent change that
+        script's code without asking and the update keeps to the same sites and hosts.
+    </p>
+    <p>
+        A script runs only on sites you allowed in read and act, and your browser blocks every request it makes to any host beyond those sites
+        and the ones it listed for you. Nothing is fetched to build it, so the code you read is the code that runs.
+    </p>
+    <p>
+        The popup lists every installed script with a switch, its code and its last error. Turn one off or remove it there at any time; one you
+        turned off stays off until you turn it on again. A script is yours once installed, so disconnecting the sandbox that wrote it leaves it
+        running. <strong>Pause</strong> stops every script until you resume, and taking back a site, or making it read only, stops the scripts
+        that run on it.
     </p>
 
     <h2>Ending it</h2>

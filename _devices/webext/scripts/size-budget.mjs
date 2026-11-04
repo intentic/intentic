@@ -14,7 +14,8 @@ const BUDGETS = {
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes
     // section that lists every paired sandbox and pairs another (sandboxes-section.ts).
-    "popup.js": 24_000,
+    // 2026-11-04: up for Scripts (scripts-section.ts, line-diff.ts), the install card with its code and an update's diff.
+    "popup.js": 36_000,
     // Injected on all sites while Passwords is on: capture, fill UI, and toast only (no zod).
     "passwords.js": 18_000,
 };

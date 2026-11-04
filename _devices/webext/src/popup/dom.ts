@@ -1,4 +1,5 @@
 import type { PopupCommand } from "../background/messages.js";
+import { siteOf } from "../background/policy.js";
 
 // The popup's few DOM helpers, shared by its sections (popup.ts, passwords-section.ts): no framework, since the popup
 // opens on every click of the toolbar button and has to draw at once.
@@ -86,4 +87,24 @@ export const show = (node: HTMLElement, visible: boolean): void => {
 export const say = (node: HTMLElement, message: string | undefined): void => {
     node.textContent = message ?? "";
     show(node, message !== undefined);
+};
+
+// The site's icon from the browser's own favicon cache (the `favicon` permission: nothing is fetched from the site),
+// over a letter in a colour of its own until it loads.
+export const favicon = (origin: string): HTMLElement => {
+    const host = siteOf(origin).replace(/^www\./, "");
+    const box = h("span", { class: "fav", text: (host[0] ?? "?").toUpperCase() });
+    let hue = 7;
+    for (const char of host) {
+        hue = (hue * 31 + char.charCodeAt(0)) % 360;
+    }
+    box.style.background = `oklch(58% 0.1 ${hue})`;
+    const image = new Image();
+    image.alt = "";
+    image.addEventListener("load", () => {
+        box.style.background = "transparent";
+        box.replaceChildren(image);
+    });
+    image.src = chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(origin.replace(/\/\*$/, "/"))}&size=32`);
+    return box;
 };

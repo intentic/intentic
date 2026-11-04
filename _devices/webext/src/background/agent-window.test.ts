@@ -48,7 +48,7 @@ const personUndisturbed = (): void => {
 
 beforeEach(async () => {
     browser = installBrowser();
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", scripts: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
     await store.setMode("https://mail.example/*", "act");
 });

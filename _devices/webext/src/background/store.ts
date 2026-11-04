@@ -196,7 +196,7 @@ const readAgentWindows = async (): Promise<Record<SandboxKey, number>> => {
 
 // Every switch off and every action asked: a stored grant that no longer parses holds a choice the owner made, which
 // the defaults may be wider than. The sandbox's next push replaces it.
-const LOCKED_SCOPES: WebExtScopes = { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" };
+const LOCKED_SCOPES: WebExtScopes = { read: "off", act: "off", screenshot: "off", cookies: "off", scripts: "off", confirm: "always" };
 
 export const store = {
     // Moves what a build before 2026-10-28 kept for its one sandbox into the list, once, on the worker's start: its

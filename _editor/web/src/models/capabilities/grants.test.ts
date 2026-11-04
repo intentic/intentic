@@ -4,7 +4,7 @@ import { grantList, grantWords } from "./grants";
 
 // Every grant effects.ts can put in a device, browser or phone effect: each switch on, then each off, so a phrase
 // behind either position of a switch is in the list.
-const SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `read`, `act`, `screenshot`, `cookies`, `files`, `notifications`, `apps`];
+const SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `read`, `act`, `screenshot`, `cookies`, `scripts`, `files`, `notifications`, `apps`];
 const everyGrant = (): string[] => {
     const phrases = new Set<string>();
     for (const position of [`on`, `off`]) {
@@ -20,8 +20,8 @@ const everyGrant = (): string[] => {
     return [...phrases];
 };
 
-test(`the switches produce the sixteen grants this list knows`, () => {
-    expect(everyGrant()).toHaveLength(16);
+test(`the switches produce the seventeen grants this list knows`, () => {
+    expect(everyGrant()).toHaveLength(17);
 });
 
 test(`in English every grant reads exactly as the package spells it`, () => {

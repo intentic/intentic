@@ -122,7 +122,7 @@ export const assertRunning = (paused: boolean): void => {
 
 // The global switches, for tools not about one page; one message shape naming the card's own label, so the
 // person knows which control to flip.
-export const assertScope = (scopes: WebExtScopes, scope: "read" | "act" | "screenshot" | "cookies"): void => {
+export const assertScope = (scopes: WebExtScopes, scope: "read" | "act" | "screenshot" | "cookies" | "scripts"): void => {
     if (scopes[scope] === "on") {
         return;
     }
@@ -131,6 +131,7 @@ export const assertScope = (scopes: WebExtScopes, scope: "read" | "act" | "scree
         act: "Click and type",
         screenshot: "Take screenshots",
         cookies: "Hand sessions to the sandbox",
+        scripts: "Run scripts it writes",
     }[scope];
     throw new RefusedError(`Refused: "${label}" is switched off for this browser. Turn it on in its capability card to allow this.`);
 };

@@ -19,7 +19,11 @@ import {
     type PasswordContentMessage,
 } from "./passwords.js";
 import { siteOf } from "./policy.js";
+import { kept } from "./scripts/kept.js";
+import { followAvailability, listenToScripts, syncScripts } from "./scripts/runtime.js";
+import { scriptsState } from "./scripts/view.js";
 import { choose, granted, owner } from "./site-grants.js";
+import { answerScriptRequest, personAutoUpdate, personRemove, personToggle } from "./tools/scripts.js";
 
 // The service worker's entry point: keeps the socket up and answers the popup. Deliberately holds no state,
 // since Chrome rebuilds this module from scratch on every run; only storage and these listeners survive. A
@@ -38,6 +42,10 @@ const wake = (): void => {
     void refreshBadge();
     void passwordsStartup();
     void clearStaleAsking();
+    // Chrome clears every user script registration when the extension updates; this puts them back, and brings in a
+    // change made while no worker ran (a site revoked from the browser's settings).
+    listenToScripts();
+    void syncScripts();
 };
 
 chrome.runtime.onInstalled.addListener(wake);
@@ -51,15 +59,14 @@ chrome.runtime.onStartup.addListener(wake);
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ALARM) {
         void ensureLinks();
+        void followAvailability();
     }
 });
 
 // A site revoked in Chrome's own settings, not this popup: the mode kept for it is now meaningless, and leaving
 // it would silently restore "read and act" if re-granted.
 chrome.permissions.onRemoved.addListener((removed) => {
-    for (const origin of removed.origins ?? []) {
-        void store.forgetMode(origin);
-    }
+    void Promise.all((removed.origins ?? []).map(async (origin) => await store.forgetMode(origin))).then(syncScripts);
 });
 
 // The agent's own window (agent-window.ts): wherever the person moves it is where the next one opens, and once they
@@ -72,6 +79,8 @@ chrome.windows.onRemoved.addListener((windowId) => void forgetClosedWindow(windo
 // filed, every paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
 chrome.permissions.onAdded.addListener((added) => {
     void granted(added.origins ?? []).then(notifySandboxGrantsChanged);
+    // A site a script needs coming back starts it again; the userScripts permission itself is followed by the popup.
+    void syncScripts();
 });
 
 // One paired sandbox as the popup shows it: never its token, which the popup has no use for.
@@ -82,7 +91,7 @@ const sandboxState = async (sandbox: PairedSandbox): Promise<SandboxState> => {
 };
 
 const readState = async (): Promise<PopupState> => {
-    const [paired, grants, pending, offered, paused, log, settings, passwords, asking] = await Promise.all([
+    const [paired, grants, pending, offered, paused, log, settings, passwords, asking, scripts] = await Promise.all([
         store.sandboxes(),
         currentGrants(),
         store.pending(),
@@ -92,6 +101,7 @@ const readState = async (): Promise<PopupState> => {
         store.settings(),
         passwordsUiStatus(),
         store.asking(),
+        scriptsState(),
     ]);
     const sandboxes = await Promise.all(paired.map(sandboxState));
     return {
@@ -111,6 +121,7 @@ const readState = async (): Promise<PopupState> => {
         settings,
         passwords,
         asking,
+        scripts,
     };
 };
 
@@ -180,6 +191,8 @@ const unpair = async (url: string): Promise<{ ok: true }> => {
     const sandbox = await store.sandbox(key);
     closeLink(key);
     await store.forgetSandbox(key);
+    // Its scripts stay: the person installed them. A script it was still asking for goes with it.
+    await kept.dropRequestsOf(key);
     if (sandbox !== undefined) {
         await owner(`Disconnected ${sandboxName(sandbox)}`);
     }
@@ -243,9 +256,45 @@ const handlePairing = async (command: PairingCommand): Promise<unknown> => {
     }
 };
 
+// The person's own say over user scripts, apart from the commands above.
+type ScriptCommand = Extract<
+    PopupCommand,
+    { readonly type: "scripts-enabled" | "script-answer" | "script-toggle" | "script-remove" | "script-auto-update" | "script-source" }
+>;
+const SCRIPT_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["scripts-enabled", "script-answer", "script-toggle", "script-remove", "script-auto-update", "script-source"]);
+const isScriptCommand = (command: PopupCommand): command is ScriptCommand => SCRIPT_COMMANDS.has(command.type);
+
+const handleScript = async (command: ScriptCommand): Promise<{ readonly ok: boolean } | { readonly source: string }> => {
+    switch (command.type) {
+        case "scripts-enabled":
+            await owner("Turned on scripts in this browser");
+            await followAvailability();
+            // Also when an earlier look already saw the API, which only means that look found nothing to bring in.
+            listenToScripts();
+            await syncScripts();
+            return { ok: true };
+        case "script-answer":
+            return { ok: await answerScriptRequest(command.id, command.accept, command.autoUpdate) };
+        case "script-toggle":
+            await personToggle(command.id, command.on);
+            return { ok: true };
+        case "script-remove":
+            await personRemove(command.id);
+            return { ok: true };
+        case "script-auto-update":
+            await personAutoUpdate(command.id, command.on);
+            return { ok: true };
+        case "script-source":
+            return { source: (await kept.script(command.id))?.source ?? "" };
+    }
+};
+
 const handle = async (command: PopupCommand): Promise<unknown> => {
     if (isPairing(command)) {
         return await handlePairing(command);
+    }
+    if (isScriptCommand(command)) {
+        return await handleScript(command);
     }
     switch (command.type) {
         case "state":
@@ -256,11 +305,13 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
         case "mode":
             await store.setMode(command.origin, command.mode);
             await owner(`Set ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);
+            await syncScripts();
             return { ok: true };
         case "revoke":
             await chrome.permissions.remove({ origins: [command.origin] });
             await store.forgetMode(command.origin);
             await owner(`Removed ${siteOf(command.origin)}`);
+            await syncScripts();
             return { ok: true };
         case "decline":
             return await decline(command.sandbox);
@@ -278,6 +329,7 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await store.setPaused(command.value);
             await owner(command.value ? "Paused the agent" : "Resumed the agent");
             await refreshBadge();
+            await syncScripts();
             return { ok: true };
         case "passwords-enable":
             return await enablePasswords();

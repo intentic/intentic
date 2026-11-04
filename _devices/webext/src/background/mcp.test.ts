@@ -110,6 +110,8 @@ test("the tool list says which tools only read and which can lose something", as
         "read",
         "wait_for",
         "screenshot",
+        "scripts",
+        "script_logs",
     ]);
     expect(tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name)).toEqual([
         "click",
@@ -117,6 +119,8 @@ test("the tool list says which tools only read and which can lose something", as
         "key",
         "connect_site",
         "lend_site",
+        "script_try",
+        "script_remove",
         "type_ticket",
     ]);
 });
@@ -225,7 +229,7 @@ test("a notification is not answered, and a malformed message does not throw", a
 test("a switch that is off refuses by name, even on a site that is allowed", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "act");
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" });
     const result = await call("screenshot");
     expect(result.isError).toBe(true);
     expect(result.text).toContain("Take screenshots");
@@ -236,8 +240,8 @@ test("a switch that is off refuses by name, even on a site that is allowed", asy
 test("a stored grant that no longer parses refuses every switch rather than falling back to the defaults", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "read");
-    await chrome.storage.local.set({ [`scopes:${SANDBOX}`]: { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "sometimes" } });
-    expect(await store.scopes(SANDBOX)).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" });
+    await chrome.storage.local.set({ [`scopes:${SANDBOX}`]: { read: "off", act: "off", screenshot: "off", cookies: "off", scripts: "off", confirm: "sometimes" } });
+    expect(await store.scopes(SANDBOX)).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", scripts: "off", confirm: "always" });
     const result = await call("snapshot");
     expect(result.isError).toBe(true);
     expect(result.text).toContain(`"Read the page" is switched off`);
@@ -257,7 +261,7 @@ test("a stored pause that is not a boolean holds as paused, and nothing stored i
 test("handing a session over is refused outright while its switch is off", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "act");
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", scripts: "off", confirm: "sensitive" });
     const result = await call("connect_site", { account: "gh" });
     expect(result.isError).toBe(true);
     expect(result.text).toContain("Hand sessions to the sandbox");

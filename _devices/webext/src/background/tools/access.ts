@@ -1,8 +1,10 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { WebExtFacts } from "@intentic/sandbox-contract/webext";
+import { WEBEXT_USER_SCRIPTS_FEATURE, type WebExtFacts } from "@intentic/sandbox-contract/webext";
 import { ownWindow } from "../agent-window.js";
 import { loopbackFeatures } from "../loopback-catch.js";
 import { declinedMessage, originPattern, RefusedError, siteOf } from "../policy.js";
+import { kept } from "../scripts/kept.js";
+import { availability, unavailableMessage } from "../scripts/runtime.js";
 import { DECLINE_HOLD_MS, type SandboxKey, store } from "../store.js";
 import { currentGrants } from "./tab-access.js";
 
@@ -14,25 +16,22 @@ import { currentGrants } from "./tab-access.js";
 // for waiting, because the icon itself is ember and an ember badge disappears into it. Waiting covers a question the
 // agent is asking on a page, which may be in its own window behind theirs (asking.ts).
 export const refreshBadge = async (): Promise<void> => {
-    const [requests, offered, paused, questions] = await Promise.all([store.pending(), store.inbox(), store.paused(), store.asking()]);
-    // The newest of each is the one named; the popup lists them all.
-    const pending = requests.at(-1);
+    const [requests, offered, paused, questions, scripts] = await Promise.all([store.pending(), store.inbox(), store.paused(), store.asking(), kept.requests()]);
+    // The newest of each is the one named, in this order; the popup lists them all.
     const asking = questions.at(-1);
-    const waiting = pending !== undefined || offered !== undefined || asking !== undefined;
-    await chrome.action.setBadgeText({ text: paused ? `❚❚` : waiting ? `!` : `` });
+    const pending = requests.at(-1);
+    const script = scripts.at(-1);
+    const waiting: readonly (string | undefined)[] = [
+        asking === undefined ? undefined : `your agent is asking you something on ${siteOf(asking.origin)}`,
+        pending === undefined ? undefined : `your agent is asking for ${siteOf(pending.origin)}`,
+        script === undefined ? undefined : `your agent wants to ${script.kind === "install" ? "install" : "update"} the script “${script.name}”`,
+        offered === undefined ? undefined : `a sandbox is offering to connect`,
+    ];
+    const first = waiting.find((each) => each !== undefined);
+    await chrome.action.setBadgeText({ text: paused ? `❚❚` : first === undefined ? `` : `!` });
     await chrome.action.setBadgeBackgroundColor({ color: paused ? `#6f6353` : `#d93a2b` });
     await chrome.action.setBadgeTextColor?.({ color: `#ffffff` });
-    await chrome.action.setTitle({
-        title: paused
-            ? `Intentic — paused`
-            : asking !== undefined
-              ? `Intentic — your agent is asking you something on ${siteOf(asking.origin)}`
-              : pending !== undefined
-                ? `Intentic — your agent is asking for ${siteOf(pending.origin)}`
-                : offered !== undefined
-                  ? `Intentic — a sandbox is offering to connect`
-                  : `Intentic`,
-    });
+    await chrome.action.setTitle({ title: paused ? `Intentic — paused` : first === undefined ? `Intentic` : `Intentic — ${first}` });
 };
 
 // The shortest gap between two popups the extension opens by itself, so an agent cycling through sites can't turn a
@@ -60,14 +59,15 @@ export const openPanel = async (force = false): Promise<void> => {
 
 // A browser's own account of itself, the answer to `describe` on the socket and the substance of its card.
 export const browserFacts = async (): Promise<WebExtFacts> => {
-    const [tabs, grants, paused, browser, features] = await Promise.all([
+    const [tabs, grants, paused, browser, loopback, scripts] = await Promise.all([
         chrome.tabs.query({}),
         currentGrants(),
         store.paused(),
         browserName(),
         loopbackFeatures(),
+        availability(),
     ]);
-    return { browser, tabs: tabs.length, grants, paused, features };
+    return { browser, tabs: tabs.length, grants, paused, features: [...loopback, ...(scripts === "ready" ? [WEBEXT_USER_SCRIPTS_FEATURE] : [])] };
 };
 
 // Brave ships Chrome's user agent on purpose, so asking it is the only way to tell; any browser without the hook reads
@@ -111,8 +111,19 @@ const browserName = async (): Promise<string> => {
 
 // What the agent is told when it asks what it may touch; reads as a list of sites, not match patterns, since a
 // model echoing this should echo something recognisable.
-export const describeAccess = async (): Promise<string> => {
-    const [facts, own] = await Promise.all([browserFacts(), ownWindow()]);
+// Whether this sandbox's agent can write scripts here, in one line, only once its card lets it.
+const scriptsLine = async (from: SandboxKey): Promise<string> => {
+    if ((await store.scopes(from)).scripts !== "on") {
+        return ``;
+    }
+    const state = await availability();
+    return state === "ready"
+        ? `Scripts: on. You can write user scripts that the person installs here (script_try, script_install; \`scripts\` lists them).`
+        : `Scripts: ${unavailableMessage(state)}`;
+};
+
+export const describeAccess = async (from: SandboxKey): Promise<string> => {
+    const [facts, own, scripts] = await Promise.all([browserFacts(), ownWindow(), scriptsLine(from)]);
     const lines = facts.grants.map((grant) => `  ${siteOf(grant.origin)} — ${grant.mode === "act" ? "read and act" : "read only"}`);
     return [
         `${facts.browser}, ${facts.tabs} tab${facts.tabs === 1 ? "" : "s"} open.`,
@@ -123,6 +134,7 @@ export const describeAccess = async (): Promise<string> => {
         ``,
         facts.grants.length === 0 ? `You are not allowed on any site yet. Use ask_access to ask for one.` : `Sites you may work on:`,
         ...lines,
+        scripts,
     ]
         .filter((line) => line !== ``)
         .join("\n");

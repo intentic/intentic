@@ -27,12 +27,29 @@ const FIXED = new Map([
     // Its one argument is a ticket, spent by then and meaningless to a person: what they want to know is that a secret
     // went in.
     [WEBEXT_TICKET_TOOL, "Typed a stored secret into the field in focus"],
+    ["scripts", "Listed the scripts in this browser"],
+    ["script_try", "Tried a script it is writing on the page"],
+    ["script_remove", "Removed one of its scripts"],
+    ["script_logs", "Read one of its scripts' logs"],
+]);
+
+// A script's @name, read from its source the way header.ts does, for a sentence; never more of the source than that.
+const scriptName = (source: string): string => {
+    const name = /^\s*\/\/\s*@name\s+(.+?)\s*$/m.exec(source)?.[1];
+    return name === undefined ? "a script" : `“${oneLine(name, 60)}”`;
+};
+
+// The script tools whose sentence reads their arguments; nothing of a source but its name ever reaches the list.
+const SCRIPT_CALLS = new Map<string, (args: Parameters<typeof describeCall>[1]) => string>([
+    ["script_install", (args) => `Asked to install ${scriptName(text(args["source"]))}`],
+    ["script_update", (args) => `Asked to update ${scriptName(text(args["source"]))}`],
+    ["script_toggle", (args) => (args["on"] === true ? "Turned one of its scripts on" : "Turned one of its scripts off")],
 ]);
 
 // One tool call as a sentence ("Typed 86 characters and submitted"), so the popup's list reads as what happened, not
 // as the call's arguments. Nothing typed into a page is kept: `fill` is recorded by length only.
 export const describeCall = (tool: string, args: Record<string, unknown>): string => {
-    const fixed = FIXED.get(tool);
+    const fixed = FIXED.get(tool) ?? SCRIPT_CALLS.get(tool)?.(args);
     if (fixed !== undefined) {
         return fixed;
     }

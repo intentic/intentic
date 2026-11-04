@@ -2453,6 +2453,7 @@
             "readNotifications": "lire les notifications",
             "readPagesYouAllow": "lire les pages que vous autorisez",
             "runCommands": "exécuter des commandes",
+            "runScripts": "exécuter des scripts qu'il écrit sur les sites que vous autorisez",
             "seeScreen": "voir l'écran",
             "startAndStopSandboxes": "démarrer et arrêter ses sandboxes",
             "takeScreenshots": "prendre des captures d'écran",

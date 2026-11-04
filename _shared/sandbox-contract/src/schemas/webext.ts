@@ -19,6 +19,10 @@ export const WebExtScopesSchema = object({
     screenshot: webextScope.default("off"),
     // Off by default: the only switch here that copies a credential rather than borrowing the browser holding it.
     cookies: webextScope.default("off"),
+    // Off by default: the one switch whose effect outlives the turn. A script the person installs runs on every visit to
+    // its sites, with the sandbox offline too, so it is a standing grant rather than an action (webext userscripts/).
+    // Each install still needs the person's click in the extension, and the browser's own "Allow User Scripts".
+    scripts: webextScope.default("off"),
     // "sensitive" (default) prompts only for a password, payment or delete action; "always" prompts every action,
     // "never" trusts the owner to watch.
     confirm: zEnum(["sensitive", "always", "never"]).default("sensitive"),
@@ -49,6 +53,10 @@ export const WebExtFactsSchema = object({
     features: array(string()).optional(),
 });
 export type WebExtFacts = z.infer<typeof WebExtFactsSchema>;
+// In `features` when this browser can run scripts the agent writes: the extension holds the optional `userScripts`
+// permission and the person turned on the browser's own "Allow User Scripts" for it. Absent, the script tools refuse
+// with what the person has to turn on.
+export const WEBEXT_USER_SCRIPTS_FEATURE = "user-scripts";
 export const WebExtSummarySchema = object({
     // id is the capability id and the prefix of its tools (mcp__<id>__click).
     id: string(),

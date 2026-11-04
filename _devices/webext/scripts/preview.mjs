@@ -10,12 +10,12 @@ const here = import.meta.dirname;
 const dist = join(here, "..", "dist");
 
 // The state a listing screenshot should show: connected, working, and something waiting for the person, all
-// visible at once. The other states are for design work: preview.html#asking, #paused, #offline, #quiet, #front,
+// visible at once. The other states are for design work: preview.html#asking, #scripts, #paused, #offline, #quiet, #front,
 // #offered, #welcome, and with two sandboxes paired #several, #another (a second one offering to connect).
 const now = Date.now();
 const SANDBOX = "https://sandbox-4f2a91c7b8e0.intentic.dev";
 const SECOND = "https://sandbox-9c03d5e1a27b.intentic.dev";
-const scopes = { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" };
+const scopes = { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" };
 const working = {
     sandboxes: [{ url: SANDBOX, name: "intentic", link: "open", scopes, agentWindowOpen: true }],
     grants: [
@@ -29,6 +29,7 @@ const working = {
     settings: { openOnAsk: true, workIn: "own-window" },
     passwords: { kind: "on", version: "0.0.0.1" },
     asking: [],
+    scripts: { availability: "ready", toggle: '"Allow User Scripts"', rows: [], requests: [] },
     log: [
         { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true, sandbox: SANDBOX },
         { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true, sandbox: SANDBOX },
@@ -64,6 +65,39 @@ const STATES = {
         offered: { url: SECOND, name: "marketing", paired: false },
     },
     quiet: { ...working, pending: [] },
+    // An agent's update to a script the person installed, reviewed as a diff, beside the scripts already running.
+    scripts: {
+        ...working,
+        pending: [],
+        sandboxes: [{ ...working.sandboxes[0], scopes: { ...scopes, scripts: "on" } }],
+        scripts: {
+            availability: "ready",
+            toggle: '"Allow User Scripts"',
+            rows: [
+                { id: "us_1", name: "PR sizes", version: "1.1", description: "Shows each pull request's size in the list.", sites: ["https://github.com/*"], connects: ["https://api.github.com"], from: "userscripts/pr-sizes.user.js", by: "intentic", on: true, stopped: undefined, autoUpdate: false, hash: "3f2a9c1be04d", errors: 0, lastError: undefined, updatedAt: now - 3_600_000 },
+                { id: "us_2", name: "Quiet Jira", version: "", description: "", sites: ["https://acme.atlassian.net/*"], connects: [], from: undefined, by: "intentic", on: true, stopped: undefined, autoUpdate: true, hash: "9be01c2a77f0", errors: 2, lastError: "TypeError: Cannot read properties of null (reading 'remove')", updatedAt: now - 86_400_000 },
+            ],
+            requests: [
+                {
+                    id: "rq_1",
+                    sandbox: SANDBOX,
+                    kind: "update",
+                    name: "PR sizes",
+                    version: "1.2",
+                    description: "Shows each pull request's size in the list.",
+                    sites: ["https://github.com/*"],
+                    connects: ["https://api.github.com"],
+                    runAt: "document_idle",
+                    from: "userscripts/pr-sizes.user.js",
+                    hash: "c41d0e8a92b7",
+                    source: "// ==UserScript==\n// @name PR sizes\n// @version 1.2\n// @match https://github.com/*/pulls*\n// @connect api.github.com\n// ==/UserScript==\nfor (const row of document.querySelectorAll('.js-issue-row')) {\n    row.dataset.size = 'large';\n}",
+                    previous: "// ==UserScript==\n// @name PR sizes\n// @version 1.1\n// @match https://github.com/*/pulls*\n// @connect api.github.com\n// ==/UserScript==\nfor (const row of document.querySelectorAll('.js-issue-row')) {\n    row.dataset.size = 'big';\n}",
+                    newConnects: [],
+                    at: now - 12_000,
+                },
+            ],
+        },
+    },
     // A question on a page in the agent's own window, behind the person's: answered from here.
     asking: {
         ...working,

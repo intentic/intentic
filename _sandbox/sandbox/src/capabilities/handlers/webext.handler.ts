@@ -20,6 +20,7 @@ export const webextHandler = peerHandler<WebExtConfig>({
         act: browser.act,
         screenshot: browser.screenshot,
         cookies: browser.cookies,
+        scripts: browser.scripts,
         confirm: browser.confirm,
     }),
 });

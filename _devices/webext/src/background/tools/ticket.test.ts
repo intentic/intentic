@@ -117,7 +117,7 @@ beforeEach(async () => {
         { preconnect: realFetch.preconnect },
     );
     await store.addSandbox({ url: SANDBOX, token: "iwx_token" });
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
 });
 
@@ -167,7 +167,7 @@ test("the ticket is presented with the page, and the value goes into the field h
 // token: another sandbox never learns of it, and could not redeem it anyway.
 test("a ticket is collected from the sandbox that sent it, on its own token, never from another paired one", async () => {
     await store.addSandbox({ url: OTHER, token: "iwx_other" });
-    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" });
     expect((await typeTicket({ ticket: "tkt_two" }, OTHER)).isError).toBe(false);
     expect(posted.map(({ url, headers }) => [url, headers["authorization"]])).toEqual([[`${OTHER}/system/webext/secret`, "Bearer iwx_other"]]);
     expect((await store.log())[0]?.sandbox).toBe(OTHER);
@@ -175,7 +175,7 @@ test("a ticket is collected from the sandbox that sent it, on its own token, nev
 
 // A sandbox no longer paired holds no token here, so its socket's late call collects nothing.
 test("a call from a sandbox that is not paired types nothing and asks nobody", async () => {
-    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" });
     const typed = await typeTicket({ ticket: "tkt_two" }, OTHER);
     expect(typed.isError).toBe(true);
     expect(typed.text).toContain("not paired with a sandbox");
@@ -217,7 +217,7 @@ test("an answer from the sandbox this browser cannot read types nothing", async 
 });
 
 test("a person whose switches ask before every action is asked first, and a no reaches nobody", async () => {
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "always" });
     const typed = await typeTicket();
     expect(typed.isError).toBe(true);
     expect(typed.text).toContain("said no (or did not answer) to typing a secret into this password field");

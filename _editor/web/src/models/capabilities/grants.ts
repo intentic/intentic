@@ -15,6 +15,7 @@ const GRANT_WORDS: ReadonlyMap<string, () => string> = new Map([
     [`click and type on them`, () => t(`capabilities.grants.clickAndType`)],
     [`take screenshots`, () => t(`capabilities.grants.takeScreenshots`)],
     [`hand a site's session to this sandbox`, () => t(`capabilities.grants.handSession`)],
+    [`run scripts it writes on the sites you allow`, () => t(`capabilities.grants.runScripts`)],
     [`see the screen`, () => t(`capabilities.grants.seeScreen`)],
     [`tap, swipe and type in the apps you allow`, () => t(`capabilities.grants.tapSwipeType`)],
     [`read the folders you pick`, () => t(`capabilities.grants.readFoldersYouPick`)],

@@ -866,6 +866,97 @@
                 background: var(--knob-on);
             }
 
+
+/* Scripts. A request shows everything there is to decide on; an installed script is a row with its switch. */
+            .script-ask .facts {
+                display: grid;
+                gap: 3px;
+                margin-top: 10px;
+                font-size: 12px;
+            }
+            .fact {
+                display: grid;
+                grid-template-columns: 84px minmax(0, 1fr);
+                gap: 8px;
+                overflow-wrap: anywhere;
+            }
+            .fact-label {
+                color: var(--subtle);
+            }
+            .fact.warn span:last-child {
+                color: var(--warn);
+                font-weight: var(--w-medium);
+            }
+            .code-box {
+                margin-top: 10px;
+            }
+            .code-box summary {
+                color: var(--link);
+                font-size: 12.5px;
+                font-weight: var(--w-medium);
+                cursor: pointer;
+            }
+            pre.code {
+                max-height: 220px;
+                margin: 6px 0 0;
+                padding: 8px;
+                overflow: auto;
+                border-radius: var(--radius-control);
+                background: var(--field);
+                box-shadow: var(--field-edge);
+                font: 11px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+                white-space: pre;
+                tab-size: 4;
+            }
+            pre.diff .added {
+                color: var(--ok);
+            }
+            pre.diff .removed {
+                color: var(--danger);
+            }
+            pre.diff .fold {
+                color: var(--subtle);
+            }
+            .switch.auto-update {
+                align-items: flex-start;
+                margin-top: 10px;
+                font-size: 12px;
+                color: var(--muted);
+            }
+            .switch.auto-update input {
+                margin-top: 1px;
+            }
+            .script + .script {
+                border-top: 1px solid var(--line);
+            }
+            .script-name {
+                padding: 0;
+                border: 0;
+                background: none;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+            .row .sub.warn {
+                color: var(--warn);
+            }
+            .icon-btn.armed {
+                color: var(--danger);
+                background: color-mix(in srgb, var(--danger) 14%, transparent);
+            }
+            .script-details {
+                display: grid;
+                gap: 4px;
+                padding: 0 12px 12px;
+                font-size: 12px;
+            }
+            .turn-on {
+                display: grid;
+                justify-items: start;
+                gap: 10px;
+                padding: 12px;
+            }
+
             @keyframes blink {
                 50% {
                     opacity: 0.35;
@@ -936,6 +1027,13 @@
                             <button class="btn small" type="submit">Allow reading</button>
                         </form>
                         <div id="add-error" class="error" hidden></div>
+                    </div>
+                </section>
+                <!-- Scripts the agent wrote and the person installed: they run on every visit to their sites. -->
+                <section id="scripts" hidden>
+                    <h2 class="label">Scripts</h2>
+                    <div class="card">
+                        <div id="script-list"></div>
                     </div>
                 </section>
                 <section id="workspace" hidden>

@@ -38,6 +38,13 @@ account to use instead.
 | \`mcp__\${id}__screenshot\` | Your page as an image. For canvas apps and PDF viewers, where the DOM says nothing. |
 | \`mcp__\${id}__ask_access\` | Ask the person to allow a site you are not allowed on. It lights up their extension. |
 | \`mcp__\${id}__connect_site\` | Hand this site's session to the sandbox's own browser, so a job can carry on without them. |
+| \`mcp__\${id}__scripts\` | The user scripts installed here: yours with ids, each running or why not, and requests still waiting. |
+| \`mcp__\${id}__script_try\` | Run a script you are writing once, in a tab, and read what it returned, threw and logged. |
+| \`mcp__\${id}__script_install\` | Ask the person to install a script. Their extension shows its code, sites and hosts first. |
+| \`mcp__\${id}__script_update\` | Replace one of your scripts' code. Reviewed as a diff, unless they let it update without asking. |
+| \`mcp__\${id}__script_toggle\` | Turn one of your scripts off or on. One the person turned off stays off. |
+| \`mcp__\${id}__script_remove\` | Remove one of your scripts, with its log and what it stored. |
+| \`mcp__\${id}__script_logs\` | What one of your scripts logged on the pages it ran on, newest first, errors included. |
 
 ## Rules that are not negotiable
 
@@ -86,4 +93,37 @@ sandbox's own browser, against an account that already exists there. It needs th
 browser every time, and the switch on this card. You never see what moved: the answer is a count and a site.
 
 Say plainly what it means before you offer it: the sandbox will then be signed into that site as them, and some
-sites end a session that starts appearing from a second place.`;
+sites end a session that starts appearing from a second place.
+
+## Scripts that keep running: \`script_try\` / \`script_install\`
+
+When the person wants a site changed for good (hide a panel, add a button or a column, restyle, reformat), write
+them a user script. Once they install it from their extension, the browser runs it on every visit to its sites,
+with you gone and the sandbox offline. For a one-off task, use the tools above instead.
+
+1. A refusal naming "Run scripts it writes" means the card's switch is off: ask with
+   \`capabilities request \${id} --set scripts=on --why "…"\` and stop. If \`describe\`'s \`Scripts:\` line names
+   something the person has to turn on in their browser, ask them and stop.
+2. Keep the script as a file in the sandbox, e.g. \`userscripts/<name>.user.js\`, and pass its whole text as \`source\`.
+3. \`script_try\` it on an open tab of its site until it works. It runs once, with the same reach as an installed
+   script; the person is asked first (by default once per site per 15 minutes). Its storage starts empty and is
+   thrown away.
+4. \`script_install\` with \`from\` set to the file's path, and tell the person it is waiting in their extension.
+   Change it later with \`script_update\`.
+5. Once installed, reload a tab on its site and read \`script_logs\`. \`scripts\` says why one is not running (it is
+   off, the browser is paused, or one of its sites is no longer allowed in read and act).
+
+The header is Tampermonkey's, between \`// ==UserScript==\` and \`// ==/UserScript==\`:
+
+- \`@name\` is required. Each \`@match\` names one site, with an explicit \`https://\` or \`http://\` and an exact host
+  (no \`*\` in the host, no \`*://\`, no \`<all_urls>\`), and every site must be allowed to you in read and act.
+  \`@exclude-match\` narrows them.
+- \`@connect\` names each other host it talks to or loads from: \`api.example.com\` (https), \`*.example.com\`, never \`*\`.
+- \`@run-at\` is document-start, document-end or document-idle (the default).
+- \`@require\`, \`@resource\`, \`@include\` and \`@exclude\` are refused: bundle or inline what it needs. \`@grant\` does
+  nothing; there are no \`GM_\` functions.
+
+In the script: \`intentic.log\`, \`.warn\` and \`.error\` write what \`script_logs\` shows; \`intentic.storage.get\`,
+\`.set\` and \`.remove(key)\` keep JSON values for this script across pages; plain \`fetch\` reaches its sites and its
+\`@connect\` hosts. Top-level \`await\` and \`return\` work. The browser blocks the script's requests and loads to
+any other host, whatever the page allows, so name every host it needs in \`@connect\`.`;

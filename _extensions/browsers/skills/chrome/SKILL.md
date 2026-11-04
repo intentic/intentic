@@ -30,7 +30,14 @@ This sandbox usually has two, and picking the wrong one wastes a turn:
 - **Single-page apps re-render constantly.** A ref taken before a click that re-rendered the list is stale, and
   will be refused. Snapshot, act, read what came back, snapshot again.
 - **`chrome://` pages, the Web Store, and other extensions' pages cannot be touched by any extension.** That is
-  the browser's rule, not this connection's, and there is no permission that changes it.
+  the browser's rule, not this connection's, and there is no permission that changes it. They never run a user
+  script either.
+- **User scripts need Chrome 135 and two switches the person turns on once:** Scripts in the extension's popup, and
+  the browser's own "Allow User Scripts" on the extension's details page ("Developer mode" before Chrome 138).
+  `describe`'s `Scripts:` line says which one is missing.
+- **A user script reaches only its own sites and its `@connect` hosts.** Chrome blocks its requests and loads to any
+  other host, whatever the page itself allows. An installed script runs from the next page load, so reload an open
+  tab to see it.
 - **Downloads land in their Downloads folder, on their computer** — not in the sandbox. If a file is needed
   here, say so: a connected computer (the `host` capability) can read it, or they can drag it into the app.
 

@@ -259,6 +259,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             ...(input.config["act"] === "off" ? [] : ["click and type on them"]),
             ...(input.config["screenshot"] === "on" ? ["take screenshots"] : []),
             ...(input.config["cookies"] === "on" ? ["hand a site's session to this sandbox"] : []),
+            ...(input.config["scripts"] === "on" ? ["run scripts it writes on the sites you allow"] : []),
         ];
         return [
             { kind: "own-browser", platform: String(input.config["platform"] ?? ""), grants },

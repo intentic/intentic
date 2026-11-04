@@ -104,7 +104,7 @@ beforeEach(async () => {
         { id: 7, url: URL_NOW },
         { id: 8, url: URL_NOW },
     ]);
-    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", scripts: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
 });
 

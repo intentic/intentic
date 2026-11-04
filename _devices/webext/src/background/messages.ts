@@ -1,5 +1,6 @@
 import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
 import type { PasswordsUiStatus } from "./passwords.js";
+import type { ScriptsAvailability } from "./scripts/runtime.js";
 import type { LinkState } from "./link.js";
 import type { ActivityEntry, Asking, PendingAccess, SandboxKey, Settings } from "./store.js";
 
@@ -42,7 +43,68 @@ export type PopupCommand =
     | { readonly type: "answer"; readonly id: string; readonly allow: boolean }
     // Brings a tab in front: `tabId` when a question is about that tab, else the front tab of `sandbox`'s agent window.
     | { readonly type: "show"; readonly tabId: number; readonly sandbox?: undefined }
-    | { readonly type: "show"; readonly sandbox: SandboxKey; readonly tabId?: undefined };
+    | { readonly type: "show"; readonly sandbox: SandboxKey; readonly tabId?: undefined }
+    // The popup just got the optional `userScripts` permission from the person's click: the worker brings scripts in.
+    | { readonly type: "scripts-enabled" }
+    // The person's Install (or Update) or Decline on a script an agent asked for, and whether that sandbox may update
+    // its code without asking from then on.
+    | { readonly type: "script-answer"; readonly id: string; readonly accept: boolean; readonly autoUpdate: boolean }
+    | { readonly type: "script-toggle"; readonly id: string; readonly on: boolean }
+    | { readonly type: "script-remove"; readonly id: string }
+    | { readonly type: "script-auto-update"; readonly id: string; readonly on: boolean }
+    // An installed script's code, read on demand: the state the popup polls carries none.
+    | { readonly type: "script-source"; readonly id: string };
+
+// An installed script as the popup lists it.
+export interface ScriptRow {
+    readonly id: string;
+    readonly name: string;
+    readonly version: string;
+    readonly description: string;
+    readonly sites: readonly string[];
+    readonly connects: readonly string[];
+    readonly from: string | undefined;
+    // The sandbox that wrote it, by name; it may no longer be connected.
+    readonly by: string;
+    readonly on: boolean;
+    // Why it is not running though it is on: a site no longer allowed, pause, scripts off in the browser.
+    readonly stopped: string | undefined;
+    readonly autoUpdate: boolean;
+    readonly hash: string;
+    // Error lines in its log, and the newest one.
+    readonly errors: number;
+    readonly lastError: string | undefined;
+    readonly updatedAt: number;
+}
+
+// A script an agent wants installed or changed, with everything the person decides on.
+export interface ScriptRequestView {
+    readonly id: string;
+    readonly sandbox: SandboxKey;
+    readonly kind: "install" | "update";
+    readonly name: string;
+    readonly version: string;
+    readonly description: string;
+    readonly sites: readonly string[];
+    readonly connects: readonly string[];
+    readonly runAt: string;
+    readonly from: string | undefined;
+    readonly hash: string;
+    readonly source: string;
+    // The code it replaces, for an update's diff.
+    readonly previous: string | undefined;
+    // Hosts an update adds, which the person did not allow before.
+    readonly newConnects: readonly string[];
+    readonly at: number;
+}
+
+export interface ScriptsState {
+    readonly availability: ScriptsAvailability;
+    // The browser's own name for the switch it needs (runtime.ts toggleName).
+    readonly toggle: string;
+    readonly rows: readonly ScriptRow[];
+    readonly requests: readonly ScriptRequestView[];
+}
 
 // One paired sandbox as the popup shows it. Its token stays in the worker.
 export interface SandboxState {
@@ -70,4 +132,5 @@ export interface PopupState {
     readonly passwords: PasswordsUiStatus;
     // What the agents are asking the person right now, on pages that may be out of their sight.
     readonly asking: readonly Asking[];
+    readonly scripts: ScriptsState;
 }

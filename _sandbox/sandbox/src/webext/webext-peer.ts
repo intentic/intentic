@@ -55,8 +55,20 @@ export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, n
 };
 
 // Tools whose answer is the extension's own voice, unsealed; everything else is sealed as outside content. An
-// allowlist, fail-closed: notably `tabs` is excluded, since a tab's title/URL are page-controlled strings.
-const OWN_VOICE = new Set(["describe", "ask_access", "connect_site", "lend_site"]);
+// allowlist, fail-closed: notably `tabs` is excluded, since a tab's title/URL are page-controlled strings. The script
+// tools that change a script answer with the extension's words and the agent's own script names. `script_try` and
+// `script_logs` stay sealed (a tab's title, and whatever a script read off a page), and so does `scripts`, which names
+// other sandboxes' scripts too.
+const OWN_VOICE = new Set([
+    "describe",
+    "ask_access",
+    "connect_site",
+    "lend_site",
+    "script_install",
+    "script_update",
+    "script_toggle",
+    "script_remove",
+]);
 
 // One MCP result, sealed. Text blocks only: an image has no marker to forge, and the model reads it as pixels.
 export const sealAnswer = (id: string, tool: string, answer: unknown): unknown => {

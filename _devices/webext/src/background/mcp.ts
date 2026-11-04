@@ -12,7 +12,9 @@ import { click, fill, openUrl, pressKey, readable, screenshot, scroll, selectOpt
 import { lendSite } from "./tools/lend.js";
 import { connectSite } from "./tools/session.js";
 import { listTabs, selectTab } from "./tools/tabs.js";
+import { describeScripts, installScript, removeScript, scriptLogs, toggleScript, tryScript, updateScript } from "./tools/scripts.js";
 import { typeTicket } from "./tools/ticket.js";
+import { SOURCE_LIMIT } from "./scripts/header.js";
 
 /* The peer MCP server dispatches the connected browser's tool surface. */
 
@@ -22,6 +24,13 @@ const required = string().min(1);
 // the person when they chose to have it work there. An id comes from `tabs`, and naming one of the person's tabs is how
 // the agent works on a page they already have open, where it is, without bringing it forward.
 const tab = number().int().optional().describe("Which tab, from `tabs`. Omit for your own tab, the one `open` loaded.");
+// A user script's whole text, its `// ==UserScript==` header included: what the person reviews is what runs.
+const source = string()
+    .min(1)
+    .max(SOURCE_LIMIT)
+    .describe("The script's whole text, `// ==UserScript==` header included, exactly as the file in your sandbox holds it.");
+const filePath = string().max(200).optional().describe("Where that file is in your sandbox, e.g. userscripts/pr-sizes.user.js. Shown to the person beside the code.");
+const scriptId = required.describe("The script's id, from `scripts`.");
 
 // Every tool runs for the sandbox whose socket the call came over (`from`, link.ts): with that sandbox's switches, in
 // that sandbox's agent window, and reporting to that sandbox only.
@@ -32,7 +41,7 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
             "Which browser this is, how many tabs are open, and exactly which sites you are allowed to work on and whether each is read-only. This is the person's own browser: call it before your first action here, and only once you know the task needs their session. A site the sandbox holds its own signed-in account for goes through that account's browser instead.",
         effect: "read",
         input: NO_ARGS,
-        run: async () => textResult(await describeAccess()),
+        run: async (_, from) => textResult(await describeAccess(from)),
     }),
     tool({
         name: "tabs",
@@ -181,6 +190,64 @@ const TOOLS: readonly McpTool<SandboxKey>[] = [
             tab,
         }),
         run: async ({ account, tab: id }, from) => textResult(await lendSite(from, account, id)),
+    }),
+    tool({
+        name: "scripts",
+        description:
+            "The user scripts installed in this browser: yours with their ids, each running or why not, and any install still waiting for the person. Scripts are code you write that the person installs from their extension; they run on every visit to their sites, with you gone. Needs the card's scripts switch.",
+        effect: "read",
+        input: NO_ARGS,
+        run: async (_, from) => textResult(await describeScripts(from)),
+    }),
+    tool({
+        name: "script_try",
+        description:
+            "Run a script you are writing once, on a page, and read what it did: what it returned, what it threw, what it logged with intentic.log. Nothing is installed and nothing persists. Runs as an installed script would (its own world, reaching only that site and the hosts its @connect names), on a site in read-and-act mode. The person is asked first, once per site for a while unless they chose otherwise.",
+        effect: "destructive",
+        input: object({
+            source,
+            settle: number().min(0).max(10).default(0.5).describe("Seconds to keep collecting its log after it returns, for what it does later. Default 0.5."),
+            tab,
+        }),
+        run: async ({ source: code, settle, tab: id }, from) => textResult(await tryScript(from, code, settle, id)),
+    }),
+    tool({
+        name: "script_install",
+        description:
+            "Ask the person to install a user script: their extension shows its code, its sites and the hosts it may reach, and only their click installs it. It then runs on every page its @match names until they or you turn it off. Every @match must be a site you may click and type on. Answers once they decide, or after two minutes that it is still waiting for them.",
+        effect: "write",
+        input: object({ source, from: filePath }),
+        run: async ({ source: code, from: path }, from) => textResult(await installScript(from, code, path)),
+    }),
+    tool({
+        name: "script_update",
+        description:
+            "Replace one of your installed scripts' code. The person reviews the change like an install, as a diff, unless they let you update that script without asking and its sites and hosts stay within what they allowed.",
+        effect: "write",
+        input: object({ id: scriptId, source, from: filePath }),
+        run: async ({ id, source: code, from: path }, from) => textResult(await updateScript(from, id, code, path)),
+    }),
+    tool({
+        name: "script_toggle",
+        description: "Turn one of your installed scripts off, or back on. One the person turned off stays off until they turn it on.",
+        effect: "write",
+        input: object({ id: scriptId, on: boolean() }),
+        run: async ({ id, on }, from) => textResult(await toggleScript(from, id, on)),
+    }),
+    tool({
+        name: "script_remove",
+        description: "Remove one of your installed scripts from this browser, with its log and what it kept in intentic.storage.",
+        effect: "destructive",
+        input: object({ id: scriptId }),
+        run: async ({ id }, from) => textResult(await removeScript(from, id)),
+    }),
+    tool({
+        name: "script_logs",
+        description:
+            "What one of your installed scripts logged on the pages it ran on, newest first: every uncaught error, and every intentic.log, warn and error line. The way to see a script work, or fail, after you are gone.",
+        effect: "read",
+        input: object({ id: scriptId, clear: boolean().default(false).describe("Empty the log after reading it.") }),
+        run: async ({ id, clear }, from) => textResult(await scriptLogs(from, id, clear)),
     }),
     tool({
         name: WEBEXT_TICKET_TOOL,

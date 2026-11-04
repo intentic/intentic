@@ -52,6 +52,8 @@ WHAT IT CAN DO
 • Take a screenshot of a tab, for the canvas apps and PDF viewers a page's structure says nothing about
 • Hand one site's sign-in to your sandbox, with your confirmation, so a long job carries on after you close
   the laptop
+• Write small scripts that change a site you allowed for good, which run only once you have read and
+  installed them
 
 WHAT IT CANNOT DO
 • Touch a site you have not allowed. Sites are granted one at a time, by you, and revoked in Chrome's own
@@ -75,7 +77,8 @@ You need an Intentic sandbox to use this: https://intentic.dev
 
 ```
 Lets a user's own Intentic sandbox read and act on web pages in this browser, on the sites the user
-explicitly allows, so an AI agent can carry out tasks the user asked for while the user watches.
+explicitly allows, so an AI agent can carry out tasks the user asked for while the user watches, and,
+when the user reviews and installs one, run a user script the agent wrote on those same sites.
 ```
 
 **Permission justifications** (one field each — these are the sentences reviewers read)
@@ -83,13 +86,14 @@ explicitly allows, so an AI agent can carry out tasks the user asked for while t
 | Permission | Justification |
 | --- | --- |
 | `scripting` | Reading a page and clicking in it is the extension's only function. Injection happens solely into origins the user granted at runtime; Chrome refuses anything else. |
-| `storage` | Stores the sandbox pairing the user made, which sites they allowed and whether each is read-only, whether they have paused the agent, and a local log of recent actions shown in the popup. Nothing is stored remotely. |
+| `storage` | Stores the sandbox pairing the user made, which sites they allowed and whether each is read-only, whether they have paused the agent, a local log of recent actions shown in the popup, and the user scripts they installed with each one's log and saved values. Nothing is stored remotely. |
 | `alarms` | Reconnects the extension's single WebSocket after Chrome evicts the MV3 service worker. It runs no periodic task otherwise. |
 | `cookies` | One user-initiated action: "hand this site's sign-in to my sandbox", so a long-running job continues after the browser closes. It requires a confirmation on the page every time, a switch that is off by default, and it sends the cookies only to the user's own sandbox. |
 | `activeTab` | Lets the popup name the site the user is on when they click the toolbar icon, so they can allow that one site with a click. It never reaches a page by itself: the agent's tools still run only on sites the user granted. |
 | `favicon` | Shows each allowed site's icon in the popup's list, from the browser's own favicon cache. No page is fetched for it. |
 | `host permissions` (`*://*/*`, optional) | Two separate uses, both optional and both started by the user in the popup: (1) the agent, one site at a time, for reading and acting while they watch; (2) Passwords, all sites at once only after "Turn on", to remember and fill sign-ins via the Intentic desktop app on this computer. Does not widen the agent's reach. |
 | `nativeMessaging` (optional) | Talks only to the Intentic desktop app's local native host so passwords saved in this browser are sealed on the user's own computer and returned for fill only after they confirm on the computer (Windows Hello or system consent). No other native hosts and no remote servers. |
+| `userScripts` (optional) | Runs user scripts that the user reviews and installs from the extension's popup, to change sites they have allowed. Requested only when the user turns scripts on in the popup. Each script's full code, the sites it runs on and the hosts it may reach are shown to the user before it is installed, and nothing runs without their click. It uses Chrome's documented User Scripts API, which the Manifest V3 remote-code policy names as a permitted way to run code that is not in the extension package. |
 | Content script on `*://*.intentic.dev/*` | Receives a pairing code the user's own sandbox page offers, so the user does not have to copy and paste it. It reads nothing else on those pages. |
 
 **Data usage disclosures** — the connector reads arbitrary user-approved pages, so disclose the sensitive

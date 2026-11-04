@@ -4,8 +4,9 @@ import type { PopupState } from "../background/messages.js";
 import { originPattern, sandboxOwnOrigin, siteOf } from "../background/policy.js";
 import { DEFAULT_SETTINGS } from "../background/settings.js";
 import type { ActivityEntry, Asking, PendingAccess } from "../background/store.js";
-import { button, byId, h, icon, type IconName, say, send, show } from "./dom.js";
+import { button, byId, favicon, h, icon, type IconName, say, send, show } from "./dom.js";
 import { renderPasswords } from "./passwords-section.js";
+import { renderScripts, scriptRequestCard } from "./scripts-section.js";
 import { agentOf, listed, pairSandbox, renderSandboxes, sandboxLabel, wirePasteForm, wireSandboxes } from "./sandboxes-section.js";
 import { renderWorkspace, saveSettings } from "./workspace-section.js";
 
@@ -41,26 +42,6 @@ const when = (at: number, short: boolean): HTMLTimeElement => {
     node.dataset["at"] = String(at);
     node.dataset["short"] = short ? "1" : "";
     return node;
-};
-
-// The site's icon from the browser's own favicon cache (the `favicon` permission: nothing is fetched from the site),
-// over a letter in a colour of its own until it loads.
-const favicon = (origin: string): HTMLElement => {
-    const host = siteOf(origin).replace(/^www\./, "");
-    const box = h("span", { class: "fav", text: (host[0] ?? "?").toUpperCase() });
-    let hue = 7;
-    for (const char of host) {
-        hue = (hue * 31 + char.charCodeAt(0)) % 360;
-    }
-    box.style.background = `oklch(58% 0.1 ${hue})`;
-    const image = new Image();
-    image.alt = "";
-    image.addEventListener("load", () => {
-        box.style.background = "transparent";
-        box.replaceChildren(image);
-    });
-    image.src = chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(origin.replace(/\/\*$/, "/"))}&size=32`);
-    return box;
 };
 
 // Hands the pick to the worker, then asks Chrome. Chrome closes this popup the moment its own dialog takes focus
@@ -261,6 +242,9 @@ const renderAlerts = (state: PopupState): void => {
     for (const pending of state.pending) {
         const card = state.sandboxes.length > 1 ? sandboxLabel(state, pending.sandbox) : "your sandbox";
         items.push(askCard(pending, scopesOf(state, pending.sandbox), agentOf(state, pending.sandbox), card));
+    }
+    for (const request of state.scripts.requests) {
+        items.push(scriptRequestCard(request, agentOf(state, request.sandbox), refresh));
     }
     const said = stateNotice(state);
     if (said !== undefined) {
@@ -500,6 +484,7 @@ const draw = async (): Promise<void> => {
         renderWelcome(state);
         renderPasswords(state, refresh);
         renderSites(state, here);
+        renderScripts(state, refresh);
         renderWorkspace(state, refresh);
         renderSandboxes(state, refresh);
         renderActivity(state);

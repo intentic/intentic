@@ -27,6 +27,15 @@ turns remembering on; justify them as:
   and fill UI on pages where the person signs in. Separate from the agent's per-site grants; does not widen what
   the sandbox may read or click.
 
+User scripts add the **optional** `userScripts` permission, requested only when the person presses "Turn on scripts"
+in the popup; justify it as:
+
+- **userScripts (optional):** Runs user scripts that the user reviews and installs from the extension's popup, to
+  change sites they have allowed. Requested only when the user turns scripts on. Each script's full code, the sites
+  it runs on and the hosts it may reach are shown to the user before it is installed, and nothing runs without their
+  click. It uses Chrome's documented User Scripts API, which the Manifest V3 remote-code policy names as a permitted
+  way to run code that is not in the extension package.
+
 Uploading the package through the API does not fill those fields. The store can accept the upload and then reject
 `:publish` with HTTP 400, "Your submission does not meet the requirements to be published in the store." The API
 response does not name the missing field. Open the item in the Developer Dashboard and select **Why can't I submit?**
