@@ -32,7 +32,8 @@ const branchRuns = computed(() => runs.value.filter((other) => other.repo === ru
 const { recurring } = useFailureHistory(branchRuns);
 const recurringJobs = computed(() => new Map(recurring.value.filter((item) => item.repo === run.value?.repo && item.branch === run.value.branch).map((item) => [item.job, item.runs])));
 
-// A side panel is a column: the stages run down it rather than across, until it is dragged wide enough for a row.
+// A side panel is a column: the stages run down it rather than across, whatever the board's layout switch says, until it
+// is dragged wide enough for columns; from there the switch is drawn and the reader's layout holds.
 const graphBox = ref<HTMLElement>();
 const narrow = useNarrow(graphBox, 36);
 
@@ -88,7 +89,14 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
                 <Icon name="spinner" spin class="text-xl text-subtle" aria-hidden="true" />
             </div>
             <!-- The whole graph, given the tab: pan and zoom inside it rather than a band cropped to a row. -->
-            <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurringJobs" fill :direction="narrow ? `TB` : `LR`" />
+            <PipelineDagGraph
+                v-else-if="stages.length > 0"
+                class="p-2"
+                :stages="stages"
+                :recurring="recurringJobs"
+                fill
+                :direction="narrow ? `TB` : undefined"
+            />
             <Section v-else-if="run.failedJobs?.length" class="p-3" :label="t(`pipelineRunRow.failedJobs`)">
                 <div class="flex flex-wrap gap-1.5">
                     <span

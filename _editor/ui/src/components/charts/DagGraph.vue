@@ -22,6 +22,7 @@ const {
     fitAlign = `center`,
     fitPadding,
     touchPan = false,
+    wheelZoom = true,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -47,6 +48,9 @@ const {
     // Whether a finger may pan and pinch the graph. Off by default: on a phone a graph sits in a scrolling page, and
     // d3-zoom claiming the touch would stop the page under it from scrolling. A full-pane host turns it on.
     touchPan?: boolean;
+    // Whether the wheel zooms the graph. Off for a graph drawn whole inside a page that scrolls, where the wheel must go
+    // on scrolling the page rather than stop dead on the picture; a pinch, or the wheel with Ctrl held, still zooms.
+    wheelZoom?: boolean;
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -178,9 +182,13 @@ const applyFit = (store: VueFlowStore): void => {
         return;
     }
     const fitted = Math.min((frame.width * (1 - 2 * pad.x)) / box.width, (frame.height * (1 - 2 * pad.y)) / box.height, magnify ? 2 : 1);
+    // Left to right, the picture starts at the frame's left edge, where its first column is. Top to bottom, its rows
+    // are centred on the widest, so a picture narrower than the frame is centred in it too.
+    const left = (zoom: number): number =>
+        direction === `TB` && box.width * zoom < frame.width * (1 - 2 * pad.x) ? (frame.width - box.width * zoom) / 2 : frame.width * pad.x;
     const place = (zoom: number): void => {
         void store.setViewport({
-            x: frame.width * pad.x - box.x * zoom,
+            x: left(zoom) - box.x * zoom,
             y: (fitAlign === `start` ? frame.height * pad.y : (frame.height - box.height * zoom) / 2) - box.y * zoom,
             zoom,
         });
@@ -209,6 +217,10 @@ const fitAll = (): void => {
     const padding = typeof pad === `number` ? pad : Math.max(pad.x, pad.y);
     void flow.value?.fitView({ padding, maxZoom: 1 });
 };
+
+// A toolbar of the caller's own, outside the canvas, reaches it through a template ref; one drawn over the canvas has
+// it from the overlay slot.
+defineExpose({ fitAll });
 
 // Single entry point back to a fitted view; guards the reader's own pan so nothing else re-fits over it.
 const refit = (): void => {
@@ -270,7 +282,7 @@ const toggle = (id: string): void => {
             :zoom-on-double-click="false"
             :pan-on-drag="gestures"
             :zoom-on-pinch="gestures"
-            :zoom-on-scroll="gestures"
+            :zoom-on-scroll="gestures && wheelZoom"
             :pan-on-scroll="false"
             @pane-ready="onReady"
             @nodes-initialized="refit()"
@@ -280,7 +292,7 @@ const toggle = (id: string): void => {
             <template #edge-lane="edge">
                 <BaseEdge
                     :id="edge.id"
-                    :path="lanePath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane)"
+                    :path="lanePath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane, undefined, direction)"
                 />
             </template>
             <template #node-card="{ data }">

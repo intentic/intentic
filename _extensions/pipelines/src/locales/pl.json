@@ -72,10 +72,15 @@
         "step": "Krok {n}"
     },
     "pipelineDagGraph": {
+        "columns": "Kolumny",
         "expand": "Rozwiń",
         "fit": "Dopasuj",
         "fitAll": "Dopasuj całość",
-        "fullScreen": "Pełny ekran"
+        "fullScreen": "Pełny ekran",
+        "layout": "Układ grafu",
+        "leftToRight": "Od lewej do prawej",
+        "rows": "Wiersze",
+        "topToBottom": "Od góry do dołu"
     },
     "pipelineGraph": {
         "jobs": "{count} zadanie | {count} zadania | {count} zadań"

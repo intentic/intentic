@@ -25,6 +25,9 @@ export const ACTION_GLYPHS = {
     "external-link": { outline: `M13 3h8v8 M21 3 10 14 M8 5H3v16h16v-5` },
     "eye-slash": { outline: `M3 3l18 18 M9 5a10 10 0 0 1 3-1c4 0 7 3 10 8l-3 4 M15 19a10 10 0 0 1-3 1c-4 0-7-3-10-8l3-4` },
     filter: { outline: `M3 4h18l-7 8v7l-4 2v-9Z` },
+    // A graph's reading direction, drawn as the shape it takes: one card fanning out to two, rightwards or downwards.
+    "flow-columns": { outline: `M2 9h5v6H2Z M17 4h5v6h-5Z M17 14h5v6h-5Z M7 12h5 M12 7v10 M12 7h5 M12 17h5` },
+    "flow-rows": { outline: `M9 2h6v5H9Z M4 17h6v5H4Z M14 17h6v5h-6Z M12 7v5 M7 12h10 M7 12v5 M17 12v5` },
     fork: { outline: `M6 8v8 M6 12h6l6-6`, solid: `m6 2 3 3-3 3-3-3Z m0 14 3 3-3 3-3-3Z m12-16 3 3-3 3-3-3Z` },
     "layout-left": { outline: `M3 4h18v16H3Z M9 4v16 M13 12h5 M15 9l-3 3 3 3` },
     link: { outline: `m9 15 6-6 M7 13l-3 3v3l2 2h3l4-4 M11 7l4-4h3l3 3v3l-3 3` },

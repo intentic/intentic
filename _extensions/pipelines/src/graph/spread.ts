@@ -49,3 +49,23 @@ export const spreadColumns = ({ cardsWidth, columns, contentHeight, frameWidth, 
     const filling = Math.floor((frameWidth / zoom - cardsWidth) / gaps / STEP) * STEP;
     return { zoom, rankSep: Math.min(RANK_SEP_MAX, Math.max(RANK_SEP_MIN, filling)), cropped: false };
 };
+
+// Top to bottom, a run is read down the page rather than fitted into a band: it is drawn at the largest zoom its widest
+// row allows, up to full size, and is as tall as that makes it, however tall, so the page scrolls through it. A row too
+// wide to read whole starts from its left edge at READABLE_ZOOM, to be panned or opened full screen.
+// The gutter between rows: room for a line's turn on its way down, and no more, since the run's length is height.
+export const ROW_GAP = 40;
+
+export interface RowSpreadInput {
+    // The widest row's cards and the gaps between them.
+    readonly contentWidth: number;
+    readonly frameWidth: number;
+}
+
+export const spreadRows = ({ contentWidth, frameWidth }: RowSpreadInput): Spread => {
+    if (contentWidth <= 0) {
+        return { zoom: 1, rankSep: ROW_GAP, cropped: false };
+    }
+    const zoom = Math.min(1, frameWidth / contentWidth);
+    return zoom < LEGIBLE_FIT ? { zoom: READABLE_ZOOM, rankSep: ROW_GAP, cropped: true } : { zoom, rankSep: ROW_GAP, cropped: false };
+};

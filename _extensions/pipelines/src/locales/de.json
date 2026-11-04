@@ -72,10 +72,15 @@
         "step": "Schritt {n}"
     },
     "pipelineDagGraph": {
+        "columns": "Spalten",
         "expand": "Aufklappen",
         "fit": "Einpassen",
         "fitAll": "Alles einpassen",
-        "fullScreen": "Vollbild"
+        "fullScreen": "Vollbild",
+        "layout": "Graph-Layout",
+        "leftToRight": "Links nach rechts",
+        "rows": "Zeilen",
+        "topToBottom": "Oben nach unten"
     },
     "pipelineGraph": {
         "jobs": "{count} Job | {count} Jobs"

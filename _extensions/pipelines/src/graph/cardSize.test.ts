@@ -8,8 +8,17 @@ import {
     type MeasureText,
     NAME_LINE,
     nameLines,
+    HEADER_LINE,
+    JOB_LINE,
+    jobLineHeight,
+    ownCaller,
+    ROW_CARD_MAX_WIDTH,
+    ROW_CARD_MIN_WIDTH,
     ROW_CHROME,
+    rowCardRows,
+    rowCardWidths,
     rowHeight,
+    sharedCaller,
 } from "./cardSize";
 import { pipelineDag, pipelineStages } from "./pipelineDag";
 
@@ -77,5 +86,54 @@ describe(`rows`, () => {
         expect(jobStatusLine(job(`a`, [], { durationSeconds: 65 }), new Map()).text).toBe(`1m 5s`);
         expect(jobStatusLine(job(`a`, [], { durationSeconds: 73 * 60 + 4 }), new Map()).text).toBe(`1h 13m`);
         expect(jobStatusLine(job(`a`, []), new Map([[`a`, 0]])).streak).toBeUndefined();
+    });
+});
+
+// Top to bottom, a job is one line, so a row card is as wide as its longest line and as tall as its jobs; a call every
+// job in it shares is said once, above them.
+describe(`row cards`, () => {
+    const cardsOf = (jobs: PipelineJob[]) => pipelineDag(pipelineStages(jobs)).nodes;
+    const rowWidthsOf = (jobs: PipelineJob[], recurring = new Map<string, number>()): Map<string, number> =>
+        rowCardWidths(cardsOf(jobs), recurring, perChar);
+
+    test(`a short job takes the narrowest card, a long one the widest, with its name cut there`, () => {
+        expect(rowWidthsOf([job(`a`, [])]).get(`0:0`)).toBe(ROW_CARD_MIN_WIDTH);
+        expect(rowWidthsOf([job(`x`.repeat(400), [])]).get(`0:0`)).toBe(ROW_CARD_MAX_WIDTH);
+    });
+
+    test(`a card is as wide as its own longest line: status, name, streak and clock on one line`, () => {
+        const name = `n`.repeat(100);
+        const plain = rowWidthsOf([job(name, [], { durationSeconds: 61 })]).get(`0:0`) ?? 0;
+        const streaked = rowWidthsOf([job(name, [], { durationSeconds: 61 })], new Map([[name, 3]])).get(`0:0`) ?? 0;
+        expect(plain).toBeGreaterThan(ROW_CHROME + 100);
+        expect(plain).toBeLessThan(ROW_CARD_MAX_WIDTH);
+        // The badge rides the same line, so it widens the card rather than adding a line.
+        expect(streaked).toBeGreaterThan(plain);
+    });
+
+    test(`cards in one row each fit their own jobs rather than sharing the widest`, () => {
+        const widths = rowWidthsOf([job(`root`, []), job(`x`.repeat(140), [`root`]), job(`short`, [`root`], { matrix: `m` })]);
+        const [wide, narrow] = [...widths.entries()].filter(([id]) => id.startsWith(`1:`)).map(([, width]) => width);
+        expect(wide).toBeGreaterThan(narrow ?? 0);
+    });
+
+    test(`a call every job in a card shares is its header, said once; one they do not share stays on its job`, () => {
+        const [shared] = cardsOf([job(`release / build`, [], { matrix: `m` }), job(`release / verify`, [], { matrix: `m` })]);
+        expect(shared && sharedCaller(shared.data)).toBe(`release`);
+        expect(shared?.data.jobs.map((member) => ownCaller(member.job, shared.data))).toEqual([undefined, undefined]);
+        expect(shared && rowCardRows(shared.data)).toBe(HEADER_LINE + 2 * JOB_LINE);
+
+        const [mixed] = cardsOf([job(`release / build`, [], { matrix: `m` }), job(`verify`, [], { matrix: `m` })]);
+        expect(mixed && sharedCaller(mixed.data)).toBeUndefined();
+        const [called, plain] = mixed?.data.jobs ?? [];
+        expect(called && mixed && jobLineHeight(called.job, mixed.data)).toBe(JOB_LINE + CALLER_LINE);
+        expect(plain && mixed && jobLineHeight(plain.job, mixed.data)).toBe(JOB_LINE);
+        expect(mixed && rowCardRows(mixed.data)).toBe(2 * JOB_LINE + CALLER_LINE);
+    });
+
+    test(`a card of jobs nothing called has no header`, () => {
+        const [card] = cardsOf([job(`lint`, [])]);
+        expect(card && sharedCaller(card.data)).toBeUndefined();
+        expect(card && rowCardRows(card.data)).toBe(JOB_LINE);
     });
 });

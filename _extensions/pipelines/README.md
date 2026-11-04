@@ -17,6 +17,11 @@ flowchart LR
   repositories, ranks them by how loudly they ask (`src/repoStandings.ts`) and draws each run's jobs as a layered graph
   (`src/graph/pipelineDag.ts`). A GitHub run is drawn the way GitHub's own run page draws it: the same columns, cards and
   order, with every job the workflow declares, including the ones the run has not reported yet or never ran.
+- The strip above every job graph switches its layout between Columns (stages left to right, as above, fitted into a
+  band) and Rows (stages top to bottom, each job one line of status, name and duration, a call its card's jobs share
+  named once above them). Rows draws the run whole and as tall as it is, and the wheel scrolls the page over it instead
+  of zooming. The choice holds for every graph in this browser: the board, the full-screen dialog and the side panel
+  (`src/graph/graphLayout.ts`). A side panel narrower than 36rem always draws Rows and shows no switch.
 - A failing main-line branch is one incident card above its repository's runs (`src/fixes/MainFailureBanner.vue`, in
   `RowGroup`'s `lead` slot rather than its list), drawn so it cannot pass for one more run: a danger rim, a bar down its
   edge, a filled header and a square plate where rows have round status glyphs. Its header says the branch and since

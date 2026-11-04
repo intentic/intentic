@@ -72,10 +72,15 @@
         "step": "Étape {n}"
     },
     "pipelineDagGraph": {
+        "columns": "Colonnes",
         "expand": "Déplier",
         "fit": "Ajuster",
         "fitAll": "Tout ajuster",
-        "fullScreen": "Plein écran"
+        "fullScreen": "Plein écran",
+        "layout": "Disposition du graphe",
+        "leftToRight": "De gauche à droite",
+        "rows": "Lignes",
+        "topToBottom": "De haut en bas"
     },
     "pipelineGraph": {
         "jobs": "{count} tâche | {count} tâches"

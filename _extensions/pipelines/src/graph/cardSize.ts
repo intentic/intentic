@@ -90,3 +90,67 @@ export const rowHeight = (job: PipelineJob, cardWidth: number, measure: MeasureT
 
 // Where nothing can be laid out (a test, a server render): an average glyph is a little over half the font size wide.
 export const estimateText: MeasureText = (text, size) => text.length * (size === `label` ? 11 : 10) * 0.56;
+
+// Top to bottom the run is long in height, which the page scrolls, and short of nothing else: a row of cards has the
+// width a column lacks, so each job is one line, as a list of jobs reads:
+//   release                          the call every job in the card came through, once, above them
+//   ✓ linux-build  ×3      11m 18s   status, name, failing streak, and its duration (or status word) at the right edge
+// A job whose call its card's other jobs do not share keeps it on a line of its own, above its name. Every card is as
+// wide as its own longest line, up to ROW_CARD_MAX_WIDTH, past which a name ends in an ellipsis with the whole name on
+// its tooltip; cards in a row need not match, since no gutter runs between them.
+export const ROW_CARD_MIN_WIDTH = 112;
+export const ROW_CARD_MAX_WIDTH = 248;
+// One job's line, and the card's call above its jobs.
+export const JOB_LINE = 26;
+export const HEADER_LINE = 18;
+// Between the name and the duration pushed to the right edge, at the least.
+const DURATION_GAP = 12;
+
+// The call every job in a card came through, when they all came through the same one; drawn once, above them.
+export const sharedCaller = (cluster: PipelineJobCluster): string | undefined => {
+    const callers = new Set(cluster.jobs.map((member) => jobName(member.job.name).caller));
+    const [only] = callers;
+    return callers.size === 1 ? only : undefined;
+};
+
+// The caller a job's own line shows: none when its card names it once for all of them.
+export const ownCaller = (job: PipelineJob, cluster: PipelineJobCluster): string | undefined =>
+    sharedCaller(cluster) === undefined ? jobName(job.name).caller : undefined;
+
+const jobLineWidth = (job: PipelineJob, cluster: PipelineJobCluster, recurring: ReadonlyMap<string, number>, measure: MeasureText): number => {
+    const line = jobStatusLine(job, recurring);
+    const caller = ownCaller(job, cluster);
+    const main =
+        STATUS_ICON +
+        GAP +
+        measure(jobName(job.name).title, `label`) +
+        (line.streak === undefined ? 0 : GAP + BADGE_PAD + measure(`×${line.streak}`, `badge`)) +
+        DURATION_GAP +
+        measure(line.text, `meta`);
+    return Math.max(main, caller === undefined ? 0 : STATUS_ICON + GAP + measure(caller, `caller`));
+};
+
+// Card id → the width that card takes in a row.
+export const rowCardWidths = (
+    nodes: readonly DagNode<PipelineJobCluster>[],
+    recurring: ReadonlyMap<string, number>,
+    measure: MeasureText,
+): Map<string, number> =>
+    new Map(
+        nodes.map((node) => {
+            const header = sharedCaller(node.data);
+            const widest = Math.max(
+                header === undefined ? 0 : measure(header, `caller`),
+                ...node.data.jobs.map((member) => jobLineWidth(member.job, node.data, recurring, measure)),
+            );
+            return [node.id, Math.min(ROW_CARD_MAX_WIDTH, Math.max(ROW_CARD_MIN_WIDTH, Math.ceil(ROW_CHROME + widest + SLACK)))];
+        }),
+    );
+
+// A job's line in a row card: one line, and its own caller above it when the card does not name one for all.
+export const jobLineHeight = (job: PipelineJob, cluster: PipelineJobCluster): number =>
+    JOB_LINE + (ownCaller(job, cluster) === undefined ? 0 : CALLER_LINE);
+
+// A row card's rows, its caller's header line included; the card's own padding is the caller's to add.
+export const rowCardRows = (cluster: PipelineJobCluster): number =>
+    (sharedCaller(cluster) === undefined ? 0 : HEADER_LINE) + cluster.jobs.reduce((sum, member) => sum + jobLineHeight(member.job, cluster), 0);

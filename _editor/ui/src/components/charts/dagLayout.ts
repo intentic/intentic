@@ -162,16 +162,19 @@ const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagE
 };
 
 // Discards dagre's cross-axis coordinate; packs each column from the same top edge, one gap between cards, in
-// orderColumns' order.
+// orderColumns' order. Top to bottom, each row is centred on the widest instead, as placeInOrder draws one.
 const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number, order: ReadonlyMap<string, number>): Map<string, DagPoint> => {
     const columns = new Map<number, PlacedNode[]>();
     for (const entry of placed) {
         const rank = Math.round(horizontal ? entry.at.x : entry.at.y);
         columns.set(rank, [...(columns.get(rank) ?? []), entry]);
     }
+    const spanOf = (members: readonly PlacedNode[]): number =>
+        members.reduce((sum, entry) => sum + (horizontal ? entry.height : entry.width), 0) + Math.max(0, members.length - 1) * gap;
+    const widest = Math.max(...[...columns.values()].map(spanOf), 0);
     const packed = new Map<string, DagPoint>();
     for (const column of columns.values()) {
-        let next = 0;
+        let next = horizontal ? 0 : (widest - spanOf(column)) / 2;
         for (const entry of column.toSorted((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))) {
             packed.set(entry.id, {
                 x: horizontal ? entry.at.x - entry.width / 2 : next,
@@ -232,15 +235,19 @@ const turnPoints = (
     const turns = new Map<string, readonly DagPoint[]>();
     const at = (alongValue: number, acrossValue: number): DagPoint =>
         horizontal ? { x: alongValue, y: acrossValue } : { x: acrossValue, y: alongValue };
+    // A rank's own edges, not one card's: beside a taller card in a row (or a wider one in a column) a turn taken at the
+    // shorter card's edge would run across its neighbour's face.
+    const rankOf = (box: PlacedNode): PlacedNode[] =>
+        all.filter((other) => along(other, horizontal).start < along(box, horizontal).end && along(other, horizontal).end > along(box, horizontal).start);
     for (const edge of edges) {
         const source = boxes.get(edge.from);
         const target = boxes.get(edge.to);
         if (source === undefined || target === undefined) {
             continue;
         }
-        const leaves = along(source, horizontal).end + gutter / 2;
+        const leaves = Math.max(...rankOf(source).map((box) => along(box, horizontal).end)) + gutter / 2;
         // Last gutter before target; `max` guards a reversed edge from turning behind its own source.
-        const arrives = Math.max(along(target, horizontal).start - gutter / 2, leaves);
+        const arrives = Math.max(Math.min(...rankOf(target).map((box) => along(box, horizontal).start)) - gutter / 2, leaves);
         const lane = laneAcross(source, target, all, horizontal, gap);
         const handle = (across(source, horizontal).start + across(source, horizontal).end) / 2;
         // Same row all the way is one turn; a lane detour is two turns, kept as short as the obstruction.
@@ -250,7 +257,9 @@ const turnPoints = (
 };
 
 // Caller-ordered layout: each column is a dependency depth, stacked from the same top edge in the nodes' own `order`,
-// one gap between cards; columns as wide as their widest card, centred on it. No dagre: nothing here is left to choose.
+// one gap between cards; columns as wide as their widest card, centred on it. Top to bottom, a rank is a row: its cards
+// share one top edge (a tall card hangs down rather than floating mid-row), and each row is centred on the widest, as a
+// downward flow reads. No dagre: nothing here is left to choose.
 const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<string, number>, options: DagLayoutOptions): PlacedNode[] => {
     const horizontal = options.direction === `LR`;
     const rankSep = options.rankSep ?? RANK_SEP;
@@ -262,15 +271,22 @@ const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<str
     }
     // Along the flow: a card's width in LR, its height in TB.
     const thicknessOf = (node: DagNode<never>): number => (horizontal ? boxOf(node, options).width : boxOf(node, options).height);
+    // Across the flow: how far a rank's cards reach side by side, gaps included.
+    const spanOf = (members: readonly DagNode<never>[]): number =>
+        members.reduce((sum, node) => sum + (horizontal ? boxOf(node, options).height : boxOf(node, options).width), 0) +
+        Math.max(0, members.length - 1) * nodeSep;
+    const ranks = [...byColumn.keys()]
+        .toSorted((one, other) => one - other)
+        .map((column) => (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0)));
+    const widest = Math.max(...ranks.map(spanOf), 0);
     const placed: PlacedNode[] = [];
     let start = 0;
-    for (const column of [...byColumn.keys()].toSorted((one, other) => one - other)) {
-        const members = (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0));
+    for (const members of ranks) {
         const thickness = Math.max(...members.map(thicknessOf));
-        let next = 0;
+        let next = horizontal ? 0 : (widest - spanOf(members)) / 2;
         for (const node of members) {
             const box = boxOf(node, options);
-            const offset = start + (thickness - thicknessOf(node)) / 2;
+            const offset = horizontal ? start + (thickness - thicknessOf(node)) / 2 : start;
             placed.push({ id: node.id, at: horizontal ? { x: offset, y: next } : { x: next, y: offset }, ...box });
             next += (horizontal ? box.height : box.width) + nodeSep;
         }
@@ -318,20 +334,25 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
     return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep, nodeSep) };
 };
 
-// Right-angled path through `via`'s turns, rounded at the corners, so parallel edges share horizontal runs instead of
-// splaying into curves. `from`/`to` are handle positions; no `via` takes one turn at the midpoint.
-export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 8): string => {
-    const turns = via.length > 0 ? via : [{ x: (from.x + to.x) / 2, y: from.y }];
+// Right-angled path through `via`'s turns, rounded at the corners, so parallel edges share runs along the flow instead
+// of splaying into curves. `from`/`to` are handle positions; no `via` takes one turn at the midpoint. Worked out left to
+// right; a top-to-bottom graph is the same path with its axes swapped, so it leaves and arrives vertically.
+export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 8, direction: `LR` | `TB` = `LR`): string => {
+    const flip = (point: DagPoint): DagPoint => (direction === `LR` ? point : { x: point.y, y: point.x });
+    const start = flip(from);
+    const end = flip(to);
+    const turns = via.length > 0 ? via.map(flip) : [{ x: (start.x + end.x) / 2, y: start.y }];
 
-    // Horizontal-first for every turn but the last, which goes vertical first so the line arrives horizontal.
-    const waypoints = [from, ...turns, to];
-    const corners: DagPoint[] = [];
+    // Along-first for every turn but the last, which goes across first so the line arrives along the flow.
+    const waypoints = [start, ...turns, end];
+    // In flow coordinates; turned back to the screen's once every corner is known.
+    const visited: DagPoint[] = [];
     const push = (point: DagPoint): void => {
-        const last = corners.at(-1);
+        const last = visited.at(-1);
         if (last !== undefined && Math.abs(last.x - point.x) < 0.5 && Math.abs(last.y - point.y) < 0.5) {
             return;
         }
-        const before = corners.at(-2);
+        const before = visited.at(-2);
         // A point in line with the two before it is not a corner: keeping it would round a bend that is straight.
         if (
             last !== undefined &&
@@ -339,18 +360,19 @@ export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] 
             ((Math.abs(before.x - last.x) < 0.5 && Math.abs(last.x - point.x) < 0.5) ||
                 (Math.abs(before.y - last.y) < 0.5 && Math.abs(last.y - point.y) < 0.5))
         ) {
-            corners[corners.length - 1] = point;
+            visited[visited.length - 1] = point;
             return;
         }
-        corners.push(point);
+        visited.push(point);
     };
-    push(from);
+    push(start);
     waypoints.slice(1).forEach((point, index) => {
-        const previous = waypoints[index] ?? from;
-        const verticalFirst = index === waypoints.length - 2;
-        push(verticalFirst ? { x: previous.x, y: point.y } : { x: point.x, y: previous.y });
+        const previous = waypoints[index] ?? start;
+        const acrossFirst = index === waypoints.length - 2;
+        push(acrossFirst ? { x: previous.x, y: point.y } : { x: point.x, y: previous.y });
         push(point);
     });
+    const corners = visited.map(flip);
 
     const round = (value: number): number => Math.round(value * 100) / 100;
     // The point `radius` along the way from a corner towards its neighbour, where the arc starts or ends.

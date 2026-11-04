@@ -85,6 +85,8 @@ export const ICONS = {
     "folder-open": OBJECT_GLYPHS[`folder-open`],
     fork: ACTION_GLYPHS[`fork`],
     forward: ACTION_GLYPHS[`forward`],
+    "flow-columns": ACTION_GLYPHS[`flow-columns`],
+    "flow-rows": ACTION_GLYPHS[`flow-rows`],
     gift: OBJECT_GLYPHS[`gift`],
     "git-branch": OBJECT_GLYPHS[`git-branch`],
     github: BRAND_GLYPHS[`github`],

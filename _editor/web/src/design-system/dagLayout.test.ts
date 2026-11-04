@@ -197,6 +197,39 @@ describe(`layoutDag`, () => {
         expect(columnOf(placed, `tail`)).toBe(2 * (options.nodeWidth + 88));
     });
 
+    // Top to bottom a rank is a row: a tall card hangs down from the row's top edge rather than pushing its neighbours
+    // to its middle, and a narrow row sits centred under a wide one, as a downward flow reads.
+    it(`starts a row's cards at one top edge and centres each row on the widest`, () => {
+        const ordered = (id: string, order: number, height = options.nodeHeight): DagNode<undefined> => ({ ...node(id), order, height });
+        const placed = layoutDag(
+            [ordered(`root`, 0), ordered(`short`, 0), ordered(`tall`, 1, 200), ordered(`tail`, 0)] as readonly DagNode<never>[],
+            [edge(`root`, `short`), edge(`root`, `tall`), edge(`short`, `tail`)],
+            { ...options, direction: `TB` },
+        );
+        expect(topOf(placed, `short`)).toBe(topOf(placed, `tall`));
+        // The second row is two cards and a gap wide; the first and last are one card, centred under it.
+        const wide = 2 * options.nodeWidth + 28;
+        expect(columnOf(placed, `short`)).toBe(0);
+        expect(columnOf(placed, `root`)).toBe(Math.round((wide - options.nodeWidth) / 2));
+        expect(columnOf(placed, `tail`)).toBe(columnOf(placed, `root`));
+        // The next row starts below the tallest card of the one above it, not the first.
+        expect(topOf(placed, `tail`)).toBe(topOf(placed, `tall`) + 200 + 88);
+    });
+
+    // A turn taken at a short card's own edge would run across the taller card beside it in its row.
+    it(`turns below the whole row, not just below its own card`, () => {
+        const sized = (id: string, order: number, box: { height?: number; width?: number } = {}): DagNode<undefined> => ({ ...node(id), order, ...box });
+        // `b1` is wide enough to stand under `a`, so the line from `a` to `d` has to step sideways before it drops.
+        const placed = layoutDag(
+            [sized(`a`, 0), sized(`tall`, 1, { height: 240 }), sized(`b1`, 0, { width: 400 }), sized(`b2`, 1), sized(`d`, 0)] as readonly DagNode<never>[],
+            [edge(`a`, `b1`), edge(`tall`, `b2`), edge(`a`, `d`), edge(`b1`, `d`), edge(`b2`, `d`)],
+            { ...options, direction: `TB` },
+        );
+        const turns = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
+        expect(turns).toHaveLength(2);
+        expect(turns.every((point) => point.y > topOf(placed, `tall`) + 240)).toBe(true);
+    });
+
     it(`ignores an order only some nodes carry, rather than half-applying it`, () => {
         const nodes = [node(`root`), { ...node(`dead`), order: 1 }, { ...node(`feeder`), order: 0 }, node(`tail`)];
         const edges = [edge(`root`, `dead`), edge(`root`, `feeder`), edge(`feeder`, `tail`)];
@@ -248,6 +281,20 @@ describe(`lanePath`, () => {
     it(`draws a straight line straight, with no bend to round`, () => {
         const path = lanePath({ x: 0, y: 50 }, { x: 600, y: 50 }, []);
         expect(path).toBe(`M 0 50 L 600 50`);
+    });
+
+    // A top-to-bottom graph is read down its rows: the same path turned on its side.
+    it(`leaves and arrives vertically when the graph runs top to bottom`, () => {
+        const path = lanePath({ x: 0, y: 0 }, { x: 100, y: 600 }, [{ x: 0, y: 480 }], 8, `TB`);
+        const visited = corners(path);
+        const [first, second] = visited;
+        const last = visited.at(-1);
+        const penultimate = visited.at(-2);
+        expect(first?.split(`,`)[0]).toBe(second?.split(`,`)[0]);
+        expect(last?.split(`,`)[0]).toBe(penultimate?.split(`,`)[0]);
+        // The turn is where the layout put it: in the gutter above the target, not along the target's top edge.
+        expect(visited).toContain(`0,480`);
+        expect(visited).toContain(`100,480`);
     });
 
     it(`rounds every bend it does draw`, () => {
