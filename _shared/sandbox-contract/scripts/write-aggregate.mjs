@@ -15,7 +15,7 @@ const INDEX = new URL("index.ts", SOURCE);
 export const INVERSE = new Set(["device", "phone", "runner", "webext"]);
 
 const IMPORT = /^import \{ (\w+) \} from "\.\/contracts\/([\w-]+)\.contract\.js";\n/gm;
-const AGGREGATE = /^export const sandboxContract = \{\n([\s\S]*?)^\};\n/m;
+const AGGREGATE = /^export const sandboxContract(?:: \{\n(?: {4}[\w$]+: typeof \w+;\n)*\})? = \{\n([\s\S]*?)^\};\n/m;
 const ENTRY = /^ {4}([\w$]+): (\w+),$/gm;
 
 const camel = (stem) => stem.replace(/-(\w)/g, (_, letter) => letter.toUpperCase());
@@ -32,7 +32,7 @@ export const subjects = (contracts = join(fileURLToPath(SOURCE), "contracts")) =
 export const mounted = (text) => {
     const body = AGGREGATE.exec(text)?.[1];
     if (body === undefined) {
-        throw new Error("src/index.ts has no `export const sandboxContract = {…};` block");
+        throw new Error("src/index.ts has no sandboxContract object declaration");
     }
     return {
         entries: [...body.matchAll(ENTRY)].map(([, key, binding]) => `${key}: ${binding}`).toSorted(),
@@ -52,8 +52,10 @@ export const rewritten = (text, stems) => {
     const first = text.search(IMPORT);
     const without = text.replace(IMPORT, "");
     const placed = first === -1 ? `${imports}${without}` : `${without.slice(0, first)}${imports}${without.slice(first)}`;
+    // Imported type references keep declaration emission from expanding every schema into the aggregate.
+    const types = stems.map((stem) => `    ${camel(stem)}: typeof ${camel(stem)}Contract;\n`).join("");
     const entries = stems.map((stem) => `    ${camel(stem)}: ${camel(stem)}Contract,\n`).join("");
-    return placed.replace(AGGREGATE, `export const sandboxContract = {\n${entries}};\n`);
+    return placed.replace(AGGREGATE, `export const sandboxContract: {\n${types}} = {\n${entries}};\n`);
 };
 
 const differences = (have, want) => [

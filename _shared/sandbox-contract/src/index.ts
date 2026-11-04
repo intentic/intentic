@@ -46,8 +46,8 @@ import { secretsContract } from "./contracts/secrets.contract.js";
 import { servicesContract } from "./contracts/services.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
-import { sharingContract } from "./contracts/sharing.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
+import { sharingContract } from "./contracts/sharing.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
@@ -104,8 +104,8 @@ export const sandboxContract: {
     services: typeof servicesContract;
     sessions: typeof sessionsContract;
     settings: typeof settingsContract;
-    sharing: typeof sharingContract;
     share: typeof shareContract;
+    sharing: typeof sharingContract;
     skills: typeof skillsContract;
     system: typeof systemContract;
     translator: typeof translatorContract;
@@ -156,8 +156,8 @@ export const sandboxContract: {
     services: servicesContract,
     sessions: sessionsContract,
     settings: settingsContract,
-    sharing: sharingContract,
     share: shareContract,
+    sharing: sharingContract,
     skills: skillsContract,
     system: systemContract,
     translator: translatorContract,
