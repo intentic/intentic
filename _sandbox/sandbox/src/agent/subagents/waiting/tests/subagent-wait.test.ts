@@ -222,3 +222,16 @@ test("wait accepts a one-second request and clamps it instead of rejecting its s
         { outcome: "unknown-target", note: "Nothing to wait for: no subagent or background command of this conversation is still running under that id, or its ending was already reported." },
     ]);
 });
+
+test("wait accepts a timeout over its ceiling and clamps it instead of rejecting its schema", async () => {
+    const timers = jest.spyOn(globalThis, "setTimeout");
+    const call = await connect(subagentWaitServer({
+        conversationId: "parent", conversations: memoryFleet().conversations, signal: new AbortController().signal,
+    }));
+    const reply = await call("tools/call", { name: "wait", arguments: { target: "missing", timeoutSeconds: 3_600 } });
+    expect(reply.error).toBeUndefined();
+    expect(timers.mock.calls.map((args) => args[1])).toContain(1_800_000);
+    timers.mockRestore();
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toMatchObject to compare.
+    expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([{ outcome: "unknown-target" }]);
+});

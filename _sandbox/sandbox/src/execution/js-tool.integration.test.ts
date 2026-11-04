@@ -65,3 +65,13 @@ test("the timeout ask reaches the kill, and the status line names it", async () 
     });
     expect(answer).toContain("killed: still running at the 1s timeout");
 }, 15_000);
+
+// The schema once refused anything outside 1..600 or fractional, which cost the model a retry; now the handler clamps.
+test("an out-of-range timeout is clamped, never refused", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "js-tool-"));
+    const answer = await runJsTool(deps(dirPlan(dir)), {
+        code: "await new Promise((resolve) => setTimeout(resolve, 60_000));",
+        timeoutSeconds: 0.2,
+    });
+    expect(answer).toContain("killed: still running at the 1s timeout");
+}, 15_000);

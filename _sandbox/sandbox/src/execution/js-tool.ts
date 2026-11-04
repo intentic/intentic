@@ -46,10 +46,10 @@ export const jsToolDescription = (plan: JsExecutionPlan): string =>
     `otherwise assemble from grep/curl/jq pipes. ${
         plan.readRoots.length === 0
             ? "This session's scripts have NO filesystem access: work in memory and print results. "
-            : `Reads are allowed under ${plan.readRoots.join(", ")}; ` +
-              (plan.writeRoots.length === 0
+            : `Reads are allowed under ${plan.readRoots.join(", ")}; ${ 
+              plan.writeRoots.length === 0
                   ? "nothing on disk may be changed: writes are refused by the runtime itself. "
-                  : `writes under ${plan.writeRoots.join(", ")}. `)
+                  : `writes under ${plan.writeRoots.join(", ")}. `}`
     }${
         plan.allowSpawn
             ? "Starting other programs (child_process) works. "
@@ -69,13 +69,11 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
                 jsToolDescription(deps.plan),
                 {
                     code: z.string().describe("The ES module to run. Top-level await allowed; print what you need back."),
+                    // Bounds are clamped in the handler, not refused here: a refused call costs the model a retry.
                     timeoutSeconds: z
                         .number()
-                        .int()
-                        .min(1)
-                        .max(JS_TIMEOUT_MAX_S)
                         .optional()
-                        .describe(`Seconds before the run is killed. Default ${JS_TIMEOUT_DEFAULT_S}, max ${JS_TIMEOUT_MAX_S}.`),
+                        .describe(`Seconds before the run is killed. Default ${JS_TIMEOUT_DEFAULT_S}; clamped to 1..${JS_TIMEOUT_MAX_S}.`),
                 },
                 async (args) => ({ content: [{ type: "text" as const, text: await runJsTool(deps, args) }] }),
                 // A script can delete what it may write, and send anything it can reach.
@@ -87,7 +85,8 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
 // The handler itself, what a `run` call does once the SDK delivers it; the piece the tests drive (the server wrapper
 // above is only registration).
 export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutSeconds?: number | undefined }): Promise<string> => {
-    const timeoutSeconds = Math.min(args.timeoutSeconds ?? JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S);
+    const asked = args.timeoutSeconds;
+    const timeoutSeconds = asked === undefined || !Number.isFinite(asked) ? JS_TIMEOUT_DEFAULT_S : Math.min(Math.max(1, Math.round(asked)), JS_TIMEOUT_MAX_S);
     // The secret exit lives in the handler, not a hook: Bash must compose its resolution inside the tmux rewrite since
     // two hooks order themselves, but a JS run has only this one pipeline, after the command gate has read the script.
     if (deps.consult !== undefined) {

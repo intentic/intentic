@@ -101,19 +101,16 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         .min(1)
                         .max(200)
                         .describe('One line on what is being watched, e.g. "CI run 316 on intentic/intentic": shown in the wake and to the user.'),
+                    // Bounds are clamped by armWatcher and the armed answer says what was set: a refused call costs a retry.
                     intervalSeconds: z
                         .number()
-                        .min(10)
-                        .max(1800)
                         .optional()
-                        .describe(`Seconds between checks, matched to how fast the state actually changes. Default ${DEFAULT_INTERVAL_S}.`),
+                        .describe(`Seconds between checks, matched to how fast the state actually changes. Default ${DEFAULT_INTERVAL_S}; clamped to 10..1800.`),
                     timeoutSeconds: z
                         .number()
-                        .min(60)
-                        .max(86_400)
                         .optional()
                         .describe(
-                            `Deadline, at most a day. If the check never passes, you are woken anyway with its last output. Default ${DEFAULT_TIMEOUT_S}. Longer than a day is \`automations propose\`.`,
+                            `Deadline, clamped to 60s..a day. If the check never passes, you are woken anyway with its last output. Default ${DEFAULT_TIMEOUT_S}. Longer than a day is \`automations propose\`.`,
                         ),
                 },
                 async (args) => {

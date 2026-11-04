@@ -23,7 +23,8 @@ import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
-// Long enough for a real run, short enough to return if forgotten; a longer wait means calling again.
+// Long enough for a real run, short enough to return if forgotten; a longer wait means calling again. Out-of-range
+// timeouts are clamped in the handler, never refused by the schema: a refused call costs the model a retry.
 const DEFAULT_TIMEOUT_S = 600;
 const MAX_TIMEOUT_S = 1800;
 
@@ -556,11 +557,11 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         .optional()
                         .describe("Several subagent or background command ids, waited on as one; `target` is then ignored. Returns early only for trouble."),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
-                    timeoutSeconds: z.number().max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}; values below 5 are clamped to 5 seconds`),
+                    timeoutSeconds: z.number().optional().describe(`Default ${DEFAULT_TIMEOUT_S}; clamped to 5..${MAX_TIMEOUT_S} seconds`),
                 },
                 async (args) => {
                     const until: readonly SubagentWaitUntil[] = args.until ?? ["blocked", "finished"];
-                    const timeoutMs = Math.round(Math.max(5, args.timeoutSeconds ?? DEFAULT_TIMEOUT_S) * 1000);
+                    const timeoutMs = Math.round(Math.min(Math.max(5, args.timeoutSeconds ?? DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S) * 1000);
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }
