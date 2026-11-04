@@ -389,11 +389,13 @@ it(`names a card's diff and its code review apart`, () => {
 // Archive is withheld too: the worktree belongs to a turn about to run in it again.
 it(`draws an agent whose turn is being resumed as work still in flight`, () => {
     const card = mount(ready(`resuming`));
-    expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+    // In flight is the corner's ticking elapsed and the card's blade, not a spinner beside it.
+    expect(card.querySelector(`[data-card-when="working"]`)).not.toBeNull();
+    expect(card.querySelector(`.session-card-working`)).not.toBeNull();
     expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
 });
 
-// A sent turn the daemon hasn't filed yet: drawn from identity fields alone, showing just a title under a spinner.
+// A sent turn the daemon hasn't filed yet: drawn from identity fields alone, showing just a title and its elapsed.
 // Pinned here: it shows starting, elapsed runs from send, and the close exit stays available.
 const starting = (): FleetAgent => ({
     id: `a4`,
@@ -412,7 +414,7 @@ const starting = (): FleetAgent => ({
 
 it(`draws a sent turn the daemon has not filed as work in flight, with what this browser knows`, () => {
     const card = mount(starting());
-    expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+    expect(card.querySelector(`[data-card-when="working"]`)).not.toBeNull();
     // The model it went out under, and an elapsed measured from the send.
     expect(card.textContent).toContain(`Claude Opus 5`);
     expect(card.textContent).toContain(`0s`);
@@ -444,11 +446,14 @@ it(`advances an archived card's age from when it left the board`, async () => {
     jest.useFakeTimers();
     jest.setSystemTime(60_000_000);
     const card = mount({ ...ready(`landed`), archivedAt: Date.now() - 26 * 60_000 });
-    expect(card.textContent).toContain(`Archived 26m`);
+    // In the corner, under the archive's box, with no "ago": the corner already says it is an age.
+    const when = (): Element | null => card.querySelector(`[data-card-when="archived"]`);
+    expect(when()?.textContent).toBe(`26m`);
+    expect(when()?.querySelector(`[data-icon="box"]`)).not.toBeNull();
 
     await advanceTimersByTimeAsync(60_000);
     await nextTick();
-    expect(card.textContent).toContain(`Archived 27m`);
+    expect(when()?.textContent).toBe(`27m`);
 });
 
 // A `starting` turn has no daemon entry yet, so archive is unavailable; close must stay, or the card would offer no

@@ -29,8 +29,10 @@ const props = withDefaults(
         quiet?: boolean;
         // How many stamps the corner draws before the rest fold into "+N".
         max?: number;
+        // The card opens below: a board card's hover bar floats over the corner the stamps sit in.
+        below?: boolean;
     }>(),
-    { agent: undefined, quiet: false, max: 4 },
+    { agent: undefined, quiet: false, max: 4, below: false },
 );
 
 const fold = computed(() => foldStamps(props.stamps, props.max));
@@ -136,7 +138,7 @@ const runAgain = (stamp: Stamp): void => {
             <span v-if="stampMark(stamp)" class="text-[0.7em] font-semibold leading-none tabular-nums" data-stamp-mark>{{ stampMark(stamp) }}</span>
         </span>
         <span v-if="fold.folded > 0" class="text-[0.7em] font-medium leading-none text-subtle" aria-hidden="true">+{{ fold.folded }}</span>
-        <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="false">
+        <AnchoredOverlay v-model="open" :anchor="anchor" :side="below ? `bottom` : `top`" cross="end" :restore-focus="false">
             <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col p-1 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <SectionHeader :label="t(`agents.stamps.heading`)" density="dense" class="px-1.5 py-0.5" />
                 <!-- The hover wash is the whole line's, so it also covers the chevron, which sits last, after "Again". -->

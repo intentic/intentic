@@ -16,6 +16,8 @@ import { fullName, sealAuthor, sealedTitle } from "../../../../models/agent-stat
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import type { PendingAction } from "../laneDrop";
 import AgentCardClock from "./AgentCardClock.vue";
+import AgentCardWhen from "./AgentCardWhen.vue";
+import { useCardClock } from "./cardClock";
 import CardLandPresses from "./CardLandPresses.vue";
 
 const t = useT();
@@ -29,6 +31,7 @@ const lane = computed(() => laneOf(props.agent));
 const live = computed(() => props.dense !== true && lane.value !== `finished`);
 const meta = computed(() => agentStandingMeta(props.agent));
 const busy = computed(() => props.pending !== undefined);
+const clock = useCardClock(() => props.agent, () => turnWorking(props.agent));
 const landing = computed(() => props.pending === `land` || props.agent.status === `landing`);
 const { canReview, canShip } = useRole();
 const landPresses = computed(() => (props.agent.status === `ready` || props.agent.status === `landing`) && (canShip.value || canReview.value));
@@ -93,8 +96,9 @@ const grab = (event: PointerEvent): void => {
                 <span>·</span>
                 <span class="font-medium text-link">{{ t(`agents.sealedCard.reviewDiff`) }}</span>
             </button>
-            <span class="ml-auto inline-flex min-w-max items-center justify-end">
-                <AgentCardClock :agent="agent" :working="turnWorking(agent)" :activity-text="undefined" :busy="busy" />
+            <span class="ml-auto inline-flex min-w-max items-center justify-end gap-2">
+                <AgentCardWhen :agent="agent" :clock="clock" :activity-text="undefined" />
+                <AgentCardClock :clock="clock" :busy="busy" />
             </span>
         </div>
 

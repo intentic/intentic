@@ -20,6 +20,8 @@ import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
+import AgentCardWhen from "./AgentCardWhen.vue";
+import { useCardClock } from "./cardClock";
 import AgentReactions from "./AgentReactions.vue";
 import CardHoverBar from "./CardHoverBar.vue";
 import { BAR_EMOJI } from "./reactions";
@@ -79,12 +81,10 @@ import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
-// One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
-// drill-in, and either the running elapsed or the settled date).
-// The clock corner (AgentCardClock) reads the shared useNow clock itself, so a tick redraws that corner and not the card
-// or the board. The title is the open button; the card groups it with the independent action controls.
-// `dense` is the same card as a row, for stacked lanes: identical DOM and facts, just wrapped onto one line instead of
-// stacked, so a lane fits more cards.
+// One fleet agent: identity tile + title + status chip + its "when" (AgentCardWhen), a model/session line, and a closing
+// summary line (stats, drill-in, what it waits on). The "when" seats tick themselves (cardClock.ts), never the card.
+// The title is the open button; the card groups it with the independent action controls.
+// `dense` is the same card as a row, for stacked lanes: identical DOM and facts, wrapped onto one line so a lane fits more.
 
 const t = useT();
 
@@ -142,9 +142,6 @@ const emit = defineEmits<{
     // Opens the board's menu on this card, handing over what only the card can do (rename, react).
     menu: [event: MouseEvent, presses: CardOwnPresses];
 }>();
-
-// A fresh blade each time this card is selected, so its sweep starts on the click (selectionBlade.ts).
-const blade = useSelectionBlade(() => props.selected);
 
 const { mobile, coarse } = useDevice();
 const { user } = useAuth();
@@ -340,9 +337,13 @@ const tileHint = computed((): TooltipValue => {
     };
 });
 const working = computed(() => turnWorking(props.agent));
-// Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
-// readout takes the same slot.
-const dated = computed(() => props.agent.archivedAt !== undefined || (!working.value && props.agent.updatedAt > 0));
+// A fresh blade each time this card is selected, so its sweep starts on the click (selectionBlade.ts); a running card
+// sweeps one in the working ink, which with its ticking elapsed is how it says it is at work. Selection outranks it.
+const blade = useSelectionBlade(() => (props.selected === true ? `on` : working.value ? `working` : undefined));
+// The "when" for both seats, corner and closing row: they read it, so a tick redraws them, never this card (cardClock.ts).
+const clock = useCardClock(() => props.agent, () => working.value, titleOfAgent);
+// A running card's corner spends no spinner: its elapsed ticks, and the card sweeps.
+const statusShown = computed(() => cornerStandingShown(props.agent.status) && !(working.value && statusMeta.value.spin === true));
 // Whether a mark can be addressed to this card at all. A registered one keeps its marks in the roster; a draft of this
 // sandbox's keeps the reader's own with the draft (agents.reactDraft) until its first turn carries them onto the card. A
 // refused start or a chat reopened from history has neither, and another sandbox's draft marks are not read back here.
@@ -354,12 +355,12 @@ const reactionsStrip = useTemplateRef<ReactionsStrip>(`reactionsStrip`);
 const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
 // empty strip.
-// One wrapping line (stats left, press and time right) rather than two rows, so a lane fits more cards.
+// One wrapping line (stats left, press and reading right) rather than two rows; the time is the corner's (AgentCardWhen).
 // No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
 // once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
 // A draft is undated and idle, so marks are what opens the row for it: an unmarked draft keeps no empty row.
-const summary = computed(() => rowDrill.value || resendable.value || dated.value || working.value || (reactable.value && ((props.agent.reactions?.length ?? 0) > 0 || !draftMarks.value)));
+const summary = computed(() => rowDrill.value || resendable.value || clock.row.value || (reactable.value && ((props.agent.reactions?.length ?? 0) > 0 || !draftMarks.value)));
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What vouches for its work, as stamps in its corner (useCardStamps.ts): its own last check, then each kind of check a
 // fresh session ran on it.
@@ -577,7 +578,7 @@ const grab = (event: PointerEvent): void => {
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
-            selected ? 'session-card-on' : '',
+            selected ? 'session-card-on' : working ? 'session-card-working' : '',
             /* The halo is an outline, which `outline-none` (a utility, so it outranks any component rule) would erase. */
             idMatch?.exact === true ? 'session-card-found' : 'outline-none',
             dragging ? 'opacity-40' : '',
@@ -670,12 +671,13 @@ const grab = (event: PointerEvent): void => {
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
                 <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent. A card that never
                      started draws no standing (cornerStandingShown), so there the pencil is the corner's only mark. -->
-                <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
-                <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
+                <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" below class="text-sm" />
+                <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" below class="text-base" />
+                <AgentCardWhen :agent="agent" :clock="clock" :activity-text="activityText" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span
                     v-if="chip !== undefined"
-                    v-tooltip.top="chipHint"
+                    v-tooltip.bottom="chipHint"
                     class="ui-status-pill shrink-0 font-semibold"
                     :class="chip.tone"
                     ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
@@ -683,10 +685,10 @@ const grab = (event: PointerEvent): void => {
                 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
                 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
                 <Icon
-                    v-else-if="cornerStandingShown(agent.status)"
+                    v-else-if="statusShown"
                     :name="statusMeta.icon"
                     :spin="statusMeta.spin"
-                    v-tooltip.top="statusMeta.label"
+                    v-tooltip.bottom="statusMeta.label"
                     :aria-label="statusMeta.label"
                     role="img"
                     class="shrink-0 text-base"
@@ -901,11 +903,11 @@ const grab = (event: PointerEvent): void => {
                     @land="emit('land')"
                 />
 
-                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and time held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave, a running readout asking 10rem to say what it does. -->
+                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and a reading held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave. -->
                 <div
                     v-if="summary" data-shares
                     class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
-                    :class="dense ? 'min-w-32 flex-1' : ['grow has-[>[data-stat]]:basis-full', working ? 'basis-40' : '']"
+                    :class="dense ? 'min-w-32 flex-1' : 'grow has-[>[data-stat]]:basis-full'"
                 >
                     <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
@@ -922,7 +924,7 @@ const grab = (event: PointerEvent): void => {
                         :draft="draftMarks"
                     />
 
-                    <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
+                    <!-- Press and reading take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: a watch's words are contained (AgentCardClock), so a long label truncates here instead of pushing the corner onto a row of its own. -->
                     <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
                         <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
                         <button
@@ -947,11 +949,8 @@ const grab = (event: PointerEvent): void => {
                         </button>
                         <!-- The one part of the card that moves with the clock, so a tick redraws it and not the card around it. -->
                         <AgentCardClock
-                            :agent="agent"
-                            :working="working"
-                            :activity-text="activityText"
+                            :clock="clock"
                             :busy="busy"
-                            :title-of="titleOfAgent"
                             @unwatch="emit(`unwatch`)"
                             @stop-job="(jobId) => emit(`stopJob`, jobId)"
                             @warm="openWarm"

@@ -52,7 +52,7 @@ export const limitBack = (clock: LimitClock): string =>
  * ("moving to …"), a memory hold's send once memory frees, messages booked for a time or another agent's land. Nothing
  * carries it on: a spent allowance's corner says when it is back, for the press the card still owes.
  */
-type SelfStart =
+export type SelfStart =
     | { readonly kind: `moving`; readonly text: string; readonly account: string }
     | { readonly kind: `resend`; readonly text: string; readonly clock?: LimitClock }
     | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock }

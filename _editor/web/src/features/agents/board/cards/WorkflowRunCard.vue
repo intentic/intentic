@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatMoney, Icon, timeAgo, toneWash, ui, useDevice } from "@intentic/ui";
+import { formatAge, formatMoney, Icon, toneWash, ui, useDevice } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../../../../models/fleet/useWorkflowRuns";
@@ -169,8 +169,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <!-- Opt-in geek metrics, as an agent card draws them: what every step's processes hold now, together. -->
             <SessionMetrics :card="runCardKey(run.runId)" />
             <!-- Archived rows date by filing, not start, like the agent card: "when" means "when I put it away". -->
-            <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: timeAgo(run.archivedAt) }) }}</span>
-            <span v-else>{{ timeAgo(run.startedAt) }}</span>
+            <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: formatAge(run.archivedAt) }) }}</span>
+            <span v-else>{{ formatAge(run.startedAt) }}</span>
         </div>
 
         <!-- Usage reports the active work, not only the completed step count. -->

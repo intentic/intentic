@@ -352,6 +352,7 @@ export { installChunkRecovery, isStaleChunkError, loadChunk, recoverStaleChunk }
 export { vTw } from "./lib/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export {
+    formatAge,
     formatBytes,
     formatCompact,
     formatCount,

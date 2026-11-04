@@ -292,6 +292,31 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
     return wholeDays < 7 ? relativeFormat(`always`).format(-wholeDays, `day`) : formatDate(at);
 };
 
+/**
+ * An age at corner width, with no "ago": "now", "26m", "2h", "3d", then the calendar day ("Oct 20"), its year only
+ * once it is not this one's. For a slot whose place already says it is a time since (a card's corner), where "ago" is
+ * three letters of the obvious on every row. Rounded down, as `timeAgo` is; the units are CLDR's narrow ones.
+ */
+export const formatAge = (at: number, now: number = Date.now()): string => {
+    const minutes = Math.floor((now - at) / 60_000);
+    if (minutes < 1) {
+        return relativeFormat(`auto`).format(0, `second`);
+    }
+    const unit = (name: string, value: number): string => shapedFormat(`unit:${name}`, { style: `unit`, unit: name, unitDisplay: `narrow` }).format(value);
+    if (minutes < 60) {
+        return unit(`minute`, minutes);
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return unit(`hour`, hours);
+    }
+    const days = Math.floor(hours / 24);
+    if (days < 7) {
+        return unit(`day`, days);
+    }
+    return new Date(at).getFullYear() === new Date(now).getFullYear() ? formatDayMonth(at) : formatDate(at);
+};
+
 // Relative time under a day old, else a bare calendar day rather than `timeAgo`'s full absolute fallback, which
 // would set the width of every row. Pair with the exact moment in a `title`.
 export const freshness = (at: number): string => (Date.now() - at < 86_400_000 ? timeAgo(at) : formatDate(at));

@@ -20,6 +20,8 @@ const props = defineProps<{
     preview?: string | (() => string | undefined);
     // When the composer first held it (Conversation.draftAt); absent for a chat restored with no stamp.
     at?: number;
+    // Its hover opens below: a board card's hover bar floats over the corner it sits in.
+    below?: boolean;
 }>();
 
 // The mark reads the shared clock itself, armed only while it has a stamp to age, and quantized to the 15s that
@@ -35,7 +37,10 @@ const spoken = computed(() => [t(`common.unsentMark.draft`), age.value, words.va
 
 <template>
     <!-- At the host's stamp size: the host sets the font size, as it does for its CardStamps. -->
-    <span v-tooltip.top="spoken" role="img" :aria-label="spoken" data-unsent-mark class="inline-flex shrink-0 items-center text-link">
+    <span v-if="below" v-tooltip.bottom="spoken" role="img" :aria-label="spoken" data-unsent-mark class="inline-flex shrink-0 items-center text-link">
+        <Icon name="pencil" />
+    </span>
+    <span v-else v-tooltip.top="spoken" role="img" :aria-label="spoken" data-unsent-mark class="inline-flex shrink-0 items-center text-link">
         <Icon name="pencil" />
     </span>
 </template>

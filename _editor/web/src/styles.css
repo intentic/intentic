@@ -182,17 +182,22 @@
    is SMIL in the SVG the mask is drawn from, not a CSS animation, because selection follows the route and a CSS animation
    started on every navigation rebuilds an open DevTools Styles editor. The card hands the mask in through its own style
    (features/agents/board/cards/selectionBlade.ts, which says why each selection needs an image of its own); without one, nothing shows. */
-    .session-card.session-card-on::before {
+    .session-card:is(.session-card-on, .session-card-working)::before {
         content: "";
         position: absolute;
         inset: 0;
         z-index: -1;
         border-radius: inherit;
         pointer-events: none;
-        background-color: color-mix(in oklab, var(--color-selection-edge) 15%, transparent);
+        background-color: color-mix(in oklab, var(--blade-hue, var(--color-selection-edge)) 15%, transparent);
         mask-image: var(--session-card-blade, linear-gradient(#0000, #0000));
         mask-size: 100% 100%;
         mask-repeat: no-repeat;
+    }
+/* A RUNNING CARD SWEEPS THE SAME BLADE in the working ink, which with the elapsed ticking in its corner is how it says it
+   is at work (the corner spends no spinner on it). A selected card keeps the selection's hue whether it runs or not. */
+    .session-card.session-card-working:not(.session-card-on) {
+        --blade-hue: var(--color-link);
     }
 /* The same blade on a lit chip (the review panel's FROM chips), in the chip's own hue rather than the selection's, since
    a lit chip is flooded with its agent's colour. */
@@ -213,7 +218,7 @@
         mask-repeat: no-repeat;
     }
 /* Reduced motion: no blade; the wash and the edge still say which card is open. */
-    :root[data-motion="reduced"] :is(.session-card.session-card-on, .chip-blade)::before {
+    :root[data-motion="reduced"] :is(.session-card.session-card-on, .session-card.session-card-working, .chip-blade)::before {
         content: none;
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
