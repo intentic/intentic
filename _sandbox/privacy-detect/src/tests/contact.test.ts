@@ -212,7 +212,7 @@ describe("placeholder numbers", () => {
     const grouped = (digits: string, separator = " "): string => [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)].join(separator);
 
     test("one digit throughout, or each one up or down from the last, is no one's number", () => {
-        for (const digits of [counting, [...counting].reverse().join(""), "7".repeat(9), `${counting.slice(1)}0`]) {
+        for (const digits of [counting, [...counting].toReversed().join(""), "7".repeat(9), `${counting.slice(1)}0`]) {
             expect(found(`tel. ${grouped(digits)}`, "phone"), digits).toEqual([]);
             expect(found(`tel. ${grouped(digits, "-")}`, "phone"), digits).toEqual([]);
             expect(found(`tel. +48 ${grouped(digits)}`, "phone"), digits).toEqual([]);

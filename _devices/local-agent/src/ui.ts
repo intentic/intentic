@@ -629,9 +629,9 @@ export const createUi = (process: UiProcess, options: UiOptions = {}): Ui => {
                 for (const raw of rest) {
                     const body = raw.trim();
                     const split = body.indexOf(": ");
-                    const label = split > 0 ? body.slice(0, split) : "";
-                    if (label === "problem" || label === "fix") {
-                        const padded = `${label}:`.padEnd(9);
+                    const field = split > 0 ? body.slice(0, split) : "";
+                    if (field === "problem" || field === "fix") {
+                        const padded = `${field}:`.padEnd(9);
                         for (const [at, part] of wrap(body.slice(split + 2), width - 9 - padded.length).entries()) {
                             process.stderr.write(`${at === 0 ? `        ${paint(pen, padded, DIM)}` : " ".repeat(8 + padded.length)}${part}\n`);
                         }
