@@ -9,6 +9,7 @@ import { identityHue } from "../../../lib/identityHue";
 import { editPath, editWords, GROUP_ICONS, groupLabel, isGround, nodeDetail, nodeLabel, type PersonaName, principalLine } from "./mapWords";
 import { bundleId, type Focus, type Lighting } from "./reachLighting";
 import type { MapNode, Principal, ReachMap } from "./reachModel";
+import { here, page } from "../../../lib/routes/links";
 
 // WHAT THE MAP IS SAYING RIGHT NOW, IN ONE LINE. Lines and edges show a reach; this says it, so nobody has to count them
 // to know that Jo sees the whole workspace and acts only through Maya, or that nothing that gets in reaches the VPN. With
@@ -116,7 +117,7 @@ const markOf = (entry: MapNode): string => entry.icon ?? `folder`;
             <span class="max-w-64 shrink-0 truncate text-sm font-medium text-content">{{ principal.label }}</span>
             <span class="shrink-0 text-xs text-muted">{{ principalLine(principal, personaName) }}</span>
             <span class="min-w-0 truncate text-xs text-subtle" :title="summary">{{ summary }}</span>
-            <RouterLink to="/sandbox/access" :class="ui.textButton()" class="ml-auto shrink-0">{{ t(`sandbox.sandboxMap.changeAccess`) }}</RouterLink>
+            <RouterLink :to="here(page.sandboxSettings(`access`))" :class="ui.textButton()" class="ml-auto shrink-0">{{ t(`sandbox.sandboxMap.changeAccess`) }}</RouterLink>
         </template>
 
         <template v-else-if="bundle !== undefined">

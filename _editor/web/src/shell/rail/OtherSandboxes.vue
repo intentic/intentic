@@ -14,6 +14,7 @@ import { clusterOf } from "../../models/home/otherSandboxes";
 import { sandboxOrder } from "../../models/home/sandboxOrder";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
+import { homeEntryPath } from "../../models/sandbox/sandboxScreen";
 import { commandShortcut } from "../../workbench/commands/useCommands";
 import { badgeClass } from "../../workbench/views/viewBadge";
 
@@ -56,6 +57,12 @@ const tint = (id: string) => {
     };
 };
 
+// Home on the sandbox the reader came from: the section Home shows of every sandbox, else its home conversation.
+const home = computed(() => {
+    const id = sandbox.activeSandboxId.value;
+    return id === undefined ? HOME_PATH : homeEntryPath(id);
+});
+
 const needy = computed(() => cluster.value.slots.filter((slot) => slot.needsYou > 0));
 const tip = computed<Tip>(() => ({
     title: t(`home.open`),
@@ -76,7 +83,7 @@ const label = computed(() =>
 <template>
     <RouterLink
         v-if="cluster.slots.length > 0"
-        :to="HOME_PATH"
+        :to="home"
         class="icon-rail-cluster ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg"
         :aria-label="label"
         v-tooltip.right="tip"

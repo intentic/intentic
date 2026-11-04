@@ -10,6 +10,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 const t = useT();
 
@@ -128,7 +129,7 @@ const items = computed<MenuItem[]>(() => {
             <!-- A line of its own under the row, never clamped into the description: the tail is the way out of the state it
                  describes, so it must stay visible. -->
             <template v-if="needsRebuild" #below>
-                <RouterLink to="/sandbox/environment" class="text-2xs text-warning hover:underline">
+                <RouterLink :to="here(page.sandboxSettings(`environment`))" class="text-2xs text-warning hover:underline">
                     {{
                         t(`capabilities.capabilityInstanceRow.finishSetup`, {
                             detail: instance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`),

@@ -8,6 +8,7 @@ import { useRole } from "../../client/sandbox/useRole";
 import { useWakeListener } from "../../models/voice/useWakeListener";
 import { wakeStatus } from "../../models/voice/wakeStatus";
 import SettingsVoiceMic from "./SettingsVoiceMic.vue";
+import { here, page } from "../../lib/routes/links";
 
 // Talking to the agent from across the room, on this device: whether this device listens for the wake word (its own
 // microphone, so its own switch, kept in this browser) and where listening stands. The word itself is the sandbox's
@@ -32,7 +33,7 @@ const listening = computed(
 );
 
 // Where the word is chosen: the sandbox's own Agent settings, which only a maintainer reaches.
-const wordSettings = `/sandbox/agent?section=tools#setting-agent-voice`;
+const wordSettings = computed(() => here(page.sandboxSettings(`agent`, { query: { section: `tools` }, hash: `setting-agent-voice` })));
 </script>
 
 <template>

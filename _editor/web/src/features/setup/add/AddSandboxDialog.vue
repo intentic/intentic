@@ -15,6 +15,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { unfinishedSandboxes } from "../../../models/sandbox/live/roster";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { masterRail } from "../../../models/home/masterRail";
+import { page, toInside } from "../../../lib/routes/links";
 import AddSandboxForm from "./AddSandboxForm.vue";
 import AddSandboxRun from "./AddSandboxRun.vue";
 import { ATTACH, HOSTED } from "./useAddSandbox";
@@ -62,7 +63,7 @@ watch(
     () => created.value?.id,
     (id) => {
         if (id !== undefined && !mobile.value && !masterRail.value) {
-            landOnAfterSwitch(id, `/chat`);
+            landOnAfterSwitch(id, toInside(id, page.chat()));
         }
     },
 );

@@ -1,3 +1,4 @@
+import { matchPattern, parseFloatingPath } from "@intentic/sandbox-contract/app-routes";
 import { getCurrentScope, onScopeDispose, watch } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
 import { raiseOwnWindow } from "../../app/environments/desktop";
@@ -160,7 +161,9 @@ export const sendLinkToMainWindow = (event: MouseEvent): void => {
         return;
     }
     const path = `/${url.pathname.slice(base.length)}${url.search}${url.hash}`;
-    if (path.startsWith(`/floating/`)) {
+    // A floating window's own address stays in this one: its own, or the one before frames that the app's windows still
+    // open at (floating.ts).
+    if (parseFloatingPath(path) !== undefined || matchPattern(`floating/:panel`, url.pathname.slice(base.length)) !== undefined) {
         return;
     }
     if (handOffToMainWindow({ kind: `route`, path })) {

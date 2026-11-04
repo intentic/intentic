@@ -11,6 +11,7 @@ import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import HostServerRows from "./HostServerRows.vue";
 import LocalModelLane from "./LocalModelLane.vue";
+import { here, page } from "../../../lib/routes/links";
 
 // LOCAL MODELS, opened from its tile in Sandbox ▸ Models' grid: the models this sandbox runs itself and the servers it is
 // pointed at, in one card. What it already has first (a server, an API key, a model added from its capability card),
@@ -63,7 +64,7 @@ const held = computed(() =>
                           ? (`unknown` as const)
                           : (`blocked` as const),
                 description: status !== undefined && status.state !== `active` ? status.detail : undefined,
-                manage: endpoint.kind === `localmodel` ? `/capabilities/localmodel` : `/capabilities/endpoint`,
+                manage: here(page.capabilities(endpoint.kind === `localmodel` ? `localmodel` : `endpoint`)),
             };
         }),
 );
@@ -101,12 +102,12 @@ const held = computed(() =>
              for somebody already running a server, the card that points at it. Named once, here, without a tour. -->
         <RowNote variant="block">
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
-                <RouterLink to="/capabilities/localmodel" :class="ui.textButton()">
+                <RouterLink :to="here(page.capabilities(`localmodel`))" :class="ui.textButton()">
                     <Icon name="sliders-h" class="text-2xs" />{{ t(`connect.localModelLane.moreModels`) }}<Icon name="arrow-right" class="text-2xs" />
                 </RouterLink>
                 <span class="flex flex-wrap items-center gap-x-2 text-muted">
                     <Icon name="server" class="text-2xs text-subtle" />{{ t(`connect.providerGrid.ownServer`) }}
-                    <RouterLink to="/capabilities/endpoint" :class="ui.textButton()">
+                    <RouterLink :to="here(page.capabilities(`endpoint`))" :class="ui.textButton()">
                         {{ t(`connect.providerGrid.pointAtServer`) }}<Icon name="arrow-right" class="text-2xs" />
                     </RouterLink>
                 </span>

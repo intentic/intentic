@@ -16,13 +16,14 @@ import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { desktopApp, openThisComputer } from "../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
-import { DELETED_PATH } from "../lib/routes/home";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
+import { here, isPage, page } from "../lib/routes/links";
 import { useDeletedCount } from "../models/home/sandboxTrash";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
 // plan) and actions (Settings, Recently deleted while a sandbox can come back, This computer in the desktop app, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
 // on it raises the panel, a passing pointer raises nothing, and a press pins it. The rail's two end controls are the
-// same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives on /settings. The same control at
+// same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives in the account's settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
 // account is the one the app reaches for the window (useAccount.ts), and Settings opens in that window.
 // And at the foot of the phone's rail (MobileRail.vue), where a press is the only way in and its rows grow to a finger's
@@ -38,10 +39,13 @@ const router = useRouter();
 // A chip stating the account's plan, not a clickable row; absent where the platform sells no plan.
 const { planBadge } = useHostedPlan();
 
-// Settings has no rail tile; this control lights up like one, matching on the route and any sub-path.
-const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
+// Settings has no rail tile; this control lights up like one, on the account's settings in either frame.
+const onSettings = computed(() => isPage(route, `account`));
+// The account's settings: in a window on a folder, its own shell's page (router/localRoutes.ts); in the workspace, in the
+// frame the reader is in.
+const settingsTo = computed(() => (account.local ? localPath(`account`) : here(page.account())));
 // The account's deleted sandboxes are its page too, so the avatar lights there as well.
-const onDeleted = computed(() => route.name === `deleted-sandboxes`);
+const onDeleted = computed(() => isPage(route, `deletedSandboxes`));
 const onAccountPage = computed(() => onSettings.value || onDeleted.value);
 
 // The community invitation (features/community): a quiet dot here while an ask waits unseen in this menu, never more.
@@ -130,7 +134,7 @@ const stayOnFolder = async (): Promise<void> => {
     switchingTo.value = undefined;
     open.value = false;
     if (onSettings.value) {
-        await router.push(`/workspace`);
+        await router.push(localPath(`files`));
     }
 };
 
@@ -349,7 +353,7 @@ const communityPressed = (): void => {
                 {{ t(`gettingStarted.panel.show`) }}
             </button>
             <RouterLink
-                to="/settings"
+                :to="settingsTo"
                 data-menu-row
                 :data-current="onSettings || undefined"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
@@ -360,7 +364,7 @@ const communityPressed = (): void => {
             </RouterLink>
             <RouterLink
                 v-if="deletedCount > 0"
-                :to="DELETED_PATH"
+                :to="here(page.deletedSandboxes())"
                 data-menu-row
                 :data-current="onDeleted || undefined"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"

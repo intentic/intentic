@@ -7,6 +7,12 @@ import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
@@ -15,7 +21,7 @@ let entry = `linux`;
 const push = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ params: { entry }, query: {} }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry }, query: {} }) as never,
     useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
@@ -151,6 +157,7 @@ const submitForm = async (el: HTMLElement): Promise<void> => {
 };
 
 const start = (onEntry: string, status: CapabilityStatus): HTMLElement => {
+    activeSandboxId.value = BOX;
     entry = onEntry;
     applied = status;
     capabilities.value = [];
@@ -195,7 +202,8 @@ it(`does not open the sign-in window when the browser is still waiting on a rebu
     expect(push).not.toHaveBeenCalled();
     // Names it and leads to it in two halves: the status badge is the daemon's words, the link beside it goes to the
     // remedy.
-    const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
+    const environment = insidePath(BOX, page.sandboxSettings(`environment`));
+    const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === environment);
     expect(link).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`rebuild the sandbox to install the browser`);
 });

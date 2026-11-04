@@ -33,6 +33,8 @@ import {
     withSandboxNames,
 } from "./deviceRows";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { manageBlock } from "./deviceFacts";
 
 // The board's and the device page's shared rules, checked without mounting either: which machine reads as
@@ -806,9 +808,12 @@ test(`names nobody without a slug to match against`, () => {
 // the two addresses
 
 test(`addresses a machine by its key on the Devices tab, and the board by dropping it`, () => {
-    expect(deviceRoute(`rog`)).toEqual({ name: `devices`, query: { device: `rog` } });
+    // No route is installed here, so the tab is the one inside the sandbox open.
+    activeSandboxId.value = `a1b2c3d4e5f6`;
+    const devices = insidePath(`a1b2c3d4e5f6`, page.devices());
+    expect(deviceRoute(`rog`)).toEqual({ path: devices, query: { device: `rog` } });
     // An empty query, not an absent one: the board must actively clear a `device=` already in the URL.
-    expect(boardRoute()).toEqual({ name: `devices`, query: {} });
+    expect(boardRoute()).toEqual({ path: devices, query: {} });
 });
 
 test(`names no machine for a missing, empty or repeated param`, () => {

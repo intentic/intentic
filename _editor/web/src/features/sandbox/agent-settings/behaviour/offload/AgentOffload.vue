@@ -12,6 +12,7 @@ import DetailSwitch from "../DetailSwitch.vue";
 import { useDetailLevel } from "../detailLevel";
 import OffloadExplainer from "../explainers/OffloadExplainer.vue";
 import { HERE, kindDetail, kindTitle, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
+import { here, page } from "../../../../../lib/routes/links";
 
 // "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on
 // one of your machines. The kinds are the heavy-command rules this sandbox queues by (GET /offload/kinds), so a rule the
@@ -50,7 +51,7 @@ const setKind = (kind: string, runner: string | undefined): void => {
             {{ t(`sandbox.agentOffload.intro`) }}
             <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
                 <template #devices
-                    ><RouterLink :to="{ name: `devices` }" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink></template
+                    ><RouterLink :to="here(page.devices())" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink></template
                 >
             </i18n-t>
         </RowNote>

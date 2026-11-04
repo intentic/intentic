@@ -71,7 +71,7 @@ const stubBrowser = (): void => {
     sessionStorage.setItem(`intentic.demo.mode`, `full`);
     Object.assign(globalThis, {
         window: globalThis,
-        location: new URL(`https://demo.smoke.invalid/demo/agents`),
+        location: new URL(`https://demo.smoke.invalid/demo/s/demo/agents`),
         history: { state: null, replaceState: ignore, pushState: ignore },
         sessionStorage,
         localStorage: store(),

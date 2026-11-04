@@ -2,6 +2,7 @@
 import { Button, formatBytes, type IconName, Notice, toneInk, toneTint, toneWash, ui } from "@intentic/ui";
 import { formatClock } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { LOCAL_NAVIGATE_EVENT } from "@intentic/web/local";
 import { type LocalCheckRow, type LocalFirstTask, localHost, type LocalRestartWhen } from "@intentic/web/local-host";
 import { computed, ref, watch } from "vue";
@@ -195,13 +196,10 @@ const restart = (when: LocalRestartWhen): Promise<void> => ask(`restart`, async 
 const signOut = (): Promise<void> => ask(`signOut`, async () => onboarding?.signOut?.());
 
 const failedReason = computed(() => (setup.value.state === `failed` ? setup.value.reason : undefined));
-// Repair, the agent that runs on this computer outside every sandbox, opened on the failure (local shell `/repair`).
+// Repair, the agent that runs on this computer outside every sandbox, opened on the failure (the local shell's Repair).
 const askRepair = (): void => {
-    const query = new URLSearchParams({ from: `setup` });
-    if (failedReason.value !== undefined) {
-        query.set(`reason`, failedReason.value);
-    }
-    window.dispatchEvent(new CustomEvent(LOCAL_NAVIGATE_EVENT, { detail: { path: `/repair?${query.toString()}` } }));
+    const path = localPath(`repair`, {}, { query: { from: `setup`, reason: failedReason.value } });
+    window.dispatchEvent(new CustomEvent(LOCAL_NAVIGATE_EVENT, { detail: { path } }));
 };
 
 /* STEP 2, THE SIGN-IN: the next press once this PC is ready or its setup runs by itself, a press beside it before. */

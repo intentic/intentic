@@ -4,6 +4,7 @@
 import { computed, ref, watch } from "vue";
 import { Button } from "@intentic/ui";
 import { useRouter } from "vue-router";
+import { here, page } from "../../../lib/routes/links";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useAddRepo } from "./useAddRepo";
 import { useT } from "@intentic/ui/i18n";
@@ -53,7 +54,7 @@ const askAgent = (): void => {
 // A private repository is the one case that needs an account: connect it here, at that point, rather than up front.
 const connectHost = (): void => {
     emit(`done`);
-    void router.push({ name: `capabilities`, params: { entry: `github` } });
+    void router.push(here(page.capabilities(`github`)));
 };
 </script>
 

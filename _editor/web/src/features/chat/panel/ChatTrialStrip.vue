@@ -12,7 +12,8 @@ import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
-import { MODELS_PATH } from "../../../lib/routes/modelsPath";
+import { here, page } from "../../../lib/routes/links";
+import { modelsHref } from "../../../lib/routes/modelsPath";
 
 // The free trial's standing above the composer, as one short card rather than a paragraph: a headline that is the
 // news (what is left, or that nothing is), one quiet line of facts under it, and the press that ends the trial. The
@@ -123,10 +124,10 @@ const freshNote = computed(() => {
         : t(`chat.chatPaneNotices.trialFreshGrace`, { remaining: status.remaining });
 });
 
-// What the run already changed, once the trial stops it: the desktop's /agents/:id is the review of exactly that. Only
+// What the run already changed, once the trial stops it: the desktop's agent page is the review of exactly that. Only
 // when there is something to review, never a door onto an empty diff.
 const changedFiles = computed(() => agentById(conversation.value.conversationId)?.diff?.files ?? 0);
-const reviewPath = computed(() => `/agents/${encodeURIComponent(conversation.value.conversationId)}`);
+const reviewPath = computed(() => here(page.agent(conversation.value.conversationId)));
 
 // The bar turns amber for the last fifth: the point where "connect something" stops being advice.
 const meterTone = computed(() => (card.value?.left !== undefined && card.value.left <= 0.2 ? `warning` : `accent`));
@@ -201,7 +202,7 @@ const retryTrial = async (): Promise<void> => {
                 <Button
                     v-else
                     :as="RouterLink"
-                    :to="MODELS_PATH"
+                    :to="modelsHref()"
                     size="small"
                     thumb
                     :tier="card.state === `unavailable` ? `boring` : `accent`"

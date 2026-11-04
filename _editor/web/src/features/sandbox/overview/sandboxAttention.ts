@@ -9,7 +9,6 @@ import { accessKnown, providerReady } from "../../../models/providers/access";
 import { useMissingSecretCount } from "../../../models/capabilities/useSecrets";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { DEVICES_PATH } from "../../../models/sandbox/devices/deviceLinks";
 import { useSyncHealth } from "../../../models/sandbox/devices/useDevices";
 import { useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import { buildUnderWay, hostedBuildPhase } from "../environment/rebuild/hostedBuildPhase";
@@ -21,7 +20,8 @@ import { useSandboxBackup } from "./backup/useSandboxBackup";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
-import { MODELS_PATH } from "../../../lib/routes/modelsPath";
+import { modelsHref } from "../../../lib/routes/modelsPath";
+import { here, page } from "../../../lib/routes/links";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import { useAccessRequests } from "../../../client/sandbox/access/accessRequest";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
@@ -61,7 +61,7 @@ export interface SandboxAttentionItem {
     readonly kind: "needs" | "note";
     // Stands alone in a popover row, and reads as a clause when the chip's tooltip joins several. No trailing period.
     readonly message: string;
-    // Tab that resolves it; several items can share one.
+    // Tab that resolves it, in the reader's own frame and sandbox; several items can share one.
     readonly to: string;
     // Set only when the amount is the message (e.g. how many secrets are missing).
     readonly count?: number;
@@ -74,9 +74,9 @@ export interface SandboxAttentionItem {
 }
 
 // Both update notes point at the update card's button rather than at the page (updateAnchor.ts).
-const UPDATE_ACTION = `/sandbox#${UPDATE_ACTION_ANCHOR}`;
+const updateAction = (): string => here(page.sandboxSettings(undefined, { hash: UPDATE_ACTION_ANCHOR }));
 // The rebuild's rows point at the Environment card's rebuild step, which scrolls to and focuses it (rebuildAnchor.ts).
-const REBUILD_STEP = `/sandbox/environment#${REBUILD_ANCHOR}`;
+const rebuildStep = (): string => here(page.sandboxSettings(`environment`, { hash: REBUILD_ANCHOR }));
 
 // An available update stays a quiet note (still downloading in the background); once staged it may badge the
 // chip (`badges`), since applying it is now one click and a half-minute restart.
@@ -90,14 +90,14 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
                 icon: `arrow-circle-up`,
                 tone: `info`,
                 message: t(`sandbox.sandboxAttention.sandboxUpdateReadyTo`),
-                to: UPDATE_ACTION,
+                to: updateAction(),
                 kind: `note`,
                 badges: true,
             },
         ];
     }
     return [
-        { icon: `arrow-circle-up`, tone: `info`, message: t(`sandbox.sandboxAttention.newSandboxVersionAvailable`), to: UPDATE_ACTION, kind: `note` },
+        { icon: `arrow-circle-up`, tone: `info`, message: t(`sandbox.sandboxAttention.newSandboxVersionAvailable`), to: updateAction(), kind: `note` },
     ];
 };
 
@@ -106,7 +106,7 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
 const accessRequestItems = (count: number): SandboxAttentionItem[] =>
     count === 0
         ? []
-        : [{ icon: `users`, tone: `info`, message: t(`sandbox.sandboxAttention.peopleAskForAccess`, { count }, count), to: `/sandbox/access`, kind: `needs`, count }];
+        : [{ icon: `users`, tone: `info`, message: t(`sandbox.sandboxAttention.peopleAskForAccess`, { count }, count), to: here(page.sandboxSettings(`access`)), kind: `needs`, count }];
 
 // A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
 // asked an hour of its reader for something they had already done, or that nobody needed to do. Ticks only while a
@@ -125,7 +125,7 @@ const useRebuildUnderWay = (pending: ReturnType<typeof useEnvironment>[`pending`
 // GPU work the daemon paused after the computer it runs on reported a GPU reset (settings `gpu.pausedFor`), first since
 // a GPU hang can freeze that computer: only the owner's resume on the Overview's GPU row (SandboxGpuRow.vue) lifts it.
 const gpuPausedItems = (paused: boolean): SandboxAttentionItem[] =>
-    paused ? [{ icon: `exclamation-triangle`, tone: `warning`, message: t(`sandbox.sandboxAttention.gpuPaused`), to: `/sandbox`, kind: `needs` }] : [];
+    paused ? [{ icon: `exclamation-triangle`, tone: `warning`, message: t(`sandbox.sandboxAttention.gpuPaused`), to: here(page.sandboxSettings()), kind: `needs` }] : [];
 // The history volume under 10% free (system/resources/storage/disk-pressure.ts): how much is left, what the sandbox
 // already removed, and what holds the most, with the press that removes the rest of the settled build output. Worst
 // first in the list: a full disk fails every turn's writes, the land's rebase included.
@@ -141,7 +141,7 @@ const diskItems = (pressure: DiskPressure | undefined): SandboxAttentionItem[] =
     const biggest = pressure.using[0];
     const using =
         biggest === undefined ? `` : `; ${t(`sandbox.sandboxAttention.diskUsing`, { category: storageCategoryLabel(biggest.id), bytes: formatBytes(biggest.bytes) })}`;
-    return [{ icon: `database`, tone: `warning`, message: `${free}${reaped}${using}`, to: `/sandbox#${STORAGE_ANCHOR}`, kind: `needs`, action: `clean` }];
+    return [{ icon: `database`, tone: `warning`, message: `${free}${reaped}${using}`, to: here(page.sandboxSettings(undefined, { hash: STORAGE_ANCHOR })), kind: `needs`, action: `clean` }];
 };
 
 export function useSandboxAttention() {
@@ -181,7 +181,7 @@ export function useSandboxAttention() {
                     icon: `sparkles`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.noAiAccountConnected`),
-                    to: MODELS_PATH,
+                    to: modelsHref(),
                     kind: `needs`,
                 },
             },
@@ -191,7 +191,7 @@ export function useSandboxAttention() {
                     icon: `exclamation-triangle`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.rebuildNeededToFinish`),
-                    to: REBUILD_STEP,
+                    to: rebuildStep(),
                     kind: `needs`,
                     action: `rebuild`,
                 },
@@ -204,7 +204,7 @@ export function useSandboxAttention() {
                     icon: `box`,
                     tone: `info`,
                     message: t(`sandbox.sandboxAttention.environmentBuilding`),
-                    to: REBUILD_STEP,
+                    to: rebuildStep(),
                     kind: `note`,
                 },
             },
@@ -214,7 +214,7 @@ export function useSandboxAttention() {
                     icon: `exclamation-triangle`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.agentProposedChangeTo`),
-                    to: `/sandbox/environment`,
+                    to: here(page.sandboxSettings(`environment`)),
                     kind: `needs`,
                 },
             },
@@ -225,7 +225,7 @@ export function useSandboxAttention() {
                     icon: `sliders-h`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.extensionsWaiting`, { count: waitingExtensions.value.length }, waitingExtensions.value.length),
-                    to: `/sandbox/extensions`,
+                    to: here(page.sandboxSettings(`extensions`)),
                     count: waitingExtensions.value.length,
                     kind: `needs`,
                 },
@@ -238,7 +238,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.desktopSyncStopped`, { devices: stoppedOn.value.join(`, `) }),
-                    to: DEVICES_PATH,
+                    to: here(page.devices()),
                     kind: `needs`,
                 },
             },
@@ -248,7 +248,7 @@ export function useSandboxAttention() {
                     icon: `key`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.requiredSecretsMissing`, { count: missingRequiredCount.value }, missingRequiredCount.value),
-                    to: `/sandbox/secrets`,
+                    to: here(page.sandboxSettings(`secrets`)),
                     count: missingRequiredCount.value,
                     kind: `needs`,
                 },
@@ -262,7 +262,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.filesOnlyOnCloudMachine`),
-                    to: DEVICES_PATH,
+                    to: here(page.devices()),
                     kind: `needs`,
                 },
             },
@@ -273,7 +273,7 @@ export function useSandboxAttention() {
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.noRepositoryToPushTo`),
                     // The Publish row itself, which says what it needs and links to connecting it (MoveOutPanel.vue).
-                    to: `/sandbox/environment#${PUBLISH_ANCHOR}`,
+                    to: here(page.sandboxSettings(`environment`, { hash: PUBLISH_ANCHOR })),
                     kind: `needs`,
                 },
             },
@@ -288,7 +288,7 @@ export function useSandboxAttention() {
                     icon: `desktop`,
                     tone: `info`,
                     message: t(`sandbox.sandboxAttention.portsTaken`, { count: heldPorts.value.length }, heldPorts.value.length),
-                    to: DEVICES_PATH,
+                    to: here(page.devices()),
                     count: heldPorts.value.length,
                     kind: `note`,
                 },

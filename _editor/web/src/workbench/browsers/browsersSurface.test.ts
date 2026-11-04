@@ -3,7 +3,9 @@
 import "@intentic/testing/dom";
 import { freshImport, mocked } from "@intentic/testing/bun";
 import { ref } from "vue";
-import { browsersPath, parseTabKey, previewRedirect, tabKey, type LiveTab } from "./browsersPaths";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { browsersPath, parseTabKey, tabKey, type LiveTab } from "./browsersPaths";
 
 const SANDBOX = `sbx-1`;
 // The active sandbox's row, whose `role` decides whether the reader may see the view at all. A ref, as the real row is:
@@ -13,8 +15,9 @@ const active = ref<{ role: string } | undefined>(undefined);
 jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX }, active }) }));
 
 // Where the reader stands decides whether a tab comes to front in place or the view opens beside.
-const currentRoute = { value: { name: `agents` } };
-// SAFETY: the openers reach only `push` and `currentRoute.value.name` of a router; nothing else is called here.
+// The page the reader stands on, as the route's record names it in either frame.
+const currentRoute = { value: { meta: { page: `agents` } } };
+// SAFETY: the openers reach only `push` and `currentRoute.value.meta` of a router; nothing else is called here.
 const router = { push: jest.fn(), currentRoute } as unknown as import("vue-router").Router;
 
 const { closeAllTabs, sideDocked, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
@@ -24,11 +27,15 @@ const load = () => freshImport<typeof import("./browsersSurface")>("./browsersSu
 
 const landing: LiveTab = { kind: `preview`, id: `app:site/landing` };
 
+// A tab's address, inside the sandbox open: with no route of the shell's to read, links are made there (links.ts `here`).
+const tabPath = (key?: string): string => insidePath(SANDBOX, page.browsers(key));
+
 beforeEach(() => {
+    activeSandboxId.value = SANDBOX;
     localStorage.clear();
     mocked(router.push).mockClear();
     sideDocked.value = false;
-    currentRoute.value = { name: `agents` };
+    currentRoute.value = { meta: { page: `agents` } };
     active.value = undefined;
     closeAllTabs();
 });
@@ -51,15 +58,9 @@ describe(`a tab's key`, () => {
     });
 
     it(`is the route's own tail`, () => {
-        expect(browsersPath()).toBe(`/browsers`);
-        expect(browsersPath({ kind: `desktop` })).toBe(`/browsers/desktop`);
-        expect(browsersPath(landing)).toBe(`/browsers/preview:app:site/landing`);
-    });
-
-    it(`sends the old /preview address to the app it named, or asks the view to pick one`, () => {
-        expect(previewRedirect(`port:5173`)).toEqual({ path: `/browsers/preview:port:5173`, query: {} });
-        expect(previewRedirect(undefined)).toEqual({ path: `/browsers`, query: { preview: null } });
-        expect(previewRedirect(``)).toEqual({ path: `/browsers`, query: { preview: null } });
+        expect(browsersPath()).toBe(`/s/${SANDBOX}/browsers`);
+        expect(browsersPath({ kind: `desktop` })).toBe(`/s/${SANDBOX}/browsers/desktop`);
+        expect(browsersPath(landing)).toBe(`/s/${SANDBOX}/browsers/preview:app:site/landing`);
     });
 });
 
@@ -112,7 +113,7 @@ it(`opens the live app on the first visit, on the target it was given`, async ()
     expect(openPreviewOnFirstVisit(router, `app:site/landing`)).toBe(true);
     expect(browsersOpened.value).toBe(true);
     expect(browsersFront.value).toEqual(landing);
-    expect(router.push).toHaveBeenCalledWith(`/browsers/preview:app:site/landing`);
+    expect(router.push).toHaveBeenCalledWith(tabPath(`preview:app:site/landing`));
 });
 
 it(`never opens it a second time, not even across a reload`, async () => {
@@ -140,7 +141,7 @@ it(`asked for the live app without one named, leaves the pick to the view, which
     openPreview(router);
 
     expect(browsersWantPreview.value).toBe(true);
-    expect(router.push).toHaveBeenCalledWith(`/browsers`);
+    expect(router.push).toHaveBeenCalledWith(tabPath());
 });
 
 // A server a turn left running, a localhost link: what it serves is shown beside the section the reader is in.
@@ -186,11 +187,11 @@ describe(`a running app someone points at, with the side panel in the window`, (
     });
 
     it(`comes to front in place while the reader stands on /browsers`, async () => {
-        currentRoute.value = { name: `browsers` };
+        currentRoute.value = { meta: { page: `browsers` } };
         const { openPreviewBeside, browsersFront } = await load();
         openPreviewBeside(router, `port:5173`);
 
-        expect(router.push).toHaveBeenCalledWith(`/browsers/preview:port:5173`);
+        expect(router.push).toHaveBeenCalledWith(tabPath(`preview:port:5173`));
         expect(browsersFront.value).toEqual({ kind: `preview`, id: `port:5173` });
         expect(panel.tabs.value).toEqual([]);
     });
@@ -200,12 +201,12 @@ describe(`a running app someone points at, with the side panel in the window`, (
         const { openPreviewBeside } = await load();
         openPreviewBeside(router, `port:5173`);
 
-        expect(router.push).toHaveBeenCalledWith(`/browsers/preview:port:5173`);
+        expect(router.push).toHaveBeenCalledWith(tabPath(`preview:port:5173`));
         expect(panel.tabs.value).toEqual([]);
     });
 
     it(`welcomes a first visit beside the Workspace rather than taking its place`, async () => {
-        currentRoute.value = { name: `workspace` };
+        currentRoute.value = { meta: { page: `workspace` } };
         const { openPreviewOnFirstVisit } = await load();
         expect(openPreviewOnFirstVisit(router, `app:site/landing`)).toBe(true);
 

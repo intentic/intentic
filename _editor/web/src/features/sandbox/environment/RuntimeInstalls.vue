@@ -5,6 +5,7 @@ import { computed, ref } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { runtimeInstallVisual } from "./environmentVisual";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // The daemon's cross-session record of what sessions install at runtime: auto-drafted into the proposal where a step
 // follows from the package name, surfaced here otherwise. Every row ends somewhere: add its step, hand the routing
@@ -199,7 +200,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                                 <RouterLink
                                     v-for="session in entry.sessionIds"
                                     :key="session"
-                                    :to="`/agents/${encodeURIComponent(session)}`"
+                                    :to="here(page.agent(session))"
                                     class="max-w-full truncate text-link hover:underline"
                                 >
                                     {{ session }}

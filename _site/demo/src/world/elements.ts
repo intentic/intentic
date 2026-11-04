@@ -19,6 +19,7 @@ import { sandboxAddress } from "./addresses";
 
 const CHANNEL = `intentic-demo-elements`;
 const WORKER = `element-worker.js`;
+// allow(route-literal): the daemon's own preview route, which the element worker answers, not a page of the app.
 const PREVIEW_PATH = `/workspace/preview/`;
 // Documents handed to preview frames, kept for the last few: a page re-mints on every edit, and a frame still showing
 // an older one must not lose it mid-load.

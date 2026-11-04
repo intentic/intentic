@@ -44,6 +44,8 @@ import { registerView } from "../workbench/views/registry";
 import { registerViewer } from "../workbench/views/viewerRegistry";
 import { previewAddress } from "../features/preview/previewAddress";
 import { navigation } from "../workbench/navigation/navigation";
+import { here, page } from "../lib/routes/links";
+import { addressOf, linksApi } from "./apiLinks";
 import { registerFileBindings } from "../workbench/workspace-events/fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
 import { uuid } from "../lib/uuid";
@@ -138,7 +140,7 @@ const sideViewsApi = (
             if (entry === undefined) {
                 throw new Error(`side view "${view.id}" is not declared in the manifest's contributes.sideViews`);
             }
-            return track(registerExtensionSideView(extensionId, entry, view, (path) => void navigation().push(path)));
+            return track(registerExtensionSideView(extensionId, entry, view, (path) => void navigation().push(addressOf(path))));
         },
         open: (id, input, options) => {
             const view = extensionSideViewId(extensionId, id);
@@ -418,7 +420,7 @@ export const createExtensionApi = (
                     return;
                 }
                 const id = diffTabId(payload.key, payload.scope, payload.path);
-                void navigation().push({ name: `workspace`, params: { path: [] }, query: { ...navigation().currentRoute.value.query, diff: id } });
+                void navigation().push({ path: here(page.workspace()), query: { ...navigation().currentRoute.value.query, diff: id } });
             },
             // No navigation or focus change on either device: filling a tab is not a gesture the user made.
             fillDiff: (payload) => useWorkspaceTabs().fillDiff(payload),
@@ -566,11 +568,8 @@ export const createExtensionApi = (
                 };
             },
         },
-        navigate: (path) => {
-            void navigation().push(path);
-        },
-        // The address behind the same path, for views whose rows are links rather than buttons.
-        href: (path) => navigation().resolve(path).href,
+        // The app's pages, and the way to each from a view (apiLinks.ts).
+        ...linksApi,
         // `navigation().currentRoute` rather than `useRoute()`: an extension may read this outside any component's setup,
         // where `useRoute()` needs injection context; the ref stays reactive inside a computed either way.
         route: {

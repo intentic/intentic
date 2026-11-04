@@ -22,6 +22,7 @@ import { applyNow } from "./applyNow";
 import NeedChangeFacts from "./NeedChangeFacts.vue";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
+import { here, page } from "../../lib/routes/links";
 
 const t = useT();
 
@@ -188,7 +189,7 @@ const fixed = async (): Promise<void> => {
     });
 };
 
-const setupAt = computed(() => ({ path: `/capabilities/${props.subject.entry}`, query: { need: props.need.id } }));
+const setupAt = computed(() => here(page.capabilities(props.subject.entry, { query: { need: props.need.id } })));
 
 // Where the credential comes from, folded: the provider's token page first, then the catalog's own steps.
 const tokenUrl = computed(() => (entry.value === undefined ? undefined : guideTokenUrl(entry.value, values)));
@@ -262,7 +263,7 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
             <SecretField v-if="instance.secrets.length > 0" :secret-key="instance.secrets[0] ?? ``" :capability-id="instance.id" no-hint @saved="fixed" />
             <div class="flex flex-wrap items-center gap-2">
                 <ChatDecisionButton tone="secondary" icon="check" :disabled="busy" @click="fixed">{{ t(`needs.capability.itWorks`) }}</ChatDecisionButton>
-                <ChatDecisionButton tone="secondary" icon="external-link" :to="{ path: `/capabilities/${subject.entry}`, query: { edit: instance.id } }">{{
+                <ChatDecisionButton tone="secondary" icon="external-link" :to="here(page.capabilities(subject.entry, { query: { edit: instance.id } }))">{{
                     t(`needs.capability.editConnection`)
                 }}</ChatDecisionButton>
                 <slot name="decline" />

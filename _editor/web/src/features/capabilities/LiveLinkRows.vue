@@ -20,6 +20,7 @@ import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useOperations } from "../../workbench/operations/operations";
+import { here, page } from "../../lib/routes/links";
 import { type LinkKind, type LinkOf, useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 
 // Rows come from the capability list, not the live read, which can lag or fail on its own: a row exists before its link.
@@ -311,7 +312,7 @@ const items = computed<MenuItem[]>(() => {
                          state, not text an ellipsis should hide. -->
                     <p v-if="row.note === 'rebuild'" class="text-2xs text-warning">
                         {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
-                        <RouterLink to="/sandbox/environment" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
+                        <RouterLink :to="here(page.sandboxSettings(`environment`))" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
                     </p>
                     <p v-else-if="row.note === 'drifted'" class="text-2xs text-danger">{{ t(`common.netdiskMounts.mountedWritableThoughReadOnly`) }}</p>
                     <p v-else-if="row.note === 'auto'" class="text-2xs text-muted">{{ spec.autoNote() }}</p>

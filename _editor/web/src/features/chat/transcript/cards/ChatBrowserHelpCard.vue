@@ -5,6 +5,7 @@ import type { CardAnswer } from "../../../../models/conversations/session/cardRe
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatCard from "../../../../components/ChatCard.vue";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
+import { here, page } from "../../../../lib/routes/links";
 import { helpStatus } from "./cardStatus";
 
 const t = useT();
@@ -14,7 +15,7 @@ const card = computed(() => props.message.browserHelp!);
 </script>
 
 <template>
-    <!-- The agent's browser needs a person; the primary action navigates to /browsers, where the live stage and hand-back live. -->
+    <!-- The agent's browser needs a person; the primary action navigates to Browsers, where the live stage and hand-back live. -->
     <ChatCard
         icon="desktop"
         icon-class="text-warning"
@@ -24,7 +25,7 @@ const card = computed(() => props.message.browserHelp!);
         <div class="chat-card-body text-xs text-content/85">{{ card.message }}</div>
 
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="desktop" :to="`/browsers/${card.session}`">{{
+            <ChatDecisionButton tone="primary" icon="desktop" :to="here(page.browsers(card.session))">{{
                 t(`chat.chatMessageView.openBrowser`)
             }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'browser_help', helped: false })">{{

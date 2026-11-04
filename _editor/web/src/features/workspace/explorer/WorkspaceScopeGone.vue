@@ -4,6 +4,7 @@ import { RouterLink } from "vue-router";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { SHARED_SCOPE, workspaceAgent, workspaceView } from "../../../app/workspaceScope";
+import { here, page } from "../../../lib/routes/links";
 import { useT } from "@intentic/ui/i18n";
 
 // Shown when the copy on screen cannot be read: an archived agent that lost its checkout (work stays on its branch), the
@@ -21,7 +22,7 @@ const title = useScopeTitle();
     <EmptyState icon="robot" size="page" :title="t(`workspace.workspaceScopeGone.noWorkingCopyTo`, { title })" :line="error" class="h-full">
         <template #actions>
             <!-- A link styled as a button, not a button that navigates: it's a destination, meant to open in a new tab. -->
-            <Button v-if="workspaceAgent !== undefined" tier="accent" size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
+            <Button v-if="workspaceAgent !== undefined" tier="accent" size="small" :as="RouterLink" :to="here(page.agent(workspaceAgent))">
                 <Icon name="check-square" />
                 {{ t(`workspace.words.seeChanges`) }}
             </Button>

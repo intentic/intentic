@@ -7,6 +7,7 @@ import { CF_TOKEN_KEY, useCloudflareZones } from "../../features/extensions/useC
 import { useInventory } from "../../features/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../models/capabilities/useSecrets";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../lib/routes/links";
 
 const t = useT();
 
@@ -64,7 +65,7 @@ const connect = async (): Promise<void> => {
         <template v-if="tokenAlreadySet">
             <p class="text-sm text-muted">{{ t(`views.cloudflareConnect.sandboxAlreadyCloudflareToken`) }}</p>
             <div class="flex items-center justify-between gap-3">
-                <RouterLink to="/sandbox/secrets" class="text-xs text-link hover:underline">{{
+                <RouterLink :to="here(page.sandboxSettings(`secrets`))" class="text-xs text-link hover:underline">{{
                     t(`views.cloudflareConnect.replaceTokenInSandbox`)
                 }}</RouterLink>
                 <Button tier="accent" :label="t(`views.cloudflareConnect.enableCloudflare`)" :loading="submitting" @click="connect">

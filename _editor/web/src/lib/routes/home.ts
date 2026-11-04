@@ -1,30 +1,35 @@
-// Home spans sandboxes, so the per-sandbox screen memory must leave its navigation to the home surface.
-export const isHomePath = (path: string): boolean => /^\/home(?:[/?#]|$)/.test(path);
+import { isSandboxPage, legacyPathOf, legacyTarget, page, parseAppPath } from "@intentic/sandbox-contract/app-routes";
+import { frameOf, pageOf, type RouteRead } from "./links";
+
+/** Home's own page: its chat of one sandbox (`/home/<sandbox>`), or Home with none named yet (`/home`). */
+export const isHomePath = (path: string): boolean => {
+    const address = parseAppPath(path);
+    return address !== undefined && address.frame.kind === `home` && address.page === undefined;
+};
 
 /**
  * The account's deleted sandboxes: a page of the account's, like Settings, never a section of one sandbox's screen, since
  * the trash is every sandbox the account deleted, wherever it ran, and recovery has to work with no sandbox left at all.
+ * Its address from before frames, which the router opens in the frame it is pressed in (router/legacyRoutes.ts); a new
+ * link is `here(page.deletedSandboxes())` (lib/routes/links.ts).
  */
-export const DELETED_PATH = `/deleted-sandboxes`;
-
-// Settings and deleted sandboxes belong to the account. Opened from Home, they keep its rail instead of entering
-// whichever sandbox happened to be active.
-const PERSONAL = /^\/(?:settings(?:[/?#]|$)|deleted-sandboxes\/?(?:[?#]|$))/;
+export const DELETED_PATH = legacyPathOf(page.deletedSandboxes());
 
 /**
- * A sandbox's own settings (the hub at /sandbox, features/sandbox/SandboxHub.vue). Opened from Home, from a tile's menu
- * (features/home/HomeSandboxes.vue), they keep Home's frame the way the section chosen there does: the rail of sandboxes
- * stays, so a look at one box's settings is not a trip into it.
+ * Account pages stay available without a connected sandbox or a completed setup: Home's own page, and the account's
+ * settings and deleted sandboxes in either frame, at an address of either form (an older one too: `/settings/…`).
  */
-export const isSandboxSettingsPath = (path: string): boolean => /^\/sandbox(?:[/?#]|$)/.test(path);
+export const isAccountPath = (path: string): boolean => {
+    const address = parseAppPath(path);
+    if (address === undefined) {
+        const legacy = legacyTarget(path);
+        return legacy !== undefined && !isSandboxPage(legacy.link.page);
+    }
+    return address.page === undefined ? address.frame.kind === `home` : !isSandboxPage(address.page.name);
+};
 
-/** Account pages stay available without a connected sandbox or a completed setup. */
-export const isAccountPath = (path: string): boolean => isHomePath(path) || PERSONAL.test(path);
-
-/**
- * Whether the rail stays the master view's after a navigation to `path`, given whether it was before and whether the path
- * is the section Home was asked to show of every sandbox (homeSection.ts): that section's own pages keep Home's
- * frame as the person's own do, and anything else of a sandbox gives the rail back.
- */
-export const masterRailAfter = (wasMaster: boolean, path: string, homeSectionOwns = false): boolean =>
-    isHomePath(path) || (wasMaster && (PERSONAL.test(path) || homeSectionOwns));
+/** The same of a route: Home's own page, or one of the account's in either frame. */
+export const isAccountRoute = (route: RouteRead): boolean => {
+    const shown = pageOf(route);
+    return shown === undefined ? frameOf(route) === `home` : !isSandboxPage(shown);
+};

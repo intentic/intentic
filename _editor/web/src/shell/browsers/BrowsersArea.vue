@@ -8,6 +8,7 @@ import { Button, EmptyState, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { isPage } from "../../lib/routes/links";
 import { browsersFront, markBrowsersOpened, requestDefaultPreview, showTab } from "../../workbench/browsers/browsersSurface";
 import { browsersPath, parseTabKey, tabKey } from "../../workbench/browsers/browsersPaths";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
@@ -54,7 +55,7 @@ watch(
 
 // Picking a tab rewrites the address in place: a tab is a look, not a step the back button should walk through.
 watch(browsersFront, (tab) => {
-    if (route.name === `browsers` && tabKey(tab) !== routeKey()) {
+    if (isPage(route, `browsers`) && tabKey(tab) !== routeKey()) {
         void router.replace(browsersPath(tab));
     }
 });

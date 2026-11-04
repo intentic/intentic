@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { floatingPath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { DAEMON_CONTAINER } from "../stack.js";
+import { DAEMON_CONTAINER, SEED, seededPage } from "../stack.js";
 
 // Docked panel floats into a real second window (own socket, tmux attach, fit observer) and back; the docked side
 // unmounts entirely while floating and reclaims on that window's heartbeat stop. No jsdom stand-in reaches this.
@@ -55,14 +56,15 @@ const float = async (page: Page): Promise<Page> => {
     }
     await page.mouse.click(box.x + box.width * 0.55, box.y + box.height / 2, { button: `right` });
     const [window_] = await Promise.all([page.context().waitForEvent(`page`), floatRow(page).click()]);
-    expect(new URL(window_.url()).pathname).toContain(`/floating/terminal`);
     await expect(window_.locator(`.xterm-screen`)).toBeVisible({ timeout: 30_000 });
+    // Read once the window's router has settled: its address names the panel and the sandbox it is a window of.
+    expect(new URL(window_.url()).pathname).toBe(floatingPath(SEED.sandboxId, `terminal`));
     return window_;
 };
 
 test(`floating the terminal panel refits the grid to its own window and back`, async ({ page }) => {
     await page.context().addInitScript(recordResizeFrames);
-    await page.goto(`/workspace`);
+    await page.goto(seededPage(pages.workspace()));
     // Synthetic keydown is enough here; only the float gesture below needs real user activation.
     await page.waitForTimeout(3_000);
     await page.evaluate(() => window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `\``, code: `Backquote`, ctrlKey: true })));

@@ -5,6 +5,12 @@ import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { insidePath, page as appPage } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+
+// The sandbox open; no route of the shell is on screen, so its Sandbox page is the one inside it.
+const BOX = `a1b2c3d4e5f6`;
+const OVERVIEW = insidePath(BOX, appPage.sandboxSettings(`overview`));
 
 const slug = ref<string | undefined>(`sandbox-3c469e9d6c58`);
 jest.mock(`../../models/sandbox/environment/servingSlug`, () => ({ useServingSlug: () => slug }));
@@ -17,6 +23,7 @@ const { scriptSource } = await import("../../app/environments/scriptCommand");
 const { useOsPreference } = await import("@intentic/ui");
 
 beforeEach(() => {
+    activeSandboxId.value = BOX;
     scriptSource.value = `published`;
     useOsPreference().cmdOs.value = `unix`;
 });
@@ -29,7 +36,7 @@ const mount = async (): Promise<HTMLElement> => {
         history: createMemoryHistory(),
         routes: [
             { path: `/`, component: page },
-            { path: `/sandbox/:tab?`, name: `sandbox`, component: page },
+            { path: `/s/:sandbox/settings/:tab?`, component: page },
         ],
     });
     await router.push(`/`);
@@ -54,7 +61,7 @@ it(`says the sandbox is older and what won't show, leads to the Sandbox page's u
     const el = await mount();
     expect(el.querySelector(`[data-outdated]`)).not.toBeNull();
     expect(el.textContent).toContain(`Who broke main won't show here until it updates.`);
-    expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
+    expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(OVERVIEW);
     expect(el.querySelector(`pre`)?.textContent).toBe(`curl -fsSL https://intentic.dev/update/sandbox-3c469e9d6c58 | sh`);
 });
 
@@ -69,7 +76,7 @@ it(`prints the bare verb only when the sandbox's name is unknown here`, async ()
 it(`leaves the command out when this sandbox reaches the machine it runs on`, async () => {
     runsOn.value = `rog`;
     const el = await mount();
-    expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
+    expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(OVERVIEW);
     expect(el.querySelector(`pre`)).toBeNull();
     expect(el.textContent).not.toContain(`Installed it yourself?`);
 });

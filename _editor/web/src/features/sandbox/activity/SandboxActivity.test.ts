@@ -6,6 +6,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, defineComponent, h, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 
 const canShip = ref(true);
 const hiddenAgent = ref(false);
@@ -19,17 +20,22 @@ jest.mock(`../guardrails/AgentSafetyLog.vue`, () => stub(`commands`));
 jest.mock(`../privacy-shield/PrivacyShieldRecord.vue`, () => stub(`personal`));
 jest.mock(`../audit/SandboxAudit.vue`, () => stub(`audit`));
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: SandboxActivity } = await import("./SandboxActivity.vue");
 
+// The sandbox the page is in, whose settings its links open.
+const BOX = `a1b2c3d4e5f6`;
+const settingsAt = (tab: string): string => insidePath(BOX, page.sandboxSettings(tab));
 
 let app: App | undefined;
 // The hub hands the extension's view in as the `turns` slot; a section stands in for it here.
 const mount = async (query: Record<string, string> = {}, { turns }: { turns: boolean } = { turns: true }): Promise<{ el: HTMLElement; router: Router }> => {
+    activeSandboxId.value = BOX;
     const router = createRouter({
         history: createMemoryHistory(),
-        routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+        routes: [{ path: `/s/:sandbox/settings/:tab?`, meta: { frame: `inside`, page: `sandboxSettings` }, component: defineComponent({ render: () => h(`div`) }) }],
     });
-    await router.push({ name: `sandbox`, params: { tab: `activity` }, query });
+    await router.push(insidePath(BOX, page.sandboxSettings(`activity`, { query })));
     await router.isReady();
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -62,19 +68,19 @@ it(`opens on the turns, with the records beside them and the audit trail last`, 
 it(`opens the audit trail as a part, with the way to how it is kept`, async () => {
     const { el } = await mount({ section: `audit` });
     expect(shown(el)).toEqual([`audit`]);
-    expect(el.querySelector(`a[href="/sandbox/retention"]`)).not.toBeNull();
+    expect(el.querySelector(`a[href="${settingsAt(`retention`)}"]`)).not.toBeNull();
 });
 
 it(`opens the record a settings page linked to, with the way back to those settings`, async () => {
     const { el } = await mount({ section: `commands` });
     expect(shown(el)).toEqual([`commands`]);
-    expect(el.querySelector(`a[href="/sandbox/guardrails"]`)).not.toBeNull();
+    expect(el.querySelector(`a[href="${settingsAt(`guardrails`)}"]`)).not.toBeNull();
 
     app?.unmount();
     document.body.innerHTML = ``;
     const { el: personal } = await mount({ section: `personal` });
     expect(shown(personal)).toEqual([`personal`]);
-    expect(personal.querySelector(`a[href="/sandbox/privacy-shield"]`)).not.toBeNull();
+    expect(personal.querySelector(`a[href="${settingsAt(`privacy-shield`)}"]`)).not.toBeNull();
 });
 
 it(`keeps every record when the extension is switched off, and says where the turns went`, async () => {
@@ -82,7 +88,7 @@ it(`keeps every record when the extension is switched off, and says where the tu
     expect(shown(el)).toEqual([`commands`]);
     expect(tabs(el)).toEqual([`Turns`, `Commands checked`, `Personal data`, `Audit log`]);
     (el.querySelectorAll<HTMLButtonElement>(`button[role="tab"]`)[0])?.click();
-    await waitFor(() => expect(el.querySelector(`a[href="/sandbox/extensions"]`)).not.toBeNull());
+    await waitFor(() => expect(el.querySelector(`a[href="${settingsAt(`extensions`)}"]`)).not.toBeNull());
 });
 
 it(`shows a member their turns alone, with no strip to pick from`, async () => {

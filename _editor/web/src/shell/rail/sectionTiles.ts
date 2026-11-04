@@ -6,12 +6,12 @@ import { useRole } from "../../client/sandbox/useRole";
 import { extensionsLoaded } from "../../extension-host/loader";
 import { devicesWorking } from "../../features/sandbox/devices/runners/deviceWork";
 import { pushBadge } from "../../features/workspace/push/pushBadge";
+import { here, page } from "../../lib/routes/links";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useChanges } from "../../models/changes/useChanges";
 import { usePanels } from "../../models/extensions/usePanels";
 import { agentsBadge } from "../../models/fleet/board/agentsTile";
-import { DEVICES_PATH } from "../../models/sandbox/devices/deviceLinks";
 import { useSyncHealth } from "../../models/sandbox/devices/useDevices";
 import { outgoingMark, outgoingSummary } from "../../models/workspace/push/outgoingWork";
 import {
@@ -106,7 +106,7 @@ function useDevicesTile(): ComputedRef<SectionTile> {
         return running === undefined ? count : { ...count, running };
     };
     return computed<SectionTile>(() => {
-        const tile: SectionTile = { id: DEVICES_VIEW_ID, to: DEVICES_PATH, label: t(`sandbox.words.devicesSection`), icon: `desktop` };
+        const tile: SectionTile = { id: DEVICES_VIEW_ID, to: here(page.devices()), label: t(`sandbox.words.devicesSection`), icon: `desktop` };
         const badge = devicesBadge(heldPorts.value.length, devicesWorking());
         return badge === undefined ? tile : { ...tile, badge };
     });
@@ -128,11 +128,11 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
     const tiles = computed<readonly SectionTile[]>(() => {
         // The badge from agentsTile.ts. RailIcon draws by section identity; these
         // generic names remain the fallback vocabulary.
-        let agents: SectionTile = { id: `agents`, to: `/agents`, label: words.value.agents, icon: `robot` };
+        let agents: SectionTile = { id: `agents`, to: here(page.agents()), label: words.value.agents, icon: `robot` };
         if (agentsBadge.value !== undefined) {
             agents = { ...agents, badge: agentsBadge.value };
         }
-        const workspace: SectionTile = { id: `workspace`, to: `/workspace`, label: words.value.workspace, icon: `file-tree` };
+        const workspace: SectionTile = { id: `workspace`, to: here(page.workspace()), label: words.value.workspace, icon: `file-tree` };
         return (
             [
                 ...leading(),

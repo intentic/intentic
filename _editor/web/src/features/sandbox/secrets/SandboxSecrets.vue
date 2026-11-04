@@ -17,6 +17,7 @@ import SecretKeyrings from "./SecretKeyrings.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // The one place every credential in this sandbox is visible, built to be scanned past a dozen rows. Owner-set
 // values are the only "work" here (settable, removable); capability credentials are read-only and collapse behind a
@@ -208,7 +209,7 @@ const pushToCi = async (): Promise<void> => {
                     <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" tier="boring" :disabled="adding" @click="openAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
-                    <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
+                    <Button :as="RouterLink" :to="here(page.capabilities())" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
                     <Button
                         v-if="ciKnown"
                         :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"

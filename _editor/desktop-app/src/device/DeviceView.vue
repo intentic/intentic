@@ -24,6 +24,7 @@ import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { intoWorkspace } from "../account";
 import { openUrl, signIn } from "../desktop";
 import { folderSetups } from "./folderSetups";
@@ -192,6 +193,8 @@ const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => 
 // Someone signed in now, as the roster says (roster.ts). Not `accountSeen`: the workspace merely shown sets that.
 const signedIn = computed(() => rosterSignedIn.value === true);
 const router = useRouter();
+// Where this computer makes a sandbox: a page of its own shell.
+const NEW_SANDBOX = localPath(`newSandbox`);
 
 // The masthead's errands as the workspace hangs them: the agent's wants, Restart's answer, other sides' sandboxes.
 const agentNotes = computed(() => (agentPanel.value === undefined ? [] : agentLines(agentPanel.value)));
@@ -647,7 +650,7 @@ onMounted(() => {
                     size="small" tier="accent"
                     :label="signedIn ? t(`desktop.device.setOneUp`) : t(`desktop.device.signInToSetUp`)"
                     class="ml-12"
-                    @click="void (signedIn ? router.push(`/sandbox-new`) : signIn())"
+                    @click="void (signedIn ? router.push(NEW_SANDBOX) : signIn())"
                 >
                     <template #icon><Icon :name="signedIn ? `plus` : `sign-in`" /></template>
                 </Button>

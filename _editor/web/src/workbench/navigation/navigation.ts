@@ -1,4 +1,5 @@
 import type { Router } from "vue-router";
+import { readRoutesOf } from "../../lib/routes/links";
 
 // The app's one router, for whatever below the route table navigates or reads the current route: the route table hands it
 // in where it creates it (router/index.ts), so nothing below composition imports the table and every view it names.
@@ -9,6 +10,8 @@ const pending: ((router: Router) => void)[] = [];
 
 export const installNavigation = (router: Router): void => {
     installed = router;
+    // The link helpers read the route too, from a layer below this one (lib/routes/links.ts).
+    readRoutesOf(router);
     for (const run of pending.splice(0)) {
         run(router);
     }

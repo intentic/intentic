@@ -9,16 +9,14 @@ import {
     type RouteRecordRaw,
     START_LOCATION,
 } from "vue-router";
+import { FLOATING_PANELS, HOME_SEGMENT, SANDBOX_SEGMENT, TOP_PAGES, topPath } from "@intentic/sandbox-contract/app-routes";
 import { asyncView } from "../components/asyncView";
-import { heldView } from "../components/heldPlace";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
 import { setupRoutes } from "./setupRoutes";
-import { hubOutline, settingsPartRoutes } from "./routeParts";
 import { localRoutes } from "./localRoutes";
 import { installNativeApp } from "./nativeHandoff";
 import { installSignInPlace } from "./signInPlace";
-import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { noteShellRoute } from "../lib/accounts/accountBoundary";
 import { useAuth } from "../client/auth/useAuth";
@@ -29,25 +27,24 @@ import { useRole } from "../client/sandbox/useRole";
 import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
 import { NOTHING_TO_OPEN_PATH } from "../app/environments/nothingToOpen";
-import { openNamedSandbox, settleGate } from "./shellGates";
+import { installRouteSandbox, openNamedSandbox, selectRouteSandbox, settleGate } from "./shellGates";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { t } from "@intentic/ui/i18n";
-import { useVocabulary } from "../workbench/views/vocabulary";
 import { localFace, sandboxFace } from "../app/environments/local";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
-import { MODELS_PATH } from "../lib/routes/modelsPath";
-import { goInside, homeViewGuard } from "../lib/routes/homeDetour";
-import { DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
-import { DELETED_PATH } from "../lib/routes/home";
+import { homeViewGuard } from "../lib/routes/homeDetour";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
-import { browsersPath, previewRedirect } from "../workbench/browsers/browsersPaths";
 import { installNavigation } from "../workbench/navigation/navigation";
-import { rootLanding } from "../lib/routes/firstScreens";
+import { HOME_PATH, rootLanding, sandboxLanding } from "../lib/routes/firstScreens";
 import { embedded } from "../app/environments/nativeApp";
+import { activeSandboxId } from "../app/storage/activeSandbox";
+import { here, linkOf, page, routeSandbox } from "../lib/routes/links";
+import { activeConversation, pageRoutes } from "./pageRoutes";
+import { legacyFloatingRoutes, legacyRoutes } from "./legacyRoutes";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -76,7 +73,7 @@ const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocation
     const named = [to.query[`url`]].flat()[0];
     const url = named === null || named === undefined ? undefined : normalizeDaemonUrl(named);
     if (url === undefined) {
-        return `/`;
+        return topPath(`root`);
     }
     const resolved = await resolveUser(to);
     if (!(`user` in resolved)) {
@@ -91,48 +88,48 @@ const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocation
     }
     const listed = rows.find((entry) => entry.daemonUrl !== null && normalizeDaemonUrl(entry.daemonUrl) === url);
     if (listed === undefined) {
-        return { path: `/recover`, query: { url } };
+        return { path: topPath(`recover`), query: { url } };
     }
     select(listed.id);
-    return `/`;
+    return topPath(`root`);
 };
 
 // THE DESKTOP APP TAKING THIS PAGE TO A PATH WITHOUT A RELOAD (app/environments/desktop.ts `installDesktopOpener`): a
-// sandbox picked in a local window's switcher. Inside the shell the named sandbox is chosen here, the way a link
-// arriving would choose it, since the shell's entry guard does not run again for a shell already entered; outside it,
-// the guards do as they would for the address.
-// A sandbox picked is a step inside it, so Home's rule for showing a sandbox's view in place stands aside for it.
+// sandbox picked in a local window's switcher. Inside the shell a sandbox named the old way (`?sandbox=`) is chosen
+// here, the way a link arriving would choose it, since the shell's entry guard does not run again for a shell already
+// entered; an address naming its sandbox chooses it by itself (shellGates.ts). Outside it, the guards do as they would
+// for the address.
 export const openInPage = async (path: string): Promise<void> => {
-    if (router.currentRoute.value.matched[0]?.path !== `/`) {
+    if (router.currentRoute.value.matched[0]?.path !== topPath(`root`)) {
         await router.push(path);
         return;
     }
     const settled = await openNamedSandbox(router.resolve(path));
-    await goInside(() => router.push(settled === true ? path : settled));
+    await router.push(settled === true ? path : settled);
 };
 
-// Menu and Terminal are full-screen pages only on the mobile shell, opened from its rail; the desktop shell docks the terminal and puts the
-// menu's contents on the rail, so a desktop hit lands on the workspace instead.
-const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
-
-// The conversation the chat has open. The store is imported when asked, not at module load, so the router does not pull
-// the chat's whole graph into every first paint.
-const activeConversation = async (): Promise<string> => {
-    const { useChat } = await import(`../models/conversations/run/useChat`);
-    return useChat().active.value.conversationId;
+// The root: Home for everyone who has one (lib/routes/firstScreens.ts), the landing inside the sandbox open for a guest
+// of a box and for the Android app, which draws the board itself.
+const rootRedirect = (): string => {
+    const { isGuest, homeOnly } = useRole();
+    return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded(), activeSandboxId.value);
 };
 
-// /chat on a phone is the active conversation's own screen.
-const chatEntry = async (): Promise<boolean | RouteLocationRaw> => (useDevice().mobile.value ? mobileChatPath(await activeConversation()) : true);
-
-// In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
-// setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
-// next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
+// A sandbox's bare address is its first screen. The reader's standing is known only in the sandbox open, so another's
+// lands on its board, and the guest fence (shell/guestFence.ts) moves a guest on from there.
+const sandboxRootRedirect = (to: Pick<RouteLocationNormalized, `params`>): string => {
+    const sandbox = routeSandbox(to);
+    if (sandbox === undefined) {
+        return HOME_PATH;
+    }
+    const { isGuest, homeOnly } = useRole();
+    return sandboxLanding(sandbox, sandbox === activeSandboxId.value ? { isGuest: isGuest.value, homeOnly: homeOnly.value } : { isGuest: false, homeOnly: false });
+};
 
 const routes: RouteRecordRaw[] = [
     ...setupRoutes,
     {
-        path: `/login`,
+        path: topPath(`login`),
         name: `login`,
         meta: { title: () => t(`router.index.login`) },
         component: () => import(`../features/auth/Login.vue`),
@@ -140,13 +137,13 @@ const routes: RouteRecordRaw[] = [
     {
         // A sign-in mail's link: names the address and spends the code it carries on a press, never on load (mail
         // scanners fetch links). Unguarded, there is no session yet.
-        path: `/login/confirm`,
+        path: topPath(`loginConfirm`),
         name: `login-confirm`,
         meta: { title: () => t(`router.index.confirmSignIn`) },
         component: () => import(`../features/auth/LoginConfirm.vue`),
     },
     {
-        path: `/platform-unavailable`,
+        path: topPath(`platformUnavailable`),
         name: `platform-unavailable`,
         meta: { title: () => t(`router.index.cantReachIntentic`) },
         // Guarded so a reload on this URL is the retry, not a re-render of the failure (platformRetry.ts).
@@ -156,7 +153,7 @@ const routes: RouteRecordRaw[] = [
     {
         // Desktop app's sign-in, opened in the OS's real browser (it cannot run Google's flow in its own webview).
         // Deliberately unguarded, since that browser is often not signed in as this app's user.
-        path: `/desktop-auth`,
+        path: topPath(`desktopAuth`),
         name: `desktop-auth`,
         meta: { title: () => t(`router.index.signInToIntentic`) },
         beforeEnter: [startGoogleMint],
@@ -165,7 +162,7 @@ const routes: RouteRecordRaw[] = [
     {
         // Opened inside the app's webview: redeems the handoff, putting the session cookie in this webview's jar.
         // Unguarded on purpose, there is no session here yet.
-        path: `/desktop-auth/complete`,
+        path: topPath(`desktopAuthComplete`),
         name: `desktop-auth-complete`,
         meta: { title: () => t(`router.index.signingIn`) },
         component: () => import(`../features/auth/DesktopAuthComplete.vue`),
@@ -175,7 +172,7 @@ const routes: RouteRecordRaw[] = [
     { path: `/no-sandbox`, redirect: NOTHING_TO_OPEN_PATH },
     {
         // The sandboxes this device remembers and the account's list lacks, offered back (features/sandbox/recovery).
-        path: `/recover`,
+        path: topPath(`recover`),
         name: `recover`,
         meta: { title: () => t(`router.index.reconnectSandboxes`) },
         beforeEnter: [requireAuth],
@@ -184,7 +181,7 @@ const routes: RouteRecordRaw[] = [
     {
         // A sandbox's own address, from the sandbox (its GET / sends a browser here). The guard always answers with
         // somewhere else; the screen behind it is recovery's, for the address it names.
-        path: `/open`,
+        path: topPath(`open`),
         name: `open`,
         beforeEnter: [openAddressed],
         component: () => import(`../features/sandbox/recovery/Recover.vue`),
@@ -193,195 +190,54 @@ const routes: RouteRecordRaw[] = [
         // A guarded preview's way in, from the page it shows a visitor with no pass
         // (features/preview/previewPassRules.ts): signs this browser in to the preview and sends it back. Behind sign-in,
         // which brings a signed-out visitor back.
-        path: `/preview-pass`,
+        path: topPath(`previewPass`),
         name: `preview-pass`,
         meta: { title: () => t(`router.index.openingPreview`) },
         beforeEnter: [requireAuth],
         component: () => import(`../features/preview/PreviewPass.vue`),
     },
     {
-        // A floating panel's own window (chat, terminal or browsers), no shell around it, nothing to navigate. Guarded
-        // like the shell; the path enumerates the three panels, an unknown one falls through.
-        path: `/floating/:panel(chat|terminal|browsers)`,
+        // A floating panel's own window (chat, terminal or browsers) of one sandbox, no shell around it, nothing to
+        // navigate. Guarded like the shell, the sandbox its address names chosen as the shell chooses it; the path
+        // enumerates the three panels, an unknown one falls through.
+        path: `/${SANDBOX_SEGMENT}/:sandbox/floating/:panel(${FLOATING_PANELS.join(`|`)})`,
         name: `floating`,
         // The shell's own gate, settled as the shell settles it: nothing to open is Home, never a setup page.
-        beforeEnter: [requireAuth, settleGate],
+        beforeEnter: [requireAuth, settleGate, selectRouteSandbox],
         component: () => import(`../shell/window/FloatingSection.vue`),
     },
-    // The live app's own window until it became a tab of Browsers (2026-10-08); a desktop app that remembers one still
-    // asks for it here.
-    { path: `/floating/preview`, redirect: `/floating/browsers` },
+    // A floating window's address before frames, which a desktop app still asks for.
+    ...legacyFloatingRoutes([requireAuth, settleGate]),
     {
-        // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an account; other pages need a sandbox;
-        // otherwise the gate sends the reader to Home's first run, which offers a setup of their own left unfinished
-        // (app/environments/nothingToOpen.ts).
-        path: `/`,
-        beforeEnter: [requireAuth, settleGate, openNamedSandbox],
+        // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an
+        // account; other pages need a sandbox; otherwise the gate sends the reader to Home's first run, which offers a
+        // setup of their own left unfinished (app/environments/nothingToOpen.ts). Its children are flat, one record per
+        // page and frame (pageRoutes.ts), so `matched[0]` is this record wherever the shell is showing.
+        path: topPath(`root`),
+        beforeEnter: [requireAuth, settleGate, openNamedSandbox, selectRouteSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
+            // The account's own pages in Home's frame are static addresses, so they outrank a sandbox named here.
             {
-                path: `home/:sandbox?`,
+                path: `${HOME_SEGMENT}/:sandbox?`,
                 name: `home`,
-                meta: { title: () => t(`home.title`) },
+                meta: { frame: `home`, title: () => t(`home.title`) },
                 component: asyncView(() => import(`../features/home/MasterHomeView.vue`)),
-            },
-            {
-                path: `deleted-sandboxes`,
-                name: `deleted-sandboxes`,
-                meta: { title: () => t(`sandbox.words.recentlyDeleted`) },
-                component: asyncView(() => import(`../features/home/SandboxTrashPage.vue`)),
             },
             // THE FIRST SCREEN IS HOME (2026-10-25): the master view, every sandbox at once, before and after the first
             // one (lib/routes/firstScreens.ts). Going into a sandbox is a press there, and lands on that sandbox's own first
             // screen, its agent board; so does a link naming one (openNamedSandbox). A guest of a box has no Home but
             // its chat: the tree is a read the daemon refuses it. The Android app draws the board itself and keeps it.
-            {
-                path: ``,
-                redirect: () => {
-                    const { isGuest, homeOnly } = useRole();
-                    return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded());
-                },
-            },
-            // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
-            // the rail, back button and reload already know how to enter and leave it. On a phone, the conversation's own screen.
-            {
-                path: `chat`,
-                name: `chat`,
-                meta: { title: () => t(`shared.chat`) },
-                beforeEnter: [chatEntry],
-                component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`), undefined, { mobile: `skip` }),
-            },
-            // The live app's home until it became a tab of Browsers (2026-10-08). Kept for the links an older build, an
-            // extension's "See it" or a bookmark still open: `?target=` names the app, and lands on its tab.
-            { path: `preview`, redirect: (to) => previewRedirect(to.query[`target`]) },
-            {
-                path: `agents`,
-                name: `agents`,
-                meta: { title: () => useVocabulary().value.agents },
-                component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
-            },
-            // The Needs you inbox until 2026-10-12, when each of its rows went back to the tile that already badged it
-            // (docs/architecture/needs.md). Kept for a bookmark or an older build's notification: the board is where an
-            // agent's ask and a held wake are cards.
-            { path: `needs`, redirect: (to) => ({ path: `/agents`, query: to.query }) },
-            // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat
-            // surface.
-            {
-                path: `agents/:id`,
-                name: `agent`,
-                meta: { title: () => t(`shared.agent`) },
-                component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`), undefined, { mobile: `first` }),
-            },
-            // One page an agent showed in its conversation, alone on the screen, by the page's own id: what a link to it
-            // opens, and what the Android app shows in its WebView (lib/routes/phoneScreens.ts `agentPagePath`).
-            {
-                path: `agents/:id/pages/:page`,
-                name: `agent-page`,
-                meta: { title: () => t(`chat.chatPages.screenTitle`) },
-                component: asyncView(() => import(`../features/chat/transcript/pages/ChatPageScreen.vue`)),
-            },
-            {
-                path: `menu`,
-                name: `menu`,
-                meta: { title: () => t(`shared.menu`) },
-                beforeEnter: [mobileOnly],
-                component: asyncView(() => import(`../shell/MobileMenu.vue`), undefined, { mobile: `first` }),
-            },
-            {
-                path: `terminal`,
-                name: `terminal`,
-                meta: { title: () => t(`shared.terminal`) },
-                beforeEnter: [mobileOnly],
-                component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
-            },
-            // The connect page's address until it became Sandbox ▸ Models (lib/routes/modelsPath.ts). Kept, query and all,
-            // for the links an older build or a desktop app still opens: `?provider=` continues a press made elsewhere and
-            // `?found=` names what was found signed in on this computer, and both mean the same thing there.
-            { path: `connect`, redirect: (to) => ({ path: MODELS_PATH, query: to.query, hash: to.hash }) },
-            {
-                path: `capabilities/:entry?`,
-                name: `capabilities`,
-                meta: { title: () => t(`shared.capabilities`) },
-                // Title and description mirror the page's own copy, so the outline wears the real heading immediately.
-                // Held for maintainers: anyone below meets the gate naming it, never the catalog's refused reads.
-                component: asyncView(
-                    async () => heldView((await import(`../features/capabilities/Capabilities.vue`)).default, () => t(`shared.capabilities`), `capabilities.list`),
-                    hubOutline(
-                        () => t(`shared.capabilities`),
-                        () => t(`capabilities.slices.catalogDescription`),
-                        6,
-                    ),
-                ),
-            },
-            // The machines this sandbox reaches, a view of their own beside the hub rather than a section of it: the rail
-            // tiles it as Devices is tiled in a local window. The hub's old address keeps working, query and all, so
-            // a link out of an older build or a desktop app still lands on the machine it named.
-            {
-                path: `devices`,
-                name: `devices`,
-                meta: { title: () => t(`sandbox.words.devicesSection`) },
-                component: asyncView(() => import(`../features/sandbox/devices/DevicesView.vue`)),
-            },
-            { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
-            // Recently deleted was a hub section, then the foot of the Devices board; it is the account's own page now.
-            { path: `sandbox/deleted`, redirect: () => DELETED_PATH },
-            // The audit log was a hub section until 2026-10-17; its records are a part of Activity now, and how they are
-            // kept (its old second part, `?section=keeping`) is Retention's.
-            {
-                path: `sandbox/audit`,
-                redirect: (to) =>
-                    to.query[`section`] === `keeping`
-                        ? { name: `sandbox`, params: { tab: `retention` } }
-                        : { name: `sandbox`, params: { tab: `activity` }, query: { ...to.query, section: `audit` }, hash: to.hash },
-            },
-            // Areas was a hub section until 2026-10-26; it is a part of Access now, beside the profiles that name it.
-            {
-                path: `sandbox/areas`,
-                redirect: (to) => ({ name: `sandbox`, params: { tab: `access` }, query: { ...to.query, section: `areas` }, hash: to.hash }),
-            },
-            {
-                path: `sandbox/:tab?`,
-                name: `sandbox`,
-                meta: { title: () => t(`shared.sandboxHub`) },
-                // The hub retitles itself with the active sandbox's name once mounted; the outline just says what the
-                // page is.
-                component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(() => t(`shared.sandboxHub`), () => ``, 7)),
-            },
-            // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`), so a reload or a shared
-            // link reopens it. Optional/repeatable, so bare `/workspace` still matches.
-            {
-                path: `workspace/:path(.*)*`,
-                name: `workspace`,
-                meta: { title: () => useVocabulary().value.workspace },
-                component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
-            },
-            // Everything live the sandbox shows: its browser windows, the apps it serves, its desktop and the windows on it,
-            // as tabs of one view. The tab in front is in the URL so a reload reopens it (browsersSurface.ts's keys: a
-            // window's session name, `preview:<target>`, `desktop`, `app:<window>`); optional, since a bare /browsers
-            // opens on whatever was in front last. A target id holds a slash (`app:shop/web`), hence the open pattern.
-            {
-                path: `browsers/:tab(.*)?`,
-                name: `browsers`,
-                meta: { title: () => t(`shared.browsers`) },
-                component: asyncView(() => import(`../shell/browsers/BrowsersArea.vue`)),
-            },
-            // The sandbox's own desktop was a view of its own until it became a tab of Browsers (2026-10-08).
-            { path: `desktop`, redirect: browsersPath({ kind: `desktop` }) },
-            { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
-            ...settingsPartRoutes(),
-            {
-                path: `settings/:tab?`,
-                name: `settings`,
-                meta: { title: () => t(`shared.settings`) },
-                // Mirrors the page's own heading (pages/SettingsHub.vue).
-                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5)),
-            },
+            { path: ``, redirect: rootRedirect },
+            { path: `${SANDBOX_SEGMENT}/:sandbox`, redirect: sandboxRootRedirect },
+            ...pageRoutes(),
+            ...legacyRoutes(),
         ],
     },
     {
         // Public invite-accept landing (the emailed link). No guard, the invitee may be logged out or on the wrong
         // Google account; the page drives sign-in as the invited address, then flips the pending grant.
-        path: `/invite/:token`,
+        path: `/${TOP_PAGES.invite}`,
         name: `invite`,
         meta: { title: () => t(`router.index.acceptInvite`) },
         component: () => import(`../features/setup/AcceptInvite.vue`),
@@ -392,20 +248,20 @@ const routes: RouteRecordRaw[] = [
     ...(import.meta.env.DEV
         ? [
               {
-                  path: `/kit`,
+                  path: topPath(`kit`),
                   name: `kit`,
                   meta: { title: () => t(`router.index.designKit`) },
                   component: () => import(`../features/settings/DesignKit.vue`),
               } satisfies RouteRecordRaw,
               {
-                  path: `/kit/repair`,
+                  path: topPath(`kitRepair`),
                   name: `kit-repair`,
                   meta: { title: () => t(`local.repair.title`) },
                   component: () => import(`../local/repair/RepairKitSection.vue`),
               } satisfies RouteRecordRaw,
           ]
         : []),
-    { path: `/:pathMatch(.*)*`, redirect: `/` },
+    { path: `/:pathMatch(.*)*`, redirect: topPath(`root`) },
 ];
 
 export const router = createRouter({
@@ -439,18 +295,20 @@ router.beforeEach((_to, from) => {
 router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
 // Removal receipts and links from before the account page still name the Devices board's old foot (`/devices#deleted`),
 // which needs an active sandbox; they reach recovery from anywhere.
-router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#deleted` ? DELETED_PATH : true));
+router.beforeEach((to) => (linkOf(to.path)?.page === `devices` && to.hash === `#deleted` ? here(page.deletedSandboxes(), to) : true));
 // The desktop app asks for a sign-in over the view, never instead of it (signInPlace.ts). Before every guard that might
 // send the reader somewhere for the screen it replaces.
 installSignInPlace(router);
 // From Home, a sandbox's own view (its Models, today) is shown where Home's chat was, with the way back to it, rather than
 // entered: every door to it is covered at once, so none has to know it was pressed on Home (lib/routes/homeDetour.ts).
 router.beforeEach((to, from) => homeViewGuard(to, from));
+// The sandbox an address names is the one shown, for every navigation inside the shell (shellGates.ts).
+installRouteSandbox(router);
 // Whether the workspace shell is what is showing, for the account boundary: a page drawn for one account reloads when
 // the browser moves to another, a page outside the shell follows it (lib/accounts/accountBoundary.ts).
-router.afterEach((to) => noteShellRoute(to.matched[0]?.path === `/`));
+router.afterEach((to) => noteShellRoute(to.matched[0]?.path === topPath(`root`)));
 router.afterEach((to, _from, failure) => {
-    if (failure === undefined && to.path !== `/` && to.matched.some((match) => match.path === `/`) && installedApp()) {
+    if (failure === undefined && to.path !== topPath(`root`) && to.matched.some((match) => match.path === topPath(`root`)) && installedApp()) {
         rememberRoute(to.fullPath, Date.now());
     }
 });
@@ -480,7 +338,7 @@ router.beforeEach(async (to) => {
         return true;
     }
     const surface = useDevice().mobile.value ? `phone` : (await import(`../models/conversations/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
-    return conversationRedirect(to.query, surface) ?? true;
+    return conversationRedirect(to.query, surface, to) ?? true;
 });
 
 // INSIDE THE ANDROID APP'S WEBVIEW, after every guard above that names where a navigation goes: a screen the app draws

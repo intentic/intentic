@@ -9,6 +9,7 @@ import type { Strip } from "../../../../models/conversations/tabs/tabFacts";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { WORKFLOWS } from "../../../../workbench/views/listedViews";
+import { here, page } from "../../../../lib/routes/links";
 
 // The board's presses that land on no agent card: a workflow run's row (a run is not an agent, see WorkflowRunCard), a
 // held wake's approve or reject, and the header's Synthesize; and whether its New agent and Clear are offered at all.
@@ -119,7 +120,7 @@ export const useBoardPresses = (host: PressesHost) => {
             host.chat.follow(run);
             return;
         }
-        void host.router.push({ name: `extension`, params: { ext: WORKFLOWS.view }, query: { run: run.runId } });
+        void host.router.push(here(page.extension(WORKFLOWS.view, undefined, { query: { run: run.runId } })));
     };
     // The row's own press: the run's sessions in the chat, and never nothing, which is what twenty presses on one card
     // got from a chat already showing that run. Already shown, the chat is pointed at instead; with nothing of the run

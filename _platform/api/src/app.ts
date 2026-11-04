@@ -59,16 +59,10 @@ const TRIAL_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
  * provision for a machine to start, a tier change for a move. Bun closes a request that has sent nothing for its idle
  * timeout (10s by default) with no response at all, which cut the owner off from the answer, the reason a version was
  * put back included, while the change went on without them; these lift it for themselves. */
-const MACHINE_CHANGE_PATHS = new Set(
-    [
-        `/sandbox/hosted-restart`,
-        `/sandbox/hosted-rollback`,
-        `/sandbox/hosted-rebuild`,
-        `/sandbox/wake`,
-        `/sandbox/hosted-provision`,
-        `/hosted-plan/tier`,
-    ].map((path) => `${API_BASE_PATH}${path}`),
-);
+const MACHINE_CHANGE_PATHS = new Set([
+    ...[`hosted-restart`, `hosted-rollback`, `hosted-rebuild`, `wake`, `hosted-provision`].map((route) => `${API_BASE_PATH}/sandbox/${route}`),
+    `${API_BASE_PATH}/hosted-plan/tier`,
+]);
 
 const keepMachineChangesOpen: MiddlewareHandler<AppEnv> = async (c, next) => {
     if (MACHINE_CHANGE_PATHS.has(c.req.path)) {

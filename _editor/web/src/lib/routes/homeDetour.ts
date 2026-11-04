@@ -1,25 +1,27 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { InjectionKey } from "vue";
-import type { HistoryState, LocationQuery, NavigationFailure, RouteLocationNormalized, RouteLocationRaw } from "vue-router";
-import { MODELS_PATH } from "./modelsPath";
+import type { HistoryState, LocationQuery, RouteLocationNormalized, RouteLocationRaw } from "vue-router";
+import { frameOf, page, type PageLink, pageOf, routeSandbox } from "./links";
 
 // HOME SHOWS A SANDBOX'S VIEW IN PLACE, rather than sending the person into the sandbox for it (2026-10-25). Home is
 // the master view: every sandbox at once, each with its chat. A press there that leads to one of a sandbox's own views
 // (a notice's "Connect a model", a picker's Connect, "Try again" on a sign-in) used to navigate into the sandbox, and
 // the person landed on a page with another rail, no chat, and no way back to where they were. Now any navigation from
-// Home to a view listed here stays on Home: the view is drawn where the chat was (features/home/HomeDetour.vue), the
-// rail stays, and a labelled Back returns to the chat, which stayed mounted underneath with its draft. The rejected
-// alternative was a dialog: a sign-in is a trip to another tab and back, and an address survives that (and a reload),
-// where a dialog does not.
+// Home's chat to a view listed here, in Home's frame, stays on Home: the view is drawn where the chat was
+// (features/home/HomeDetour.vue), the rail stays, and a labelled Back returns to the chat, which stayed mounted
+// underneath with its draft. The rejected alternative was a dialog: a sign-in is a trip to another tab and back, and an
+// address survives that (and a reload), where a dialog does not.
 //
 // One rule at the router (router/index.ts) covers every door at once, today's and the next one's, so no link has to
-// know whether it is pressed on Home. Adding a view is one entry here and its component in HomeDetour.vue.
+// know whether it is pressed on Home: a link made where the reader is (lib/routes/links.ts `here`) names Home's frame
+// on Home. A link into the sandbox itself (`/s/<sandbox>/…`, a tile entered on purpose) goes where it says. Adding a
+// view is one entry here and its component in HomeDetour.vue.
 
 /** The query that names the view Home is showing in its chat's place. */
 const HOME_VIEW_QUERY = `show`;
 
-/** The views Home can show in place, each by the in-sandbox address it stands in for. */
-export const HOME_VIEWS = [{ key: `models`, inside: MODELS_PATH }] as const;
+/** The views Home can show in place, each by the page of a sandbox it stands in for. */
+export const HOME_VIEWS = [{ key: `models`, page: page.sandboxSettings(`models`) }] as const satisfies readonly { key: string; page: PageLink }[];
 
 export type HomeViewKey = (typeof HOME_VIEWS)[number][`key`];
 
@@ -29,46 +31,36 @@ export const homeViewOf = (query: LocationQuery): HomeViewKey | undefined => {
     return HOME_VIEWS.find((view) => view.key === asked)?.key;
 };
 
-type From = Pick<RouteLocationNormalized, "name" | "path">;
-type To = Pick<RouteLocationNormalized, "path" | "query" | "hash">;
+type From = Pick<RouteLocationNormalized, "name" | "path" | "params">;
+type To = Pick<RouteLocationNormalized, "query" | "hash" | "meta" | "params">;
+
+const showsView = (to: To, view: PageLink): boolean =>
+    pageOf(to) === view.page && Object.entries(view.params).every(([key, value]) => value === undefined || [to.params[key]].flat()[0] === value);
 
 /**
- * Where a navigation goes once Home has had its say: from Home to a view it can show, Home itself showing that view, with
- * the target's own query (a provider to open, a sign-in to retry) and hash carried along; anything else, untouched.
+ * Where a navigation goes once Home has had its say: from Home's chat to a view it can show, in Home's frame and of the
+ * sandbox it is showing, Home itself showing that view, with the target's own query (a provider to open, a sign-in to
+ * retry) and hash carried along; anything else, untouched.
  */
 export const homeViewFor = (to: To, from: From): RouteLocationRaw | undefined => {
-    if (from.name !== `home`) {
+    if (from.name !== `home` || frameOf(to) !== `home`) {
         return undefined;
     }
-    const view = HOME_VIEWS.find((candidate) => candidate.inside === to.path);
+    const shown = routeSandbox(from);
+    if (shown !== undefined && shown !== routeSandbox(to)) {
+        return undefined;
+    }
+    const view = HOME_VIEWS.find((candidate) => showsView(to, candidate.page));
     if (view === undefined) {
         return undefined;
     }
     return { path: from.path, query: { ...to.query, [HOME_VIEW_QUERY]: view.key }, hash: to.hash };
 };
 
-// A DELIBERATE STEP INSIDE goes where it names, even onto a view Home would otherwise show in place: a sandbox tile
-// pressed twice lands on the screen it was last left on, and that may well be its Models.
-// allow(module-state): one step inside at a time per window, read by the navigation it wraps
-let steppingInside = false;
+/** The router's guard: the rule above. */
+export const homeViewGuard = (to: To, from: From): RouteLocationRaw | true => homeViewFor(to, from) ?? true;
 
-/** Runs a navigation that enters the sandbox for real, past Home's rule. */
-export const goInside = async (navigate: () => Promise<NavigationFailure | void | undefined>): Promise<void> => {
-    steppingInside = true;
-    try {
-        await navigate();
-    } finally {
-        steppingInside = false;
-    }
-};
-
-/** Whether the navigation under way is a deliberate step inside, which also leaves Home's frame (models/home/masterRail.ts). */
-export const isSteppingInside = (): boolean => steppingInside;
-
-/** The router's guard: the rule above, except for a step inside. */
-export const homeViewGuard = (to: To, from: From): RouteLocationRaw | true => (steppingInside ? true : (homeViewFor(to, from) ?? true));
-
-/** Home's own address again, the view put away: the same sandbox's chat (a phone's `/home/:sandbox`), no query. */
+/** Home's own address again, the view put away: the same sandbox's chat (`/home/:sandbox`), no query. */
 export const homeChatOf = (route: Pick<RouteLocationNormalized, "path">): RouteLocationRaw => ({ path: route.path });
 
 /**

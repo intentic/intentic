@@ -1,4 +1,4 @@
-import type { RouteLocationRaw } from "vue-router";
+import { here, page } from "../../../lib/routes/links";
 
 // Activity's four parts, by who can read each: the turns are the Activity extension's view, which a member sees
 // narrowed to their own conversations; every command the judge checked, every request the privacy shield handled and
@@ -8,8 +8,6 @@ import type { RouteLocationRaw } from "vue-router";
 export const ACTIVITY_PARTS = [`turns`, `commands`, `personal`, `audit`] as const;
 export type ActivityPart = (typeof ACTIVITY_PARTS)[number];
 
-export const activityPart = (part: ActivityPart): RouteLocationRaw => ({
-    name: `sandbox`,
-    params: { tab: `activity` },
-    query: part === `turns` ? {} : { section: part },
-});
+/** One part of Activity by address, in the reader's own frame and sandbox. */
+export const activityPart = (part: ActivityPart): string =>
+    here(page.sandboxSettings(`activity`, { query: { section: part === `turns` ? undefined : part } }));

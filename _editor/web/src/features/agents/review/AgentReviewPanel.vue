@@ -24,6 +24,7 @@ import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
+import { here, page } from "../../../lib/routes/links";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
 import { boxNameOf, openInSandbox } from "../../../models/fleet/fleetScope";
 import { CONFLICT_ICON, reasonCopy } from "../../../models/conversations/review/conflictResolution";
@@ -263,7 +264,7 @@ const openGitHistory = (repo: string): void => {
         return;
     }
     open();
-    void router.push({ name: `workspace` });
+    void router.push(here(page.workspace()));
 };
 
 // What a heading says about its folded rows, at both scopes: a collapsed heading is all that's left of them, so
@@ -576,7 +577,7 @@ const openInWorkspace = (): void => {
         // "Open this over there": a tab that vanished on the next look would say the opposite.
         `keep`,
     );
-    void router.push({ name: `workspace` });
+    void router.push(here(page.workspace()));
 };
 
 // Presentation.

@@ -22,6 +22,7 @@ import RuntimeInstalls from "./RuntimeInstalls.vue";
 import DiffToolbar from "../../workspace/viewers/DiffToolbar.vue";
 import DiffView from "../../workspace/viewers/DiffView.vue";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // The sandbox's environment, read two ways: contents leads as the approval surface, the Dockerfile diff
 // sits behind a pill. The decision (and its rebuild) is the card's first row, above both views: it
@@ -333,7 +334,7 @@ watch(
                 <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
                 <p v-else-if="route === `checkout`" data-executor="checkout" class="text-2xs text-subtle">
                     {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}
-                    <RouterLink to="/sandbox" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentCard.sandboxTab`) }}</RouterLink>
+                    <RouterLink :to="here(page.sandboxSettings())" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentCard.sandboxTab`) }}</RouterLink>
                 </p>
                 <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
                      puts back the column `bare` drops, so a running log keeps its gap. -->

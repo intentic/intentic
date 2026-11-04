@@ -1,9 +1,11 @@
 import { parseJsonWith } from "@intentic/base/json";
+import { pagePath } from "@intentic/sandbox-contract/app-routes";
 import type { IconName } from "@intentic/ui";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { linkOf } from "../../lib/routes/links";
 
 // Rail tiles arrive in waves, each pushing everything below it down as it lands. Once a load completes, the layout
 // is remembered per sandbox in localStorage (readable before anything connects) and drawn as dim placeholders next
@@ -19,6 +21,17 @@ export interface RailTile {
     // Letters drawn in place of the icon (Activation.monogram): the open project's, on the Projects tile.
     readonly monogram?: string;
 }
+
+/**
+ * A tile's identity, which its address is not: that names the frame and the sandbox it opens in (`/s/<sandbox>/agents`),
+ * while a tile is the same tile in either frame, and a reader's pins and this memory were kept by the address it had
+ * before frames (before 2026-11-04). So it is its page below the frame (`/agents`, `/ext/komodo/main`), the form those
+ * kept ones read as; an address that names no page is its own identity.
+ */
+export const railKey = (to: string): string => {
+    const link = linkOf(to);
+    return link === undefined ? to : `/${pagePath(link)}`;
+};
 
 // A tile held open for a tile not back yet; same shape as RailTile, flagged, so the rail renders one list, not a
 // parallel placeholder template.
@@ -77,8 +90,8 @@ export function useRailMemory(live: Ref<readonly RailTile[]>, settled: Ref<boole
         if (settled.value) {
             return [];
         }
-        // Matched by route, not id: several tiles from one extension can share an id but not a route.
-        const present = new Set(live.value.map((tile) => tile.to));
-        return remembered.value.filter((tile) => !present.has(tile.to)).map(asGhost);
+        // Matched by page, not id: several tiles from one extension can share an id but not a page.
+        const present = new Set(live.value.map((tile) => railKey(tile.to)));
+        return remembered.value.filter((tile) => !present.has(railKey(tile.to))).map(asGhost);
     });
 }

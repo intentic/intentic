@@ -48,6 +48,7 @@ import { useLocalModelFit } from "./useLocalModelFit";
 import { useModelSources } from "./useModelSources";
 import { offerFor } from "./otherAccounts";
 import { useOtherAccounts } from "./useOtherAccounts";
+import { here, page } from "../../../lib/routes/links";
 
 // Stable peer tiles for each provider and Local models open the sole accounts/sign-in or local/server panel below the grid.
 // All sign-in links use modelsPath.ts to land here and open the relevant tile; never expose competing sign-in doors.
@@ -329,7 +330,7 @@ const startChatting = (): void => {
         homeView.back(pick);
         return;
     }
-    void router.push(`/chat`);
+    void router.push(here(page.chat()));
 };
 
 // FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each one

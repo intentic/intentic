@@ -29,6 +29,7 @@ import { useSandboxEstablished } from "../../features/sandbox/gates/established"
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { useRouter } from "vue-router";
+import { toTop } from "../../lib/routes/links";
 import { useDeviceDirectory } from "../../client/directory/deviceDirectory";
 import { directMode } from "../../client/directory/directState";
 import { diagnosisEvidence } from "../../features/sandbox/diagnosis/useDiagnosis";
@@ -386,7 +387,7 @@ export const startNotificationSources = (): void => {
                     label: t(`shell.notificationSources.reconnect`),
                     tier: `boring` as const,
                     run: async () => {
-                        await router.push(`/recover`);
+                        await router.push(toTop(`recover`));
                     },
                 },
             ],

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ViewBadge,Disposable } from "@intentic/extension-api";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, unref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -59,7 +60,7 @@ const viewTile = (view: LocalView): Tile => {
     return badge === undefined ? tile : { ...tile, badge };
 };
 
-// Prefix match, as the sandbox shell's: a file path under /workspace keeps its tile lit.
+// Prefix match, as the sandbox shell's: a file's path under Files keeps its tile lit.
 const isActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
 
 // Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
@@ -80,7 +81,7 @@ const setupTile = computed<Tile | undefined>(() => {
 // REPAIR'S TILE, temporary like the setup's: on the rail while the reader is on its page, and while it works or waits
 // for their Allow, so they can go back to their files and return to it; gone once it rests and they have left. Its
 // corner says which (repairSession.ts). Until 2026-10-22 Repair had no tile, and leaving its page lost the way back.
-const REPAIR_PATH = `/repair`;
+const REPAIR_PATH = localPath(`repair`);
 const repairTile = computed<Tile | undefined>(() => {
     const repair = host.repair;
     if (repair === undefined || (!repairHoldsRail(repair.session.value) && !isActive(REPAIR_PATH))) {
@@ -91,7 +92,7 @@ const repairTile = computed<Tile | undefined>(() => {
     return badge === undefined ? tile : { ...tile, badge };
 });
 const tiles = computed<readonly Tile[]>(() => [
-    { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
+    { section: `workspace`, to: localPath(`files`), label: t(`shared.files`) },
     ...(setupTile.value === undefined ? [] : [setupTile.value]),
     ...(repairTile.value === undefined ? [] : [repairTile.value]),
     ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),

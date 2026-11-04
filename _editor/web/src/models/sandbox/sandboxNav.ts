@@ -1,13 +1,14 @@
 import type { ManageRight } from "@intentic/sandbox-contract/schemas/members";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { here, page, type PageLink, toInside } from "../../lib/routes/links";
 
 // The sandbox hub's index, as a table rather than markup: the hub draws these rows with their live badges, and the
 // command palette turns the same rows into "Sandbox: …" destinations. One source, so a section added here cannot be
 // reachable by click but not by name.
 
 export interface SandboxSection {
-    /** The `:tab` route param this section lives under (`/sandbox/<slug>`). */
+    /** The `:tab` route param this section lives under (the sandbox's settings page, `settings/<slug>`). */
     readonly slug: string;
     readonly label: string;
     readonly icon: IconName;
@@ -210,14 +211,32 @@ export const sandboxSections = (
         // What the sandbox's organisation hides (organisations/useOrgPolicy.ts) is no destination either.
         .filter((section) => !orgHidden.has(section.slug));
 
-export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DEFAULT_SECTION ? `/sandbox` : `/sandbox/${slug}`);
+// The page a part of a page belongs to (Activity's audit log, `within`), if the slug names such a part.
+const pageOwning = (slug: string): SandboxSection | undefined =>
+    sandboxSectionGroups()
+        .flatMap((group) => group.items)
+        .flatMap((row) => (isTabbedRow(row) ? row.parts : [row]))
+        .find((section) => section.within?.some((part) => part.slug === slug) === true);
+
+/**
+ * A section's link, the default named outright: its own page, or, for a part of a page (the audit log), that page with
+ * the part in `section`, as the page keeps its tabs. A part has no page of its own to land on.
+ */
+export const sandboxSectionLink = (slug: string): PageLink => {
+    const owner = pageOwning(slug);
+    return owner === undefined ? page.sandboxSettings(slug) : page.sandboxSettings(owner.slug, { query: { section: slug } });
+};
+
+/** A section's address where the reader is (lib/routes/links.ts `here`); the default one names no section. */
+export const sandboxSectionPath = (slug: string): string =>
+    slug === SANDBOX_DEFAULT_SECTION ? here(page.sandboxSettings()) : here(sandboxSectionLink(slug));
 
 /**
  * Where a door marked "sandbox" leads for this reader. The hub's own default is a section a guest is refused, and the
  * shell fence (lib/routes/guestPaths.ts) sends it home from the hub root before the hub can redirect — so a guest's door
  * names its one section outright rather than opening on a bounce.
  */
-export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectionPath(GUEST_SECTION) : `/sandbox`);
+export const sandboxHubPath = (guest: boolean): string => sandboxSectionPath(guest ? GUEST_SECTION : SANDBOX_DEFAULT_SECTION);
 
 /**
  * Access's parts (features/sandbox/access/SandboxAccess.vue), drawn as tabs and kept in the query as Agent's and
@@ -238,13 +257,13 @@ export const PEOPLE_ACCESS_PARTS: readonly AccessPart[] = [`people`, `profiles`,
 
 /** One part of Access by address; People, the first, writes no param. */
 export const accessPath = (part: AccessPart = `people`): string =>
-    part === `people` ? sandboxSectionPath(`access`) : `${sandboxSectionPath(`access`)}?${new URLSearchParams({ section: part }).toString()}`;
+    here(page.sandboxSettings(`access`, { query: { section: part === `people` ? undefined : part } }));
 
 // Where a sandbox's Linked sandboxes section is reached from outside the Access page: the hash marks a reader who came
 // for it, as a task handed over from another sandbox and waiting for its owner's yes sends them here. The page opens the
 // part that holds it for this hash alone too, since a link made before the parts had none.
 export const LINKED_SANDBOXES_ANCHOR = `linked-sandboxes`;
 
-/** That section on the named sandbox's own Access page, the switch to that sandbox included (router/sandboxArrival.ts). */
+/** That section on the named sandbox's own Access page, inside that sandbox, which its address makes the one open. */
 export const linkedSandboxesHref = (sandboxId: string): string =>
-    `${sandboxSectionPath(`access`)}?${new URLSearchParams({ section: `programs` satisfies AccessPart, sandbox: sandboxId }).toString()}#${LINKED_SANDBOXES_ANCHOR}`;
+    toInside(sandboxId, page.sandboxSettings(`access`, { query: { section: `programs` satisfies AccessPart }, hash: LINKED_SANDBOXES_ANCHOR }));

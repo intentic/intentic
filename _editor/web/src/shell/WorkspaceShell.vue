@@ -13,6 +13,7 @@ import { revealSideView } from "../workbench/side/sideViews";
 import { prefetchViewsAtIdle } from "./prefetch/prefetch";
 import { useChat } from "../models/conversations/run/useChat";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
+import { here, isPage, page } from "../lib/routes/links";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
@@ -93,10 +94,10 @@ useMainWindow((errand) => {
 // mobile-only page (menu, terminal) bounces to the workspace; shrinking off full-screen chat lands on the same
 // conversation's phone screen, as the /chat guard would have.
 watch(mobile, (isMobile) => {
-    if (!isMobile && [`menu`, `terminal`].includes(String(route.name))) {
-        void router.push(`/workspace`);
+    if (!isMobile && (isPage(route, `menu`) || isPage(route, `terminal`))) {
+        void router.push(here(page.workspace()));
     }
-    if (isMobile && route.name === `chat`) {
+    if (isMobile && isPage(route, `chat`)) {
         void router.replace(mobileChatPath(useChat().active.value.conversationId));
     }
 });

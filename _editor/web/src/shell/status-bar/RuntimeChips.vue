@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toneWash } from "@intentic/ui";
+import { here } from "../../lib/routes/links";
 import RailIcon from "../rail/RailIcon.vue";
 import type { RuntimeChip } from "./runtimeChips";
 import type { RuntimeChips } from "./useRuntimeChips";
@@ -31,7 +32,7 @@ const countClass = (chip: RuntimeChip): string => (chip.tone === undefined ? `bg
         <template v-for="chip in chips" :key="chip.id">
             <RouterLink
                 v-if="chip.to !== undefined"
-                :to="chip.to"
+                :to="here(chip.to)"
                 :data-chip="chip.id"
                 :class="chipClass(chip)"
                 :aria-label="chip.aria"

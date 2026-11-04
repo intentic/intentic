@@ -347,7 +347,7 @@ describe(`sandbox switch`, () => {
         queryClient.setQueryData(rpcKey(`settings.get`), { productAnalytics: false });
         analytics.track(`off`);
         expect(posthog.capture).not.toHaveBeenCalled();
-        route.value = `settings`;
+        route.value = `home:account`;
         await nextTick();
         analytics.track(`outside`);
         expect(posthog.capture).toHaveBeenCalledWith(`outside`, undefined);

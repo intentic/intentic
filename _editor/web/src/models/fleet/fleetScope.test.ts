@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 
 const sandboxes = ref<{ id: string; name: string; image: string | null; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
@@ -121,14 +122,14 @@ describe("crossing to the agent's own sandbox", () => {
     // pushing the route after would usually lose the race.
     it("aims the landing first, then switches", () => {
         openInSandbox(`sbx-laptop`, `a1`);
-        expect(landOnAfterSwitch).toHaveBeenCalledWith(`sbx-laptop`, `/agents/a1`);
+        expect(landOnAfterSwitch).toHaveBeenCalledWith(`sbx-laptop`, insidePath(`sbx-laptop`, page.agent(`a1`)));
         expect(select).toHaveBeenCalledWith(`sbx-laptop`);
         expect(landOnAfterSwitch.mock.invocationCallOrder[0]).toBeLessThan(select.mock.invocationCallOrder[0]!);
     });
 
     it("escapes an agent id that would otherwise break the path", () => {
         openInSandbox(`sbx-laptop`, `a/1?x`);
-        expect(landOnAfterSwitch).toHaveBeenCalledWith(`sbx-laptop`, `/agents/a%2F1%3Fx`);
+        expect(landOnAfterSwitch).toHaveBeenCalledWith(`sbx-laptop`, `/s/sbx-laptop/agents/a%2F1%3Fx`);
     });
 });
 

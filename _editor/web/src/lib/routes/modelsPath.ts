@@ -1,10 +1,17 @@
-import type { RouteLocationRaw } from "vue-router";
+import { legacyPathOf } from "@intentic/sandbox-contract/app-routes";
+import { here, page } from "./links";
 
 // Where this sandbox's models are connected and managed: Sandbox ▸ Models. One address for every door to it (the chat's
 // strip, the model picker, setup's landing, a job whose model is not connected) so none of them can drift onto an older
-// one. `/connect` was its own page until 2026-10; it redirects here, query and all, for links out of older builds.
+// one. `/connect` was its own page until 2026-10; it redirects here, query and all, for links out of older builds. Made
+// in the reader's own frame and sandbox (links.ts `here`), so a door pressed on Home stays on Home
+// (lib/routes/homeDetour.ts shows it in the chat's place there).
 
-export const MODELS_PATH = `/sandbox/models`;
+/**
+ * The page's address in the form addresses had before frames, for a door that names it once as a constant; the router
+ * opens it in the frame it is pressed in. A new door uses `modelsPath()`.
+ */
+export const MODELS_PATH = legacyPathOf(page.sandboxSettings(`models`));
 
 // What a link may ask of the page: `provider` starts that provider's sign-in where nothing of it is connected yet
 // (linkArrival), `open` only opens a tile (a provider's own, by its id) for the reader to choose how to connect, and
@@ -15,13 +22,8 @@ export interface ModelsQuery {
     readonly found?: string;
 }
 
-export const modelsPath = (query: ModelsQuery = {}): RouteLocationRaw => {
-    const named = Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== ``));
-    return Object.keys(named).length === 0 ? MODELS_PATH : { path: MODELS_PATH, query: named };
-};
+/** The page's address where the reader is, carrying only the parts of a request that say something. */
+export const modelsHref = (query: ModelsQuery = {}): string => here(page.sandboxSettings(`models`, { query: { ...query } }));
 
-// The same address as text, for the places that hold a plain href (a test's expectation, a string route).
-export const modelsHref = (query: ModelsQuery = {}): string => {
-    const named = Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== ``);
-    return named.length === 0 ? MODELS_PATH : `${MODELS_PATH}?${new URLSearchParams(named).toString()}`;
-};
+// The same address, for the places that hand the router a location.
+export const modelsPath = (query: ModelsQuery = {}): string => modelsHref(query);

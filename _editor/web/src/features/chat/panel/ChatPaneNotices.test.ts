@@ -77,6 +77,8 @@ jest.mock(`vue-router`, () => ({
 
 const { trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ChatPaneNotices } = await import("./ChatPaneNotices.vue");
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
+const { page, toInside } = await import("../../../lib/routes/links");
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -249,12 +251,14 @@ it(`turns into the way out once today's allowance is gone, saying when it comes 
 it(`offers the changes the run already made once the trial stops it`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
     agentRow.value = { id: `agent-1`, status: `error`, diff: { files: 2, insertions: 11, deletions: 2 } };
+    // The sandbox the link is made in while no route names one (lib/routes/links.ts `here`).
+    activeSandboxId.value = `sb-1`;
 
     const element = mount();
 
     const review = named(element, `View changes`);
     expect(review?.textContent?.trim()).toBe(`View changes (2 files)`);
-    expect(review?.getAttribute(`href`)).toBe(`/agents/agent-1`);
+    expect(review?.getAttribute(`href`)).toBe(toInside(`sb-1`, page.agent(`agent-1`)));
     expect(review?.parentElement).toBe(named(element, `Continue with another model`)?.parentElement);
 });
 

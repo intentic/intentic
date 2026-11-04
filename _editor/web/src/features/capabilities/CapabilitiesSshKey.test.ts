@@ -10,11 +10,15 @@ import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import * as actualVueRouter from "vue-router";
 
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
+
 let query: Record<string, string> = {};
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     // SAFETY: the page reads only `params.entry` and `query` off the route; a member it reached past these would be undefined, failing the case.
-    useRoute: () => ({ params: { entry: `ssh` }, query }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry: `ssh` }, query }) as never,
     // SAFETY: the page only moves between tiles with push/replace and builds links with resolve; nothing else is called.
     useRouter: () => ({ push: jest.fn(), replace: jest.fn(), resolve: (to: string) => ({ href: to }) }) as never,
 }));

@@ -6,6 +6,7 @@ import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-set
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { IconStub } from "@intentic/ui/testing";
 import * as providerCatalogOriginal from "../../../models/providers/providerCatalog";
 
@@ -36,14 +37,18 @@ jest.mock(`../../../models/providers/providerCatalog`, () => ({
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
 }));
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: AgentSafetyJudge } = await import("./AgentSafetyJudge.vue");
 
-// A minimal router to resolve the link to the Models tab; the app's own router carries unrelated guards.
+// A minimal router to resolve the link to the Models tab, in the sandbox the reader is in; the app's own router carries
+// unrelated guards.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+    routes: [{ path: `/s/:sandbox/settings/:tab?`, meta: { frame: `inside`, page: `sandboxSettings` }, component: defineComponent({ render: () => h(`div`) }) }],
 });
-await router.push({ name: `sandbox`, params: { tab: `guardrails` } });
+await router.push(insidePath(BOX, page.sandboxSettings(`guardrails`)));
 await router.isReady();
 
 let app: App | undefined;
@@ -143,7 +148,7 @@ test("offers no way to edit the model, only the address of the one that does", (
     expect(link?.textContent?.trim()).toBe(`Change in Models`);
     // Models is the tab's default category, so its address carries no section param; it names the judge's job, so
     // Models opens on that row rather than on a Simple view with no row for it.
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?job=safety-judge`);
+    expect(link?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings(`agent`, { query: { job: `safety-judge` } })));
 });
 
 // The catalog of what reaches the gate is reference, not a setting: it waits behind the group's (i), not on the page.

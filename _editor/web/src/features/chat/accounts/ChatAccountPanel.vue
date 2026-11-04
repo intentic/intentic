@@ -13,7 +13,7 @@ import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../client/sandbox/useRole";
-import { MODELS_PATH, modelsHref } from "../../../lib/routes/modelsPath";
+import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useT } from "@intentic/ui/i18n";
 import { ACCOUNT_NUDGE } from "./accountNudge";
 
@@ -67,7 +67,7 @@ const named = computed(() => chosen.value || others.value);
 // A named provider with a sign-in of its own is connected by name, on its own tile; anything else (nothing named, an
 // endpoint like the trial) opens the page on the reader's choice.
 const byName = computed(() => named.value && hasSignIn(provider.value));
-const connectTo = computed(() => (byName.value ? modelsHref({ open: provider.value }) : MODELS_PATH));
+const connectTo = computed(() => modelsHref({ open: byName.value ? provider.value : undefined }));
 const connectLabel = computed(() =>
     byName.value ? t(`chat.chatAccountPanel.connectProvider`, { providerName: providerName.value }) : t(`chat.words.connectAModel`),
 );
@@ -98,7 +98,7 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
             <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelSignIn">
                 {{ t(`ui.action.cancel`) }}
             </button>
-            <RouterLink :to="MODELS_PATH" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
+            <RouterLink :to="modelsHref()" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`chat.chatAccountPanel.finishSignIn`) }}
             </RouterLink>
         </span>

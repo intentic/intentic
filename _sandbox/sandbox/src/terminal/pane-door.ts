@@ -225,7 +225,7 @@ export const openPaneDoor = async (deps: PaneDoorDeps): Promise<PaneDoor> => {
             const form = request.method === "POST" ? await readForm(request) : url.searchParams;
             const pane = form.get("pane") ?? "";
             let answer: [number, string];
-            if (request.method === "POST" && url.pathname === "/open") {
+            if (request.method === "POST" && url.pathname === "/open") { // allow(route-literal): the door's own route
                 answer = await open(form, target);
             } else if (request.method === "GET" && url.pathname === "/dead") {
                 answer = PANE.test(pane) && opened.has(pane) ? await dead(pane) : [404, "not a pane this domain opened"];

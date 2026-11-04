@@ -2,6 +2,7 @@
 import { CopyButton } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import { useT } from "@intentic/ui/i18n";
 
 // The one place the session's name is shown whole, in every form it's pasted as; raised from the agent page's chip, not
@@ -17,7 +18,7 @@ const { agentId, branch } = defineProps<{ agentId: string; branch: string }>();
 
 const router = useRouter();
 // Through the router, so the app's base path rides in the link, not left for the reader to add.
-const link = computed(() => `${globalThis.location.origin}${router.resolve({ name: `agent`, params: { id: agentId } }).href}`);
+const link = computed(() => `${globalThis.location.origin}${router.resolve(here(page.agent(agentId))).href}`);
 
 const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
 </script>

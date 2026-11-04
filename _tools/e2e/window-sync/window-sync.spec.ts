@@ -1,3 +1,4 @@
+import { floatingPath } from "@intentic/sandbox-contract/app-routes";
 import { expect, type BrowserContext, type Page, test } from "@playwright/test";
 
 declare global {
@@ -15,9 +16,9 @@ declare global {
     }
 }
 
-// A holder loads at the chat's own floating address, where the app's first script says it is booting; `claimAfter`
-// stands in for the app's boot between that and the claim.
-const holderAt = (claimAfter = 0): string => `/floating/chat?holder&claimAfter=${claimAfter}`;
+// A holder loads at the chat's own floating address (its sandbox's: the fixture's `sb1`), where the app's first script
+// says it is booting; `claimAfter` stands in for the app's boot between that and the claim.
+const holderAt = (claimAfter = 0): string => `${floatingPath(`sb1`, `chat`)}?holder&claimAfter=${claimAfter}`;
 const open = async (context: BrowserContext, holder = false, claimAfter = 0): Promise<Page> => {
     const page = await context.newPage();
     await page.goto(holder ? holderAt(claimAfter) : `/`);

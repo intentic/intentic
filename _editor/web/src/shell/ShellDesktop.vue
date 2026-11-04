@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useHomeCommand } from "./commands/useHomeCommand";
-import { followMasterRail, masterRail } from "../models/home/masterRail";
+import { masterRail } from "../models/home/masterRail";
+import { here, isPage, page, routeShows } from "../lib/routes/links";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
@@ -100,7 +101,6 @@ const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 const onHome = computed(() => route.name === `home`);
-followMasterRail();
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
 // A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
@@ -108,11 +108,11 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const connects = useHeldDoor(`capabilities.list`);
 
-// Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
-const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
+// By page, not active-class: a splat param (workspace/:path) drops it once set, and a tile is its page in any frame.
+const isNavActive = (to: string): boolean => routeShows(route, to);
 
 // On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
-const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
+const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || isPage(route, `chat`)));
 
 // Opens the seeded starter site on a box's very first landing (browsersSurface.ts's once-only flag), waiting
 // for /panels to actually name it rather than a timer. Desktop only: a phone has one surface to give up.
@@ -120,7 +120,7 @@ watch(
     panels,
     (list) => {
         // Only from the landing route: a reader who opened a different link asked to be there.
-        if (route.name === `workspace` && list.some((panel) => panel.repo === STARTER_REPO)) {
+        if (isPage(route, `workspace`) && list.some((panel) => panel.repo === STARTER_REPO)) {
             openPreviewOnFirstVisit(router, appTargetId(STARTER_REPO, STARTER_APP));
         }
     },
@@ -132,19 +132,19 @@ watch(
 // section is never in neither (only the one you are visiting is in both).
 const { tiles, settled: railSettled } = useSectionTiles(() =>
     // Heads the Work band's permanent tiles, below Projects when that is tiled; unbadged, since the Agents tile carries the debt (see chatTileSeated).
-    chatTileSeated.value ? [{ id: `chat`, to: `/chat`, label: t(`shared.chat`), icon: `comments` }] : [],
+    chatTileSeated.value ? [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }] : [],
 );
 
 // onRail (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
 const pins = useRailPins();
 const onRailTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => onRail(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
+    tiles.value.filter((tile) => onRail(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) })),
 );
 // More lists what is off the rail AT REST: a section visited from here stays in the menu (marked as where you are)
 // while its tile also sits on the rail, so the menu keeps the same rows in the same places between openings.
 const moreTiles = computed<readonly SectionTile[]>(() =>
     tiles.value
-        .filter((tile) => !onRail(tile, { pinned: pins.pinned.value.has(tile.to), active: false }))
+        .filter((tile) => !onRail(tile, { pinned: pins.isPinned(tile.to), active: false }))
         .toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
@@ -170,7 +170,7 @@ const pressTile = (tile: RailTile, event: PointerEvent): void => {
 
 // Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
 const stableTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => railPolicy(tile.id) === `always` || pins.pinned.value.has(tile.to)),
+    tiles.value.filter((tile) => railPolicy(tile.id) === `always` || pins.isPinned(tile.to)),
 );
 // Tiles the rail had last time and hasn't refilled yet; empty once complete or on a first visit.
 const heldTiles = useRailMemory(stableTiles, railSettled);
@@ -226,7 +226,7 @@ onUnmounted(() => {
 watch(
     () => route.path,
     (path) => {
-        if (!path.startsWith(`/chat`)) {
+        if (!isPage(route, `chat`)) {
             lastSectionPath.value = path;
         }
     },
@@ -551,13 +551,13 @@ useGettingStarted();
                     <!-- Plain words gave the rail's + to a new conversation; what it used to open stays here, one press in. -->
                     <RouterLink
                         v-if="maker && connects"
-                        to="/capabilities"
+                        :to="here(page.capabilities())"
                         class="ui-row-select flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs"
-                        :class="isNavActive('/capabilities') ? 'ui-row-select-on text-link' : 'text-content'"
+                        :class="isPage(route, `capabilities`) ? 'ui-row-select-on text-link' : 'text-content'"
                         @click="dismissMore"
                     >
                         <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                            <RailIcon section="capabilities" class="text-base" :class="isNavActive('/capabilities') ? 'text-link' : 'text-muted'" />
+                            <RailIcon section="capabilities" class="text-base" :class="isPage(route, `capabilities`) ? 'text-link' : 'text-muted'" />
                         </span>
                         <span class="min-w-0 flex-1 truncate">{{ t(`shell.words.addCapability`) }}</span>
                     </RouterLink>
@@ -578,8 +578,8 @@ useGettingStarted();
             </button>
             <RouterLink
                 v-else-if="connects"
-                to="/capabilities"
-                :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isNavActive('/capabilities') }]"
+                :to="here(page.capabilities())"
+                :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isPage(route, `capabilities`) }]"
                 :aria-label="t(`shell.words.addCapability`)"
                 v-tooltip.right="t(`shell.words.addCapability`)"
             >

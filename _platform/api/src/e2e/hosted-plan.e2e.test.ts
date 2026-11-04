@@ -291,8 +291,8 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             "line_items[0][quantity]": `1`,
             client_reference_id: alice.id,
             customer_email: alice.email,
-            success_url: `${WEB_ORIGIN}/settings/billing?plan=welcome`,
-            cancel_url: `${WEB_ORIGIN}/settings/billing`,
+            success_url: `${WEB_ORIGIN}/home/account/billing?plan=welcome`,
+            cancel_url: `${WEB_ORIGIN}/home/account/billing`,
         });
         // A checkout the buyer abandons leaves nothing behind: the webhook is what makes the plan.
         expect(await planRow()).toBeNull();
@@ -424,7 +424,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(portal.body.url.startsWith(`${stripe.origin}/portal/${customerId}`)).toBe(true);
         expect(lastCall(stripe, `POST`, `/billing_portal/sessions`)?.params).toEqual({
             customer: customerId,
-            return_url: `${WEB_ORIGIN}/settings/billing`,
+            return_url: `${WEB_ORIGIN}/home/account/billing`,
         });
     });
 

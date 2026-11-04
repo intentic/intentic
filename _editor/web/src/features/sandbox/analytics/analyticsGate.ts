@@ -6,6 +6,7 @@ import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { routeName as nameOfRoute } from "../../../lib/routes/links";
 
 // The open sandbox's say in product analytics (settings.productAnalytics, the switch SandboxAnalytics.vue beside this
 // edits), for app/analytics.ts. While a sandbox is open
@@ -21,8 +22,8 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 // some screen that reads the settings (Privacy shield, a chat) fetched them. Now it asks only while the daemon is
 // reachable, asks again each time it becomes reachable, and keeps its answer for the page (gcTime Infinity).
 
-// Routes that show nothing of a sandbox, whichever one was open last.
-const OUTSIDE_SANDBOX = new Set([`settings`, `login`, `login-confirm`, `platform-unavailable`]);
+// Routes that show nothing of a sandbox, whichever one was open last: the account's settings in either frame among them.
+const OUTSIDE_SANDBOX = new Set([nameOfRoute(`inside`, `account`), nameOfRoute(`home`, `account`), `login`, `login-confirm`, `platform-unavailable`]);
 
 export const sandboxAnalyticsGate = (routeName: Readonly<Ref<string>>): AnalyticsGate => {
     const { reachable } = useSandbox();

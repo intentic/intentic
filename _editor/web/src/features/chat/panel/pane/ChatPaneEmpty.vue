@@ -6,7 +6,7 @@ import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-spe
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { endpointProviders } from "../../../../models/providers/providerCatalog";
 import { accessKnown, providerReady, trialPhase } from "../../../../models/providers/access";
-import { MODELS_PATH } from "../../../../lib/routes/modelsPath";
+import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 const t = useT();
 
@@ -47,7 +47,7 @@ const offerUncapped = computed(
         </p>
         <p v-if="offerUncapped" class="max-w-[22rem] text-2xs leading-relaxed text-subtle">
             {{ t(`chat.chatPane.uncappedQuestion`) }}
-            <RouterLink :to="MODELS_PATH" class="touch-target whitespace-nowrap text-link hover:underline">{{
+            <RouterLink :to="modelsHref()" class="touch-target whitespace-nowrap text-link hover:underline">{{
                 t(`chat.chatPane.uncappedLink`)
             }}</RouterLink>
         </p>

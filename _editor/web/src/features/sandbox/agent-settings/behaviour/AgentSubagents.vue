@@ -11,6 +11,7 @@ import { useT } from "@intentic/ui/i18n";
 import DetailSwitch from "./DetailSwitch.vue";
 import { useDetailLevel } from "./detailLevel";
 import SubagentsExplainer from "./explainers/SubagentsExplainer.vue";
+import { here, page } from "../../../../lib/routes/links";
 
 // Three ceilings over one activity, starting subagents, and how long a subagent refused for a spent allowance waits for
 // its reset before it stops instead (childRerunHorizonHours): how wide one fan-out is, the lifetime budget per conversation,
@@ -36,7 +37,6 @@ const RESERVE = numberSetting(SandboxSettingsSchema.shape.subagentReservePercent
 
 // Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
 const spawnDenied = computed(() => postureOf(settings.value?.actionRules ?? {}) === `deny`);
-const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 </script>
 
 <template>
@@ -45,7 +45,7 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
         <template #actions><DetailSwitch v-model="level" :label="t(`shared.subagents`)" /></template>
         <RowNote>
             {{ spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : t(`sandbox.agentSubagents.whetherInGuardrails`) }}
-            <RouterLink :to="GUARDRAILS" :class="ui.textButton()"
+            <RouterLink :to="here(page.sandboxSettings(`guardrails`))" :class="ui.textButton()"
                 >{{ t(`sandbox.sandboxNav.guardrails`) }}<Icon name="arrow-right" class="text-2xs"
             /></RouterLink>
         </RowNote>

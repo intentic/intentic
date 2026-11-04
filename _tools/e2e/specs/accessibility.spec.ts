@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
+import { homePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
-import { WEB_URL } from "../stack.js";
+import { seededPage, WEB_URL } from "../stack.js";
 import { auditPage, printFindings } from "../accessibility/audit.js";
 
 interface BaselineEntry { rule: string; target: string; note: string }
@@ -9,9 +10,10 @@ const baseline = JSON.parse(readFileSync(new URL(`../accessibility/baseline.json
 const accepted = new Set(baseline.map(({ rule, target }) => `${rule}\t${target}`));
 
 for (const [screen, path, ready] of [
-    [`sandbox home`, `/agents`, `main`],
-    [`composer`, `/chat`, `textarea[name="draft"]`],
-    [`settings`, `/settings`, `main`],
+    [`sandbox home`, seededPage(pages.agents()), `main`],
+    [`composer`, seededPage(pages.chat()), `textarea[name="draft"]`],
+    // The account's settings, where an address naming no sandbox has always opened them: Home's frame.
+    [`settings`, homePath(undefined, pages.account()), `main`],
 ] as const) {
     test(`${screen} has no new serious WCAG 2.1 A/AA violations`, async ({ page }) => {
         await page.goto(path);
@@ -36,7 +38,7 @@ test(`chat with a message has no new serious WCAG 2.1 A/AA violations`, async ({
         headers: { "content-type": "text/event-stream" },
         body: `${[`data: {"kind":"session","sessionId":"a11y-s1"}`, `data: {"kind":"delta","text":"A test message."}`, `data: {"kind":"done"}`].join(`\n\n`)  }\n\n`,
     }));
-    await page.goto(`/workspace`);
+    await page.goto(seededPage(pages.workspace()));
     const composer = page.locator(`textarea[name="draft"]`);
     await expect(composer).toBeVisible();
     await composer.fill(`Accessibility test`);

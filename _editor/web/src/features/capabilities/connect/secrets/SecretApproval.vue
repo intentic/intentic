@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import type { CredentialGateScope } from "@intentic/sandbox-contract/schemas/secrets";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { useCredentialGates } from "../../../../models/capabilities/useSecrets";
 import SecretChoice from "./SecretChoice.vue";
@@ -164,7 +165,7 @@ const SCOPES = computed(() => [
                     <p v-if="!namesEveryone" class="text-xs text-subtle">{{ t(`capabilities.secretApproval.othersUnlisted`) }}</p>
                     <p v-else-if="approverChoices.length <= 1" class="text-xs text-subtle">
                         {{ approverChoices.length === 0 ? t(`capabilities.secretApproval.nobodyYet`) : t(`capabilities.secretApproval.onlyYou`) }}
-                        <RouterLink to="/sandbox/access" class="text-link hover:underline">{{ t(`capabilities.secretApproval.accessTab`) }}</RouterLink>
+                        <RouterLink :to="here(page.sandboxSettings(`access`))" class="text-link hover:underline">{{ t(`capabilities.secretApproval.accessTab`) }}</RouterLink>
                     </p>
                     <span v-if="approvers.length === 0" class="text-xs text-warning">{{ t(`capabilities.secretApproval.nameAtLeastOne`) }}</span>
                 </div>

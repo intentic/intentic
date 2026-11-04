@@ -1,3 +1,4 @@
+import { homePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
 import { FAKE_STRIPE, readStackState } from "../stack.js";
 
@@ -11,12 +12,16 @@ test.beforeAll(() => {
 
 const control = `${FAKE_STRIPE.origin}/__test`;
 
+// Billing is the account's, so it opens in Home's frame, where it needs no sandbox; Stripe sends the reader back to it
+// in whichever frame the page asked from.
+const BILLING = homePath(undefined, pages.account(`billing`));
+
 interface FakeState {
     subscriptions: { id: string; status: string }[];
 }
 
 test(`the offer, then a paid checkout the page turns into an active plan while the webhook is still on its way`, async ({ page }) => {
-    await page.goto(`/settings/billing`);
+    await page.goto(BILLING);
     await expect(page.getByRole(`heading`, { name: `More power and more hours for your cloud sandbox` })).toBeVisible();
 
     await page.getByRole(`button`, { name: `Get Standard` }).click();
@@ -26,7 +31,7 @@ test(`the offer, then a paid checkout the page turns into an active plan while t
     await page.getByRole(`button`, { name: `Pay` }).click();
 
     // Redirects home before the webhook lands; the page polls rather than requiring a reload.
-    await expect(page).toHaveURL(/\/settings\/billing\?plan=welcome$/);
+    await expect(page).toHaveURL(/\/account\/billing\?plan=welcome$/);
     await expect(page.getByText(`Payment received, activating your plan`)).toBeVisible();
     await expect(page.getByText(`You're on the hosted plan`)).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole(`button`, { name: `Manage on Stripe` })).toBeVisible();
@@ -35,19 +40,19 @@ test(`the offer, then a paid checkout the page turns into an active plan while t
 });
 
 test(`the avatar menu carries the plan`, async ({ page }) => {
-    await page.goto(`/settings/billing`);
+    await page.goto(BILLING);
     await page.getByRole(`button`, { name: `Account` }).click();
     await expect(page.getByRole(`link`, { name: /^Hosted plan · renews / })).toBeVisible();
 });
 
 test(`a cancel made in Stripe's portal is said as an end date, never as a renewal`, async ({ page }) => {
-    await page.goto(`/settings/billing`);
+    await page.goto(BILLING);
     await page.getByRole(`button`, { name: `Manage on Stripe` }).click();
     await expect(page.getByRole(`heading`, { name: `Fake Stripe portal` })).toBeVisible();
     // Subscription stays active until the period ends; the webhook reports that, not an immediate cancel.
     await page.getByRole(`button`, { name: `Cancel plan` }).click();
 
-    await expect(page).toHaveURL(/\/settings\/billing$/);
+    await expect(page).toHaveURL(/\/account\/billing$/);
     await expect(page.getByText(/^Your plan ends /)).toBeVisible();
     await expect(page.getByText(/^ends /)).toBeVisible();
     await expect(page.getByText(/renews /)).toHaveCount(0);
@@ -61,7 +66,7 @@ test(`a failed charge asks for a card, and an ended plan is offered again as a r
 
     // Stripe retrying a charge: past_due, delivered as customer.subscription.updated.
     await request.post(`${control}/update/${live?.id}`, { data: { patch: { status: `past_due`, cancel_at_period_end: false } } });
-    await page.goto(`/settings/billing`);
+    await page.goto(BILLING);
     await expect(page.getByText(`Your plan needs a working card`)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Update payment on Stripe` })).toBeVisible();
     await expect(page.getByText(`Stripe reports this plan as "past_due".`)).toBeVisible();
@@ -69,7 +74,7 @@ test(`a failed charge asks for a card, and an ended plan is offered again as a r
 
     // Fully given up on: customer.subscription.deleted; the offer returns, phrased as a resubscription.
     await request.post(`${control}/update/${live?.id}`, { data: { patch: { status: `canceled` } } });
-    await page.goto(`/settings/billing`);
+    await page.goto(BILLING);
     await expect(page.getByText(`Your previous plan has ended.`)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Get Standard` })).toBeVisible();
 });

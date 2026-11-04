@@ -1,4 +1,6 @@
+import { page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
+import { seededPage } from "../stack.js";
 
 // Model picker lists xAI's live catalog and self-heals an empty-at-startup one: opening it refetches every provider.
 // Daemon is mocked, driving the real Vue app; Claude/Codex stay unmocked to prove their static-alias fallback.
@@ -37,7 +39,7 @@ test("the model picker lists Grok's live catalog and shows the real Grok logo", 
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
 
-    await page.goto("/workspace");
+    await page.goto(seededPage(pages.workspace()));
     await expect(page.locator('textarea[name="draft"]')).toBeVisible({ timeout: 30_000 });
 
     // Chip shows the model's name, not just the icon; selection repoints to the default once the catalog loads.
@@ -69,7 +71,7 @@ test("opening the picker refetches the catalogs, self-healing an empty Grok list
     await page.route("**/claude/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "claude-1", label: "Claude" }] } }));
     await page.route("**/codex/accounts", (route) => route.fulfill({ json: { accounts: [] } }));
 
-    await page.goto("/workspace");
+    await page.goto(seededPage(pages.workspace()));
     await expect(page.locator('textarea[name="draft"]')).toBeVisible({ timeout: 30_000 });
 
     grokReady = true;

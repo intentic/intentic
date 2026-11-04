@@ -1,9 +1,11 @@
 import { sandboxRef } from "@intentic/extension-api";
+import { legacyPathOf } from "@intentic/sandbox-contract/app-routes";
 import { computed, ref } from "vue";
 import type { Router } from "vue-router";
 import type { ScreenPoint } from "../../../workbench/window/floating";
 import { chatFullSlot } from "../../../workbench/window/panelSlots";
 import { homeFrame } from "../../../lib/routes/homeSection";
+import { here, isPage, page } from "../../../lib/routes/links";
 import { useChatFloating } from "./chatFloating";
 import { type ChatPosition, useLayout } from "../../../workbench/window/useLayout";
 
@@ -45,8 +47,9 @@ export const showParkedChat = (): void => {
 };
 
 // Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat. It names one
-// sandbox's file or agent, so a switch starts it over.
-export const lastSectionPath = sandboxRef(() => `/agents`);
+// sandbox's file or agent, so a switch starts it over, on the board's address in the form that names no frame, which the
+// router opens in the frame the chat is left from (router/legacyRoutes.ts).
+export const lastSectionPath = sandboxRef(() => legacyPathOf(page.agents()));
 
 // Docking to the side only leaves /chat, restoring the section the column replaces.
 export const dockChatToSide = (router: Router, position?: ChatPosition): void => {
@@ -57,7 +60,7 @@ export const dockChatToSide = (router: Router, position?: ChatPosition): void =>
         floating.dock();
     }
     layout.setChatHome(`side`);
-    if (router.currentRoute.value.name === `chat`) {
+    if (isPage(router.currentRoute.value, `chat`)) {
         void router.push(lastSectionPath.value);
     }
 };
@@ -72,7 +75,7 @@ export const toggleChatHome = (router: Router): void => {
         floating.dock();
     }
     layout.setChatHome(`rail`);
-    void router.push(`/chat`);
+    void router.push(here(page.chat()));
 };
 
 // Puts the chat in its own window, or brings it back. Every explicit control already routes through the surface's own

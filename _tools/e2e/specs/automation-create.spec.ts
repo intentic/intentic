@@ -1,10 +1,12 @@
+import { page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
-import { DAEMON_URL } from "../stack.js";
+import { DAEMON_URL, seededPage } from "../stack.js";
 
 // The automations journey: the create dialog's form (hand-mirrored Zod schemas in api-contract) must round-trip
 // through the daemon's POST /automations and come back in the list, the drift guard for the mirrored shapes.
 test(`a schedule automation created in the UI lands in the daemon's manifest and is listed back`, async ({ page }) => {
-    await page.goto(`/automations`);
+    // Automations is the automations extension's own view; the app has no page of that name.
+    await page.goto(seededPage(pages.extension(`automations`)));
     await page.getByRole(`button`, { name: `New automation` }).click();
     await page.getByPlaceholder(`morning-briefing`).fill(`e2e-morning`);
     // Trigger defaults to Schedule with a valid default cadence; only the prompt is still required.

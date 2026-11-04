@@ -52,6 +52,7 @@ import {
     windowFor,
 } from "./usageChart";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // The Usage tab answers four separate questions, kept visually distinct:
 //   - whether this sandbox's awake time costs hours, and how many are left (SandboxHoursCard: hosted machines only)
@@ -76,10 +77,10 @@ const { fleet } = useAgents();
 
 const preset = ref<RangePreset>(`30d`);
 const providerFilter = ref<string>(`all`);
-// Set by the deep link from an agent card (/sandbox/usage?agent=<id>): the whole screen narrows to one agent.
+// Set by the deep link from an agent card (Usage with `?agent=<id>`): the whole screen narrows to one agent.
 const agentFilter = computed<string | undefined>(() => (typeof route.query[`agent`] === `string` ? route.query[`agent`] : undefined));
 const clearAgentFilter = (): void => {
-    void router.replace({ name: `sandbox`, params: { tab: `usage` } });
+    void router.replace(here(page.sandboxSettings(`usage`)));
 };
 
 // Today in UTC: the ledger's own calendar, so the window bounds and the rows' days can't disagree.

@@ -37,12 +37,15 @@
             </intent-filter>
             <!-- App Links: a link to an agent on the web app opens its conversation here instead. Verified against the
                  web app's /.well-known/assetlinks.json, which the web container renders from ANDROID_APP_FINGERPRINTS;
-                 a build whose certificate is not listed there still offers to open them, unverified. -->
+                 a build whose certificate is not listed there still offers to open them, unverified. Both forms: the
+                 address from before frames, and the web app's own, its frame and sandbox first (web/AgentLink.kt). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="${webHost}" android:pathPrefix="/agents/" />
+                <data android:pathPattern="/s/.*/agents/.*" />
+                <data android:pathPattern="/home/.*/agents/.*" />
             </intent-filter>
         </activity>
 

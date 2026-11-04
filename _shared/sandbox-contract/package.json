@@ -349,6 +349,17 @@
                 "default": "./dist/protocol/doors/webext-links.js"
             }
         },
+        "./app-routes": {
+            "types": "./dist/app-routes/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/app-routes/index.ts",
+                "default": "./dist/app-routes/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/app-routes/index.ts",
+                "default": "./dist/app-routes/index.js"
+            }
+        },
         "./*": {
             "types": "./dist/*.d.ts",
             "import": {

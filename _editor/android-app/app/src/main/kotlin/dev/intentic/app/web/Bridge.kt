@@ -60,10 +60,14 @@ sealed interface PageMessage {
 /** Where a path the page hands over goes natively. */
 enum class NativeScreen { CONVERSATION, HOME, NONE }
 
-/** `/agents/<id>` a conversation; `/agents[?…]`, `/menu` and `/login…` the app's home, which shows sign-in when signed out. */
+/**
+ * `/agents/<id>` a conversation; `/agents[?…]`, `/menu` and `/login…` the app's home, which shows sign-in when signed out.
+ * The page hands these over in that form, the one every installed app reads; the same pages at the web app's own
+ * addresses, below their frame and sandbox (`/s/<sandbox>/agents/<id>`, `/home/<sandbox>/menu`), are read alike.
+ */
 fun nativeScreenOf(path: String): Pair<NativeScreen, String?> {
     val route = path.substringBefore('?').substringBefore('#')
-    val parts = route.trim('/').split('/').filter(String::isNotEmpty)
+    val parts = framedPath(route.trim('/').split('/').filter(String::isNotEmpty)).second
     return when {
         parts.size >= 2 && parts[0] == "agents" -> NativeScreen.CONVERSATION to decoded(parts[1])
         parts.firstOrNull() == "agents" || parts.firstOrNull() == "menu" || parts.firstOrNull() == "login" -> NativeScreen.HOME to null

@@ -74,13 +74,16 @@ const blobOf = async (route: string, accept?: string): Promise<Blob | undefined>
 // back AVIF, which keeps a dark interface's fine background texture from breaking into squares the way WebP does.
 const pictureBlob = async (scope: ViewScope, path: string, size: PictureSize): Promise<Blob | undefined> => {
     if (size === `original`) {
+        // allow(route-literal): the daemon's own file route, which blobOf asks the sandbox for, not a page of the app
         return blobOf(`/workspace/raw?${queryOf(scope, path)}`);
     }
     const accept = (await decodesAvif()) ? `image/avif,image/webp` : `image/webp`;
     try {
+        // allow(route-literal): the daemon's own rendition route, which blobOf asks the sandbox for
         return await blobOf(`/workspace/thumb?${queryOf(scope, path, size)}`, accept);
     } catch (error) {
         if (refusedWith(error, NOT_RENDERED)) {
+            // allow(route-literal): the daemon's own file route, which blobOf asks the sandbox for
             return blobOf(`/workspace/raw?${queryOf(scope, path)}`);
         }
         throw error;
@@ -221,6 +224,7 @@ interface Drawn {
 // refuses an SVG (415), and one from before the edges refuses the size (400), so the grid tile's frame is asked next.
 const posterAt = async (entry: WorkspaceTreeEntry, edge: TileEdge): Promise<Drawn | undefined> => {
     try {
+        // allow(route-literal): the daemon's own rendition route, which blobOf asks the sandbox for
         const blob = await blobOf(`/workspace/thumb?${queryOf(workspaceView.value, entry.path, renditionAt(edge))}`, `image/webp`);
         return blob !== undefined ? { blob, edge } : edge === 256 ? undefined : await posterAt(entry, 256);
     } catch (error) {

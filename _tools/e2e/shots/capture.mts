@@ -3,7 +3,9 @@ import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readSync,
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import { homePath, insidePath, page as pages, type PageLink } from "@intentic/sandbox-contract/app-routes";
 import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { DEMO_SANDBOX } from "../fixtures/demo-pages.ts";
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 
@@ -163,10 +165,13 @@ const wing = (column: { chat: number; height: number }, dock = TERMINAL_DOCK): P
     dpr: DENSE_DPR,
 });
 
+// A page of the demo's own sandbox, at its address inside it.
+const inDemo = (link: PageLink): string => insidePath(DEMO_SANDBOX, link);
+
 const SHOTS: Shot[] = [
     {
         name: "hero-home",
-        path: "/home",
+        path: homePath(),
         mode: "hero",
         viewport: { width: 1280, height: 720 },
         waitFor: "text=I'll walk through it in the browser",
@@ -194,8 +199,8 @@ const SHOTS: Shot[] = [
     // the board Automations shows its runs arriving on.
     {
         name: "hero-agents",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(`cnv_checkout_stripe`)),
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         storage: CHAT_ON_RAIL,
@@ -204,8 +209,8 @@ const SHOTS: Shot[] = [
     // hero, drawn whole there.
     {
         name: "chat-plan",
-        path: "/workspace",
-        openFirst: "/agents/cnv_checkout_stripe",
+        path: inDemo(pages.workspace()),
+        openFirst: inDemo(pages.agent(`cnv_checkout_stripe`)),
         waitFor: PLAN_WAITING,
         settleMs: 1200,
         ...wing(PLAN_WING),
@@ -216,8 +221,8 @@ const SHOTS: Shot[] = [
     // frames in a row read as one picture four times.
     {
         name: "stage-run",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(`cnv_checkout_stripe`)),
         waitFor: ["text=ATTENTION", PLAN_WAITING],
         settleMs: 1400,
         storage: { "ui-chat-width": "400" },
@@ -228,7 +233,7 @@ const SHOTS: Shot[] = [
     // first row of Business & docs (Outline, Notion, Stripe) rather than through a row of tiles.
     {
         name: "stage-connect",
-        path: "/capabilities",
+        path: inDemo(pages.capabilities()),
         waitFor: "text=Connected",
         settleMs: 1200,
         extensions: CONNECTOR_EXTENSIONS,
@@ -238,8 +243,8 @@ const SHOTS: Shot[] = [
     // The finished run beside its own chat: the branch, the files, the route's diff, Land now, and the agent's report.
     {
         name: "stage-review",
-        path: "/agents/cnv_soft_deletes",
-        openFirst: "/agents/cnv_soft_deletes",
+        path: inDemo(pages.agent(`cnv_soft_deletes`)),
+        openFirst: inDemo(pages.agent(`cnv_soft_deletes`)),
         waitFor: ["text=Land now", "text=held on"],
         click: [changesRow("users.ts")],
         settleMs: 1800,
@@ -249,7 +254,7 @@ const SHOTS: Shot[] = [
     // (fixture/devices.ts, quiet), one row of three. Also the Self-hosting page's hero.
     {
         name: "stage-host",
-        path: "/sandbox/devices",
+        path: inDemo(pages.devices()),
         waitFor: "text=build-box",
         settleMs: 1400,
         storage: CHAT_ON_RAIL,
@@ -259,8 +264,8 @@ const SHOTS: Shot[] = [
     // The board on a phone: the same app, its own shell.
     {
         name: "mobile-fleet",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(`cnv_checkout_stripe`)),
         mobile: true,
         waitFor: "text=ATTENTION",
         settleMs: 1400,
@@ -270,7 +275,7 @@ const SHOTS: Shot[] = [
     // ("github-2") under the one already connected.
     {
         name: "capability-add",
-        path: "/capabilities",
+        path: inDemo(pages.capabilities()),
         waitFor: 'text="GitLab"',
         click: ['text="GitLab"'],
         settleMs: 1400,
@@ -282,7 +287,7 @@ const SHOTS: Shot[] = [
     // The Changes tab, the checkout panel's diff open beside the list, at the window's whole width.
     {
         name: "workspace-changes",
-        path: "/workspace",
+        path: inDemo(pages.workspace()),
         waitFor: 'button:has-text("Changes")',
         click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
         settleMs: 1800,
@@ -292,7 +297,7 @@ const SHOTS: Shot[] = [
     // The Environment section alone, without the settings column beside it.
     {
         name: "sandbox-environment",
-        path: "/sandbox/environment",
+        path: inDemo(pages.sandboxSettings(`environment`)),
         waitFor: 'button:text-is("Recipe")',
         click: ['button:text-is("Recipe")'],
         settleMs: 1600,
@@ -305,7 +310,7 @@ const SHOTS: Shot[] = [
     // those numbers are the recording's, and a marketing page that shows them reads as a benchmark we never measured.
     {
         name: "sandbox-spend",
-        path: "/sandbox/usage",
+        path: inDemo(pages.sandboxSettings(`usage`)),
         waitFor: "text=Cost per day",
         settleMs: 1800,
         storage: CHAT_ON_RAIL,
@@ -315,10 +320,18 @@ const SHOTS: Shot[] = [
     },
 
     // THE FEATURES MENU'S PREVIEWS: one per row, each its page's surface in the preview window's own shape.
-    { name: "menu-run", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", waitFor: "text=ATTENTION", settleMs: 1400, storage: CHAT_ON_RAIL, viewport: MENU },
+    {
+        name: "menu-run",
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(`cnv_checkout_stripe`)),
+        waitFor: "text=ATTENTION",
+        settleMs: 1400,
+        storage: CHAT_ON_RAIL,
+        viewport: MENU,
+    },
     {
         name: "menu-connect",
-        path: "/capabilities",
+        path: inDemo(pages.capabilities()),
         waitFor: "text=Connected",
         settleMs: 1200,
         extensions: CONNECTOR_EXTENSIONS,
@@ -328,7 +341,7 @@ const SHOTS: Shot[] = [
     // Automations is an extension, so this shot is the one that switches it on.
     {
         name: "menu-automate",
-        path: "/ext/automations",
+        path: inDemo(pages.extension(`automations`)),
         waitFor: "text=CODE CHORES",
         settleMs: 1600,
         extensions: ["intentic.automations"],
@@ -339,8 +352,8 @@ const SHOTS: Shot[] = [
     // Land now away, which are the two things this preview is of.
     {
         name: "menu-review",
-        path: "/agents/cnv_soft_deletes",
-        openFirst: "/agents/cnv_soft_deletes",
+        path: inDemo(pages.agent(`cnv_soft_deletes`)),
+        openFirst: inDemo(pages.agent(`cnv_soft_deletes`)),
         waitFor: "text=Land now",
         click: [changesRow("users.ts")],
         settleMs: 1600,
@@ -348,7 +361,7 @@ const SHOTS: Shot[] = [
         viewport: { width: MENU.width * 1.5, height: MENU.height * 1.5 },
         dpr: 1.5,
     },
-    { name: "menu-host", path: "/sandbox/devices", waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, viewport: MENU },
+    { name: "menu-host", path: inDemo(pages.devices()), waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, viewport: MENU },
 ];
 
 // THE DESK EDITION'S SHOTS: the same frames the developer page has, on the desk recording. Every one runs in `desk`
@@ -360,8 +373,8 @@ const DESK_SHOTS: Shot[] = [
     // cards across three lanes in the wide one left the frame two thirds wallpaper.
     {
         name: "desk-hero-agents",
-        path: "/agents",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(DESK_FEATURED)),
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         storage: CHAT_ON_RAIL,
@@ -373,8 +386,8 @@ const DESK_SHOTS: Shot[] = [
     // reworked, beside the folder it lives in.
     {
         name: "desk-hero-files",
-        path: "/workspace/newsletter/september.md",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        path: inDemo(pages.workspace(`newsletter/september.md`)),
+        openFirst: inDemo(pages.agent(DESK_FEATURED)),
         waitFor: "text=September at the studio",
         settleMs: 1400,
         storage: CHAT_ON_RAIL,
@@ -383,12 +396,20 @@ const DESK_SHOTS: Shot[] = [
         mode: "desk",
     },
     // The left wing: the plan the assistant wrote for the October newsletter, Approve in the bar below it.
-    { name: "desk-hero-plan", path: "/workspace", openFirst: `/agents/${DESK_FEATURED}`, waitFor: PLAN_WAITING, settleMs: 1200, ...wing(PLAN_WING, 0), mode: "desk" },
+    {
+        name: "desk-hero-plan",
+        path: inDemo(pages.workspace()),
+        openFirst: inDemo(pages.agent(DESK_FEATURED)),
+        waitFor: PLAN_WAITING,
+        settleMs: 1200,
+        ...wing(PLAN_WING, 0),
+        mode: "desk",
+    },
     // The right wing: the finished draft's conversation, ending on the two copies it made (a Word file and a web page).
     {
         name: "desk-hero-chat",
-        path: `/agents/${DESK_REVIEW}`,
-        openFirst: `/agents/${DESK_REVIEW}`,
+        path: inDemo(pages.agent(DESK_REVIEW)),
+        openFirst: inDemo(pages.agent(DESK_REVIEW)),
         waitFor: "text=september.html",
         settleMs: 1600,
         ...wing(REPORT_WING, 0),
@@ -396,8 +417,8 @@ const DESK_SHOTS: Shot[] = [
     },
     {
         name: "desk-stage-run",
-        path: "/agents",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        path: inDemo(pages.agents()),
+        openFirst: inDemo(pages.agent(DESK_FEATURED)),
         waitFor: ["text=ATTENTION", PLAN_WAITING],
         settleMs: 1400,
         storage: { "ui-chat-width": "400" },
@@ -407,7 +428,7 @@ const DESK_SHOTS: Shot[] = [
     // shelf of the catalogue, two to a row in a window small enough that the app draws it two to a row.
     {
         name: "desk-stage-connect",
-        path: "/capabilities",
+        path: inDemo(pages.capabilities()),
         waitFor: "text=Connected",
         click: ['button:has-text("Communication")'],
         settleMs: 1200,
@@ -421,8 +442,8 @@ const DESK_SHOTS: Shot[] = [
     // shop's own style, over the review it came from. The review itself is a row of two downloads on an empty page.
     {
         name: "desk-stage-review",
-        path: `/agents/${DESK_REVIEW}`,
-        openFirst: `/agents/${DESK_REVIEW}`,
+        path: inDemo(pages.agent(DESK_REVIEW)),
+        openFirst: inDemo(pages.agent(DESK_REVIEW)),
         waitFor: "text=Results",
         click: ["main >> text=september.html >> nth=0"],
         settleMs: 2400,
@@ -430,7 +451,7 @@ const DESK_SHOTS: Shot[] = [
         mode: "desk",
     },
     // The computers the desk can live on, the same quiet fleet as the developer page's stage.
-    { name: "desk-stage-host", path: "/sandbox/devices", waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, mode: "desk" },
+    { name: "desk-stage-host", path: inDemo(pages.devices()), waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, mode: "desk" },
 ];
 
 const TYPES: Record<string, string> = {

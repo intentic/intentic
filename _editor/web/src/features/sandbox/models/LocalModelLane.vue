@@ -12,6 +12,7 @@ import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { suggestName } from "../../../models/capabilities/tiles";
 import { deleteLocalModelWeights } from "./useLocalModelFit";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // The machine the reader already owns, inside the Local models panel (LocalModelsPanel). Two rungs and no arithmetic: one
 // that is ready in a minute and says plainly what it is good for, one that is the most this box can hold. Everything
@@ -403,7 +404,7 @@ const rungs = computed(() => {
                                         >{{ rung.detail.text }}
                                         <RouterLink
                                             v-if="rung.detail.tone !== `muted`"
-                                            to="/capabilities/localmodel"
+                                            :to="here(page.capabilities(`localmodel`))"
                                             :class="ui.textButton({ size: `xs` }, `ml-1`)"
                                             >{{ t(`connect.localModelLane.openSettings`) }}<Icon name="arrow-right" class="text-2xs"
                                         /></RouterLink>
@@ -412,7 +413,7 @@ const rungs = computed(() => {
                                 <!-- Served and helper-only: where it earns its keep is a settings list, not a chat, so that is where this points. -->
                                 <RouterLink
                                     v-if="quickJobsOnly(rung.model) && rung.installed?.status.state === `active`"
-                                    to="/sandbox/agent#models"
+                                    :to="here(page.sandboxSettings(`agent`, { hash: `models` }))"
                                     :class="ui.textButton({ size: `xs` })"
                                 >
                                     {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />

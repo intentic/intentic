@@ -6,6 +6,7 @@ import {
     type HostedPlanState,
 } from "@intentic/api-contract";
 import { FREE_TIER, type HostedTier, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
+import { homePath, page, topPath } from "@intentic/sandbox-contract/app-routes";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../../../config.js";
 import type { OrpcContext } from "../../../context.js";
@@ -21,16 +22,19 @@ import { DAY_MS } from "../../../durations.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-// Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and every state's words.
-const billingUrl = (context: OrpcContext, query = ``): string => `${context.config.webOrigin}/settings/billing${query}`;
+// Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and every state's words. It
+// is an account page, so Home's frame draws it whichever sandbox the payer had open.
+const billingUrl = (context: OrpcContext, plan?: string): string =>
+    `${context.config.webOrigin}${homePath(undefined, page.account(`billing`, { query: { plan } }))}`;
 
-const checkoutUrls = (context: OrpcContext, tier: string, returnTo: `/start/hosted` | undefined): { successUrl: string; cancelUrl: string } =>
-    returnTo === undefined
-        ? { successUrl: billingUrl(context, `?plan=welcome`), cancelUrl: billingUrl(context) }
-        : {
-              successUrl: `${context.config.webOrigin}${returnTo}?tier=${tier}&plan=welcome`,
-              cancelUrl: `${context.config.webOrigin}${returnTo}?tier=${tier}&plan=cancelled`,
-          };
+// A checkout started from the hosted start page (its `returnTo` names it) goes back there, the tier it was for kept.
+const checkoutUrls = (context: OrpcContext, tier: string, backToStart: boolean): { successUrl: string; cancelUrl: string } =>
+    backToStart
+        ? {
+              successUrl: `${context.config.webOrigin}${topPath(`startHosted`, {}, { tier, plan: `welcome` })}`,
+              cancelUrl: `${context.config.webOrigin}${topPath(`startHosted`, {}, { tier, plan: `cancelled` })}`,
+          }
+        : { successUrl: billingUrl(context, `welcome`), cancelUrl: billingUrl(context) };
 
 // The wire form of one kind of hours: what was spent, the ceiling or null where nothing is counted, and when it resets.
 const meterOf = (budget: HostedBudget, now: Date): HostedHoursMeter => ({
@@ -219,7 +223,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
                     customerEmail: user.email,
                     // A resubscriber is the same Stripe customer they were: one invoice history, one portal.
                     ...(plan === null ? {} : { customer: plan.stripeCustomerId }),
-                    ...checkoutUrls(context, entry.tier.id, input?.returnTo),
+                    ...checkoutUrls(context, entry.tier.id, input?.returnTo !== undefined),
                 }),
             );
         }),

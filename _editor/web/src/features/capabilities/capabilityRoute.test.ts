@@ -1,53 +1,60 @@
-// Pins the page's URL as its state: every move's next address and whether it is a history stop, what survives leaving
-// a tile, and what the page reads off the URL (the open tile, the connection being edited, the slice, the walk),
-// including the bounce off a tile slug nothing answers to.
+// Pins the page's URL as its state: every move's next address (in the frame and sandbox it was made from) and whether it
+// is a history stop, what survives leaving a tile, and what the page reads off the URL (the open tile, the connection
+// being edited, the slice, the walk), including the bounce off a tile slug nothing answers to.
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
+import { homePath, insidePath, type LinkQuery, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { type EffectScope, effectScope, nextTick, reactive, ref } from "vue";
 import { type PageMove, type PageRoute, type PageStep, pageStep, SETUP, useCapabilityRoute } from "./capabilityRoute";
 
-const NAME = `capabilities`;
+const BOX = `a1b2c3d4e5f6`;
+// The page's address inside the sandbox, a tile open or none.
+const at = (entry: string | undefined, query: LinkQuery): string => insidePath(BOX, pages.capabilities(entry, { query }));
 // Mid-edit on the GitHub tile, filtered, inside the walk: every part of the query a move may carry or drop.
-const FROM: PageRoute = { params: { entry: `github` }, query: { category: `code`, q: `git`, edit: `github-ada`, setup: SETUP } };
+const FROM: PageRoute = {
+    meta: { frame: `inside`, page: `capabilities` },
+    params: { sandbox: BOX, entry: `github` },
+    query: { category: `code`, q: `git`, edit: `github-ada`, setup: SETUP },
+};
 const KEPT = { category: `code`, q: `git`, edit: undefined, setup: SETUP };
 
 describe(`a move from the URL as it stands`, () => {
     const cases: [PageMove, PageStep][] = [
         [
             { kind: `tile`, entry: `gitlab` },
-            { how: `push`, to: { name: NAME, params: { entry: `gitlab` }, query: KEPT } },
+            { how: `push`, to: at(`gitlab`, KEPT) },
         ],
-        [{ kind: `back` }, { how: `push`, to: { name: NAME, query: KEPT } }],
+        [{ kind: `back` }, { how: `push`, to: at(undefined, KEPT) }],
         [
             { kind: `edit`, id: `github` },
-            { how: `replace`, to: { name: NAME, params: FROM.params, query: { ...FROM.query, edit: `github` } } },
+            { how: `replace`, to: at(`github`, { ...KEPT, edit: `github` }) },
         ],
         [
             { kind: `edit`, id: `` },
-            { how: `replace`, to: { name: NAME, params: FROM.params, query: { ...FROM.query, edit: undefined } } },
+            { how: `replace`, to: at(`github`, KEPT) },
         ],
         [
             { kind: `connection`, entry: `vpn`, connection: `office` },
-            { how: `push`, to: { name: NAME, params: { entry: `vpn` }, query: { ...KEPT, edit: `office` } } },
+            { how: `push`, to: at(`vpn`, { ...KEPT, edit: `office` }) },
         ],
         [
             { kind: `connection`, entry: `linux`, connection: `device:radarsu-rog` },
-            { how: `push`, to: { name: NAME, params: { entry: `linux` }, query: { ...KEPT, device: `radarsu-rog` } } },
+            { how: `push`, to: at(`linux`, { ...KEPT, device: `radarsu-rog` }) },
         ],
         [
             { kind: `filter`, key: `category`, value: `data` },
-            { how: `replace`, to: { name: NAME, query: { ...KEPT, category: `data` } } },
+            { how: `replace`, to: at(undefined, { ...KEPT, category: `data` }) },
         ],
         [
             { kind: `filter`, key: `q`, value: `` },
-            { how: `replace`, to: { name: NAME, query: { ...KEPT, q: undefined } } },
+            { how: `replace`, to: at(undefined, { ...KEPT, q: undefined }) },
         ],
         [
             { kind: `walk`, entry: `gitlab` },
-            { how: `push`, to: { name: NAME, params: { entry: `gitlab` }, query: KEPT } },
+            { how: `push`, to: at(`gitlab`, KEPT) },
         ],
-        [{ kind: `finish` }, { how: `push`, to: { name: NAME, query: { ...KEPT, setup: undefined } } }],
-        [{ kind: `unknown` }, { how: `replace`, to: { name: NAME, query: KEPT } }],
+        [{ kind: `finish` }, { how: `push`, to: at(undefined, { ...KEPT, setup: undefined }) }],
+        [{ kind: `unknown` }, { how: `replace`, to: at(undefined, KEPT) }],
     ];
     for (const [move, step] of cases) {
         it(`${move.kind} ${JSON.stringify(move)}`, () => {
@@ -56,9 +63,16 @@ describe(`a move from the URL as it stands`, () => {
     }
 
     it(`starts the walk with its mark, from a URL that had none`, () => {
-        expect(pageStep({ params: {}, query: { q: `git` } }, { kind: `walk`, entry: `gitlab` })).toStrictEqual({
+        expect(pageStep({ ...FROM, params: { sandbox: BOX }, query: { q: `git` } }, { kind: `walk`, entry: `gitlab` })).toStrictEqual({
             how: `push`,
-            to: { name: NAME, params: { entry: `gitlab` }, query: { q: `git`, edit: undefined, setup: SETUP } },
+            to: at(`gitlab`, { q: `git`, setup: SETUP }),
+        });
+    });
+
+    it(`stays in Home's frame when the page is shown there`, () => {
+        expect(pageStep({ ...FROM, meta: { frame: `home`, page: `capabilities` } }, { kind: `tile`, entry: `gitlab` })).toStrictEqual({
+            how: `push`,
+            to: homePath(BOX, pages.capabilities(`gitlab`, { query: KEPT })),
         });
     });
 });
@@ -81,7 +95,7 @@ afterEach(() => {
 
 // The page over a live, reactive URL; `settled` is whether /extensions has answered.
 const pageAt = (entry: string, query: Record<string, string> = {}, settled = true) => {
-    const route = reactive<PageRoute>({ params: { entry }, query });
+    const route = reactive<PageRoute>({ meta: FROM.meta, params: { sandbox: BOX, entry }, query });
     const router = { push: jest.fn(), replace: jest.fn() };
     const state = {
         entries: ref([catalogEntry(`vpn`), catalogEntry(`docker`)]),
@@ -125,7 +139,7 @@ describe(`what the page reads off its URL`, () => {
         expect([page.scope.value, page.search.value, page.device.value, page.walking.value]).toEqual([`servers`, `vpn`, `radarsu-rog`, true]);
         page.search.value = `ssh`;
         expect(router.replace.mock.calls).toEqual([
-            [{ name: NAME, query: { category: `servers`, q: `ssh`, device: `radarsu-rog`, setup: SETUP, edit: undefined } }],
+            [at(undefined, { category: `servers`, q: `ssh`, device: `radarsu-rog`, setup: SETUP })],
         ]);
         expect(pageAt(``, { q: [`a`, `b`] as never }).page.search.value).toBe(``);
     });
@@ -137,15 +151,15 @@ describe(`what the page reads off its URL`, () => {
         page.back();
         page.openConnection(`vpn`, `home`);
         expect(router.push.mock.calls).toEqual([
-            [{ name: NAME, params: { entry: `docker` }, query: { edit: undefined } }],
-            [{ name: NAME, query: { edit: undefined } }],
-            [{ name: NAME, params: { entry: `vpn` }, query: { edit: `home` } }],
+            [at(`docker`, {})],
+            [at(undefined, {})],
+            [at(`vpn`, { edit: `home` })],
         ]);
         page.openEdit(`home`);
         page.stopEditing();
         expect(router.replace.mock.calls).toEqual([
-            [{ name: NAME, params: { entry: `vpn` }, query: { edit: `home` } }],
-            [{ name: NAME, params: { entry: `vpn` }, query: { edit: undefined } }],
+            [at(`vpn`, { edit: `home` })],
+            [at(`vpn`, {})],
         ]);
     });
 });
@@ -154,7 +168,7 @@ describe(`a tile slug nothing answers to`, () => {
     it(`bounces to the grid once extensions have answered`, () => {
         const { router } = pageAt(`no-such-tile`, { q: `x` });
 
-        expect(router.replace.mock.calls).toEqual([[{ name: NAME, query: { q: `x`, edit: undefined } }]]);
+        expect(router.replace.mock.calls).toEqual([[at(undefined, { q: `x` })]]);
     });
 
     it(`waits for extensions first, since a deep-linked connector tile is unknown until they arrive`, async () => {
@@ -163,7 +177,7 @@ describe(`a tile slug nothing answers to`, () => {
 
         state.settled.value = true;
         await nextTick();
-        expect(router.replace.mock.calls).toEqual([[{ name: NAME, query: { edit: undefined } }]]);
+        expect(router.replace.mock.calls).toEqual([[at(undefined, {})]]);
     });
 
     it(`leaves a known tile and the bare catalog alone`, () => {

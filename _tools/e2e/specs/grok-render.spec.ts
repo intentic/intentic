@@ -1,4 +1,6 @@
+import { page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
+import { seededPage } from "../stack.js";
 
 // Regression guard for `undefined is not an object (evaluating 'W.type')`: Grok's partial markdown re-renders every
 // delta, and a throw mid-render blanks the bubble. Mocked daemon; frames stress mid-table/fence/list states.
@@ -53,7 +55,7 @@ test("a streamed Grok turn renders (partial markdown, table, code, tool) without
         return route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseBody() });
     });
 
-    await page.goto("/workspace");
+    await page.goto(seededPage(pages.workspace()));
 
     // name="draft" is the stable composer handle, regardless of placeholder text, once a provider connects.
     const composer = page.locator('textarea[name="draft"]');

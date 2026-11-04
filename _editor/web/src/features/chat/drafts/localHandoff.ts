@@ -2,6 +2,7 @@ import { parseJsonWith } from "@intentic/base/json";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { localFace } from "../../../app/environments/local";
+import { toTop } from "../../../lib/routes/links";
 
 // "Ask an agent about this" for a file on the user's own computer, the hosted workspace's half. The desktop app opens
 // the workspace (never a local window) at `/?handoff=<base64url(JSON {url, token, name})>`: `url` is the file on the
@@ -15,7 +16,7 @@ export const HANDOFF_KEY = `intentic.localHandoff`;
 // THE OTHER `handoff`: the desktop sign-in lands at this path with `?handoff=<row id>&verifier=…` (desktop-app auth.rs
 // `complete_path`), naming the parked sign-in rather than a file. Taking it off the address there left the page with a
 // verifier and nothing to redeem, so every desktop sign-in ended on "This sign-in link is incomplete."
-export const SIGN_IN_COMPLETE_PATH = `/desktop-auth/complete`;
+export const SIGN_IN_COMPLETE_PATH = toTop(`desktopAuthComplete`);
 
 // Past this a kept handoff is dropped unread: its token has long expired, and a file nobody has been waiting on for a
 // quarter of an hour is not news.
@@ -30,6 +31,7 @@ const onLoopback = (url: string): boolean => {
         parsed !== null &&
         parsed.protocol === `http:` &&
         parsed.hostname === `127.0.0.1` &&
+        // allow(route-literal): the app's loopback file server's own route, not an address of this app
         parsed.pathname === `/workspace/raw` &&
         parsed.username === `` &&
         parsed.password === ``

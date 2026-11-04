@@ -27,6 +27,7 @@ import { realWithin, resolveWorkspacePath } from "./workspace-files-paths.js";
 // server's root (`/assets/app.js`) would leave it, so those in the page's markup and stylesheets are rewritten under
 // the folder the page reads as its site's root, and an import map does the same for module specifiers.
 
+// allow(route-literal): the daemon's own preview route, not the editor's workspace page.
 export const PREVIEW_PATH = "/workspace/preview/";
 
 // A ticket lives as long as a media ticket, the length of a sitting; one that carries unsaved text, an hour.

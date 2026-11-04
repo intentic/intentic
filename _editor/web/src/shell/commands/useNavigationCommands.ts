@@ -7,8 +7,7 @@ import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { usePanels } from "../../models/extensions/usePanels";
 import { openBrowsers, openPreview } from "../../workbench/browsers/browsersSurface";
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
-import { DEVICES_PATH } from "../../models/sandbox/devices/deviceLinks";
-import { DELETED_PATH } from "../../lib/routes/home";
+import { here, page, toHome } from "../../lib/routes/links";
 import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../models/sandbox/sandboxNav";
 import { useHeldDoor } from "../../components/heldPlace";
 import { useRole } from "../../client/sandbox/useRole";
@@ -31,14 +30,38 @@ interface NavCommand {
     readonly title: string;
     readonly category: string;
     readonly icon?: string | undefined;
-    /** Where it goes. */
+    /** Where it goes, in the frame the reader is in (lib/routes/links.ts `here`). */
     readonly to: string;
     /** How it goes, for a destination that has to be opened rather than navigated to. */
     readonly run?: () => void;
 }
 
 // A maintainer's page: below that it is no destination (components/heldPlace.ts).
-const capabilitiesCommand = (): NavCommand => ({ command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` });
+const capabilitiesCommand = (): NavCommand => ({ command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: here(page.capabilities()) });
+
+// What a palette row shows: a command is registered again only when one of these changes, not on every navigation.
+const rowsOf = (list: readonly NavCommand[]): string =>
+    list.map(({ command, title, category, icon }) => [command, title, category, icon ?? ``].join(`\t`)).join(`\n`);
+
+// One destination's palette command, or none for a colliding third-party id: the tile still works, but that palette row
+// is lost, not every other destination's command.
+const registered = (destination: NavCommand, go: () => void): readonly Disposable[] => {
+    try {
+        return [
+            registerCommand({
+                owner: `builtin`,
+                command: destination.command,
+                title: destination.title,
+                category: destination.category,
+                ...(destination.icon === undefined ? {} : { icon: destination.icon }),
+                handler: destination.run ?? go,
+            }),
+        ];
+    } catch (error) {
+        console.error(`command ${destination.command}: already registered`, error);
+        return [];
+    }
+};
 
 export function useNavigationCommands(): void {
     const router = useRouter();
@@ -54,21 +77,21 @@ export function useNavigationCommands(): void {
     const capabilitiesDoor = useHeldDoor(`capabilities.list`);
     // Shell routes named as the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
-        { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
-        { command: `view.agents`, title: useVocabulary().value.agents, category: GO_TO, icon: `robot`, to: `/agents` },
+        { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: here(page.chat()) },
+        { command: `view.agents`, title: useVocabulary().value.agents, category: GO_TO, icon: `robot`, to: here(page.agents()) },
         ...(isGuest.value ? [] : guestless.value),
     ]);
     const guestless = computed<readonly NavCommand[]>(() => [
-        { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
+        { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: here(page.workspace()) },
         // The live app is a tab of Browsers now; this lands on the one most worth seeing, opening the view on the way, which
         // a bare push would not.
-        { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/browsers`, run: () => openPreview(router) },
-        { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `browsers`, to: `/browsers`, run: () => openBrowsers(router) },
+        { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: browsersPath(), run: () => openPreview(router) },
+        { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `browsers`, to: browsersPath(), run: () => openBrowsers(router) },
         ...(capabilitiesDoor.value ? [capabilitiesCommand()] : []),
         // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
-        ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
+        ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: here(page.devices()) }] : []),
         // The account's deleted sandboxes, a page of the account's rather than of this sandbox: the restore is the account's own.
-        { command: `view.deletedSandboxes`, title: t(`sandbox.recentlyDeleted.paletteTitle`), category: GO_TO, icon: `trash`, to: DELETED_PATH },
+        { command: `view.deletedSandboxes`, title: t(`sandbox.recentlyDeleted.paletteTitle`), category: GO_TO, icon: `trash`, to: here(page.deletedSandboxes()) },
         // The daemon lets only a maintainer open the sandbox's desktop, since driving it is operating the sandbox.
         ...(canShip.value
             ? [
@@ -119,7 +142,7 @@ export function useNavigationCommands(): void {
                 to: sandboxSectionPath(activation.key),
             })),
         // The same add action as the switcher: a dialog here, with sign-in first only when needed.
-        { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: `/home`, run: requestAddSandbox },
+        { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: toHome(), run: requestAddSandbox },
     ]);
 
     const settingsPlaces = computed<readonly NavCommand[]>(() =>
@@ -139,6 +162,11 @@ export function useNavigationCommands(): void {
         ...settingsPlaces.value,
     ]);
 
+    // Every address is in the frame the reader is in, so the list is made again on each navigation. A command is
+    // registered again only when its row changes (rowsOf), and goes where its row says at the moment it runs.
+    const whereNow = (destination: NavCommand): string =>
+        destinations.value.find((current) => current.command === destination.command)?.to ?? destination.to;
+
     let disposables: readonly Disposable[] = [];
     const release = (): void => {
         for (const disposable of disposables) {
@@ -150,32 +178,14 @@ export function useNavigationCommands(): void {
     const sync = (list: readonly NavCommand[]): void => {
         // Release before re-registering, so a hot-reloaded view isn't refused as duplicate of its own previous command.
         release();
-        disposables = list.flatMap((destination) => {
-            try {
-                return [
-                    registerCommand({
-                        owner: `builtin`,
-                        command: destination.command,
-                        title: destination.title,
-                        category: destination.category,
-                        ...(destination.icon === undefined ? {} : { icon: destination.icon }),
-                        handler: destination.run ?? ((): void => void router.push(destination.to)),
-                    }),
-                ];
-            } catch (error) {
-                // A colliding third-party id: the tile still works, but the palette row is lost, not every other
-                // destination's command.
-                console.error(`command ${destination.command}: already registered`, error);
-                return [];
-            }
-        });
+        disposables = list.flatMap((destination) => registered(destination, (): void => void router.push(whereNow(destination))));
     };
 
     // Registered from onMounted, not setup, since WorkspaceShell may discard an instance before it ever mounts.
     let stop: WatchStopHandle | undefined;
 
     onMounted(() => {
-        stop = watch(destinations, sync, { immediate: true });
+        stop = watch(() => rowsOf(destinations.value), () => sync(destinations.value), { immediate: true });
     });
 
     onUnmounted(() => {

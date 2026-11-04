@@ -5,6 +5,7 @@ import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { tellSignedInOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
+import { toTop } from "../../lib/routes/links";
 import { takeBrowserHandoffDestination } from "./browserHandoff";
 import { readDesktopHandoff, redeemDesktopHandoff } from "./redeemHandoff";
 
@@ -66,7 +67,7 @@ onMounted(() => void complete());
                     :label="t(`auth.desktopAuthComplete.backToSignIn`)"
                     tier="accent"
                     class="mt-4 self-center"
-                    @click="void router.replace(`/login`)"
+                    @click="void router.replace(toTop(`login`))"
                 />
             </section>
         </main>

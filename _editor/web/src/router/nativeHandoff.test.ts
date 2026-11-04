@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { useTheme } from "@intentic/ui/theme";
+import { homePath, insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import type { IntenticNative, NativeMessage } from "../app/environments/nativeApp";
@@ -11,9 +12,13 @@ import { useSkin } from "../skins/useSkin";
 // the first read of the flag on, so the tab says so before the module is loaded; every case stands up its own router.
 sessionStorage.setItem(`intentic.embed`, `native`);
 const { NATIVE_LOOKS } = await import(`../app/environments/nativeApp`);
-const { hasStepBack, installNativeApp, nativeScreen, withoutEmbedQuery } = await import(`./nativeHandoff`);
+const { hasStepBack, installNativeApp, nativeRoutedPath, nativeScreen, withoutEmbedQuery } = await import(`./nativeHandoff`);
 
-const page = { render: () => null };
+const view = { render: () => null };
+
+// The sandbox every address below is in, and its pages inside it: the shell's own addresses.
+const SB = `sbx_1`;
+const inside = (link: Parameters<typeof insidePath>[1]): string => insidePath(SB, link);
 
 /** The app's object, recording what the page told it, as the methods addJavascriptInterface injects. */
 const appHearing = () => {
@@ -33,25 +38,28 @@ const tabHistory = (start: number) => {
     return { position: (): number => at, stepBack: (): void => void (at -= 1), forward: (): void => void (at += 1), at: (): number => at };
 };
 
+// The shell's shape: its pages inside a sandbox, and the old addresses an installed app still hands over.
 const stage = (start = 3) => {
     const history = tabHistory(start);
     const adopted: [string, DaemonSession][] = [];
     const router: Router = createRouter({
         history: createMemoryHistory(),
         routes: [
-            { path: `/login`, component: page },
+            { path: `/login`, component: view },
             {
                 path: `/`,
-                component: page,
+                component: view,
                 children: [
-                    { path: ``, redirect: `/agents` },
-                    { path: `agents`, component: page },
-                    { path: `agents/:id`, component: page },
-                    { path: `agents/:id/pages/:page`, component: page },
-                    { path: `chat`, component: page },
-                    { path: `menu`, component: page },
-                    { path: `sandbox/:tab?`, component: page, meta: { title: () => `Sandbox` } },
-                    { path: `settings/:tab?`, component: page, meta: { title: () => `Settings` } },
+                    { path: ``, redirect: inside(page.agents()) },
+                    { path: `s/:sandbox/agents`, component: view },
+                    { path: `s/:sandbox/agents/:id`, component: view },
+                    { path: `s/:sandbox/agents/:id/pages/:page`, component: view },
+                    { path: `s/:sandbox/chat`, component: view },
+                    { path: `s/:sandbox/menu`, component: view },
+                    { path: `s/:sandbox/settings/:tab?`, component: view, meta: { title: () => `Sandbox` } },
+                    { path: `s/:sandbox/account/:tab?`, component: view, meta: { title: () => `Settings` } },
+                    { path: `agents/:id/pages/:page`, component: view },
+                    { path: `sandbox/:tab?`, component: view, meta: { title: () => `Sandbox` } },
                 ],
             },
         ],
@@ -84,52 +92,94 @@ beforeEach(() => {
     useSkin().hand(undefined);
 });
 
-describe(`the screens the app draws itself`, () => {
-    const at = (fullPath: string) => {
-        const url = new URL(fullPath, `https://app.intentic.dev`);
-        return { path: url.pathname, query: Object.fromEntries(url.searchParams), fullPath };
-    };
+const at = (fullPath: string) => {
+    const url = new URL(fullPath, `https://app.intentic.dev`);
+    return { path: url.pathname, query: Object.fromEntries(url.searchParams), fullPath };
+};
 
-    it(`are the board, a conversation, the menu and the sign-in pages, whole`, () => {
-        expect(nativeScreen(at(`/agents`))).toBe(`/agents`);
-        expect(nativeScreen(at(`/agents?sandbox=sbx_2`))).toBe(`/agents?sandbox=sbx_2`);
-        expect(nativeScreen(at(`/agents/cnv_1`))).toBe(`/agents/cnv_1`);
-        expect(nativeScreen(at(`/menu`))).toBe(`/menu`);
-        expect(nativeScreen(at(`/login?returnTo=%2Fsettings`))).toBe(`/login?returnTo=%2Fsettings`);
-        expect(nativeScreen(at(`/login/confirm`))).toBe(`/login/confirm`);
+// What the app is handed for an address: the path it opens, `chat` for the chat's own conversation, or nothing.
+const handed = (fullPath: string): string | undefined => {
+    const screen = nativeScreen(at(fullPath));
+    return screen?.kind === `open` ? screen.path : screen?.kind;
+};
+
+// Every installed app parses `/agents/<id>` and reads `?sandbox=`, so that is the form it is handed whatever form the
+// address came in.
+describe(`the screens the app draws itself`, () => {
+    it(`are the board, a conversation, the menu and the sign-in pages, in the form the app reads, the sandbox named`, () => {
+        expect(handed(inside(page.agents()))).toBe(`/agents?sandbox=sbx_1`);
+        expect(handed(homePath(SB, page.agents()))).toBe(`/agents?sandbox=sbx_1`);
+        expect(handed(inside(page.agents({ query: { view: `changes` } })))).toBe(`/agents?view=changes&sandbox=sbx_1`);
+        expect(handed(inside(page.agent(`cnv_1`)))).toBe(`/agents/cnv_1?sandbox=sbx_1`);
+        expect(handed(inside(page.agent(`cnv_1`, { query: { view: `chat` } })))).toBe(`/agents/cnv_1?view=chat&sandbox=sbx_1`);
+        expect(handed(inside(page.menu()))).toBe(`/menu?sandbox=sbx_1`);
+        expect(handed(`/login?returnTo=%2Fs%2Fsbx_1%2Faccount`)).toBe(`/login?returnTo=%2Fs%2Fsbx_1%2Faccount`);
+        expect(handed(`/login/confirm`)).toBe(`/login/confirm`);
+    });
+
+    it(`are the same screens at the addresses from before frames, which the guard sees on their way to a redirect`, () => {
+        expect(handed(`/agents`)).toBe(`/agents`);
+        expect(handed(`/agents?sandbox=sbx_2`)).toBe(`/agents?sandbox=sbx_2`);
+        expect(handed(`/agents/cnv_1`)).toBe(`/agents/cnv_1`);
+        expect(handed(`/menu`)).toBe(`/menu`);
     });
 
     it(`name a conversation as its own screen however the route named it`, () => {
-        expect(nativeScreen(at(`/?conversation=cnv_1`))).toBe(`/agents/cnv_1`);
-        expect(nativeScreen(at(`/settings?conversation=a/b`))).toBe(`/agents/a%2Fb`);
-        expect(nativeScreen(at(`/agents?focus=cnv_2`))).toBe(`/agents/cnv_2`);
-        expect(nativeScreen(at(`/chat?focus=cnv_3`))).toBe(`/agents/cnv_3`);
+        expect(handed(`/?conversation=cnv_1`)).toBe(`/agents/cnv_1`);
+        expect(handed(`/settings?conversation=a/b`)).toBe(`/agents/a%2Fb`);
+        expect(handed(inside(page.account(undefined, { query: { conversation: `a/b` } })))).toBe(`/agents/a%2Fb?sandbox=sbx_1`);
+        expect(handed(inside(page.agents({ query: { focus: `cnv_2` } })))).toBe(`/agents/cnv_2?sandbox=sbx_1`);
+        expect(handed(inside(page.chat({ query: { focus: `cnv_3` } })))).toBe(`/agents/cnv_3?sandbox=sbx_1`);
     });
 
     // The two addresses under an agent the app shows in its WebView rather than drawing: its Changes alone, and one
     // page it showed, full screen.
     it(`leave an agent's Changes and its full-screen pages to the page, and nothing else under it`, () => {
-        expect(nativeScreen(at(`/agents/cnv_1?view=changes`))).toBeUndefined();
-        expect(nativeScreen(at(`/agents/cnv_1/pages/a1b2c3d4e5`))).toBeUndefined();
-        expect(nativeScreen(at(`/agents/cnv_1?view=chat`))).toBe(`/agents/cnv_1?view=chat`);
-        expect(nativeScreen(at(`/agents?view=changes`))).toBe(`/agents?view=changes`);
+        expect(handed(inside(page.agent(`cnv_1`, { query: { view: `changes` } })))).toBeUndefined();
+        expect(handed(inside(page.agentPage(`cnv_1`, `a1b2c3d4e5`)))).toBeUndefined();
+        expect(handed(`/agents/cnv_1?view=changes`)).toBeUndefined();
+        expect(handed(`/agents/cnv_1/pages/a1b2c3d4e5`)).toBeUndefined();
     });
 
-    it(`leave the chat alone to the guard, which reads the conversation it has open`, () => {
-        expect(nativeScreen(at(`/chat`))).toBe(`/chat`);
+    it(`leave the chat alone to the guard, which reads the conversation it has open, in the sandbox the route named`, () => {
+        expect(nativeScreen(at(inside(page.chat())))).toEqual({ kind: `chat`, sandbox: SB });
+        expect(nativeScreen(at(`/chat`))).toEqual({ kind: `chat`, sandbox: undefined });
     });
 
     it(`leave every other screen to the page`, () => {
-        for (const path of [`/settings`, `/sandbox/models`, `/workspace/src/a.ts`, `/capabilities`, `/devices`, `/browsers`, `/ext/approvals`, `/terminal`, `/setup`]) {
-            expect(nativeScreen(at(path))).toBeUndefined();
+        const pages = [
+            page.account(),
+            page.sandboxSettings(`models`),
+            page.workspace(`src/a.ts`),
+            page.capabilities(),
+            page.devices(),
+            page.browsers(),
+            page.extension(`approvals`),
+            page.terminal(),
+        ];
+        const others = [insidePath(SB), homePath(SB), homePath(), `/setup`, `/settings`, `/sandbox/models`, `/ext/approvals`];
+        for (const path of [...pages.map(inside), ...others]) {
+            expect(handed(path)).toBeUndefined();
         }
-        expect(nativeScreen(at(`/agentsmith`))).toBeUndefined();
-        expect(nativeScreen(at(`/loginx`))).toBeUndefined();
+        expect(handed(`/agentsmith`)).toBeUndefined();
+        expect(handed(`/loginx`)).toBeUndefined();
     });
 
     // The Theme row's looks are what the app may hand over; a fifth on either side would be a look one cannot wear.
     it(`take exactly the Theme row's looks`, () => {
         expect([...NATIVE_LOOKS]).toEqual([...THEME_ROW]);
+    });
+});
+
+// The app keeps where the page last was and shows it again later, reading its `?sandbox=` to hand that sandbox's session
+// over first.
+describe(`where the app is told the page is`, () => {
+    it(`is a page of a sandbox in the form the app reads, the sandbox named, and anything else as it is`, () => {
+        expect(nativeRoutedPath(at(inside(page.sandboxSettings(`models`))))).toBe(`/sandbox/models?sandbox=sbx_1`);
+        expect(nativeRoutedPath(at(inside(page.account(`appearance`, { hash: `voice` }))))).toBe(`/settings/appearance?sandbox=sbx_1#voice`);
+        expect(nativeRoutedPath(at(homePath(SB, page.workspace(`src/a.ts`))))).toBe(`/workspace/src/a.ts?sandbox=sbx_1`);
+        expect(nativeRoutedPath(at(homePath(SB)))).toBe(homePath(SB));
+        expect(nativeRoutedPath(at(`/setup?sandbox=x`))).toBe(`/setup?sandbox=x`);
     });
 });
 
@@ -147,69 +197,71 @@ describe(`the app's address keys`, () => {
     it(`are gone from the address the first navigation lands on`, async () => {
         const { router } = stage();
         appHearing();
-        await router.push(`/settings/account?embed=native&look=dark&found=claude`);
-        expect(router.currentRoute.value.fullPath).toBe(`/settings/account?found=claude`);
+        await router.push(`${inside(page.account(`account`))}?embed=native&look=dark&found=claude`);
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.account(`account`, { query: { found: `claude` } })));
     });
 });
 
 describe(`a navigation to one of the app's screens`, () => {
-    it(`is handed to the app and goes nowhere here`, async () => {
+    it(`is handed to the app, in the form it reads, and goes nowhere here`, async () => {
         const { router } = stage();
         const app = appHearing();
-        await router.push(`/settings`);
+        await router.push(inside(page.account()));
 
-        await router.push(`/agents/cnv_1`);
-        await router.push(`/menu`);
-        await router.push(`/login?returnTo=/settings`);
+        await router.push(inside(page.agent(`cnv_1`)));
+        await router.push(inside(page.menu()));
+        await router.push(`/login?returnTo=/s/sbx_1/account`);
 
-        expect(app.opened()).toEqual([`/agents/cnv_1`, `/menu`, `/login?returnTo=/settings`]);
-        expect(router.currentRoute.value.fullPath).toBe(`/settings`);
+        expect(app.opened()).toEqual([`/agents/cnv_1?sandbox=sbx_1`, `/menu?sandbox=sbx_1`, `/login?returnTo=/s/sbx_1/account`]);
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.account()));
     });
 
     // The home redirect's own target, the board, is what the app is told: the guard reads where a navigation lands.
     it(`is caught after a redirect, as the place it was redirected to`, async () => {
         const { router } = stage();
         const app = appHearing();
-        await router.push(`/sandbox`);
+        await router.push(inside(page.sandboxSettings()));
         await router.push(`/`);
-        expect(app.opened()).toEqual([`/agents`]);
+        expect(app.opened()).toEqual([`/agents?sandbox=sbx_1`]);
     });
 
-    it(`to the chat opens the conversation the chat has open`, async () => {
+    it(`to the chat opens the conversation the chat has open, in the chat's sandbox`, async () => {
         const { router } = stage();
         const app = appHearing();
-        await router.push(`/settings`);
-        await router.push(`/chat`);
-        expect(app.opened()).toEqual([`/agents/cnv_open`]);
+        await router.push(inside(page.account()));
+        await router.push(inside(page.chat()));
+        expect(app.opened()).toEqual([`/agents/cnv_open?sandbox=sbx_1`]);
     });
 
-    it(`stays in the page for an agent's Changes and a page it showed, which the app opens here`, async () => {
+    it(`stays in the page for an agent's Changes and a page it showed, which the app opens here in either form`, async () => {
         const { router, embed } = stage();
         const app = appHearing();
-        await router.push(`/agents/cnv_1?view=changes`);
-        expect(router.currentRoute.value.fullPath).toBe(`/agents/cnv_1?view=changes`);
-        expect(embed.open(`/agents/cnv_1/pages/a1b2c3d4e5`)).toBe(true);
-        await waitFor(() => expect(router.currentRoute.value.fullPath).toBe(`/agents/cnv_1/pages/a1b2c3d4e5`));
+        await router.push(inside(page.agent(`cnv_1`, { query: { view: `changes` } })));
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.agent(`cnv_1`, { query: { view: `changes` } })));
+        expect(embed.open(inside(page.agentPage(`cnv_1`, `a1b2c3d4e5`)))).toBe(true);
+        await waitFor(() => expect(router.currentRoute.value.fullPath).toBe(inside(page.agentPage(`cnv_1`, `a1b2c3d4e5`))));
+        expect(embed.open(`/agents/cnv_1/pages/f6e5d4c3b2?sandbox=sbx_1`)).toBe(true);
+        await waitFor(() => expect(router.currentRoute.value.fullPath).toBe(`/agents/cnv_1/pages/f6e5d4c3b2?sandbox=sbx_1`));
         expect(app.opened()).toEqual([]);
     });
 
     it(`goes ahead in the page where the app hears no such message`, async () => {
         const { router } = stage();
         window.intenticNative = {};
-        await router.push(`/agents/cnv_1`);
-        expect(router.currentRoute.value.fullPath).toBe(`/agents/cnv_1`);
+        await router.push(inside(page.agent(`cnv_1`)));
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.agent(`cnv_1`)));
     });
 
-    it(`lets every other screen land, and tells the app where the page now is`, async () => {
+    it(`lets every other screen land, and tells the app where the page now is in the form it reads`, async () => {
         const { router, history } = stage();
         const app = appHearing();
-        await router.push(`/settings`);
+        await router.push(inside(page.account()));
         history.forward();
-        await router.push(`/sandbox/models`);
-        expect(router.currentRoute.value.fullPath).toBe(`/sandbox/models`);
+        await router.push(inside(page.sandboxSettings(`models`)));
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.sandboxSettings(`models`)));
         expect(app.told).toEqual([
-            { kind: `routed`, path: `/settings`, title: `Settings`, canGoBack: false },
-            { kind: `routed`, path: `/sandbox/models`, title: `Sandbox`, canGoBack: true },
+            { kind: `routed`, path: `/settings?sandbox=sbx_1`, title: `Settings`, canGoBack: false },
+            { kind: `routed`, path: `/sandbox/models?sandbox=sbx_1`, title: `Sandbox`, canGoBack: true },
         ]);
     });
 });
@@ -234,11 +286,11 @@ describe(`the app asking for a step back`, () => {
 
     it(`counts from where the app last opened a route in the page`, async () => {
         const { router, embed, history } = stage(3);
-        await router.push(`/settings`);
-        expect(embed.open(`/sandbox/access`)).toBe(true);
+        await router.push(inside(page.account()));
+        expect(embed.open(inside(page.sandboxSettings(`access`)))).toBe(true);
         // The open lands one entry up, and the page counts from there: no step back below it.
         await waitFor(() => expect(history.at()).toBe(4));
-        expect(router.currentRoute.value.fullPath).toBe(`/sandbox/access`);
+        expect(router.currentRoute.value.fullPath).toBe(inside(page.sandboxSettings(`access`)));
         expect(embed.back()).toBe(false);
         expect(history.at()).toBe(4);
     });
@@ -256,7 +308,9 @@ describe(`the app opening a route in the page`, () => {
     it(`refuses its own screens and anything that is not a path on this origin`, () => {
         const { embed } = stage();
         appHearing();
-        for (const path of [`/agents`, `/agents/cnv_1`, `/menu`, `/login`, `//evil.example/x`, `https://evil.example/`, ``]) {
+        const ownScreens = [inside(page.agents()), inside(page.agent(`cnv_1`)), inside(page.menu()), inside(page.chat())];
+        const oldOwnScreens = [`/agents`, `/agents/cnv_1`, `/menu`, `/login`];
+        for (const path of [...ownScreens, ...oldOwnScreens, `//evil.example/x`, `https://evil.example/`, ``]) {
             expect(embed.open(path)).toBe(false);
         }
     });

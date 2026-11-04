@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { here as linkHere, type PageLink } from "../../lib/routes/links";
 import { nameScore } from "../commands/commandSearch";
 
 // FINDING A SETTING BY NAME, in either hub. The hubs' indexes (sandboxNav.ts, settingsNav.ts) name pages; a setting sits
@@ -58,9 +59,8 @@ export interface HubPage {
 }
 
 /**
- * Where an answer goes: the page's own address, its category and the card's mark. An address rather than the hub's
- * route name, since a page drawn as a part of another (Activity ▸ Audit) is reached through the router's redirect for
- * its old address, and a named route goes past every redirect.
+ * Where an answer goes: the page's own address in the reader's frame, its category and the card's mark. A page drawn as
+ * a part of another (Activity ▸ Audit) is that page with the part named, as its hub's source links it.
  */
 export interface HubTarget {
     readonly path: string;
@@ -101,11 +101,14 @@ const TRAIL = ` › `;
  * Where a hub's page lives. The default page is named outright, unlike a row in the hub's own index: on a phone the
  * param-less address is the index, and an answer must land on the page it names wherever it is followed from.
  */
-const target = (hub: HubName, slug: string, entry: SettingEntry | undefined): HubTarget => ({
-    path: `/${hub}/${slug}`,
-    query: entry?.part === undefined ? {} : { [entry.partKey ?? `section`]: entry.part },
-    hash: entry === undefined ? `` : settingHash(entry.id),
-});
+const target = (linked: HubSource[`link`], slug: string, entry: SettingEntry | undefined): HubTarget => {
+    const link = linked(slug);
+    const part = entry?.part === undefined ? [] : [[entry.partKey ?? `section`, entry.part] as const];
+    const named = Object.entries(link.query).filter((pair): pair is [string, string] => pair[1] !== undefined);
+    // The page's address in the reader's frame, its query kept apart: the router takes it as `query`, and the results
+    // list compares it with the page on screen.
+    return { path: linkHere({ ...link, query: {}, hash: `` }), query: Object.fromEntries([...named, ...part]), hash: entry === undefined ? `` : settingHash(entry.id) };
+};
 
 /** One hub's pages and cards, as this reader may open them. */
 export interface HubSource {
@@ -114,6 +117,8 @@ export interface HubSource {
     readonly entries: readonly SettingEntry[];
     /** The words people use for a page that its name does not hold ("invoice" for Billing), by slug; a synonyms string. */
     readonly pageTerms?: Readonly<Record<string, string>>;
+    /** A page's link by its slug, the default named outright: the hub's own pages are its to place (a part of a page included). */
+    readonly link: (slug: string) => PageLink;
 }
 
 // A synonyms string is one catalog message, commas between its terms, so a translator writes a language's own words
@@ -156,7 +161,7 @@ export const searchHubs = (sources: readonly HubSource[], reader: HubReader, que
     query.trim().length === 0
         ? []
         : sources
-              .flatMap(({ hub, pages, entries, pageTerms = {} }) => {
+              .flatMap(({ hub, pages, entries, pageTerms = {}, link }) => {
                   const bySlug = new Map(pages.map((page) => [page.slug, page]));
                   const pageResults = pages.flatMap((page): readonly HubSearchResult[] => {
                       const score = scoreOf(page.label, [page.row ?? ``, pageTerms[page.slug] ?? ``], query);
@@ -171,7 +176,7 @@ export const searchHubs = (sources: readonly HubSource[], reader: HubReader, que
                                     trail: page.row ?? ``,
                                     icon: page.icon,
                                     score,
-                                    to: target(hub, page.slug, undefined),
+                                    to: target(link, page.slug, undefined),
                                 },
                             ];
                   });
@@ -194,7 +199,7 @@ export const searchHubs = (sources: readonly HubSource[], reader: HubReader, que
                                     trail: steps.join(TRAIL),
                                     icon: page.icon,
                                     score,
-                                    to: target(hub, entry.slug, entry),
+                                    to: target(link, entry.slug, entry),
                                     setting: entry.id,
                                 },
                             ];

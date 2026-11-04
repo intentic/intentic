@@ -31,6 +31,7 @@ import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import { matchToggles } from "../../../models/workspace/search/useSearchOptions";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
+import { here, page } from "../../../lib/routes/links";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { useNotifications } from "../../../workbench/notifications/notifications";
@@ -107,17 +108,17 @@ const diffId = computed(() => (typeof route.query[`diff`] === `string` ? route.q
 const openDir = (path: string): void => {
     // Browsing a folder leaves any open file; clear the path segment along with the query. The root carries no `?dir=`,
     // whatever it is called, so the address of "where this screen starts" doesn't change when the project does.
-    void router.push({ name: `workspace`, params: { path: [] }, query: { ...scopeFields(workspaceView.value), ...(path === workspaceDir.value ? {} : { dir: path }) } });
+    void router.push({ path: here(page.workspace()), query: { ...scopeFields(workspaceView.value), dir: path === workspaceDir.value ? undefined : path } });
 };
 // A folder path means nothing under a different project root, so opening or clearing a project starts at its floor.
 watch(workspaceDir, () => {
     if (typeof route.query[`dir`] === `string`) {
-        void router.replace({ name: `workspace`, params: { path: [] }, query: scopeFields(workspaceView.value) });
+        void router.replace({ path: here(page.workspace()), query: scopeFields(workspaceView.value) });
     }
 });
 const openDiffNav = (payload: DiffPayload, mode: OpenMode): void => {
     openDiff(payload, mode);
-    void router.push({ name: `workspace`, params: { path: [] }, query: { ...route.query, diff: activeId.value ?? undefined } });
+    void router.push({ path: here(page.workspace()), query: { ...route.query, diff: activeId.value ?? undefined } });
 };
 
 // A reload can leave `?diff=` with no matching tab, since a diff lives only in the tabs singleton; that case
@@ -376,7 +377,7 @@ const onPick = (event: Event): void => {
                     :path="openPath"
                     :meta="openMeta"
                     :line="openLine"
-                    @gone="router.replace({ name: `workspace`, params: { path: [] }, query: route.query })"
+                    @gone="router.replace({ path: here(page.workspace()), query: route.query })"
                 />
             </div>
         </template>

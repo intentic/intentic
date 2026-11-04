@@ -1,6 +1,8 @@
 import "@intentic/testing/dom";
-import { createApp, h, ref } from "vue";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { homePath, insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { createApp, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter, type Router } from "vue-router";
+import { readRoutesOf } from "../../lib/routes/links";
 import { registerView } from "../../workbench/views/registry";
 import { sandboxSections } from "../../models/sandbox/sandboxNav";
 import { settingsSections } from "../../features/settings/settingsNav";
@@ -33,15 +35,17 @@ jest.mock(`../../models/hosted-plan/useHostedPlan`, () => {
 const requestAddSandbox = jest.fn();
 jest.mock(`../../models/sandbox/addSandbox`, () => ({ useRequestAddSandbox: () => requestAddSandbox }));
 
-const mountShell = (): { unmount: () => void } => {
+// Only used inside handlers (router.push), so one catch-all route covers the whole dependency.
+const catchAll = (): Router => createRouter({ history: createMemoryHistory(), routes: [{ path: `/:all(.*)*`, component: { render: () => null } }] });
+
+const mountShell = (router: Router = catchAll()): { unmount: () => void } => {
     const app = createApp({
         setup() {
             useNavigationCommands();
             return () => h(`div`);
         },
     });
-    // Only used inside handlers (router.push), so one catch-all route covers the whole dependency.
-    app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:all(.*)*`, component: { render: () => null } }] }));
+    app.use(router);
     app.mount(document.createElement(`div`));
     return app;
 };
@@ -173,4 +177,27 @@ it(`releases every command when the shell goes away`, () => {
 
     app.unmount();
     expect(commands.value).toHaveLength(0);
+});
+
+it(`goes to its page in the frame the reader is in when it runs, and is not registered again on every navigation`, async () => {
+    const shown = { render: () => null };
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: `/s/:sandbox/:rest(.*)*`, meta: { frame: `inside` }, component: shown },
+            { path: `/home/:sandbox/:rest(.*)*`, meta: { frame: `home` }, component: shown },
+        ],
+    });
+    readRoutesOf(router);
+    await router.push(insidePath(`a1b2c3d4e5f6`, page.agents()));
+    const app = mountShell(router);
+    const chat = commands.value.find((entry) => entry.command === `view.chat`);
+
+    await router.push(homePath(`a1b2c3d4e5f6`, page.agents()));
+    await nextTick();
+    expect(commands.value.find((entry) => entry.command === `view.chat`)).toBe(chat);
+    await chat?.handler();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(router.currentRoute.value.fullPath).toBe(homePath(`a1b2c3d4e5f6`, page.chat()));
+    app.unmount();
 });

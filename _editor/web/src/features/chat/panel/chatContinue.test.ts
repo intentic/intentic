@@ -14,6 +14,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { SANDBOX_BUSY_AFTER_MS } from "../../sandbox/overview/availability";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
+import { activeSandboxId as openedLast } from "../../../app/storage/activeSandbox";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as limitResetOriginal from "../session/limitReset";
@@ -185,6 +186,8 @@ beforeEach(async () => {
     // `connected` is the composer's own gate; with no account the box goes inert.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
+    // The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+    openedLast.value = `sandbox-1`;
     // Baseline: no grant offered, the state every test but the reset tests itself runs in.
     resetOffer.value = undefined;
     claimReset.mockReset();
@@ -866,7 +869,7 @@ describe(`a conversation no account of its provider can serve`, () => {
         expect(card?.textContent).toContain(`Work can't run this conversation: its plan or organization does not allow Claude, and no other Claude account here can take it.`);
         expect(continueButton()).toBeUndefined();
         const connect = link(`Connect another Claude account`);
-        expect(connect?.getAttribute(`href`)).toContain(`/sandbox/models?open=claude`);
+        expect(connect?.getAttribute(`href`)).toContain(`/s/sandbox-1/settings/models?open=claude`);
         expect(connect?.classList.contains(`p-button-secondary`)).toBe(false);
         const retry = button(`Try Work again`)!;
         expect(retry.classList.contains(`p-button-text`)).toBe(true);

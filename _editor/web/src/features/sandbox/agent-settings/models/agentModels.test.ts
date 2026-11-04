@@ -9,6 +9,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 import * as providerCatalogOriginal from "../../../../models/providers/providerCatalog";
@@ -118,14 +119,18 @@ jest.mock(`@intentic/ui`, () => ({
     }),
 }));
 
+const { activeSandboxId } = await import("../../../../app/storage/activeSandbox");
 const { default: AgentModels } = await import("./AgentModels.vue");
 
-// The judge row links to the Safety tab when off, so a router is needed; only the hub's route, not the app's guards.
+// The judge row links to the Safety tab when off, so a router is needed; only the hub's route, not the app's guards, in
+// the sandbox the reader is in.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+    routes: [{ path: `/s/:sandbox/settings/:tab?`, meta: { frame: `inside`, page: `sandboxSettings` }, component: defineComponent({ render: () => h(`div`) }) }],
 });
-await router.push({ name: `sandbox`, params: { tab: `agent` } });
+await router.push(insidePath(BOX, page.sandboxSettings(`agent`)));
 await router.isReady();
 
 let app: App | undefined;
@@ -504,7 +509,7 @@ test("with the judge off its chip says it is not in use, and its panel says wher
     expect(chip(host, labelOf(JUDGE)).textContent).toContain(`not in use`);
     await openJob(host, labelOf(JUDGE));
     const link = [...document.querySelectorAll<HTMLAnchorElement>(`.job-panel a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/guardrails`);
+    expect(link?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings(`guardrails`)));
 });
 
 test("with the judge merely watching its chip is like any other", async () => {
@@ -540,7 +545,7 @@ test("a link naming a job opens that job's panel and drops the name from the add
     Element.prototype.scrollIntoView = function (this: Element) {
         scrolled.push(this.closest(`li`)?.id ?? ``);
     };
-    await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { job: JUDGE } });
+    await router.push(insidePath(BOX, page.sandboxSettings(`agent`, { query: { job: JUDGE } })));
     mount();
     await flush();
     await flush();

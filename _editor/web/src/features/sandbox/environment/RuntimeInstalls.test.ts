@@ -2,6 +2,7 @@
 // never resolve without one.
 import "@intentic/testing/dom";
 import type { EnvironmentRecurring } from "@intentic/sandbox-contract/schemas/environment";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -14,7 +15,12 @@ import { IconStub } from "@intentic/ui/testing";
 const started: string[] = [];
 jest.mock(`../../../models/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: RuntimeInstalls } = await import("./RuntimeInstalls.vue");
+
+// The sandbox the reader is in, whose conversations the session links open.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 
 const entry = (over: Partial<EnvironmentRecurring> & Pick<EnvironmentRecurring, "tool" | "kind">): EnvironmentRecurring => ({
     sessions: 2,
@@ -106,7 +112,10 @@ it(`opens on who installed it and how, each session a link to its conversation`,
     const el = mount([SPIKE]);
     expect(el.textContent).not.toContain(`--prefix`);
     await openRow(el);
-    expect([...el.querySelectorAll(`a`)].map((link) => link.getAttribute(`href`))).toEqual([`/agents/keen-anchor-eq06`, `/agents/ci-fix-attempt41`]);
+    expect([...el.querySelectorAll(`a`)].map((link) => link.getAttribute(`href`))).toEqual([
+        insidePath(BOX, page.agent(`keen-anchor-eq06`)),
+        insidePath(BOX, page.agent(`ci-fix-attempt41`)),
+    ]);
     expect(el.textContent).toContain(`npm install -g --prefix /tmp/oc2spike/gtest @opencode/cli@2.0.26`);
     // Not in the container now: said, since beside a scratch-folder command it is the tell.
     expect(el.textContent).toContain(`does not have it`);

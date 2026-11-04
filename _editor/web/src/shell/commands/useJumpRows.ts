@@ -30,6 +30,7 @@ import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { fuzzyScore } from "@intentic/base/fuzzy";
 import { useFuzzyFiles } from "../../models/workspace/search/useFuzzyFiles";
 import { useWorkspaceTabs } from "../../models/workspace/tabs/useWorkspaceTabs";
+import { here, page } from "../../lib/routes/links";
 
 // Every source the palette can answer from, as one list of rows: the fleet, the workspace's files, the sandbox's
 // terminals and the command registry. Each kind ranks its own rows (jumpSearch orders the kinds against each other),
@@ -164,9 +165,9 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
     const text = computed(() => parsed.value.text);
     const wants = (kind: JumpKind): boolean => parsed.value.kind === undefined || parsed.value.kind === kind;
 
-    const openAgent = (id: string): void => void router.push({ name: `agent`, params: { id } });
+    const openAgent = (id: string): void => void router.push(here(page.agent(id)));
     // Navigates to the file's workspace URL; useWorkspaceRoute opens it, whichever area we're coming from.
-    const openFile = (path: string): void => void router.push({ name: `workspace`, params: { path: path.split(`/`) } });
+    const openFile = (path: string): void => void router.push(here(page.workspace(path)));
 
     // A pasted session id takes over the palette; any of its four spellings are accepted (sessionRef). Read off the raw
     // query when unscoped, since one of those spellings is an absolute worktree path.

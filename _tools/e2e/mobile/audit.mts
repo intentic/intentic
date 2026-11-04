@@ -3,7 +3,9 @@ import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import { homePath, insidePath, page as pages, type PageLink } from "@intentic/sandbox-contract/app-routes";
 import { chromium, type Browser, type CDPSession, type Page } from "@playwright/test";
+import { DEMO_SANDBOX } from "../fixtures/demo-pages.ts";
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 /* Its own port, one above the shots harness's. */
@@ -32,40 +34,49 @@ interface Surface {
     readonly settleMs?: number;
 }
 
+// A page of the demo's own sandbox, at its address inside it.
+const inDemo = (link: PageLink): string => insidePath(DEMO_SANDBOX, link);
+
 const SURFACES: readonly Surface[] = [
-    { path: "/agents", waitFor: "text=ATTENTION", primary: "text=Add Stripe checkout", settleMs: 1_400 },
+    { path: inDemo(pages.agents()), waitFor: "text=ATTENTION", primary: "text=Add Stripe checkout", settleMs: 1_400 },
     // The one route whose blank screen shipped. `primary` is a file row, which is the whole point.
-    { path: "/workspace", waitFor: 'button:has-text("Changes")', primary: "text=README.md", settleMs: 1_600 },
+    { path: inDemo(pages.workspace()), waitFor: 'button:has-text("Changes")', primary: "text=README.md", settleMs: 1_600 },
     {
-        path: "/workspace?panel=changes",
+        path: inDemo(pages.workspace(undefined, { query: { panel: `changes` } })),
         waitFor: 'button:has-text("Changes")',
         primary: "text=CheckoutPanel.tsx",
         settleMs: 1_600,
     },
-    { path: "/menu", waitFor: "text=SANDBOXES", primary: "text=Add sandbox", settleMs: 1_200 },
-    { path: "/capabilities", waitFor: "text=Connected", settleMs: 1_200 },
-    { path: "/sandbox", waitFor: "text=Installed version", settleMs: 1_200 },
-    /* Each route waits for rendered content before measuring its primary surface. */
-    { path: "/settings", waitFor: "text=Keybindings", primary: "text=Profile", settleMs: 1_200 },
+    { path: inDemo(pages.menu()), waitFor: "text=SANDBOXES", primary: "text=Add sandbox", settleMs: 1_200 },
+    { path: inDemo(pages.capabilities()), waitFor: "text=Connected", settleMs: 1_200 },
+    { path: inDemo(pages.sandboxSettings()), waitFor: "text=Installed version", settleMs: 1_200 },
+    /* Each route waits for rendered content before measuring its primary surface. The account's settings, in Home's
+     * frame, where an address naming no sandbox opens them. */
+    { path: homePath(undefined, pages.account()), waitFor: "text=Keybindings", primary: "text=Profile", settleMs: 1_200 },
     // The accessory key row, which is the whole reason this route is gated: it is `coarse`-only, so a run that
     // is not in a touch context finds nothing here and says so instead of passing quietly.
-    { path: "/terminal", waitFor: "text=Esc", primary: "text=Ctrl", settleMs: 1_600 },
+    { path: inDemo(pages.terminal()), waitFor: "text=Esc", primary: "text=Ctrl", settleMs: 1_600 },
     // The paperclip is the phone's one road for a photo, so the surface waits on it rather than on the box alone.
     // `primary` is visible transcript text: the paperclip has only an aria-label, which the height rule never reads.
-    { path: "/agents/cnv_checkout_stripe", waitFor: 'button[aria-label="Attach files"]', primary: "text=The pricing page already has a CTA", settleMs: 2_600 },
+    {
+        path: inDemo(pages.agent(`cnv_checkout_stripe`)),
+        waitFor: 'button[aria-label="Attach files"]',
+        primary: "text=The pricing page already has a CTA",
+        settleMs: 2_600,
+    },
     // The Chat tab: lands on the active conversation's screen, never on the desktop's full-screen chat. Its model
     // picker is the sheet that once did not scroll under touch at all, so the gate swipes it.
     {
-        path: "/chat",
+        path: inDemo(pages.chat()),
         waitFor: 'textarea[name="draft"]',
         primary: "text=Add Stripe checkout",
         sheet: 'button[aria-label^="Provider and model"]',
         settleMs: 2_600,
     },
-    { path: "/ext/pipelines", waitFor: "text=pass rate", primary: "text=Draft the release note", settleMs: 1_600 },
-    { path: "/ext/acceptance", waitFor: "text=criteria", primary: "text=Sign up for an account", settleMs: 1_400 },
+    { path: inDemo(pages.extension(`pipelines`)), waitFor: "text=pass rate", primary: "text=Draft the release note", settleMs: 1_600 },
+    { path: inDemo(pages.extension(`acceptance`)), waitFor: "text=criteria", primary: "text=Sign up for an account", settleMs: 1_400 },
     /* Primary selectors match raw textContent, so they must use text unaffected by CSS transforms. */
-    { path: "/ext/documentation", waitFor: "text=documented", primary: "text=src/pricing", settleMs: 1_400 },
+    { path: inDemo(pages.extension(`documentation`)), waitFor: "text=documented", primary: "text=src/pricing", settleMs: 1_400 },
 ];
 
 interface Offender {
@@ -415,7 +426,7 @@ const audit = async (browser: Browser, surface: Surface): Promise<Result> => {
 
 const run = async (): Promise<void> => {
     const asJson = process.argv.includes("--json");
-    // `--only=/chat` runs one surface while iterating; the exit code still means what it means.
+    // `--only=/s/demo/chat` runs one surface while iterating; the exit code still means what it means.
     const only = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
     const surfaces = only === undefined ? SURFACES : SURFACES.filter((surface) => surface.path === only);
     if (!existsSync(join(DEMO_DIR, "index.html"))) {

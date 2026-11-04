@@ -1,6 +1,7 @@
 import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { page, type PageLink } from "../../lib/routes/links";
 
 // THE STATUS BAR'S RUNTIME CHIPS: the machinery agents work with, said at the foot of the window rather than tiled on the
 // rail, which is kept for places a reader goes. Each chip is there only while its thing is live (a browser, an app or a
@@ -16,8 +17,11 @@ export interface RuntimeChip {
     readonly id: RuntimeChipId;
     /** The words on the chip. */
     readonly label: string;
-    /** Where a press goes. Absent for the terminal, whose press opens and closes its panel instead. */
-    readonly to?: string;
+    /**
+     * The page a press goes to, made into an address where the reader is (RuntimeChips.vue). Absent for the terminal,
+     * whose press opens and closes its panel instead.
+     */
+    readonly to?: PageLink;
     /** Drawn beside the label; absent rather than zero. */
     readonly count?: number;
     /** A standing state worth a colour: a browser waiting on the reader, a port the internet can reach, a tunnel up. */
@@ -100,22 +104,23 @@ const browsersRows = (facts: BrowsersFacts, live: number, desktop: number): { la
     return rows;
 };
 
-// Where a press goes: the window asking for help; else the one kind that is live, by name, since a bare /browsers
-// reopens whatever tab was in front; with several kinds live (or none), that tab in front is as good a guess as any.
-const browsersTarget = (facts: BrowsersFacts, desktop: number): string => {
+// Where a press goes: the window asking for help; else the one kind that is live, by name, since a bare Browsers
+// reopens whatever tab was in front; with several kinds live (or none), that tab in front is as good a guess as any. The
+// live app is asked for as `?preview`, which the view reads as "pick the one most worth seeing" (BrowsersArea.vue).
+const browsersTarget = (facts: BrowsersFacts, desktop: number): PageLink => {
     const asking = facts.sessions.find((session) => session.help !== undefined);
     if (asking !== undefined) {
-        return `/browsers/${asking.name}`;
+        return page.browsers(asking.name);
     }
     const window = facts.sessions.find((session) => session.running);
     const kinds = [facts.apps > 0, window !== undefined, desktop > 0].filter(Boolean).length;
     if (kinds !== 1) {
-        return `/browsers`;
+        return page.browsers();
     }
     if (facts.apps > 0) {
-        return `/browsers?preview`;
+        return page.browsers(undefined, { query: { preview: `1` } });
     }
-    return window === undefined ? `/browsers/desktop` : `/browsers/${window.name}`;
+    return page.browsers(window === undefined ? `desktop` : window.name);
 };
 
 export const browsersChip = (facts: BrowsersFacts): RuntimeChip | undefined => {
@@ -152,7 +157,7 @@ export const portsChip = (facts: { readonly ports: readonly number[]; readonly h
     return {
         id: `ports`,
         label: t(`shell.statusBar.portsPublic`, { port: list, count: facts.ports.length }, facts.ports.length),
-        to: `/sandbox/ports`,
+        to: page.sandboxSettings(`ports`),
         tone: `warning`,
         active: facts.here,
         aria: `${title}: ${list}`,
@@ -170,7 +175,7 @@ export const vpnChip = (facts: { readonly names: readonly string[]; readonly her
     return {
         id: `vpn`,
         label: t(`shell.statusBar.vpn`),
-        to: `/capabilities/vpn`,
+        to: page.capabilities(`vpn`),
         tone: `success`,
         active: facts.here,
         aria: `${title}: ${names}`,

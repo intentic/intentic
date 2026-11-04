@@ -33,6 +33,7 @@ import {
 } from "../../../models/providers/usageStatus";
 import { poolResetNote } from "../../../models/providers/usageNotes";
 import { useT } from "@intentic/ui/i18n";
+import { modelsHref } from "../../../lib/routes/modelsPath";
 
 // How much of your plans is left, the section that must scale to a 36-connection fleet rather than one row per
 // account. A hierarchy, each level answering a different question:
@@ -318,7 +319,7 @@ const roster = computed(() => {
                                         >
                                         <span class="text-xs tabular-nums text-subtle">{{ group.total }}</span>
                                         <!-- The action is the door when there is one to open; a sign-in is redone where it was made. -->
-                                        <RouterLink v-if="group.fix === `reconnect`" to="/sandbox/models" class="ml-auto text-2xs text-link hover:underline">{{
+                                        <RouterLink v-if="group.fix === `reconnect`" :to="modelsHref()" class="ml-auto text-2xs text-link hover:underline">{{
                                             group.action
                                         }}</RouterLink>
                                         <span v-else-if="group.action !== ``" class="ml-auto text-2xs text-subtle">{{ group.action }}</span>

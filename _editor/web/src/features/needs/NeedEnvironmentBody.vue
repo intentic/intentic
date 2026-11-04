@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
+import { here, page } from "../../lib/routes/links";
 
 const t = useT();
 
@@ -33,7 +34,7 @@ const approve = async (): Promise<void> => {
         <!-- Approved, not yet built: the rebuild is where the sandbox is run, so the Environment card is where it is started. -->
         <div v-else class="flex flex-wrap items-center gap-2">
             <span class="text-xs text-content/85">{{ t(`needs.environment.rebuildToFinish`, { tool: subject.tool }) }}</span>
-            <ChatDecisionButton tone="primary" icon="refresh" to="/sandbox/environment">{{ t(`needs.environment.openRebuild`) }}</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="refresh" :to="here(page.sandboxSettings(`environment`))">{{ t(`needs.environment.openRebuild`) }}</ChatDecisionButton>
         </div>
         <Notice v-if="notice" :of="notice" />
     </div>

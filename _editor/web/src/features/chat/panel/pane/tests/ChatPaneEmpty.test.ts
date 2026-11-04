@@ -12,6 +12,8 @@ jest.mock(`vue-router`, () => ({
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("../../../../../models/providers/providerCatalog");
 const { accountsLoaded, providerAccounts } = await import("../../../../../models/providers/providerAccounts");
 const { default: ChatPaneEmpty } = await import("../ChatPaneEmpty.vue");
+const { activeSandboxId } = await import("../../../../../app/storage/activeSandbox");
+const { page, toInside } = await import("../../../../../lib/routes/links");
 const noAccounts = providerAccounts.value;
 
 type Props = { unset: boolean; onTrial: boolean; providerName: string };
@@ -30,6 +32,8 @@ const offerLink = (element: HTMLElement): HTMLAnchorElement | undefined =>
     [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`lift the daily cap`));
 
 beforeEach(() => {
+    // The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+    activeSandboxId.value = `sb-1`;
     accountsLoaded.value = true;
     endpointsLoaded.value = true;
     trialStatus.value = { available: true, allowance: 10, used: 1, remaining: 9, health: `healthy` };
@@ -48,7 +52,7 @@ it(`opens a trial chat on what it costs, and offers the way off the cap under it
 
     expect(element.textContent).toContain(`this chat is free and needs nothing connected`);
     expect(element.textContent).toContain(`Already pay for an AI plan, or run a model on this machine?`);
-    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(offerLink(element)?.getAttribute(`href`)).toBe(toInside(`sb-1`, page.sandboxSettings(`models`)));
 });
 
 it(`names the provider a non-trial chat runs on, and offers nothing`, () => {
@@ -65,7 +69,7 @@ it(`says nothing about the cap until both reads have landed`, async () => {
 
     endpointsLoaded.value = true;
     await nextTick();
-    expect(offerLink(element)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(offerLink(element)?.getAttribute(`href`)).toBe(toInside(`sb-1`, page.sandboxSettings(`models`)));
 });
 
 it(`leaves the offer to the trial strip once half the allowance is gone`, () => {

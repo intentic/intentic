@@ -28,6 +28,7 @@ import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useRunTargets } from "../../models/runs/useRunTargets";
 import { openRunDialog } from "../../models/runs/runDialog";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../lib/routes/links";
 
 export interface PreviewActions {
     readonly start: (target: PreviewTarget) => Promise<void>;
@@ -97,8 +98,7 @@ const act = async (verb: keyof typeof PRESSES, action: (entry: PreviewTarget) =>
 const start = (entry: PreviewTarget): Promise<void> => actions.start(entry);
 const stop = (entry: PreviewTarget): Promise<void> => actions.stop(entry);
 
-// Forwards one server of a fanned-out repo and opens the target it becomes. Forwarding publishes the port; the Ports
-// view is where it's taken back.
+// Forwards one server of a fanned-out repo and opens the target it becomes; the port it publishes is taken back in Ports.
 const forwarding = computed(() => {
     const forward = work.at(`forward`);
     return forward?.state === `running` ? forward.progress : undefined;
@@ -463,7 +463,7 @@ watch(
             </template>
             <template #actions>
                 <Button :label="t(`ui.action.tryAgain`)" size="small" tier="accent" @click="resolvePreview()" />
-                <Button :as="RouterLink" to="/sandbox/ports" :label="t(`preview.previewPanel.openPorts`)" size="small" tier="boring" />
+                <Button :as="RouterLink" :to="here(page.sandboxSettings(`ports`))" :label="t(`preview.previewPanel.openPorts`)" size="small" tier="boring" />
             </template>
         </EmptyState>
 

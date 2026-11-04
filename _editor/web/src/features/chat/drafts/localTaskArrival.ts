@@ -3,13 +3,15 @@ import { computed, watch } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { openDesktopLink } from "../../../app/environments/desktop";
+import { linkOf } from "../../../lib/routes/links";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { drawsChat } from "../../../models/conversations/run/chatEcho";
 import { conversations } from "../../../models/conversations/tabs/useChat-tabs";
 import { rememberTaskSent, takeTaskHandoff } from "./localTaskHandoff";
 
-const inShell = (path: string): boolean => path === `/` || path.startsWith(`/workspace`);
+// The shell's root, or its workspace in either frame (an address from before frames names it too).
+const inShell = (path: string): boolean => path === `/` || linkOf(path)?.page === `workspace`;
 
 const SENT_DEADLINE_MS = 30_000;
 

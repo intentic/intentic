@@ -3,6 +3,7 @@ import { Button, RowGroup, RowNote } from "@intentic/ui";
 import { RouterLink } from "vue-router";
 import { useSandboxBackup } from "./useSandboxBackup";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../../lib/routes/links";
 
 // Offers desktop sync where it is the difference between one copy of this work and two: a cloud machine, read from
 // the app on a computer that could hold the second copy. Not a warning — nothing is broken — and not dismissible,
@@ -18,7 +19,7 @@ const { unbacked } = useSandboxBackup();
             <div class="flex flex-col gap-3">
                 <p class="text-xs text-muted">{{ t(`sandbox.sandboxBackupCard.detail`) }}</p>
                 <div class="flex flex-wrap items-center gap-2">
-                    <RouterLink to="/devices">
+                    <RouterLink :to="here(page.devices())">
                         <Button tier="accent" :label="t(`sandbox.sandboxBackupCard.turnOnSync`)" size="small">
                             <template #icon><Icon name="desktop" /></template>
                         </Button>

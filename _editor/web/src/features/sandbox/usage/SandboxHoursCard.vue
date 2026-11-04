@@ -7,6 +7,7 @@ import HostedHoursMeter from "../../settings/hosted-plan/HostedHoursMeter.vue";
 import { formatDayShort, machineHours, rungName } from "../../../models/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { here, page } from "../../../lib/routes/links";
 
 // WHETHER THIS SANDBOX'S AWAKE TIME COSTS HOURS, answered on the page about what the sandbox uses. A limit belongs
 // beside the thing it limits: shown only at account level, it reads as a limit on every sandbox, and one on the
@@ -61,7 +62,7 @@ const note = computed(() => {
                 <span class="flex items-center gap-2 text-sm font-semibold text-content">
                     <Icon name="clock" class="text-link" aria-hidden="true" />{{ t(`sandbox.sandboxHours.awakeHours`) }}
                 </span>
-                <RouterLink v-if="offered" to="/settings/billing" class="text-xs text-link hover:underline">{{
+                <RouterLink v-if="offered" :to="here(page.account(`billing`))" class="text-xs text-link hover:underline">{{
                     t(`sandbox.sandboxHours.billing`)
                 }}</RouterLink>
             </div>

@@ -1,47 +1,54 @@
-import { isAccountPath, isHomePath, isSandboxSettingsPath, masterRailAfter } from "./home";
+import { homePath, insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { DELETED_PATH, isAccountPath, isAccountRoute, isHomePath } from "./home";
 
-// The master view's rail: worn on /home, kept on the person's own pages opened from there, and given back to the sandbox's
-// rail by any page of a sandbox.
+// Home's own page, and the account's pages, which need no sandbox: read off the address in either form it comes in.
 
-test("home paths are the master view, nothing else is", () => {
-    expect(isHomePath(`/home`)).toBe(true);
-    expect(isHomePath(`/home/box-1`)).toBe(true);
+const BOX = `a1b2c3d4e5f6`;
+
+test(`Home's own page is Home with or without a sandbox named, and nothing below it`, () => {
+    expect(isHomePath(homePath())).toBe(true);
+    expect(isHomePath(homePath(BOX))).toBe(true);
+    expect(isHomePath(`${homePath()}?add=sandbox`)).toBe(true);
+    expect(isHomePath(homePath(BOX, page.workspace()))).toBe(false);
+    expect(isHomePath(homePath(undefined, page.account()))).toBe(false);
     expect(isHomePath(`/homework`)).toBe(false);
 });
 
-test("settings opened from the master view keep its rail; a sandbox's page gives it back", () => {
-    expect(masterRailAfter(false, `/home`)).toBe(true);
-    expect(masterRailAfter(true, `/settings/appearance`)).toBe(true);
-    expect(masterRailAfter(true, `/settings`)).toBe(true);
-    expect(masterRailAfter(false, `/settings`)).toBe(false);
-    expect(masterRailAfter(true, `/deleted-sandboxes`)).toBe(true);
-    expect(masterRailAfter(false, `/deleted-sandboxes`)).toBe(false);
-    expect(masterRailAfter(true, `/workspace`)).toBe(false);
-    expect(masterRailAfter(true, `/settingsx`)).toBe(false);
-});
+test.each([
+    homePath(),
+    homePath(BOX),
+    homePath(undefined, page.account()),
+    homePath(undefined, page.account(`appearance`, { query: { plan: `welcome` } })),
+    homePath(undefined, page.deletedSandboxes()),
+    insidePath(BOX, page.account(`notifications`, { hash: `voice` })),
+    insidePath(BOX, page.deletedSandboxes()),
+    // The same pages at their addresses from before frames.
+    `/settings`,
+    `/settings/appearance`,
+    `/deleted-sandboxes`,
+    `/deleted-sandboxes#deleted`,
+    DELETED_PATH,
+])(`%s belongs to the account without needing a sandbox`, (path) => expect(isAccountPath(path)).toBe(true));
 
-test("the section Home shows of every sandbox keeps its frame when entered from it; any other page of a sandbox gives the rail back", () => {
-    expect(masterRailAfter(true, `/workspace/src/a.ts`, true)).toBe(true);
-    expect(masterRailAfter(true, `/agents`, false)).toBe(false);
-    // Reached from inside a sandbox, the same page stays the sandbox's own.
-    expect(masterRailAfter(false, `/workspace`, true)).toBe(false);
-});
+test.each([
+    `/homework`,
+    `/settingsx`,
+    `/deleted-sandboxesx`,
+    `/deleted-sandboxes/other`,
+    insidePath(BOX),
+    insidePath(BOX, page.workspace()),
+    homePath(BOX, page.agents()),
+    homePath(BOX, page.sandboxSettings()),
+    `/workspace`,
+    `/agents`,
+    `/sandbox`,
+    `/sandbox/agent`,
+])(`%s is not an account page`, (path) => expect(isAccountPath(path)).toBe(false));
 
-test.each([`/home`, `/home/box-1`, `/settings`, `/settings/appearance`, `/settings?plan=welcome`, `/settings/notifications#voice`, `/deleted-sandboxes`, `/deleted-sandboxes/`, `/deleted-sandboxes#deleted`])(
-    `%s belongs to the account without needing a sandbox`,
-    (path) => expect(isAccountPath(path)).toBe(true),
-);
-
-test.each([`/homework`, `/settingsx`, `/deleted-sandboxesx`, `/deleted-sandboxes/other`, `/workspace`, `/agents`, `/sandbox`, `/sandbox/agent`])(
-    `%s is not an account page`,
-    (path) => expect(isAccountPath(path)).toBe(false),
-);
-
-test("a sandbox's settings are the hub at /sandbox and every page below it, nothing that only starts the same", () => {
-    for (const path of [`/sandbox`, `/sandbox/models`, `/sandbox/access?tab=people`, `/sandbox#top`]) {
-        expect(isSandboxSettingsPath(path)).toBe(true);
-    }
-    for (const path of [`/sandboxes`, `/settings`, `/home/sandbox`]) {
-        expect(isSandboxSettingsPath(path)).toBe(false);
-    }
+test(`a route is the account's on Home's own page and on an account page in either frame`, () => {
+    expect(isAccountRoute({ meta: { frame: `home` }, params: {} })).toBe(true);
+    expect(isAccountRoute({ meta: { frame: `inside`, page: `account` }, params: { sandbox: BOX } })).toBe(true);
+    expect(isAccountRoute({ meta: { frame: `home`, page: `deletedSandboxes` }, params: {} })).toBe(true);
+    expect(isAccountRoute({ meta: { frame: `home`, page: `workspace` }, params: { sandbox: BOX } })).toBe(false);
+    expect(isAccountRoute({ meta: {}, params: {} })).toBe(false);
 });

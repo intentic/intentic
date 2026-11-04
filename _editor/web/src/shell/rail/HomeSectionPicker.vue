@@ -10,7 +10,8 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { chooseHomeSection, type HomeSection, homeSection } from "../../lib/routes/homeSection";
-import { sectionEntryPath } from "../../models/sandbox/sandboxScreen";
+import { homeEntryPath } from "../../models/sandbox/sandboxScreen";
+import { HOME_PATH } from "../../lib/routes/firstScreens";
 import HomeSectionChoices from "./HomeSectionChoices.vue";
 
 const t = useT();
@@ -28,13 +29,13 @@ const tip = computed((): Tip =>
         : { title: t(`home.section.inEverySandbox`), rows: [{ label: t(`home.section.view`), value: chosen.value.label }] },
 );
 
-// Chosen before the navigation, since Home's frame holds for the address of whichever section is chosen
-// (models/home/masterRail.ts); replaced rather than pushed, so Back never walks through views the reader has since left.
+// Chosen before the navigation, which opens what was chosen of the sandbox shown, in Home's frame; replaced rather than
+// pushed, so Back never walks through views the reader has since left.
 const choose = (section: HomeSection | undefined): void => {
     open.value = false;
     chooseHomeSection(section);
     const id = sandbox.activeSandboxId.value;
-    void router.replace(section === undefined || id === undefined ? `/home` : sectionEntryPath(id, section));
+    void router.replace(id === undefined ? HOME_PATH : homeEntryPath(id));
 };
 </script>
 

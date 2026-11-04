@@ -58,7 +58,7 @@ pub fn notification_query(tag: &str) -> String {
 pub struct SentNotification {
     pub title: String,
     pub body: String,
-    /// The in-app path it opens: `/?conversation=<id>`, `/workspace`, `/automations`.
+    /// The in-app path it opens: `/s/<sandbox>?conversation=<id>`, `/s/<sandbox>/workspace`, `/s/<sandbox>/ext/automations`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     pub tag: String,

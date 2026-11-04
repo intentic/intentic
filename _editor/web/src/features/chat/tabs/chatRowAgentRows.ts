@@ -3,6 +3,7 @@ import type { MenuItem } from "primevue/menuitem";
 import type { Ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRole } from "../../../client/sandbox/useRole";
+import { here, page } from "../../../lib/routes/links";
 import { changesToRead } from "../../../models/agent-status/agentStatus-attention";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { draftFreshSession } from "../../../models/fleet/freshSession";
@@ -56,7 +57,7 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
     // it has something on it. No drill-in into the chat: this row IS the chat.
     const reviewRows = (agent: FleetAgent): MenuItem[] =>
         changesToRead(agent)
-            ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, command: () => navigateInApp(router, `/agents/${encodeURIComponent(agent.id)}`) }]
+            ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, command: () => navigateInApp(router, here(page.agent(agent.id))) }]
             : [];
     return (conversation: Conversation): ChatRowAgentRows => {
         // Only this sandbox's roster answers here: another box's chat offers none of its agent's rows.

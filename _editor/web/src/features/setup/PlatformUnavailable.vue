@@ -7,6 +7,7 @@ import { usePoll } from "@intentic/ui/async";
 import { platformRetry } from "../../client/auth/platformRetry";
 import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
+import { toTop } from "../../lib/routes/links";
 import { onScreen } from "../../workbench/window/onScreen";
 import { openThisComputersSandboxes, thisComputerOffered } from "../../app/environments/thisComputer";
 
@@ -30,7 +31,8 @@ const retry = async (): Promise<void> => {
 // The sandbox an /open link named, carried here in `returnTo` when the platform could not be asked about it; offered
 // first among the ones this device remembers.
 const returnTo = [route.query[`returnTo`]].flat()[0];
-const opened = returnTo === null || returnTo === undefined || !returnTo.startsWith(`/open?`) ? null : new URLSearchParams(returnTo.slice(`/open?`.length)).get(`url`);
+const openPrefix = `${toTop(`open`)}?`;
+const opened = returnTo === null || returnTo === undefined || !returnTo.startsWith(openPrefix) ? null : new URLSearchParams(returnTo.slice(openPrefix.length)).get(`url`);
 const focusUrl = opened === null ? undefined : normalizeDaemonUrl(opened);
 
 // Asks again on its own while the screen is up, so a reader who leaves the tab open lands in the app the moment the

@@ -7,6 +7,7 @@ import type { HistoryState, LocationQuery } from "vue-router";
 import { z } from "zod";
 import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE } from "../../../models/sandbox/addSandbox";
 import { FINISH_QUERY } from "../../../models/sandbox/finishOnHome";
+import { toTop } from "../../../lib/routes/links";
 import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 
 // A NEW SANDBOX IS MADE ON HOME, IN A TILE OF ITS OWN (2026-10-26). The + on Home's rail, its first-run page, and every
@@ -63,7 +64,7 @@ export const closesBackTo = (back: HistoryState[`back`]): boolean => {
         return false;
     }
     const [path = ``, search = ``] = read.data.split(`?`, 2);
-    if (path.startsWith(`/login`) || path === `/setup` || path === `/start/hosted`) {
+    if (path.startsWith(toTop(`login`)) || path === toTop(`setup`) || path === toTop(`startHosted`)) {
         return false;
     }
     return new URLSearchParams(search).get(ADD_SANDBOX_QUERY) !== ADD_SANDBOX_VALUE;

@@ -2,14 +2,14 @@
      sandbox's name and one press that opens it where it was last left (sandboxEntryPath): the same step the rail tile's
      double-click and Enter take, said where it can be seen. A top bar over the chat carrying the same was removed by the
      owner's decision, so this is one quiet item of the status strip instead (ChatPaneStatus.vue decides when it shows).
-     A link, so Ctrl/Cmd-click opens the sandbox in a tab of its own; a plain click steps inside past Home's rule. -->
+     A link, so Ctrl/Cmd-click opens the sandbox in a tab of its own; its address is inside the sandbox, so a plain click
+     leaves Home's frame for it. -->
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { goInside } from "../../../../lib/routes/homeDetour";
 import { sandboxEntryPath } from "../../../../models/sandbox/sandboxScreen";
 
 const t = useT();
@@ -28,7 +28,7 @@ const enter = (event: MouseEvent): void => {
         return;
     }
     event.preventDefault();
-    void goInside(() => router.push(to));
+    void router.push(to);
 };
 </script>
 

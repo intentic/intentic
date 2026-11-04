@@ -5,6 +5,7 @@ import SandboxAnalytics from "../analytics/SandboxAnalytics.vue";
 import { activityPart } from "../activity/activityParts";
 import SectionLink from "../SectionLink.vue";
 import AgentPrivacyShield from "./AgentPrivacyShield.vue";
+import { here, page } from "../../../lib/routes/links";
 
 // Privacy shield: what may leave this sandbox, and in what form. The shield first, since it is what keeps personal data
 // from a model provider nobody trusted, then the one other thing that sends anything about this box out, Intentic's own
@@ -13,13 +14,11 @@ import AgentPrivacyShield from "./AgentPrivacyShield.vue";
 // command judge, and the analytics switch on Access until 2026-10-16.
 
 const t = useT();
-
-const PLACES = { name: `sandbox`, params: { tab: `data-protection` }, query: { step: `places` } } as const;
 </script>
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <SectionLink :text="t(`sandbox.privacyShieldPage.intro`)" :to="PLACES" :label="t(`sandbox.privacyShieldPage.wherePlaces`)" />
+        <SectionLink :text="t(`sandbox.privacyShieldPage.intro`)" :to="here(page.sandboxSettings(`data-protection`, { query: { step: `places` } }))" :label="t(`sandbox.privacyShieldPage.wherePlaces`)" />
 
         <AgentPrivacyShield />
 

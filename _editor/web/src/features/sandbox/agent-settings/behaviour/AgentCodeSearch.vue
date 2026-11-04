@@ -17,6 +17,7 @@ import { useDetailLevel } from "./detailLevel";
 import CodeSearchExplainer from "./explainers/CodeSearchExplainer.vue";
 import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../../lib/routes/links";
 
 // Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's a
 // question), and the field notes (before the conversation, and for all of it). Simple draws each switch with one chip
@@ -153,7 +154,7 @@ const notesSchedule = computed<string>(() => {
                         <span class="text-warning">{{
                             notes.automation === `missing` ? t(`sandbox.agentCodeSearch.notScheduled`) : t(`sandbox.agentCodeSearch.automationOff`)
                         }}</span>
-                        <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                        <RouterLink :to="here(page.extension(`automations`))" class="text-link hover:underline">{{
                             t(`sandbox.agentCodeSearch.openAutomations`)
                         }}</RouterLink>
                     </span>
@@ -171,7 +172,7 @@ const notesSchedule = computed<string>(() => {
                             <span v-else-if="notes?.present === false" class="text-muted">{{ t(`sandbox.agentCodeSearch.noBriefYet`) }}</span>
                             <template v-else-if="notes?.present === true">
                                 <span class="tabular-nums text-content">{{ notesReach }}</span>
-                                <RouterLink :to="`/workspace/${FIELD_NOTES_FILE}`" class="text-link hover:underline">{{
+                                <RouterLink :to="here(page.workspace(FIELD_NOTES_FILE))" class="text-link hover:underline">{{
                                     t(`sandbox.agentCodeSearch.openTheBrief`)
                                 }}</RouterLink>
                                 <!-- A block the file's priority table does not rank reaches no conversation at any limit. -->
@@ -215,13 +216,13 @@ const notesSchedule = computed<string>(() => {
                         <dd class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                             <template v-if="notes?.automation === `missing`">
                                 <span class="text-muted">{{ t(`sandbox.agentCodeSearch.notScheduled`) }}</span>
-                                <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                                <RouterLink :to="here(page.extension(`automations`))" class="text-link hover:underline">{{
                                     t(`sandbox.agentCodeSearch.setUpTheAutomation`)
                                 }}</RouterLink>
                             </template>
                             <template v-else-if="notes?.automation === `disabled`">
                                 <span class="text-warning">{{ t(`sandbox.agentCodeSearch.automationOff`) }}</span>
-                                <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                                <RouterLink :to="here(page.extension(`automations`))" class="text-link hover:underline">{{
                                     t(`sandbox.agentCodeSearch.openAutomations`)
                                 }}</RouterLink>
                             </template>

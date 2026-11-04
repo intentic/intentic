@@ -1,5 +1,7 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { page as pages, topPath } from "@intentic/sandbox-contract/app-routes";
+import { demoHome, demoPage } from "../fixtures/demo-pages.js";
 import { auditPage, WCAG_22_AA } from "./audit.js";
 
 const looks = [`light`, `dark`, `sanctum`, `silver`] as const;
@@ -20,7 +22,7 @@ test.describe(`composer model controls`, () => {
                 });
 
                 test(`keeps the free trial model visible and opens its picker on a fresh home`, async ({ page }) => {
-                    await page.goto(`home?mode=fresh`);
+                    await page.goto(`${demoHome()}?mode=fresh`);
                     if (width < 768) {
                         await page.getByRole(`button`, { name: /^acme-shop/ }).click();
                     }
@@ -39,7 +41,7 @@ test.describe(`composer model controls`, () => {
                 });
 
                 test(`lets a home change its model and supported effort`, async ({ page }) => {
-                    await page.goto(`home?mode=home`);
+                    await page.goto(`${demoHome()}?mode=home`);
                     if (width < 768) {
                         await page.getByRole(`button`, { name: /^acme-shop/ }).click();
                     }
@@ -62,7 +64,7 @@ test.describe(`composer model controls`, () => {
 
         test(`keeps guest model and effort controls absent at ${width}px`, async ({ page }) => {
             await page.setViewportSize({ width, height: 1000 });
-            await page.goto(`home?mode=home&as=guest`);
+            await page.goto(`${demoHome()}?mode=home&as=guest`);
             const composer = page.locator(`.chat-pane form`);
             await expect(composer.getByRole(`textbox`)).toBeVisible();
             await expect(composer.getByRole(`button`, { name: /^(Provider and model: |Model: |Free trial|Choose a model|No model)/ })).toHaveCount(0);
@@ -71,18 +73,40 @@ test.describe(`composer model controls`, () => {
     }
 });
 
-const screens = [
-    `login`, `agents`, `chat`, `workspace`, `settings`, `settings/appearance`, `settings/organisation`, `sandbox`,
-    `sandbox/access`, `sandbox/access?section=areas`, `sandbox/personas`, `sandbox/data-protection`, `sandbox/audit`,
-    `capabilities`, `ext/approvals`, `ext/workflows`, `ext/e-urzad/office-ezd`, `ext/e-urzad/office-ed`,
-] as const;
+// Each screen by the name its tests carry, at its address in the demo: a page of the demo's sandbox inside it, and the
+// account's own in Home's frame, where an address naming no sandbox has always opened them.
+const SCREEN_PATHS = {
+    login: topPath(`login`).slice(1),
+    agents: demoPage(pages.agents()),
+    chat: demoPage(pages.chat()),
+    workspace: demoPage(pages.workspace()),
+    settings: demoHome(pages.account()),
+    "settings/appearance": demoHome(pages.account(`appearance`)),
+    "settings/organisation": demoHome(pages.account(`organisation`)),
+    sandbox: demoPage(pages.sandboxSettings()),
+    "sandbox/access": demoPage(pages.sandboxSettings(`access`)),
+    "sandbox/access?section=areas": demoPage(pages.sandboxSettings(`access`, { query: { section: `areas` } })),
+    "sandbox/personas": demoPage(pages.sandboxSettings(`personas`)),
+    "sandbox/data-protection": demoPage(pages.sandboxSettings(`data-protection`)),
+    // The audit log is a part of Activity now (legacy.ts says since when).
+    "sandbox/audit": demoPage(pages.sandboxSettings(`activity`, { query: { section: `audit` } })),
+    capabilities: demoPage(pages.capabilities()),
+    "ext/approvals": demoPage(pages.extension(`approvals`)),
+    "ext/workflows": demoPage(pages.extension(`workflows`)),
+    "ext/e-urzad/office-ezd": demoPage(pages.extension(`e-urzad`, `office-ezd`)),
+    "ext/e-urzad/office-ed": demoPage(pages.extension(`e-urzad`, `office-ed`)),
+} as const;
+type Screen = keyof typeof SCREEN_PATHS;
+// SAFETY: SCREEN_PATHS is a const literal whose own keys are exactly Screen; Object.keys only widens their type.
+const screens = Object.keys(SCREEN_PATHS) as Screen[];
 
-const open = async (page: Page, path: string): Promise<void> => {
+const open = async (page: Page, screen: Screen): Promise<void> => {
+    const path = SCREEN_PATHS[screen];
     await page.goto(`${path}${path.includes(`?`) ? `&` : `?`}mode=full`, { waitUntil: `domcontentloaded` });
-    if (![`agents`, `chat`, `workspace`].includes(path)) {
+    if (![`agents`, `chat`, `workspace`].includes(screen)) {
         await page.locator(`main h1, main h2`).first().waitFor();
     }
-    if (path !== `login`) {
+    if (screen !== `login`) {
         await expect(page.locator(`#main-content`)).toBeVisible();
         await expect(page.locator(`#main-content`)).not.toHaveText(``);
         if ((page.viewportSize()?.width ?? 0) >= 768) {
@@ -90,14 +114,14 @@ const open = async (page: Page, path: string): Promise<void> => {
             await page.locator(`.chat-turns`).first().waitFor();
             await expect(page.locator(`textarea:visible`).first()).toBeVisible();
         }
-        if (path === `agents`) {
+        if (screen === `agents`) {
             await page.locator(`.session-card button`).first().waitFor();
         }
-        if (path === `settings/organisation`) {
+        if (screen === `settings/organisation`) {
             await page.getByRole(`button`, { name: /^Transport office demo/ }).click();
             await page.getByRole(`switch`).first().waitFor();
         }
-        if (path.startsWith(`ext/e-urzad/`)) {
+        if (screen.startsWith(`ext/e-urzad/`)) {
             await page.getByRole(`status`).filter({ hasText: /Last read from the office|Ostatni odczyt z urzędu/ }).waitFor();
         }
     }
@@ -239,7 +263,7 @@ test(`organisation policy groups and switches work from the keyboard`, async ({ 
 for (const width of [1440, 320]) {
     test(`shared modal traps and restores keyboard focus at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 800 });
-        await page.goto(`kit`);
+        await page.goto(topPath(`kit`).slice(1));
         const trigger = page.getByRole(`button`, { name: `Open modal`, exact: true });
         await trigger.focus();
         await page.keyboard.press(`Enter`);
@@ -336,7 +360,8 @@ test(`system reduced motion and forced colours preserve keyboard focus`, async (
     await clean(page);
 });
 
-for (const screen of [`agents`, `sandbox/access`, `ext/approvals`, `ext/e-urzad/office-ezd`]) {
+const TEXT_SIZE_SCREENS: readonly Screen[] = [`agents`, `sandbox/access`, `ext/approvals`, `ext/e-urzad/office-ezd`];
+for (const screen of TEXT_SIZE_SCREENS) {
     test(`200% text size: ${screen}`, async ({ page }) => {
         await open(page, screen);
         const before = await page.locator(`html`).evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
@@ -390,8 +415,17 @@ test(`area disclosure and persona routing have names and keyboard actions`, asyn
     await expect(page.getByRole(`switch`, { name: /Match new chats/ })).toBeVisible();
 });
 
+const REFLOW_SCREENS: readonly Screen[] = [
+    `agents`,
+    `settings/organisation`,
+    `sandbox/access`,
+    `sandbox/access?section=areas`,
+    `ext/approvals`,
+    `ext/e-urzad/office-ezd`,
+    `ext/e-urzad/office-ed`,
+];
 for (const locale of [`en`, `pl`] as const) {
-    for (const screen of [`agents`, `settings/organisation`, `sandbox/access`, `sandbox/access?section=areas`, `ext/approvals`, `ext/e-urzad/office-ezd`, `ext/e-urzad/office-ed`]) {
+    for (const screen of REFLOW_SCREENS) {
         test(`${locale} reflow at 320px: ${screen}`, async ({ page }) => {
             await page.setViewportSize({ width: 320, height: 800 });
             await page.addInitScript((language) => localStorage.setItem(`ui-locale`, language), locale);

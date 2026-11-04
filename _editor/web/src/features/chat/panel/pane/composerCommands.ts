@@ -3,6 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, inject, type InjectionKey, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { here, page } from "../../../../lib/routes/links";
 import { type CommandResult, commandResultOf } from "../../../../models/conversations/commands/commandResult";
 import {
     type LocalCommandName,
@@ -40,7 +41,7 @@ const realEffects = (): CommandEffects => {
     const router = useRouter();
     return {
         startChat: () => void startAgent(),
-        openSettings: () => void router.push(`/sandbox/agent`),
+        openSettings: () => void router.push(here(page.sandboxSettings(`agent`))),
         rename: (conversation, title) => void useAgents().rename(conversation.conversationId, title),
         copy: (text) => writeClipboard(text),
     };

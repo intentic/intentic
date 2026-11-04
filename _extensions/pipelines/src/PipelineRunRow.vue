@@ -102,9 +102,9 @@ const fixModel = useAgentRunPick(
 
 const api = host();
 const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => void } =>
-    // `/agents/<id>` as the href, so ⌘-click opens a full tab like every other row on this board.
+    // The agent's own page as the href, so ⌘-click opens a full tab like every other row on this board.
     // The plain click opens the conversation in the docked chat panel rather than navigating away.
-    appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
+    appLink(api.href(api.links.agent(id)), () => api.chat.openAgent(id));
 
 // This row's own agent's fate, read once: drives the chip that replaces the button and its label when there's nothing
 // left to report.

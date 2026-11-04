@@ -92,7 +92,7 @@ const stalledNames = computed(() => workflows.value.filter((workflow) => workflo
 const fixerId = computed(() => props.view.fixer?.id ?? failure.value.fixer ?? failure.value.decision?.conversationId);
 const fixerLink = computed(() => {
     const id = fixerId.value;
-    return id === undefined ? undefined : appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
+    return id === undefined ? undefined : appLink(api.href(api.links.agent(id)), () => api.chat.openAgent(id));
 });
 
 // Why it was handed back, in two words the sentence leads with. Undefined reads "Handed back": an older daemon recorded

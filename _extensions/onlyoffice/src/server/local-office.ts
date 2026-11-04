@@ -259,10 +259,10 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
             if (request.method === "GET" && route === "/status") {
                 return json(200, (await (await engineFor(folder)).engine.status()) satisfies DocsState);
             }
-            if (request.method === "POST" && route === "/start") {
+            if (request.method === "POST" && route === "/start") { // allow(route-literal): this extension's own backend route
                 return json(200, (await (await engineFor(folder)).engine.prepare()) satisfies DocsState);
             }
-            if (request.method === "POST" && route === "/open") {
+            if (request.method === "POST" && route === "/open") { // allow(route-literal): this extension's own backend route
                 return open(folder, request);
             }
             // A browser-engine editor is told to save by message; the route exists only for the document server's.

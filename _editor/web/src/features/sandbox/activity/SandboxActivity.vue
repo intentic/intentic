@@ -10,6 +10,7 @@ import PrivacyShieldRecord from "../privacy-shield/PrivacyShieldRecord.vue";
 import SandboxAudit from "../audit/SandboxAudit.vue";
 import SectionLink from "../SectionLink.vue";
 import { ACTIVITY_PARTS, type ActivityPart } from "./activityParts";
+import { here, page } from "../../../lib/routes/links";
 
 // Activity: what happened, in four parts. Turns (what woke the agent, what it called, how each went) are the Activity
 // extension's view, drawn here; every command the judge checked and every request the privacy shield handled are the
@@ -62,11 +63,6 @@ const part = computed<ActivityPart>({
     get: () => parts.value.find((entry) => entry !== first.value && entry === route.query[`section`]) ?? first.value,
     set: (value) => void router.push({ query: { ...route.query, section: value === first.value ? undefined : value } }),
 });
-
-const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
-const SHIELD = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
-const EXTENSIONS = { name: `sandbox`, params: { tab: `extensions` } } as const;
-const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
 </script>
 
 <template>
@@ -77,23 +73,23 @@ const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
             <slot v-if="turns" name="turns" />
             <template v-else>
                 <Notice tone="info">{{ t(`sandbox.activityPage.turnsOff`) }}</Notice>
-                <SectionLink :text="t(`sandbox.activityPage.turnsOffHow`)" :to="EXTENSIONS" :label="t(`sandbox.sandboxNav.extensions`)" />
+                <SectionLink :text="t(`sandbox.activityPage.turnsOffHow`)" :to="here(page.sandboxSettings(`extensions`))" :label="t(`sandbox.sandboxNav.extensions`)" />
             </template>
         </template>
 
         <template v-else-if="part === `commands`">
             <AgentSafetyLog />
-            <SectionLink :text="t(`sandbox.activityPage.commandsSettings`)" :to="GUARDRAILS" :label="t(`sandbox.sandboxNav.guardrails`)" />
+            <SectionLink :text="t(`sandbox.activityPage.commandsSettings`)" :to="here(page.sandboxSettings(`guardrails`))" :label="t(`sandbox.sandboxNav.guardrails`)" />
         </template>
 
         <template v-else-if="part === `personal`">
             <PrivacyShieldRecord />
-            <SectionLink :text="t(`sandbox.activityPage.personalSettings`)" :to="SHIELD" :label="t(`sandbox.sandboxNav.privacyShield`)" />
+            <SectionLink :text="t(`sandbox.activityPage.personalSettings`)" :to="here(page.sandboxSettings(`privacy-shield`))" :label="t(`sandbox.sandboxNav.privacyShield`)" />
         </template>
 
         <template v-else>
             <SandboxAudit />
-            <SectionLink :text="t(`sandbox.activityPage.auditSettings`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
+            <SectionLink :text="t(`sandbox.activityPage.auditSettings`)" :to="here(page.sandboxSettings(`retention`))" :label="t(`sandbox.sandboxNav.retention`)" />
         </template>
     </div>
 </template>

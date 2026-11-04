@@ -1,11 +1,12 @@
+import { insidePath, page, SANDBOX_PAGES, SANDBOX_SEGMENT } from "@intentic/sandbox-contract/app-routes";
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
 import { queryWithScope, scopeFromQuery } from "./scopeRoute";
 
-/* The workspace deep-link route must remain resolvable by Vue Router. */
+/* The workspace deep-link route must remain resolvable by Vue Router, at the address the shared table writes for it. */
 
 const noop = { template: `<div />` };
 const routes: RouteRecordRaw[] = [
-    { path: `/workspace/:path(.*)*`, name: `workspace`, component: noop },
+    { path: `/${SANDBOX_SEGMENT}/:sandbox/${SANDBOX_PAGES.workspace}`, name: `inside:workspace`, component: noop },
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
 const makeRouter = () => createRouter({ history: createMemoryHistory(), routes });
@@ -13,37 +14,35 @@ const readPath = (params: Record<string, unknown>): string => {
     const path = params[`path`];
     return Array.isArray(path) ? path.join(`/`) : ((path as string | undefined) ?? ``);
 };
+// The address useWorkspaceRoute writes for a path, as the builders make it (lib/routes/links.ts `here`).
+const workspaceAt = (path?: string): string => insidePath(`sb-1`, page.workspace(path));
 
 describe(`workspace splat route`, () => {
     it(`reads a nested file path as joined segments`, () => {
-        expect(readPath(makeRouter().resolve(`/workspace/src/foo.ts`).params)).toBe(`src/foo.ts`);
+        expect(readPath(makeRouter().resolve(workspaceAt(`src/foo.ts`)).params)).toBe(`src/foo.ts`);
     });
 
-    it(`reads bare /workspace as an empty path (the "no file" sentinel)`, () => {
-        expect(readPath(makeRouter().resolve(`/workspace`).params)).toBe(``);
+    it(`reads the bare workspace as an empty path (the "no file" sentinel)`, () => {
+        expect(readPath(makeRouter().resolve(workspaceAt()).params)).toBe(``);
     });
 
-    it(`writes an array param as real slashes, not %2F`, () => {
-        expect(makeRouter().resolve({ name: `workspace`, params: { path: [`src`, `foo.ts`] } }).href).toBe(`/workspace/src/foo.ts`);
-    });
-
-    it(`writing a single string param encodes the slash: why useWorkspaceRoute splits to an array`, () => {
-        expect(makeRouter().resolve({ name: `workspace`, params: { path: `src/foo.ts` } }).href).toBe(`/workspace/src%2Ffoo.ts`);
+    it(`writes a file's path with real slashes, not %2F`, () => {
+        expect(makeRouter().resolve({ path: workspaceAt(`src/foo.ts`), query: {} }).href).toBe(`/s/sb-1/workspace/src/foo.ts`);
     });
 
     it(`round-trips a filename with spaces`, () => {
         const router = makeRouter();
-        const href = router.resolve({ name: `workspace`, params: { path: `my dir/a b.ts`.split(`/`) } }).href;
-        expect(href).toBe(`/workspace/my%20dir/a%20b.ts`);
+        const href = router.resolve({ path: workspaceAt(`my dir/a b.ts`), query: {} }).href;
+        expect(href).toBe(`/s/sb-1/workspace/my%20dir/a%20b.ts`);
         expect(readPath(router.resolve(href).params)).toBe(`my dir/a b.ts`);
     });
 
-    it(`writes bare /workspace for an empty path array`, () => {
-        expect(makeRouter().resolve({ name: `workspace`, params: { path: [] } }).href).toBe(`/workspace`);
+    it(`writes the bare workspace for an empty path`, () => {
+        expect(makeRouter().resolve({ path: workspaceAt(``), query: {} }).href).toBe(`/s/sb-1/workspace`);
     });
 
     it(`outranks the root catch-all for a nested path`, () => {
-        expect(makeRouter().resolve(`/workspace/src/foo.ts`).name).toBe(`workspace`);
+        expect(makeRouter().resolve(workspaceAt(`src/foo.ts`)).name).toBe(`inside:workspace`);
     });
 });
 
@@ -71,7 +70,7 @@ describe(`the scope the workspace URL carries`, () => {
 
     it(`round-trips a branch through a real URL, slashes and all`, () => {
         const router = makeRouter();
-        const href = router.resolve({ name: `workspace`, params: { path: [] }, query: queryWithScope({}, { repo: `apps/web`, branch: `feature/a b` }) }).href;
+        const href = router.resolve({ path: workspaceAt(), query: queryWithScope({}, { repo: `apps/web`, branch: `feature/a b` }) }).href;
         expect(scopeFromQuery(router.resolve(href).query)).toEqual({ repo: `apps/web`, branch: `feature/a b` });
     });
 });

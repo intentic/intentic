@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { homeFrame } from "../../lib/routes/homeSection";
 import { masterRail } from "../../models/home/masterRail";
+import { here, isPage, page } from "../../lib/routes/links";
 import { homeConversation } from "../../models/home/homeChat";
 import { computed, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
@@ -57,13 +58,13 @@ const browsersBeside = computed(() => sideBrowsersSlot.value !== null && browser
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
 chat.onDocked(() => {
-    if (chatOnRail.value && router.currentRoute.value.name !== `chat`) {
-        void router.push(`/chat`);
+    if (chatOnRail.value && !isPage(router.currentRoute.value, `chat`)) {
+        void router.push(here(page.chat()));
     }
 });
 // The view with a tab in the side panel comes back to it, beside wherever the reader is.
 browsers.onDocked(() => {
-    if (browsersOpened.value && router.currentRoute.value.name !== `browsers` && tabsOfView(BROWSERS_SIDE_VIEW).length === 0) {
+    if (browsersOpened.value && !isPage(router.currentRoute.value, `browsers`) && tabsOfView(BROWSERS_SIDE_VIEW).length === 0) {
         void router.push(browsersPath(browsersFront.value));
     }
 });

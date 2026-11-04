@@ -10,6 +10,7 @@ import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../app/projectScope";
 import { SHARED_SCOPE, scopeFields, type ViewScope, workspaceScope, workspaceView } from "../../../app/workspaceScope";
 import { linkScope } from "../../../lib/markdown/markdownFileLinks";
+import { here, isPage, page } from "../../../lib/routes/links";
 
 // `.intentic` is bind-mounted into every isolated namespace, so a path under it is shared regardless of scope.
 export const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);
@@ -19,9 +20,9 @@ export const sharedStatePath = (path: string): boolean => path.startsWith(`${STA
 // pulling in the router or tab singleton.
 
 // Whether this window has a side panel to look at a file in, for a reader the Workspace is open to.
-const canLookBeside = (): boolean => sideDocked.value && sectionReachable(`/workspace`);
+const canLookBeside = (): boolean => sideDocked.value && sectionReachable(here(page.workspace()));
 // Whether a reference is looked at beside rather than opened: anywhere but the Workspace itself.
-const peeksBeside = (): boolean => canLookBeside() && navigation().currentRoute.value.name !== `workspace`;
+const peeksBeside = (): boolean => canLookBeside() && !isPage(navigation().currentRoute.value, `workspace`);
 
 // What is worth saying beside the file a reference opened: that nothing matched (and what it may have meant), that it is
 // one of several, or that the conversation renamed it since. undefined when there is nothing to say, or no answer.
@@ -110,7 +111,7 @@ export const openInWorkspace = async (path: string, line?: number, scope?: ViewS
         openFile(target);
     }
     // No-op when already on the route; the scope rides the query so the route and singleton stay in sync.
-    void navigation().push({ name: `workspace`, params: { path: target.split(`/`) }, query: scopeFields(workspaceView.value) });
+    void navigation().push(here(page.workspace(target, { query: scopeFields(workspaceView.value) })));
 };
 
 // Delegated click handler for file links rendered inside v-html (anchors host no per-link listener). A modified

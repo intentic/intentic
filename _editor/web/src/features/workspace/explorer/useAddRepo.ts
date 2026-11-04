@@ -6,6 +6,7 @@ import { computed, hasInjectionContext, onScopeDispose, ref } from "vue";
 import { useRouter } from "vue-router";
 import { setProjectScope } from "../../../app/projectScope";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { here, page } from "../../../lib/routes/links";
 import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { hold, useNotifications } from "../../../workbench/notifications/notifications";
 import { dismissOperation, type Operation, operationsUnder, useOperations } from "../../../workbench/operations/operations";
@@ -52,7 +53,7 @@ export function useAddRepo() {
 
     const open = (name: string): void => {
         setProjectScope(name);
-        void router?.push({ name: `workspace` });
+        void router?.push(here(page.workspace()));
     };
 
     // Files the clone and answers at once whether it was taken: the caller clears its field and closes, and the lane

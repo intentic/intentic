@@ -1,6 +1,7 @@
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { Router } from "vue-router";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { here, page } from "../../../../lib/routes/links";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { agentSeed } from "../../../../models/fleet/useAgents-actions";
 import { summonChat } from "../../../../models/conversations/run/summon";
@@ -56,12 +57,12 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         commandTerminal: () => conversation().agentTerminal.value,
         watchTerminal: openWorkTerminal,
         commandBrowser: () => conversation().agentBrowser.value,
-        watchBrowser: (session) => navigate(`/browsers/${session}`),
+        watchBrowser: (session) => navigate(here(page.browsers(session))),
         toolChildren: (toolId) => {
             const chat = conversation();
             return agentToolChildren(chat.conversationId, toolId, chat.box.value);
         },
-        conversationRoute: (id) => `/agents/${encodeURIComponent(id)}`,
+        conversationRoute: (id) => here(page.agent(id)),
         subagent: (id) => subagents().find((session) => session.id === id),
         navigate,
         // A spawned child opens as a look, as its row in the tray does; an in-process one steps this chat's column into it.
@@ -78,7 +79,7 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
             if (kind === `spawned`) {
                 const child = agents.agentById(id);
                 if (child === undefined) {
-                    navigate(`/agents/${encodeURIComponent(id)}`);
+                    navigate(here(page.agent(id)));
                     return;
                 }
                 agents.open(child, `peek`);

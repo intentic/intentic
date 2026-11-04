@@ -1,5 +1,6 @@
 import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
 import type { IconName } from "@intentic/ui";
+import { here, page, type PageLink } from "../../../lib/routes/links";
 
 // What a chip and its card both say about one block: a state other than live, and who put it there.
 
@@ -37,13 +38,18 @@ export interface TurnedOffAt {
 
 // A capability's row has no Remove of its own: it goes with whatever pulled it in, so the card sends the reader THERE.
 // Every row once said "Capabilities", where the privacy shield's readers have no card at all, so the owner who wanted
-// them gone was sent to a page that could not do it.
+// them gone was sent to a page that could not do it. The page is named here and its address made where the reader is.
 const TURNED_OFF_AT = {
-    capability: { words: `goesWithCapability`, link: `capabilitiesLink`, to: `/capabilities` },
-    extension: { words: `goesWithCapability`, link: `capabilitiesLink`, to: `/capabilities` },
-    provider: { words: `goesWithAccount`, link: `modelsLink`, to: `/sandbox/models` },
-    privacy: { words: `goesWithPrivacyShield`, link: `privacyShieldLink`, to: `/sandbox/privacy-shield` },
-} as const satisfies Record<NonNullable<EnvironmentItem[`source`]>, TurnedOffAt>;
+    capability: { words: `goesWithCapability`, link: `capabilitiesLink`, page: page.capabilities() },
+    extension: { words: `goesWithCapability`, link: `capabilitiesLink`, page: page.capabilities() },
+    provider: { words: `goesWithAccount`, link: `modelsLink`, page: page.sandboxSettings(`models`) },
+    privacy: { words: `goesWithPrivacyShield`, link: `privacyShieldLink`, page: page.sandboxSettings(`privacy-shield`) },
+} as const satisfies Record<NonNullable<EnvironmentItem[`source`]>, Omit<TurnedOffAt, `to`> & { readonly page: PageLink }>;
 
-export const turnedOffAt = (item: EnvironmentItem): TurnedOffAt | undefined =>
-    item.origin === `capability` ? TURNED_OFF_AT[item.source ?? `capability`] : undefined;
+export const turnedOffAt = (item: EnvironmentItem): TurnedOffAt | undefined => {
+    if (item.origin !== `capability`) {
+        return undefined;
+    }
+    const { words, link, page: where } = TURNED_OFF_AT[item.source ?? `capability`];
+    return { words, link, to: here(where) };
+};

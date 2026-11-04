@@ -3,6 +3,7 @@ import { type CommandOs, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { RouterLink } from "vue-router";
 import RunCommand from "../../components/RunCommand.vue";
+import { here, page } from "../../lib/routes/links";
 import { useServingSlug } from "../../models/sandbox/environment/servingSlug";
 import { useHostRunning } from "../../models/sandbox/devices/useDevices";
 import { updateCommand } from "../../models/sandbox/environment/updateCommand";
@@ -32,7 +33,7 @@ const reachable = useHostRunning(() => slug.value);
         <span class="block font-medium">{{ t(`sandbox.sandboxOutdatedNotice.title`) }}</span>
         <span class="mt-0.5 block">{{ missing }}</span>
         <span class="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xs">
-            <RouterLink to="/sandbox/overview" data-update class="font-medium text-link hover:underline">{{
+            <RouterLink :to="here(page.sandboxSettings(`overview`))" data-update class="font-medium text-link hover:underline">{{
                 t(`sandbox.sandboxOutdatedNotice.update`)
             }}</RouterLink>
             <span v-if="!reachable" class="text-subtle">{{ t(`sandbox.sandboxOutdatedNotice.manual`) }}</span>

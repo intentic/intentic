@@ -4,6 +4,7 @@ import { Row, ROW_TIERS, RowGroup, SectionHeader, ui } from "@intentic/ui";
 import { sectionIcon } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
 import { useRoute, useRouter } from "vue-router";
+import { linkOf, samePage } from "../../lib/routes/links";
 import { searchInQuickOpen, useQuickOpen } from "../commands/useQuickOpen";
 import type { HubSearchResult } from "./hubSearch";
 import type { HubSearchPanel } from "./useHubSearchPanel";
@@ -31,9 +32,15 @@ const press = (event: MouseEvent, result: HubSearchResult): void => {
     search.open(result);
 };
 
+// Two addresses of one page with the same values, in whichever form and frame each is written.
+const samePageAt = (left: string, right: string): boolean => {
+    const [shown, named] = [linkOf(left), linkOf(right)];
+    return shown !== undefined && named !== undefined && samePage(shown, named);
+};
+
 // The answer whose card is on screen now, so the list says where the reader already is.
 const current = (result: HubSearchResult): boolean =>
-    route.path === result.to.path &&
+    samePageAt(route.path, result.to.path) &&
     route.hash === result.to.hash &&
     Object.entries(result.to.query).every(([key, value]) => route.query[key] === value);
 

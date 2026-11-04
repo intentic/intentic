@@ -11,6 +11,7 @@ import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBy
 import { useSandboxStorage } from "./useSandboxStorage";
 import { STORAGE_ANCHOR } from "./storageAnchor";
 import StorageCheckouts from "./StorageCheckouts.vue";
+import { here, page } from "../../../../lib/routes/links";
 
 // What is filling this sandbox's disk, by what the space is for, with a way to free what may go. A scan is asked for,
 // never started by opening the page: it reads every file on the volumes, and the last one stays on screen meanwhile.
@@ -225,7 +226,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             <Notice
                 :of="{ tone: `warning`, title: t(`sandbox.sandboxStorageCard.largeCheckout`, { repo: repo.repo, bytes: formatBytes(repo.bytes) }) }"
             />
-            <RouterLink to="/sandbox/personas?repositories=true" class="text-xs text-link hover:underline">{{
+            <RouterLink :to="here(page.sandboxSettings(`personas`, { query: { repositories: `true` } }))" class="text-xs text-link hover:underline">{{
                 t(`sandbox.sandboxStorageCard.chooseRepositories`)
             }}</RouterLink>
         </div>

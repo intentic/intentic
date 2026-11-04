@@ -2,6 +2,7 @@
 // in for a sandbox; nothing is mocked or sped up. No reloads: the fixture is in-memory, so a reload rewinds the drop
 // and the landed delta. The scripted turn starts on ATTACH, not page load, and parks until this script answers.
 
+import { insidePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -102,13 +103,15 @@ const record = async () => {
 
     const chat = page.locator(".chat-panel");
     const board = page.locator("main");
+    // By the end of a rail tile's address, which names the page after its frame and sandbox (`/demo/s/demo/agents`).
     const railLink = (path) => page.locator(`a[href$="${path}"]`);
     const cardBody = (title) => board.locator("div.cursor-pointer").filter({ hasText: title }).first();
     // Targets the card's title, not its body: a Finished card's body centre carries its own Land now, while the title
     // only focuses the agent (opens chat, keeps the board).
     const card = (title) => cardBody(title).getByText(title).first();
 
-    await page.goto(`${DEMO}/workspace`, { waitUntil: "domcontentloaded" });
+    // The demo's own sandbox (_site/demo/src/world/account.ts), its Workspace at the address that names it.
+    await page.goto(`${DEMO}${insidePath("demo", pages.workspace())}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("treeitem", { name: "README.md" }).waitFor({ timeout: 60_000 });
     await page.mouse.move(pointer.x, pointer.y);
     await sleep(1_600);

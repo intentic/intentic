@@ -1,6 +1,8 @@
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { nextTick } from "vue";
 import { faceOf, type LocalFace, LOCAL_REPOINT_EVENT, localSandboxId, wearFace } from "../app/environments/local";
 import { useSandbox } from "../client/sandbox/useSandbox";
+import { page, toInside } from "../lib/routes/links";
 import { landOnAfterSwitch } from "../models/sandbox/sandboxScreen";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 
@@ -58,7 +60,7 @@ export const moveTo = async (face: LocalFace): Promise<void> => {
     wearFace(face);
     setPageTitle(face.name);
     // Files, as the reload did, rather than whatever screen this folder was last left on: the reader asked for a folder.
-    landOnAfterSwitch(sandboxId, `/workspace`);
+    landOnAfterSwitch(sandboxId, toInside(sandboxId, page.workspace()));
     await sandbox.refresh();
     if (sandbox.activeSandboxId.value !== sandboxId) {
         throw new Error(`the editor stayed on ${sandbox.activeSandboxId.value ?? `no folder`} instead of ${sandboxId}`);
@@ -69,7 +71,7 @@ export const moveTo = async (face: LocalFace): Promise<void> => {
 
 // What the app would have done had the page not taken the switch: its face is already kept for the reload (local.rs).
 const reloadOnto = (): void => {
-    window.history.replaceState(null, ``, `${window.location.pathname}#/workspace`);
+    window.history.replaceState(null, ``, `${window.location.pathname}#${localPath(`files`)}`);
     window.location.reload();
 };
 

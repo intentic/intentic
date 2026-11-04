@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { homePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { type Browser, type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
 import { GOOGLE_BUTTON, newPerson, signedOutOfGoogle, signInToGoogle } from "./google.js";
 import { ENV_GOOGLE_KEY, REPO, stackUrls } from "./tier.js";
@@ -49,6 +50,8 @@ const GOOGLE_CREDENTIAL = /^(?:intentic@([^/]+)\/)?intentic\.gid\./u;
 
 // Where every move to another account lands (client/auth/deviceAccounts.ts `ACCOUNT_HOME`, which the router sends Home).
 const HOME = /\/home(?:[/?#]|$)/u;
+// The account's settings, in Home's frame, where they need no sandbox.
+const ACCOUNT_SETTINGS = homePath(undefined, pages.account());
 const LOGIN = /\/login(?:[?#]|$)/u;
 
 const googleKey = (): string => {
@@ -331,8 +334,8 @@ test(`a second tab follows when the first switches account, leaving for Home as 
     const { context, page, first, second } = await twoAccounts(browser, `tabs`);
     const settings = await context.newPage();
     record(settings, `second tab`);
-    await settings.goto(`${stackUrls().web}/settings`);
-    await expect(settings).toHaveURL(/\/settings(?:[/?#]|$)/u);
+    await settings.goto(`${stackUrls().web}${ACCOUNT_SETTINGS}`);
+    await expect(settings).toHaveURL(new RegExp(`${ACCOUNT_SETTINGS}(?:[/?#]|$)`, `u`));
     await expectMenuFor(settings, second);
 
     await switchFromMenu(page, first);
@@ -350,7 +353,7 @@ test(`a change a page asks for as one account is refused once the browser has mo
     // Another tab makes the first account active by the platform alone, so the page drawn for the second hears nothing.
     const tab = await context.newPage();
     record(tab, `other tab`);
-    await tab.goto(`${stackUrls().web}/settings`);
+    await tab.goto(`${stackUrls().web}${ACCOUNT_SETTINGS}`);
     expect(await postFrom(tab, `/api/auth/multi-session/set-active`, { sessionToken: kept.session.token })).toMatchObject({ status: 200 });
     expect(await signedInAs(context)).toBe(first);
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useRouter } from "vue-router";
@@ -10,6 +11,7 @@ import { passwordsOffered } from "./passwordsState";
 
 const t = useT();
 const router = useRouter();
+const PASSWORDS = localPath(`passwords`);
 </script>
 
 <template>
@@ -21,6 +23,6 @@ const router = useRouter();
                 <p class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.passwords.offerLead`) }}</p>
             </div>
         </div>
-        <Button size="small" tier="boring" class="shrink-0" :label="t(`desktop.passwords.offerOpen`)" @click="void router.push(`/passwords`)" />
+        <Button size="small" tier="boring" class="shrink-0" :label="t(`desktop.passwords.offerOpen`)" @click="void router.push(PASSWORDS)" />
     </section>
 </template>

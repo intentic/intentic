@@ -5,6 +5,7 @@ import type { Router } from "vue-router";
 import { z } from "zod";
 import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { guestAllowedPath } from "../../lib/routes/guestPaths";
+import { isPage } from "../../lib/routes/links";
 import { openBeside, sideDocked, type SideInput } from "../side/sideTabs";
 import { handOffToMainWindow } from "../window/mainWindow";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -166,11 +167,11 @@ export const openPreview = (router: Router, targetId?: string): void => {
 };
 
 // A tab shown beside the section the reader is in rather than taking the main area: a running app a turn left
-// for them, a localhost link. Standing on /browsers it simply comes to front there; a window with no side panel, or a
-// reader the view is closed to, goes to /browsers; a popped-out panel hands it to the app's own window. Kept, not a
+// for them, a localhost link. Standing on the view's page it simply comes to front there; a window with no side panel, or
+// a reader the view is closed to, goes to that page; a popped-out panel hands it to the app's own window. Kept, not a
 // peek: replacing it with the next file looked at would reload the app.
 export const openBrowsersBeside = (router: Router, tab?: LiveTab): void => {
-    const beside = sideDocked.value && router.currentRoute.value.name !== `browsers` && (!useRole().isGuest.value || guestAllowedPath(`/browsers`));
+    const beside = sideDocked.value && !isPage(router.currentRoute.value, `browsers`) && (!useRole().isGuest.value || guestAllowedPath(browsersPath()));
     if (!beside) {
         if (!handOffToMainWindow({ kind: `browsers`, tab: tab === undefined ? undefined : tabKey(tab) })) {
             openBrowsers(router, tab);

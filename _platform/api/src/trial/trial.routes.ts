@@ -175,7 +175,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         // our own words rather than passing through Google's refusal (billing advice that doesn't apply to a user with
         // no Google plan).
         const candidates = await ladder.candidates();
-        const attempt = await pool.call(`/chat/completions`, {
+        const attempt = await pool.call(`/chat/completions`, { // allow(route-literal): the provider's route, no page
             method: `POST`,
             models: candidates,
             body: (model) => withModel(body, model),

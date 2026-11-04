@@ -12,6 +12,7 @@
      the words got shorter, and the network-drive caution went, since every WSL folder drew it.) -->
 <script setup lang="ts">
 import { Button, Icon, Notice, toneWash } from "@intentic/ui";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -35,7 +36,7 @@ const { view, setup, preview, creating, failure, actionFailure, weigh, seen } = 
 const folderName = computed(() => face.value?.name ?? setup.value?.name ?? ``);
 
 // Back to the folder's files: a link wherever the reader presses for it.
-const FILES = `/workspace`;
+const FILES = localPath(`files`);
 
 // The first look, when nothing has been asked yet: a folder that has its sandbox already says so, with the press that
 // opens it. Looked at again when a setup is put away, since who is signed in may have changed meanwhile.

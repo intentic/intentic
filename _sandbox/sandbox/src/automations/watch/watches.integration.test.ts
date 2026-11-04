@@ -187,7 +187,7 @@ test("a notify target runs no model: the owner's phone hears what the check saw"
     const prompts: string[] = [];
     const after = await fire(drivenBy(services, recordingWake(prompts)), "tell-me");
     expect(prompts).toEqual([]);
-    expect(pushed.always).toEqual([{ title: "Bun 1.4.3", body: "bun@1.4.3", url: "/automations", tag: "automation-tell-me" }]);
+    expect(pushed.always).toEqual([{ title: "Bun 1.4.3", body: "bun@1.4.3", url: "/ext/automations", tag: "automation-tell-me" }]);
     expect(after.runs[0]).toMatchObject({ outcome: "completed" });
     expect(after.runs[0]?.detail).toContain("Saw: bun@1.4.3");
 });

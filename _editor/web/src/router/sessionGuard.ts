@@ -1,4 +1,5 @@
 import type { User } from "@intentic/api-contract";
+import { topPath } from "@intentic/sandbox-contract/app-routes";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { useAuth } from "../client/auth/useAuth";
 import { restorePersistedQueries } from "../lib/queryPersistence";
@@ -19,7 +20,10 @@ const SESSION_BUDGET_MS = 10_000;
 const withinBudget = <T>(work: Promise<T>, budgetMs: number): Promise<T> =>
     Promise.race([work, new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error(`the platform did not answer in time`)), budgetMs))]);
 
-export const unavailable = (to: RouteLocationNormalized): RouteLocationRaw => ({ path: `/platform-unavailable`, query: { returnTo: to.fullPath } });
+export const unavailable = (to: RouteLocationNormalized): RouteLocationRaw => ({
+    path: topPath(`platformUnavailable`),
+    query: { returnTo: to.fullPath },
+});
 
 export const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
     const { user, refresh } = useAuth();
@@ -43,7 +47,8 @@ export const requireAuth = async (to: RouteLocationNormalized): Promise<boolean 
     const resolved = await resolveUser(to);
     if (!(`user` in resolved)) {
         // Home's first run is useful before an account exists, and the bare address lands there (lib/routes/firstScreens.ts).
-        // A link naming a sandbox (`?sandbox=`) is about an account's, and every other workspace route asks for sign-in.
+        // A link naming a sandbox the old way (`?sandbox=`) is about an account's, and every other workspace route asks
+        // for sign-in; Home's own page of a sandbox gone with the session shows that first run too.
         return isHomePath(to.path) && to.query[`sandbox`] === undefined && resolved.signedOut ? true : resolved.redirect;
     }
     // A page that read another account's drawer at import (the browser moved accounts since it loaded) enters by a full

@@ -1,4 +1,6 @@
 import "@intentic/testing/dom";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { BURST, type NoticeChoice, type NoticeSubject, noticesFor, settledAsks } from "./desktopSignal";
 import type { NewsItems, TabFrame } from "./tabSignal";
 
@@ -26,10 +28,13 @@ describe(`the notifications for a reading's news`, () => {
         ]);
     });
 
-    it(`counts a burst in one notification, naming what it counts`, () => {
+    it(`counts a burst in one notification, naming what it counts and opening the board of the sandbox it is about`, () => {
         const keys = Array.from({ length: BURST + 1 }, (_, index) => `agent${index}`);
-        expect(noticesFor({ asked: asked(...keys), finished: [] }, fleetNames, all)).toEqual([
-            { key: `asks:many`, kind: `asks`, title: `4 agents need you`, body: `agent0 · agent1 · agent2 · agent3`, path: `/agents`, silent: false },
+        activeSandboxId.value = `sbx`;
+        const burst = noticesFor({ asked: asked(...keys), finished: [] }, fleetNames, all);
+        activeSandboxId.value = undefined;
+        expect(burst).toEqual([
+            { key: `asks:many`, kind: `asks`, title: `4 agents need you`, body: `agent0 · agent1 · agent2 · agent3`, path: insidePath(`sbx`, page.agents()), silent: false },
         ]);
         const finished = noticesFor({ asked: [], finished: keys.map((key) => `sbx/${key}`) }, fleetNames, all);
         expect(finished.map((notice) => [notice.key, notice.title])).toEqual([[`finished:many`, `4 turns finished`]]);

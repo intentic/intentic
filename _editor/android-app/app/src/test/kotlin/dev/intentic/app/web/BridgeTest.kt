@@ -35,4 +35,15 @@ class BridgeTest {
         assertEquals(NativeScreen.HOME to null, nativeScreenOf("/login/confirm?token=t"))
         assertEquals(NativeScreen.NONE to null, nativeScreenOf("/workspace"))
     }
+
+    // The same pages at the web app's own addresses, below their frame and sandbox.
+    @Test
+    fun theFramedAddressesOfThoseScreensAreReadAlike() {
+        assertEquals(NativeScreen.CONVERSATION to "a b", nativeScreenOf("/s/sb2/agents/a%20b"))
+        assertEquals(NativeScreen.HOME to null, nativeScreenOf("/s/sb2/agents?lane=active"))
+        assertEquals(NativeScreen.HOME to null, nativeScreenOf("/home/sb2/menu"))
+        assertEquals(NativeScreen.NONE to null, nativeScreenOf("/s/sb2/workspace"))
+        assertEquals(NativeScreen.NONE to null, nativeScreenOf("/s/sb2"))
+        assertEquals(NativeScreen.NONE to null, nativeScreenOf("/home/account"))
+    }
 }

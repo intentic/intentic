@@ -73,13 +73,19 @@ const EVERY_GROUP = [
     `Night hours`,
 ];
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: SandboxAgent } = await import("./SandboxAgent.vue");
 
-// Bare route with no auth guards, so a redirect can't be mistaken for a default category.
+// Bare route with no auth guards, so a redirect can't be mistaken for a default category. The page's own address in a
+// sandbox beside its old one, where the old sign-in link is forwarded.
 const routerFor = async (query: Record<string, string>): Promise<Router> => {
+    activeSandboxId.value = `sbx-1`;
     const router = createRouter({
         history: createMemoryHistory(),
-        routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
+        routes: [
+            { path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) },
+            { path: `/s/:sandbox/settings/:tab?`, meta: { frame: `inside`, page: `sandboxSettings` }, component: defineComponent({ render: () => h(`div`) }) },
+        ],
     });
     await router.push({ name: `sandbox`, params: { tab: `agent` }, query });
     await router.isReady();
@@ -113,7 +119,7 @@ it(`opens on the jobs category alone, and holds no accounts`, async () => {
     const { el } = await mount();
     expect(shown(el)).toEqual([`Jobs`]);
     // The way to what the jobs choose among, since the accounts are not on this tab any more.
-    expect(el.querySelector(`a[href="/sandbox/models"]`)).not.toBeNull();
+    expect(el.querySelector(`a[href="/s/sbx-1/settings/models"]`)).not.toBeNull();
 });
 
 it(`puts each group in exactly one category`, async () => {
@@ -149,7 +155,7 @@ it(`opens jobs for the category's old name`, async () => {
 // The judge, the shield and their records were a Safety category here until 2026-10-16; they are Privacy & safety's pages.
 it(`sends an old Safety link to Guardrails`, async () => {
     const { router } = await mount({ section: `safety` });
-    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/sandbox/guardrails`));
+    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/s/sbx-1/settings/guardrails`));
     expect(router.currentRoute.value.query).toEqual({});
     expect(pill(document.body, `Safety`)).toBeUndefined();
     expect([...document.body.querySelectorAll(`button[role="tab"]`)].map((button) => button.textContent?.trim())).toEqual([
@@ -177,7 +183,7 @@ it(`holds delegation under tools`, async () => {
 
 it(`says under finished work that deleting is Retention's`, async () => {
     const { el } = await mount({ section: `finishing` });
-    const link = el.querySelector(`a[href="/sandbox/retention"]`);
+    const link = el.querySelector(`a[href="/s/sbx-1/settings/retention"]`);
     expect(link?.textContent?.trim()).toBe(`Retention`);
     expect(link?.parentElement?.textContent?.replace(/\s+/g, ` `).trim()).toBe(
         `Archiving deletes nothing. How long conversations and restore points are kept: Retention`,
@@ -187,7 +193,7 @@ it(`says under finished work that deleting is Retention's`, async () => {
 // `?connect=` opened a provider's accounts here when they lived on this tab; a link from then lands on them now.
 it(`forwards an old sign-in link to Sandbox ▸ Models, naming the same provider`, async () => {
     const { router } = await mount({ section: `finishing`, connect: `claude` });
-    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/sandbox/models`));
+    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/s/sbx-1/settings/models`));
     expect(router.currentRoute.value.query).toEqual({ provider: `claude` });
 });
 

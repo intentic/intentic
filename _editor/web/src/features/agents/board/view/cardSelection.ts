@@ -17,6 +17,7 @@ import { agentSeed } from "../../../../models/fleet/useAgents-actions";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
 import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
+import { here, page } from "../../../../lib/routes/links";
 
 // Which card the board points at and what a press on one does: the ring follows the chat's own selection unless a link
 // just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a
@@ -168,10 +169,10 @@ export const useCardFocus = (host: FocusHost) => {
         return true;
     };
 
-    const agentPath = (agent: FleetAgent): string => `/agents/${encodeURIComponent(agent.id)}`;
-    // The agent's page, and for another box's card that box's, which the page reads from `?sandbox=`.
-    const agentHref = (agent: FleetAgent): string =>
-        router.resolve(isRemote(agent) ? { path: agentPath(agent), query: { sandbox: agent.sandboxId } } : agentPath(agent)).href;
+    const agentPath = (agent: FleetAgent): string => here(page.agent(agent.id));
+    // Another box's agent, read from that box by the page, which takes the box from `?sandbox=` and stays in this one.
+    const remotePath = (agent: FleetAgent): string => here(page.agent(agent.id, { query: { sandbox: agent.sandboxId } }));
+    const agentHref = (agent: FleetAgent): string => router.resolve(isRemote(agent) ? remotePath(agent) : agentPath(agent)).href;
     // Keeps a chat this board only opened for a look. A summons: the tab lives in whichever window draws the chat, and a
     // local promotion alone would be swept on that window's next focus move.
     const keepAgent = (agent: FleetAgent): void => {
@@ -181,7 +182,7 @@ export const useCardFocus = (host: FocusHost) => {
     const reviewAgent = (agent: FleetAgent): void => {
         // Another box's card mints no tab, which would file into the chat pointed at THIS daemon; its page reaches that box.
         if (isRemote(agent)) {
-            void router.push({ path: agentPath(agent), query: { sandbox: agent.sandboxId } });
+            void router.push(remotePath(agent));
             return;
         }
         agents.open(agent);

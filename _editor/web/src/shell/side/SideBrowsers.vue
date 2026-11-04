@@ -3,6 +3,7 @@ import { Button, EmptyState } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
+import { isPage } from "../../lib/routes/links";
 import { useBrowsersQuery } from "../../features/browsers/browsersQuery";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import { tabKey } from "../../workbench/browsers/browsersPaths";
@@ -45,7 +46,7 @@ const route = useRoute();
 const shown = computed(
     () =>
         !floats.value &&
-        route.name !== `browsers` &&
+        !isPage(route, `browsers`) &&
         shownSideTabs.value.find((tab) => tab.id === shownSideActive.value)?.view === BROWSERS_SIDE_VIEW,
 );
 const sideKey = computed(() => tabKey(browsersTabOfInput(input)));

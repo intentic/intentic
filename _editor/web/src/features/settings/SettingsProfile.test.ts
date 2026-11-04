@@ -5,6 +5,7 @@ import { vAction } from "@intentic/ui";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { page, toHome } from "../../lib/routes/links";
 
 const user = ref<{ name: string; image: string | null; email?: string; signInMethods?: (`google` | `email`)[] } | undefined>({
     name: `Artur Kurowski`,
@@ -155,7 +156,8 @@ describe(`an account that signs in by email code`, () => {
 
         expect(el.textContent).toContain(`intentic mails a code to ana@corp.example each time you sign in.`);
         linkButton()?.click();
-        await waitFor(() => expect(linkGoogle).toHaveBeenCalledWith(`/settings`));
+        // No route on screen here, so the account's settings in Home's frame, which need no sandbox.
+        await waitFor(() => expect(linkGoogle).toHaveBeenCalledWith(toHome(undefined, page.account())));
     });
 
     it(`says Google is linked once it is, with nothing to press`, async () => {

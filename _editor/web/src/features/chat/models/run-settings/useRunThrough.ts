@@ -9,6 +9,7 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { useLoopDesigns } from "../../../../models/fleet/useLoopDesigns";
 import { startLoop, stopLoop } from "../../../../models/fleet/useLoops";
 import { useWorkflowRuns } from "../../../../models/fleet/useWorkflowRuns";
+import { here, page } from "../../../../lib/routes/links";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { useListedView, WORKFLOWS } from "../../../../workbench/views/listedViews";
@@ -221,7 +222,7 @@ export const useRunThrough = (
             // In a popped-out chat the form opens in the app's own window, not over the conversation.
             navigateInApp(
                 router,
-                workflowsPage.state.value === `here` ? { name: `extension`, params: { ext: WORKFLOWS.view }, query: { loop: `list` } } : workflowsPage.setUp.value,
+                workflowsPage.state.value === `here` ? here(page.extension(WORKFLOWS.view, undefined, { query: { loop: `list` } })) : workflowsPage.setUp.value,
             );
         },
         end: async (): Promise<void> => {

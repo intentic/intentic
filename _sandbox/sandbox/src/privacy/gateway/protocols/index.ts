@@ -27,6 +27,7 @@ const PROTOCOLS: ReadonlyMap<string, GatewayProtocol> = new Map([
     ["/v1/responses/input_tokens", "responses"],
     ["/responses/input_tokens", "responses"],
     ["/v1/chat/completions", "chat"],
+    // allow(route-literal): a model provider's OpenAI-style route, not a page of the editor.
     ["/chat/completions", "chat"],
 ]);
 

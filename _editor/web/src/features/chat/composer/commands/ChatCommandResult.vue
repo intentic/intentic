@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { here, page } from "../../../../lib/routes/links";
 import { contextPct } from "../../../../models/agent-status/agentStatus-meta";
 import { commandResultOf } from "../../../../models/conversations/commands/commandResult";
 import type { SlashRow } from "../../../../models/conversations/commands/slashCommands";
@@ -112,7 +113,7 @@ const pickEffort = (value: string, label: string): void => {
                 <span class="shrink-0 tabular-nums">{{ formatRemaining(pool.percent, headroom?.stale ?? false) }}</span>
                 <span v-if="poolResetNote(pool)" class="shrink-0 text-subtle">{{ poolResetNote(pool) }}</span>
             </div>
-            <RouterLink v-if="canShip" to="/sandbox/usage" class="self-start text-link hover:underline">{{ t(`chat.slashCommands.openUsage`) }}</RouterLink>
+            <RouterLink v-if="canShip" :to="here(page.sandboxSettings(`usage`))" class="self-start text-link hover:underline">{{ t(`chat.slashCommands.openUsage`) }}</RouterLink>
         </template>
 
         <template v-else-if="result.kind === `context`">

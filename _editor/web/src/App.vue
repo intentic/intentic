@@ -18,6 +18,7 @@ import WindowControls from "./workbench/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 import LocalRuntime from "./local/LocalRuntime.vue";
 import { localFace } from "./app/environments/local";
+import { toTop } from "./lib/routes/links";
 
 const { user, signingOut } = useAuth();
 const { activeSandboxId } = useSandbox();
@@ -46,7 +47,7 @@ watch(user, (current, previous) => {
         return;
     }
     if (!signsInInPlace) {
-        void router.replace(`/login`);
+        void router.replace(toTop(`login`));
         return;
     }
     if (!signingOut()) {

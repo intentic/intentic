@@ -5,6 +5,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { IconStub } from "@intentic/ui/testing";
 import { storedValue, storeJson } from "@intentic/ui/storage";
 
@@ -19,7 +20,12 @@ jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
 
 // Every ceiling is Advanced's; the section's choice is read once, as its module loads, so it is set before the import.
 storeJson(`intentic:agent-tools-detail`, { subagents: `advanced` });
+const { activeSandboxId } = await import("../../../../app/storage/activeSandbox");
 const { default: AgentSubagents } = await import("./AgentSubagents.vue");
+
+// The sandbox the reader is in, whose Guardrails the section's link opens.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 
 let app: App | undefined;
 
@@ -29,7 +35,10 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(AgentSubagents) });
     app.use(PrimeVue);
     app.use(
-        createRouter({ history: createMemoryHistory(), routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: { render: () => null } }] }),
+        createRouter({
+            history: createMemoryHistory(),
+            routes: [{ path: `/s/:sandbox/settings/:tab?`, meta: { frame: `inside`, page: `sandboxSettings` }, component: { render: () => null } }],
+        }),
     );
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -54,7 +63,7 @@ test("draws the three ceilings, and sends whether it may spawn at all to Guardra
     for (const label of [`Subagents at once`, `Subagents per conversation`, `Nesting depth`, `Wait for a reset`]) {
         expect(numberBox(host, label), label).not.toBeNull();
     }
-    expect(host.querySelector(`a[href="/sandbox/guardrails"]`)).not.toBeNull();
+    expect(host.querySelector(`a[href="${insidePath(BOX, page.sandboxSettings(`guardrails`))}"]`)).not.toBeNull();
 });
 
 test("each ceiling opens on the daemon's own default", () => {

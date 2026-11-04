@@ -1,4 +1,6 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { type AccountReading, modelSources, sourcesNeedingSomeone } from "./modelSources";
 
 // The overview at the top of Sandbox ▸ Models: one row per thing this sandbox can run a model on, and what needs a
@@ -105,6 +107,7 @@ it(`mentions accounts resting beside ones that serve, since turns may land on an
 });
 
 it(`points a model on this machine and an endpoint at the cards that manage them, and counts the trial down`, () => {
+    activeSandboxId.value = `a1b2c3d4e5f6`;
     const sources = modelSources(
         [
             { kind: `trial`, provider: `trial`, label: `Free trial`, remaining: 0 },
@@ -115,8 +118,8 @@ it(`points a model on this machine and an endpoint at the cards that manage them
     );
 
     expect(sources.map((source) => [source.label, source.summary, source.manage])).toEqual([
-        [`Qwen3 30B`, `Runs on this machine`, `/capabilities/localmodel`],
-        [`OpenRouter`, `Your own server`, `/capabilities/endpoint`],
+        [`Qwen3 30B`, `Runs on this machine`, insidePath(`a1b2c3d4e5f6`, page.capabilities(`localmodel`))],
+        [`OpenRouter`, `Your own server`, insidePath(`a1b2c3d4e5f6`, page.capabilities(`endpoint`))],
         [`Free trial`, `0 free agent steps left today`, undefined],
     ]);
     expect(sources[2]).toMatchObject({ standing: `waiting`, line: `Today's free agent steps are used up` });

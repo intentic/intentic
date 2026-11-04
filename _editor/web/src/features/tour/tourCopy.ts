@@ -1,12 +1,15 @@
 import { t } from "@intentic/ui/i18n";
-import { MODELS_PATH } from "../../lib/routes/modelsPath";
+import { here, page } from "../../lib/routes/links";
+import { modelsPath } from "../../lib/routes/modelsPath";
 import type { MarkStep } from "./tourMarks";
 import type { StepId } from "./steps";
 import type { TourAction } from "./tourState";
 
 // Every word the getting-started tour says, in one table: what each step is called on the checklist, and what each
 // place that points at it says when its hint opens. A hint names where the reader is and the one thing to do there;
-// a place whose own control is the press offers no action, and one that only leads somewhere offers the way there.
+// a place whose own control is the press offers no action, and one that only leads somewhere offers the way there. Every
+// way there is made in the reader's own frame and sandbox when the words are read (lib/routes/links.ts `here`), so a
+// hint read on Home leads to the page on Home.
 
 export interface StepWords {
     readonly title: string;
@@ -18,13 +21,13 @@ export interface StepWords {
 export const stepWords = (step: StepId): StepWords => {
     switch (step) {
         case `work`:
-            return { title: t(`gettingStarted.steps.work.title`), line: t(`gettingStarted.steps.work.line`), to: `/workspace` };
+            return { title: t(`gettingStarted.steps.work.title`), line: t(`gettingStarted.steps.work.line`), to: here(page.workspace()) };
         case `agent`:
-            return { title: t(`gettingStarted.steps.agent.title`), line: t(`gettingStarted.steps.agent.line`), to: `/agents` };
+            return { title: t(`gettingStarted.steps.agent.title`), line: t(`gettingStarted.steps.agent.line`), to: here(page.agents()) };
         case `models`:
-            return { title: t(`gettingStarted.steps.models.title`), line: t(`gettingStarted.steps.models.line`), to: MODELS_PATH };
+            return { title: t(`gettingStarted.steps.models.title`), line: t(`gettingStarted.steps.models.line`), to: modelsPath() };
         case `land`:
-            return { title: t(`gettingStarted.steps.land.title`), line: t(`gettingStarted.steps.land.line`), to: `/agents` };
+            return { title: t(`gettingStarted.steps.land.title`), line: t(`gettingStarted.steps.land.line`), to: here(page.agents()) };
     }
 };
 
@@ -44,7 +47,7 @@ export const hintWords = (step: MarkStep, place: MarkPlace, trial: boolean): Hin
     const open = (label: string, to: string): HintWords[`action`] => ({ label, to });
     switch (`${step}:${place}`) {
         case `work:rail`:
-            return { ...words(`workRail`), action: open(t(`gettingStarted.hints.openWorkspace`), `/workspace`) };
+            return { ...words(`workRail`), action: open(t(`gettingStarted.hints.openWorkspace`), here(page.workspace())) };
         case `work:workspace`:
             return { ...words(`workHere`), action: { label: t(`gettingStarted.skip.work`), run: `skipWork` } };
         case `agent:board`:
@@ -59,17 +62,17 @@ export const hintWords = (step: MarkStep, place: MarkPlace, trial: boolean): Hin
                 line: trial ? t(`gettingStarted.hints.agentComposer.lineTrial`) : t(`gettingStarted.hints.agentComposer.line`),
             };
         case `agent:rail`:
-            return { ...words(`agentRail`), action: open(t(`gettingStarted.hints.openBoard`), `/agents`) };
+            return { ...words(`agentRail`), action: open(t(`gettingStarted.hints.openBoard`), here(page.agents())) };
         case `board:rail`:
-            return { ...words(`boardRail`), action: open(t(`gettingStarted.hints.openBoard`), `/agents`) };
+            return { ...words(`boardRail`), action: open(t(`gettingStarted.hints.openBoard`), here(page.agents())) };
         case `models:rail`:
-            return { ...words(`modelsRail`), action: open(t(`gettingStarted.hints.openModels`), MODELS_PATH) };
+            return { ...words(`modelsRail`), action: open(t(`gettingStarted.hints.openModels`), modelsPath()) };
         case `models:models`:
             return words(`modelsHere`);
         case `land:card`:
             return words(`landCard`);
         case `land:rail`:
-            return { ...words(`landRail`), action: open(t(`gettingStarted.hints.openBoard`), `/agents`) };
+            return { ...words(`landRail`), action: open(t(`gettingStarted.hints.openBoard`), here(page.agents())) };
         default:
             return step === `board` ? words(`boardRail`) : { title: stepWords(step).title, line: stepWords(step).line };
     }

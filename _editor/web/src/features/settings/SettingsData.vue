@@ -6,6 +6,7 @@ import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/
 import { leaveAfterSignOut } from "../../app/environments/afterSignOut";
 import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
+import { page, toHome } from "../../lib/routes/links";
 import { useAccount } from "../../client/auth/useAccount";
 import { useDeviceAccounts } from "../../client/auth/deviceAccounts";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -35,7 +36,7 @@ const deleteInWorkspace = async (): Promise<void> => {
         failed: t(`settings.settingsData.workspaceNotOpened`),
         // The workspace window opening is the answer.
         quiet: true,
-        task: () => localHost().openWorkspace(`/settings/data`),
+        task: () => localHost().openWorkspace(toHome(undefined, page.account(`data`))),
     });
 };
 

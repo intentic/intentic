@@ -13,6 +13,7 @@ import { useT } from "@intentic/ui/i18n";
 import DetailSwitch from "./DetailSwitch.vue";
 import { useDetailLevel } from "./detailLevel";
 import CommandOutputExplainer from "./explainers/CommandOutputExplainer.vue";
+import { here, page } from "../../../../lib/routes/links";
 
 // Shell-output filter as one switch. What it saved sits under it; the per-cleaner switches, the commands no cleaner
 // covers and the measurement holdout are tuning, which the section's Advanced view draws. Simple says only the figure,
@@ -164,7 +165,7 @@ const gaps = computed(() => savings.value?.input.gaps.slice(0, 5) ?? []);
                         <Verdict :value="summary.value" :unit="summary.unit" :tone="summary.tone" />
                         <p v-if="advanced" class="mt-1 text-2xs text-subtle">
                             {{ summary.detail }}
-                            <RouterLink v-if="summary.measured" to="/sandbox/usage" class="ml-1 whitespace-nowrap text-link hover:underline">{{
+                            <RouterLink v-if="summary.measured" :to="here(page.sandboxSettings(`usage`))" class="ml-1 whitespace-nowrap text-link hover:underline">{{
                                 t(`sandbox.agentCommandOutput.breakdown`)
                             }}</RouterLink>
                         </p>

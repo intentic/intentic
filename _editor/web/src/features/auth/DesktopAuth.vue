@@ -16,6 +16,7 @@ import DesktopAuthRail from "./DesktopAuthRail.vue";
 import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
 import { arrivingProfile } from "../../app/useProfile";
 import { useT } from "@intentic/ui/i18n";
+import { toTop } from "../../lib/routes/links";
 
 // Runs in the user's real browser, not the app's webview (Google refuses OAuth there; see environments/desktop.ts).
 // Session handling is this page's own job, not a route guard's: bouncing a signed-out window to /login would sign
@@ -35,10 +36,9 @@ const route = useRoute();
 const { user, refresh, signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton, adoptIdToken, refusedCredentials, cancelSignIn } = useGoogleIdentity();
 
-// A signed-out browser can sign in by emailed code on /login and come straight back here, where the hand-off then runs
-// on that session; offered only where the platform mails codes.
+// A signed-out browser can sign in by emailed code and come straight back here to run the hand-off; where codes are mailed.
 const emailOffered = ref(false);
-const emailSignInLink = computed(() => `/login?${new URLSearchParams({ returnTo: route.fullPath }).toString()}`);
+const emailSignInLink = computed(() => toTop(`login`, {}, { returnTo: route.fullPath }));
 onMounted(async () => {
     emailOffered.value = (await readSignInOptions()).email;
 });

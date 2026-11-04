@@ -1,3 +1,5 @@
+import { linkOf } from "../../../lib/routes/links";
+
 // A session reference read back: one session's id appears in four costumes (id, branch, worktree path, page link)
 // depending on where it was copied from, so the way back into the app accepts all four. A prefix is what makes a
 // reference, since a missed one costs a paste while a false one swaps real results for an unwanted jump.
@@ -15,6 +17,13 @@ const tailOf = (text: string, marker: string): string | undefined => {
     return tail === `` || /[/\s]/.test(tail) ? undefined : tail;
 };
 
+// The agent an app link opens, its address read past the origin; a page of an agent's (`…/pages/<id>`) is not one.
+const agentOfLink = (text: string): string | undefined => {
+    const url = URL.parse(text);
+    const shown = url === null ? undefined : linkOf(url.pathname);
+    return shown?.page === `agent` ? shown.params[`id`] : undefined;
+};
+
 /** The session id inside a pasted reference, or undefined when the text is not one. */
 export const sessionIdFrom = (text: string, known?: (id: string) => boolean): string | undefined => {
     const trimmed = text.trim().replace(/\/+$/, ``);
@@ -26,8 +35,9 @@ export const sessionIdFrom = (text: string, known?: (id: string) => boolean): st
         return tailOf(trimmed, `agent/`);
     }
     // A link someone was sent: only a real URL, so a source path through a folder called `agents` stays a file search.
+    // Its address in either form (in a frame, or from before frames), read by the app's own table of pages.
     if (trimmed.includes(`://`)) {
-        return tailOf(trimmed, `/agents/`);
+        return agentOfLink(trimmed);
     }
     // The worktree on disk, as a log or terminal prints it: absolute, or it isn't that path.
     if (trimmed.startsWith(`/`)) {

@@ -7,6 +7,7 @@ import { localHost } from "../../../app/environments/localHost";
 import { useAccount } from "../../../client/auth/useAccount";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { ADD_SANDBOX_PATH, LOCAL_ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
+import { HOME_PATH } from "../../../lib/routes/firstScreens";
 
 // WHERE THE SANDBOX SWITCHER STANDS, the one thing about it that differs between the two windows that draw it. In the
 // workspace it stands on a sandbox and moves by selecting another, a route of its own. In the desktop app's window on a
@@ -105,7 +106,8 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         openHome: async (event) => {
             if (local) {
                 event.preventDefault();
-                await attempt(`:home`, () => openWorkspacePath(router, `/home`));
+                // Home's bare address, which opens on the sandbox shown last there (features/home/MasterHomeView.vue).
+                await attempt(`:home`, () => openWorkspacePath(router, HOME_PATH));
             } else if (!browserOwnsClick(event)) {
                 open.value = false;
             }

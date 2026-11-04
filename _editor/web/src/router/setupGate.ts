@@ -1,6 +1,10 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import type { RouteLocationRaw } from "vue-router";
+import { topPath } from "@intentic/sandbox-contract/app-routes";
 import { isAccountPath, isHomePath } from "../lib/routes/home";
+
+// The setup page's old address, which the shell settles to Home's first run (app/environments/nothingToOpen.ts).
+const SETUP = topPath(`setup`);
 
 // Whether this account has a workspace to open or an unfinished setup to return to. True once any
 // sandbox's lastSeenAt is non-null (set by the daemon's announce or sandbox.attach); a merely down sandbox still
@@ -11,7 +15,7 @@ export const setupRedirect = (sandboxes: readonly SandboxSummary[]): RouteLocati
     }
     // Only the owner's unfinished sandbox is resumed; a member can't mint a setup code for someone else's.
     const unfinished = sandboxes.find((entry) => entry.role === `owner`);
-    return unfinished === undefined ? `/setup` : { path: `/setup`, query: { sandbox: unfinished.id } };
+    return unfinished === undefined ? SETUP : { path: SETUP, query: { sandbox: unfinished.id } };
 };
 
 export interface SetupGateHost {

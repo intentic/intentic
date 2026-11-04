@@ -19,6 +19,7 @@ import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { stalledPaths } from "../../../app/perf/perf";
 import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
 // failure (connectionNotice), so setup, sign-in and account-mismatch causes each get their own words and action.
@@ -119,7 +120,7 @@ const signIn = async (): Promise<void> => {
             </Button>
             <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->
             <template v-else-if="notice.action?.kind === `billing`">
-                <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" tier="loud">
+                <Button :as="RouterLink" :to="here(page.account(`billing`))" :label="notice.action.label" icon-pos="right" tier="loud">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
                 <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" tier="boring" />

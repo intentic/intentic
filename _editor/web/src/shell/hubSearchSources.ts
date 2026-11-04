@@ -13,7 +13,8 @@ import { useCapabilities } from "../models/capabilities/useCapabilities";
 import { usePanels } from "../models/extensions/usePanels";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { SANDBOX_CARDS, sandboxPageTerms } from "../models/sandbox/sandboxIndex";
-import { isTabbedRow, sandboxKeyAllowed, sandboxSectionGroups, sandboxSections } from "../models/sandbox/sandboxNav";
+import { isTabbedRow, sandboxKeyAllowed, sandboxSectionGroups, sandboxSectionLink, sandboxSections } from "../models/sandbox/sandboxNav";
+import { page } from "../lib/routes/links";
 import { detectActivations } from "../workbench/views/registry";
 import type { HubPage, HubReader, HubSource } from "../workbench/hub/hubSearch";
 import type { HubSearchSources } from "../workbench/hub/useHubSearch";
@@ -65,7 +66,7 @@ export function useHubSearchSources(): HubSearchSources {
                 // The hub's own fallback for an extension row whose glyph the icon set lacks (SandboxHub.vue).
                 icon: activation.icon !== undefined && isIconName(activation.icon) ? activation.icon : `th-large`,
             }));
-        return { hub: `sandbox`, pages: [...builtIn, ...extensions], entries: SANDBOX_CARDS, pageTerms: sandboxPageTerms() };
+        return { hub: `sandbox`, pages: [...builtIn, ...extensions], entries: SANDBOX_CARDS, pageTerms: sandboxPageTerms(), link: sandboxSectionLink };
     });
 
     const settingsSource = computed<HubSource>(() => ({
@@ -73,6 +74,7 @@ export function useHubSearchSources(): HubSearchSources {
         pages: settingsPages(settingsSections(planOffered.value, mobile.value)),
         entries: SETTINGS_CARDS,
         pageTerms: settingsPageTerms(),
+        link: (slug) => page.account(slug),
     }));
 
     const sources = computed<readonly HubSource[]>(() =>

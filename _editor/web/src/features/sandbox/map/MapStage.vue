@@ -12,6 +12,7 @@ import type { PersonaName } from "./mapWords";
 import type { Focus, Lighting } from "./reachLighting";
 import type { GroupKey, Principal, PrincipalKind, ReachMap } from "./reachModel";
 import { useMapLayout } from "./useMapLayout";
+import { here, page } from "../../../lib/routes/links";
 
 // THE MAP'S STAGE: who gets in on the left, the box in the middle, what it reaches on the right, and the lines between
 // them. The cards are laid out by CSS, so the map reads at any width; the lines are drawn after, from where the cards
@@ -180,7 +181,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                 </div>
                 <div v-if="map.groups.length === 0" class="flex flex-col items-start gap-2 rounded-xl border border-dashed border-line-strong p-4">
                     <span class="text-sm text-muted">{{ t(`sandbox.sandboxMap.nothingConnected`) }}</span>
-                    <RouterLink to="/capabilities" class="text-sm font-medium text-link hover:underline">{{ t(`sandbox.sandboxMap.connect`) }}</RouterLink>
+                    <RouterLink :to="here(page.capabilities())" class="text-sm font-medium text-link hover:underline">{{ t(`sandbox.sandboxMap.connect`) }}</RouterLink>
                 </div>
             </section>
         </div>

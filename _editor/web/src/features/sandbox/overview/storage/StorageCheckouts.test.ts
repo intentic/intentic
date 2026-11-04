@@ -4,6 +4,7 @@ import type { CheckoutPress, CheckoutUsage } from "@intentic/sandbox-contract/sc
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick } from "vue";
 import { RouterLinkStub } from "../../../../testing/routerLinkStub";
+import { activeSandboxId } from "../../../../app/storage/activeSandbox";
 import StorageCheckouts from "./StorageCheckouts.vue";
 
 const row = (over: Partial<CheckoutUsage> & Pick<CheckoutUsage, "id">): CheckoutUsage => ({
@@ -48,13 +49,14 @@ const pressesOf = (el: HTMLElement, id: string): string[] =>
     [...el.querySelectorAll(`[data-checkout="${id}"] [data-press]`)].map((button) => button.getAttribute(`data-press`) ?? ``);
 
 test("each row links to its conversation and offers exactly the presses the daemon allows", () => {
+    activeSandboxId.value = `sbx-1`;
     const { el } = mount([
         row({ id: `c1`, title: `Fix the login bug`, buildOutputBytes: 20_000, can: { cleanBuildOutput: true, release: true, trash: false } }),
         row({ id: `busy`, title: `Port the parser`, state: `working` }),
         row({ id: `stray`, state: `leftover`, updatedAt: undefined, can: { cleanBuildOutput: false, release: false, trash: true } }),
     ]);
     expect([...el.querySelectorAll(`[data-checkout]`)].map((li) => li.getAttribute(`data-checkout`))).toEqual([`c1`, `busy`, `stray`]);
-    expect(el.querySelector(`[data-checkout="c1"] a`)?.getAttribute(`href`)).toBe(`/agents/c1`);
+    expect(el.querySelector(`[data-checkout="c1"] a`)?.getAttribute(`href`)).toBe(`/s/sbx-1/agents/c1`);
     // A leftover has no conversation to open.
     expect(el.querySelector(`[data-checkout="stray"] a`)).toBe(null);
     expect(pressesOf(el, `c1`)).toEqual([`cleanBuildOutput`, `release`]);

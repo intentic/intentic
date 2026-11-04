@@ -1,9 +1,10 @@
-<!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/browsers). -->
+<!-- Whole window for a popped-out panel of one sandbox (`/s/<sandbox>/floating/chat`, `…/terminal`, `…/browsers`). -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, useTemplateRef, watch, watchEffect } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { toFloating } from "../../lib/routes/links";
 import { closeOwnWindow } from "../../app/environments/desktop";
 import { useExtensionHost } from "../../extension-host/useExtensionHost";
 import { useKeybindings } from "../../workbench/commands/useKeybindings";
@@ -74,10 +75,13 @@ onMounted(() => document.addEventListener(`click`, sendLinkToMainWindow, true));
 onUnmounted(() => document.removeEventListener(`click`, sendLinkToMainWindow, true));
 
 // Following the workspace: which sandbox is active is one localStorage fact per origin, and `storage` is the
-// browser's cross-window notification. A floating panel must follow the main window's switch, or it would diverge.
+// browser's cross-window notification. A floating panel must follow the main window's switch, or it would diverge, and
+// its address says which sandbox it shows, so it follows too.
+const router = useRouter();
 const followSandbox = (event: StorageEvent): void => {
     if (event.key === ACTIVE_KEY && event.newValue !== null && event.newValue !== useSandbox().activeSandboxId.value) {
         useSandbox().select(event.newValue);
+        void router.replace(toFloating(event.newValue, panel));
     }
 };
 onMounted(() => window.addEventListener(`storage`, followSandbox));

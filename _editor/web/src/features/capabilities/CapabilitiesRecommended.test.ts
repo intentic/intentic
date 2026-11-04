@@ -6,6 +6,11 @@ import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { CapabilityRecommendation } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
+import { linkOf } from "../../lib/routes/links";
+
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
@@ -15,7 +20,7 @@ let setup: string | undefined;
 const push = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ params: { entry }, query: setup === undefined ? {} : { setup } }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry }, query: setup === undefined ? {} : { setup } }) as never,
     useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
@@ -137,7 +142,7 @@ it(`offers the whole set as one thing to do, and says what each one was read off
     button(el, `Set them up`).click();
     await nextTick();
     // Into the first entry with the walk running, so the form knows it's a step, not a lone visit.
-    expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { entry: `gitlab` }, query: { setup: `recommended` } }));
+    expect(linkOf(push.mock.calls.at(-1)?.[0])).toMatchObject({ page: `capabilities`, params: { entry: `gitlab` }, query: { setup: `recommended` } });
 });
 
 it(`fills in what the scan could read, and leaves the credential to the user`, async () => {
@@ -171,5 +176,5 @@ it(`takes "not needed" as an answer and moves on rather than asking again`, asyn
     button(el, `Not needed`).click();
     await waitFor(() => expect(dismiss).toHaveBeenCalledWith(`gitlab`));
     // Moves straight to the next queued entry, not back to the grid.
-    await waitFor(() => expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { entry: `docker` } })));
+    await waitFor(() => expect(push.mock.calls.map(([to]) => linkOf(to)?.params[`entry`])).toContain(`docker`));
 });

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { type RouteLocationNamedRaw, RouterLink } from "vue-router";
+import { RouterLink } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
 import { otherFleet } from "../../../../models/fleet/fleetScope";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -26,13 +27,7 @@ const title = computed(() => {
     return found === undefined ? props.parent : agentDisplayTitle(found);
 });
 // Another box's parent is read from that box, which the agent's page takes from `?sandbox=` (cardSelection.agentHref).
-const to = computed<RouteLocationNamedRaw>(() => {
-    const location: RouteLocationNamedRaw = { name: `agent`, params: { id: props.parent } };
-    if (props.sandboxId !== undefined) {
-        location.query = { sandbox: props.sandboxId };
-    }
-    return location;
-});
+const to = computed(() => here(page.agent(props.parent, { query: { sandbox: props.sandboxId } })));
 </script>
 
 <template>

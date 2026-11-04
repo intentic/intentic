@@ -3,6 +3,7 @@ import { CAPABILITY_CATALOG } from "@intentic/capability-catalog";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { entryDescription } from "../../../../models/capabilities/catalogCopy";
 import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
@@ -19,7 +20,7 @@ const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (ans
 const card = computed(() => props.message.capabilityOffer!);
 
 const router = useRouter();
-const setupAt = (entry: string): string => `/capabilities/${entry}`;
+const setupAt = (entry: string): string => here(page.capabilities(entry));
 // Connect both un-parks the turn and opens the Capabilities page at this card; the press holds for the answer only.
 const connect = async (): Promise<void> => {
     navigateInApp(router, setupAt(card.value.offer.entry));

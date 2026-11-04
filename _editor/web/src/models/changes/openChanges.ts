@@ -1,3 +1,4 @@
+import { here, page } from "../../lib/routes/links";
 import { navigation } from "../../workbench/navigation/navigation";
 import { useLayout } from "../../workbench/window/useLayout";
 
@@ -6,5 +7,5 @@ import { useLayout } from "../../workbench/window/useLayout";
 // land them in the same place, or the instruction and the destination drift apart.
 export const openChanges = (): void => {
     useLayout().setSidebarPanel(`changes`);
-    void navigation().push({ name: `workspace` });
+    void navigation().push(here(page.workspace()));
 };

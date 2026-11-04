@@ -2,7 +2,7 @@
 import { Await, Icon, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
+import { modelsHref, modelsPath } from "../../../lib/routes/modelsPath";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
@@ -29,6 +29,7 @@ import AgentVoice from "../agent-settings/behaviour/AgentVoice.vue";
 import AgentOffload from "../agent-settings/behaviour/offload/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 import SectionLink from "../SectionLink.vue";
+import { here, page } from "../../../lib/routes/links";
 
 // Agent tab: how the agent works in this sandbox. Each group reads and writes the same settings object via
 // useSandboxSettings; only page-level state (which category, blocked/dropped notices) lives here. Categories are one
@@ -75,7 +76,7 @@ watch(
     () => route.query[`section`],
     (named) => {
         if (named === `safety`) {
-            void router.replace({ name: `sandbox`, params: { tab: `guardrails` } });
+            void router.replace(here(page.sandboxSettings(`guardrails`)));
         }
     },
     { immediate: true },
@@ -92,8 +93,6 @@ watch(
     },
     { immediate: true },
 );
-
-const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
 
 const sandbox = useSandbox();
 const { settings, loaded: settingsRead, dropped: settingsDropped } = useSandboxSettings();
@@ -140,7 +139,7 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
             <template v-if="section === `jobs`">
                 <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
                     {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
-                    <RouterLink :to="MODELS_PATH" :class="ui.textButton()">
+                    <RouterLink :to="modelsHref()" :class="ui.textButton()">
                         {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
                     </RouterLink>
                 </p>
@@ -177,7 +176,7 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentChecks />
                 <AgentFinishedWork />
                 <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
-                <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
+                <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="here(page.sandboxSettings(`retention`))" :label="t(`sandbox.sandboxNav.retention`)" />
                 <!-- After the work that is committed, whose name those commits carry; below the link, which belongs to the archive row. -->
                 <AgentCommitAuthor />
                 <!-- What finished builds keep on disk, after what finished conversations keep. -->

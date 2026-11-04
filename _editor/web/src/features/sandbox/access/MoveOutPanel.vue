@@ -28,6 +28,7 @@ import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
+import { here, page } from "../../../lib/routes/links";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
 // sandbox.toml document, bundle), in that order since publishing unlocks what a definition can carry and comparing
@@ -223,8 +224,8 @@ const compare = async (event: Event): Promise<void> => {
             <Row v-else :id="PUBLISH_ANCHOR" icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
                 <template #description>
                     <i18n-t v-if="host === undefined" keypath="sandbox.moveOutPanel.connectGithubGitlabAccount" tag="span" scope="global">
-                        <template #github><RouterLink to="/capabilities/github" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitHub</RouterLink></template>
-                        <template #gitlab><RouterLink to="/capabilities/gitlab" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitLab</RouterLink></template>
+                        <template #github><RouterLink :to="here(page.capabilities(`github`))" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitHub</RouterLink></template>
+                        <template #gitlab><RouterLink :to="here(page.capabilities(`gitlab`))" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitLab</RouterLink></template>
                     </i18n-t>
                     <template v-else>{{ t(`ui.action.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>

@@ -3,6 +3,7 @@ import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
 import { guestFenceOf } from "../../lib/routes/guestPaths";
+import { here, page } from "../../lib/routes/links";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
 
@@ -64,10 +65,10 @@ export interface ActiveExtension {
     readonly activation: Activation;
 }
 
-// Deep-link path to a sidebar element. `:key` is dropped when it only repeats the view id (a singleton
-// view); ExtensionHost resolves the missing segment back.
+// Deep-link path to a sidebar element, in the frame and the sandbox the reader is in. `:key` is dropped when it only
+// repeats the view id (a singleton view); ExtensionHost resolves the missing segment back.
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
-    activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
+    here(page.extension(extension.id, activation.key === extension.id ? undefined : activation.key));
 
 // Rail order and which tiles show, declared here so the desktop rail and mobile menu agree. `always` tiles
 // are constant destinations (chat, agents, workspace, preview); everything else is `signal`, on the rail only

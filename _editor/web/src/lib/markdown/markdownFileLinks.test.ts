@@ -3,6 +3,8 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 // Needs jsdom: the linkifier and DOMPurify require a real document. Asserted end-to-end through renderMarkdown since
 // the order (parse, sanitize, then linkify) is what's pinned.
 
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { treeCache, treeCacheModule } from "../../testing/treeCache";
 
 // The container-root lookup reads the workspace-tree query: a real cache, seeded under the explorer's own key.
@@ -19,8 +21,13 @@ const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 // directory to resolve against.
 const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator({ dir }));
 
+// With no route to read, a link is made inside the sandbox opened last (lib/routes/links.ts `here`).
+const BOX = `a1b2c3d4e5f6`;
+const fileHref = (path: string, agent?: string): string => insidePath(BOX, page.workspace(path, { query: { agent } }));
+
 beforeEach(() => {
     treeCache.clear();
+    activeSandboxId.value = BOX;
 });
 
 // The rendered anchor for `path`, or undefined; parsed from the HTML so assertions read as DOM shape, not string
@@ -36,7 +43,7 @@ describe(`file mentions in agent prose`, () => {
         const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
         expect(link?.textContent).toBe(`foo.ts:42`);
         expect(link?.getAttribute(`title`)).toBe(`src/foo.ts:42`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`src/foo.ts`));
         expect(link?.dataset[`line`]).toBe(`42`);
         expect(link?.classList.contains(`md-file-link`)).toBe(true);
     });
@@ -65,7 +72,7 @@ describe(`file mentions in agent prose`, () => {
 
     it(`retargets a relative markdown link at the workspace route, line tail and all`, () => {
         const link = linkTo(renderMarkdown(`[the config](./src/foo.ts:42)`), `src/foo.ts`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`src/foo.ts`));
         expect(link?.dataset[`line`]).toBe(`42`);
     });
 
@@ -110,7 +117,7 @@ describe(`file mentions in agent prose`, () => {
                 ],
             });
         const link = linkTo(renderMarkdown(`gone from pages/Foo.vue:3`), `_apps/pages/Foo.vue`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/_apps/pages/Foo.vue`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`_apps/pages/Foo.vue`));
         expect(link?.dataset[`line`]).toBe(`3`);
         expect(link?.textContent).toBe(`Foo.vue:3`);
     });
@@ -164,7 +171,7 @@ describe(`links into a conversation's own copy of the workspace`, () => {
 
     it(`carries the conversation in the href, so a new tab lands in the same tree`, () => {
         const link = linkTo(renderAs(`c-1`, `Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts?agent=c-1`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`src/foo.ts`, `c-1`));
         // The click handler reads the dataset; the href covers browser-native gestures instead.
         expect(link?.dataset[`agent`]).toBe(`c-1`);
         expect(link?.dataset[`line`]).toBe(`42`);
@@ -185,20 +192,27 @@ describe(`links into a conversation's own copy of the workspace`, () => {
 
     it(`leaves a shared conversation's links unscoped, so nothing changes for them`, () => {
         const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts today.`), `src/foo.ts`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`src/foo.ts`));
         expect(link?.dataset[`agent`]).toBeUndefined();
     });
 
     it(`unwraps our OWN address written out in full, instead of treating it as another website`, () => {
-        const link = linkTo(renderMarkdown(`[the plan](${window.location.origin}/workspace/docs/plan.md#L12)`), `docs/plan.md`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/docs/plan.md`);
+        const link = linkTo(renderMarkdown(`[the plan](${window.location.origin}${fileHref(`docs/plan.md`)}#L12)`), `docs/plan.md`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`docs/plan.md`));
         expect(link?.getAttribute(`target`)).toBeNull();
         expect(link?.dataset[`line`]).toBe(`12`);
     });
 
+    it(`unwraps one written in the form addresses had before frames, and one of Home's frame, the same way`, () => {
+        const before = linkTo(renderMarkdown(`[the plan](${window.location.origin}/workspace/docs/plan.md#L12)`), `docs/plan.md`);
+        expect([before?.getAttribute(`href`), before?.dataset[`line`]]).toEqual([fileHref(`docs/plan.md`), `12`]);
+        const home = `${window.location.origin}/home/${BOX}/workspace/docs/plan.md`;
+        expect(linkTo(renderMarkdown(`[the plan](${home})`), `docs/plan.md`)?.getAttribute(`href`)).toBe(fileHref(`docs/plan.md`));
+    });
+
     it(`scopes an unwrapped full address the same way a bare path is scoped`, () => {
         const link = linkTo(renderAs(`c-1`, `[the plan](${window.location.origin}/workspace/docs/plan.md)`), `docs/plan.md`);
-        expect(link?.getAttribute(`href`)).toBe(`/workspace/docs/plan.md?agent=c-1`);
+        expect(link?.getAttribute(`href`)).toBe(fileHref(`docs/plan.md`, `c-1`));
     });
 
     it(`still sends a genuinely external address to its own tab`, () => {

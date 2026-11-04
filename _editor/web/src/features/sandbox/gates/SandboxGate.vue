@@ -5,7 +5,7 @@ import { useRoute } from "vue-router";
 import { announceWorkspaceShown } from "../../../app/environments/desktopShown";
 import { daemonTooOld } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandboxLiveness } from "../../../client/sandbox/freshness/queryFreshness";
-import { isAccountPath } from "../../../lib/routes/home";
+import { isAccountRoute } from "../../../lib/routes/home";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxTooOld from "./SandboxTooOld.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
@@ -19,7 +19,7 @@ import { useSandboxGateState } from "./workspaceShown";
 const { denied, gated, availability, shown: shownSandbox } = useSandboxGateState();
 // Both shells share this gate. Personal settings stay reachable while sandbox setup or recovery is unfinished.
 const route = useRoute();
-const accountPage = computed(() => isAccountPath(route.path));
+const accountPage = computed(() => isAccountRoute(route));
 const shownWorkspace = computed(() => accountPage.value ? undefined : shownSandbox.value);
 // What stays mounted through a stall is the last answers it had: the frame says when they may be out of date.
 const { offline, lostAt } = useSandboxLiveness();

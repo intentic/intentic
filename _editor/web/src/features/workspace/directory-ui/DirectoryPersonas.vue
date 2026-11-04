@@ -17,6 +17,7 @@ import {
     storedPowers,
 } from "../../../models/sandbox/personas/personaRules";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { here, page } from "../../../lib/routes/links";
 import PersonaPowersFields from "../../../components/PersonaPowersFields.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -372,7 +373,7 @@ const submit = async (): Promise<void> => {
 
         <template #footer>
             <!-- The rest of a card lives on the page that owns it; this link is the way there, not a second copy of it. -->
-            <RouterLink to="/sandbox/personas" :class="ui.textButton({ tone: `quiet` }, 'mr-auto')">
+            <RouterLink :to="here(page.sandboxSettings(`personas`))" :class="ui.textButton({ tone: `quiet` }, 'mr-auto')">
                 {{ t(`workspace.directoryPersonas.fullEditor`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="dir = undefined" />

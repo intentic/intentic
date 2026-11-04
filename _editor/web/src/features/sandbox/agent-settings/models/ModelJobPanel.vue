@@ -11,6 +11,7 @@ import type { SetupsView } from "./modelSetups";
 import { roleBlurb, roleLabel, setupName } from "./roleWords";
 import type { DropTarget } from "./useJobDrag";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../../lib/routes/links";
 
 // One job, opened from its chip: what it does, and which setup it runs on, as a choice between every setup on the page,
 // a new one, or none (back to the list of jobs that run on nothing). The same move a drag makes, for a phone, a keyboard, or anyone who would rather pick from a list.
@@ -88,7 +89,7 @@ const choices = computed<readonly Choice[]>(() => [
         <!-- The judge reads untrusted text, and can be switched off elsewhere: both are said where its setup is picked. -->
         <p v-if="role === `safety-judge` && judgeOff" class="text-2xs text-subtle">
             {{ t(`sandbox.agentModels.nothingJudgingCommandsAt`) }}
-            <RouterLink :to="{ name: `sandbox`, params: { tab: `guardrails` } }" class="text-link hover:underline">{{
+            <RouterLink :to="here(page.sandboxSettings(`guardrails`))" class="text-link hover:underline">{{
                 t(`sandbox.agentModels.turnJudgeOn`)
             }}</RouterLink>
             {{ t(`sandbox.agentModels.inGuardrails`) }}

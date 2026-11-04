@@ -6,6 +6,8 @@ import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
+import { page, toInside } from "../../../lib/routes/links";
 
 // Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
@@ -58,6 +60,8 @@ const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | 
     [...element.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(label));
 
 beforeEach(() => {
+    // The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+    activeSandboxId.value = `sb-1`;
     personas.value = [];
     connected.value = [];
     isGuest.value = false;
@@ -122,7 +126,7 @@ it(`explains the empty workspace and offers the way in`, () => {
 
     expect(text(element)).toContain(`No personas yet`);
     // A real href, so the row can be hovered, copied, and opened in a new tab like any other link.
-    expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
+    expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(toInside(`sb-1`, page.sandboxSettings(`personas`)));
 });
 
 // Sandbox ▸ Personas is a maintainer's section: below that, a link there would only open a gate.

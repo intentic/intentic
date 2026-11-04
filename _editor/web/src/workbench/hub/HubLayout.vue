@@ -33,7 +33,10 @@ const {
 } = defineProps<{
     title: string;
     description?: string;
-    /** The named route the sections live on: `/<path>/:tab?`. */
+    /**
+     * The hub's name (`sandbox`, `settings`), which its sections' work is kept under (hubWork.ts). Their addresses are
+     * the route the hub is drawn on, with another `:tab`.
+     */
     routeName: string;
     /** The section the param-less URL shows. Its row writes no param, so no section has two URLs. */
     defaultSlug: string;
@@ -93,9 +96,12 @@ const { mobile } = useDevice();
 const drill = computed(() => hubDrills(mobile.value, addressable, rows.value.length));
 const onIndex = computed(() => drill.value && named.value === undefined);
 
-// Drilling names every section, the default one included: its param-less URL is the index there.
-const linkTo = (slug: string) => ({ name: routeName, params: { tab: hubSectionParam(slug, defaultSlug, addressable || drill.value) } });
-const indexLink = { name: routeName, params: { tab: undefined } };
+// Drilling names every section, the default one included: its param-less URL is the index there. A section is the
+// hub's own route with another `:tab`, so the frame and the sandbox it is drawn in stay (`/s/<sandbox>/settings/<tab>`,
+// `/home/<sandbox>/settings/<tab>`, a folder window's `account/<tab>`). By its name: a location of params alone would
+// keep the `:tab` on screen where it names none.
+const linkTo = (slug: string) => ({ name: route.name, params: { tab: hubSectionParam(slug, defaultSlug, addressable || drill.value) } });
+const indexLink = () => ({ name: route.name, params: { tab: undefined } });
 // A row with parts opens its first; it is current while any of them is open, whichever the reader went to.
 const rowLink = (row: HubTab) => linkTo(hubRowSections(row)[0]?.slug ?? row.slug);
 const activeRow = computed<HubTab | undefined>(() => hubRowOf(rows.value, activeSlug.value));
@@ -113,11 +119,11 @@ const pageDescription = computed(() => (drill.value && !onIndex.value ? undefine
 // loop, and a replace otherwise (a link from a chat straight into a section), so the index's own way back still leads
 // to wherever they were before.
 const backToIndex = (): void => {
-    if (router.options.history.state[`back`] === router.resolve(indexLink).fullPath) {
+    if (router.options.history.state[`back`] === router.resolve(indexLink()).fullPath) {
         router.back();
         return;
     }
-    void router.replace(indexLink);
+    void router.replace(indexLink());
 };
 const shellBack = usePageBack();
 // Inside the Android app its own toolbar and back gesture are the way back (app/environments/nativeApp.ts), and they step
@@ -179,13 +185,13 @@ watch(
 const searchList = useId();
 const searching = computed(() => search?.searching.value === true);
 
-// An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one, which on a
+// An unknown slug (`settings/nonsense`) resolves to the default: clean the URL back to the canonical one, which on a
 // phone is the index.
 watch(
     [() => route.params[`tab`], slugs, () => ready],
     ([tab, known, settled]) => {
         if (settled && typeof tab === `string` && tab.length > 0 && !known.includes(tab)) {
-            void router.replace(drill.value ? indexLink : linkTo(defaultSlug));
+            void router.replace(drill.value ? indexLink() : linkTo(defaultSlug));
         }
     },
     { immediate: true },

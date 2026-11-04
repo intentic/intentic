@@ -194,12 +194,29 @@ The lock (`src/state/contract-lock.ts`) walks every module of `src/` (`src/state
 barrel's namespace, and refuses two modules exporting different schemas under one name. `scripts/write-aggregate.mjs
 --check` holds `sandboxContract` to the files in `src/contracts/`.
 
+## The app's addresses
+
+`./app-routes` (`src/app-routes/`) is the one place an address of the editor is spelled. `app-pages.ts` names every
+page once (`chat`, `agents`, `agent`, `workspace`, `sandboxSettings`, `account`, …) with its path pattern, and `page.*`
+makes a link to one: a page and its values, not an address. `paths.ts` says where a link is drawn and writes its
+address: `/s/<sandbox>/<page>` inside a sandbox, `/home/<sandbox>/<page>` in Home's frame (`/home` alone is Home),
+the top pages (`/login`, `/invite/:token`, …) by name, and the desktop app's own face (`localPath`) by its own table;
+`parseAppPath` reads one back. `legacy.ts` reads the addresses from before frames (`/agents/<id>`, `/sandbox/models`,
+`/settings/billing`) into the page they meant, so an installed app, a push message or a bookmark that holds one still
+lands; `legacyPathOf` writes that old form for a reader that only knows it (the Android app's native screens).
+
+The editor's router is built from this table, the daemon's push messages and the desktop app build their links with
+it, and an extension gets the same constructors as `api.links`. `_tools/checks/route-literals.mjs` refuses an address
+typed by hand anywhere else. (2026-11-04: which frame a page was drawn in lived in session storage, so Back, a reload
+and a shared link could each show something else; the sandbox and the frame are now in the address.)
+
 ## Key files
 
 - [src/index.ts](src/index.ts) — `sandboxContract`, the route tables derived from it, and every public export.
 - [src/protocol/route-meta.ts](src/protocol/route-meta.ts) — the per-route policy fields and their defaults.
 - [src/protocol/raw/raw-routes.ts](src/protocol/raw/raw-routes.ts) — every route the daemon serves outside oRPC, and `rawRouteUrl`.
 - [src/protocol/routes.ts](src/protocol/routes.ts) — route naming, `streamOf` for streamed routes, and the route list a daemon advertises.
+- [src/app-routes/app-pages.ts](src/app-routes/app-pages.ts) — every page of the editor and its path pattern, and the `page.*` link constructors.
 - [contract.lock.json](contract.lock.json) — the committed fingerprint of the wire surface.
 - [src/webext/index.ts](src/webext/index.ts) — a narrow entry point, one of several that keep small bundles off the barrel.
 

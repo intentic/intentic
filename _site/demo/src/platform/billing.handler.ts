@@ -1,4 +1,5 @@
 import { hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
+import { homePath, page, topPath } from "@intentic/sandbox-contract/app-routes";
 import { hasSubscription, machineTier, managePlan, moveMachine, notOnSale, planState, setSlots, slotsLeftAt, subscribe, subscribed } from "../world/plan";
 import { type PlatformRouter, refusePlatform } from "./serve";
 
@@ -8,6 +9,10 @@ import { type PlatformRouter, refusePlatform } from "./serve";
 
 // Where "Stripe" sends the browser back, as the platform names it (hosted-plan.orpc.ts `billingUrl`, `checkoutUrls`).
 const appUrl = (path: string): string => `${window.location.origin}${import.meta.env.BASE_URL}${path.replace(/^\//, ``)}`;
+
+// The account's Billing, in Home's frame where it needs no sandbox, as the platform's `billingUrl` builds it.
+const BILLING = homePath(undefined, page.account(`billing`));
+const BILLING_WELCOME = homePath(undefined, page.account(`billing`, { query: { plan: `welcome` } }));
 
 // A rung a slot can be bought at, or the platform's own refusal for one it cannot.
 const paidRung = (tier: string): string => {
@@ -25,14 +30,14 @@ export const hostedPlanAnswers = {
         }
         const tier = paidRung(input?.tier ?? PAID_TIERS[0]?.id ?? `standard`);
         subscribe(tier);
-        return { url: input?.returnTo === undefined ? appUrl(`/settings/billing?plan=welcome`) : appUrl(`${input.returnTo}?tier=${tier}&plan=welcome`) };
+        return { url: appUrl(input?.returnTo === undefined ? BILLING_WELCOME : topPath(`startHosted`, {}, { tier, plan: `welcome` })) };
     },
     portal: () => {
         if (!hasSubscription()) {
             return refusePlatform(`No plan to manage.`, 404);
         }
         managePlan();
-        return { url: appUrl(`/settings/billing`) };
+        return { url: appUrl(BILLING) };
     },
     setSlots: ({ tier, quantity }) => {
         if (!subscribed()) {

@@ -5,6 +5,7 @@ import type { AgentStanding } from "../../models/agent-status/agentStatus-standi
 import { fleet } from "../../models/fleet/useAgents-fleet";
 import { heldWakes } from "../../models/fleet/useAgents-registry";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { here, hereIn, page } from "../../lib/routes/links";
 import { clearDesktopNotices, type DesktopNotice, desktopNotices, postDesktopNotice, withdrawDesktopNotice } from "../../app/environments/desktopNotices";
 import { CHIME_GAP_MS } from "../../workbench/browser-tab/chimes";
 import { noticeAsks, noticeFinished } from "../../workbench/browser-tab/tabPreferences";
@@ -51,7 +52,7 @@ export const noticesFor = (
     const notices: Omit<DesktopNotice, `silent`>[] = [];
     const group = (kind: DesktopNotice[`kind`], keyed: readonly (readonly [string, NoticeSubject])[], many: (count: number) => string): void => {
         if (keyed.length > BURST) {
-            notices.push({ key: `${kind}:many`, kind, title: many(keyed.length), body: keyed.map(([, subject]) => subject.title).join(` · `), path: `/agents` });
+            notices.push({ key: `${kind}:many`, kind, title: many(keyed.length), body: keyed.map(([, subject]) => subject.title).join(` · `), path: here(page.agents()) });
             return;
         }
         for (const [key, subject] of keyed) {
@@ -116,7 +117,7 @@ const describeAsk = (source: string, key: string): NoticeSubject | undefined => 
         return {
             title: t(`shell.desktopSignal.heldTitle`),
             line: wake.title ?? t(`shell.desktopSignal.heldLine`),
-            path: `/agents?${new URLSearchParams({ sandbox }).toString()}`,
+            path: hereIn(sandbox, page.agents()),
         };
     }
     const agent = fleet.value.find((entry) => entry.id === key);

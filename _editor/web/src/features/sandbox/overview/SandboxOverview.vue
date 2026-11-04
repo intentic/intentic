@@ -41,6 +41,7 @@ import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
 import { askRemoveSandbox } from "../../../models/sandbox/removeSandbox";
+import { here, page } from "../../../lib/routes/links";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
 // non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate badges and panels
@@ -449,7 +450,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                 <span class="text-content">{{ machineStanding }}</span>
                 <template v-if="planOffered">
                     ·
-                    <RouterLink to="/settings/billing" class="text-link hover:underline">{{
+                    <RouterLink :to="here(page.account(`billing`))" class="text-link hover:underline">{{
                         t(`sandbox.sandboxOverview.billing`)
                     }}</RouterLink></template
                 >

@@ -1,27 +1,31 @@
+import { page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
-import { DAEMON_URL } from "../stack.js";
+import { DAEMON_URL, seededPage } from "../stack.js";
+
+const WORKSPACE = seededPage(pages.workspace());
 
 // First-run screens read real state: a fresh sandbox seeds and starts a running starter site, not an empty tree. Serial
 // (workers: 1) shares one seeded world; every fact here assumes nothing has happened in it yet.
 test.describe.configure({ mode: `serial` });
 
 test(`the first landing is the starter site, already running`, async ({ page }) => {
-    // Goes to the shell's own entry (not /preview) since the automatic redirect there is itself under test.
+    // Goes to the shell's own entry (not the preview) since the automatic redirect there is itself under test. The live
+    // app's page is a tab of the sandbox's Browsers (2026-10-08), named after the app it shows.
     await page.goto(`/`);
 
-    await expect(page).toHaveURL(/\/preview$/);
+    await expect(page).toHaveURL(new RegExp(`${seededPage(pages.browsers())}(?:/[^/?#]+)?$`));
     await expect(page.getByLabel(`Which app to preview`)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Stop` })).toBeVisible();
     await expect(page.frameLocator(`iframe`).locator(`body`)).toBeVisible();
 
     // One-time redirect: after the first landing, a reload keeps wherever the reader last navigated to.
-    await page.goto(`/workspace`);
+    await page.goto(WORKSPACE);
     await page.reload();
-    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page).toHaveURL(new RegExp(`${WORKSPACE}$`));
 });
 
 test(`the agent board asks for a task rather than for a sign-in`, async ({ page }) => {
-    await page.goto(`/agents`);
+    await page.goto(seededPage(pages.agents()));
 
     await expect(page.getByRole(`heading`, { name: `Start your first agent` })).toBeVisible();
 
@@ -46,7 +50,7 @@ test(`a workspace with nothing in it offers every way of getting code in, reposi
     const cleared = await request.delete(`${DAEMON_URL}/workspace/entry`, { data: { path: `site` } });
     expect(cleared.ok()).toBe(true);
 
-    await page.goto(`/workspace`);
+    await page.goto(WORKSPACE);
 
     await expect(page.getByText(`Get your code in`)).toBeVisible();
     // The address field is open from the start; the other two ways in are buttons beside each other under it.

@@ -313,7 +313,9 @@ const setAutoStart = async (value: boolean): Promise<void> => {
         await start();
     }
 };
-const settingsLink = appLink(host().href(`/sandbox/extensions?view=installed`), () => host().navigate(`/sandbox/extensions?view=installed`));
+// The sandbox's installed extensions, where this one's settings are.
+const extensionSettings = host().links.sandboxSettings(`extensions`, { query: { view: `installed` } });
+const settingsLink = appLink(host().href(extensionSettings), () => host().navigate(extensionSettings));
 
 onBeforeUnmount(() => {
     clearTimeout(pending);
@@ -355,7 +357,7 @@ const problem = computed(() => {
     }
 });
 // A real link: hover, right-click and Ctrl/Cmd-click behave as on any address.
-const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navigate(`/capabilities`));
+const capabilitiesLink = appLink(host().href(host().links.capabilities()), () => host().navigate(host().links.capabilities()));
 </script>
 
 <template>

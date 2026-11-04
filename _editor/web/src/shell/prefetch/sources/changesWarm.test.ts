@@ -5,7 +5,8 @@ import { ref } from "vue";
 // The workspace review is invalidated wholesale whenever a turn ends (useChanges); reading ahead is
 // what keeps it from opening cold to git's raw counts.
 
-const route = ref<{ name: string }>({ name: `workspace` });
+// The page the reader stands on, as the route's record names it in either frame.
+const route = ref<{ meta: { page?: string } }>({ meta: { page: `workspace` } });
 const sidebarPanel = ref(`changes`);
 const sidebarCollapsed = ref(false);
 
@@ -17,7 +18,7 @@ const { changesKey } = await import(`../../../models/changes/useChanges`);
 const { changesWarmSource } = await import(`./changesWarm`);
 
 const stand = (name: string, panel = `changes`, collapsed = false): void => {
-    route.value = { name };
+    route.value = { meta: { page: name } };
     sidebarPanel.value = panel;
     sidebarCollapsed.value = collapsed;
 };

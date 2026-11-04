@@ -1,3 +1,4 @@
+import { insidePath, isSandboxPage, legacyTarget, topPath } from "@intentic/sandbox-contract/app-routes";
 import { channelId, type PushNotification, type PushSentNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import { idleEverywhere, presentMembers } from "../system/presence.js";
@@ -61,7 +62,37 @@ const awayNow = (to?: string): ((channel: StoredChannel) => boolean) => {
 // encrypted to the browser end to end and goes as written.
 export type PushRedaction = (text: string) => Promise<string>;
 
-export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction): PushSender => {
+// A conversation's link as notifications.ts writes one (the editor's conversation-link guard reads `?conversation=`):
+// its query and anchor, when the address is the app's root and names a conversation.
+const conversationLinkOf = (url: string): string | undefined => {
+    const read = new URL(url, "http://push.invalid");
+    return read.pathname === topPath("root") && read.searchParams.has("conversation") ? `${read.search}${read.hash}` : undefined;
+};
+
+/**
+ * Where a tap opens, once the daemon knows its own platform id (`sandbox`, its connect token's): a page of the sandbox,
+ * written as every notification writes one (notifications.ts, the address before frames), is placed inside THIS sandbox
+ * (`/s/<id>/…`), so the tap opens it whichever sandbox the reader had open last. A conversation's link goes to this
+ * sandbox the same way (`/s/<id>?conversation=`), where the conversation-link guard reads the sandbox off the route. An
+ * account page and anything else the table does not read go as written, as every notification does from a daemon that
+ * does not know its id.
+ */
+export const placedIn =
+    (sandbox: string | undefined) =>
+    (notification: PushNotification): PushNotification => {
+        if (sandbox === undefined || notification.url === undefined) {
+            return notification;
+        }
+        const conversation = conversationLinkOf(notification.url);
+        if (conversation !== undefined) {
+            return { ...notification, url: `${insidePath(sandbox)}${conversation}` };
+        }
+        const target = legacyTarget(notification.url);
+        return target === undefined || !isSandboxPage(target.link.page) ? notification : { ...notification, url: insidePath(sandbox, target.link) };
+    };
+
+export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction, sandbox?: string): PushSender => {
+    const placed = placedIn(sandbox);
     const forRelay = async (notification: PushNotification): Promise<PushNotification> => {
         if (redact === undefined) {
             return notification;
@@ -80,7 +111,8 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
     const shown = new Map<string, Set<string>>();
     const sentWords = createSentNotifications();
     // Sends to every registered device `wanted` keeps.
-    const send = async (notification: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
+    const send = async (asked: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
+        const notification = placed(asked);
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
         const channels = registered.filter(wanted);
         if (channels.length === 0) {

@@ -1,4 +1,5 @@
 import type { LocalOnboardingHost, LocalPcCheck, LocalPcSetup, LocalPrefetch, LocalRestartWhen } from "@intentic/web/local-host";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { LOCAL_NAVIGATE_EVENT } from "@intentic/web/local";
 import { computed, shallowRef, watch, type Ref } from "vue";
 import { t } from "@intentic/ui/i18n";
@@ -33,7 +34,7 @@ import {
 export type PcParts = Omit<LocalOnboardingHost, `firstTask` | `pickFolder` | `queueFirstTask` | `clearFirstTask`>;
 
 /** Where This computer makes a sandbox on a machine of ours, a page of its own shell (the web's local routes). */
-export const NEW_SANDBOX_HOSTED_PATH = `/sandbox-new?on=hosted`;
+export const NEW_SANDBOX_HOSTED_PATH = localPath(`newSandbox`, {}, { query: { on: `hosted` } });
 
 // What the app last said, as it said it; the page's shapes are computed from these.
 const rawCheck = shallowRef<OnboardingCheck | undefined>(undefined);

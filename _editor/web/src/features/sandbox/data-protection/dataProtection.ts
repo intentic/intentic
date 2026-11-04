@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/compliance";
 import type { Tone } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import type { RouteLocationRaw } from "vue-router";
+import { here, page, type PageLink } from "../../../lib/routes/links";
 
 // The data protection page's wording and grouping, kept out of the component so the mapping reads as a table and is
 // tested as one. Ids from the daemon are kebab-case (`model-provider`); catalog keys are camelCase.
@@ -176,7 +176,7 @@ export const STATUS_TONE = { on: `success`, partial: `info`, off: `warning`, una
     Tone
 >;
 
-const tab = (name: string): RouteLocationRaw => ({ name: `sandbox`, params: { tab: name } });
+const tab = (name: string): PageLink => page.sandboxSettings(name);
 const SHIELD = tab(`privacy-shield`);
 const GUARDRAILS = tab(`guardrails`);
 const RETENTION = tab(`retention`);
@@ -188,7 +188,7 @@ const RETENTION = tab(`retention`);
 // a secret, a model) still goes to that thing. Every setting of the audit trail is Retention's: its period always was,
 // and whether reads are recorded and where a copy goes were the audit log's own "How it is kept" until 2026-10-17. Running the agent without administrator rights has no control in the
 // editor (only its route, Full access's), so it has no link: it went to Agent, which says nothing about it.
-export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
+export const MEASURE_LINKS = new Map<MeasureId, PageLink>([
     [`privacy-shield`, SHIELD],
     [`privacy-images`, SHIELD],
     [`privacy-names`, SHIELD],
@@ -206,10 +206,16 @@ export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`guest-jail`, tab(`access`)],
     [`sign-in`, tab(`access`)],
     [`ai-notice`, tab(`access`)],
-    [`areas`, { name: `sandbox`, params: { tab: `access` }, query: { section: `areas` } }],
+    [`areas`, page.sandboxSettings(`access`, { query: { section: `areas` } })],
     [`credential-gates`, tab(`secrets`)],
     [`host-guards`, tab(`secrets`)],
 ]);
+
+/** Where a measure is changed, in the frame the reader is in (lib/routes/links.ts `here`); none for one set elsewhere. */
+export const measureHref = (id: MeasureId): string | undefined => {
+    const link = MEASURE_LINKS.get(id);
+    return link === undefined ? undefined : here(link);
+};
 
 // A preset item's own words: the setting it changes, and for an action rule, which action on which service.
 export const presetLabel = (item: PresetItem): string => {

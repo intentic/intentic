@@ -1,3 +1,4 @@
+import type { PageLink } from "@intentic/extension-api";
 import type { MenuItem } from "@intentic/extension-ui";
 import { host } from "./host.js";
 import { t } from "./i18n.js";
@@ -21,11 +22,10 @@ export const shortBranchName = (ref: string, remotes: readonly string[]): string
     return remote === undefined ? ref : ref.slice(remote.length + 1);
 };
 
-/** The editor's address for the Workspace showing `branch` of `repo` ("root" is the workspace itself). */
-export const workspaceViewPath = (repo: string, branch: string): string =>
-    `/workspace?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
+/** The Workspace showing `branch` of `repo` ("root" is the workspace itself), opened in the reader's own frame. */
+export const workspaceViewLink = (repo: string, branch: string): PageLink => host().links.workspace(undefined, { query: { repo, branch } });
 
-export const viewInWorkspace = (repo: string, branch: string): void => host().navigate(workspaceViewPath(repo, branch));
+export const viewInWorkspace = (repo: string, branch: string): void => host().navigate(workspaceViewLink(repo, branch));
 
 export const startAgentFrom = (repo: string, branch: string): void => host().chat.composeFrom({ repo, branch });
 

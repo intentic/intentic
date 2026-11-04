@@ -7,6 +7,7 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 import * as vueRouterOriginal from "vue-router";
 import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import { homePath, page } from "@intentic/sandbox-contract/app-routes";
 
 // Pins the one answer this card owes on a sandbox's Usage tab: whether its awake time costs hours. A sandbox on its
 // owner's own computer is told it never does, whatever the account's hosted hours say; a hosted one's owner sees the
@@ -70,7 +71,8 @@ it(`shows a hosted sandbox's owner the free hours its machine spends, and when t
     expect(root.textContent).toContain(`Free hours`);
     expect(root.textContent).toContain(`12h of 40h left this month`);
     expect(root.textContent).toContain(`shared by every hosted sandbox of yours that isn't on a paid slot`);
-    expect(root.querySelector(`a`)?.getAttribute(`href`)).toBe(`/settings/billing`);
+    // No route on screen here, so the account's billing opens where it needs no sandbox: in Home's frame.
+    expect(root.querySelector(`a`)?.getAttribute(`href`)).toBe(homePath(undefined, page.account(`billing`)));
 });
 
 it(`shows a machine on a paid slot its own month, named by its rung`, async () => {

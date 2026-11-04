@@ -2,6 +2,7 @@
 import "@intentic/testing/dom";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope } from "vue";
+import { insidePath, type LinkQuery, page } from "@intentic/sandbox-contract/app-routes";
 import type { WorkspaceResolve } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -11,7 +12,11 @@ const openFile = jest.fn();
 const openAtLine = jest.fn();
 const push = jest.fn();
 // Where the reader stands: the Workspace route opens a file in place, anywhere else it peeks beside.
-const currentRoute = { value: { name: `agents` } };
+// The page the reader stands on, as the route's record names it in either frame; a floating window's names none.
+interface Standing {
+    value: { readonly meta: { readonly page?: string } };
+}
+const currentRoute: Standing = { value: { meta: { page: `agents` } } };
 const sectionReachable = jest.fn((_to: string) => true);
 // Daemon's reference resolver; by default every reference names a real file as written, so a click opens it as is.
 const asWritten = async (input: ProcedureInput<`workspace.resolve`>): Promise<WorkspaceResolve> => ({ path: input.path });
@@ -30,6 +35,12 @@ const { workspaceAgent } = await import("../../../app/workspaceScope");
 const { claimFloating } = await import("../../../workbench/window/floating");
 const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../workbench/side/sideTabs");
 const { arrivalOf } = await import("../../../workbench/side/sideFileInput");
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
+
+// The sandbox open, which names where a file opens: no route is installed here, so links are made in it.
+const BOX = `a1b2c3d4e5f6`;
+// A file's address in the Workspace inside that sandbox, with the scope its query carries.
+const atFile = (path: string, query: LinkQuery = {}): string => insidePath(BOX, page.workspace(path, { query }));
 
 // Binds a click listener the way ChatMessageView and MarkdownViewer do, then renders markdown into it.
 const surface = (markdown: string): HTMLDivElement => {
@@ -51,11 +62,12 @@ beforeEach(() => {
     openFile.mockClear();
     openAtLine.mockClear();
     push.mockClear();
+    activeSandboxId.value = BOX;
     resolve.mockClear();
     resolve.mockImplementation(asWritten);
     workspaceAgent.value = undefined;
     sideDocked.value = false;
-    currentRoute.value = { name: `agents` };
+    currentRoute.value = { meta: { page: `agents` } };
     sectionReachable.mockImplementation(() => true);
     closeAllTabs();
 });
@@ -68,7 +80,7 @@ describe(`clicking a file the agent mentioned`, () => {
     it(`opens it in the workspace at the named line, without a page navigation`, async () => {
         const event = clickFileLink(surface(`Fixed in src/foo.ts:42.`));
         await waitFor(() => expect(openAtLine).toHaveBeenCalledWith(`src/foo.ts`, 42));
-        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} });
+        expect(push).toHaveBeenCalledWith(atFile(`src/foo.ts`));
         expect(event.defaultPrevented).toBe(true);
     });
 
@@ -83,7 +95,7 @@ describe(`clicking a file the agent mentioned`, () => {
         clickFileLink(surface("Gone from `pages/Foo.vue`."));
         await waitFor(() => expect(openFile).toHaveBeenCalledWith(`_editor/web/src/pages/Foo.vue`));
         expect(resolve).toHaveBeenCalledWith({ path: `pages/Foo.vue`, agent: undefined });
-        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`_editor`, `web`, `src`, `pages`, `Foo.vue`] }, query: {} });
+        expect(push).toHaveBeenCalledWith(atFile(`_editor/web/src/pages/Foo.vue`));
     });
 
     it(`leaves a modified click to the browser, so ⌘/ctrl-click still opens a real new tab`, () => {
@@ -113,7 +125,7 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
         clickFileLink(scopedSurface(`Wrote docs/plan.md just now.`));
         await waitFor(() => expect(openFile).toHaveBeenCalledWith(`docs/plan.md`));
         expect(workspaceAgent.value).toBe(`c-1`);
-        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`docs`, `plan.md`] }, query: { agent: `c-1` } });
+        expect(push).toHaveBeenCalledWith(atFile(`docs/plan.md`, { agent: `c-1` }));
     });
 
     // Scope is set before the daemon is asked, and travels with the question; the shared tree answers unmatched.
@@ -156,7 +168,7 @@ describe(`clicking a file in a popped-out panel`, () => {
         const scope = effectScope();
         scope.run(() => claimFloating(`chat`, jest.fn()));
         sideDocked.value = true;
-        currentRoute.value = { name: `floating` };
+        currentRoute.value = { meta: {} };
 
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
 
@@ -223,17 +235,17 @@ describe(`clicking a file with the side panel in the window`, () => {
     });
 
     it(`opens it in the Workspace itself while the reader stands there`, async () => {
-        currentRoute.value = { name: `workspace` };
+        currentRoute.value = { meta: { page: `workspace` } };
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
         await waitFor(() => expect(openAtLine).toHaveBeenCalledWith(`src/foo.ts`, 42));
-        expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} });
+        expect(push).toHaveBeenCalledWith(atFile(`src/foo.ts`));
         expect(panel.tabs.value).toEqual([]);
     });
 
     it(`keeps the Workspace route for a reader the Workspace is closed to`, async () => {
-        sectionReachable.mockImplementation((to) => to !== `/workspace`);
+        sectionReachable.mockImplementation((to) => to !== insidePath(BOX, page.workspace()));
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
-        await waitFor(() => expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} }));
+        await waitFor(() => expect(push).toHaveBeenCalledWith(atFile(`src/foo.ts`)));
         expect(panel.tabs.value).toEqual([]);
     });
 });
@@ -285,7 +297,7 @@ describe(`a reference that is not simply one file`, () => {
     });
 
     it(`standing in the Workspace, opens no editor tab for a reference that matched nothing, and leaves its copy alone`, async () => {
-        currentRoute.value = { name: `workspace` };
+        currentRoute.value = { meta: { page: `workspace` } };
         resolve.mockResolvedValue({});
         clickFileLink(surface(`Fixed in src/nowhere.ts.`));
         await waitFor(() => expect(inputs()).toEqual([{ path: `src/nowhere.ts`, missing: true }]));

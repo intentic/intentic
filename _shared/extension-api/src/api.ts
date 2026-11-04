@@ -1,4 +1,5 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { page as appPages, PageLink } from "@intentic/sandbox-contract/app-routes";
 import type { InferClientInputs } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Component, ComputedRef, MaybeRefOrGetter, Ref } from "vue";
@@ -11,6 +12,8 @@ import type { Loaded } from "./loaded.js";
 // activate(api, context); everything registered returns a Disposable pushed onto context.subscriptions.
 
 export type { Disposable } from "./disposable.js";
+// A page of the app as `api.links` makes it, for `api.navigate` and `api.href`.
+export type { PageLink } from "@intentic/sandbox-contract/app-routes";
 
 // One sidebar element a view contributes, routed at /ext/<viewId>/<key> and rendered by the view's
 // component with `repo` (+ props) bound.
@@ -253,7 +256,9 @@ export interface SideViewRegistration {
     // to the manifest's label.
     readonly describe: (input: SideViewInput) => SideViewLabel;
     // The app path "Open in …" takes the reader to for this input (e.g. "/ext/pipelines?repo=web"), which is also where a
-    // phone, with no side panel, goes instead; absent offers no such button.
+    // phone, with no side panel, goes instead; absent offers no such button. Read as `navigate` reads a path, so it is
+    // the address from before the editor's frames (`legacyPathOf` of @intentic/sandbox-contract/app-routes writes one
+    // from a link) and opens in the reader's frame and sandbox.
     readonly home?: ((input: SideViewInput) => string | undefined) | undefined;
     // A link this side view can show instead of the browser opening it: the input it would open for `url`, or undefined.
     // Asked only when a link in the chat is followed, and only with `links: true` on the manifest entry; it may parse,
@@ -521,11 +526,18 @@ export interface IntenticApi {
             readonly schedules?: boolean | undefined;
         }): Promise<PickedModel | undefined>;
     };
-    // Navigates the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
-    readonly navigate: (path: string) => void;
-    // The same path as a browser address, for `<a href>` so a navigational row is a real link, not just a
-    // click handler. Use with `browserOwnsClick` for modified clicks.
-    readonly href: (path: string) => string;
+    // The app's pages, one constructor each, as the editor names them (`links.capabilities()`, `links.agent(id)`,
+    // `links.extension("pipelines", undefined, { query: { repo } })`): what `navigate` and `href` take. A link names the
+    // page, not its address, so the host draws it in the frame and the sandbox the reader is in, and a page the editor
+    // moves is still where the link goes.
+    readonly links: typeof appPages;
+    // Navigates the shell to a page of the app, made by `links`. A path (e.g. "/capabilities", "/ext/<view>/<key>") is
+    // still taken but deprecated: it is read as an address from before the editor's frames, of the sandbox open (or the
+    // one its `?sandbox=` names), and opens that page where a link to it would.
+    readonly navigate: (to: PageLink | string) => void;
+    // The same page as a browser address, for `<a href>` so a navigational row is a real link, not just a
+    // click handler. Use with `browserOwnsClick` for modified clicks. A path is read as `navigate` reads one.
+    readonly href: (to: PageLink | string) => string;
     // The URL as a view's own state, so what's on screen can be linked. A view's route space is the query
     // only (`:key` already names the activation).
     readonly route: {

@@ -1,6 +1,7 @@
+import { page as pages, parseAppPath } from "@intentic/sandbox-contract/app-routes";
 import { expect, type Page, test } from "@playwright/test";
-import { activationPath, EXPECTED_ACTIVATIONS, EXPECTED_RAIL_IDS, FIXTURE_CAPABILITIES, FIXTURE_PANELS } from "../fixtures/extension-facts.js";
-import { DAEMON_URL } from "../stack.js";
+import { activationLink, EXPECTED_ACTIVATIONS, EXPECTED_RAIL_IDS, FIXTURE_CAPABILITIES, FIXTURE_PANELS } from "../fixtures/extension-facts.js";
+import { DAEMON_URL, seededPage } from "../stack.js";
 
 // Every extension view mounts against stubbed /panels and /capabilities, with the real router, registry and components.
 // Console errors are not asserted: opened views hit a loopback daemon lacking a matching workspace.
@@ -15,10 +16,14 @@ const stubFacts = async (page: Page): Promise<void> => {
     });
 };
 
+const BOARD = seededPage(pages.agents());
+// Where every extension view of the seeded sandbox is linked from, inside it: `/s/<sandbox>/ext/<id>[/<key>]`.
+const VIEWS = `${seededPage()}/ext/`;
+
 // True once the rail's extensions have activated, when the failure states below become meaningful. A tile is on the rail
 // only if visited or badging; everything else counts under the More menu.
 const shellReady = async (page: Page): Promise<void> => {
-    await expect(page.locator(`nav a[href^="/ext/"], nav [aria-label*="not on the rail"]`).first()).toBeVisible();
+    await expect(page.locator(`nav a[href^="${VIEWS}"], nav [aria-label*="not on the rail"]`).first()).toBeVisible();
 };
 
 // Rows are the sections not currently on the rail; the menu's label carries a count, matched on its stable half.
@@ -41,7 +46,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test(`a tile opened from More says its place lasts only as long as the visit`, async ({ page }) => {
-    await page.goto(`/agents`);
+    await page.goto(BOARD);
     await shellReady(page);
     await openMore(page);
     const area = await anUnseatedArea(page);
@@ -53,13 +58,13 @@ test(`a tile opened from More says its place lasts only as long as the visit`, a
     await expect(tile).toBeVisible();
     await expect(tile).toHaveAttribute(`aria-label`, /here while you are · right-click to keep/);
 
-    await page.goto(`/agents`);
+    await page.goto(BOARD);
     await shellReady(page);
     await expect(page.locator(`nav a[href="${area.href}"]`)).toHaveCount(0);
 });
 
 test(`an area is kept on the rail from the menu row it was found on`, async ({ page }) => {
-    await page.goto(`/agents`);
+    await page.goto(BOARD);
     await shellReady(page);
     await openMore(page);
     const area = await anUnseatedArea(page);
@@ -73,7 +78,7 @@ test(`an area is kept on the rail from the menu row it was found on`, async ({ p
     await expect(page.locator(`nav a[href="${area.href}"]`)).toBeVisible();
     await expect(keep).toHaveCount(0);
 
-    await page.goto(`/agents`);
+    await page.goto(BOARD);
     await shellReady(page);
     const tile = page.locator(`nav a[href="${area.href}"]`);
     await expect(tile).toBeVisible();
@@ -81,13 +86,13 @@ test(`an area is kept on the rail from the menu row it was found on`, async ({ p
 });
 
 test(`the rail and its More menu show exactly the views the fixture activates`, async ({ page }) => {
-    await page.goto(`/agents`);
+    await page.goto(BOARD);
     await shellReady(page);
     await openMore(page);
 
-    const hrefs = await page.locator(`a[href^="/ext/"]`).evaluateAll((links) => links.map((link) => link.getAttribute(`href`) ?? ``));
-    // Format: /ext/<id> or /ext/<id>/<key>; id identifies the view family.
-    const railIds = [...new Set(hrefs.map((href) => href.split(`/`)[2] ?? ``))].filter((id) => id !== ``);
+    const hrefs = await page.locator(`a[href^="${VIEWS}"]`).evaluateAll((links) => links.map((link) => link.getAttribute(`href`) ?? ``));
+    // The extension page's `ext` names the view family, whatever activation key follows it.
+    const railIds = [...new Set(hrefs.map((href) => parseAppPath(href)?.page?.params[`ext`] ?? ``))].filter((id) => id !== ``);
 
     // Both directions of the set check matter:
     // missing ⇒ a detect() rule changed, or the fixture dropped its evidence.
@@ -102,7 +107,7 @@ test(`every registered extension view mounts`, async ({ page }) => {
     const broken: string[] = [];
 
     for (const activation of EXPECTED_ACTIVATIONS) {
-        const path = activationPath(activation);
+        const path = seededPage(activationLink(activation));
         await page.goto(path);
         try {
             await shellReady(page);

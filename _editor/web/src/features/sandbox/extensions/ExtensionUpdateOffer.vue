@@ -13,6 +13,7 @@ import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // What an open row says about its installed version before anything else, so it leads the drawer: a registry advisory,
 // an update that came up wrong, then the update on offer. The offer is named for the row's `update` pill, so the pill
@@ -145,7 +146,7 @@ const revert = async (): Promise<void> => {
 
 // Links a finished agent diff-read when the policy already ran one, offers to start one otherwise; an unregistered
 // conversation still resolves by id through the chat route.
-const reviewAt = (conversationId: string): string => `/agents/${encodeURIComponent(conversationId)}`;
+const reviewAt = (conversationId: string): string => here(page.agent(conversationId));
 const openReview = (conversationId: string): void => {
     const { agentById, open } = useAgents();
     const agent = agentById(conversationId);

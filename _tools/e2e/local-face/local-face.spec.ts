@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { expect, type Page, test } from "@playwright/test";
 import { type FaceServer, type LocalFace, type Sidecar, serveFace, startSidecar } from "./local-stack.js";
 
@@ -73,6 +74,7 @@ const pointAt = (face: LocalFace): boolean => {
     }
     const taken = !window.dispatchEvent(new CustomEvent(`intentic:repoint`, { cancelable: true, detail: face }));
     if (!taken) {
+        // The folder's own page (localPath(`files`)), spelled as local.rs spells it: this runs in the page, not here.
         window.history.replaceState(null, ``, `${window.location.pathname}#/workspace`);
         window.location.reload();
     }
@@ -193,7 +195,7 @@ test(`a window on a folder lists it, opens, edits and saves a file, and asks the
         await expect(page.getByRole(`navigation`).getByRole(`link`, { name: FILES, exact: true })).toBeVisible();
         // One address for the page, whatever screen it is on: the screen rides the hash (the web's router, a local window).
         expect(new URL(page.url()).pathname).toBe(`/files/local`);
-        expect(new URL(page.url()).hash).toBe(`#/workspace`);
+        expect(new URL(page.url()).hash).toBe(`#${localPath(`files`)}`);
     });
 
     await test.step(`the tree lists the folder`, async () => {
@@ -294,7 +296,7 @@ test(`another folder pointed at in the window's place takes it in place: no relo
         await expect(row(`hello.txt`)).toHaveCount(0);
         await expect(page.getByRole(`complementary`).getByText(other.name, { exact: true })).toBeVisible();
         await expect(page).toHaveTitle(new RegExp(other.name));
-        expect(new URL(page.url()).hash).toBe(`#/workspace`);
+        expect(new URL(page.url()).hash).toBe(`#${localPath(`files`)}`);
     });
 
     await test.step(`with no reload, the shell in every frame, and no frame of the new folder half drawn`, async () => {

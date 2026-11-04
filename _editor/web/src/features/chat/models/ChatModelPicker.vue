@@ -13,6 +13,7 @@ import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoo
 import { accessKnown, anyProviderReady } from "../../../models/providers/access";
 import { useT } from "@intentic/ui/i18n";
 import { useRole } from "../../../client/sandbox/useRole";
+import { here, page } from "../../../lib/routes/links";
 
 // Chat's binding of the shared model picker: the list, then a footer every picker draws in the same three parts: one status
 // line (PickerStatus), the account rows (PickerAccounts) and one toolbar (PickerRunSettings). Edits the given conversation, not the active tab, so
@@ -178,7 +179,7 @@ const footerVisible = computed(() =>
                 <div v-if="auto" class="flex flex-col gap-1">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
                     <!-- The one part of Auto a sandbox configures: which model does the reading; a maintainer's page to open. -->
-                    <RouterLink v-if="canShip" to="/sandbox/agent#models" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
+                    <RouterLink v-if="canShip" :to="here(page.sandboxSettings(`agent`, { hash: `models` }))" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
                         {{ t(`chat.chatModelPicker.chooseWhichModelReads`) }}
                     </RouterLink>
                 </div>

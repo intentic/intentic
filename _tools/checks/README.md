@@ -134,6 +134,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [extension-deps](extension-deps.mjs) | an extension manifest naming an `@intentic/*` package outside the extension SDK |
 | [runtime-deps](runtime-deps.mjs) | shipped code importing a package its manifest names only as a devDependency |
 | [contract-paths](contract-paths.mjs) | a contract route, or a platform route the daemon calls, called by spelling its path |
+| [route-literal](route-literals.mjs) | an address of the editor (`/agents`, `/s/<sb>/settings/models`, `/settings/billing`…) typed as a string instead of built from `@intentic/sandbox-contract/app-routes` (`page.*`, `here`, `toInside`…, `api.links` in an extension); the roots it looks for are read from that table, so a page added there is guarded at once |
 | [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |
 | [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |

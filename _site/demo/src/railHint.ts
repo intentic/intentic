@@ -1,3 +1,4 @@
+import { parseAppPath } from "@intentic/sandbox-contract/app-routes";
 import { homeRecording, photographed } from "./mode";
 
 // THE FIRST THING THE HERO SAYS: which way in. The home recording opens on a chat with three sandboxes in the rail, and
@@ -38,10 +39,11 @@ const STYLE = `
 }
 `;
 
-/** The app's address under the demo's base: `home`, `home/…`, `agents`, … */
-const appPath = (): string => window.location.pathname.slice(BASE.length).replace(/^\/+/, ``);
+/** The app's address under the demo's base, as the editor's router reads it: `/home/…`, `/s/<sandbox>/agents`, … */
+const appPath = (): string => `/${window.location.pathname.slice(BASE.length).replace(/^\/+/, ``)}`;
 
-const onHome = (): boolean => appPath() === `` || appPath() === `home` || appPath().startsWith(`home/`);
+// Home's frame, or the bare base on its way there: anything else is inside a sandbox (or a page that is no sandbox's).
+const onHome = (): boolean => appPath() === `/` || parseAppPath(appPath())?.frame.kind === `home`;
 
 /** The rail's sandbox tiles on Home (HomeSandboxes.vue), without the add tile after them. */
 const sandboxTiles = (): HTMLElement[] => {

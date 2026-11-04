@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { agentScope, branchScope, isShared, SHARED_SCOPE, sameScope, scopeKey, type ViewScope } from "../../../app/workspaceScope";
+import { here, page } from "../../../lib/routes/links";
 import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
 import { agentDisplayTitle, agentStandingMeta } from "../../../models/agent-status/agentStatus-meta";
 import { sandboxNow } from "../../../models/agent-status/sandboxClock";
@@ -332,7 +333,7 @@ const MORE = ui.textButton({ tone: `link`, size: `xs`, flush: true }, `min-h-8 w
             <p class="text-2xs text-subtle">{{ t(`workspace.workspaceScopeChip.staysShared`) }}</p>
             <RouterLink
                 v-if="currentAgent !== undefined"
-                :to="`/agents/${currentAgent}`"
+                :to="here(page.agent(currentAgent))"
                 :class="ui.textButton({ tone: `quiet`, size: `xs`, flush: true }, `min-h-8 self-start`)"
                 @click="emit(`close`)"
             >

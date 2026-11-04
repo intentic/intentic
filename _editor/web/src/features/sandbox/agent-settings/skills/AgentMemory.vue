@@ -5,6 +5,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAgentMemory } from "./useAgentMemory";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../../lib/routes/links";
 
 // One file, read at the top of every turn on every runtime; this group can read, edit and delete it, not just append
 // via import. Save is explicit since a half-typed sentence going live would be read on the next turn.
@@ -20,7 +21,7 @@ const missing = computed(() => onDisk.value !== undefined && !present.value);
 const createAndOpen = async (): Promise<void> => {
     await commit(draft.value);
     if (editorError.value === undefined) {
-        await router.push(`/workspace/${MEMORY_FILE}`);
+        await router.push(here(page.workspace(MEMORY_FILE)));
     }
 };
 
@@ -35,7 +36,7 @@ onMounted(() => void load());
             <Button v-if="missing" :label="t(`sandbox.agentMemory.createFile`)" size="small" tier="boring" :loading="saving" @click="createAndOpen">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-            <Button v-else :as="RouterLink" :to="`/workspace/${MEMORY_FILE}`" :label="t(`sandbox.agentMemory.openFile`)" size="small" tier="quiet">
+            <Button v-else :as="RouterLink" :to="here(page.workspace(MEMORY_FILE))" :label="t(`sandbox.agentMemory.openFile`)" size="small" tier="quiet">
                 <template #icon><Icon name="arrow-up-right" /></template>
             </Button>
         </template>

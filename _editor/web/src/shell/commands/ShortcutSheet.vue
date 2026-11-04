@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { Disposable } from "@intentic/extension-api";
+import { here, page } from "../../lib/routes/links";
 import { installApp, installOffered } from "../../workbench/commands/appInstall";
 import { registerBuiltin } from "../../workbench/commands/builtinCommands";
 import { categoryLabel } from "../../workbench/commands/categories";
@@ -60,9 +61,11 @@ const families = computed<readonly Family[]>(() => {
 const appNote = computed(() => isMac && !appWindow && installOffered.value);
 const appKeys = { close: formatChord(`Mod+W`, true), reopen: formatChord(`Mod+Shift+T`, true), next: formatChord(`Mod+Shift+]`, true) };
 
+// The sheet is open over a sandbox's shell or over a desktop window on a folder (local/LocalFiles.vue), and each has its
+// own address for the account's Settings: the sandbox's in the frame the reader is in, the folder window's its own.
 const openSettings = (): void => {
     open.value = false;
-    void router.push(`/settings/keybindings`);
+    void router.push(here(page.account(`keybindings`)));
 };
 </script>
 

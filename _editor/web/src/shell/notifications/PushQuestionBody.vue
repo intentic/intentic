@@ -4,6 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
+import { here, page } from "../../lib/routes/links";
 import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -32,7 +33,7 @@ const connectHint = computed<string | undefined>(() =>
 const connect = (): void => {
     const host = pushFlow.connectHost.value;
     if (host !== undefined) {
-        void router.push({ name: `capabilities`, params: { entry: host } });
+        void router.push(here(page.capabilities(host)));
     }
 };
 

@@ -9,6 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import * as actualUi from "@intentic/ui";
 import * as actualAgentActions from "../../../models/fleet/agentActions";
 import * as actualNativeApp from "../../../app/environments/nativeApp";
@@ -251,10 +252,12 @@ it(`opens a phone on the agent's Changes when the address asks for them, and on 
 });
 
 // Inside the Android app the conversation is the app's own screen: turning to the chat asks the router for it, which
-// hands `/agents/<id>` to the app, and this page stays on the changes it was opened for, with no way back of its own.
+// hands it to the app (router/nativeHandoff.ts), and this page stays on the changes it was opened for, with no way back
+// of its own. Asked in the sandbox open, as the page names no frame here.
 it(`inside the Android app, turns to the agent's chat by asking the router for it, staying on the changes`, async () => {
     knobs.inApp = true;
     knobs.query = { view: `changes` };
+    activeSandboxId.value = `sbx-1`;
     const el = await mountDetail();
     expect(pageInFront(el)).toBe(`changes`);
     expect(el.querySelector(`[aria-label="Back to agents"]`)).toBeNull();
@@ -263,7 +266,7 @@ it(`inside the Android app, turns to the agent's chat by asking the router for i
     chatTab.click();
     await nextTick();
 
-    expect(routerCalls.push.mock.calls).toEqual([[`/agents/agent-1`]]);
+    expect(routerCalls.push.mock.calls).toEqual([[`/s/sbx-1/agents/agent-1`]]);
     expect(pageInFront(el)).toBe(`changes`);
 });
 

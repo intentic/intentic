@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic/prisma";
+import { insidePath, type PageLink } from "@intentic/sandbox-contract/app-routes";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -72,6 +73,10 @@ export const SEED = {
     sandboxId: `e2e-sandbox`,
     sandboxName: `E2E Sandbox`,
 };
+
+// A page of the seeded sandbox at its address inside it (`/s/e2e-sandbox/…`), the sandbox's own landing with no page:
+// the address names the sandbox, so a spec opens the seeded one whatever the browser had open last.
+export const seededPage = (link?: PageLink): string => insidePath(SEED.sandboxId, link);
 
 const createPrisma = (): PrismaClient => new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
 

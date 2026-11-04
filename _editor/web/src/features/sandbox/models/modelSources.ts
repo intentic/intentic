@@ -2,6 +2,7 @@ import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { t } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // EVERYTHING THIS SANDBOX CAN RUN A MODEL ON, one entry per source, which the grid's tiles and the Models row in the
 // sandbox's menu are both read from: a provider's accounts (its own sign-ins and its
@@ -40,7 +41,7 @@ export interface ModelSource {
     // Under the name, only when there is something to say: what needs doing, or what it is waiting on.
     readonly line: string | undefined;
     readonly standing: ModelSourceStanding;
-    // Where a source this page does not manage itself is managed: its capability card.
+    // Where a source this page does not manage itself is managed: its capability card, where the reader is.
     readonly manage: string | undefined;
 }
 
@@ -118,7 +119,7 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
                 summary: t(`connect.modelSources.local`),
                 line: undefined,
                 standing: `ready`,
-                manage: `/capabilities/localmodel`,
+                manage: here(page.capabilities(`localmodel`)),
             };
         case `endpoint`:
             return {
@@ -129,7 +130,7 @@ const sourceOf = (input: ModelSourceInput, when: WhenWords): ModelSource => {
                 summary: t(`connect.modelSources.endpoint`),
                 line: undefined,
                 standing: `ready`,
-                manage: `/capabilities/endpoint`,
+                manage: here(page.capabilities(`endpoint`)),
             };
         case `trial`:
             return {

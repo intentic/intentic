@@ -46,7 +46,7 @@ import { usePostEdit } from "./usePostEdit";
 import { t } from "./i18n.js";
 
 // Where an empty queue points: what agents ask while they work is answered on the board, from each agent's card.
-const agentsLink = appLink(host().href(`/agents`), () => host().navigate(`/agents`));
+const agentsLink = appLink(host().href(host().links.agents()), () => host().navigate(host().links.agents()));
 
 // The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
 // instant: it starts a one-minute hold with a live countdown and a way to call it back. Sections are ordered by what's

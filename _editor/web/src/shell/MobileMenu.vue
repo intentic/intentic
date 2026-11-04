@@ -6,6 +6,7 @@ import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttenti
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
 import { useDiskPressure } from "../features/sandbox/overview/storage/useDiskPressure";
 import { identityHue } from "../lib/identityHue";
+import { here, page, toHome } from "../lib/routes/links";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { switchableSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
@@ -117,14 +118,14 @@ const resumeSetup = (id: string) => finishOnHome(id);
 
             <!-- This device, not the sandbox: push is registered per phone, so the ask belongs on the phone's own page. -->
             <RowGroup v-if="pushRow !== undefined" :label="t(`shell.mobileMenu.phone`)">
-                <MenuRow to="/settings/notifications" icon="bolt" :tone="pushRow.tone" :title="pushRow.message" :description="pushRow.detail" />
+                <MenuRow :to="here(page.account(`notifications`))" icon="bolt" :tone="pushRow.tone" :title="pushRow.message" :description="pushRow.detail" />
             </RowGroup>
 
             <!-- Sandboxes: tap to switch; the active one's placement mark carries its live status. -->
             <RowGroup :label="t(`shared.sandboxes`)">
                 <!-- Out to the master view (features/home/), quietly, on the header of the list it zooms out of. -->
                 <template #actions>
-                    <RouterLink to="/home" class="flex min-h-9 min-w-9 items-center justify-center text-subtle" :aria-label="t(`home.open`)">
+                    <RouterLink :to="toHome()" class="flex min-h-9 min-w-9 items-center justify-center text-subtle" :aria-label="t(`home.open`)">
                         <Icon name="th-large" class="text-sm" />
                     </RouterLink>
                 </template>

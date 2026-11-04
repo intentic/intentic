@@ -8,6 +8,7 @@ import { useRoute, useRouter } from "vue-router";
 import { z } from "zod";
 import { useAuth } from "../../client/auth/useAuth";
 import { CODE_LENGTH, codeDigits, EmailCodeError, plausibleAddress } from "../../client/auth/emailCode";
+import { toTop } from "../../lib/routes/links";
 import { returnPath } from "../../lib/routes/signIn";
 import EmailCodeSignIn from "./EmailCodeSignIn.vue";
 
@@ -91,7 +92,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
                 <!-- A link with a part missing: the sign-in page is where a code can be asked for again. -->
                 <template v-if="!complete">
                     <Notice :of="brokenNotice" class="rounded-none text-left" />
-                    <Button :label="t(`auth.desktopAuthComplete.backToSignIn`)" tier="accent" class="mt-4 self-center" @click="void router.replace(`/login`)" />
+                    <Button :label="t(`auth.desktopAuthComplete.backToSignIn`)" tier="accent" class="mt-4 self-center" @click="void router.replace(toTop(`login`))" />
                 </template>
 
                 <!-- The code is spent: one more mail to the same address, typed here this time. -->

@@ -3,6 +3,7 @@ import { Button, ui, Icon, Modal, RowGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import RepoCheckRow from "../../../components/RepoCheckRow.vue";
+import { here, page } from "../../../lib/routes/links";
 import { useRepoChecks } from "../../../models/sandbox/environment/useRepoChecks";
 import { useT } from "@intentic/ui/i18n";
 
@@ -71,7 +72,7 @@ const EXAMPLE = `{
 
         <template #footer>
             <!-- Where the rest of the answer lives: the daemon's own reviews and every other repository's checks. -->
-            <RouterLink to="/sandbox/agent?section=finishing" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
+            <RouterLink :to="here(page.sandboxSettings(`agent`, { query: { section: `finishing` } }))" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
                 {{ t(`workspace.directoryChecks.allChecksInSandbox`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
             <Button :label="t(`ui.action.close`)" tier="quiet" @click="dir = undefined" />

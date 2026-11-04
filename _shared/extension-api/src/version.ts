@@ -19,4 +19,8 @@
 // 2.40.0 lets a view start an agent from a branch while the shared workspace stays on its main line:
 // `api.chat.composeFrom({ repo, branch })` opens a new chat whose private copy is cut from that branch. Additive. The
 // recorded surface grows `chatApi`.
-export const extensionApiVersion = "2.40.0";
+// 2.41.0 gives a view the app's pages to link to: `api.links` holds a constructor for each (the editor's own table,
+// @intentic/sandbox-contract/app-routes), and `api.navigate` and `api.href` take the link one makes, drawn in the frame
+// and the sandbox the reader is in. A path is still taken, deprecated: read as an address from before the editor's
+// frames, it opens where a link to its page would. Additive. The recorded surface grows `api`.
+export const extensionApiVersion = "2.41.0";

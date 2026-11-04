@@ -5,7 +5,9 @@ import { z } from "zod";
 import { EMBED_QUERY, embedded, LOOK_QUERY, type NativeLook, nativeLook, nativeLookOf, rememberLook, tellNative } from "../app/environments/nativeApp";
 import { type ThemeRow, themeRowLook } from "../skins/themeRow";
 import { returnPath } from "../lib/routes/signIn";
-import { AGENT_VIEW, CHANGES_VIEW, mobileChatPath, PHONE_HOME } from "../lib/routes/phoneScreens";
+import { legacyPathOf, legacySandbox, page, type PageLink, parseAppPath, topPath } from "@intentic/sandbox-contract/app-routes";
+import { linkOf } from "../lib/routes/links";
+import { AGENT_VIEW, CHANGES_VIEW } from "../lib/routes/phoneScreens";
 import { useSkin } from "../skins/useSkin";
 import { linkedConversation } from "./conversationLink";
 
@@ -17,10 +19,12 @@ import { linkedConversation } from "./conversationLink";
 //   whether there was one, so the app closes the WebView when there was not;
 // - the app shows another route in the warm page with `intenticEmbed.open(path)`, hands over the look it wears with
 //   `setLook`, and a daemon session it already holds with `adoptSession`.
+//
+// The app is told every address in the form addresses had before frames (legacy.ts `legacyPathOf`), its sandbox named
+// as `?sandbox=`: every installed app parses `/agents/<id>` to open a conversation natively and reads `?sandbox=` to hand
+// over that sandbox's session before it shows a path again. The page reads either form, so the app's own paths land.
 
-const CHAT = `/chat`;
-const MENU = `/menu`;
-const SIGN_IN = `/login`;
+const SIGN_IN = topPath(`login`);
 
 /** What the hand-off reads of a route: a guard's and one the router resolved alike. */
 export type NativeRoute = Pick<RouteLocationNormalized, `path` | `query` | `fullPath`>;
@@ -31,32 +35,57 @@ const HistoryEntrySchema = z.object({ position: z.number() });
 
 const focused = (query: LocationQuery): string | undefined => WordSchema.safeParse(query[`focus`]).data;
 
-// An agent's own screen (`/agents/<id>`), as opposed to the board or a screen under it (`/agents/<id>/pages/<page>`).
-const agentScreen = (path: string): boolean => path.startsWith(`${PHONE_HOME}/`) && !path.slice(PHONE_HOME.length + 1).includes(`/`);
+// What a route shows, read off its address in either form (links.ts `linkOf`), and the sandbox that address names: its
+// frame's (`/s/<sandbox>/…`, `/home/<sandbox>/…`), or an old address's `?sandbox=`.
+const shownBy = (to: NativeRoute): { readonly link: PageLink; readonly sandbox: string | undefined } | undefined => {
+    const link = linkOf(to.fullPath);
+    if (link === undefined) {
+        return undefined;
+    }
+    const framed = parseAppPath(to.path);
+    return { link, sandbox: framed === undefined ? legacySandbox(to.fullPath) : framed.frame.sandbox };
+};
+
+// A conversation's own screen as the app's bridge reads it, `/agents/<id>` (the id escaped), in the sandbox named.
+const nativeChatPath = (conversationId: string, sandbox: string | undefined): string => legacyPathOf(page.agent(conversationId), sandbox);
+
+/** A screen the app draws itself: a path as it reads one, or the chat, whose open conversation only the guard can read. */
+export type NativeScreen = { readonly kind: `open`; readonly path: string } | { readonly kind: `chat`; readonly sandbox: string | undefined };
 
 /**
- * The path the app opens for a route it draws itself, undefined for a route this page shows. A conversation is always
- * `/agents/<id>` (the id escaped), however the route named it: `?conversation=`, the board's or the chat's `?focus=`.
- * `/chat` alone is the conversation the chat has open, which only the guard can read, so it comes back as `/chat`. The
- * board, the menu and the sign-in pages keep their whole path, query and all. Two addresses under an agent stay here,
- * since the app shows them in this page: its Changes alone (`/agents/<id>?view=changes`, AgentDetail) and one page it
- * showed, full screen (`/agents/<id>/pages/<page>`, ChatPageScreen).
+ * The screen the app draws for a route, undefined for a route this page shows. A conversation is always its own screen,
+ * however the route named it: `?conversation=`, the board's or the chat's `?focus=`. The chat alone is the conversation
+ * it has open. The board and the menu keep their query, and the sign-in pages their whole address. Two pages under an
+ * agent stay here, since the app shows them in this page: its Changes alone (`view=changes`, AgentDetail) and one page
+ * it showed, full screen (the agent's pages, ChatPageScreen).
  */
-export const nativeScreen = (to: NativeRoute): string | undefined => {
-    const named = linkedConversation(to.query) ?? (to.path === CHAT || to.path === PHONE_HOME ? focused(to.query) : undefined);
+export const nativeScreen = (to: NativeRoute): NativeScreen | undefined => {
+    const shown = shownBy(to);
+    const name = shown?.link.page;
+    const named = linkedConversation(to.query) ?? (name === `chat` || name === `agents` ? focused(to.query) : undefined);
     if (named !== undefined) {
-        return mobileChatPath(named);
+        return { kind: `open`, path: nativeChatPath(named, shown?.sandbox) };
     }
-    if (to.path === CHAT) {
-        return CHAT;
+    if (to.path === SIGN_IN || to.path.startsWith(`${SIGN_IN}/`)) {
+        return { kind: `open`, path: to.fullPath };
     }
-    const drawn =
-        to.path === PHONE_HOME ||
-        (agentScreen(to.path) && to.query[AGENT_VIEW] !== CHANGES_VIEW) ||
-        to.path === MENU ||
-        to.path === SIGN_IN ||
-        to.path.startsWith(`${SIGN_IN}/`);
-    return drawn ? to.fullPath : undefined;
+    if (shown === undefined) {
+        return undefined;
+    }
+    if (name === `chat`) {
+        return { kind: `chat`, sandbox: shown.sandbox };
+    }
+    const drawn = name === `agents` || name === `menu` || (name === `agent` && to.query[AGENT_VIEW] !== CHANGES_VIEW);
+    return drawn ? { kind: `open`, path: legacyPathOf(shown.link, shown.sandbox) } : undefined;
+};
+
+/**
+ * Where the page is, as the app is told after each navigation (`routed`) and shows again later: a page of a sandbox in
+ * the form the app reads, its sandbox named; any other address as it is.
+ */
+export const nativeRoutedPath = (to: NativeRoute): string => {
+    const shown = shownBy(to);
+    return shown === undefined ? to.fullPath : legacyPathOf(shown.link, shown.sandbox);
 };
 
 /** The route without the app's two address keys, which the page has read and remembered; undefined when it has neither. */
@@ -138,7 +167,7 @@ export const installNativeApp = (router: Router, host: NativeAppHost): void => {
         if (screen === undefined) {
             return true;
         }
-        const path = screen === CHAT ? mobileChatPath(await host.activeConversation()) : screen;
+        const path = screen.kind === `chat` ? nativeChatPath(await host.activeConversation(), screen.sandbox) : screen.path;
         // An app that cannot hear it leaves the page to go there itself, as a browser would.
         return !tellNative({ kind: `open`, path });
     });
@@ -146,7 +175,7 @@ export const installNativeApp = (router: Router, host: NativeAppHost): void => {
     router.afterEach((to, _from, failure) => {
         root ??= position();
         if (failure === undefined) {
-            tellNative({ kind: `routed`, path: to.fullPath, title: to.meta.title?.() ?? ``, canGoBack: canGoBack() });
+            tellNative({ kind: `routed`, path: nativeRoutedPath(to), title: to.meta.title?.() ?? ``, canGoBack: canGoBack() });
         }
     });
 

@@ -15,6 +15,7 @@ import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { desktopVersion, openThisComputer } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { inNativeShell } from "../../workbench/window/capacitor";
+import { toTop } from "../../lib/routes/links";
 import { returnPath } from "../../lib/routes/signIn";
 import { useT } from "@intentic/ui/i18n";
 
@@ -27,7 +28,7 @@ const route = useRoute();
 
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (lib/routes/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
-const hosted = computed(() => destination.value.split(`?`)[0] === `/start/hosted`);
+const hosted = computed(() => destination.value.split(`?`)[0] === toTop(`startHosted`));
 // Adding an account beside the one signed in, or continuing as one still signed in here (loginAccounts.ts).
 const accounts = useLoginAccounts(destination);
 const { asked: addAsked, adding, remaining } = accounts;

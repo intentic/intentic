@@ -8,6 +8,7 @@ import { RouterLink } from "vue-router";
 import { usePrivacyShield } from "../../../../models/sandbox/usePrivacyShield";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { here, page } from "../../../../lib/routes/links";
 import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 
@@ -48,8 +49,6 @@ const grant = async (on: boolean): Promise<void> => {
         await resumeQueue();
     }
 };
-
-const shield = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
 </script>
 
 <template>
@@ -76,7 +75,7 @@ const shield = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
             >
                 {{ t(`chat.chatPaneNotices.privacyLetRead`, { provider: standing.label }) }}
             </Button>
-            <Button :as="RouterLink" :to="shield" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
+            <Button :as="RouterLink" :to="here(page.sandboxSettings(`privacy-shield`))" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
         </template>
     </Notice>
     <!-- Granted: said for as long as it holds, since this conversation's reads leave unmasked while it does. -->

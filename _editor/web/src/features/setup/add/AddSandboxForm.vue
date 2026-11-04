@@ -11,6 +11,7 @@ import { computed, ref, useId } from "vue";
 import { RouterLink } from "vue-router";
 import ModeChoice from "../../../parts/sandbox/ModeChoice.vue";
 import SetupNeedsGoogle from "../SetupNeedsGoogle.vue";
+import { here, page } from "../../../lib/routes/links";
 import AddSandboxAttach from "./AddSandboxAttach.vue";
 import AddSandboxWays from "./AddSandboxWays.vue";
 import { HERE } from "../flow/useSetupOnMachine";
@@ -115,7 +116,7 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
                 <SetupNeedsGoogle v-if="hostedProblem === `google`" :choose-mine="hereOffered ? chooseHere : undefined" />
                 <p v-else-if="hostedProblem !== undefined" class="text-xs text-muted" data-add-sandbox-hosted-problem>
                     {{ hostedProblemLine }}
-                    <RouterLink v-if="hostedProblem === `occupied`" to="/settings/billing" :class="ui.textButton({ size: `xs` })">{{
+                    <RouterLink v-if="hostedProblem === `occupied`" :to="here(page.account(`billing`))" :class="ui.textButton({ size: `xs` })">{{
                         t(`setup.setup.buyMachine`)
                     }}</RouterLink>
                 </p>

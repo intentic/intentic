@@ -2,7 +2,7 @@ import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/prov
 import { queueWhole } from "./agent/tools/agent-terminals.js";
 import { join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
-import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_WAKE_MS } from "./endpoints/local-model-idle.js";
@@ -824,8 +824,8 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         runtimeInstalls,
         push,
         // A native install's notification passes the privacy shield on its way to Apple; read through `whole` since the
-        // shield is composed in this same object.
-        pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text)),
+        // shield is composed in this same object. A tap opens this sandbox when its connect token names it (push.ts).
+        pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text), sandboxIdFromToken(config.connectToken)),
         heldCards,
         events,
         reaper,

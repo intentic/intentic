@@ -1,12 +1,13 @@
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../../app/environments/local";
+import { here, page } from "../../lib/routes/links";
 
 // The settings hub's index, read by the hub (which draws the rows) and by the command palette (which turns each into a
 // "Settings: …" destination), for the reason sandboxNav.ts exists: one table, so a section cannot be reachable by click
 // but not by name.
 
-/** The `:tab` route param a section lives under (`/settings/<slug>`), and the key its name is written under. */
+/** The `:tab` route param a section lives under (`<frame>/account/<slug>`), and the key its name is written under. */
 export type SettingsSlug = (typeof SETTINGS_SECTIONS)[number][`slug`];
 
 /** A page drawn at the foot of another section's (`within`), and the anchor it answers to there. */
@@ -56,7 +57,7 @@ export interface SettingsGroup {
     readonly sections: readonly SettingsSection[];
 }
 
-/** The section a param-less `/settings` shows. */
+/** The section the account's settings show with no section named (`<frame>/account`). */
 export const SETTINGS_DEFAULT_SECTION = `profile`;
 
 // Who you are and what you pay for, then how this app looks and talks to you, then a developer's tools. Account first,
@@ -72,7 +73,7 @@ const SETTINGS_GROUPS = [`account`, `preferences`, `developer`] as const;
 // below type-check against the catalog instead of being a bare string.
 //
 // `within` is a page too small to be a row of its own, drawn at the foot of the section it belongs with: it keeps its
-// name in the palette ("Settings: Voice") and its old address, which the router sends to the anchor (router/index.ts).
+// name in the palette ("Settings: Voice") and its old address, which the router sends to the anchor (router/routeParts.ts).
 // A section whose parts this reader is shown may wear a longer name (`withinLabel`), so the index says what is on it.
 const SETTINGS_SECTIONS = [
     { slug: `profile`, icon: `user`, group: `account` },
@@ -146,7 +147,10 @@ export const settingsGroups = (sections: readonly SettingsSection[]): readonly S
         (group) => group.sections.length > 0,
     );
 
-const settingsSectionPath = (slug: string): string => (slug === SETTINGS_DEFAULT_SECTION ? `/settings` : `/settings/${slug}`);
+// In the frame the reader is in, so the palette and the wake chip open the account's settings beside the rail they
+// were pressed from (lib/routes/links.ts `here`).
+const settingsSectionLink = (slug: string, hash?: string): string =>
+    here(page.account(slug === SETTINGS_DEFAULT_SECTION ? undefined : slug, { hash }));
 
 /** The section a part is drawn on, by the table rather than this reader's index: an address must not depend on who asks. */
 const hostOf = (part: SettingsPartSlug): SettingsSlug => {
@@ -158,9 +162,9 @@ const hostOf = (part: SettingsPartSlug): SettingsSlug => {
 };
 
 /** Where a part is reached: its section's page, scrolled to the part's anchor. */
-export const settingsPartPath = (part: SettingsPartSlug): string => `${settingsSectionPath(hostOf(part))}#${part}`;
+export const settingsPartPath = (part: SettingsPartSlug): string => settingsSectionLink(hostOf(part), part);
 
-/** Every part's old address (`/settings/<part>`) and the section it now sits at the foot of, for the router. */
+/** Every part's old address (`<frame>/account/<part>`) and the section it now sits at the foot of, for the router. */
 export const settingsPartHosts = (): readonly { readonly part: SettingsPartSlug; readonly host: SettingsSlug }[] =>
     ENTRIES.flatMap((entry) => (entry.within ?? []).map((part) => ({ part: part.slug, host: entry.slug })));
 
@@ -170,6 +174,6 @@ export const settingsPartHosts = (): readonly { readonly part: SettingsPartSlug;
  */
 export const settingsDestinations = (planOffered: boolean): readonly { slug: SettingsSlug | SettingsPartSlug; label: string; icon: IconName; path: string }[] =>
     settingsSections(planOffered).flatMap((section) => [
-        { slug: section.slug, label: section.label, icon: section.icon, path: settingsSectionPath(section.slug) },
+        { slug: section.slug, label: section.label, icon: section.icon, path: settingsSectionLink(section.slug) },
         ...(section.within ?? []).map((part) => ({ slug: part.slug, label: part.label, icon: part.icon, path: settingsPartPath(part.slug) })),
     ]);

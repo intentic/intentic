@@ -36,6 +36,7 @@ import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
 import { useCapabilityPairing } from "./capabilityPairing";
 import { useCapabilityProbe } from "./capabilityProbe";
 import { useCapabilityRoute } from "./capabilityRoute";
+import { here, page as pages } from "../../lib/routes/links";
 import { useCapabilitySubmit } from "./capabilitySubmit";
 import BrowserProfileDialog from "./connect/BrowserProfileDialog.vue";
 import CapabilityConnections from "./connect/CapabilityConnections.vue";
@@ -270,7 +271,7 @@ onBeforeUnmount(() => {
                     <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
                     <RouterLink
                         v-if="soleInstance && soleRebuildStep(soleInstance)"
-                        to="/sandbox/environment"
+                        :to="here(pages.sandboxSettings(`environment`))"
                         class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
                     >
                         <Icon name="exclamation-triangle" />
@@ -389,7 +390,7 @@ onBeforeUnmount(() => {
                         <!-- Where extensions are found, on the tile people arrive at wanting one. -->
                         <RouterLink
                             v-if="selected.kind === 'extension'"
-                            to="/sandbox/extensions?view=browse"
+                            :to="here(pages.sandboxSettings(`extensions`, { query: { view: `browse` } }))"
                             class="flex items-center gap-3 rounded-lg bg-card shadow-sm px-3 py-2.5 transition-colors hover:bg-overlay"
                         >
                             <Icon name="search" class="shrink-0 text-link" />

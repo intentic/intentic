@@ -4,6 +4,7 @@ import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-ro
 import { z } from "zod";
 import { modelsPath } from "./routes/modelsPath";
 import { HOME_PATH } from "./routes/firstScreens";
+import { toTop } from "./routes/links";
 
 // THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens the new sandbox as
 // `/home?add=sandbox&found=claude,codex` (provider ids, comma-separated; an older app's `/setup?found=…` lands there,
@@ -112,7 +113,7 @@ export const foundToOffer = (value: QueryValue, now: number = Date.now()): Nativ
 
 /** Whether an address asks for a new sandbox: Home's (`/home?add=sandbox`), or the setup page's old one that lands there. */
 const asksForSandbox = (to: { readonly path: string; readonly query: LocationQuery }): boolean =>
-    to.path === `/setup` || (to.path === HOME_PATH && to.query[`add`] === `sandbox`);
+    to.path === toTop(`setup`) || (to.path === HOME_PATH && to.query[`add`] === `sandbox`);
 
 /**
  * The router's half, for every navigation: a `?found=` on the way to a new sandbox is kept for the landing, and any address

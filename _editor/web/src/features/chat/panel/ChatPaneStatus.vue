@@ -16,6 +16,7 @@ import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useAudience } from "../../../app/useAudience";
+import { here, page } from "../../../lib/routes/links";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import HomeDoor from "./pane/HomeDoor.vue";
 import HomeMemory from "./pane/HomeMemory.vue";
@@ -237,7 +238,7 @@ const usageChip = computed(() => {
                  for a maintainer, who may open that page; anyone else reads the chip alone. -->
             <RouterLink
                 v-if="usageChip && canShip"
-                to="/sandbox/usage"
+                :to="here(page.sandboxSettings(`usage`))"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
                 <UsageMeter :headroom="usageChip.headroom"

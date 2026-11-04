@@ -1,3 +1,4 @@
+import { legacyPathOf, page } from "@intentic/sandbox-contract/app-routes";
 import type { CiRepo, CiRunsResponse } from "@intentic/sandbox-contract/schemas/ci";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -62,7 +63,8 @@ describe(`a tab's input read back`, () => {
     });
 
     it(`sends "Open in Pipelines" to the board narrowed to the run's repository`, () => {
-        expect(runHome({ repo: `web`, runId: 42 })).toBe(`/ext/pipelines?repo=web`);
+        expect(runHome({ repo: `web`, runId: 42 })).toBe(legacyPathOf(page.extension(`pipelines`, undefined, { query: { repo: `web` } })));
+        expect(runHome({ repo: `apps/web`, runId: 42 })).toBe(`/ext/pipelines?repo=apps%2Fweb`);
         expect(runHome({ runId: 42 })).toBeUndefined();
     });
 });

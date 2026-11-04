@@ -8,7 +8,7 @@ import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import HintedTitle from "./HintedTitle.vue";
-import { keyOf, MEASURE_LINKS, planProtections, presetLabel, presetValue, STATUS_TONE } from "./dataProtection";
+import { keyOf, measureHref, planProtections, presetLabel, presetValue, STATUS_TONE } from "./dataProtection";
 import { useComplianceReport, usePreset } from "./useCompliance";
 
 // Step 1: every protection the sandbox offers, sorted by what the reader can do about it. Recommended first: the
@@ -135,7 +135,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                     <template #control>
                         <div class="flex items-center gap-2">
                             <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
-                            <Button v-if="MEASURE_LINKS.has(entry.measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(entry.measure.id)" size="small" tier="quiet">
+                            <Button v-if="measureHref(entry.measure.id) !== undefined" :as="RouterLink" :to="measureHref(entry.measure.id)" size="small" tier="quiet">
                                 {{ t(`sandbox.dataProtection.change`) }}
                             </Button>
                         </div>
@@ -153,7 +153,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                         <template #control>
                             <div class="flex items-center gap-2">
                                 <StatusBadge :variant="STATUS_TONE[measure.status]" dot :label="statusOf(measure)" />
-                                <Button v-if="MEASURE_LINKS.has(measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(measure.id)" size="small" tier="quiet">
+                                <Button v-if="measureHref(measure.id) !== undefined" :as="RouterLink" :to="measureHref(measure.id)" size="small" tier="quiet">
                                     {{ t(`sandbox.dataProtection.change`) }}
                                 </Button>
                             </div>

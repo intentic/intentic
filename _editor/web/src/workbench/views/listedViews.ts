@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import type { RouteLocationRaw } from "vue-router";
+import { here, page } from "../../lib/routes/links";
 import { extensionsLoaded, extensionStatuses } from "./extensionStatuses";
 import { viewRegistered } from "./registry";
 
@@ -20,8 +20,11 @@ export const WORKFLOWS: ListedView = { view: `workflows`, listing: `intentic.wor
 // and a surface that offered the install in that second would be wrong for everyone who has it.
 export const listedViewMissing = (view: string): boolean => extensionsLoaded.value && !viewRegistered(view);
 
+// The sandbox's Extensions, on one of its tabs, in the frame the reader is in.
+const extensionsTab = (query: Readonly<Record<string, string>>): string => here(page.sandboxSettings(`extensions`, { query }));
+
 // A listing's own panel in Extensions → Browse, where its Install button is.
-const browseListing = (listing: string): RouteLocationRaw => ({ path: `/sandbox/extensions`, query: { view: `browse`, ext: listing } });
+const browseListing = (listing: string): string => extensionsTab({ view: `browse`, ext: listing });
 
 // Whether the view is here, its extension is installed and switched off, or it is not installed at all, and where to
 // send someone for the last two: the switch on the Installed tab, or the listing to install it from.
@@ -32,8 +35,6 @@ export const useListedView = (target: ListedView) => {
         }
         return extensionStatuses.value.some((status) => status.state === `disabled` && status.extensionId === target.listing) ? `off` : `absent`;
     });
-    const setUp = computed<RouteLocationRaw>(() =>
-        state.value === `off` ? { path: `/sandbox/extensions`, query: { view: `installed` } } : browseListing(target.listing),
-    );
+    const setUp = computed<string>(() => (state.value === `off` ? extensionsTab({ view: `installed` }) : browseListing(target.listing)));
     return { state, setUp };
 };

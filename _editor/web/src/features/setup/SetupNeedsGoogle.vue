@@ -5,6 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useAuth } from "../../client/auth/useAuth";
+import { here, page } from "../../lib/routes/links";
 
 // Drawn in place of the hosted rung's button while the free machine needs Google linked first (the Add sandbox
 // form's `hostedProblem`, add/AddSandboxForm.vue). `chooseMine` is the own-computer rung's press, absent where the ladder offers no such rung.
@@ -36,7 +37,7 @@ const linkGoogleHere = async (): Promise<void> => {
             <Button tier="accent" :label="t(`setup.setup.linkGoogle`)" size="small" :loading="linkingGoogle" @click="linkGoogleHere">
                 <template #icon><Icon name="google" /></template>
             </Button>
-            <Button :as="RouterLink" to="/settings/billing" :label="t(`setup.setup.buyMachine`)" size="small" tier="boring">
+            <Button :as="RouterLink" :to="here(page.account(`billing`))" :label="t(`setup.setup.buyMachine`)" size="small" tier="boring">
                 <template #icon><Icon name="credit-card" /></template>
             </Button>
             <Button v-if="chooseMine" :label="t(`setup.setup.runOnThisComputer`)" size="small" tier="boring" v-action="chooseMine">

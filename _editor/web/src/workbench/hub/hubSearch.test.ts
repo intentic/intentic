@@ -4,7 +4,9 @@ import { packageRoot } from "@intentic/constants/node";
 import { SETTINGS_CARDS, settingsPages, settingsPageTerms } from "../../features/settings/settingsIndex";
 import { SETTINGS_DEFAULT_SECTION, settingsSections } from "../../features/settings/settingsNav";
 import { SANDBOX_CARDS, sandboxPageTerms } from "../../models/sandbox/sandboxIndex";
-import { sandboxBuiltInSlugs, sandboxSections } from "../../models/sandbox/sandboxNav";
+import { sandboxBuiltInSlugs, sandboxSectionLink, sandboxSections } from "../../models/sandbox/sandboxNav";
+import { homePath, insidePath, page as appPage } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { groupByHub, type HubReader, type HubSource, searchHubs, settingHash, settingOfHash, type SettingEntry } from "./hubSearch";
 
 // FINDING A SETTING BY NAME. The two halves of an answer live apart: the index tables say a card exists and what it is
@@ -101,6 +103,14 @@ describe(`addresses`, () => {
     });
 });
 
+// The sandbox open, with no route of the shell on screen: its pages are the ones inside it, the account's in Home's frame.
+const BOX = `a1b2c3d4e5f6`;
+const sandboxTab = (tab: string): string => insidePath(BOX, appPage.sandboxSettings(tab));
+const accountTab = (tab: string): string => homePath(undefined, appPage.account(tab));
+beforeEach(() => {
+    activeSandboxId.value = BOX;
+});
+
 // The real tables, as a maintainer who writes code reads them in a browser tab on a desktop.
 const MAINTAINER: HubReader = { maker: false, phone: false, app: false, canShip: true };
 
@@ -110,12 +120,14 @@ const sources = (canShip = true): readonly HubSource[] => [
         pages: sandboxSections(canShip).map(({ slug, label, icon }) => ({ slug, label, icon })),
         entries: sandbox,
         pageTerms: sandboxPageTerms(),
+        link: sandboxSectionLink,
     },
     {
         hub: `settings`,
         pages: settingsPages(settingsSections(true, false, false)),
         entries: settings,
         pageTerms: settingsPageTerms(),
+        link: (slug) => appPage.account(slug),
     },
 ];
 
@@ -129,13 +141,13 @@ describe(`what people type`, () => {
     it(`finds a setting by its own name, and lands on its card`, () => {
         const [theme] = ask(`theme`);
         expect(theme?.setting).toBe(`theme`);
-        expect(theme?.to).toEqual({ path: `/settings/appearance`, query: {}, hash: `#setting-theme` });
+        expect(theme?.to).toEqual({ path: accountTab(`appearance`), query: {}, hash: `#setting-theme` });
         expect(theme?.trail).toBe(`Appearance`);
     });
 
     it(`finds the network fence on the sandbox overview`, () => {
         const fence = ask(`network fence`).find((result) => result.setting === `overview-fence`);
-        expect(fence?.to).toEqual({ path: `/sandbox/overview`, query: {}, hash: `#setting-overview-fence` });
+        expect(fence?.to).toEqual({ path: sandboxTab(`overview`), query: {}, hash: `#setting-overview-fence` });
     });
 
     it(`finds a setting by the words people use for it rather than ours`, () => {
@@ -146,7 +158,7 @@ describe(`what people type`, () => {
 
     it(`opens a card behind its page's category, and says where it is`, () => {
         const voice = ask(`voice`).find((result) => result.setting === `agent-voice`);
-        expect(voice?.to).toEqual({ path: `/sandbox/agent`, query: { section: `tools` }, hash: `#setting-agent-voice` });
+        expect(voice?.to).toEqual({ path: sandboxTab(`agent`), query: { section: `tools` }, hash: `#setting-agent-voice` });
         expect(voice?.trail).toBe(`Agent › Tools`);
         const documents = ask(`documents`).find((result) => result.setting === `data-protection-documents`);
         expect(documents?.to.query).toEqual({ step: `documents` });
@@ -172,10 +184,10 @@ describe(`what people type`, () => {
     // address, which the router sends to its anchor there, and its cards on the section that draws them.
     it(`finds a page drawn inside another, and its cards on the section that draws them`, () => {
         const voice = ask(`voice`).find((result) => result.key === `settings:page:voice`);
-        expect(voice?.to.path).toBe(`/settings/voice`);
+        expect(voice?.to.path).toBe(accountTab(`voice`));
         const wake = ask(`wake word`).find((result) => result.setting === `wake-word`);
-        expect(wake?.to).toEqual({ path: `/settings/notifications`, query: {}, hash: `#setting-wake-word` });
-        expect(ask(`delete account`).find((result) => result.setting === `delete-account`)?.to.path).toBe(`/settings/data`);
+        expect(wake?.to).toEqual({ path: accountTab(`notifications`), query: {}, hash: `#setting-wake-word` });
+        expect(ask(`delete account`).find((result) => result.setting === `delete-account`)?.to.path).toBe(accountTab(`data`));
     });
 
     it(`puts a page before a card of its own name`, () => {
@@ -207,7 +219,13 @@ describe(`what people type`, () => {
         expect(ask(`   `)).toEqual([]);
     });
 
+    // The audit log is a part of Activity, with no page of its own: an answer for it opens Activity on that part.
+    it(`opens a part of a page on the page it is part of`, () => {
+        const audit = ask(`audit`).find((result) => result.slug === `audit` && result.setting === undefined);
+        expect(audit?.to).toEqual({ path: sandboxTab(`activity`), query: { section: `audit` }, hash: `` });
+    });
+
     it(`names the default page outright, which a phone's param-less address would not show`, () => {
-        expect(ask(`display name`)[0]?.to.path).toBe(`/settings/${SETTINGS_DEFAULT_SECTION}`);
+        expect(ask(`display name`)[0]?.to.path).toBe(accountTab(SETTINGS_DEFAULT_SECTION));
     });
 });

@@ -1,3 +1,4 @@
+import { page } from "@intentic/sandbox-contract/app-routes";
 import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browsersChip, portsChip, terminalChip, vpnChip } from "./runtimeChips";
 
@@ -38,7 +39,7 @@ const facts = (overrides: Partial<Parameters<typeof browsersChip>[0]> = {}): Par
 describe(`the browsers' chip`, () => {
     it(`is one chip for everything the Browsers view shows: live apps, web windows and the desktop`, () => {
         const chip = browsersChip(facts({ apps: 1, appsOpen: 1, sessions: [browser(), browser({ name: `b2` })], desktopWindows: 1 }));
-        expect(chip).toMatchObject({ label: `Browsers`, count: 4, to: `/browsers` });
+        expect(chip).toMatchObject({ label: `Browsers`, count: 4, to: page.browsers() });
         expect(chip?.tip?.rows).toEqual([
             { label: `Live app`, value: `1 running` },
             { label: `Browsers`, value: `2 open` },
@@ -56,7 +57,7 @@ describe(`the browsers' chip`, () => {
 
     it(`counts an app only while a tab shows it, and stays, uncounted, while its server answers with the tab closed`, () => {
         const closed = browsersChip(facts({ apps: 1, appsOpen: 0 }));
-        expect(closed).toMatchObject({ to: `/browsers?preview` });
+        expect(closed).toMatchObject({ to: page.browsers(undefined, { query: { preview: `1` } }) });
         expect(closed?.count).toBeUndefined();
         expect(closed?.tip?.rows).toEqual([{ label: `Live app`, value: `1 running` }]);
         expect(browsersChip(facts({ apps: 2, appsOpen: 1, sessions: [browser()] }))?.count).toBe(2);
@@ -68,18 +69,18 @@ describe(`the browsers' chip`, () => {
     });
 
     it(`opens the one kind that is live by name, since a bare /browsers reopens whatever tab was in front`, () => {
-        expect(browsersChip(facts({ apps: 2, appsOpen: 2 }))).toMatchObject({ to: `/browsers?preview`, count: 2 });
-        expect(browsersChip(facts({ desktopWindows: 3 }))).toMatchObject({ to: `/browsers/desktop`, count: 3 });
+        expect(browsersChip(facts({ apps: 2, appsOpen: 2 }))).toMatchObject({ to: page.browsers(undefined, { query: { preview: `1` } }), count: 2 });
+        expect(browsersChip(facts({ desktopWindows: 3 }))).toMatchObject({ to: page.browsers(`desktop`), count: 3 });
         expect(browsersChip(facts({ sessions: [browser(), browser({ name: `b2` }), browser({ name: `b3`, running: false })] }))).toMatchObject({
             count: 2,
-            to: `/browsers/${browser().name}`,
+            to: page.browsers(browser().name),
         });
     });
 
     it(`turns to a warning, counting what waits, while an agent asks for help in one`, () => {
         const help = { requestId: `r1`, message: `captcha`, requestedAt: 1 };
         const chip = browsersChip(facts({ apps: 1, sessions: [browser({ name: `b2` }), browser({ help })] }));
-        expect(chip).toMatchObject({ count: 1, tone: `warning`, to: `/browsers/${browser().name}` });
+        expect(chip).toMatchObject({ count: 1, tone: `warning`, to: page.browsers(browser().name) });
         expect(chip?.aria).toBe(`Browsers, Needs your help`);
     });
 });
@@ -87,12 +88,12 @@ describe(`the browsers' chip`, () => {
 describe(`the standing states`, () => {
     it(`warns while a port answers the internet, naming one and counting several`, () => {
         expect(portsChip({ ports: [], here: false })).toBeUndefined();
-        expect(portsChip({ ports: [3000], here: false })).toMatchObject({ label: `Port 3000 public`, tone: `warning`, to: `/sandbox/ports` });
+        expect(portsChip({ ports: [3000], here: false })).toMatchObject({ label: `Port 3000 public`, tone: `warning`, to: page.sandboxSettings(`ports`) });
         expect(portsChip({ ports: [3000, 5173], here: false })).toMatchObject({ label: `2 ports public`, aria: `Publicly reachable: 3000, 5173` });
     });
 
     it(`says a tunnel is up while one is`, () => {
         expect(vpnChip({ names: [], here: false })).toBeUndefined();
-        expect(vpnChip({ names: [`office`], here: false })).toMatchObject({ label: `VPN`, tone: `success`, aria: `VPN connected: office` });
+        expect(vpnChip({ names: [`office`], here: false })).toMatchObject({ label: `VPN`, tone: `success`, aria: `VPN connected: office`, to: page.capabilities(`vpn`) });
     });
 });

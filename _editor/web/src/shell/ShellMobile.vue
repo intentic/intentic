@@ -6,9 +6,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import MobileRail from "./MobileRail.vue";
-import { ownsWayBack, PHONE_HOME } from "../lib/routes/phoneScreens";
-import { isHomePath } from "../lib/routes/home";
+import { ownsWayBack } from "../lib/routes/phoneScreens";
 import { HOME_PATH } from "../lib/routes/firstScreens";
+import { here, isPage, page as pages, routeSandbox } from "../lib/routes/links";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import { useEdgeBack } from "./edgeBack";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
@@ -33,17 +33,17 @@ const router = useRouter();
 const onHome = computed(() => route.name === `home`);
 const inApp = embedded();
 // The board itself, where the rail is drawn. Not its drill-downs: a conversation keeps the whole width of the screen.
-const onBoard = computed(() => route.path === PHONE_HOME);
+const onBoard = computed(() => isPage(route, `agents`));
 
 // Undefined on the board and a conversation under it: the board is home, and a conversation's screen carries its own
 // arrow. Otherwise steps back when history.state.back shows one exists, else falls back to the board.
 const back = computed<PageBack | undefined>(() => {
-    if (inApp || ownsWayBack(route.path) || route.path === HOME_PATH) {
+    if (inApp || ownsWayBack(route.path) || (onHome.value && routeSandbox(route) === undefined)) {
         return undefined;
     }
     // One sandbox's home conversation is the list's drill-down: an edge swipe goes back to the list. Nothing is drawn
     // over the chat for it: Home carries no top bar, on purpose.
-    if (isHomePath(route.path)) {
+    if (onHome.value) {
         return { label: t(`home.open`), go: () => void router.push(HOME_PATH) };
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;
@@ -54,7 +54,7 @@ const back = computed<PageBack | undefined>(() => {
                 router.back();
                 return;
             }
-            void router.push(PHONE_HOME);
+            void router.push(here(pages.agents()));
         },
     };
 });
@@ -71,7 +71,10 @@ useEdgeBack({
     page,
     scrim,
     chip,
-    back: () => (inApp ? undefined : (back.value?.go ?? (route.path.startsWith(`/agents/`) ? () => router.push(`/agents`) : undefined))),
+    back: () =>
+        inApp
+            ? undefined
+            : (back.value?.go ?? (isPage(route, `agent`) || isPage(route, `agentPage`) ? () => router.push(here(pages.agents())) : undefined)),
     route: () => route.fullPath,
 });
 // The getting-started checklist, started with the shell so every mark in every feature has an answer to read

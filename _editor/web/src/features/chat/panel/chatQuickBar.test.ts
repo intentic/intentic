@@ -14,6 +14,8 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { chatBarSlot, chatFullSlot } from "../../../workbench/window/panelSlots";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
+import { page as pages, toInside } from "../../../lib/routes/links";
 import ChatPanel from "./ChatPanel.vue";
 import ChatQuickBar from "./ChatQuickBar.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -106,9 +108,17 @@ beforeEach(async () => {
     await nextTick();
 });
 
+// The chat's own page, where every ask to read the turns goes: in the sandbox opened last while no route names one
+// (lib/routes/links.ts `here`), which only the tests that follow a press name, so every other test keeps no sandbox.
+const chatPage = (): string => toInside(`sb-1`, pages.chat());
+const inSandbox = (): void => {
+    activeSandboxId.value = `sb-1`;
+};
+
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    activeSandboxId.value = undefined;
 });
 
 it(`draws where no composer is already on screen, and nowhere else`, async () => {
@@ -236,6 +246,7 @@ it(`marks the last words as the reader's own when the agent has not answered yet
 });
 
 it(`takes the reader to the conversation from the header, closing the pad`, async () => {
+    inSandbox();
     const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
     await mountBar();
     await open();
@@ -243,13 +254,14 @@ it(`takes the reader to the conversation from the header, closing the pad`, asyn
     context().click();
     await settle();
 
-    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`]]]);
+    expect([opened(), push.mock.calls]).toEqual([false, [[chatPage()]]]);
     push.mockRestore();
 });
 
 // The card holding the turn is drawn in the transcript, and the pill opens a composer with none: offering one here
 // would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
+    inSandbox();
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([
         { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } },
@@ -265,7 +277,7 @@ it(`turns into a door while a card waits for an answer, rather than a box that c
     expect(opened()).toBe(false);
 
     await open();
-    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`]]]);
+    expect([opened(), push.mock.calls]).toEqual([false, [[chatPage()]]]);
     push.mockRestore();
 });
 
@@ -370,6 +382,7 @@ it(`counts the menus the composer opens as part of the box`, async () => {
 // A board card's click asks for the chat's turns, and the pad has none to show: before, the pill only changed its
 // title and readers clicked again. Every ask goes, since the same ask twice must act twice.
 it(`opens /chat when a board card asks to see the chat`, async () => {
+    inSandbox();
     const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
     await mountBar();
     await open();
@@ -379,7 +392,7 @@ it(`opens /chat when a board card asks to see the chat`, async () => {
     quickBarShowAsk.value += 1;
     await settle();
 
-    expect([opened(), push.mock.calls]).toEqual([false, [[`/chat`], [`/chat`]]]);
+    expect([opened(), push.mock.calls]).toEqual([false, [[chatPage()], [chatPage()]]]);
     push.mockRestore();
 });
 

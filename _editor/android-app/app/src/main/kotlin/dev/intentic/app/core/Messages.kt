@@ -358,7 +358,7 @@ data class OutcomeWebSessionInner (
 data class OutcomeNotificationInner (
 	val title: String? = null,
 	val body: String? = null,
-	/// The in-app path it opens: `/?conversation=<id>`, `/workspace`, `/automations`.
+	/// The in-app path it opens: `/s/<sandbox>?conversation=<id>`, `/s/<sandbox>/workspace`, `/s/<sandbox>/ext/automations`.
 	val url: String? = null,
 	val requireInteraction: Boolean,
 	val silent: Boolean

@@ -8,6 +8,7 @@ import { agentTranscriptQuery } from "../../../models/conversations/transcript/a
 import { isSealed } from "../../../models/agent-status/sealView";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
+import { isPage } from "../../../lib/routes/links";
 import type { WarmBand, WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 import { reviewsToRead, type ReviewToRead } from "./reviewsToRead";
@@ -42,7 +43,7 @@ const reviewRowWishes = ({ agentId, band, rows }: ReviewToRead): readonly WarmTa
 // The open agent's id, if the current route is one.
 const openAgentId = (): string | undefined => {
     const route = navigation().currentRoute.value;
-    return route.name === `agent` ? String(route.params[`id`] ?? ``) : undefined;
+    return isPage(route, `agent`) ? String(route.params[`id`] ?? ``) : undefined;
 };
 
 // Agents whose completed turn is `landed`: the diff now lives as workspace changes, which is what gets

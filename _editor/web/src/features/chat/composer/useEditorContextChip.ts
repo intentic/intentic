@@ -1,6 +1,7 @@
 import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { isPage } from "../../../lib/routes/links";
 import { useEditorSelection } from "../../../models/workspace/files/useEditorSelection";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 
@@ -26,7 +27,7 @@ export const useEditorContextChip = (): {
     const editorSelection = useEditorSelection();
 
     const target = computed<{ file: string; startLine?: number; endLine?: number; selection?: string } | undefined>(() => {
-        if (route.name !== `workspace`) {
+        if (!isPage(route, `workspace`)) {
             return undefined;
         }
         const selection = editorSelection.selection.value;

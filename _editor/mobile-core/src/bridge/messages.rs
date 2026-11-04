@@ -324,7 +324,7 @@ pub enum Outcome {
     Notification {
         title: Option<String>,
         body: Option<String>,
-        /// The in-app path it opens: `/?conversation=<id>`, `/workspace`, `/automations`.
+        /// The in-app path it opens: `/s/<sandbox>?conversation=<id>`, `/s/<sandbox>/workspace`, `/s/<sandbox>/ext/automations`.
         url: Option<String>,
         require_interaction: bool,
         silent: bool,

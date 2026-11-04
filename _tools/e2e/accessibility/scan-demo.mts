@@ -1,15 +1,17 @@
+import { page as pages, topPath } from "@intentic/sandbox-contract/app-routes";
 import { chromium } from "@playwright/test";
+import { demoHome, demoPage } from "../fixtures/demo-pages.ts";
 import { auditPage, printFindings } from "./audit.ts";
 
 const demo = process.env.AXE_DEMO_URL ?? `http://127.0.0.1:47160/demo`;
 const site = process.env.AXE_SITE_URL ?? `http://localhost:47149`;
 const screens = [
-    [`demo sign-in`, `${demo}/login`],
-    [`demo sandbox home`, `${demo}/agents`],
-    [`demo chat and composer`, `${demo}/chat`],
-    [`demo settings`, `${demo}/settings`],
-    [`demo workspace`, `${demo}/workspace`],
-    [`demo design kit`, `${demo}/kit`],
+    [`demo sign-in`, `${demo}${topPath(`login`)}`],
+    [`demo sandbox home`, `${demo}/${demoPage(pages.agents())}`],
+    [`demo chat and composer`, `${demo}/${demoPage(pages.chat())}`],
+    [`demo settings`, `${demo}/${demoHome(pages.account())}`],
+    [`demo workspace`, `${demo}/${demoPage(pages.workspace())}`],
+    [`demo design kit`, `${demo}${topPath(`kit`)}`],
     [`site home`, `${site}/`],
     [`site privacy`, `${site}/privacy/`],
     [`site docs`, `${site}/docs/`],

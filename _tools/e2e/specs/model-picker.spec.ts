@@ -1,4 +1,6 @@
+import { page as pages } from "@intentic/sandbox-contract/app-routes";
 import { expect, test } from "@playwright/test";
+import { seededPage } from "../stack.js";
 
 // Unified model picker: one searchable list across providers, a rail that filters (never switches), harness folded into
 // 'via Claude Code' rows. Catalogs are mocked for determinism; everything else is the real app and picker wiring.
@@ -48,7 +50,7 @@ const connectAll = async (page: import("@playwright/test").Page): Promise<void> 
 };
 
 const openPicker = async (page: import("@playwright/test").Page): Promise<void> => {
-    await page.goto("/workspace");
+    await page.goto(seededPage(pages.workspace()));
     await expect(page.locator('textarea[name="draft"]')).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Provider and model" }).click();
 };

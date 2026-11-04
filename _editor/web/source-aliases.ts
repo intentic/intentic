@@ -53,6 +53,10 @@ const contractModuleEntries = readdirSync(fromRoot(`_shared/sandbox-contract/src
     .toReversed()
     .map((id) => [`@intentic/sandbox-contract/${id}`, fromRoot(`_shared/sandbox-contract/src/${id}.ts`)] as const);
 
+// A folder of the contract published as one subpath (its `index.ts`, as `./app-routes` is): after its own modules, which
+// its key would otherwise swallow. The app's addresses, which the route table and every link are built from.
+const contractFolderEntries = [[`@intentic/sandbox-contract/app-routes`, fromRoot(`_shared/sandbox-contract/src/app-routes/index.ts`)] as const];
+
 // The kit's entry points the app reaches by source; listed here rather than among the hand-named ones below.
 const uiEntries = [[`@intentic/ui/reload-reason`, fromRoot(`_editor/ui/src/lib/reloadReason.ts`)] as const];
 
@@ -68,7 +72,7 @@ const apiEntries = Object.entries(
 ] as const);
 
 export const sourceAliases = (): Record<string, string> => ({
-    ...Object.fromEntries([...baseEntries, ...contractModuleEntries, ...uiEntries, ...apiEntries]),
+    ...Object.fromEntries([...baseEntries, ...contractModuleEntries, ...contractFolderEntries, ...uiEntries, ...apiEntries]),
     // Alias order matters: a string alias also matches `<key>/…`, so a subpath must precede its own barrel, and a
     // prefix-sharing pair (`markdown-document` before `markdown`) must keep that order too, or the import resolves
     // into a directory and fails with ENOTDIR.

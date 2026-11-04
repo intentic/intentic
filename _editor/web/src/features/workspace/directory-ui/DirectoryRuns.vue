@@ -7,6 +7,7 @@ import { RouterLink, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
 import { formatDateTime } from "@intentic/ui/format";
 import { errorMessage } from "@intentic/base/errors";
+import { here, page } from "../../../lib/routes/links";
 import { usePanels } from "../../../models/extensions/usePanels";
 import { composeAgent } from "../../../models/fleet/agentActions";
 import type { AgentFix } from "../../../models/fixes/agentFix";
@@ -405,7 +406,7 @@ const placeClass = (id: string, online: boolean): string[] => [
                 <Notice v-if="chosen !== undefined && chosenBlocked !== undefined" :tone="chosen.online ? `warning` : `info`" size="sm">
                     {{ chosenBlocked }}
                     <template v-if="chosen.online" #actions>
-                        <RouterLink :to="`/capabilities/${chosen.id}`" :class="ui.textButton()">{{
+                        <RouterLink :to="here(page.capabilities(chosen.id))" :class="ui.textButton()">{{
                             t(`workspace.directoryRuns.openCard`)
                         }}</RouterLink>
                     </template>
@@ -558,7 +559,7 @@ const placeClass = (id: string, online: boolean): string[] => [
                     <!-- Targets only a computer runs, while none is connected: no place to pick them from, so they are named here. -->
                     <p v-if="unplaced > 0" class="text-xs text-muted">
                         {{ t(`workspace.directoryRuns.noComputerFor`, { count: unplaced }, unplaced) }}
-                        <RouterLink to="/capabilities" class="ml-1 text-link hover:underline">{{
+                        <RouterLink :to="here(page.capabilities())" class="ml-1 text-link hover:underline">{{
                             t(`workspace.directoryRuns.connectOne`)
                         }}</RouterLink>
                     </p>
@@ -587,7 +588,7 @@ const placeClass = (id: string, online: boolean): string[] => [
             >
                 <Icon name="file-edit" class="text-2xs" />{{ t(`workspace.directoryRuns.editFile`, { file: fileName }) }}
             </button>
-            <RouterLink to="/capabilities" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
+            <RouterLink :to="here(page.capabilities())" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
                 {{ t(`workspace.directoryRuns.yourComputers`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
             <Button :label="t(`ui.action.close`)" tier="quiet" @click="dir = undefined" />

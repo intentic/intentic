@@ -11,6 +11,7 @@ import {
     type LinkTask,
     type LinkTaskStatus,
 } from "@intentic/sandbox-contract/schemas/links";
+import { legacyPathOf, page } from "@intentic/sandbox-contract/app-routes";
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
@@ -223,8 +224,9 @@ const startTurn = async (deps: LinkTaskDeps, link: ResolvedLink, task: StoredLin
 const heldNotice = (link: ResolvedLink, task: StoredLinkTask, words: string): PushNotification => ({
     title: `${link.label} asks to run a task here`,
     body: (task.title ?? words).replace(/\s+/g, " ").trim().slice(0, 120),
-    // Access ▸ Programs, scrolled to the link's row, where the task's Allow and Decline are (editor sandboxNav.ts).
-    url: "/sandbox/access?section=programs#linked-sandboxes",
+    // Access ▸ Programs, scrolled to the link's row, where the task's Allow and Decline are (editor sandboxNav.ts). Written
+    // as every notification writes a page of the sandbox, which the sender places in this one (push/push.ts `placedIn`).
+    url: legacyPathOf(page.sandboxSettings(`access`, { query: { section: `programs` }, hash: `linked-sandboxes` })),
     tag: `link-${task.requestId}`,
     requireInteraction: true,
 });

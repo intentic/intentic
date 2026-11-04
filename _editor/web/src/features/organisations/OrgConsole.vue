@@ -7,6 +7,7 @@ import { computed, onMounted, ref, shallowRef } from "vue";
 import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
 import { apiClient } from "../../lib/useApi";
+import { page, toHome } from "../../lib/routes/links";
 import { useOperation } from "../../workbench/operations/operations";
 import OrgDetailPanel from "./OrgDetailPanel.vue";
 
@@ -80,7 +81,7 @@ const openInWorkspace = async (): Promise<void> => {
         failed: t(`settings.settingsData.workspaceNotOpened`),
         // The workspace window opening is the answer.
         quiet: true,
-        task: () => localHost().openWorkspace(`/settings/organisation`),
+        task: () => localHost().openWorkspace(toHome(undefined, page.account(`organisation`))),
     });
 };
 

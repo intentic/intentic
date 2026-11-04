@@ -13,6 +13,11 @@ const openWorkspaceRef = jest.fn<(path: string, line?: number, asked?: { readonl
 );
 jest.mock("../../../../../models/workspace/files/openFileRef", () => ({ openWorkspaceRef, openFileRefFromEvent: jest.fn() }));
 const { paneSurface, viewingIn } = await import("../paneSurface");
+const { activeSandboxId } = await import("../../../../../app/storage/activeSandbox");
+const { page, toInside } = await import("../../../../../lib/routes/links");
+
+// The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+activeSandboxId.value = `sb-1`;
 
 const push = jest.fn<(to: string) => Promise<undefined>>(async () => undefined);
 const router = unstubbed<Router>(`router`, { resolve: ((to: string) => ({ fullPath: to })) as unknown as Router[`resolve`], push });
@@ -53,7 +58,7 @@ it(`hands a card the chat's own terminal and browser, and a route to the app's w
 
     expect([surface.commandTerminal?.(), surface.commandBrowser?.()]).toEqual([`agent-s1`, `browser-s1`]);
     surface.watchBrowser?.(`browser-s1`);
-    expect(push.mock.calls).toEqual([[`/browsers/browser-s1`]]);
+    expect(push.mock.calls).toEqual([[toInside(`sb-1`, page.browsers(`browser-s1`))]]);
 });
 
 // A spawned subagent works on after the turn that started it; its card asks the roster how it is doing, and leads to its
@@ -68,6 +73,6 @@ it(`hands a card the roster's word on the subagents its calls started, and the w
     );
 
     expect([surface.subagent?.(`sub-x`)?.status, surface.subagent?.(`sub-y`)]).toEqual([`blocked`, undefined]);
-    expect(surface.conversationRoute?.(`sub x`)).toBe(`/agents/sub%20x`);
+    expect(surface.conversationRoute?.(`sub x`)).toBe(`/s/sb-1/agents/sub%20x`);
     expect(Object.keys(surface)).not.toContain(`subagentRoute`);
 });

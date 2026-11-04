@@ -31,6 +31,8 @@ jest.mock(`../../../client/sandbox/useMembers`, () => ({ ...realMembers, selfAiA
 const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
 const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ModelPicker } = await import("./ModelPicker.vue");
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
+const { page, toInside } = await import("../../../lib/routes/links");
 const { browsingCatalog } = await import("../../../models/providers/loadBrowsingCatalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract/models/provider-specs");
 
@@ -167,11 +169,13 @@ it(`leads with connecting a model while nothing here can run, and drops it once 
     const { endpointsLoaded } = await import("../../../models/providers/providerCatalog");
     accountsLoaded.value = true;
     endpointsLoaded.value = true;
+    // The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+    activeSandboxId.value = `sb-1`;
     let element = mount();
 
     const first = element.querySelector(`[data-picker-connect-first]`);
     expect(first?.textContent).toContain(`Nothing is connected yet. Connect a model to start`);
-    expect(first?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(first?.getAttribute(`href`)).toBe(toInside(`sb-1`, page.sandboxSettings(`models`)));
     app?.unmount();
     document.body.innerHTML = ``;
 

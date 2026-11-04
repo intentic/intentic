@@ -4,11 +4,12 @@ import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../app/projectScope";
 import { sameScope, scopeKey, workspaceView } from "../../../app/workspaceScope";
+import { here, page } from "../../../lib/routes/links";
 import { queryWithScope, scopeFromQuery } from "./scopeRoute";
 
 // Two-way syncs the open file (and the `?agent` / `?repo&branch` scope) between the URL and the tabs singleton, so reload and
-// back/forward work; only file tabs are addressable. `route.params.path` is string[] or "" when bare; writes need an
-// array.
+// back/forward work; only file tabs are addressable. `route.params.path` is string[] or "" when bare; writes are the
+// workspace page's address in the reader's own frame (links.ts `here`), its query carried as the route holds it.
 export function useWorkspaceRoute(): void {
     const route = useRoute();
     const router = useRouter();
@@ -31,7 +32,7 @@ export function useWorkspaceRoute(): void {
 
     const urlPath = computed(() => {
         const path = route.params[`path`];
-        // "" is the bare-/workspace sentinel; the optional splat is never absent, but indexed access widens it.
+        // "" is the bare workspace's sentinel; the optional splat is never absent, but indexed access widens it.
         return Array.isArray(path) ? path.join(`/`) : (path ?? ``);
     });
     const activeFilePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : ``));
@@ -46,7 +47,7 @@ export function useWorkspaceRoute(): void {
     };
 
     // Reconcile once at mount: a deep link wins; otherwise the singleton's open file is asserted into the URL.
-    // Not on a phone, where the URL is the state: a bare /workspace there is the list or its Changes
+    // Not on a phone, where the URL is the state: a bare workspace address there is the list or its Changes
     // panel, and a file tab restored from storage on a cold load would put the viewer over whichever was asked for.
     const { mobile } = useDevice();
     if (urlPath.value !== ``) {
@@ -58,7 +59,7 @@ export function useWorkspaceRoute(): void {
         if (mobile.value) {
             activeId.value = null;
         } else {
-            void router.replace({ name: `workspace`, params: { path: activeFilePath.value.split(`/`) }, query: route.query });
+            void router.replace({ path: here(page.workspace(activeFilePath.value)), query: route.query });
         }
     }
 
@@ -67,7 +68,7 @@ export function useWorkspaceRoute(): void {
         if (path === urlPath.value) {
             return;
         }
-        void router.push({ name: `workspace`, params: { path: path ? path.split(`/`) : [] }, query: route.query });
+        void router.push({ path: here(page.workspace(path)), query: route.query });
     });
 
     // URL -> state: deep links, back/forward. Empty path deselects a file tab only; a mobile `?diff=` view survives.

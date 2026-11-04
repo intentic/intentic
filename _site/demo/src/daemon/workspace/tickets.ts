@@ -110,6 +110,7 @@ export const downloadPlanOf = (ticket: string): DownloadPlan | undefined => {
     return binding?.kind === `download` ? binding.plan : undefined;
 };
 
+// allow(route-literal): the daemon's own preview route, which a ticket's address is served under, not a page of the app.
 export const PREVIEW_PATH = `/workspace/preview/`;
 
 // A path's segments, each escaped once, so a space or a `#` in a name stays part of it.

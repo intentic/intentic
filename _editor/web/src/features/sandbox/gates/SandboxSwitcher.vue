@@ -8,8 +8,10 @@ import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
 import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
-import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
-import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
+import { GUEST_SECTION, sandboxHubPath } from "../../../models/sandbox/sandboxNav";
+import { homeEntryPath, sandboxEntryPath } from "../../../models/sandbox/sandboxScreen";
+import { hereIn, isPage, page } from "../../../lib/routes/links";
+import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import type { SandboxPlacement } from "../overview/placement";
 import { rowPlacement, useSandboxPlacement } from "../overview/useSandboxPlacement";
@@ -185,33 +187,35 @@ const addHere = (): void => {
     requestAddSandbox();
 };
 
+// A pick is a navigation into the sandbox, where it was last left: its address names it, which selects it
+// (router/shellGates.ts), and Back undoes the switch.
 const pick = (option: SandboxSummary): void => {
     if (local) {
         void openFromFolder(option.id);
         return;
     }
     open.value = false;
-    sandbox.select(option.id);
+    void router.push(sandboxEntryPath(option.id));
 };
+
+// The way out to Home, on the sandbox shown: the section Home shows of every sandbox, else its home conversation.
+const allSandboxes = computed(() => {
+    const id = sandbox.activeSandboxId.value;
+    return id === undefined ? HOME_PATH : homeEntryPath(id);
+});
 
 // A SANDBOX'S SETTINGS, from its own row: the cog beside it, so the list says whose settings they are, and another
 // sandbox's are one press away instead of a switch and a second trip through this panel. Removing or leaving one is
 // in there, at the foot of its Overview, rather than a trash on the row a pointer sweeps past on its way to switching.
-// A guest's door names the one section it may open (sandboxHubPath); every other tier opens on the hub's own default.
-// Another sandbox's lands there through the switch itself (sandboxScreen.ts), whose landing would replace a push.
+// A guest's door names the one section it may open (GUEST_SECTION); every other tier opens on the hub's own default.
+// Another sandbox's in the same frame, its address selecting it.
 const openSettings = (option: SandboxSummary): void => {
-    const path = sandboxHubPath(option.role === `guest`);
     if (local) {
-        void openSettingsFromFolder(option.id, path);
+        void openSettingsFromFolder(option.id, sandboxHubPath(option.role === `guest`));
         return;
     }
     open.value = false;
-    if (isActive(option)) {
-        void router.push(path);
-        return;
-    }
-    landOnAfterSwitch(option.id, path);
-    sandbox.select(option.id);
+    void router.push(hereIn(option.id, page.sandboxSettings(option.role === `guest` ? GUEST_SECTION : undefined)));
 };
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
@@ -265,7 +269,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
             type="button"
             class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg"
             :class="[
-                route.path === '/sandbox' || route.path.startsWith('/sandbox/') ? 'ui-row-select-on text-link' : 'text-muted hover:text-content',
+                isPage(route, `sandboxSettings`) ? 'ui-row-select-on text-link' : 'text-muted hover:text-content',
                 open && 'opacity-80',
             ]"
             :aria-label="
@@ -362,7 +366,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                 <template #actions>
                     <component
                         :is="local ? `button` : RouterLink"
-                        v-bind="local ? { type: `button` } : { to: `/home` }"
+                        v-bind="local ? { type: `button` } : { to: allSandboxes }"
                         class="flex h-5 w-5 items-center justify-center rounded text-subtle transition-colors hover:bg-content/5 hover:text-content"
                         :aria-label="t(`home.open`)"
                         v-tooltip.top="t(`home.open`)"

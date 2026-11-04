@@ -10,6 +10,7 @@ import { useAgents } from "../../../models/fleet/useAgents";
 import { agentSeed } from "../../../models/fleet/useAgents-actions";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { runIdsInLedger, useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
+import { here, page } from "../../../lib/routes/links";
 import { navigateInApp } from "../../../workbench/window/mainWindow";
 import { useRouter } from "vue-router";
 import { agentTabOf } from "../../../models/conversations/panel/useChat-reveal";
@@ -100,7 +101,7 @@ export const useChatTrays = (host: ChatTraysHost) => {
         open,
         openSubagent,
         // The child's page is the app's, reached in the window the app is in, never this one if it is the chat's own.
-        review: (child) => navigateInApp(router, `/agents/${encodeURIComponent(child.id)}`),
+        review: (child) => navigateInApp(router, here(page.agent(child.id))),
         // Nothing moves between lanes here, so a row has no motion to join.
         setRowEl: () => {},
     };

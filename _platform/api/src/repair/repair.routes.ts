@@ -109,7 +109,7 @@ export const repairRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () =
             tools: repairToolDefinitions(),
             max_tokens: config.repair.maxTokensPerTurn,
         });
-        const attempt = await pool.call(`/chat/completions`, {
+        const attempt = await pool.call(`/chat/completions`, { // allow(route-literal): the provider's route, no page
             method: `POST`,
             models: candidates,
             body: () => payload,

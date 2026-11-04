@@ -1,4 +1,5 @@
 import type { SideViewInput, SideViewLabel } from "@intentic/extension-api";
+import { legacyPathOf, page as appPage } from "@intentic/sandbox-contract/app-routes";
 import type { CiRepo, CiRunsResponse, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { STATUS_TONE } from "./statusVisual";
 import { t } from "./i18n.js";
@@ -66,10 +67,12 @@ export const describeRun = (input: SideViewInput, response: CiRunsResponse): Sid
     };
 };
 
-// The board, narrowed to the run's repository: what "Open in Pipelines" shows, and where a phone goes instead.
+// The board, narrowed to the run's repository: what "Open in Pipelines" shows, and where a phone goes instead. A side
+// view's home is still a path the host reads as one from before frames (`SideViewRegistration.home`), so it is that
+// form of the link, opened in the reader's frame and sandbox; the table builds it, so this module stays pure.
 export const runHome = (input: SideViewInput): string | undefined => {
     const ref = runRefOf(input);
-    return ref === undefined ? undefined : `/ext/pipelines?repo=${encodeURIComponent(ref.repo)}`;
+    return ref === undefined ? undefined : legacyPathOf(appPage.extension(`pipelines`, undefined, { query: { repo: ref.repo } }));
 };
 
 // Where the run lives on its forge: its own page while it is on the list, else built from the repository's page the

@@ -7,6 +7,7 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 import * as vueRouterOriginal from "vue-router";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 
 // The workspace's files: AGENTS.md absent (undefined) unless a test puts it there.
 const files = new Map<string, string>();
@@ -33,7 +34,13 @@ jest.mock(`@intentic/ui`, () => ({
     }),
 }));
 
+const { activeSandboxId } = await import("../../../../app/storage/activeSandbox");
 const { default: AgentMemory } = await import("./AgentMemory.vue");
+
+// The file's address in the sandbox the reader is in.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
+const FILE_AT = insidePath(BOX, page.workspace(`AGENTS.md`));
 
 let app: App | undefined;
 const mount = async (): Promise<HTMLElement> => {
@@ -66,19 +73,19 @@ it(`makes a missing AGENTS.md before opening it, and says it isn't there yet`, a
     const el = await mount();
 
     expect(el.textContent).toContain(`doesn't exist yet`);
-    expect(el.querySelector(`a[href="/workspace/AGENTS.md"]`)).toBeNull();
+    expect(el.querySelector(`a[href="${FILE_AT}"]`)).toBeNull();
     buttonSaying(`Create file`)?.click();
     await new Promise((resolve) => setTimeout(resolve));
 
     expect(saveText).toHaveBeenCalledWith(`AGENTS.md`, ``);
-    expect(push).toHaveBeenCalledWith(`/workspace/AGENTS.md`);
+    expect(push).toHaveBeenCalledWith(FILE_AT);
 });
 
 it(`opens an AGENTS.md that is there`, async () => {
     files.set(`AGENTS.md`, `Be brief.`);
     const el = await mount();
 
-    expect(el.querySelector(`a[href="/workspace/AGENTS.md"]`)?.textContent).toContain(`Open file`);
+    expect(el.querySelector(`a[href="${FILE_AT}"]`)?.textContent).toContain(`Open file`);
     expect(buttonSaying(`Create file`)).toBeUndefined();
     expect(el.textContent).toContain(`at the workspace root`);
 });

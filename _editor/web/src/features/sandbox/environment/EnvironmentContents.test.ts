@@ -2,6 +2,7 @@
 // card opens on a press, staples as plain names with nothing to press, attribution said once, several taken out at once.
 import "@intentic/testing/dom";
 import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
@@ -16,7 +17,12 @@ import { IconStub } from "@intentic/ui/testing";
     HTMLElement.prototype.getBoundingClientRect = (): DOMRect => DOMRect.fromRect({ x: 0, y: 0, width: 120, height: 32 });
 })();
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
+
+// The sandbox the reader is in, whose pages the card's links open.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 
 const staple = (name: string, bin: string, version: string, purpose: string): EnvironmentItem => ({
     id: `base:${bin}`,
@@ -195,7 +201,7 @@ it(`offers Remove on an agent-added block only, and points a capability's at Cap
     chip(el, `capability:docker`).click();
     await nextTick();
     expect(buttonNamed(card()!, `Remove from environment`)).toBeUndefined();
-    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/capabilities`);
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(insidePath(BOX, page.capabilities()));
 
     chip(el, `custom:ffmpeg`).click();
     await nextTick();
@@ -230,12 +236,12 @@ it(`points a capability's row at whatever turns it off: the privacy shield's rea
     chip(el, `capability:privacy`).click();
     await nextTick();
     expect(buttonNamed(card()!, `Remove from environment`)).toBeUndefined();
-    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/privacy-shield`);
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings(`privacy-shield`)));
     expect(card()?.textContent).toContain(`Privacy shield ›`);
 
     chip(el, `capability:codex`).click();
     await nextTick();
-    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings(`models`)));
 });
 
 it(`takes several out at once once asked to select, ticking only what can go`, async () => {

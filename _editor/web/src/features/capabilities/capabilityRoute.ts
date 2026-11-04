@@ -1,18 +1,19 @@
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import { computed, type Ref, watch } from "vue";
-import type { LocationQueryRaw, RouteLocationNormalizedLoaded, RouteLocationRaw, Router } from "vue-router";
+import type { RouteLocationNormalizedLoaded, Router } from "vue-router";
+import { here, type LinkQuery, page } from "../../lib/routes/links";
 import { isDeviceConnection, machineNamed } from "./model/deviceConnections";
 
 // The page's state is its URL: the open tile (`/capabilities/<entry>`), the connection its form is over (`edit`), the
 // slice and filter (`category`, `q`), a machine arriving to be connected (`device`) and the setup walk (`setup`).
-// Every move is one pure step from the URL as it stands; the composable reads the page's selection off it.
+// Every move is one pure step from the URL as it stands; the composable reads the page's selection off it. Each step
+// stays in the frame and the sandbox the URL names (lib/routes/links.ts `here`), so Home's frame keeps its rail.
 
-const PAGE = `capabilities`;
 // The walk's mark in the URL.
 export const SETUP = `recommended`;
 
-export type PageRoute = Pick<RouteLocationNormalizedLoaded, `params` | `query`>;
+export type PageRoute = Pick<RouteLocationNormalizedLoaded, `meta` | `params` | `query`>;
 
 export type PageMove =
     // Picking a tile, or walking on to the next one.
@@ -34,42 +35,48 @@ export type PageMove =
 // Where a move lands, and whether it is a history stop: Back undoes opening a tile, not each keystroke.
 export interface PageStep {
     readonly how: `push` | `replace`;
-    readonly to: RouteLocationRaw;
+    readonly to: string;
 }
 
+// The query as a link carries it: one value a key, as every key of this page holds; a repeated or empty key says nothing.
+const carried = (route: PageRoute): LinkQuery =>
+    Object.fromEntries(Object.entries(route.query).map(([key, value]) => [key, [value].flat()[0] ?? undefined]));
+
 // What survives leaving a tile: the slice and filter, not the connection being edited, which means nothing elsewhere.
-const elsewhere = (route: PageRoute): LocationQueryRaw => ({ ...route.query, edit: undefined });
+const elsewhere = (route: PageRoute): LinkQuery => ({ ...carried(route), edit: undefined });
+
+// The page in the route's own frame and sandbox, a tile open or none.
+const at = (route: PageRoute, entry: string | undefined, query: LinkQuery): string => here(page.capabilities(entry, { query }), route);
+
+// The tile the URL has open, if any.
+const openEntry = (route: PageRoute): string | undefined => [route.params[`entry`]].flat()[0];
 
 type Moves = { readonly [K in PageMove["kind"]]: (route: PageRoute, move: Extract<PageMove, { kind: K }>) => PageStep };
 
 // One entry per move; the query carries over (minus `edit`) so Back lands on the same slice.
 const MOVES: Moves = {
-    tile: (route, { entry }) => ({ how: `push`, to: { name: PAGE, params: { entry }, query: elsewhere(route) } }),
-    back: (route) => ({ how: `push`, to: { name: PAGE, query: elsewhere(route) } }),
+    tile: (route, { entry }) => ({ how: `push`, to: at(route, entry, elsewhere(route)) }),
+    back: (route) => ({ how: `push`, to: at(route, undefined, elsewhere(route)) }),
     // Replaced, not pushed, so reload and Back land correctly: stepping between connections isn't a history stop.
     edit: (route, { id }) => ({
         how: `replace`,
-        to: { name: PAGE, params: route.params, query: { ...route.query, edit: id === `` ? undefined : id } },
+        to: at(route, openEntry(route), { ...carried(route), edit: id === `` ? undefined : id }),
     }),
     // A machine that only syncs has no connection to open: it lands on the tile's add form with its name carried over,
     // the step it is missing, and the switches stay a decision made there rather than something one click does.
     connection: (route, { entry, connection }) => ({
         how: `push`,
-        to: {
-            name: PAGE,
-            params: { entry },
-            query: { ...elsewhere(route), ...(isDeviceConnection(connection) ? { device: machineNamed(connection) } : { edit: connection }) },
-        },
+        to: at(route, entry, { ...elsewhere(route), ...(isDeviceConnection(connection) ? { device: machineNamed(connection) } : { edit: connection }) }),
     }),
     // Replaced: Back undoes opening a tile, not each keystroke.
     filter: (route, { key, value }) => ({
         how: `replace`,
-        to: { name: PAGE, query: { ...elsewhere(route), [key]: value === `` ? undefined : value } },
+        to: at(route, undefined, { ...elsewhere(route), [key]: value === `` ? undefined : value }),
     }),
-    walk: (route, { entry }) => ({ how: `push`, to: { name: PAGE, params: { entry }, query: { ...elsewhere(route), setup: SETUP } } }),
+    walk: (route, { entry }) => ({ how: `push`, to: at(route, entry, { ...elsewhere(route), setup: SETUP }) }),
     // Nothing left means the walk is over, back to the catalog it just populated.
-    finish: (route) => ({ how: `push`, to: { name: PAGE, query: { ...elsewhere(route), setup: undefined } } }),
-    unknown: (route) => ({ how: `replace`, to: { name: PAGE, query: elsewhere(route) } }),
+    finish: (route) => ({ how: `push`, to: at(route, undefined, { ...elsewhere(route), setup: undefined }) }),
+    unknown: (route) => ({ how: `replace`, to: at(route, undefined, elsewhere(route)) }),
 };
 
 // The table is keyed by the move's own kind, so the entry read always takes the move it is handed.

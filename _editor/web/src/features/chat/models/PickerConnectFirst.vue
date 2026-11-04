@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { RouterLink } from "vue-router";
-import { MODELS_PATH } from "../../../lib/routes/modelsPath";
+import { modelsHref } from "../../../lib/routes/modelsPath";
 
 // The model picker's first row while nothing in the sandbox can run: every row under it is locked, so the way to unlock
 // them leads the list rather than ending it. A real link, so Ctrl/Cmd-click opens it elsewhere; on Home the view opens in
@@ -12,7 +12,7 @@ const t = useT();
 
 <template>
     <RouterLink
-        :to="MODELS_PATH"
+        :to="modelsHref()"
         class="ui-row-select flex w-full items-center gap-2 border-b border-line px-3 py-2 text-xs font-medium text-link max-md:min-h-11"
         data-picker-connect-first
         @click="emit(`navigate`, $event)"

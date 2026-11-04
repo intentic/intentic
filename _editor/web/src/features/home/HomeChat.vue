@@ -13,7 +13,7 @@ import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
 import HomeChatSlot from "./HomeChatSlot.vue";
 import HomeDetour from "./HomeDetour.vue";
-import { goInside, homeViewOf } from "../../lib/routes/homeDetour";
+import { homeViewOf } from "../../lib/routes/homeDetour";
 import { useRole } from "../../client/sandbox/useRole";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
@@ -26,6 +26,7 @@ import SandboxOutdatedNotice from "../../parts/sandbox/SandboxOutdatedNotice.vue
 import { daemonTooOld } from "../../client/sandbox/daemon/useDaemonVersion";
 import { folderSurface, readFailure, supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { here, page } from "../../lib/routes/links";
 
 const t = useT();
 const sandbox = useSandbox();
@@ -73,7 +74,7 @@ const tooOldForHome = computed(() => daemonTooOld.value || homeMissing.value);
 const enter = (): void => {
     const id = sandbox.activeSandboxId.value;
     if (id !== undefined) {
-        void goInside(() => router.push(sandboxEntryPath(id)));
+        void router.push(sandboxEntryPath(id));
     }
 };
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
@@ -139,7 +140,7 @@ watch(
             <summary class="cursor-pointer text-muted">{{ t(`home.work`) }} · {{ ledger.length }}</summary>
             <div class="max-h-40 overflow-auto py-1">
                 <div v-for="row in ledger" :key="row.worker.id" class="py-1">
-                    <RouterLink :to="`/agents/${encodeURIComponent(row.worker.id)}`" class="flex items-center gap-3 hover:text-link">
+                    <RouterLink :to="here(page.agent(row.worker.id))" class="flex items-center gap-3 hover:text-link">
                         <span class="min-w-0 flex-1 truncate">{{ row.worker.title ?? row.worker.id }}</span>
                         <span class="text-muted">{{ t(`home.stage.${row.stage}`) }}</span>
                     </RouterLink>
@@ -147,7 +148,7 @@ watch(
                     <RouterLink
                         v-for="check in row.checks"
                         :key="check.id"
-                        :to="`/agents/${encodeURIComponent(check.id)}`"
+                        :to="here(page.agent(check.id))"
                         class="ml-3 block truncate py-0.5 text-muted hover:text-link"
                         >{{ check.title ?? t(`home.stage.${check.fresh?.kind === "test" ? "testing" : "reviewing"}`) }}</RouterLink
                     >

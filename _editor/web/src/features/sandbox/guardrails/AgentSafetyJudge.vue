@@ -7,6 +7,7 @@ import { useRoleModel } from "../../../models/providers/roleModel";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import AgentSafetyRules from "./AgentSafetyRules.vue";
+import { here, page } from "../../../lib/routes/links";
 
 // On/off/watch switch for whether the safety judge runs; the policy below only applies when this is not off. Watch
 // judges and logs every command without holding any. The judge's model is chosen on the Models tab, not here.
@@ -52,7 +53,7 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
             <template #control>
                 <Button
                     :as="RouterLink"
-                    :to="{ name: `sandbox`, params: { tab: `agent` }, query: { job: `safety-judge` } }"
+                    :to="here(page.sandboxSettings(`agent`, { query: { job: `safety-judge` } }))"
                     size="small"
                     tier="quiet"
                 >

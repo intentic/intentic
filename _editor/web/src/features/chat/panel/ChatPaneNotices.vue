@@ -16,6 +16,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import SealAsks from "./seal/SealAsks.vue";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 import { modelsPath } from "../../../lib/routes/modelsPath";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
@@ -104,7 +105,7 @@ const activeAccountReauth = computed(() => {
     <Notice v-if="hoursNotice" tone="warning" icon="clock" size="sm">
         {{ hoursNotice }}
         <template v-if="planOffered" #actions>
-            <Button :as="RouterLink" to="/settings/billing" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
+            <Button :as="RouterLink" :to="here(page.account(`billing`))" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
         </template>
     </Notice>
     <!-- The trial's standing: what is left of the day's allowance, and the way off it. -->

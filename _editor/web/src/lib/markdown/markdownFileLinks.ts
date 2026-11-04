@@ -1,5 +1,6 @@
-import { agentScope, branchScope, scopeQuery, type ViewScope } from "../../app/workspaceScope";
+import { agentScope, branchScope, scopeFields, type ViewScope } from "../../app/workspaceScope";
 import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "../files/fileRefs";
+import { here, linkOf, page } from "../routes/links";
 
 // File mentions in rendered markdown become clickable: a path is matched against the workspace tree and shown by
 // filename. Runs on the sanitized DOM, not the source or an HTML string, via a text-node walk, since a regex cannot
@@ -11,27 +12,25 @@ const FILE_REF_ALL = new RegExp(FILE_REF.source, `g`);
 // Leaves the app: any scheme (http:, mailto:, vscode:) or protocol-relative `//host`; else it's a path.
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
-// A same-origin `/workspace/...` link written out in full is unwrapped back into its reference; any other host or
-// route is left alone, since guessing more broadly would hijack links this app has no business intercepting.
-const WORKSPACE_ROUTE = `/workspace/`;
+// A same-origin link to a file of the Workspace written out in full (in either frame, or in the form addresses had before
+// frames) is unwrapped back into its reference; any other host or page is left alone, since guessing more broadly would
+// hijack links this app has no business intercepting.
 const ownWorkspaceRef = (href: string): string | undefined => {
     const url = URL.parse(href, window.location.href);
-    if (url === null || url.origin !== window.location.origin || !url.pathname.startsWith(WORKSPACE_ROUTE)) {
+    if (url === null || url.origin !== window.location.origin) {
         return undefined;
     }
-    // The route's own splat is percent-encoded per segment (workspaceHref), and a line can ride as `#L12`.
-    const path = decodeURIComponent(url.pathname.slice(WORKSPACE_ROUTE.length));
-    return path === `` ? undefined : `${path}${url.hash}`;
+    // The page's own splat is percent-encoded per segment (workspaceHref) and read back decoded; a line can ride as `#L12`.
+    const link = linkOf(url.pathname);
+    const path = link?.page === `workspace` ? link.params[`path`] : undefined;
+    return path === undefined || path === `` ? undefined : `${path}${url.hash}`;
 };
 
-// The workspace route for a file (`/workspace/src/foo.ts`), a real URL so middle-click, copy-link and the status bar
-// work. `?agent=` rides along for an isolated conversation, `?repo=&branch=` for a branch, since a bare path can't tell
-// either tree from the shared one.
-const workspaceHref = (path: string, scope: ViewScope): string => {
-    const route = `/workspace/${path.split(`/`).map(encodeURIComponent).join(`/`)}`;
-    const query = scopeQuery(new URLSearchParams(), scope).toString();
-    return query === `` ? route : `${route}?${query}`;
-};
+// The Workspace's address for a file, in the frame and the sandbox the reader is in, a real URL so middle-click,
+// copy-link and the status bar work. `?agent=` rides along for an isolated conversation, `?repo=&branch=` for a branch,
+// since a bare path can't tell either tree from the shared one.
+const workspaceHref = (path: string, scope: ViewScope): string =>
+    here(page.workspace(path, { query: scopeFields(scope) }));
 
 /** The copy a marked link names (markFileLink's data attributes); none is the shared tree. */
 export const linkScope = (data: DOMStringMap): ViewScope => {

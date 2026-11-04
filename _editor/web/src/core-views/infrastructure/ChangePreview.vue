@@ -5,6 +5,7 @@ import { type PlanStep, statusDot } from "../../features/extensions/reconcileSta
 import SecretField from "../../parts/capabilities/SecretField.vue";
 import type { usePlanPreview } from "./usePlanPreview";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../lib/routes/links";
 
 // Pre-apply review: what the current wants would do, grouped by verb (create/update/remove) into three
 // counted sections rather than one per-resource chain. Stages only, doesn't deploy. Reads the usePlanPreview
@@ -82,7 +83,7 @@ const hasChanges = computed(() => sections.value.length > 0);
             </div>
             <p class="text-xs text-muted">
                 {{ t(`views.changePreview.intentDeclaresSecretsArent`) }}
-                <RouterLink to="/sandbox/secrets" class="text-link hover:underline">{{ t(`views.changePreview.sandboxSecrets`) }}</RouterLink
+                <RouterLink :to="here(page.sandboxSettings(`secrets`))" class="text-link hover:underline">{{ t(`views.changePreview.sandboxSecrets`) }}</RouterLink
                 >.
             </p>
             <div v-for="key in missingSecrets" :key="key" class="flex flex-col gap-1">

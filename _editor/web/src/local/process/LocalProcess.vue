@@ -3,6 +3,7 @@
      workspace, in this window's place, which is the one press that goes there. Devices keeps its fuller card for the
      app's own runs on this computer, one press away. -->
 <script setup lang="ts">
+import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -36,7 +37,7 @@ const answer = (act: ProcessAction, need?: string): void => {
     }
     processes.act(current, act, need);
     if (act === `dismiss` || act === `cancel`) {
-        void router.replace(`/workspace`);
+        void router.replace(localPath(`files`));
     }
 };
 </script>

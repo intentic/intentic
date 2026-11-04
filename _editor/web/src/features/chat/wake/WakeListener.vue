@@ -4,6 +4,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { postDesktopNotice } from "../../../app/environments/desktopNotices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { here, page } from "../../../lib/routes/links";
 import { onScreen } from "../../../workbench/window/onScreen";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
@@ -102,7 +103,7 @@ const delivery = new WakeDelivery({
             kind: `finished`,
             title: t(`chat.wake.notifyTitle`, { word: listener.word.value, destination: destinationLabel(to) }),
             body: text,
-            path: `/chat`,
+            path: here(page.chat()),
             silent: true,
         });
     },

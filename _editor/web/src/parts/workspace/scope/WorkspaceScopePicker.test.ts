@@ -1,6 +1,8 @@
 // The switcher a scope chip opens. It replaced a flat menu of every conversation that ever had a branch, so what is
 // pinned here is what that menu could not do: say where the reader is, keep a long lane short, find a copy by typing.
 import "@intentic/testing/dom";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import type { ViewScope } from "../../../app/workspaceScope";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import type { BranchChoice } from "./scopeChoices";
@@ -55,8 +57,12 @@ const options = (el: HTMLElement): string[] => [...el.querySelectorAll(`[role=op
 const buttonSaying = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
 
+// With no route of the shell's to read, a link is made inside the sandbox opened last (lib/routes/links.ts `here`).
+const BOX = `a1b2c3d4e5f6`;
+
 beforeAll(() => {
     Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+    activeSandboxId.value = BOX;
 });
 
 afterEach(() => {
@@ -112,9 +118,9 @@ it(`finds a folded copy by typing, and Enter switches to it`, async () => {
 it(`offers the review of the copy on screen, and nothing to review from the shared tree`, async () => {
     fleet.value = [copy(`a`)];
 
-    expect((await mount({ agent: `a` })).querySelector(`a[href="/agents/a"]`)).not.toBeNull();
+    expect((await mount({ agent: `a` })).querySelector(`a[href="${insidePath(BOX, page.agent(`a`))}"]`)).not.toBeNull();
     app?.unmount();
-    expect((await mount({})).querySelector(`a[href^="/agents/"]`)).toBeNull();
+    expect((await mount({})).querySelector(`a[href*="/agents/"]`)).toBeNull();
 });
 
 it(`lists each repository's branches under the shared row, and a press views that branch`, async () => {
@@ -138,7 +144,7 @@ it(`marks the branch on screen, and says what stays on the shared workspace`, as
     expect(el.querySelector(`[role=option][aria-selected=true]`)?.textContent).toContain(`next`);
     expect(el.textContent).toContain(`Search, terminals and previews use the shared workspace.`);
     // A branch has no card to review.
-    expect(el.querySelector(`a[href^="/agents/"]`)).toBeNull();
+    expect(el.querySelector(`a[href*="/agents/"]`)).toBeNull();
 });
 
 it(`offers to start from the main line, a branch, or a copy a fresh session can be cut from`, async () => {

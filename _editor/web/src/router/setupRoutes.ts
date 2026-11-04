@@ -1,4 +1,5 @@
 import { isHostedTierId } from "@intentic/constants";
+import { homePath, topPath } from "@intentic/sandbox-contract/app-routes";
 import type { LocationQuery, RouteLocationGeneric, RouteRecordRaw } from "vue-router";
 import { z } from "zod";
 
@@ -31,15 +32,18 @@ type HomeAsk = {
 
 /** Home's address asking for a new sandbox, as an old setup address asked for it. */
 export type HomeForSetup = {
-    readonly path: `/home`;
+    readonly path: string;
     readonly query: HomeAsk;
 };
 
+const SETUP = topPath(`setup`);
+const HOSTED_START = topPath(`startHosted`);
+
 /** Home's address for what an old setup address asked. */
 export const homeForSetup = (path: string, query: LocationQuery): HomeForSetup => {
-    const hosted = path === `/start/hosted` || single(query[`machine`]) === `hosted`;
+    const hosted = path === HOSTED_START || single(query[`machine`]) === `hosted`;
     const tier = single(query[`tier`]);
-    const finish = path === `/setup` ? single(query[`sandbox`]) : undefined;
+    const finish = path === SETUP ? single(query[`sandbox`]) : undefined;
     const found = single(query[`found`]);
     const asked: HomeAsk = { add: `sandbox` };
     if (finish !== undefined) {
@@ -54,13 +58,13 @@ export const homeForSetup = (path: string, query: LocationQuery): HomeForSetup =
     if (found !== undefined) {
         asked.found = found;
     }
-    return { path: `/home`, query: asked };
+    return { path: homePath(), query: asked };
 };
 
 const toHome = (to: RouteLocationGeneric) => homeForSetup(to.path, to.query);
 
 // Named still, so a link that names the old page (`{ name: "setup" }`) lands where its address would.
 export const setupRoutes: RouteRecordRaw[] = [
-    { path: `/start/hosted`, name: `hosted-start`, redirect: toHome },
-    { path: `/setup`, name: `setup`, redirect: toHome },
+    { path: HOSTED_START, name: `hosted-start`, redirect: toHome },
+    { path: SETUP, name: `setup`, redirect: toHome },
 ];

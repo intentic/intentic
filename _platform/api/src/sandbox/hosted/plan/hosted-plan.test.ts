@@ -569,7 +569,7 @@ describe(`the doors to Stripe`, () => {
         ({ prisma, config: baseConfig, user: { id: `user-1`, email: `buyer@intentic.dev` }, logger }) as unknown as OrpcContext;
 
     it.each([
-        [undefined, `/settings/billing?plan=welcome`, `/settings/billing`],
+        [undefined, `/home/account/billing?plan=welcome`, `/home/account/billing`],
         [`/start/hosted`, `/start/hosted?tier=${ENTRY.id}&plan=welcome`, `/start/hosted?tier=${ENTRY.id}&plan=cancelled`],
     ] as const)(`returns checkout to its requested journey: %s`, async (returnTo, success, cancel) => {
         const checkoutSession = jest.fn<StripeGateway[`checkoutSession`]>(async () => ({ url: `https://checkout.test/session` }));

@@ -6,6 +6,7 @@ import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAccount } from "../../client/auth/useAccount";
 import { signsInByEmail, signsInWithGoogle } from "../../client/auth/signInMethods";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
+import { here, page } from "../../lib/routes/links";
 import SettingsConversations from "./SettingsConversations.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -68,8 +69,8 @@ const linkGoogle = async (): Promise<void> => {
     try {
         // Loaded at the press: the settings view needs nothing else of the platform's sign-in client.
         const { useAuth } = await import(`../../client/auth/useAuth`);
-        // Google's page, then back here with the account holding both ways in.
-        await useAuth().linkGoogle(`/settings`);
+        // Google's page, then back here, in the frame it was pressed in, with the account holding both ways in.
+        await useAuth().linkGoogle(here(page.account()));
     } catch (error) {
         linkError.value = messageOr(error, t(`auth.useAuth.linkGoogleFailed`));
         linking.value = false;

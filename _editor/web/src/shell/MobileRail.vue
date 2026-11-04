@@ -3,6 +3,7 @@ import { SandboxLogo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { here, page, routeShows } from "../lib/routes/links";
 import { useAudience } from "../app/useAudience";
 import { useRole } from "../client/sandbox/useRole";
 import { useHeldDoor } from "../components/heldPlace";
@@ -55,7 +56,7 @@ const sectionBands = computed(() => railBands(tiles.value, (tile) => tile.id));
 // The box rather than the work, as the desktop keeps it under its sandbox switcher: the terminal (ship tier, since a PTY
 // is the whole sandbox, and not in plain words) and the sandbox's own pages. Settings is the avatar's, as on the desktop.
 const boxTiles = computed<readonly SectionTile[]>(() => [
-    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shared.terminal`), icon: `code` } as const] : []),
+    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: here(page.terminal()), label: t(`shared.terminal`), icon: `code` } as const] : []),
     { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandboxHub`), icon: `box` },
 ]);
 
@@ -67,11 +68,8 @@ const RAIL_MARKS = new Map<string, readonly MarkStep[]>([
 ]);
 const railMarks = (id: string): readonly MarkStep[] => RAIL_MARKS.get(id) ?? [];
 
-// The Sandbox hub's path carries its tab, so the prefix is what lights it.
-const isNavActive = (to: string): boolean => {
-    const path = to.split(`?`)[0] ?? to;
-    return route.path === path || route.path.startsWith(`${path}/`);
-};
+// The Sandbox hub's path carries its tab, so the page is what lights it, below it included, in whichever frame.
+const isNavActive = (to: string): boolean => routeShows(route, to);
 
 // THE SANDBOX'S TILE. The same three corners as the desktop's switcher: what it needs from its owner (the badge), where
 // it runs and whether it answers (the placement mark, inked by the connection), and work under way that ends by
@@ -101,7 +99,7 @@ const frame = phoneRailFrame();
     >
         <!-- The sandbox: its logo, the way to every sandbox and to what this one needs. -->
         <RouterLink
-            to="/menu"
+            :to="here(page.menu())"
             class="icon-rail-tile relative flex items-center justify-center overflow-visible rounded-xl"
             :aria-label="sandboxLabel"
         >
@@ -178,7 +176,7 @@ const frame = phoneRailFrame();
              board's own floating press, beside this rail. -->
         <RouterLink
             v-if="connects"
-            to="/capabilities"
+            :to="here(page.capabilities())"
             :class="ui.addTile(`icon-rail-tile rounded-lg`)"
             :aria-label="t(`shell.words.addCapability`)"
         >

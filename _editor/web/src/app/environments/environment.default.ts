@@ -1,3 +1,5 @@
+import { topPath } from "@intentic/sandbox-contract/app-routes";
+
 // Base web environment. environment.local.ts (dev) / environment.deployment.ts (deploy) spread this
 // and set api.url. esbuild bundles the right one into assets/js/env.js, loaded before the app so
 // window.env exists at module-eval time (see environment.ts).
@@ -11,5 +13,5 @@ export const defaultEnv = {
     // default, and there is no nginx there to run the /wire proxy the deployment env points at.
     analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com`, posthogUiHost: `https://us.posthog.com` },
     // The app's own sign-in page; every real deployment is served at its root. The demo overrides this.
-    afterSignOut: `/login`,
+    afterSignOut: topPath(`login`),
 };

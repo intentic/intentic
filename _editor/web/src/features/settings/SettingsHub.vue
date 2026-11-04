@@ -52,8 +52,9 @@ import { SETTINGS_DEFAULT_SECTION, type SettingsPart, settingsGroups, settingsSe
 // own (settingsNav.ts `within`) is drawn at the foot of the section it belongs with, under an anchor of its own.
 
 const t = useT();
-// Billing joins the index only once the plan read answers, so until then the hub must not read `/settings/billing`
-// as an unknown slug: that is the address Stripe returns a payer to, and the redirect would drop `?plan=welcome`.
+// Billing joins the index only once the plan read answers, so until then the hub must not read `billing` as an unknown
+// slug: Stripe returns a payer to it (`/settings/billing`, the address from before frames, which the router opens as
+// the account's Billing with its query), and the redirect would drop `?plan=welcome`.
 const { offered: planOffered, isLoading: planLoading } = useHostedPlan();
 // A phone's index leaves out what is about a keyboard (settingsNav.ts).
 const { mobile } = useDevice();
@@ -112,9 +113,9 @@ watch(
     { immediate: true },
 );
 
-// A part's address is its section's page with the part's anchor (`/settings/notifications#voice`). The router scrolls
-// only to an anchor already drawn, and the page is drawn after the navigation settles and its code has landed, so the
-// hub scrolls once both have: before the section above it is drawn, the part sits where the section will be.
+// A part's address is its section's page with the part's anchor (`<frame>/account/notifications#voice`). The router
+// scrolls only to an anchor already drawn, and the page is drawn after the navigation settles and its code has landed,
+// so the hub scrolls once both have: before the section above it is drawn, the part sits where the section will be.
 watch(
     () => [route.hash, route.params[`tab`]] as const,
     ([hash]) => {

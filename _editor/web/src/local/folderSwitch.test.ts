@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { ref } from "vue";
 import type { LocalFace } from "../app/environments/local";
 
@@ -78,7 +79,7 @@ describe(`moving to the folder`, () => {
         const moved = moveTo(PICKED);
         expect(window.__INTENTIC_LOCAL__).toEqual(PICKED);
         expect(setPageTitle).toHaveBeenCalledWith(`auto-translate`);
-        expect(landOnAfterSwitch).toHaveBeenCalledWith(`local-b`, `/workspace`);
+        expect(landOnAfterSwitch).toHaveBeenCalledWith(`local-b`, insidePath(`local-b`, page.workspace()));
         folderDrawn(`local-b`);
         await moved;
         expect(activeSandboxId.value).toBe(`local-b`);

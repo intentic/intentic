@@ -1,138 +1,117 @@
-import { effectScope } from "vue";
-import * as actualVueRouter from "vue-router";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { HOME_SEGMENT, homePath, insidePath, page, SANDBOX_PAGES, SANDBOX_SEGMENT } from "@intentic/sandbox-contract/app-routes";
+import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
+import { readRoutesOf, routeName } from "../../lib/routes/links";
 
-/* Home's frame (the rail of sandboxes) around a section of a sandbox: worn on the section Home shows of every sandbox when
-   it was entered from Home, given back by any other page of a sandbox or by a deliberate step inside, and kept for the
-   tab's reloads. A real router, so a duplicate navigation and a step inside are the router's own. */
+/* Home's frame (the rail of sandboxes) is read off the address and nothing else: worn on Home's own page, on the account's
+   pages opened from it and on any page of a sandbox in it, given back by any address inside a sandbox. A real router, so
+   Back is the router's own, and nothing a window remembers can make one address draw two screens. */
 
-// The node test environment has neither storage.
-const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
-    const entries = new Map<string, string>();
-    Object.defineProperty(globalThis, name, {
-        configurable: true,
-        value: {
-            getItem: (key: string) => entries.get(key) ?? null,
-            setItem: (key: string, value: string) => void entries.set(key, value),
-            removeItem: (key: string) => void entries.delete(key),
-            clear: () => entries.clear(),
-        },
-    });
-    return entries;
-};
-store(`localStorage`);
-const session = store(`sessionStorage`);
-
-const page = { render: () => null };
+const view = { render: () => null };
+const pages = [`chat`, `agents`, `workspace`, `sandboxSettings`] as const;
 const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-        { path: `/home/:sandbox?`, name: `home`, component: page },
-        { path: `/chat`, name: `chat`, component: page },
-        { path: `/agents/:id?`, name: `agents`, component: page },
-        { path: `/workspace/:path(.*)*`, name: `workspace`, component: page },
-        { path: `/settings`, name: `settings`, component: page },
-        { path: `/sandbox/:tab?`, name: `sandbox`, component: page },
+        { path: `/home/account/:tab?`, name: routeName(`home`, `account`), meta: { frame: `home`, page: `account` }, component: view },
+        { path: `/home/:sandbox?`, name: `home`, meta: { frame: `home` }, component: view },
+        { path: `/s/:sandbox/account/:tab?`, name: routeName(`inside`, `account`), meta: { frame: `inside`, page: `account` }, component: view },
+        ...pages.flatMap((name): RouteRecordRaw[] => [
+            {
+                path: `/${SANDBOX_SEGMENT}/:sandbox/${SANDBOX_PAGES[name]}`,
+                name: routeName(`inside`, name),
+                meta: { frame: `inside`, page: name },
+                component: view,
+            },
+            {
+                path: `/${HOME_SEGMENT}/:sandbox/${SANDBOX_PAGES[name]}`,
+                name: routeName(`home`, name),
+                meta: { frame: `home`, page: name },
+                component: view,
+            },
+        ]),
+        { path: `/login`, component: view },
     ],
 });
-jest.mock("vue-router", () => ({ ...actualVueRouter, useRouter: () => router }));
+readRoutesOf(router);
 
-const { followMasterRail, masterRail } = await import("./masterRail");
-const { homeFrame, homeSection } = await import("../../lib/routes/homeSection");
-const { goInside } = await import("../../lib/routes/homeDetour");
+const { masterRail } = await import("./masterRail");
+const { homeFrame } = await import("../../lib/routes/homeSection");
 
-const WORKSPACE = { id: `workspace`, to: `/workspace`, label: `Workspace` };
-const CHAT = { id: `chat`, to: `/chat`, label: `Chat` };
+const BOX = `a1b2c3d4e5f6`;
 
-const scope = effectScope();
-beforeAll(async () => {
-    await router.push(`/home`);
-    scope.run(() => followMasterRail());
-});
-afterAll(() => scope.stop());
 beforeEach(async () => {
-    homeSection.value = undefined;
-    await router.push(`/home`);
+    await router.push(homePath(BOX));
 });
 
-it(`wears Home's rail on Home's own page, around no section`, () => {
+it(`wears Home's rail on Home's own page, around no page of a sandbox`, () => {
     expect(masterRail.value).toBe(true);
     expect(homeFrame.value).toBeUndefined();
 });
 
-it(`keeps Home's frame on the section chosen, the chat docked beside it, and remembers so for a reload`, async () => {
-    homeSection.value = WORKSPACE;
-
-    await router.replace(`/workspace/src/a.ts`);
+it(`keeps Home's frame on a sandbox's page in it, the chat docked beside`, async () => {
+    await router.replace(homePath(BOX, page.workspace()));
 
     expect(masterRail.value).toBe(true);
     expect(homeFrame.value).toBe(`docked`);
-    expect(session.get(`intentic.masterRail`)).toBe(`1`);
 });
 
 it(`frames the Chat as the chat it is, with nothing docked beside`, async () => {
-    homeSection.value = CHAT;
-
-    await router.replace(`/chat`);
+    await router.replace(homePath(BOX, page.chat()));
 
     expect(homeFrame.value).toBe(`chat`);
 });
 
-it(`gives the rail back on any other page of the sandbox`, async () => {
-    homeSection.value = WORKSPACE;
-    await router.replace(`/workspace`);
-
-    await router.push(`/agents/cnv_1`);
-
-    expect(masterRail.value).toBe(false);
-    expect(homeFrame.value).toBeUndefined();
-    expect(session.get(`intentic.masterRail`)).toBe(`0`);
-});
-
-it(`leaves the frame for a step inside, even onto the very page it was showing`, async () => {
-    homeSection.value = WORKSPACE;
-    await router.replace(`/workspace`);
-
-    await goInside(() => router.push(`/workspace`));
-
-    expect(masterRail.value).toBe(false);
-    expect(homeFrame.value).toBeUndefined();
-});
-
-it(`does not put a sandbox's own page in Home's frame when it was reached from inside`, async () => {
-    homeSection.value = WORKSPACE;
-    await router.push(`/agents`);
-
-    await router.push(`/workspace`);
-
-    expect(masterRail.value).toBe(false);
-});
-
-it(`keeps the rail on the person's own pages, around no section`, async () => {
-    await router.push(`/settings`);
-
-    expect(masterRail.value).toBe(true);
-    expect(homeFrame.value).toBeUndefined();
-});
-
-it(`keeps Home's frame on a sandbox's settings opened from Home, the chat docked beside, whatever section is chosen`, async () => {
-    await router.push(`/sandbox`);
-
-    expect(masterRail.value).toBe(true);
-    expect(homeFrame.value).toBe(`docked`);
-
-    homeSection.value = WORKSPACE;
-    await router.push(`/sandbox/models`);
+it(`keeps Home's frame on a sandbox's settings seen from Home, the chat docked beside`, async () => {
+    await router.push(homePath(BOX, page.sandboxSettings(`models`)));
 
     expect(masterRail.value).toBe(true);
     expect(homeFrame.value).toBe(`docked`);
 });
 
-it(`leaves a sandbox's settings reached from inside it to the sandbox's own rail`, async () => {
-    await router.push(`/agents`);
+it(`gives the rail back on any address inside a sandbox, the same page included`, async () => {
+    await router.push(homePath(BOX, page.workspace()));
 
-    await router.push(`/sandbox`);
+    await router.push(insidePath(BOX, page.workspace()));
 
+    expect(masterRail.value).toBe(false);
+    expect(homeFrame.value).toBeUndefined();
+});
+
+it(`keeps the rail on the person's own pages in Home's frame, around no page of a sandbox, and gives it back on them inside`, async () => {
+    await router.push(homePath(undefined, page.account(`appearance`)));
+
+    expect(masterRail.value).toBe(true);
+    expect(homeFrame.value).toBeUndefined();
+
+    await router.push(insidePath(BOX, page.account(`appearance`)));
+
+    expect(masterRail.value).toBe(false);
+});
+
+it(`wears nothing of Home on a page outside the shell`, async () => {
+    await router.push(`/login`);
+
+    expect(masterRail.value).toBe(false);
+    expect(homeFrame.value).toBeUndefined();
+});
+
+// The audit's repro (2026-11-04): from inside a sandbox, out to Home, then Back. The frame was the window's memory, which
+// Back did not restore, so the reader landed on the sandbox's page with Home's rail around it.
+it(`steps Back out of Home onto the address inside the sandbox, in the sandbox's own frame`, async () => {
+    await router.push(insidePath(BOX, page.agents()));
+    expect(masterRail.value).toBe(false);
+
+    await router.push(homePath(BOX));
+    expect(masterRail.value).toBe(true);
+
+    router.back();
+    await new Promise<void>((resolve) => {
+        const stop = router.afterEach(() => {
+            stop();
+            resolve();
+        });
+    });
+
+    expect(router.currentRoute.value.fullPath).toBe(insidePath(BOX, page.agents()));
     expect(masterRail.value).toBe(false);
     expect(homeFrame.value).toBeUndefined();
 });

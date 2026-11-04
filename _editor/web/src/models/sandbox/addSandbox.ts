@@ -5,6 +5,8 @@ import { localFace } from "../../app/environments/local";
 import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
 import { useRole } from "../../client/sandbox/useRole";
+import { localPath } from "@intentic/sandbox-contract/app-routes";
+import { toHome } from "../../lib/routes/links";
 import { signInAt } from "../../lib/routes/signIn";
 
 // ONE "ADD SANDBOX" ACTION, wherever it is pressed. On a desktop it is made on Home, from a dialog over it and then in a
@@ -23,13 +25,13 @@ import { signInAt } from "../../lib/routes/signIn";
 export const ADD_SANDBOX_QUERY = `add`;
 export const ADD_SANDBOX_VALUE = `sandbox`;
 export const ADD_SANDBOX_PATH = `/?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_VALUE}`;
-export const ADD_SANDBOX_HOME_PATH = `/home?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_VALUE}`;
+export const ADD_SANDBOX_HOME_PATH = `${toHome()}?${new URLSearchParams({ [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE }).toString()}`;
 /**
  * The same ask in a desktop window on a folder of this computer (local/newSandbox/LocalNewSandbox.vue): made in that
  * window, as Home makes one in the workspace, rather than sending the reader to the workspace for it. `?on=hosted` picks
  * a machine of ours.
  */
-export const LOCAL_ADD_SANDBOX_PATH = `/sandbox-new`;
+export const LOCAL_ADD_SANDBOX_PATH = localPath(`newSandbox`);
 
 /**
  * Where a link to a new sandbox goes from this window, the machine picked or not: Home's ask in the workspace, and the
@@ -39,7 +41,7 @@ export const newSandboxLink = (machine?: `hosted`): RouteLocationRaw => {
     if (localFace() !== undefined && localHost().newSandbox !== undefined) {
         return machine === undefined ? LOCAL_ADD_SANDBOX_PATH : { path: LOCAL_ADD_SANDBOX_PATH, query: { on: machine } };
     }
-    return machine === undefined ? ADD_SANDBOX_HOME_PATH : { path: `/home`, query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, machine } };
+    return machine === undefined ? ADD_SANDBOX_HOME_PATH : { path: toHome(), query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, machine } };
 };
 
 // allow(module-state): one Add sandbox dialog for the window, asked for from wherever its press is

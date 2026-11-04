@@ -1,4 +1,5 @@
 import type { IntenticApi } from "@intentic/extension-api";
+import { page } from "@intentic/sandbox-contract/app-routes";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -66,7 +67,9 @@ beforeEach(() => {
                     return new Response(JSON.stringify(`status` in body ? body.status : body), { status: `status` in body ? 409 : 200 });
                 },
             }),
-            href: (path) => path,
+            links: page,
+            // Only drawn, never read here: the links' own addresses are the host's to make.
+            href: () => ``,
             navigate: () => undefined,
         }),
     );

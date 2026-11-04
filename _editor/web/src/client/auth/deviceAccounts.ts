@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { leaveFor, leaveForNobody } from "../../lib/accounts/accountBoundary";
 import { invalidatePlatformAuth } from "../../lib/authLifecycle";
+import { toTop } from "../../lib/routes/links";
 import { forgetAccount } from "../directory/deviceDirectory";
 import { forgetAccountTraces } from "./accountTeardown";
 import { type DeviceSession, useAuth } from "./useAuth";
@@ -16,7 +17,7 @@ import { type DeviceSession, useAuth } from "./useAuth";
 /** Where the reader lands as the account they moved to: Home, since the address they were on may be another's sandbox. */
 const ACCOUNT_HOME = `/`;
 /** The sign-in screen as it adds an account beside the one signed in (features/auth/Login.vue). */
-export const ADD_ACCOUNT_PATH = `/login?add=1`;
+export const ADD_ACCOUNT_PATH = toTop(`login`, {}, { add: `1` });
 
 /** A sign-in that ended since it was listed (signed out elsewhere, expired): it is not switched to. */
 class SignInEndedError extends Error {

@@ -1,3 +1,4 @@
+import { homePath, insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { sessionIdFrom } from "../sessionRef";
 
 const ID = `a8b5f00f-cf24-40d4-aaea-525d2a5086f0`;
@@ -10,6 +11,13 @@ describe(`sessionIdFrom`, () => {
         expect(sessionIdFrom(`agent/${ID}`)).toBe(ID);
         expect(sessionIdFrom(`https://sandbox.example.com/agents/${ID}`)).toBe(ID);
         expect(sessionIdFrom(`/history/worktrees/${ID}`)).toBe(ID);
+    });
+
+    // A link copied since addresses name their frame and sandbox, from inside the sandbox or from Home's.
+    it(`reads a link in either frame, and not an agent's page`, () => {
+        expect(sessionIdFrom(`https://app.example.com${insidePath(`a1b2c3d4e5f6`, page.agent(ID))}`)).toBe(ID);
+        expect(sessionIdFrom(`https://app.example.com${homePath(`a1b2c3d4e5f6`, page.agent(STEP, { query: { view: `changes` } }))}`)).toBe(STEP);
+        expect(sessionIdFrom(`https://app.example.com${insidePath(`a1b2c3d4e5f6`, page.agentPage(ID, `p1`))}`)).toBeUndefined();
     });
 
     it(`forgives what a paste picks up on the way`, () => {

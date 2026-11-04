@@ -52,6 +52,7 @@ import AgentSessionMenu from "../board/session/AgentSessionMenu.vue";
 import SessionChip from "../board/session/SessionChip.vue";
 import SessionIdentity from "../board/session/SessionIdentity.vue";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 
 // Drill-in for one agent (/agents/:id): one canonical chat surface per form factor.
 // - mobile: this IS the chat surface, Chat and Changes as two pages a finger turns, chat by default
@@ -143,7 +144,7 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
         if (fleetAgent.value === undefined) {
             settleLookup(id);
             if (!settling.value) {
-                void router.replace(`/agents`);
+                void router.replace(here(page.agents()));
             }
         }
         return;
@@ -160,7 +161,7 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     if (fleetAgent.value !== undefined) {
         open(fleetAgent.value);
         if (!mobile.value && !reviewable.value) {
-            void router.replace(`/agents`);
+            void router.replace(here(page.agents()));
         }
         return;
     }
@@ -174,7 +175,7 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     if (settling.value) {
         return;
     }
-    void router.replace(`/agents`);
+    void router.replace(here(page.agents()));
 };
 
 // Keyed on id + roster size, not the fleetAgent computed itself, whose per-recompute identity would refire this
@@ -451,7 +452,7 @@ const confirmHandOver = async (): Promise<void> => {
                  app draws its own way back, in its toolbar. -->
             <RouterLink
                 v-if="!inApp"
-                to="/agents"
+                :to="here(page.agents())"
                 class="touch-target flex shrink-0 items-center justify-center text-muted transition-colors hover:bg-overlay hover:text-content active:bg-overlay"
                 :class="mobile ? `h-11 w-11 rounded-full` : `h-7 w-7 rounded-md`"
                 :aria-label="t(`agents.agentDetail.backToAgents`)"

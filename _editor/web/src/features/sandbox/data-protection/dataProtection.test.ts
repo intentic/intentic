@@ -1,5 +1,6 @@
 import type { DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
 import { OUTWARD_ACTION_KEYS } from "@intentic/sandbox-contract/schemas/data-protection";
+import { page } from "@intentic/sandbox-contract/app-routes";
 import {
     documentLanguageFor,
     flowFacts,
@@ -166,7 +167,7 @@ it(`writes the documents in Polish for a Polish reader and in English for anyone
 // sent there rather than to the panel at the foot of the page. What the whole box does with data is this page's siblings
 // under Privacy & safety; a measure about one thing goes to that thing.
 it(`sends each measure to where it is set: the box-wide ones to this page's siblings`, () => {
-    const tab = (name: string) => ({ name: `sandbox`, params: { tab: name } });
+    const tab = (name: string) => page.sandboxSettings(name);
     for (const id of [`privacy-shield`, `privacy-images`, `privacy-names`, `trusted-providers`, `product-analytics`] as const) {
         expect(MEASURE_LINKS.get(id)).toEqual(tab(`privacy-shield`));
     }
@@ -180,6 +181,7 @@ it(`sends each measure to where it is set: the box-wide ones to this page's sibl
     }
     expect(MEASURE_LINKS.get(`ai-notice`)).toEqual(tab(`access`));
     expect(MEASURE_LINKS.get(`credential-gates`)).toEqual(tab(`secrets`));
+    expect(MEASURE_LINKS.get(`areas`)).toEqual(page.sandboxSettings(`access`, { query: { section: `areas` } }));
 });
 
 it(`names every outward action the preset holds in words, not as a key`, () => {

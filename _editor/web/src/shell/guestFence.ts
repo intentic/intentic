@@ -2,7 +2,9 @@ import { watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { selfAgents } from "../client/sandbox/useMembers";
 import { useRole } from "../client/sandbox/useRole";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import { guestFenceOf } from "../lib/routes/guestPaths";
+import { routeSandbox } from "../lib/routes/links";
 
 // Keeps a guest member on the screens the daemon answers it on (guestPaths.ts). The tier arrives after the first paint
 // (the summary loads, then corrects a default of owner), so a watch and not a guard: the redirect has to fire when
@@ -14,13 +16,15 @@ export const useGuestFence = (): void => {
     const router = useRouter();
     const { isGuest, homeOnly } = useRole();
     const agents = selfAgents();
+    const { activeSandboxId } = useSandbox();
     watch(
         [() => route.path, isGuest, homeOnly, agents],
         ([path, guest, home, known]) => {
             if (!guest || known === undefined) {
                 return;
             }
-            const fence = guestFenceOf(home);
+            // The chat it is sent to is the sandbox's it stands in.
+            const fence = guestFenceOf(home, routeSandbox(route) ?? activeSandboxId.value);
             if (!fence.allowed(path)) {
                 void router.replace(fence.home);
             }

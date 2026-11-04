@@ -12,6 +12,8 @@ jest.mock(`../../../../client/sandbox/streams/wsTicket`, () => ({ socketUrl: asy
 jest.mock(`../../../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 
 const { useComposerVoice } = await import(`./useComposerVoice`);
+const { activeSandboxId } = await import(`../../../../app/storage/activeSandbox`);
+const { page, toInside } = await import(`../../../../lib/routes/links`);
 type Voice = ReturnType<typeof useComposerVoice>;
 
 const capable = {
@@ -251,17 +253,20 @@ describe(`the model on its way`, () => {
 
 describe(`a failed press`, () => {
     it(`offers the update card's own button when the sandbox cannot hear, as a warning`, () => {
+        // The sandbox the link is made in while no route names one (lib/routes/links.ts `here`).
+        activeSandboxId.value = `sb-1`;
+        const update = toInside(`sb-1`, page.sandboxSettings(undefined, { hash: `sandbox-update-action` }));
         const { voice, input } = mounted();
         input.error.value = `needs-rebuild`;
         expect(voice.failure.value).toMatchObject({
             code: `needs-rebuild`,
             message: `Voice isn't available on this version of the sandbox. Updating it adds it.`,
             tone: `warning`,
-            action: { to: `/sandbox#sandbox-update-action` },
+            action: { to: update },
             repeats: 0,
         });
         input.error.value = `unavailable`;
-        expect(voice.failure.value?.action?.to).toBe(`/sandbox#sandbox-update-action`);
+        expect(voice.failure.value?.action?.to).toBe(update);
     });
 
     it(`offers no page to a reader who could not act on it`, () => {

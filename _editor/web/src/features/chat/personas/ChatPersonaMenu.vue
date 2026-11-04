@@ -7,6 +7,7 @@ import { RouterLink } from "vue-router";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { builtInPersonaViews } from "../../../models/sandbox/personas/builtInPersonas";
 import { useRole } from "../../../client/sandbox/useRole";
+import { here, page } from "../../../lib/routes/links";
 import { useT } from "@intentic/ui/i18n";
 
 // The composer's persona picker: who this chat speaks as to the outside world. The two built-ins come first and are always
@@ -79,7 +80,7 @@ const closeMenu = (event: MouseEvent): void => {
             </p>
             <RouterLink
                 v-if="canShip"
-                to="/sandbox/personas"
+                :to="here(page.sandboxSettings(`personas`))"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"
             >
@@ -118,7 +119,7 @@ const closeMenu = (event: MouseEvent): void => {
             <!-- Link to the page that owns these personas, placed where a list's "manage" row always is. -->
             <RouterLink
                 v-if="canShip"
-                to="/sandbox/personas"
+                :to="here(page.sandboxSettings(`personas`))"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"
             >

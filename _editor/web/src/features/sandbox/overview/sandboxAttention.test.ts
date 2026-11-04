@@ -10,6 +10,8 @@ import { effectScope, shallowRef } from "vue";
 import type { GpuSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { UPDATE_ACTION_ANCHOR } from "../../../models/sandbox/updateAnchor";
 import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
@@ -67,6 +69,11 @@ afterEach(() => {
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
+// The sandbox the reader is in, whose settings every row opens.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
+const settingsAt = (tab?: string, hash?: string): string => insidePath(BOX, page.sandboxSettings(tab, { hash }));
+
 // The list as a surface holds it: inside a scope, as a component's setup is, which its clock is disposed with.
 const attention = async () => {
     const { useSandboxAttention } = await import(`./sandboxAttention`);
@@ -120,13 +127,13 @@ it(`stays quiet for a translator subscription`, async () => {
     expect(shown).not.toContain(NO_ACCOUNT);
 });
 
-// The switcher's update row clicked five times while already on /sandbox, going nowhere: both update notes point at
+// The switcher's update row clicked five times while already on the sandbox's settings, going nowhere: both update notes point at
 // the update card's own button, which the switcher scrolls to and focuses once the page is there.
 it(`points both update notes at the update's own button rather than at the page`, async () => {
     update.available = true;
-    expect((await attention()).notes.value.map((item) => item.to)).toEqual([`/sandbox#${UPDATE_ACTION_ANCHOR}`]);
+    expect((await attention()).notes.value.map((item) => item.to)).toEqual([settingsAt(undefined, UPDATE_ACTION_ANCHOR)]);
     update.staged = true;
-    expect((await attention()).notes.value.map((item) => [item.to, item.badges])).toEqual([[`/sandbox#sandbox-update-action`, true]]);
+    expect((await attention()).notes.value.map((item) => [item.to, item.badges])).toEqual([[settingsAt(undefined, `sandbox-update-action`), true]]);
 });
 
 // "No repository to push this work to" landed on Environment with nothing saying where the fix was, and its reader
@@ -134,7 +141,7 @@ it(`points both update notes at the update's own button rather than at the page`
 it(`points the missing repository at the Publish row, not at the page`, async () => {
     unbacked.value = true;
     expect((await attention()).needs.value.find((item) => item.message === `No repository to push this work to`)?.to).toBe(
-        `/sandbox/environment#${PUBLISH_ANCHOR}`,
+        settingsAt(`environment`, PUBLISH_ANCHOR),
     );
 });
 
@@ -143,7 +150,7 @@ it(`points the missing repository at the Publish row, not at the page`, async ()
 it(`points the rebuild at the card's rebuild step, with the press beside it`, async () => {
     pending.value = { hash: `h1`, content: `RUN true` };
     const row = (await attention()).needs.value.find((item) => item.message === `Rebuild needed to finish setting up your new capabilities`);
-    expect([row?.to, row?.action]).toEqual([`/sandbox/environment#sandbox-rebuild`, `rebuild`]);
+    expect([row?.to, row?.action]).toEqual([settingsAt(`environment`, `sandbox-rebuild`), `rebuild`]);
 });
 
 // A build the platform is running is nothing owed: the row stops asking for one and says it is under way.
@@ -153,7 +160,7 @@ it(`says the environment is building instead of asking for a rebuild while one r
     const list = await attention();
     expect(list.needs.value.map((item) => item.message)).not.toContain(`Rebuild needed to finish setting up your new capabilities`);
     expect(list.notes.value.map((item) => [item.message, item.to])).toEqual([
-        [`Your sandbox's new environment is building`, `/sandbox/environment#sandbox-rebuild`],
+        [`Your sandbox's new environment is building`, settingsAt(`environment`, `sandbox-rebuild`)],
     ]);
 });
 
@@ -166,7 +173,7 @@ it(`heads the list with GPU work paused after the computer reported a GPU reset`
         icon: `exclamation-triangle`,
         tone: `warning`,
         message: `GPU work is paused after your computer reported a GPU reset`,
-        to: `/sandbox`,
+        to: settingsAt(),
         kind: `needs`,
     });
     delete gpu.pausedFor;
@@ -187,7 +194,7 @@ it(`heads the list with a nearly full disk, saying what went and what holds the 
     };
     unbacked.value = true;
     const needs = (await attention()).needs.value;
-    expect(needs[0]).toMatchObject({ to: `/sandbox#sandbox-storage`, action: `clean`, kind: `needs`, tone: `warning` });
+    expect(needs[0]).toMatchObject({ to: settingsAt(undefined, `sandbox-storage`), action: `clean`, kind: `needs`, tone: `warning` });
     expect(needs[0]?.message).toMatch(
         /^The disk is nearly full: .+ free \(8%\); removed .+ of build output from 3 finished checkouts; Build output in checkouts holds the most \(.+\)$/,
     );

@@ -14,13 +14,13 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { processAskedBy } from "../../models/processes/processAddress";
-import { sandboxEntryPath, sectionEntryPath } from "../../models/sandbox/sandboxScreen";
-import { sandboxHubPath } from "../../models/sandbox/sandboxNav";
-import { homeFrame, homeSection } from "../../lib/routes/homeSection";
+import { homeEntryPath, sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { GUEST_SECTION } from "../../models/sandbox/sandboxNav";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
-import { goInside } from "../../lib/routes/homeDetour";
+import { page, routeSandbox, toHome } from "../../lib/routes/links";
+import { masterRail } from "../../models/home/masterRail";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../workbench/views/viewBadge";
 import TileMark from "../../components/TileMark.vue";
@@ -66,22 +66,23 @@ const moveBy = (step: number): void => {
     sandboxOrder.value = movedOrder(ids, menuIndex.value, menuIndex.value + step);
 };
 // A sandbox's settings, straight from its tile, without entering it and finding the switcher's cog. Shown in Home's frame
-// (lib/routes/home.ts isSandboxSettingsPath): the rail stays, the tile stays lit, and Back or a press on any tile returns
-// to a chat. A guest's door names the one section it may open (sandboxNav.ts sandboxHubPath).
+// (`/home/<sandbox>/settings`): the rail stays, the tile stays lit, and Back or a press on any tile returns to a chat.
+// A guest's door names the one section it may open (sandboxNav.ts GUEST_SECTION). The address names the sandbox, which
+// selects it (router/shellGates.ts).
 const openSettings = (id: string): void => {
     const box = boxes.value.find((candidate) => candidate.id === id);
     if (box === undefined) {
         return;
     }
     seenReady(id);
-    sandbox.select(id);
-    void router.push(sandboxHubPath(box.role === `guest`));
+    void router.push(toHome(id, page.sandboxSettings(box.role === `guest` ? GUEST_SECTION : undefined)));
 };
 // Into the sandbox, as a double-click goes: the menu's way for a keyboard, and the place a reader learns the double-click.
+// Inside it for real, where it was last left, even when that was its Models (lib/routes/homeDetour.ts shows those in
+// place only in Home's frame).
 const enter = (id: string): void => {
     seenReady(id);
-    sandbox.select(id);
-    void goInside(() => router.push(sandboxEntryPath(id)));
+    void router.push(sandboxEntryPath(id));
 };
 const withMenuId = (act: (id: string) => void): void => {
     const id = boxes.value[menuIndex.value]?.id;
@@ -139,10 +140,11 @@ const noteOf = (id: string): string => {
 const route = useRoute();
 // While the new sandbox's page, or a process's, stands in the chat's place, its tile is the selected one; the new
 // sandbox's dialog over the chat leaves the chat's own tile selected.
-// Around the section Home shows of every sandbox (lib/routes/homeSection.ts), the sandbox it is showing is the selected one.
+// Around any page of a sandbox in Home's frame, the sandbox its address names is the selected one; on Home's own page
+// with none named yet, the one open.
 const selected = (id: string): boolean =>
-    (route.name === `home` || homeFrame.value !== undefined) &&
-    sandbox.activeSandboxId.value === id &&
+    masterRail.value &&
+    (routeSandbox(route) ?? (route.name === `home` ? sandbox.activeSandboxId.value : undefined)) === id &&
     !newSandboxPageShown(route, newSandbox.value) &&
     processAskedBy(route) === undefined;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
@@ -155,17 +157,14 @@ const choose = (id: string, input: `click` | `enter`): void => {
     const action = homeOnly.value ? `select` : tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
     last = { id, at: now };
     seenReady(id);
-    sandbox.select(id);
     if (action === `enter`) {
-        // Into the sandbox, where it was last left: `/` alone is Home itself (lib/routes/firstScreens.ts). Inside for real,
-        // even when that was its Models, which a press on Home would otherwise show in place (lib/routes/homeDetour.ts).
-        void goInside(() => router.push(sandboxEntryPath(id)));
+        enter(id);
     } else if (phone) {
-        void router.push(`/home/${encodeURIComponent(id)}`);
+        void router.push(toHome(id));
     } else {
-        // The section Home was asked to show of every sandbox, of this one; else its home conversation.
-        const section = homeOnly.value ? undefined : homeSection.value;
-        void router.replace(section === undefined ? `/home` : sectionEntryPath(id, section));
+        // The section Home was asked to show of every sandbox, of this one; else its home conversation. Replaced, as
+        // a look along the rail; the address names the sandbox, which selects it (router/shellGates.ts).
+        void router.replace(homeEntryPath(id));
     }
 };
 </script>
@@ -179,7 +178,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
                  account's own figure, as the desktop rail's foot wears it, since a cog on each row below is that sandbox's. -->
             <RouterLink
                 v-if="user !== null"
-                to="/settings"
+                :to="toHome(undefined, page.account())"
                 class="flex size-11 items-center justify-center rounded-xl text-muted hover:bg-content/5 hover:text-content"
                 :aria-label="t(`shared.settings`)"
             >

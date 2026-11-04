@@ -1,4 +1,5 @@
 import { PrismaClient } from "@intentic/prisma";
+import { insidePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { type BrowserContext, expect, type Page, type Request, test } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -21,11 +22,16 @@ const SANDBOX_NAME = `Released sandbox`;
 // The pages, and what each has to show before it counts as drawn: the board's cards and buttons, the files' tabs, a
 // chat's box to type in, the Sandbox page under the sandbox's own name. Read off the page's structure and the seeded
 // name rather than its words, so a reworded label does not fail a check about versions.
+// Each at its address inside the person's sandbox, which names it: signing in left the account a setup row of its own
+// (the wizard's), which an address naming no sandbox would open instead.
 const PAGES: readonly { readonly path: string; readonly drawn: (page: Page) => Promise<void> }[] = [
-    { path: `/agents`, drawn: (page) => expect(page.locator(`main`).getByRole(`button`).first()).toBeVisible() },
-    { path: `/workspace`, drawn: (page) => expect(page.locator(`main`).getByRole(`tablist`).first()).toBeVisible() },
-    { path: `/chat`, drawn: (page) => expect(page.locator(`main`).getByRole(`textbox`).first()).toBeVisible() },
-    { path: `/sandbox/overview`, drawn: (page) => expect(page.locator(`main`).getByRole(`heading`, { level: 1, name: SANDBOX_NAME })).toBeVisible() },
+    { path: insidePath(SANDBOX_ID, pages.agents()), drawn: (page) => expect(page.locator(`main`).getByRole(`button`).first()).toBeVisible() },
+    { path: insidePath(SANDBOX_ID, pages.workspace()), drawn: (page) => expect(page.locator(`main`).getByRole(`tablist`).first()).toBeVisible() },
+    { path: insidePath(SANDBOX_ID, pages.chat()), drawn: (page) => expect(page.locator(`main`).getByRole(`textbox`).first()).toBeVisible() },
+    {
+        path: insidePath(SANDBOX_ID, pages.sandboxSettings(`overview`)),
+        drawn: (page) => expect(page.locator(`main`).getByRole(`heading`, { level: 1, name: SANDBOX_NAME })).toBeVisible(),
+    },
 ];
 
 // How long the daemon's traffic must stay quiet before a page counts as settled. Its /events stream never ends and is
@@ -209,9 +215,7 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
         visits.push(seen);
         await test.step(path, async () => {
             const before = seen.streams();
-            // Named on every visit: signing in left the account a setup row of its own (the wizard's), which a bare
-            // visit would open instead. The editor selects the named one and drops the key from the address.
-            await page.goto(`${stackUrls().web}${path}?sandbox=${SANDBOX_ID}`);
+            await page.goto(`${stackUrls().web}${path}`);
             await expect.poll(seen.streams, { message: `the editor never opened the daemon's /events stream on ${path}` }).toBeGreaterThan(before);
             // Below the floor the editor draws one page instead of any of these, and the release owners run must never
             // be. Waited for beside the quiet, since a daemon that old never goes quiet: with no roster revision on its

@@ -3,7 +3,13 @@
 import "@intentic/testing/dom";
 import type { IntenticApi, SideViewInput, SideViewRegistration } from "@intentic/extension-api";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { defineComponent, h } from "vue";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+
+// The sandbox open, which a side view's home (a path from before frames) opens in: no route of the shell is on screen.
+const BOX = `a1b2c3d4e5f6`;
+const RUN_7 = insidePath(BOX, page.extension(`ci`, undefined, { query: { run: `7` } }));
 
 // Where "Open in …" and a phone's fallback go, stood in for: the route itself is the router's business.
 const push = jest.fn((_path: string) => Promise.resolve());
@@ -50,6 +56,7 @@ const RUN: SideViewRegistration = {
 const RUN_URL = `https://github.com/acme/web/actions/runs/42`;
 
 beforeEach(() => {
+    activeSandboxId.value = BOX;
     push.mockClear();
     sideDocked.value = true;
     closeAllTabs();
@@ -72,7 +79,7 @@ it(`draws a declared side view under the extension's own id, its tab in the exte
     expect(sideViewOf(`acme.ci/run`)?.label).toBe(`CI run`);
     expect(describeTab(tab)).toEqual({ title: `#7`, icon: `pipelines`, tip: { title: `Run 7 of build` } });
     homeOf(tab)?.open();
-    expect(push).toHaveBeenCalledWith(`/ext/ci?run=7`);
+    expect(push).toHaveBeenCalledWith(RUN_7);
 });
 
 it(`takes the chat's links only where the manifest says it may`, () => {
@@ -110,7 +117,7 @@ it(`goes to the side view's home where there is no side panel`, () => {
     api.sideViews.register(RUN);
 
     api.sideViews.open(`run`, { runId: 7 });
-    expect(push).toHaveBeenCalledWith(`/ext/ci?run=7`);
+    expect(push).toHaveBeenCalledWith(RUN_7);
     expect(panel.tabs.value).toEqual([]);
 });
 

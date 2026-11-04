@@ -16,10 +16,16 @@ import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import type { ViewEvent } from "../boardView";
 import { paneAsk, paneRange, useCardFocus, useCardRing } from "../cardSelection";
 import { afterPaint } from "../../../../../lib/afterPaint";
+import { activeSandboxId } from "../../../../../app/storage/activeSandbox";
+import { insidePath, type LinkQuery, page } from "@intentic/sandbox-contract/app-routes";
 
 // Pins which card the board points at and what a press on one asks of the chat: the ring follows the chat unless a
 // link's flash outranks it, a plain click is a look, a modified one composes panes, another box's card opens its
 // review, and a link to a card waits for it, uncovers it, rings it and scrolls to it.
+
+// The sandbox open: no route is installed here, so an agent's page is the one inside it.
+const BOX = `a1b2c3d4e5f6`;
+const agentAt = (id: string, query?: LinkQuery): string => insidePath(BOX, page.agent(id, { query }));
 
 const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     id,
@@ -137,6 +143,7 @@ describe(`the ring`, () => {
 
 describe(`a press on a card`, () => {
     const boardOf = (roster: FleetAgent[], strip: Strip = EMPTY_STRIP) => {
+        activeSandboxId.value = BOX;
         const cards = shallowRef(roster);
         const summon = jest.fn((_summons: Summons) => undefined);
         const push = jest.fn(async (_to: RouteLocationRaw) => undefined);
@@ -186,7 +193,7 @@ describe(`a press on a card`, () => {
             [a1, `peek`],
             [a1, `peek`],
         ]);
-        expect(board.push.mock.calls).toEqual([[`/agents/a1`]]);
+        expect(board.push.mock.calls).toEqual([[agentAt(`a1`)]]);
     });
 
     it(`does nothing for the click a drag's release lands on its own card`, () => {
@@ -202,10 +209,10 @@ describe(`a press on a card`, () => {
         expect(isRemote(far)).toBe(true);
         const board = boardOf([far]);
         board.focus.focusAgent(far);
-        expect(board.push.mock.calls).toEqual([[{ path: `/agents/far`, query: { sandbox: `elsewhere` } }]]);
+        expect(board.push.mock.calls).toEqual([[agentAt(`far`, { sandbox: `elsewhere` })]]);
         expect(board.agents.open).not.toHaveBeenCalled();
-        expect(board.focus.agentHref(far)).toBe(JSON.stringify({ path: `/agents/far`, query: { sandbox: `elsewhere` } }));
-        expect(board.focus.agentHref(a1)).toBe(`/agents/a1`);
+        expect(board.focus.agentHref(far)).toBe(agentAt(`far`, { sandbox: `elsewhere` }));
+        expect(board.focus.agentHref(a1)).toBe(agentAt(`a1`));
     });
 
     it(`adds a column beside on Alt, marking the card read, and takes one away on Ctrl among several`, () => {
@@ -255,11 +262,11 @@ describe(`a press on a card`, () => {
         expect(board.push).not.toHaveBeenCalled();
 
         board.focus.drillIn(a1);
-        expect(board.push.mock.calls).toEqual([[`/agents/a1`]]);
+        expect(board.push.mock.calls).toEqual([[agentAt(`a1`)]]);
 
         board.mobile.value = true;
         board.focus.drillIn(asking);
-        expect(board.push.mock.calls).toEqual([[`/agents/a1`], [`/agents/ask`]]);
+        expect(board.push.mock.calls).toEqual([[agentAt(`a1`)], [agentAt(`ask`)]]);
     });
 
     it(`keeps a look, ends a card everywhere, and walks to a review keeping its chat`, () => {
@@ -273,7 +280,7 @@ describe(`a press on a card`, () => {
             [{ kind: `keep`, conversationIds: [`a1`] }],
         ]);
         expect(board.agents.open.mock.calls).toEqual([[a1]]);
-        expect(board.push.mock.calls).toEqual([[`/agents/a1`]]);
+        expect(board.push.mock.calls).toEqual([[agentAt(`a1`)]]);
     });
 
     it(`opens a conversation no card stands for as a fresh tab on its session`, () => {

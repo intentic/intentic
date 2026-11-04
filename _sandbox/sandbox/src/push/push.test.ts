@@ -1,11 +1,12 @@
+import { insidePath, legacyPathOf, page } from "@intentic/sandbox-contract/app-routes";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { unstubbed } from "@intentic/testing";
 import pino from "pino";
 import webpush from "web-push";
 import { opt } from "../opt.js";
 import { registerPresence, updatePresence } from "../system/presence.js";
-import { needRaised, turnAwaiting } from "./notifications.js";
-import { createPushSender } from "./push.js";
+import { automationFired, diskLow, needRaised, pushRefused, turnAwaiting, turnFinished } from "./notifications.js";
+import { createPushSender, placedIn } from "./push.js";
 import type { PushStore, StoredChannel } from "./push-store.js";
 
 /* Who a notification for someone away reaches. Each device belongs to the member who registered it, so it goes quiet
@@ -124,6 +125,43 @@ test("a raised need goes out the same way, verbatim, to the devices of whoever i
     );
     expect(reached).toEqual([{ endpoint: "https://push.example/bob", payload: JSON.stringify(need) }]);
     expect(need.url).toBe("/?conversation=conv-1&need=n1");
+});
+
+// A tap opens the sandbox the news is from: every page of a sandbox is written in the address form from before frames,
+// which an editor opens in whichever sandbox its reader had open last, until the sender names itself in it.
+describe("where a tap opens", () => {
+    const fired = automationFired({ id: "tell-me", prompt: "Watch for Bun 1.4.3" }, "bun@1.4.3");
+
+    test("each notification names its page in the address form every editor reads, Automations being the extension's view", () => {
+        expect(fired.url).toBe(legacyPathOf(page.extension("automations")));
+        expect(fired.url).toBe("/ext/automations");
+        expect(pushRefused({ repo: "web", command: "git push", status: "failed", output: "", reason: "rejected" }).url).toBe("/workspace");
+        expect(diskLow("low", { level: "low", freeBytes: 1, totalBytes: 10, measuredAt: 0, using: [] }).url).toBe("/sandbox");
+        expect(turnFinished("conv-1", "Fix it", { ok: true }).url).toBe("/?conversation=conv-1");
+    });
+
+    test("a daemon that knows its own id places each page inside itself, its query and anchor kept", () => {
+        const place = placedIn("abcdef012345");
+        expect(place(fired).url).toBe(insidePath("abcdef012345", page.extension("automations")));
+        const access = { title: "dev asks to run a task here", body: "check r1", url: "/sandbox/access?section=programs#linked-sandboxes" };
+        expect(place(access).url).toBe("/s/abcdef012345/settings/access?section=programs#linked-sandboxes");
+    });
+
+    test("a conversation's link opens in this sandbox, where the conversation-link guard reads it, and a daemon with no id changes nothing", () => {
+        const finished = turnFinished("conv-1", "Fix it", { ok: true });
+        expect(placedIn("abcdef012345")(finished).url).toBe(`${insidePath("abcdef012345")}?conversation=conv-1`);
+        expect(placedIn(undefined)(finished)).toEqual(finished);
+        expect(placedIn(undefined)(fired)).toEqual(fired);
+    });
+
+    test("the sender sends, and remembers, the placed address", async () => {
+        const reached = stubSends();
+        const store = storeOf(device("https://push.example/bob", "bob@example.com"));
+        const pushed = createPushSender(store, pino({ level: "silent" }), undefined, "abcdef012345");
+        await pushed.notify(fired);
+        expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual(["/s/abcdef012345/ext/automations"]);
+        expect(pushed.sent(fired.tag ?? "", "bob@example.com")?.url).toBe("/s/abcdef012345/ext/automations");
+    });
 });
 
 test("nobody is looking with no tab open at all, and the settings page's test send reaches a device whoever is looking", async () => {

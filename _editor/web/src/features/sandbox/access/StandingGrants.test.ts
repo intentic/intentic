@@ -6,6 +6,11 @@ import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
+
+// The sandbox open; no route of the shell is on screen, so a conversation's page is the one inside it.
+const BOX = `a1b2c3d4e5f6`;
 
 type StandingConversation = StandingGrants["conversations"][number];
 
@@ -67,6 +72,7 @@ const conversation = (conversationId: string, over: Partial<StandingConversation
 
 let app: App | undefined;
 const mount = async (): Promise<void> => {
+    activeSandboxId.value = BOX;
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(StandingGrantsView) });
@@ -121,7 +127,7 @@ it(`names the conversation, where it stands and who allowed it, apart from what 
     expect(shown()).toContain(`May do anything without asking you`);
     expect(shown()).toContain(`May send github/token to any host, not only its own`);
     // The conversation is a place to go, said as one, rather than a title that happens to be a link.
-    expect(buttons(`Open`)[0]?.getAttribute(`href`)).toBe(`/agents/c1`);
+    expect(buttons(`Open`)[0]?.getAttribute(`href`)).toBe(insidePath(BOX, page.agent(`c1`)));
     expect(buttons(`Revoke`)).toHaveLength(2);
     // On a live conversation nothing is put away, so nothing is said about bringing it back, and the archive is not read.
     expect(shown()).not.toContain(`Archived`);

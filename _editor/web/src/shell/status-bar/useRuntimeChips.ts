@@ -1,5 +1,6 @@
 import { computed, type ComputedRef, type Ref } from "vue";
 import { useRoute } from "vue-router";
+import { here, linkOf, page, pageCovers, type PageLink } from "../../lib/routes/links";
 import { useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -31,7 +32,11 @@ export interface RuntimeChips {
 
 export function useRuntimeChips(): RuntimeChips {
     const route = useRoute();
-    const here = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
+    // Whether the reader is on that page or below it, in whichever frame.
+    const showing = (link: PageLink): boolean => {
+        const shown = linkOf(route.path);
+        return shown !== undefined && pageCovers(link, shown);
+    };
 
     const { canShip } = useRole();
     const { maker } = useAudience();
@@ -69,17 +74,17 @@ export function useRuntimeChips(): RuntimeChips {
                 // The daemon lets nobody below maintainer drive the desktop.
                 desktopWindows: canShip.value ? (windows.value ?? 0) : undefined,
                 appsLabel: words.value.preview,
-                here: here(`/browsers`),
+                here: showing(page.browsers()),
             }),
-            portsChip({ ports: forwarded.value.map((entry) => entry.port), here: here(`/sandbox/ports`) }),
+            portsChip({ ports: forwarded.value.map((entry) => entry.port), here: showing(page.sandboxSettings(`ports`)) }),
             vpnChip({
                 names: vpnLinks.value.filter((link) => link.state === `connected`).map((link) => link.id),
-                here: here(`/capabilities/vpn`),
+                here: showing(page.capabilities(`vpn`)),
             }),
         ]
             .filter((chip) => chip !== undefined)
             // A chip whose page this reader cannot open (a guest's fence) would only answer with a bounce.
-            .filter((chip) => chip.to === undefined || sectionReachable(chip.to)),
+            .filter((chip) => chip.to === undefined || sectionReachable(here(chip.to))),
     );
 
     return { chips, toggleTerminal: () => terminal.toggle(), reachable };

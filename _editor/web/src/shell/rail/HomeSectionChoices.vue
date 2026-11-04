@@ -7,7 +7,8 @@ import { SearchBar, useListNavigation } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref } from "vue";
-import type { HomeSection } from "../../lib/routes/homeSection";
+import { type HomeSection, sameSection, sectionPageOf } from "../../lib/routes/homeSection";
+import { here, page } from "../../lib/routes/links";
 import RailIcon from "./RailIcon.vue";
 import { type SectionTile, useSectionTiles } from "./sectionTiles";
 
@@ -16,10 +17,15 @@ const emit = defineEmits<{ choose: [section: HomeSection | undefined] }>();
 
 const t = useT();
 // The Chat heads the sandbox's sections, as on its rail when it docks there.
-const { tiles } = useSectionTiles(() => [{ id: `chat`, to: `/chat`, label: t(`shared.chat`), icon: `comments` }]);
+const { tiles } = useSectionTiles(() => [{ id: `chat`, to: here(page.chat()), label: t(`shared.chat`), icon: `comments` }]);
 
-const sectionOf = ({ id, to, label, icon, monogram }: SectionTile): HomeSection => {
-    let section: HomeSection = { id, to, label };
+// A tile is a section when its address is a page of the sandbox's own; one that is not is no view Home can show.
+const sectionOf = ({ id, to, label, icon, monogram }: SectionTile): HomeSection | undefined => {
+    const shown = sectionPageOf(to);
+    if (shown === undefined) {
+        return undefined;
+    }
+    let section: HomeSection = { id, page: shown, label };
     if (icon !== undefined) {
         section = { ...section, icon };
     }
@@ -41,13 +47,16 @@ const rows = computed<readonly Row[]>(() => {
     const needle = query.value.trim().toLowerCase();
     const all: Row[] = [
         { key: HOME, label: t(`home.section.homeConversation`), section: undefined },
-        ...tiles.value.map((tile): Row => ({ key: tile.to, label: tile.label, section: sectionOf(tile) })),
+        ...tiles.value.flatMap((tile): Row[] => {
+            const section = sectionOf(tile);
+            return section === undefined ? [] : [{ key: tile.to, label: tile.label, section }];
+        }),
     ];
     return all.filter((row) => row.label.toLowerCase().includes(needle));
 });
 const keyOf = (row: Row): string => row.key;
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(rows, keyOf);
-const isChosen = (row: Row): boolean => row.section?.to === chosen?.to;
+const isChosen = (row: Row): boolean => (row.section === undefined ? chosen === undefined : sameSection(row.section, chosen));
 
 const pick = (row: Row | undefined): void => {
     if (row !== undefined) {

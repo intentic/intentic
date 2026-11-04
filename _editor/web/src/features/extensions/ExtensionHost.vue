@@ -11,6 +11,7 @@ import { detectActivations } from "../../workbench/views/registry";
 import { extensionsLoaded } from "../../workbench/views/extensionStatuses";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../lib/routes/links";
 
 const t = useT();
 
@@ -71,7 +72,7 @@ const imprint = computed(() => `ext:${ext.value}/${key.value}`);
         <template #actions>
             <Button
                 :as="RouterLink"
-                to="/sandbox/extensions?view=installed"
+                :to="here(page.sandboxSettings(`extensions`, { query: { view: `installed` } }))"
                 size="small"
                 tier="accent"
                 :label="t(`extensions.extensionHost.turnBackOnIn`)"

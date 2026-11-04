@@ -1,13 +1,11 @@
+import { LOCAL_PAGES, localPath } from "@intentic/sandbox-contract/app-routes";
 import { t } from "@intentic/ui/i18n";
 import type { RouteLocationRaw, RouteRecordRaw } from "vue-router";
 import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
 import { asyncView } from "../components/asyncView";
-import { SANDBOX_SETUP_PATH } from "../local/setup/setupPath";
-import { LOCAL_PROCESS_PATH } from "../models/processes/processAddress";
-import { LOCAL_ADD_SANDBOX_PATH } from "../models/sandbox/addSandbox";
-import { hubOutline, settingsPartRoutes } from "./routeParts";
+import { accountSettingsView, settingsPartRoutes } from "./routeParts";
 import { requireAuth } from "./sessionGuard";
 import { requireSetup } from "./shellGates";
 
@@ -16,8 +14,11 @@ import { requireSetup } from "./shellGates";
 const requireAccount = async (): Promise<true | RouteLocationRaw> => {
     const account = useAccount();
     await account.settled();
-    return account.user.value === null ? `/workspace` : true;
+    return account.user.value === null ? localPath(`files`) : true;
 };
+
+// The account's settings were at `settings/<section>` until 2026-11-04, when "settings" came to mean a sandbox's alone.
+const ACCOUNT = LOCAL_PAGES.account.split(`/`)[0] ?? ``;
 
 // A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (app/environments/local.ts) has a shell of its own, not a sandbox's: the
 // same rail, holding what needs no sandbox (local/LocalShell.vue). Files is the folder; every other tile is a view the app
@@ -30,10 +31,10 @@ export const localRoutes = (): RouteRecordRaw[] => [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../local/LocalShell.vue`),
         children: [
-            { path: ``, redirect: `/workspace` },
+            { path: ``, redirect: localPath(`files`) },
             {
                 // The folder's tree and its documents. The path is the tree's, not the window's: the window is one folder.
-                path: `workspace/:path(.*)*`,
+                path: LOCAL_PAGES.files,
                 name: `workspace`,
                 meta: { title: () => localFace()?.name ?? t(`shared.files`) },
                 component: asyncView(() => import(`../local/LocalFiles.vue`)),
@@ -44,7 +45,7 @@ export const localRoutes = (): RouteRecordRaw[] => [
                 ? []
                 : [
                       {
-                          path: SANDBOX_SETUP_PATH.slice(1),
+                          path: LOCAL_PAGES.sandboxSetup,
                           name: `local-sandbox-setup`,
                           meta: { title: () => t(`local.sandboxSetup.tile`, { name: localFace()?.name ?? `` }) },
                           component: asyncView(() => import(`../local/setup/LocalSandboxSetup.vue`)),
@@ -56,7 +57,7 @@ export const localRoutes = (): RouteRecordRaw[] => [
                 ? []
                 : [
                       {
-                          path: `repair`,
+                          path: LOCAL_PAGES.repair,
                           name: `local-repair`,
                           meta: { title: () => t(`local.repair.title`) },
                           component: asyncView(() => import(`../local/repair/LocalRepair.vue`)),
@@ -68,7 +69,7 @@ export const localRoutes = (): RouteRecordRaw[] => [
                 ? []
                 : [
                       {
-                          path: `${LOCAL_PROCESS_PATH.slice(1)}/:id`,
+                          path: LOCAL_PAGES.process,
                           name: `local-process`,
                           props: true,
                           meta: { title: () => t(`processes.group`) },
@@ -81,7 +82,7 @@ export const localRoutes = (): RouteRecordRaw[] => [
                 ? []
                 : [
                       {
-                          path: LOCAL_ADD_SANDBOX_PATH.slice(1),
+                          path: LOCAL_PAGES.newSandbox,
                           name: `local-new-sandbox`,
                           meta: { title: () => t(`sandbox.words.addSandbox`) },
                           component: asyncView(() => import(`../local/newSandbox/LocalNewSandbox.vue`)),
@@ -95,15 +96,16 @@ export const localRoutes = (): RouteRecordRaw[] => [
                     component: asyncView(view.load),
                 }),
             ),
-            ...settingsPartRoutes(),
+            ...settingsPartRoutes(ACCOUNT, `settings`),
             {
-                path: `settings/:tab?`,
+                path: LOCAL_PAGES.account,
                 name: `settings`,
-                meta: { title: () => t(`shared.settings`) },
+                meta: { page: `account`, title: () => t(`shared.settings`) },
                 beforeEnter: requireAccount,
-                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5)),
+                component: accountSettingsView(),
             },
+            { path: `settings/:tab?`, redirect: (to) => ({ name: `settings`, params: to.params, query: to.query, hash: to.hash }) },
         ],
     },
-    { path: `/:pathMatch(.*)*`, redirect: `/workspace` },
+    { path: `/:pathMatch(.*)*`, redirect: localPath(`files`) },
 ];

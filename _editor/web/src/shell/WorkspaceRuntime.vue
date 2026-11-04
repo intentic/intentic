@@ -3,6 +3,7 @@ import { loadChunk, useDevice } from "@intentic/ui";
 import { computed, defineAsyncComponent, onMounted, onUnmounted, watch } from "vue";
 import { localFace } from "../app/environments/local";
 import { useRoute } from "vue-router";
+import { pageOf } from "../lib/routes/links";
 import { useChat } from "../models/conversations/run/useChat";
 import { floatingWindowPanel } from "../workbench/window/floating";
 import { onScreen } from "../workbench/window/onScreen";
@@ -46,13 +47,13 @@ const liveness = useSandboxLiveness();
 const route = useRoute();
 const { mobile } = useDevice();
 
-// What this tab is looking at, pushed to the daemon so other members see it live.
+// What this tab is looking at, pushed to the daemon so other members see it live: the page, in whichever frame.
 watch(
     () => route.name,
-    (name) =>
-        reportView(
-            name === `extension` ? `ext:${String(route.params[`ext`])}/${String(route.params[`key`])}` : typeof name === `string` ? name : undefined,
-        ),
+    () => {
+        const shown = pageOf(route) ?? (route.name === `home` ? `home` : undefined);
+        reportView(shown === `extension` ? `ext:${String(route.params[`ext`])}/${String(route.params[`key`])}` : shown);
+    },
     { immediate: true },
 );
 const { active: activeConversation } = useChat();

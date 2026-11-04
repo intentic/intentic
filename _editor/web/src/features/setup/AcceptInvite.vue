@@ -8,6 +8,7 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { toTop } from "../../lib/routes/links";
 import { desktopVersion } from "../../app/environments/desktop";
 import { inNativeShell } from "../../workbench/window/capacitor";
 import EmailCodeSignIn from "../auth/EmailCodeSignIn.vue";
@@ -101,7 +102,7 @@ const view = computed(() => {
     return emailMatches.value ? `accept` : `wrong-account`;
 });
 
-const signIn = (): Promise<void> => signInWithGoogle(`/invite/${token}`);
+const signIn = (): Promise<void> => signInWithGoogle(toTop(`invite`, { token }));
 
 const accept = async (): Promise<void> => {
     if (busy.value) {
@@ -131,7 +132,7 @@ const switchAccount = async (): Promise<void> => {
     await signOut();
     if (options.value.email) {
         // Signing out sends a stale shell to /login (App.vue); the invite is still the page this reader is on.
-        await router.replace(`/invite/${token}`);
+        await router.replace(toTop(`invite`, { token }));
         return;
     }
     await signIn();

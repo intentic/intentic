@@ -1,6 +1,19 @@
+import {
+    ACCOUNT_PAGES,
+    HOME_SEGMENT,
+    homePath,
+    insidePath,
+    page,
+    SANDBOX_PAGES,
+    SANDBOX_SEGMENT,
+    type SandboxPageName,
+} from "@intentic/sandbox-contract/app-routes";
 import { nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 
-/* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it comes back to. */
+/* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it comes back
+   to, in the frame the switch was made in. A real router in the shell's shape, so the screens recorded are the router's
+   own landings and the switch's landing is a real navigation. */
 
 // The node test environment has neither storage; windowStore itself is real (its own two-store rules are what
 // make a screen this window's own).
@@ -20,94 +33,92 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-// One matched record is all inShell reads: `/` is the shell's own path, anything else is a page outside it.
-const shellRoute = (fullPath: string) => ({ fullPath, matched: [{ path: `/` }, { path: fullPath }] });
-const outsideRoute = (fullPath: string) => ({ fullPath, matched: [{ path: fullPath }] });
-
-type Landing = ReturnType<typeof shellRoute>;
-type AfterEach = (to: Landing, from: Landing, failure?: unknown) => void;
-
 const activeSandboxId = ref<string | undefined>(`sb1`);
-const currentRoute = ref<Landing>(shellRoute(`/workspace`));
-const replace = jest.fn();
-const hooks: AfterEach[] = [];
-
 jest.mock("../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
 // The person's standing in the sandbox switched to: a guest's first screen is its chat, everyone else's the board.
 const guest = ref(false);
 jest.mock("../../client/sandbox/useRole", () => ({ useRole: () => ({ isGuest: guest, homeOnly: ref(false) }) }));
-const router = { afterEach: (hook: AfterEach) => void hooks.push(hook), currentRoute, replace };
-jest.mock("../../workbench/navigation/navigation", () => ({ onNavigation: (run: (installed: typeof router) => void) => run(router) }));
 
-const { sectionEntryPath } = await import("./sandboxScreen");
-const { homeFrame, homeSection } = await import("../../lib/routes/homeSection");
+const view = { render: () => null };
+const frames = [
+    [`inside`, `/${SANDBOX_SEGMENT}/:sandbox`],
+    [`home`, `/${HOME_SEGMENT}/:sandbox`],
+] as const;
+const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+        { path: `/login`, component: view },
+        { path: `/home/:sandbox?`, name: `home`, meta: { frame: `home` }, component: view },
+        { path: `/s/:sandbox/${ACCOUNT_PAGES.account}`, meta: { frame: `inside`, page: `account` }, component: view },
+        ...frames.flatMap(([frame, base]) =>
+            // SAFETY: SANDBOX_PAGES is a const literal whose own keys are exactly SandboxPageName; Object.entries only widens them.
+            (Object.entries(SANDBOX_PAGES) as [SandboxPageName, string][]).map(([name, pattern]) => ({
+                path: `${base}/${pattern}`,
+                meta: { frame, page: name },
+                component: view,
+            })),
+        ),
+    ],
+});
+const replace = jest.spyOn(router, `replace`);
 
-// A navigation that landed, as the router reports it: the route becomes current, then the afterEach hooks run.
-const navigate = (to: Landing, failure?: unknown): void => {
-    const from = currentRoute.value;
-    if (failure === undefined) {
-        currentRoute.value = to;
-    }
-    for (const hook of hooks) {
-        hook(to, from, failure);
-    }
-};
+const { homeEntryPath, landOnAfterSwitch, routeChoosesSandbox, sandboxEntryPath, sectionEntryPath } = await import("./sandboxScreen");
+const { homeSection } = await import("../../lib/routes/homeSection");
+const { installNavigation } = await import("../../workbench/navigation/navigation");
+installNavigation(router);
 
-// The switcher's own gesture (Alt+N → select): the id changes, and the landing is a post-flush watcher.
+// The switch made without a navigation (the phone's menu, a removal, a card opening another sandbox's agent): the id
+// changes, the landing is a post-flush watcher, and its navigation is waited for.
 const switchTo = async (sandboxId: string): Promise<void> => {
+    const before = replace.mock.calls.length;
     activeSandboxId.value = sandboxId;
     await nextTick();
+    await nextTick();
+    if (replace.mock.calls.length > before) {
+        await replace.mock.results.at(-1)?.value;
+    }
 };
+// A navigation the router lands, under the sandbox its address names, as the route's own gate would select it.
+const go = async (address: string): Promise<void> => {
+    routeChoosesSandbox();
+    const named = /^\/(?:s|home)\/([^/?#]+)/.exec(address)?.[1];
+    if (named !== undefined && named !== `account`) {
+        activeSandboxId.value = named;
+    }
+    await router.push(address);
+};
+const landedOn = (): string => router.currentRoute.value.fullPath;
 
-beforeEach(() => {
+const WORKSPACE = { id: `workspace`, page: { name: `workspace`, params: {} }, label: `Workspace` } as const;
+
+beforeEach(async () => {
     local.clear();
     session.clear();
-    replace.mockClear();
-    activeSandboxId.value = `sb1`;
     guest.value = false;
-    currentRoute.value = shellRoute(`/workspace`);
-    homeFrame.value = undefined;
     homeSection.value = undefined;
+    await go(insidePath(`sb1`, page.workspace()));
+    replace.mockClear();
 });
 
 describe(`landing on a switched-to sandbox`, () => {
     it(`comes back to the screen that sandbox was last on`, async () => {
-        navigate(shellRoute(`/agents`));
+        await go(insidePath(`sb1`, page.agents()));
         await switchTo(`sb2`);
-        navigate(shellRoute(`/workspace/src/foo.ts`));
+        await go(insidePath(`sb2`, page.workspace(`src/foo.ts`)));
 
         await switchTo(`sb1`);
-
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
-    });
-
-    it(`keeps each sandbox's screen apart: switching back and forth lands on both`, async () => {
-        navigate(shellRoute(`/sandbox/secrets`));
-        await switchTo(`sb2`);
-        navigate(shellRoute(`/workspace/src/foo.ts`));
-        await switchTo(`sb1`);
-        navigate(shellRoute(`/sandbox/secrets`));
+        expect(landedOn()).toBe(insidePath(`sb1`, page.agents()));
 
         await switchTo(`sb2`);
-
-        expect(replace).toHaveBeenLastCalledWith(`/workspace/src/foo.ts`);
+        expect(landedOn()).toBe(insidePath(`sb2`, page.workspace(`src/foo.ts`)));
     });
 
     it(`sends a sandbox this window has never shown to its own first screen, not to the current screen`, async () => {
-        navigate(shellRoute(`/agents/agent-of-sb1`));
+        await go(insidePath(`sb1`, page.agent(`agent-of-sb1`)));
 
         await switchTo(`sb-fresh`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
-    });
-
-    // `/` is Home since Home became the first screen: a switch made inside a sandbox must not bounce out to it.
-    it(`never sends a switch to the bare address, which opens Home`, async () => {
-        session.set(`intentic.sandboxScreen.sb2`, `/`);
-
-        await switchTo(`sb2`);
-
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+        expect(landedOn()).toBe(insidePath(`sb-fresh`, page.agents()));
     });
 
     it(`lands a guest on its chat, the one screen it has in a box it was let into`, async () => {
@@ -115,111 +126,135 @@ describe(`landing on a switched-to sandbox`, () => {
 
         await switchTo(`sb-fresh`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/chat`);
+        expect(landedOn()).toBe(insidePath(`sb-fresh`, page.chat()));
     });
 
-    it(`ignores a stored value that is not a path`, async () => {
-        session.set(`intentic.sandboxScreen.sb2`, `agents`);
+    // `/` is Home since Home became the first screen: a switch made inside a sandbox must not bounce out to it.
+    it.each([`/`, `agents`, homePath(`sb2`), insidePath(`sb1`, page.agents())])(`takes %s for no screen of the sandbox`, async (stored) => {
+        session.set(`intentic.sandboxScreen.sb2`, stored);
 
-        await switchTo(`sb2`);
+        expect(sandboxEntryPath(`sb2`)).toBe(insidePath(`sb2`, page.agents()));
+    });
 
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    it(`reads a screen an older build kept, before frames, as the sandbox's`, () => {
+        session.set(`intentic.sandboxScreen.sb2`, `/sandbox/secrets`);
+
+        expect(sandboxEntryPath(`sb2`)).toBe(insidePath(`sb2`, page.sandboxSettings(`secrets`)));
     });
 
     it(`seeds a window that has never held the screen from the last window's`, async () => {
-        local.set(`intentic.sandboxScreen.sb2`, `/approvals`);
+        local.set(`intentic.sandboxScreen.sb2`, insidePath(`sb2`, page.extension(`approvals`)));
 
         await switchTo(`sb2`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/approvals`);
+        expect(landedOn()).toBe(insidePath(`sb2`, page.extension(`approvals`)));
+    });
+
+    it(`lands where a switch with a known destination asked, in either form of address`, async () => {
+        landOnAfterSwitch(`sb2`, `/agents/cnv_9`);
+
+        await switchTo(`sb2`);
+
+        expect(landedOn()).toBe(insidePath(`sb2`, page.agent(`cnv_9`)));
+    });
+
+    it(`keeps an account page in view, of the sandbox switched to`, async () => {
+        await go(insidePath(`sb1`, page.account(`appearance`)));
+
+        await switchTo(`sb2`);
+
+        expect(landedOn()).toBe(insidePath(`sb2`, page.account(`appearance`)));
+    });
+});
+
+describe(`a switch the address made`, () => {
+    it(`is the route's own answer, so nothing moves the reader again`, async () => {
+        routeChoosesSandbox();
+        await switchTo(`sb2`);
+
+        expect(replace).not.toHaveBeenCalled();
+    });
+
+    it(`answers the next switch once its navigation has landed`, async () => {
+        await go(insidePath(`sb2`, page.workspace()));
+
+        await switchTo(`sb3`);
+
+        expect(landedOn()).toBe(insidePath(`sb3`, page.agents()));
     });
 });
 
 describe(`what counts as a sandbox's screen`, () => {
-    it(`never records a page outside the shell: /setup belongs to the account`, async () => {
-        navigate(outsideRoute(`/setup`));
-        await switchTo(`sb2`);
-        navigate(shellRoute(`/agents`));
-
-        await switchTo(`sb1`);
-
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
-    });
-
-    it(`does not land while the user is outside the shell: the setup flow makes its new sandbox active`, async () => {
-        navigate(shellRoute(`/agents`));
-        navigate(outsideRoute(`/setup`));
+    it(`never records a page outside the shell, and does not land while the reader is outside it`, async () => {
+        await go(insidePath(`sb1`, page.agents()));
+        await go(`/login`);
 
         await switchTo(`sb2`);
 
         expect(replace).not.toHaveBeenCalled();
+        expect(sandboxEntryPath(`sb1`)).toBe(insidePath(`sb1`, page.agents()));
     });
 
     it(`does not record a navigation that failed: the screen nobody reached`, async () => {
-        navigate(shellRoute(`/agents`));
-        navigate(shellRoute(`/workspace/src/foo.ts`), { type: 8 });
-        await switchTo(`sb2`);
+        await go(insidePath(`sb1`, page.agents()));
+        const refuse = router.beforeEach(() => false);
+        await router.push(insidePath(`sb1`, page.workspace(`src/foo.ts`)));
+        refuse();
 
-        await switchTo(`sb1`);
+        expect(sandboxEntryPath(`sb1`)).toBe(insidePath(`sb1`, page.agents()));
+    });
 
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    it(`records a page of the sandbox seen in Home's frame as its screen inside it`, async () => {
+        await go(homePath(`sb1`, page.workspace(`src/a.ts`, { query: { agent: `cnv_1` } })));
+
+        expect(sandboxEntryPath(`sb1`)).toBe(insidePath(`sb1`, page.workspace(`src/a.ts`, { query: { agent: `cnv_1` } })));
     });
 });
 
-
-describe(`the master view spans sandboxes`, () => {
-    it(`keeps switching on the master view instead of restoring a sandbox screen`, async () => {
-        navigate(shellRoute(`/home`));
-        await switchTo(`sb2`);
-        expect(replace).not.toHaveBeenCalled();
-    });
-
-    it(`does not replace the sandbox's remembered screen with the master view`, async () => {
-        navigate(shellRoute(`/agents`));
-        navigate(shellRoute(`/home/sb1`));
-        await switchTo(`sb2`);
-        navigate(shellRoute(`/workspace`));
-        await switchTo(`sb1`);
-        expect(replace).toHaveBeenLastCalledWith(`/agents`);
-    });
-});
-
-// Home's frame around the section it shows of every sandbox (lib/routes/homeSection.ts): a switch there stays on that
-// section, of the sandbox switched to.
-describe(`a switch in Home's frame around a section`, () => {
-    const workspace = { id: `workspace`, to: `/workspace`, label: `Workspace` };
-
-    it(`lands on the section, at the screen that sandbox was last on there when it has one`, async () => {
-        navigate(shellRoute(`/agents`));
-        await switchTo(`sb2`);
-        navigate(shellRoute(`/workspace/src/b.ts`));
-        homeSection.value = workspace;
-        homeFrame.value = `docked`;
-
-        await switchTo(`sb1`);
-        expect(replace).toHaveBeenLastCalledWith(`/workspace`);
-
-        await switchTo(`sb2`);
-        expect(replace).toHaveBeenLastCalledWith(`/workspace/src/b.ts`);
-    });
-
-    it(`leaves a sandbox's settings opened from Home in view, for whoever switched to say where to go`, async () => {
-        navigate(shellRoute(`/sandbox/models`));
-        homeSection.value = workspace;
-        homeFrame.value = `docked`;
-        replace.mockClear();
+describe(`a switch in Home's frame`, () => {
+    it(`does nothing on Home with no sandbox named`, async () => {
+        await go(homePath());
 
         await switchTo(`sb2`);
 
         expect(replace).not.toHaveBeenCalled();
     });
 
-    it(`is the section's own address for a sandbox never shown, and the remembered screen only when the section owns it`, () => {
-        session.set(`intentic.sandboxScreen.sb2`, `/workspace/src/b.ts?agent=cnv_1`);
-        session.set(`intentic.sandboxScreen.sb3`, `/workspaces`);
+    it(`goes from one sandbox's home conversation to the other's`, async () => {
+        await go(homePath(`sb1`));
 
-        expect(sectionEntryPath(`sb-fresh`, workspace)).toBe(`/workspace`);
-        expect(sectionEntryPath(`sb2`, workspace)).toBe(`/workspace/src/b.ts?agent=cnv_1`);
-        expect(sectionEntryPath(`sb3`, workspace)).toBe(`/workspace`);
+        await switchTo(`sb2`);
+
+        expect(landedOn()).toBe(homePath(`sb2`));
+    });
+
+    it(`lands on the section chosen there, at the screen that sandbox was last on in it when it has one`, async () => {
+        await go(insidePath(`sb2`, page.workspace(`src/b.ts`)));
+        homeSection.value = WORKSPACE;
+        await go(homePath(`sb1`, page.workspace()));
+
+        await switchTo(`sb3`);
+        expect(landedOn()).toBe(homePath(`sb3`, page.workspace()));
+
+        await switchTo(`sb2`);
+        expect(landedOn()).toBe(homePath(`sb2`, page.workspace(`src/b.ts`)));
+    });
+
+    it(`keeps a sandbox's settings seen from Home in view, of the sandbox switched to`, async () => {
+        await go(homePath(`sb1`, page.sandboxSettings(`models`)));
+
+        await switchTo(`sb2`);
+
+        expect(landedOn()).toBe(homePath(`sb2`, page.sandboxSettings(`models`)));
+    });
+
+    it(`is the section's own page for a sandbox never shown, and the remembered screen only when it is the section's`, () => {
+        session.set(`intentic.sandboxScreen.sb2`, insidePath(`sb2`, page.workspace(`src/b.ts`, { query: { agent: `cnv_1` } })));
+        session.set(`intentic.sandboxScreen.sb3`, insidePath(`sb3`, page.agents()));
+
+        expect(sectionEntryPath(`sb-fresh`, WORKSPACE)).toBe(homePath(`sb-fresh`, page.workspace()));
+        expect(sectionEntryPath(`sb2`, WORKSPACE)).toBe(homePath(`sb2`, page.workspace(`src/b.ts`, { query: { agent: `cnv_1` } })));
+        expect(sectionEntryPath(`sb3`, WORKSPACE)).toBe(homePath(`sb3`, page.workspace()));
+        expect(homeEntryPath(`sb3`)).toBe(homePath(`sb3`));
     });
 });

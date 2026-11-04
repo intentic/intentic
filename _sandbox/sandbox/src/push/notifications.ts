@@ -1,3 +1,4 @@
+import { legacyPathOf, page, topPath } from "@intentic/sandbox-contract/app-routes";
 import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
 import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
@@ -9,6 +10,9 @@ import type { DiskPressure } from "@intentic/sandbox-contract/schemas/metrics";
 // - `tag` collapses a replacement onto its predecessor: one per waiting card or need, so two waiting at once both stay on
 //   screen; one per conversation for a finished turn, per automation or repository for the rest.
 // - `requireInteraction` is set only while the agent is blocked waiting on an answer.
+// - `url` is built by the editor's own table (@intentic/sandbox-contract/app-routes). A page of the sandbox is written in
+//   the form addresses had before frames (`legacyPathOf`), which every editor opens in the sandbox its reader had open
+//   last; the sender names this sandbox in it once it knows its own id (push.ts `placedIn`).
 
 // Trims a prompt to fit a lock screen without cutting mid-word.
 const summarize = (prompt: string, limit = 90): string => {
@@ -21,8 +25,10 @@ const summarize = (prompt: string, limit = 90): string => {
     return `${lastSpace > limit / 2 ? cut.slice(0, lastSpace) : cut}…`;
 };
 
-// Must match the route the web client uses to open a conversation.
-export const conversationUrl = (conversationId: string): string => `/?conversation=${encodeURIComponent(conversationId)}`;
+// Must match the route the web client uses to open a conversation: the bare address with `?conversation=`, which the
+// editor's conversation-link guard reads (router/conversationLink.ts) and the Android app parses for its own screen.
+export const conversationUrl = (conversationId: string, extra: { readonly need?: string } = {}): string =>
+    topPath(`root`, {}, { conversation: conversationId, need: extra.need });
 
 export const turnFinished = (conversationId: string, prompt: string, outcome: { ok: boolean; error?: string }): PushNotification => ({
     title: outcome.ok ? "Turn finished" : "Turn failed",
@@ -98,7 +104,7 @@ export const turnAwaiting = (conversationId: string, kind: ParkKind, card?: Awai
 export const needRaised = (need: { readonly id: string; readonly conversationId: string; readonly title: string; readonly why?: string | undefined }, conversationTitle: string | undefined): PushNotification => ({
     title: conversationTitle === undefined || conversationTitle === "" ? `An agent needs: ${need.title}` : `${summarize(conversationTitle, 40)} needs: ${need.title}`,
     body: need.why === undefined || need.why === "" ? "Answer it in the chat, or in Needs you." : summarize(need.why),
-    url: `${conversationUrl(need.conversationId)}&need=${encodeURIComponent(need.id)}`,
+    url: conversationUrl(need.conversationId, { need: need.id }),
     tag: `need-${need.id}`,
     requireInteraction: true,
 });
@@ -108,7 +114,7 @@ export const needRaised = (need: { readonly id: string; readonly conversationId:
 export const pushRefused = (run: PushRun): PushNotification => ({
     title: commandRunOutcome(run, "Push"),
     body: `${run.repo}: ${run.reason ?? run.command}`,
-    url: "/workspace",
+    url: legacyPathOf(page.workspace()),
     // Per repository: a workspace can push several, a new verdict replaces the old one for that repo.
     tag: `push-${run.repo}`,
     requireInteraction: true,
@@ -127,17 +133,21 @@ export const diskLow = (level: "low" | "critical", state: DiskPressure): PushNot
     return {
         title: level === "critical" ? "The sandbox's disk is almost full" : "The sandbox's disk is getting full",
         body: `${gigabytes(state.freeBytes)} free (${String(percent)}%). ${reaped} Storage shows what is using the rest.`,
-        url: "/sandbox",
+        url: legacyPathOf(page.sandboxSettings()),
         tag: "disk-low",
         requireInteraction: level === "critical",
     };
 };
 
+// Where every automation's news opens: the Automations view, which is the automations extension's own. Until 2026-11-04
+// these pointed at `/automations`, a page the app does not have, so a tap opened nothing in particular.
+const AUTOMATIONS_URL = legacyPathOf(page.extension(`automations`));
+
 // An automation has no title of its own; uses its prompt, the same label the Automations page shows.
 export const automationPending = (automationId: string, prompt: string): PushNotification => ({
     title: "Automation needs approval",
     body: summarize(prompt),
-    url: `/automations`,
+    url: AUTOMATIONS_URL,
     tag: `approval-${automationId}`,
     requireInteraction: true,
 });
@@ -150,7 +160,7 @@ export const automationFired = (
 ): PushNotification => ({
     title: summarize(automation.note ?? `Automation ${automation.id} fired`, 60),
     body: saw === undefined || saw.trim() === "" ? summarize(automation.prompt) : summarize(saw),
-    url: `/automations`,
+    url: AUTOMATIONS_URL,
     tag: `automation-${automation.id}`,
 });
 
@@ -161,7 +171,7 @@ export const automationExpired = (
 ): PushNotification => ({
     title: fired ? "Watch ended" : "Watch gave up",
     body: `${summarize(automation.note ?? automation.prompt, 70)}: ${fired ? "it reached its end date and is switched off." : "it reached its end date without firing."}`,
-    url: `/automations`,
+    url: AUTOMATIONS_URL,
     tag: `automation-${automation.id}`,
 });
 

@@ -4,8 +4,9 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
+import { homePath, insidePath, isSandboxPage, page, PAGE_PATTERNS, type PageName } from "@intentic/sandbox-contract/app-routes";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
 
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`div`, { "data-gate": name }) }) });
 jest.mock(`./SandboxTooOld.vue`, () => stub(`too-old`));
@@ -23,10 +24,22 @@ jest.mock(`../overview/useSandboxAvailability`, () => ({ useSandboxAvailability:
 const { setDaemonVersion } = await import("../../../client/sandbox/daemon/useDaemonVersion");
 const { default: SandboxGate } = await import("./SandboxGate.vue");
 
+// The shell's pages in both frames, each record saying its frame and page as the real table does.
+const BOX = `a1b2c3d4e5f6`;
+const view = defineComponent({ render: () => null });
+const routes: RouteRecordRaw[] = [
+    { path: `/home/:sandbox?`, meta: { frame: `home` }, component: view },
+    // SAFETY: PAGE_PATTERNS is a const literal whose own keys are exactly PageName; Object.entries only widens them.
+    ...(Object.entries(PAGE_PATTERNS) as [PageName, string][]).flatMap(([name, pattern]): RouteRecordRaw[] => [
+        { path: `/s/:sandbox/${pattern}`, meta: { frame: `inside`, page: name }, component: view },
+        { path: isSandboxPage(name) ? `/home/:sandbox/${pattern}` : `/home/${pattern}`, meta: { frame: `home`, page: name }, component: view },
+    ]),
+];
+
 let app: App | undefined;
 let router: ReturnType<typeof createRouter>;
-const mount = async (path = `/agents`): Promise<HTMLElement> => {
-    router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:path(.*)*`, component: defineComponent({ render: () => null }) }] });
+const mount = async (path = insidePath(BOX, page.agents())): Promise<HTMLElement> => {
+    router = createRouter({ history: createMemoryHistory(), routes });
     await router.push(path);
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -78,32 +91,38 @@ it(`keeps a refused account's page first`, async () => {
     expect(shown(el)).toBe(`unauthorized`);
 });
 
-it(`opens settings from Home with unfinished setup, and still gates sandbox pages`, async () => {
+it(`opens settings from Home with unfinished setup, and still gates sandbox pages, in Home's frame too`, async () => {
     reachable.value = false;
     established.value = false;
-    const el = await mount(`/home`);
+    const el = await mount(homePath());
     expect(shown(el)).toBe(`page`);
-    await router.push(`/settings`);
+    await router.push(homePath(undefined, page.account()));
     expect(shown(el)).toBe(`page`);
-    await router.push(`/settings/appearance`);
+    await router.push(homePath(undefined, page.account(`appearance`)));
     expect(shown(el)).toBe(`page`);
-    await router.push(`/agents`);
+    await router.push(homePath(BOX, page.agents()));
+    expect(shown(el)).toBe(`connecting`);
+    await router.push(insidePath(BOX, page.agents()));
     expect(shown(el)).toBe(`connecting`);
 });
 
-it.each([`/settings`, `/settings/appearance`, `/settings/billing`, `/settings/tokens`, `/deleted-sandboxes`])(
-    `opens a direct visit to %s even when the sandbox is unavailable, too old or refuses access`,
-    async (path) => {
-        reachable.value = false;
-        established.value = false;
-        setDaemonVersion(`1.200.0:1`);
-        connection.value = { failure: { kind: `forbidden` } };
-        const el = await mount(path);
-        expect(shown(el)).toBe(`page`);
-        await router.push(`/sandbox`);
-        expect(shown(el)).toBe(`unauthorized`);
-        connection.value = {};
-        await nextTick();
-        expect(shown(el)).toBe(`too-old`);
-    },
-);
+it.each([
+    homePath(undefined, page.account()),
+    homePath(undefined, page.account(`appearance`)),
+    insidePath(BOX, page.account(`billing`)),
+    insidePath(BOX, page.account(`tokens`)),
+    homePath(undefined, page.deletedSandboxes()),
+    insidePath(BOX, page.deletedSandboxes()),
+])(`opens a direct visit to %s even when the sandbox is unavailable, too old or refuses access`, async (path) => {
+    reachable.value = false;
+    established.value = false;
+    setDaemonVersion(`1.200.0:1`);
+    connection.value = { failure: { kind: `forbidden` } };
+    const el = await mount(path);
+    expect(shown(el)).toBe(`page`);
+    await router.push(insidePath(BOX, page.sandboxSettings()));
+    expect(shown(el)).toBe(`unauthorized`);
+    connection.value = {};
+    await nextTick();
+    expect(shown(el)).toBe(`too-old`);
+});

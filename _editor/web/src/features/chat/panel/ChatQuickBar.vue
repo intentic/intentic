@@ -7,6 +7,7 @@ import { chatBarSlot } from "../../../workbench/window/panelSlots";
 import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { useT } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { contextPct } from "../../../models/agent-status/agentStatus-meta";
@@ -119,13 +120,13 @@ const onEscape = (event: KeyboardEvent): void => {
 // The header's press: the conversation itself, where its turns are read.
 const openChat = (): void => {
     collapse();
-    void router.push(`/chat`);
+    void router.push(here(page.chat()));
 };
 
 // A press on the pill is the one way in: the composer with the caret in it, or, while a card waits, the chat itself.
 const onPress = (): void => {
     if (standing.value === `asking`) {
-        void router.push(`/chat`);
+        void router.push(here(page.chat()));
         return;
     }
     expand(true);
@@ -140,10 +141,10 @@ watch(composerFocus, () => {
 });
 
 // A board card's click, or a run it follows, asks to see the chat's turns (showParkedChat), and the pad draws none:
-// the turns are on /chat, so that is where the ask goes.
+// the turns are on the chat's own page, so that is where the ask goes.
 watch(quickBarShowAsk, () => {
     collapse();
-    void router.push(`/chat`);
+    void router.push(here(page.chat()));
 });
 
 // The slot is published only while the pill is on screen, and leaving closes the box over a surface with its own.

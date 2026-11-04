@@ -11,12 +11,9 @@ import { processAskedBy } from "../../models/processes/processAddress";
 import HomeNewSandbox from "./newSandbox/HomeNewSandbox.vue";
 import NewSandboxDialog from "./newSandbox/NewSandboxDialog.vue";
 import { newSandbox, newSandboxDialogShown, newSandboxPageShown } from "./newSandbox/newSandbox";
-import { useRole } from "../../client/sandbox/useRole";
-import { homeSection } from "../../lib/routes/homeSection";
-import { sectionEntryPath } from "../../models/sandbox/sandboxScreen";
+import { homeEntryPath } from "../../models/sandbox/sandboxScreen";
 const route = useRoute();
 const router = useRouter();
-const { homeOnly } = useRole();
 const { mobile } = useDevice();
 const sandbox = useSandbox();
 const list = computed(() => mobile.value && route.params[`sandbox`] === undefined);
@@ -27,32 +24,23 @@ const asking = computed(() => !mobile.value && newSandboxDialogShown(route, newS
 const making = computed(() => !mobile.value && newSandboxPageShown(route, newSandbox.value));
 // A process's page (sign-in, this PC's setup, a sandbox's) in the chat's place while its tile is selected (HomeProcess.vue).
 const following = computed(() => !mobile.value && !making.value && processAskedBy(route) !== undefined);
-// HOME OPENS ON THE SECTION CHOSEN FOR IT (lib/routes/homeSection.ts): its bare address (the first screen, the Home
-// command, a dialog closing back onto it) shows that section of the selected sandbox rather than its home conversation.
-// Every other ask of Home (a dialog, a process's page, a view shown in place) is answered here as it always was.
+// HOME'S BARE ADDRESS NAMES A SANDBOX BEFORE IT SHOWS ONE, on a desktop: the first screen, the Home command and a dialog
+// closing back onto it (`/home`) become the sandbox open last, on the section chosen for every sandbox
+// (lib/routes/homeSection.ts) or its home conversation, so the address says what the page shows and Back returns to it.
+// Every other ask of Home (a dialog, a process's page, a view shown in place) is answered here as it always was; a phone
+// keeps the bare address for its list of sandboxes. The sandbox an address names is selected by the router
+// (router/shellGates.ts).
 const sectionTarget = computed(() => {
-    const section = mobile.value || homeOnly.value ? undefined : homeSection.value;
     const id = sandbox.activeSandboxId.value;
     const bare = route.name === `home` && route.params[`sandbox`] === undefined && Object.keys(route.query).length === 0 && route.hash === ``;
     const offered = switchableSandboxes(sandbox.sandboxes.value).some((box) => box.id === id);
-    return section === undefined || id === undefined || !bare || !offered ? undefined : sectionEntryPath(id, section);
+    return mobile.value || id === undefined || !bare || !offered ? undefined : homeEntryPath(id);
 });
 watch(
     sectionTarget,
     (target) => {
         if (target !== undefined) {
             void router.replace(target);
-        }
-    },
-    { immediate: true },
-);
-watch(
-    () => [route.params[`sandbox`], sandbox.sandboxes.value] as const,
-    ([id, boxes]) => {
-        // Only a sandbox the rail offers: a link naming an unfinished setup must not make it the active one.
-        const selected = switchableSandboxes(boxes).find((box) => box.id === id);
-        if (selected !== undefined && sandbox.activeSandboxId.value !== selected.id) {
-            sandbox.select(selected.id);
         }
     },
     { immediate: true },

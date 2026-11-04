@@ -1,3 +1,4 @@
+import { page, toHome } from "../../lib/routes/links";
 import { settingsDestinations, settingsGroups, settingsPartHosts, settingsPartPath, settingsSections } from "./settingsNav";
 
 // Which sections the settings index offers: a plan only where the platform sells one, nothing about a keyboard (or the
@@ -55,10 +56,14 @@ it(`leaves the tokens out of a non-coder's index, and their heading with them, b
     expect(settingsSections(true, false, false).map((section) => section.slug)).toContain(`tokens`);
 });
 
-// Voice keeps its old address and palette name while drawn under Notifications.
+// Voice keeps its old address and palette name while drawn under Notifications. No route is on screen here, so each
+// address is the account's settings in Home's frame, which need no sandbox.
 it(`sends a part's old address and its name to its anchor on the section it is drawn on`, () => {
+    const data = toHome(undefined, page.account(`data`));
+    const voice = toHome(undefined, page.account(`notifications`, { hash: `voice` }));
     expect(settingsPartHosts()).toEqual([{ part: `voice`, host: `notifications` }]);
-    expect(settingsDestinations(true).find((place) => place.slug === `data`)?.path).toBe(`/settings/data`);
-    expect(settingsPartPath(`voice`)).toBe(`/settings/notifications#voice`);
-    expect(settingsDestinations(true).map((place) => place.path)).toEqual(expect.arrayContaining([`/settings/data`, `/settings/notifications#voice`]));
+    expect(settingsDestinations(true).find((place) => place.slug === `data`)?.path).toBe(data);
+    expect(settingsDestinations(true).find((place) => place.slug === `profile`)?.path).toBe(toHome(undefined, page.account()));
+    expect(settingsPartPath(`voice`)).toBe(voice);
+    expect(settingsDestinations(true).map((place) => place.path)).toEqual(expect.arrayContaining([data, voice]));
 });

@@ -9,6 +9,7 @@ import { namespaceHolderReady } from "../namespace-holder.js";
 
 export const AGENT_UID = 1500;
 export const AGENT_GID = 1500;
+// allow(route-literal): the agent user's home directory, not Home's frame.
 export const AGENT_HOME = "/home/agent";
 export const DOMAIN_READY = "agent-domain-ready";
 const USER_READY = "agent-user-ready";

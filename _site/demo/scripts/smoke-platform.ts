@@ -97,7 +97,7 @@ const stubBrowser = (): void => {
     sessionStorage.setItem(`intentic.demo.mode`, `fresh`);
     Object.assign(globalThis, {
         window: globalThis,
-        location: new URL(`https://demo.smoke.invalid/demo/settings/billing`),
+        location: new URL(`https://demo.smoke.invalid/demo/home/account/billing`),
         history: { state: null, replaceState: ignore, pushState: ignore },
         sessionStorage,
         localStorage: store(),
@@ -155,7 +155,12 @@ const STEPS: readonly Step[] = [
     { group: `me`, name: `get`, input: () => undefined },
     { group: `me`, name: `signInOptions`, input: () => undefined },
     { group: `hostedPlan`, name: `state`, input: () => undefined, check: (plan) => said(!plan.onPlan, `a first-day account is not on the plan`) },
-    { group: `hostedPlan`, name: `checkout`, input: () => ({ tier: `standard` }), check: (door) => said(door.url.includes(`/settings/billing?plan=welcome`), `checkout returns to Billing`) },
+    {
+        group: `hostedPlan`,
+        name: `checkout`,
+        input: () => ({ tier: `standard` }),
+        check: (door) => said(door.url.includes(`/home/account/billing?plan=welcome`), `checkout returns to Billing`),
+    },
     { group: `hostedPlan`, name: `state`, input: () => undefined, check: (plan) => said(plan.onPlan, `the checkout put the account on the plan`) },
     { group: `hostedPlan`, name: `setSlots`, input: () => ({ tier: `max`, quantity: 1 }), check: (plan) => said(plan.hosted?.slotsByTier[`max`] === 1, `a Max slot was bought`) },
     { group: `hostedPlan`, name: `portal`, input: () => undefined },

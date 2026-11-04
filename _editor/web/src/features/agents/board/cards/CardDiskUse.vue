@@ -7,6 +7,7 @@ import { CARD_DISK_MARK_BYTES, checkoutParts, checkoutTotal } from "../../../san
 import { checkoutPartLabel } from "../../../sandbox/overview/storage/checkoutLabels";
 import { STORAGE_ANCHOR } from "../../../sandbox/overview/storage/storageAnchor";
 import { useCheckoutSizes } from "../../../sandbox/overview/storage/useCheckoutSizes";
+import { here, page } from "../../../../lib/routes/links";
 
 // How much disk this conversation's checkout held at the last scan, once that is worth a look (a Rust target alone is
 // 10-30 GB), linking to the Disk card where it can be freed. This sandbox's cards only: the scan is this daemon's.
@@ -23,7 +24,7 @@ const detail = computed(() => [t(`agents.cardDiskUse.lastScan`), ...(row.value =
 <template>
     <RouterLink
         v-if="total >= CARD_DISK_MARK_BYTES"
-        :to="`/sandbox#${STORAGE_ANCHOR}`"
+        :to="here(page.sandboxSettings(undefined, { hash: STORAGE_ANCHOR }))"
         class="flex min-w-0 items-center gap-1.5 self-start text-2xs text-muted hover:text-content"
         data-disk-use
         v-tooltip.top.lines="detail"

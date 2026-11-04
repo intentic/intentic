@@ -8,13 +8,17 @@ import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/v
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
+
 // Mounting reads matchMedia (useDevice) and window.env (environment.ts) at module scope; see startAgent.test.ts.
 
 // URL-driven: the route names the vpn tile and nothing navigates. Empty `query` isn't padding, the rail and grid
 // filter read off it, so a route without one is one vue-router never hands out.
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ params: { entry: `vpn` }, query: {} }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry: `vpn` }, query: {} }) as never,
     useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
 }));
 

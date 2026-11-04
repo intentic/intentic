@@ -14,6 +14,7 @@ import { useOperations } from "../../../workbench/operations/operations";
 import { agentDisplayTitle, agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useStandingGrants } from "./useStandingGrants";
+import { here, page } from "../../../lib/routes/links";
 
 const t = useT();
 
@@ -203,7 +204,7 @@ const takeBackAll = async (conversationId: string, title: string, items: readonl
 };
 
 // The conversation's own page, which opens an archived one too: its transcript and its work are kept there.
-const pageOf = (conversationId: string): string => `/agents/${encodeURIComponent(conversationId)}`;
+const pageOf = (conversationId: string): string => here(page.agent(conversationId));
 </script>
 
 <template>

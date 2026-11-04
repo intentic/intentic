@@ -3,6 +3,7 @@ import { markSeenAcross, otherBoxes } from "../sandbox/live/fleetAcross";
 import { onScreen } from "../../workbench/window/onScreen";
 import { connectedSandboxes } from "../sandbox/live/roster";
 import { landOnAfterSwitch } from "../sandbox/sandboxScreen";
+import { page, toInside } from "../../lib/routes/links";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { turnInFlight } from "../agent-status/agentStatus-standing";
 import { answeredAt } from "../agent-status/answeredAt";
@@ -96,6 +97,6 @@ export const isRemote = (agent: Pick<FleetAgent, "sandboxId">): boolean =>
 // Go to the agent in its own box, the one action on a distant card that costs a switch: reading and settling are calls
 // addressed by id, but talking to one needs the chat singleton, which exists for one sandbox at a time.
 export const openInSandbox = (sandboxId: string, agentId: string): void => {
-    landOnAfterSwitch(sandboxId, `/agents/${encodeURIComponent(agentId)}`);
+    landOnAfterSwitch(sandboxId, toInside(sandboxId, page.agent(agentId)));
     useSandbox().select(sandboxId);
 };

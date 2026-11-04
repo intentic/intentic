@@ -1,8 +1,9 @@
 import type { IntenticApi } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { unstubbed } from "@intentic/testing";
-import { branchMenuItems, opensFrom, shortBranchName, workspaceViewPath } from "./branchActions.js";
+import { branchMenuItems, opensFrom, shortBranchName, workspaceViewLink } from "./branchActions.js";
 import { bindHost } from "./host.js";
 import { messages } from "./i18n.js";
 import { manifest } from "./manifest.js";
@@ -37,10 +38,11 @@ describe(`opensFrom`, () => {
     });
 });
 
-describe(`workspaceViewPath`, () => {
-    it(`encodes both halves, since a repository and a branch both carry slashes`, () => {
-        expect(workspaceViewPath(`apps/web`, `feature/x`)).toBe(`/workspace?repo=apps%2Fweb&branch=feature%2Fx`);
-        expect(workspaceViewPath(`root`, `fix#1`)).toBe(`/workspace?repo=root&branch=fix%231`);
+describe(`workspaceViewLink`, () => {
+    it(`names both halves in the query, encoded in the address, since a repository and a branch both carry slashes`, () => {
+        bindHost(unstubbed<IntenticApi>(`host`, { links: page }));
+        expect(insidePath(`sb`, workspaceViewLink(`apps/web`, `feature/x`))).toBe(`/s/sb/workspace?repo=apps%2Fweb&branch=feature%2Fx`);
+        expect(insidePath(`sb`, workspaceViewLink(`root`, `fix#1`))).toBe(`/s/sb/workspace?repo=root&branch=fix%231`);
     });
 });
 
@@ -50,6 +52,7 @@ describe(`branchMenuItems`, () => {
         const composeFrom = jest.fn();
         bindHost(
             unstubbed<IntenticApi>(`host`, {
+                links: page,
                 navigate,
                 chat: unstubbed<IntenticApi["chat"]>(`chat`, { composeFrom }),
             }),
@@ -59,7 +62,7 @@ describe(`branchMenuItems`, () => {
         expect(view?.label).toBe(`View feature/x in Workspace`);
         expect(start?.label).toBe(`Start an agent from feature/x`);
         view?.command?.({ originalEvent: new Event(`click`), item: view });
-        expect(navigate).toHaveBeenCalledWith(`/workspace?repo=root&branch=feature%2Fx`);
+        expect(navigate).toHaveBeenCalledWith(page.workspace(undefined, { query: { repo: `root`, branch: `feature/x` } }));
         start?.command?.({ originalEvent: new Event(`click`), item: start });
         expect(composeFrom).toHaveBeenCalledWith({ repo: `root`, branch: `feature/x` });
     });

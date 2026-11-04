@@ -19,6 +19,7 @@ import { queryClient } from "../../lib/queryPersistence";
 import { projectScope } from "../../app/projectScope";
 import { ensureProjectPersona, projectPersonaId } from "../sandbox/personas/projectPersona";
 import { navigation } from "../../workbench/navigation/navigation";
+import { here, page } from "../../lib/routes/links";
 import { otherBoxes, refreshAcross } from "../sandbox/live/fleetAcross";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../conversations/review/conflictResolution";
@@ -132,7 +133,7 @@ export const composeAgent = (prompt: string): void => {
 // shows. Local only, since a background window navigating itself would yank the route from under whoever returns to it.
 export const revealConversation = (conversation: Conversation): void => {
     if (useDevice().mobile.value) {
-        void navigation().push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
+        void navigation().push(here(page.agent(conversation.conversationId)));
     }
 };
 

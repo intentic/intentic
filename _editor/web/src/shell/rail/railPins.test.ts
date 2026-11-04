@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { homePath, insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { useRailPins } from "./railPins";
 
 // Pins the reader's overrule of the rail table: a toggle is visible to the rail immediately (localStorage isn't
@@ -43,4 +44,17 @@ it(`treats pins it cannot read as no pins, rather than as a broken rail`, () => 
 
     localStorage.setItem(KEY, JSON.stringify({ drafts: true }));
     expect([...useRailPins().pinned.value]).toEqual([]);
+});
+
+it(`keeps a tile's pin by its page, so a pin made inside the sandbox holds in Home's frame and one kept before frames still holds`, () => {
+    const komodo = page.extension(`komodo`, `main`);
+    localStorage.setItem(KEY, JSON.stringify([`/ext/komodo/main`]));
+    const pins = useRailPins();
+    expect(pins.isPinned(insidePath(`a1b2c3d4e5f6`, komodo))).toBe(true);
+    expect(pins.isPinned(homePath(`a1b2c3d4e5f6`, komodo))).toBe(true);
+
+    pins.toggle(insidePath(`a1b2c3d4e5f6`, komodo));
+    expect(pins.isPinned(`/ext/komodo/main`)).toBe(false);
+    pins.toggle(insidePath(`a1b2c3d4e5f6`, page.devices()));
+    expect(JSON.parse(localStorage.getItem(KEY) ?? `[]`)).toEqual([`/devices`]);
 });

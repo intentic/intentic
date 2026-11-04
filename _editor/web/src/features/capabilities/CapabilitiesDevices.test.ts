@@ -7,6 +7,11 @@ import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import * as actualVueRouter from "vue-router";
+import { linkOf } from "../../lib/routes/links";
+
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
 import * as actualUseDevices from "../../models/sandbox/devices/useDevices";
 
 const NOW = 1_700_000_000_000;
@@ -14,7 +19,7 @@ const NOW = 1_700_000_000_000;
 const push = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ params: { entry: `linux` }, query: {} }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry: `linux` }, query: {} }) as never,
     useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
@@ -161,9 +166,7 @@ it(`carries the machine's own name into the form that connects it`, async () => 
     await nextTick();
 
     // Named after the enrollment on purpose: both doors answering to one name is what folds them into a single row.
-    expect(push).toHaveBeenCalledWith(
-        expect.objectContaining({ params: { entry: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }),
-    );
+    expect(linkOf(push.mock.calls.at(-1)?.[0])).toMatchObject({ page: `capabilities`, params: { entry: `linux` }, query: { device: `radarsu-rog` } });
 });
 
 // The row's other half. A machine listed under "your connections" holds no capability to remove, so without this the

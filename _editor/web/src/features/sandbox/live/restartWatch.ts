@@ -1,5 +1,6 @@
 import { computed, effectScope, type EffectScope, shallowRef, watch } from "vue";
 import { navigation } from "../../../workbench/navigation/navigation";
+import { here, isPage, page } from "../../../lib/routes/links";
 import { type NotificationInput, useNotifications } from "../../../workbench/notifications/notifications";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useHostHolding } from "../../../models/sandbox/devices/useDevices";
@@ -31,11 +32,11 @@ const READING_IT = new Set([`environment`, SANDBOX_DEFAULT_SECTION, undefined]);
 const onTheCard = (): boolean => {
     const route = navigation().currentRoute.value;
     const tab = route.params[`tab`];
-    return route.name === `sandbox` && READING_IT.has(typeof tab === `string` && tab !== `` ? tab : undefined);
+    return isPage(route, `sandboxSettings`) && READING_IT.has(typeof tab === `string` && tab !== `` ? tab : undefined);
 };
 
 const openEnvironment = (): void => {
-    void navigation().push({ name: `sandbox`, params: { tab: `environment` } });
+    void navigation().push(here(page.sandboxSettings(`environment`)));
 };
 
 const failureTitle = (run: DevRebuildRun): string => {

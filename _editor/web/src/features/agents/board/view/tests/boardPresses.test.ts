@@ -6,6 +6,8 @@ import type { RouteLocationRaw, Router } from "vue-router";
 import type { Strip } from "../../../../../models/conversations/tabs/tabFacts";
 import { forgetOperations } from "../../../../../workbench/operations/operations";
 import { useBoardPresses } from "../boardPresses";
+import { linkOf, page } from "../../../../../lib/routes/links";
+import { activeSandboxId } from "../../../../../app/storage/activeSandbox";
 
 // Pins the presses that land on no agent card: a run's stop stays marked until the ledger says it stopped, a refused
 // stop or filing says why on the notice strip rather than throwing at the row, a run's diagram is the workflows page
@@ -24,6 +26,8 @@ afterEach(() => {
 });
 
 const pressesOf = (runs = shallowRef<readonly WorkflowRun[]>([run(`r1`, `running`)])) => {
+    // The sandbox open, which the workflows page opens in: no route of the shell is on screen.
+    activeSandboxId.value = `a1b2c3d4e5f6`;
     const write = () => ({ mutateAsync: jest.fn(async (_runId: string): Promise<unknown> => undefined) });
     const workflows = { runs, stop: write(), archive: write(), unarchive: write() };
     const push = jest.fn(async (_to: RouteLocationRaw) => undefined);
@@ -120,7 +124,7 @@ describe(`a workflow run's row`, () => {
     it(`opens its diagram on the workflows page`, () => {
         const { push, presses } = pressesOf();
         presses.openRunGraph(run(`r1`, `running`));
-        expect(push.mock.calls).toEqual([[{ name: `extension`, params: { ext: `workflows` }, query: { run: `r1` } }]]);
+        expect(push.mock.calls.map(([to]) => linkOf(to))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
     });
 
     // The page is a listed extension: a sandbox without it still answers the press, in the chat, never with a 404.
@@ -154,7 +158,7 @@ describe(`a press on a workflow run's row`, () => {
     it(`opens the diagram for an ended run a docked chat has nothing of, and leaves the chat alone`, () => {
         const { chat, push, presses } = pressesOf();
         presses.openRun(stepped(`r1`, `done`));
-        expect(push.mock.calls).toEqual([[{ name: `extension`, params: { ext: `workflows` }, query: { run: `r1` } }]]);
+        expect(push.mock.calls.map(([to]) => linkOf(to))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
         expect(chat.follow).not.toHaveBeenCalled();
     });
 

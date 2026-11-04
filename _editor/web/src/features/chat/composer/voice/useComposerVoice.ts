@@ -2,6 +2,7 @@ import type { NoticeTone, TooltipValue } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref, watch } from "vue";
+import { here, page } from "../../../../lib/routes/links";
 import { UPDATE_ACTION_ANCHOR } from "../../../../models/sandbox/updateAnchor";
 import {
     type Heard,
@@ -121,8 +122,8 @@ const ERROR_TONE: Record<VoiceError, NoticeTone> = {
 // Where each sandbox-side failure is fixed: the update card's own button (updateAnchor.ts). The microphone's fix is in
 // the browser, so its sentence says where instead; a failed download is retried from the line itself, by anyone.
 const ERROR_ACTION: Partial<Record<VoiceError, () => { label: string; to: string }>> = {
-    "needs-rebuild": () => ({ label: t(`chat.composerVoice.updateSandbox`), to: `/sandbox#${UPDATE_ACTION_ANCHOR}` }),
-    unavailable: () => ({ label: t(`chat.composerVoice.updateSandbox`), to: `/sandbox#${UPDATE_ACTION_ANCHOR}` }),
+    "needs-rebuild": () => ({ label: t(`chat.composerVoice.updateSandbox`), to: here(page.sandboxSettings(undefined, { hash: UPDATE_ACTION_ANCHOR })) }),
+    unavailable: () => ({ label: t(`chat.composerVoice.updateSandbox`), to: here(page.sandboxSettings(undefined, { hash: UPDATE_ACTION_ANCHOR })) }),
 };
 
 // Words joined as speech is: one space, nothing doubled at either end.

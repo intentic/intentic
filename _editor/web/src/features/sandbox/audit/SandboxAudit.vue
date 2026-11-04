@@ -43,6 +43,7 @@ import {
     verdictLine,
 } from "./auditRows";
 import { downloadAudit, useAuditLog, useAuditStatus, useAuditVerify } from "./useAudit";
+import { here, page } from "../../../lib/routes/links";
 
 // The audit trail, for the owner and maintainers: a part of Activity, after what agents did, since it answers "who
 // changed this, and when" for people. The records alone: how they are kept (how long, whether reads are recorded, where a
@@ -83,7 +84,7 @@ const integrity = computed<{ readonly tone: ChipTone; readonly icon: IconName; r
 
 const { settings } = useSandboxSettings();
 // How the trail is kept, every setting of it, is Retention's (AuditKeeping.vue); the chip below is the way there.
-const RETENTION_PAGE = { name: `sandbox`, params: { tab: `retention` } } as const;
+const retentionPage = (): string => here(page.sandboxSettings(`retention`));
 
 // Whether a copy leaves the sandbox at all: the one copy nobody inside can change, so the records say when there is none.
 const forwarded = computed(() => settings.value !== undefined && settings.value.audit.forwardUrl !== ``);
@@ -230,7 +231,7 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
                 </button>
             </span>
 
-            <RouterLink v-if="outsideCopy !== undefined" :to="RETENTION_PAGE" :class="ui.chip()" v-tooltip.bottom="outsideCopy.tip">
+            <RouterLink v-if="outsideCopy !== undefined" :to="retentionPage()" :class="ui.chip()" v-tooltip.bottom="outsideCopy.tip">
                 <Icon name="external-link" class="text-xs" :class="toneInk(outsideCopy.tone)" />{{ outsideCopy.label }}
             </RouterLink>
 

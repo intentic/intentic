@@ -1,5 +1,6 @@
 import type { GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { navigation } from "../../../workbench/navigation/navigation";
+import { isPage } from "../../../lib/routes/links";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { queryClient } from "../../../lib/queryPersistence";
 import { changesKey, fetchChanges, fileDiffQuery } from "../../../models/changes/useChanges";
@@ -14,7 +15,7 @@ import { warmRows } from "./warmRows";
 // On screen (Changes panel open) the rows are `now`; everywhere else `near`, never lower. A turn ending
 // invalidates the whole review at once (list and diffs, workingReviewKeys), so it needs reading back early.
 const band = (): WarmBand => {
-    if (navigation().currentRoute.value.name !== `workspace`) {
+    if (!isPage(navigation().currentRoute.value, `workspace`)) {
         return `near`;
     }
     const layout = useLayout();

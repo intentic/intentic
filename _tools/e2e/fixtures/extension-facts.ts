@@ -1,3 +1,4 @@
+import { page, type PageLink } from "@intentic/sandbox-contract/app-routes";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 
@@ -59,7 +60,8 @@ export const FIXTURE_CAPABILITIES: CapabilitySummary[] = [
 // view added without an entry here fails extension-views.spec.ts's rail-inventory check.
 export interface ExpectedActivation {
     readonly id: string;
-    // Activation key, the /ext/:ext/:key? segment; equal to the view id for a singleton, whose segment is dropped.
+    // Activation key, the extension page's `key` (`ext/:ext/:key?`); equal to the view id for a singleton, whose segment
+    // is dropped.
     readonly key: string;
     readonly surface: `rail` | `directory` | `sandbox`;
     readonly why: string;
@@ -99,8 +101,9 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `public`, key: `public`, surface: `sandbox`, why: `always on` },
 ];
 
-// Deep-link path for an activation, mirroring extensionPath in the app: a singleton's sole segment is dropped.
-export const activationPath = ({ id, key }: ExpectedActivation): string => (key === id ? `/ext/${id}` : `/ext/${id}/${encodeURIComponent(key)}`);
+// The page an activation deep-links to, as the app links it: a singleton's sole segment is dropped. Which sandbox and
+// frame it opens in is the spec's to say.
+export const activationLink = ({ id, key }: ExpectedActivation): PageLink => page.extension(id, key === id ? undefined : key);
 
 // Every rail tile the fixture should produce, in no particular order; the exhaustiveness guard's expectation.
 export const EXPECTED_RAIL_IDS: readonly string[] = EXPECTED_ACTIVATIONS.filter((activation) => activation.surface === `rail`).map(

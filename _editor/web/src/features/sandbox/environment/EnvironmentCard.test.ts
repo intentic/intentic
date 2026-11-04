@@ -3,6 +3,7 @@
 // where its one next step goes: first, above the contents and the runtime installs, never trailing them.
 import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
@@ -108,7 +109,12 @@ jest.mock(`../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
 }));
 jest.mock(`./rebuild/HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 const { default: EnvironmentCard } = await import("./EnvironmentCard.vue");
+
+// The sandbox the reader is in, whose pages the card's links open.
+const BOX = `a1b2c3d4e5f6`;
+activeSandboxId.value = BOX;
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -188,7 +194,7 @@ it(`points a checkout-built sandbox's waiting recipe to the Sandbox tab instead 
     localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
     const el = mount();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
-    expect(el.querySelector(`[data-executor="checkout"] a`)?.getAttribute(`href`)).toBe(`/sandbox`);
+    expect(el.querySelector(`[data-executor="checkout"] a`)?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings()));
     expect(el.querySelector(`button`)?.textContent ?? ``).not.toContain(`Rebuild from checkout`);
 });
 
@@ -266,7 +272,7 @@ it(`names what a waiting rebuild brings, and sends a capability's block to where
     expect(arriving?.textContent).toContain(`privacy`);
     // Only what the rebuild brings: a block already built is not news.
     expect(arriving?.textContent).not.toContain(`docker`);
-    expect(arriving?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/privacy-shield`);
+    expect(arriving?.querySelector(`a`)?.getAttribute(`href`)).toBe(insidePath(BOX, page.sandboxSettings(`privacy-shield`)));
 });
 
 // A Komodo-run sandbox was handed the `ic` one-liner, which had nowhere to run and would have taken the container from

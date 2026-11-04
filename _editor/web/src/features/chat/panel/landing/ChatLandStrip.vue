@@ -7,6 +7,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAudience } from "../../../../app/useAudience";
+import { here, page } from "../../../../lib/routes/links";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { attentionReason, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
@@ -38,7 +39,7 @@ const { requesting, requestLand } = useCardRequests(
 
 // The review page, where the whole diff is read and a refused land is sorted out; from a popped-out chat it opens in the
 // main window (navigateInApp).
-const openReview = (): void => navigateInApp(router, `/agents/${encodeURIComponent(props.agent.id)}`);
+const openReview = (): void => navigateInApp(router, here(page.agent(props.agent.id)));
 
 // The card's own land: a refusal is said as a toast, since no board strip is here to carry it (landFromMenu).
 const land = (): void => void landFromMenu(props.agent, `land`);

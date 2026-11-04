@@ -1,3 +1,4 @@
+import { homePath, topPath } from "@intentic/sandbox-contract/app-routes";
 import type { RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 
@@ -12,9 +13,12 @@ computer instead, with the workspace waiting behind it on a page saying there wa
 
 /**
  * The place for an account with nothing to open: Home's first run. The same address as lib/routes/firstScreens.ts
- * `HOME_PATH`, written out since `app` sits below `lib` and may not import it back.
+ * `HOME_PATH`, made here from the shared table since `app` sits below `lib` and may not import it back.
  */
-export const NOTHING_TO_OPEN_PATH = `/home`;
+export const NOTHING_TO_OPEN_PATH = homePath();
+
+// The setup page's address, which the gate still names (setupGate.ts) and which lands on Home now (setupRoutes.ts).
+const SETUP_PATH = topPath(`setup`);
 
 export interface NothingToOpen {
     /** The shell gate's answer as it stands here: any setup it names is Home's first run. */
@@ -22,10 +26,10 @@ export interface NothingToOpen {
 }
 
 /** The gate's answer that names a setup of the reader's own (setupGate.ts `setupRedirect`): `/setup` with the row named. */
-const ResumedSetup = z.object({ path: z.literal(`/setup`) });
+const ResumedSetup = z.object({ path: z.literal(SETUP_PATH) });
 
 export const createNothingToOpen = (): NothingToOpen => ({
-    settle: (gate) => (gate === `/setup` || ResumedSetup.safeParse(gate).success ? NOTHING_TO_OPEN_PATH : gate),
+    settle: (gate) => (gate === SETUP_PATH || ResumedSetup.safeParse(gate).success ? NOTHING_TO_OPEN_PATH : gate),
 });
 
 export const nothingToOpen: NothingToOpen = createNothingToOpen();

@@ -422,13 +422,13 @@ export const activateServer = async (api: ExtensionServerApi): Promise<ServerAct
         if (request.method === "GET" && url.pathname === "/status") {
             return json(200, engineFrom(url.searchParams.get("engine")) === "server" ? await docs.status() : await browser.status());
         }
-        if (request.method === "POST" && url.pathname === "/start") {
+        if (request.method === "POST" && url.pathname === "/start") { // allow(route-literal): this extension's own backend route
             // SAFETY: a JSON body or undefined; its one field is read through engineFrom, which takes anything.
             const body = (await bodyOf(request)) as { engine?: unknown } | null | undefined;
             const chosen = engineFrom(body?.engine);
             return json(200, chosen === "server" ? await docs.start() : await browser.prepare());
         }
-        if (request.method === "POST" && url.pathname === "/open") {
+        if (request.method === "POST" && url.pathname === "/open") { // allow(route-literal): this extension's own backend route
             const parsed = parseOpen(await bodyOf(request));
             return parsed === undefined ? json(400, { error: "expected { path, mode, theme, agent?, resume? }" }) : open(parsed);
         }

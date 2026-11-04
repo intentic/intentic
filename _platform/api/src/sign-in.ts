@@ -3,6 +3,7 @@ import type { SignInMethod, SignInOptions } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
+import { topPath } from "@intentic/sandbox-contract/app-routes";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { sendMail, signInCodeEmail } from "./mail.js";
@@ -30,12 +31,9 @@ export const signInOptionsOf = (config: Config): SignInOptions => ({
 });
 
 // The page the mail's link opens: it shows the address and asks for a Confirm press before it spends the code
-// (_editor/web /login/confirm), so a scanner that opens every link in a mail signs nobody in.
+// (the editor's `loginConfirm` page), so a scanner that opens every link in a mail signs nobody in.
 export const signInCodeLink = (config: Config, email: string, code: string): string => {
-    const link = new URL(`/login/confirm`, config.webOrigin);
-    link.searchParams.set(`email`, email);
-    link.searchParams.set(`code`, code);
-    return link.toString();
+    return new URL(topPath(`loginConfirm`, {}, { email, code }), config.webOrigin).toString();
 };
 
 // At most one code a minute and five an hour per address, whoever asks and from wherever: the per-IP limit Better Auth

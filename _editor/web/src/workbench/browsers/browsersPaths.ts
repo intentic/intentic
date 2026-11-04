@@ -1,4 +1,4 @@
-import type { RouteLocationRaw } from "vue-router";
+import { here, page, type PageLink } from "../../lib/routes/links";
 
 // The Browsers view's tabs as addresses: what a tab is, its key, and the route that shows it. Pure, so the router and
 // the status bar can name a tab without loading the view's state (browsersSurface.ts).
@@ -55,15 +55,11 @@ export const parseTabKey = (key: string | undefined): LiveTab => {
 
 export const sameTab = (left: LiveTab, right: LiveTab): boolean => tabKey(left) === tabKey(right);
 
-// The address of a tab in the main window: what a link to it says, and what the route reads back.
-export const browsersPath = (tab: LiveTab = WEB_FRONT): string => {
+// The page of a tab in the main window: what a link to it names, and what the route reads back.
+const browsersLink = (tab: LiveTab = WEB_FRONT): PageLink<`browsers`> => {
     const key = tabKey(tab);
-    return key === `` ? `/browsers` : `/browsers/${key}`;
+    return page.browsers(key === `` ? undefined : key);
 };
 
-// Where the old /preview address goes: the app it named, or the one most worth seeing (`?preview`, which the view reads
-// as "pick one" and then drops). The query is said whole, since a redirect otherwise carries the old `?target=` along.
-export const previewRedirect = (target: unknown): RouteLocationRaw =>
-    typeof target === `string` && target !== ``
-        ? { path: browsersPath({ kind: `preview`, id: target }), query: {} }
-        : { path: `/browsers`, query: { preview: null } };
+// The address of a tab, in the frame and the sandbox the reader is in.
+export const browsersPath = (tab: LiveTab = WEB_FRONT): string => here(browsersLink(tab));

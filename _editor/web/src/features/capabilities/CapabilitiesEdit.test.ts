@@ -9,6 +9,10 @@ import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capab
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
+// The page as the shell routes it: inside a sandbox, so each move the page makes lands on an address inside it.
+const BOX = `a1b2c3d4e5f6`;
+const CAPABILITIES_ROUTE = { frame: `inside`, page: `capabilities` } as const;
+
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
 // Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the tile off the path.
@@ -16,7 +20,7 @@ let query: Record<string, string> = {};
 const replace = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRoute: () => ({ params: { entry: `vpn` }, query }) as never,
+    useRoute: () => ({ meta: CAPABILITIES_ROUTE, params: { sandbox: BOX, entry: `vpn` }, query }) as never,
     // `resolve` as well as `push`: a row's menu carries the address of what it opens.
     useRouter: () => ({ push: jest.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));

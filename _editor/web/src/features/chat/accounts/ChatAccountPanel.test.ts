@@ -8,6 +8,7 @@ import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import * as providerCatalogOriginal from "../../../models/providers/providerCatalog";
 import * as providerAccountsOriginal from "../../../models/providers/providerAccounts";
 import * as aiReachOriginal from "../../../models/providers/aiReach";
@@ -121,6 +122,8 @@ const linkNamed = (element: HTMLElement, label: string): HTMLAnchorElement | und
     [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(label));
 
 beforeEach(() => {
+    // The sandbox a link is made in while no route names one (lib/routes/links.ts `here`).
+    activeSandboxId.value = `sbx-1`;
     connected.value = false;
     withheld.value = [];
     accountsLoaded.value = true;
@@ -157,7 +160,7 @@ it(`names what this chat is pointed at, and offers connecting exactly that`, () 
     expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
     // The one press: Claude's own tile, opened rather than signed in. No sign-in starts here — a handshake is a trip to
     // another tab and back, which eighty pixels over a composer is the wrong host for.
-    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=claude`);
+    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models?open=claude`);
     // Nothing else can run, so there is nothing to choose: no second door to a list of locked rows.
     expect(buttonNamed(element, `Choose`)).toBeUndefined();
 });
@@ -174,7 +177,7 @@ it(`names no vendor where nobody has chosen one, and offers connecting a model a
     expect(element.textContent).not.toContain(`Claude`);
     expect(buttonNamed(element, `Connect Claude subscription`)).toBeUndefined();
     const connect = linkNamed(element, `Connect a model`);
-    expect(connect?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(connect?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models`);
     // Drawn as the card's press, not as link text nobody reads as one.
     expect(connect?.className.split(` `)).toEqual(expect.arrayContaining([`p-button`]));
     expect(buttonNamed(element, `Choose`)).toBeUndefined();
@@ -209,7 +212,7 @@ it(`leads with another model where something else here can run, and opens the li
     const element = mount();
 
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
-    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=claude`);
+    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models?open=claude`);
     const press = buttonNamed(element, `Choose another model`)!;
     press.click();
     await nextTick();
@@ -248,7 +251,7 @@ it(`starts no handshake of its own, for either credential mechanism`, () => {
         provider.value = target;
         turnDefaults.provider.value = target;
         const element = mount();
-        expect(linkNamed(element, `Connect`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=${target}`);
+        expect(linkNamed(element, `Connect`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models?open=${target}`);
         app?.unmount();
         element.remove();
     }
@@ -267,7 +270,7 @@ it(`points back at a sign-in already under way instead of offering another`, asy
     await nextTick();
     expect(element.textContent).toContain(`Your Claude Code sign-in isn't finished yet.`);
     expect(element.textContent).not.toContain(`isn't connected`);
-    expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models`);
 
     // Abandoned elsewhere, the line comes back rather than leaving a dead pointer.
     nativeConnectFlow.value = undefined;
@@ -296,7 +299,7 @@ it(`says a sign-in ended without connecting, until tried again or dismissed`, as
     expect(element.textContent).toContain(`Cursor didn't connect.`);
     expect(element.textContent).toContain(`The Cursor sign-in expired`);
     // Back to the connect view, naming the provider, which is what starts its sign-in there (linkArrival).
-    expect(linkNamed(element, `Try again`)?.getAttribute(`href`)).toBe(`/sandbox/models?provider=cursor`);
+    expect(linkNamed(element, `Try again`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models?provider=cursor`);
 
     buttonNamed(element, `Dismiss`)!.click();
     await nextTick();
@@ -337,7 +340,7 @@ it(`still speaks when the trial is absent rather than spent`, () => {
     expect(buttonNamed(element, `Connect`)).toBeUndefined();
     // An endpoint has no sign-in to name, so the way on is the page's, on the reader's choice.
     expect(linkNamed(element, `Connect Free trial`)).toBeUndefined();
-    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/s/sbx-1/settings/models`);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {

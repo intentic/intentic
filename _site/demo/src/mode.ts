@@ -1,3 +1,4 @@
+import { legacyPathOf, page } from "@intentic/sandbox-contract/app-routes";
 import {
     AUDIT_AGENT_ID,
     AWAITING_AGENT_ID,
@@ -400,5 +401,7 @@ export const setDemoMode = (id: DemoModeId): void => {
     if ((id === `desk`) !== deskEdition) {
         applyLook(id === `desk`);
     }
-    window.location.assign(`${import.meta.env.BASE_URL}agents`);
+    // The board's address from before frames, since this module cannot name the demo's sandbox (world/account.ts reads
+    // the mode): the editor opens it in the sandbox open last, which every load seeds as the demo's own (main.ts).
+    window.location.assign(`${import.meta.env.BASE_URL}${legacyPathOf(page.agents()).slice(1)}`);
 };

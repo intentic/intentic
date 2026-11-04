@@ -14,6 +14,8 @@ import {
     rememberOffer,
     takeFound,
 } from "./foundOnComputer";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../app/storage/activeSandbox";
 
 /* `?found=`: the AI tools the desktop app found signed in on this computer, carried from setup to Sandbox ▸ Models. */
 
@@ -23,7 +25,8 @@ beforeEach(() => {
 });
 
 test("a new sandbox, once open, lands on Sandbox ▸ Models with what was found, else on Home", () => {
-    expect(landingAfterSetup([`claude`, `codex`])).toEqual({ path: `/sandbox/models`, query: { found: `claude,codex` } });
+    activeSandboxId.value = `box-1`;
+    expect(landingAfterSetup([`claude`, `codex`])).toBe(insidePath(`box-1`, page.sandboxSettings(`models`, { query: { found: `claude,codex` } })));
     expect(landingAfterSetup([])).toBe(`/home`);
 });
 

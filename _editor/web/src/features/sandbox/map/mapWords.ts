@@ -2,6 +2,7 @@ import type { ControlScope } from "@intentic/sandbox-contract/policy/control-sco
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { here, page } from "../../../lib/routes/links";
 import { accessPath } from "../../../models/sandbox/sandboxNav";
 import { type GroupKey, type MapNode, type Principal, REST_ID } from "./reachModel";
 
@@ -102,20 +103,23 @@ export const principalName = (principal: Principal): string => {
     return at <= 0 ? principal.label : principal.label.slice(0, at);
 };
 
-/** Where a node is changed, for the caption's one action; undefined where nothing on the map's side edits it. */
+/**
+ * Where a node is changed, for the caption's one action, in the reader's own frame and sandbox; undefined where nothing
+ * on the map's side edits it.
+ */
 export const editPath = (node: MapNode): string | undefined => {
     switch (node.kind) {
         case `area`:
         case `rest`:
             return accessPath(`areas`);
         case `persona`:
-            return node.ref === undefined ? `/sandbox/personas` : `/sandbox/personas?open=${encodeURIComponent(node.ref)}`;
+            return here(page.sandboxSettings(`personas`, { query: { open: node.ref } }));
         case `secret`:
-            return `/sandbox/secrets`;
+            return here(page.sandboxSettings(`secrets`));
         case `model`:
-            return `/sandbox/models`;
+            return here(page.sandboxSettings(`models`));
         case `capability`:
-            return node.capabilityKind === `device` || node.capabilityKind === `phone` ? `/devices` : `/capabilities`;
+            return here(node.capabilityKind === `device` || node.capabilityKind === `phone` ? page.devices() : page.capabilities());
         default:
             return undefined;
     }
