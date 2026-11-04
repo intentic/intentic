@@ -5925,6 +5925,7 @@
             "setUpOnPage": "Celle-ci se configure sur sa propre page, où ce que l'agent a rempli est repris.",
             "setUp": "Configurer {name}",
             "newCredential": "Son identifiant ne fonctionne plus. Collez-en un nouveau pour « {id} » :",
+            "notUpYet": "\"{id}\" est connecté mais ne fonctionne pas encore. Cette carte se ferme d’elle-même dès qu’il démarre ; s’il fonctionne déjà, appuyez sur Ça fonctionne maintenant.",
             "itWorks": "Ça fonctionne maintenant",
             "editConnection": "Modifier la connexion",
             "apply": "Appliquer la modification",

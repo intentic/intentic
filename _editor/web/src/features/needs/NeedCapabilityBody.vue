@@ -94,6 +94,7 @@ const lastLine = computed(() => lines.value.at(-1));
 // What `applyNow` reads and sends for one need.
 const applyDeps = (id: string) => ({
     current: () => needs.byId(id),
+    fresh: () => needs.fresh(id),
     apply: async () => {
         await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
     },
@@ -176,13 +177,14 @@ const removeIt = async (): Promise<void> => {
     });
 };
 
-// The person's word that the new credential is in; the daemon checks the connection answers before it takes it.
+// The person's word that the new credential is in; the daemon checks the connection answers before it takes it. A need
+// the daemon met by itself first (the connection came up after a rebuild) is no refusal: applyNow reads it again.
 const fixed = async (): Promise<void> => {
     const id = props.need.id;
     await answer({
         tag: `fixed`,
         failed: t(`needs.capability.notWorkingYet`),
-        task: () => needs.answer.mutateAsync({ id, answer: { kind: `apply` } }),
+        task: () => applyNow(applyDeps(id)),
     });
 };
 
@@ -251,9 +253,12 @@ const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?
             <slot name="decline" />
         </div>
 
-        <!-- A connection whose credential stopped working: only the credential, in place. -->
+        <!-- A connection that is not working: only the credential, in place, when it has one; one with none (Docker
+             waiting on its rebuild) has nothing to paste, and closes by itself once it comes up. -->
         <div v-else-if="subject.mode === `reconnect` && instance" class="flex flex-col gap-2">
-            <span class="text-xs text-content/85">{{ t(`needs.capability.newCredential`, { id: instance.id }) }}</span>
+            <span class="text-xs text-content/85">{{
+                instance.secrets.length > 0 ? t(`needs.capability.newCredential`, { id: instance.id }) : t(`needs.capability.notUpYet`, { id: instance.id })
+            }}</span>
             <SecretField v-if="instance.secrets.length > 0" :secret-key="instance.secrets[0] ?? ``" :capability-id="instance.id" no-hint @saved="fixed" />
             <div class="flex flex-wrap items-center gap-2">
                 <ChatDecisionButton tone="secondary" icon="check" :disabled="busy" @click="fixed">{{ t(`needs.capability.itWorks`) }}</ChatDecisionButton>

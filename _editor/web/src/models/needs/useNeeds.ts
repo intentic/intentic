@@ -44,6 +44,11 @@ export function useNeeds() {
         release,
         isLoading: query.isLoading,
         byId: (id: string): Need | undefined => needs.value.find((need) => need.id === id),
+        /** One need as the daemon holds it now, read again rather than as the last push left it. */
+        fresh: async (id: string): Promise<Need | undefined> => {
+            await settled();
+            return needs.value.find((need) => need.id === id);
+        },
         open: computed(() => needs.value.filter(isOpenNeed)),
         openFor: (conversationId: MaybeRefOrGetter<string | undefined>) =>
             computed(() => needs.value.filter((need) => need.conversationId === toValue(conversationId) && isOpenNeed(need)).sort((left, right) => left.createdAt - right.createdAt)),

@@ -13459,6 +13459,7 @@
             "setUpOnPage": "Tę możliwość konfiguruje się na osobnej stronie, a to, co agent już wypełnił, zostanie tam przeniesione.",
             "setUp": "Skonfiguruj {name}",
             "newCredential": "Jej dane uwierzytelniające przestały działać. Wklej nowe dla „{id}”:",
+            "notUpYet": "\"{id}\" jest połączone, ale jeszcze nie działa. Ta karta zamknie się sama, gdy zacznie działać; jeśli już działa, naciśnij Już działa.",
             "itWorks": "Już działa",
             "editConnection": "Edytuj połączenie",
             "apply": "Zastosuj zmianę",

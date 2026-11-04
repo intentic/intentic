@@ -5925,6 +5925,7 @@
             "setUpOnPage": "Diese Verbindung wird auf ihrer eigenen Seite eingerichtet; die Angaben des Agenten werden dorthin übernommen.",
             "setUp": "{name} einrichten",
             "newCredential": "Die Zugangsdaten funktionieren nicht mehr. Fügen Sie neue für „{id}“ ein:",
+            "notUpYet": "\"{id}\" ist verbunden, funktioniert aber noch nicht. Diese Karte schließt sich von selbst, sobald es läuft; läuft es schon, drücke Funktioniert jetzt.",
             "itWorks": "Funktioniert jetzt",
             "editConnection": "Verbindung bearbeiten",
             "apply": "Änderung anwenden",

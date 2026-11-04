@@ -5925,6 +5925,7 @@
             "setUpOnPage": "This one is set up on its own page, with what the agent filled in carried there.",
             "setUp": "Set up {name}",
             "newCredential": "Its credential stopped working. Paste a new one for \"{id}\":",
+            "notUpYet": "\"{id}\" is connected but not working yet. This card closes by itself once it comes up; press It works now if it already has.",
             "itWorks": "It works now",
             "editConnection": "Edit the connection",
             "apply": "Apply the change",
