@@ -51,7 +51,17 @@ const toggle = (value: boolean): void => {
         <div class="flex flex-col gap-3">
             <label class="ui-field">
                 <span class="ui-field-label">{{ t(`sandbox.aiLiteracy.customText`) }}</span>
-                <textarea v-model="draft" rows="5" maxlength="4000" :class="ui.input()" class="w-full" :placeholder="t(`sandbox.aiLiteracy.customPlaceholder`)" />
+                <!-- Enter breaks the line; Ctrl+Enter (⌘+Enter) is Save's, as in every field with a button beside it. -->
+                <textarea
+                    v-model="draft"
+                    rows="5"
+                    maxlength="4000"
+                    :class="ui.input()"
+                    class="w-full"
+                    :placeholder="t(`sandbox.aiLiteracy.customPlaceholder`)"
+                    @keydown.ctrl.enter.prevent="save.isPending.value || saveNotice()"
+                    @keydown.meta.enter.prevent="save.isPending.value || saveNotice()"
+                />
             </label>
             <div class="flex justify-end"><Button tier="accent" :label="t(`sandbox.aiLiteracy.save`)" :loading="save.isPending.value" @click="saveNotice" /></div>
             <div>

@@ -500,6 +500,8 @@ watch(flow, (live) => {
                             name="accountLabel"
                             :placeholder="t(`sandbox.words.accountName`)"
                             :class="ui.input({ size: `sm` }, `min-w-0`)"
+                            @keydown.ctrl.enter.prevent="finish()"
+                            @keydown.meta.enter.prevent="finish()"
                         />
                     </template>
                 </div>

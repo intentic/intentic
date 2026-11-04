@@ -110,6 +110,8 @@ const submit = (): void => {
                         type="text"
                         :class="ui.input({ size: `sm` }, `flex-1`)"
                         :placeholder="t(`addAppDialog.eGShopApi`)"
+                        @keydown.ctrl.enter.prevent="submit"
+                        @keydown.meta.enter.prevent="submit"
                     />
                 </div>
             </Card>

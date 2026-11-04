@@ -113,6 +113,8 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                     autocomplete="off"
                     :value="typed.get(request.id) ?? ``"
                     @input="onTyped(request.id, $event)"
+                    @keydown.ctrl.enter.prevent="(typed.get(request.id) ?? ``) === `` || answer(request, `once`)"
+                    @keydown.meta.enter.prevent="(typed.get(request.id) ?? ``) === `` || answer(request, `once`)"
                 />
             </div>
 

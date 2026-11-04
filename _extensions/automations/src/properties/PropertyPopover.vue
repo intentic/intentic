@@ -1,6 +1,7 @@
 <!-- Where one setting is changed: a panel hanging off its value on a desktop, a sheet on a phone, with the change's own Save and the daemon's answer. -->
 <script setup lang="ts">
 import { Button, ResponsiveOverlay } from "@intentic/extension-ui";
+import { onSendKey } from "../sendKey";
 import { useDrafting } from "./useAutomationPatch";
 import { t } from "../i18n.js";
 
@@ -34,11 +35,17 @@ const cancel = (): void => {
 };
 // Inside a draft nothing is written until it is created, so the press only settles the change.
 const drafting = useDrafting();
+// Ctrl+Enter (⌘+Enter) in any of the panel's fields is its keeping press, held as the button is.
+const sendFromField = onSendKey(() => {
+    if (canSave && !saving) {
+        emit(`save`);
+    }
+});
 </script>
 
 <template>
     <ResponsiveOverlay v-model="open" :anchor="anchor" :header="header" :panel-class="wide ? `w-pop p-4` : `w-pop-sm p-4`">
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-3" @keydown="sendFromField">
             <slot />
             <p v-if="error" class="text-xs break-words text-danger">{{ error }}</p>
             <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">

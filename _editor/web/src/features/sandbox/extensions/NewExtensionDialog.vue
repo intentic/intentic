@@ -90,7 +90,13 @@ const submit = async (): Promise<void> => {
             <div class="flex items-end gap-2">
                 <label class="flex w-36 flex-col gap-1">
                     <span class="ui-field-label">{{ t(`sandbox.newExtensionDialog.publisher`) }}</span>
-                    <input v-model="publisher" :class="ui.input()" spellcheck="false" />
+                    <input
+                        v-model="publisher"
+                        :class="ui.input()"
+                        spellcheck="false"
+                        @keydown.ctrl.enter.prevent="submit()"
+                        @keydown.meta.enter.prevent="submit()"
+                    />
                 </label>
                 <span class="pb-2 text-subtle">.</span>
                 <label class="flex flex-1 flex-col gap-1">
@@ -112,10 +118,19 @@ const submit = async (): Promise<void> => {
                 >
             </span>
 
-            <!-- Optional, and last: empty leaves a stub to edit by hand, filled starts an agent on it before dialog closes. -->
+            <!-- Optional, and last: empty leaves a stub to edit by hand, filled starts an agent on it before dialog closes.
+                 Enter breaks its line, so Ctrl+Enter (⌘+Enter) is Create's here and in the publisher box; the name's Enter
+                 already is. -->
             <label class="flex flex-col gap-1">
                 <span class="ui-field-label">{{ t(`sandbox.newExtensionDialog.whatShouldDo`) }}</span>
-                <textarea v-model="wish" :class="ui.input()" rows="3" :placeholder="t(`sandbox.newExtensionDialog.showWhatShippedWeek`)"></textarea>
+                <textarea
+                    v-model="wish"
+                    :class="ui.input()"
+                    rows="3"
+                    :placeholder="t(`sandbox.newExtensionDialog.showWhatShippedWeek`)"
+                    @keydown.ctrl.enter.prevent="submit()"
+                    @keydown.meta.enter.prevent="submit()"
+                ></textarea>
                 <span class="text-2xs text-subtle">
                     {{ t(`sandbox.newExtensionDialog.optionalSayInOwn`) }}
                 </span>

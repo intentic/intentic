@@ -244,8 +244,8 @@ watch(
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
-                <!-- One card per person, the signed-in one first; adding someone grows the group by one card, the address
-                     field, at its end. -->
+                <!-- One card per person, the signed-in one first; adding someone grows the group by the address field, at
+                     its end and across the whole row: a cell is too narrow for an address being typed and its key hint. -->
                 <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
                     <!-- The reader on the roster opens their own panel from their own card, read-only unless they hold Full
                          access; the owner, who is on no roster, has nothing to open. -->
@@ -294,7 +294,7 @@ watch(
                             />
                             <form
                                 v-if="adding"
-                                class="ui-field-shell flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
+                                class="ui-field-shell col-span-full flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
                                 :class="{ 'ui-field-error-box': addError !== undefined }"
                                 @submit.prevent="addPerson"
                             >

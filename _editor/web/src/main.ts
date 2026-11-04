@@ -19,7 +19,7 @@ import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installAppOffer } from "./workbench/commands/appInstall";
-import { installComposingEnterGuard } from "@intentic/ui/keys";
+import { installComposingEnterGuard, installModEnterSubmit } from "@intentic/ui/keys";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
 import { markBoot } from "./app/perf/boot";
 import { watchStalledQueries } from "./app/perf/queryStalls";
@@ -108,6 +108,8 @@ highlightInWorker();
 installDesktopLinks();
 installAppOffer();
 installComposingEnterGuard();
+// Ctrl+Enter (⌘+Enter) in any form's field submits it, a textarea's included, as Enter does in a one-line field (keys.ts).
+installModEnterSubmit();
 // Also the app's alone: a loaded workspace is taken to a sandbox picked in a local window without a reload.
 installDesktopOpener(openInPage);
 

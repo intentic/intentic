@@ -55,7 +55,7 @@ const pressLabel = computed(() => (props.starts === `now` ? t(`desktop.pcSetup.t
         </div>
     </div>
 
-    <!-- Not written yet, or taken back to change. -->
+    <!-- Not written yet, or taken back to change. Enter breaks the task's line; Ctrl+Enter (⌘+Enter) is the press below. -->
     <div v-else class="flex flex-col gap-2 text-xs">
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
             <Button
@@ -75,6 +75,8 @@ const pressLabel = computed(() => (props.starts === `now` ? t(`desktop.pcSetup.t
             :class="ui.input(`min-h-20 w-full resize-y`)"
             :aria-label="t(`desktop.pcSetup.task.title`)"
             :placeholder="t(`desktop.pcSetup.task.placeholder`)"
+            @keydown.ctrl.enter.prevent="ready && !busy && emit(`queue`)"
+            @keydown.meta.enter.prevent="ready && !busy && emit(`queue`)"
         />
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <p class="min-w-0 flex-1 text-2xs text-muted">{{ startsLine }}</p>

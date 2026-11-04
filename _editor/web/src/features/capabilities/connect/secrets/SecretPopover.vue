@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { Button, Notice, type NoticeModel, ResponsiveOverlay } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { isSendKey } from "@intentic/ui/keys";
 import { nextTick, ref, watch } from "vue";
 
 const t = useT();
@@ -46,11 +47,20 @@ watch(
     },
     { immediate: true },
 );
+
+// Ctrl+Enter (⌘+Enter) in any of the panel's fields is its Save, held as the button holds it: a multi-line value or a
+// rules list keeps Enter for its lines. A form of the content's own (adding a host) still takes it first.
+const onSendKey = (event: KeyboardEvent): void => {
+    if (!bare && canSave && !saving && isSendKey(event)) {
+        event.preventDefault();
+        emit(`save`);
+    }
+};
 </script>
 
 <template>
     <ResponsiveOverlay v-model="open" :anchor="anchor" :header="header" side="bottom" :panel-class="wide ? `w-pop p-4` : `w-pop-sm p-4`">
-        <div ref="body" class="flex flex-col gap-3">
+        <div ref="body" class="flex flex-col gap-3" @keydown="onSendKey">
             <slot />
             <Notice v-if="error" :of="error" />
             <div v-if="!bare" class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">

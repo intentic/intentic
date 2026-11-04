@@ -92,3 +92,76 @@ export const installComposingEnterGuard = (win: Window = window): void => {
         true,
     );
 };
+
+/**
+ * Whether a keystroke is Ctrl+Enter or ⌘+Enter, the chord that sends what a field holds: a one-line field's Enter, and
+ * the only way a multi-line field has. Either modifier on either platform, as the chat composer reads it, since ⌃↩ is no
+ * text chord on a Mac; Shift or Alt with it is some other chord.
+ */
+export const isModEnter = (event: Pick<KeyboardEvent, `key` | `ctrlKey` | `metaKey` | `shiftKey` | `altKey`>): boolean =>
+    event.key === `Enter` && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey;
+
+/**
+ * Whether a keydown is the send chord for the surface whose listener it reached (`currentTarget`): Ctrl+Enter or ⌘+Enter,
+ * not claimed below it, not an input method's, and not from a field in a form inside that surface, whose own submit it
+ * is (installModEnterSubmit). For a panel, a dialog or an editor that has one Save for many fields and no form of its own.
+ */
+export const isSendKey = (event: KeyboardEvent): boolean => {
+    if (event.defaultPrevented || !isModEnter(event) || composingKey(event)) {
+        return false;
+    }
+    const form = event.target instanceof Element ? event.target.closest(`form`) : null;
+    const surface = event.currentTarget;
+    return form === null || !(surface instanceof Node) || !surface.contains(form);
+};
+
+// Inputs that press rather than hold text: Enter on one already does what it says.
+const PRESSED_INPUTS = new Set([`submit`, `button`, `reset`, `image`, `file`]);
+
+// The form a keystroke's field belongs to. `instanceof` holds in a window the app popped out as well: Vue creates every
+// element it mounts there from this window's document.
+const formOfField = (target: EventTarget | null): HTMLFormElement | undefined => {
+    const field =
+        target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && !PRESSED_INPUTS.has(target.type))
+            ? target
+            : undefined;
+    if (field === undefined || field.closest(OWN_COMPOSITION) !== null) {
+        return undefined;
+    }
+    return field.form ?? undefined;
+};
+
+// The button Enter would press: the form's first submit button, in tree order, including one outside it that names it.
+const defaultButton = (form: HTMLFormElement): HTMLButtonElement | HTMLInputElement | undefined =>
+    [...form.elements].find(
+        (element): element is HTMLButtonElement | HTMLInputElement =>
+            (element instanceof HTMLButtonElement && element.type === `submit`) ||
+            (element instanceof HTMLInputElement && (element.type === `submit` || element.type === `image`)),
+    );
+
+/**
+ * Ctrl+Enter (⌘+Enter) in a field of a form submits the form, as Enter does in a one-line field: a browser submits on a
+ * bare Enter only, and never from a textarea. It goes through the form's default button, so a disabled one holds it as
+ * it holds Enter, and through `requestSubmit`, so the browser's own validation still speaks first. On the window and
+ * bubbling, so a field that answers the chord itself (the chat composer) and says so with `preventDefault` keeps it.
+ * Answers what takes it off again.
+ */
+export const installModEnterSubmit = (win: Window = window): (() => void) => {
+    const submit = (event: KeyboardEvent): void => {
+        if (event.defaultPrevented || !isModEnter(event) || composingKey(event)) {
+            return;
+        }
+        const form = formOfField(event.target);
+        if (form === undefined) {
+            return;
+        }
+        const button = defaultButton(form);
+        if (button?.matches(`:disabled`)) {
+            return;
+        }
+        event.preventDefault();
+        form.requestSubmit(button);
+    };
+    win.addEventListener(`keydown`, submit);
+    return () => win.removeEventListener(`keydown`, submit);
+};

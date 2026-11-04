@@ -82,7 +82,8 @@ const save = async (): Promise<void> => {
     }
 };
 
-// In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.
+// In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly. A multi-line value
+// keeps Enter for its line breaks and takes Ctrl+Enter (⌘+Enter) the same way.
 const onEnter = (event: KeyboardEvent): void => {
     if (props.collect) {
         return;
@@ -105,6 +106,8 @@ const onEnter = (event: KeyboardEvent): void => {
                 :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
                 :aria-label="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
                 :class="[ui.input({ size: `sm` }, 'min-w-0 flex-1 basis-40 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
+                @keydown.ctrl.enter="onEnter"
+                @keydown.meta.enter="onEnter"
             ></textarea>
             <input
                 v-else

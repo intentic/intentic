@@ -6,7 +6,8 @@ import { formatDateTime } from "@intentic/ui/format";
 import ToggleSwitch from "primevue/toggleswitch";
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref, shallowRef } from "vue";
+import { isSendKey } from "@intentic/ui/keys";
+import { computed, nextTick, ref, shallowRef } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { apiClient } from "../../lib/useApi";
 import OrgAccessPolicy from "./OrgAccessPolicy.vue";
@@ -53,6 +54,20 @@ const savePolicy = (): Promise<void> =>
         accept(saved);
         return saved;
     }, t(`organisations.detail.couldntSave`));
+
+// Ctrl+Enter (⌘+Enter) in any of the policy's fields is Save policy's, held as the button is. A list field writes the
+// draft on `change`, which a keystroke has not fired yet, so it is told first and the save waits a tick for the draft.
+const onPolicyKey = async (event: KeyboardEvent): Promise<void> => {
+    if (!admin.value || busy.value || !isSendKey(event)) {
+        return;
+    }
+    event.preventDefault();
+    event.target?.dispatchEvent(new Event(`change`, { bubbles: true }));
+    await nextTick();
+    if (dirty.value) {
+        await savePolicy();
+    }
+};
 
 // THE PEOPLE.
 const email = ref(``);
@@ -118,7 +133,7 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
             </Row>
         </RowGroup>
 
-        <OrgAccessPolicy v-model:profiles="profiles" v-model:ceiling="ceiling" :readonly="!admin" />
+        <OrgAccessPolicy v-model:profiles="profiles" v-model:ceiling="ceiling" :readonly="!admin" @keydown="onPolicyKey" />
         <div v-if="admin">
             <Button tier="accent" :label="t(`organisations.detail.savePolicy`)" size="small" :disabled="!dirty || busy" :loading="busy" @click="savePolicy" />
         </div>

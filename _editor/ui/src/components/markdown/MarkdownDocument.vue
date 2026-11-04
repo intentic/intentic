@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useSlots } from "vue";
 import { useDevice } from "../../composables/useDevice.js";
+import { isSendKey } from "../../lib/input/keys.js";
 import type { MarkdownDecorator } from "../../markdown/render.js";
 import Button from "../primitives/Button.vue";
 import { useT } from "../../i18n/index.js";
@@ -57,7 +58,7 @@ const {
 const emit = defineEmits<{
     /** The document changed. Fires as it is typed; `save` is what means "write this". */
     change: [value: string];
-    /** Write this text. Debounced under `auto`, from the button or Ctrl-S under `explicit`. */
+    /** Write this text. Debounced under `auto`, from the button, Ctrl-S or Ctrl+Enter under `explicit`. */
     save: [value: string];
 }>();
 
@@ -87,6 +88,15 @@ const onChange = (value: string): void => {
     doc.value = value;
     emit(`change`, value);
     touched();
+};
+
+// Ctrl+Enter (⌘+Enter) is Save's under `explicit`, as Ctrl-S is, from the surface and the phone's textarea alike. Under
+// the other policies there is no Save here, so the chord goes on to whatever the caller wraps the document in.
+const onSendKey = (event: KeyboardEvent): void => {
+    if (policy === `explicit` && editable && isSendKey(event)) {
+        event.preventDefault();
+        commit();
+    }
 };
 
 // Whether the reader is actually typing into it: the host's permission, and a surface that can take a caret.
@@ -127,7 +137,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col" :class="{ 'ui-doc-section': section }">
+    <div class="flex min-w-0 flex-col" :class="{ 'ui-doc-section': section }" @keydown="onSendKey">
         <!-- `display: contents` without a section frame: the branches keep the root as their flex parent, so a caller's
              own height still lands on the document rather than on a box wrapped round it. -->
         <div :class="section ? [`ui-doc-body ui-softscroll flex min-w-0 flex-col`, ROW_BLOCK_PAD[tier]] : `contents`">

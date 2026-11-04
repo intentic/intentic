@@ -6,6 +6,7 @@ import type { AvailableSource } from "./catalog";
 import AutomationFields from "./AutomationFields.vue";
 import { useAutomations, useSandboxZone } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
+import { onSendKey } from "./sendKey";
 import { t } from "./i18n.js";
 
 // One automation's edit form, wherever it opens: in its row's drawer on the list, and in the card above the calendar.
@@ -46,10 +47,12 @@ const submit = async (): Promise<void> => {
         error.value = err instanceof Error ? err.message : t(`automationRow.couldntSave`);
     }
 };
+const sendFromField = onSendKey(submit);
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <!-- Ctrl+Enter (⌘+Enter) in any of its fields is Save's: the prompt and the rules keep Enter for their lines. -->
+    <div class="flex flex-col gap-3" @keydown="sendFromField">
         <div v-if="back" class="flex items-center gap-2 border-b border-line-subtle pb-3">
             <Button :label="t(`automationEditor.back`)" size="small" tier="quiet" @click="emit(`done`)">
                 <template #icon><Icon name="arrow-left" /></template>

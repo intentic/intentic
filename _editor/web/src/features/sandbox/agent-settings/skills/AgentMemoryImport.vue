@@ -48,6 +48,8 @@ const showPrompt = ref(false);
                         v-model="importText"
                         :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
                         class="min-h-20"
+                        @keydown.ctrl.enter.prevent="importMemory()"
+                        @keydown.meta.enter.prevent="importMemory()"
                     />
                 </div>
                 <Button

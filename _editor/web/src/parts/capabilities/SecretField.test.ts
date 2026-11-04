@@ -75,6 +75,20 @@ it(`keeps multiline values labelled, shrinkable and masked until explicitly show
     expect(set).not.toHaveBeenCalled();
 });
 
+it(`saves a multiline value from Ctrl+Enter, leaving Enter to break its lines`, async () => {
+    const host = mount({ multiline: true });
+    const input = host.querySelector<HTMLTextAreaElement>(`textarea`)!;
+    input.value = `first line\nsecond line`;
+    input.dispatchEvent(new Event(`input`));
+    await nextTick();
+    const enter = new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true, cancelable: true });
+    input.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(false);
+    expect(set).not.toHaveBeenCalled();
+    input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, ctrlKey: true, bubbles: true, cancelable: true }));
+    await waitFor(() => expect(set).toHaveBeenCalledWith({ key: `DEMO_KEY`, value: `first line\nsecond line` }));
+});
+
 it(`lets collect mode submit its surrounding form without a standalone save or a secret write`, async () => {
     const host = mount({ collect: true });
     const input = host.querySelector<HTMLInputElement>(`input`)!;

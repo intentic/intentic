@@ -84,6 +84,13 @@ const key = computed(() => ops.rowKey(group));
 // two buttons per environment on every visit. A folder already typed opens them by itself, so a draft is never hidden.
 const asked = ref(choices.value.some((environment) => draftFolder(machine.key, group.sandboxId, environment.device.key) !== undefined));
 
+// Ctrl+Enter (⌘+Enter) in a folder field is its Sync button, held as the button is.
+const syncFrom = (environment: DeviceRow): void => {
+    if (folderFor(environment).trim() !== ``) {
+        void enable(environment, `sync`);
+    }
+};
+
 const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<void> => {
     const target = door.value;
     if (target === undefined || ops.working.value) {
@@ -149,6 +156,8 @@ const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<
                         :class="ui.input({ size: `sm` }, `flex-1 font-mono`)"
                         :style="{ minWidth: fieldFloor(environment) }"
                         @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
+                        @keydown.ctrl.enter.prevent="syncFrom(environment)"
+                        @keydown.meta.enter.prevent="syncFrom(environment)"
                     />
                     <Button
                         tier="accent"

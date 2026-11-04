@@ -166,6 +166,8 @@ const uid = useId();
                                 :aria-label="t(`ui.sandboxResourcesDialog.memoryCapInGib`)"
                                 :class="ui.input({ size: `sm` }, `w-28 text-right`)"
                                 @input="setCap(`memoryGib`, $event)"
+                                @keydown.ctrl.enter.prevent="applyReady && emit(`apply`, form)"
+                                @keydown.meta.enter.prevent="applyReady && emit(`apply`, form)"
                             />
                             <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.gib`) }}</span>
                         </label>
@@ -195,6 +197,8 @@ const uid = useId();
                                 :aria-label="t(`ui.sandboxResourcesDialog.cpuCapInCores`)"
                                 :class="ui.input({ size: `sm` }, `w-28 text-right`)"
                                 @input="setCap(`cpus`, $event)"
+                                @keydown.ctrl.enter.prevent="applyReady && emit(`apply`, form)"
+                                @keydown.meta.enter.prevent="applyReady && emit(`apply`, form)"
                             />
                             <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.cores`) }}</span>
                         </label>
@@ -260,6 +264,7 @@ const uid = useId();
             </p>
         </div>
 
+        <!-- Ctrl+Enter (⌘+Enter) in either cap is the accent press, held as it is. -->
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`cancel`)" />
             <!-- Disabled rather than refused: nothing changed, or a cap outside the rails, leaves nothing for the machine to accept. -->

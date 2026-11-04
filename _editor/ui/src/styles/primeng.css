@@ -29,6 +29,12 @@
         padding-inline: 0;
     }
 
+/* PrimeVue holds a bare glyph's line box with a hidden, zero-width `::after`. As a flex item it still takes the gap, which
+   pushed the glyph half a gap left of centre and left the button looking padded on its right. */
+    .p-button.p-button-icon-only {
+        gap: 0;
+    }
+
 /* Secondary's own hover is defined with the tier, below in @layer components — a later layer, so it wins whatever this says. */
     [data-mode="dark"] .p-button-text:enabled:hover {
         background: color-mix(in srgb, var(--color-content) 12%, transparent);

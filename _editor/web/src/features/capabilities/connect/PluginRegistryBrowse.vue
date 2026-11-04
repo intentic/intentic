@@ -82,9 +82,22 @@ const pick = (entry: RegistryEntry): void => {
     <RowGroup :label="t(`capabilities.pluginRegistryBrowse.registryOptional`)">
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
+                <!-- Enter here, and Ctrl+Enter, is Browse's: this sits inside the install form, whose submit it would otherwise be. -->
                 <div class="flex gap-2">
-                    <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
-                    <input v-model="token" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input('w-28')" />
+                    <input
+                        v-model="url"
+                        placeholder="https://github.com/owner/registry"
+                        :class="ui.input('min-w-0 flex-1')"
+                        @keydown.enter.prevent="browse()"
+                    />
+                    <input
+                        v-model="token"
+                        type="password"
+                        autocomplete="off"
+                        :placeholder="t(`shared.token`)"
+                        :class="ui.input('w-28')"
+                        @keydown.enter.prevent="browse()"
+                    />
                     <Button
                         tier="accent"
                         :label="t(`ui.action.browse`)"

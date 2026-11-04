@@ -110,6 +110,16 @@ it("keeps it in the sandbox, with no choice offered, while no computer's keyring
     done();
 });
 
+it("saves from Enter in the field, Ctrl+Enter included, since no form surrounds it to submit", async () => {
+    const { el, typeValue, done } = mount();
+    await typeValue(`hunter2`);
+    const field = el.querySelector<HTMLInputElement>(`input[type="password"]`);
+    field?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, ctrlKey: true, bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
+    done();
+});
+
 it("keeps it in the sandbox by default even when a configured keyring answers", async () => {
     keyrings.value = [{ machine: `rog`, online: true, locked: false, setUp: true, shared: 0 }];
     const { el, typeValue, press, done } = mount();

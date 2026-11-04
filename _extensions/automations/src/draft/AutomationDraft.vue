@@ -36,6 +36,7 @@ import EndsProperty from "./EndsProperty.vue";
 import TemplatePicker from "./TemplatePicker.vue";
 import ThenProperty from "./ThenProperty.vue";
 import WhenProperty from "./WhenProperty.vue";
+import { onSendKey } from "../sendKey";
 import { t } from "../i18n.js";
 
 const { prefill, at, listenerSources, templates } = defineProps<{
@@ -206,6 +207,7 @@ const submit = async (): Promise<void> => {
         submitError.value = err instanceof Error ? err.message : t(`automationRow.couldntSave`);
     }
 };
+const sendFromField = onSendKey(submit);
 // Deferred until Done, not fired at save, or the handoff and the new row would both show the same URL at once.
 const finish = (id: string): void => {
     emit(`created`, id);
@@ -264,6 +266,7 @@ const promptPlaceholder = computed(() =>
                     :placeholder="t(`automationDraft.notePlaceholder`)"
                     :aria-label="t(`automationDraft.note`)"
                     class="field-bare -mx-1 w-full min-w-0 rounded-sm px-1 text-xs text-muted transition-colors hover:bg-content/5"
+                    @keydown="sendFromField"
                 />
             </template>
 
@@ -293,7 +296,8 @@ const promptPlaceholder = computed(() =>
                     <Button tier="accent" class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
                 </div>
 
-                <div v-else class="flex flex-col gap-6 pr-3">
+                <!-- Ctrl+Enter (⌘+Enter) in any field below, the prompt's included, is Create's. -->
+                <div v-else class="flex flex-col gap-6 pr-3" @keydown="sendFromField">
                     <Notice v-if="submitError" :of="noticeOf(submitError)" />
 
                     <!-- The full form, for what has no value of its own on the draft (a listener's people, tools, a fallback model):

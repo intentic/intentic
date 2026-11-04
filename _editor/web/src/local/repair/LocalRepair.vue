@@ -109,7 +109,8 @@ const send = async (): Promise<void> => {
         draft.value = text;
     }
 };
-// Enter sends, Shift+Enter breaks the line; a key that ends an IME composition is the composition's.
+// Enter sends, as Ctrl+Enter and ⌘+Enter do, Shift+Enter breaks the line; a key that ends an IME composition is the
+// composition's.
 const onEnter = (event: KeyboardEvent): void => {
     if (composingKey(event)) {
         return;
@@ -294,6 +295,8 @@ const modes = computed(() => [
                         class="field-bare w-full resize-none px-4 pb-1 pt-3"
                         @input="onInput"
                         @keydown.enter.exact="onEnter"
+                        @keydown.ctrl.enter="onEnter"
+                        @keydown.meta.enter="onEnter"
                     />
                     <div class="flex items-center gap-2 px-3 pb-2">
                         <Icon v-if="busy" :name="waiting ? `shield` : `spinner`" :spin="!waiting" class="text-2xs text-subtle" aria-hidden="true" />
