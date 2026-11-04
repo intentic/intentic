@@ -49,15 +49,17 @@ const commandsOf = async (conversation: Conversation): Promise<readonly AgentCom
 // one from it and lands back into it; a runner's copy is on another machine) and not filed away. A check (a review, a test
 // pass) also needs something in it to look at, and never runs on a fresh session itself, so a review of a review never
 // stacks a second level under one card; the reader's own ask is a new agent starting from that copy, which takes any.
+// A check also waits for the work to hold still: started while a turn is still writing, it would judge a half-made copy.
+const MOVING: ReadonlySet<FleetAgent["status"]> = new Set([`running`, `stopping`, `resuming`, `landing`]);
 export const canStartFresh = (
-    agent: Pick<FleetAgent, "archivedAt" | "fresh" | "branch" | "runner" | "diff" | "sandboxId">,
+    agent: Pick<FleetAgent, "archivedAt" | "fresh" | "branch" | "runner" | "diff" | "sandboxId" | "status">,
     kind: FreshKind = `review`,
 ): boolean =>
     agent.sandboxId === undefined &&
     agent.archivedAt === undefined &&
     agent.branch !== undefined &&
     agent.runner === undefined &&
-    (kind === `ask` || (agent.fresh === undefined && (agent.diff?.files ?? 0) > 0));
+    (kind === `ask` || (agent.fresh === undefined && !MOVING.has(agent.status) && (agent.diff?.files ?? 0) > 0));
 
 /** Every kind a fresh session on this card's work could be, in the strip's own order. */
 export const freshKindsOf = (agent: Parameters<typeof canStartFresh>[0]): FreshKind[] => FRESH_KINDS.filter((kind) => canStartFresh(agent, kind));

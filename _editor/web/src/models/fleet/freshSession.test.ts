@@ -53,6 +53,15 @@ describe(`which cards a fresh session can start on`, () => {
         expect(canStartFresh(card(`a`, { ...WORK, fresh: { of: `o`, kind: `review`, at: 1 } }))).toBe(false);
     });
 
+    it(`holds a check back while a turn is still writing the work, and lets the reader's own ask start from it`, () => {
+        for (const status of [`running`, `stopping`, `resuming`, `landing`] as const) {
+            expect(canStartFresh(card(`a`, { ...WORK, status }))).toBe(false);
+            expect(canStartFresh(card(`a`, { ...WORK, status }), `test`)).toBe(false);
+            expect(canStartFresh(card(`a`, { ...WORK, status }), `ask`)).toBe(true);
+        }
+        expect(canStartFresh(card(`a`, { ...WORK, status: `ready` }))).toBe(true);
+    });
+
     it(`lets the reader's own ask start from any private copy here, with or without changes, a fresh session's own included`, () => {
         expect(canStartFresh(card(`a`, { ...WORK, diff: { files: 0, insertions: 0, deletions: 0 } }), `ask`)).toBe(true);
         expect(canStartFresh(card(`a`, { ...WORK, fresh: { of: `o`, kind: `review`, at: 1 } }), `ask`)).toBe(true);
