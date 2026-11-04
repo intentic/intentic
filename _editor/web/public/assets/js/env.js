@@ -114,6 +114,95 @@
   var GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
   var GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
 
+  // ../../_shared/sandbox-contract/dist/app-routes/app-pages.js
+  var SANDBOX_PAGES = {
+    chat: `chat`,
+    agents: `agents`,
+    agent: `agents/:id`,
+    agentPage: `agents/:id/pages/:page`,
+    workspace: `workspace/:path(.*)*`,
+    browsers: `browsers/:tab(.*)?`,
+    devices: `devices`,
+    capabilities: `capabilities/:entry?`,
+    extension: `ext/:ext/:key?`,
+    sandboxSettings: `settings/:tab?`,
+    terminal: `terminal`,
+    menu: `menu`
+  };
+  var ACCOUNT_PAGES = {
+    account: `account/:tab?`,
+    deletedSandboxes: `deleted-sandboxes`
+  };
+  var PAGE_PATTERNS = { ...SANDBOX_PAGES, ...ACCOUNT_PAGES };
+  var TOP_PAGES = {
+    root: ``,
+    login: `login`,
+    loginConfirm: `login/confirm`,
+    setup: `setup`,
+    startHosted: `start/hosted`,
+    invite: `invite/:token`,
+    recover: `recover`,
+    open: `open`,
+    previewPass: `preview-pass`,
+    platformUnavailable: `platform-unavailable`,
+    desktopAuth: `desktop-auth`,
+    desktopAuthComplete: `desktop-auth/complete`,
+    kit: `kit`,
+    kitRepair: `kit/repair`
+  };
+
+  // ../../_shared/sandbox-contract/dist/app-routes/patterns.js
+  var PARAM = /^:([A-Za-z_][A-Za-z0-9_]*)(?:\(([^)]*)\))?([?*+])?$/;
+  var parse = (pattern) => pattern.split(`/`).filter((segment) => segment !== ``).map((segment) => {
+    const param = PARAM.exec(segment);
+    if (param === null) {
+      return { kind: `static`, text: segment };
+    }
+    const [, name = ``, regex, modifier] = param;
+    const repeat = modifier === `*` || modifier === `+`;
+    const part = { kind: `param`, name, spans: repeat || regex === `.*`, optional: modifier === `?` || modifier === `*` };
+    return regex === void 0 || regex === `.*` ? part : { ...part, choices: regex };
+  });
+  var cache = /* @__PURE__ */ new Map();
+  var partsOf = (pattern) => {
+    let parts = cache.get(pattern);
+    if (parts === void 0) {
+      parts = parse(pattern);
+      cache.set(pattern, parts);
+    }
+    return parts;
+  };
+  var encodeSegment = (text) => encodeURIComponent(text).replace(/%3A/gi, `:`).replace(/%40/g, `@`).replace(/%2C/gi, `,`);
+  var segmentsOf = (value) => value.split(`/`).filter((segment) => segment !== ``);
+  var fillPattern = (pattern, params = {}) => {
+    const out = [];
+    for (const part of partsOf(pattern)) {
+      if (part.kind === `static`) {
+        out.push(part.text);
+        continue;
+      }
+      const value = params[part.name];
+      const segments = value === void 0 ? [] : part.spans ? segmentsOf(value) : [value];
+      if (segments.length === 0 || segments[0] === ``) {
+        if (!part.optional) {
+          throw new Error(`The address ${pattern} needs its :${part.name}.`);
+        }
+        continue;
+      }
+      out.push(segments.map(encodeSegment).join(`/`));
+    }
+    return out.join(`/`);
+  };
+
+  // ../../_shared/sandbox-contract/dist/app-routes/paths.js
+  var queryString = (query) => {
+    const entries = Object.entries(query).filter((entry) => entry[1] !== void 0 && entry[1] !== ``);
+    return entries.length === 0 ? `` : `?${new URLSearchParams(entries).toString()}`;
+  };
+  var joined = (...parts) => `/${parts.filter((part) => part !== ``).join(`/`)}`;
+  var topPath = (name, params = {}, query = {}) => `${joined(fillPattern(TOP_PAGES[name], params))}${queryString(query)}`;
+  var PAGE_NAMES = Object.keys(PAGE_PATTERNS);
+
   // src/app/environments/environment.default.ts
   var defaultEnv = {
     production: false,
@@ -125,7 +214,7 @@
     // default, and there is no nginx there to run the /wire proxy the deployment env points at.
     analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com`, posthogUiHost: `https://us.posthog.com` },
     // The app's own sign-in page; every real deployment is served at its root. The demo overrides this.
-    afterSignOut: `/login`
+    afterSignOut: topPath(`login`)
   };
 
   // src/app/environments/environment.local.ts
