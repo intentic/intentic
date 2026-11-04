@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import type { ProcessAction, ProcessReport } from "../../app/environments/processes/processReport";
+import { type ProcessAction, type ProcessReport, recreateMode } from "../../app/environments/processes/processReport";
 
 // A PROCESS IN THE PAGE'S OWN WORDS (processReport.ts says why a report carries ids rather than sentences): what it is,
 // where it stands, and what each press does. The only words from the report itself are the owner's: a name the reader
@@ -20,7 +20,14 @@ export const processTitle = (report: ProcessReport): string => {
         case `sign-in`:
             return t(`processes.title.signIn`);
         case `recreate`:
-            return t(`processes.title.recreate`, { name });
+            switch (recreateMode(report)) {
+                case `update`:
+                    return t(`processes.title.recreateUpdate`, { name });
+                case `rollback`:
+                    return t(`processes.title.recreateRollback`, { name });
+                default:
+                    return t(`processes.title.recreate`, { name });
+            }
         case `fix`:
             return t(`processes.title.fix`, { name });
         case `sync`:

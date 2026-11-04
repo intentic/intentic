@@ -1,6 +1,13 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui/icons";
-import { type ProcessKind, type ProcessReport, processAsks, processLive } from "../../app/environments/processes/processReport";
+import {
+    type ProcessKind,
+    type ProcessReport,
+    processAsks,
+    processLive,
+    type RecreateMode,
+    recreateMode,
+} from "../../app/environments/processes/processReport";
 import { processNote, processTitle } from "./processWords";
 
 // THE RAIL'S TEMPORARY GROUP: one tile per process under way, the same on Home's rail and on This computer's
@@ -35,7 +42,19 @@ const GLYPHS = {
     "first-task": `comments`,
 } as const satisfies Readonly<Record<ProcessKind, IconName>>;
 
-const SANDBOX_KINDS: ReadonlySet<ProcessKind> = new Set([`sandbox-setup`, `folder-setup`, `first-task`, `recreate`, `fix`, `sync`]);
+// A recreate is not worn in the sandbox's letters: its subject is the container's slug (`sandbox-6a4ac…`), so every one
+// read "S", and an update said nothing of being one. It wears what it does instead, by the swap its report names.
+const SANDBOX_KINDS: ReadonlySet<ProcessKind> = new Set([`sandbox-setup`, `folder-setup`, `first-task`, `fix`, `sync`]);
+
+const RECREATE_GLYPHS = { update: `arrow-circle-up`, rebuild: `refresh`, rollback: `undo` } as const satisfies Readonly<Record<RecreateMode, IconName>>;
+
+const glyphOf = (report: ProcessReport): ProcessTile[`glyph`] => {
+    if (report.kind === `recreate`) {
+        const mode = recreateMode(report);
+        return { icon: mode === undefined ? GLYPHS.recreate : RECREATE_GLYPHS[mode] };
+    }
+    return SANDBOX_KINDS.has(report.kind) && report.subject !== undefined ? { logo: report.subject } : { icon: GLYPHS[report.kind] };
+};
 
 /** The tile's corner marks for a run, as every rail tile wears them (viewBadge.ts). */
 export const processBadgeOf = (report: ProcessReport): ViewBadge | undefined => {
@@ -60,7 +79,7 @@ export const processTileOf = (report: ProcessReport): ProcessTile => ({
     title: processTitle(report),
     note: processNote(report),
     badge: processBadgeOf(report),
-    glyph: SANDBOX_KINDS.has(report.kind) && report.subject !== undefined ? { logo: report.subject } : { icon: GLYPHS[report.kind] },
+    glyph: glyphOf(report),
 });
 
 /**

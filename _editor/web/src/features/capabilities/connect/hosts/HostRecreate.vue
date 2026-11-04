@@ -16,7 +16,7 @@ import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, shallowRef, type VNode, watch } from "vue";
 import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { expectRestart, type RestartQuiet } from "../../../../models/sandbox/live/sandboxRestart";
+import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -27,7 +27,9 @@ import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapF
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
 import ComposeUpdateHint from "../../../../parts/sandbox/ComposeUpdateHint.vue";
-import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
+import { desktopVersion } from "../../../../app/environments/desktop";
+import AppRecreateButton from "./AppRecreateButton.vue";
+import { quietOf, type RecreateAction, verbOf, workingWords } from "./recreateWords";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
 import { bashCommand, oneLiner, psCommand } from "../../../../app/environments/scriptCommand";
 import RunCommand from "../../../../components/RunCommand.vue";
@@ -47,7 +49,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-type Action = `Update` | `Rebuild` | `Roll back`;
+type Action = RecreateAction;
 
 const props = defineProps<{
     slug: string;
@@ -91,10 +93,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 const hostId = useHostRunning(() => props.slug);
 const OP: Record<Action, DeviceSandboxOp> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
-// The action as a reader sees it. `Action` is the enum this component switches on and the script it runs, so its
-// members are not the words on screen: every label takes this instead.
-const VERBS: Record<Action, string> = { Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
-const verbOf = (action: Action): string => t(`capabilities.hostRecreate.${VERBS[action]}Verb` as `capabilities.hostRecreate.updateVerb`);
+// The action as a reader sees it (recreateWords.ts).
 const verb = computed(() => verbOf(props.action));
 
 // The loud tier in the house gold (primeng.css); gold stands for moving up a version, so it goes on nothing else.
@@ -120,13 +119,6 @@ const cost = computed(() => {
     return props.keepsSaid === true ? t(`capabilities.hostRecreate.costBuildThenRestartShort`) : t(`capabilities.hostRecreate.costBuildThenRestart`);
 });
 
-// What the hub row and the receipt say while the machine works: the same button sits on Environment and on Overview's
-// update tile, and each reports where it was pressed.
-const workingWords = (): Record<Action, string> => ({
-    Update: t(`capabilities.hostRecreate.workingUpdate`),
-    Rebuild: t(`capabilities.hostRecreate.workingRebuild`),
-    "Roll back": t(`capabilities.hostRecreate.workingRollBack`),
-});
 const isAction = (tag: string | undefined): tag is Action => tag !== undefined && Object.hasOwn(OP, tag);
 
 // THE SWAP IS THE SANDBOX'S, NOT THIS BUTTON'S. Environment's Rebuild, the update card's Update and the version panel's
@@ -243,22 +235,6 @@ const confirmBody = computed(() => {
     return t(`capabilities.hostRecreate.confirmBuildThenRestart`, { work });
 });
 
-// What the sandbox going quiet means while this runs, for every surface that isn't this tile.
-const QUIET = computed((): Record<Action, RestartQuiet> => ({
-    Update: {
-        title: t(`capabilities.hostRecreate.restartingOntoUpdate`),
-        detail: t(`common.restartQuiet.detail`),
-    },
-    Rebuild: {
-        title: t(`capabilities.hostRecreate.restartingOntoRebuiltEnvironment`),
-        detail: t(`common.restartQuiet.detail`),
-    },
-    "Roll back": {
-        title: t(`capabilities.hostRecreate.rollingSandboxBack`),
-        detail: t(`common.restartQuiet.detail`),
-    },
-}));
-
 // What answers now: its build and boot, or what a daemon older than `running` says instead (swapLanding.ts).
 const answered = async (overlay: string | undefined): Promise<Answered> => {
     const running = await answering();
@@ -306,7 +282,7 @@ const awaiting = computed(() => {
 const failure = computed(() => swap.failure.value ?? whenIdle.failure.value ?? idleFailure.value);
 
 // What the lines under a waiting button say: the restart this is, and that the page picks it up by itself.
-const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[runningAction.value].title }));
+const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: quietOf(runningAction.value).title }));
 
 const execute = async (): Promise<void> => {
     confirming.value = false;
@@ -317,8 +293,8 @@ const execute = async (): Promise<void> => {
     // Read at the press: the run outlives this card, and its props with it.
     const { action, hash, slug } = props;
     const sandbox = activeSandboxId.value;
-    const what = workingWords()[action];
-    const quiet = QUIET.value[action];
+    const what = workingWords(action);
+    const quiet = quietOf(action);
     const didnt = t(`capabilities.hostRecreate.didntGoThrough`, { action: verbOf(action) });
     const resumeTurns = offerResume.value && resumeAfter.value;
     // Now, not later: a rebuild the sandbox was holding for idle agents is withdrawn first, or it would run again.
@@ -434,7 +410,7 @@ watch(
                 idleFailure.value = { tone: `warning`, title: errorMessage(error) };
             },
         );
-        idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords().Rebuild, quiet: QUIET.value.Rebuild, untilAnswered: true });
+        idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords(`Rebuild`), quiet: quietOf(`Rebuild`), untilAnswered: true });
     },
     { immediate: true },
 );
@@ -464,9 +440,10 @@ const command = (os: CommandOs): string => {
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <div :class="row">
+                <!-- Named for what runs through the whole swap, the cutover included, never "Update now" over a run. -->
                 <Button
                     :label="
-                        streaming
+                        busy
                             ? t(`capabilities.hostRecreate.running`, { action: verbOf(runningAction) })
                             : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))
                     "
@@ -546,21 +523,14 @@ const command = (os: CommandOs): string => {
             </ConfirmDialog>
         </template>
 
-        <!-- Desktop deep link covers all three swaps including rollback. -->
+        <!-- Desktop deep link covers all three swaps including rollback, followed through the app's own report of it. -->
         <template v-else-if="desktop">
-            <div :class="row">
-                <Button
-                    :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
-                    :size="gilded ? undefined : `small`"
-                    :tier="gilded ? `loud` : `accent`"
-                    :gilded="gilded"
-                    @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
-                >
-                    <template #icon><Icon :name="icon" /></template>
-                </Button>
-                <slot name="beside" />
-            </div>
-            <p v-if="!bare && !gilded" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsHereOnDevice`, { cost }) }}</p>
+            <AppRecreateButton :slug="slug" :hash="hash" :action="action" :label="label" :gilded="gilded" :icon="icon" :row="row">
+                <template #beside><slot name="beside" /></template>
+                <template v-if="!bare && !gilded" #cost>
+                    <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsHereOnDevice`, { cost }) }}</p>
+                </template>
+            </AppRecreateButton>
         </template>
 
         <template v-else>

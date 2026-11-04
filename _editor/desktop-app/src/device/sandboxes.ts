@@ -56,10 +56,11 @@ const recreate = async (slug: string, hash: string | undefined, rollback: boolea
     const mode = rollback ? `rollback` : hash === undefined ? `update` : `rebuild`;
     track(`desktop_recreate_started`, { mode, source });
     // A process on both faces' rails while it runs and once it has ended, whoever asked (deviceProcesses.ts says why).
-    reportProcess({ ...processOf(`recreate`, slug, `running`), subject: slug });
+    // Its `step` names the swap (processReport.ts `RECREATE_MODES`), so both rails draw an update as one, not as a rebuild.
+    reportProcess({ ...processOf(`recreate`, slug, `running`), subject: slug, step: mode });
     const failure = await onRow(slug, rollback ? `rollback` : `update`, `recreate:${slug}`, () => sandboxRecreate(slug, hash, rollback));
     track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
-    reportProcess({ ...processOf(`recreate`, slug, failure === undefined ? `done` : `failed`), subject: slug, failure, actions: [`dismiss`] });
+    reportProcess({ ...processOf(`recreate`, slug, failure === undefined ? `done` : `failed`), subject: slug, step: mode, failure, actions: [`dismiss`] });
 };
 
 /** A recreate's tile put away, from either face (useDevice.ts starts it in the main window, which runs them). */

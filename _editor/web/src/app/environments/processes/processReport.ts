@@ -95,7 +95,8 @@ export interface ProcessReport {
     /** The owner's own words for where it is ("Step 4 of 10") and how long is left ("about 3 min left"). */
     readonly position?: string | undefined;
     readonly remaining?: string | undefined;
-    /** The running step's id, for the page's own words where it has them and for analytics. */
+    /** The running step's id, for the page's own words where it has them and for analytics. A recreate's is which swap
+     * it is (`RECREATE_MODES`). */
     readonly step?: string | undefined;
     /** The owner's one line about the running step, shown as it came. */
     readonly line?: string | undefined;
@@ -109,6 +110,14 @@ export interface ProcessReport {
     readonly startedAt?: number | undefined;
     readonly at?: number | undefined;
 }
+
+/** Which swap a recreate is, carried as its `step`: the desktop app runs all three through one script, under one id. */
+export const RECREATE_MODES = [`update`, `rebuild`, `rollback`] as const;
+export type RecreateMode = (typeof RECREATE_MODES)[number];
+
+/** A recreate's swap, where its report names one (an app from before this says nothing, and reads as a rebuild). */
+export const recreateMode = (report: ProcessReport): RecreateMode | undefined =>
+    report.kind === `recreate` ? RECREATE_MODES.find((mode) => mode === report.step) : undefined;
 
 /** Whether a run asks something of the reader now: the mark its tile wears, and what a notification is put up for. */
 export const processAsks = (report: ProcessReport): boolean =>

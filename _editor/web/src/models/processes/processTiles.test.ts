@@ -33,6 +33,17 @@ describe(`a process's tile`, () => {
         expect(processTileOf(run({ id: `pc-setup:this`, kind: `pc-setup`, subject: undefined, sandboxId: undefined })).glyph).toEqual({ icon: `desktop` });
         expect(processTileOf(run()).title).toBe(`Setting up shop`);
     });
+
+    it(`wears what a recreate does rather than its slug's first letter`, () => {
+        const recreate = (step?: string): ProcessReport => run({ id: `recreate:sandbox-6a4ac`, kind: `recreate`, subject: `sandbox-6a4ac`, sandboxId: undefined, step });
+        expect(processTileOf(recreate(`update`)).glyph).toEqual({ icon: `arrow-circle-up` });
+        expect(processTileOf(recreate(`update`)).title).toBe(`Updating sandbox-6a4ac`);
+        expect(processTileOf(recreate(`rollback`)).glyph).toEqual({ icon: `undo` });
+        expect(processTileOf(recreate(`rollback`)).title).toBe(`Rolling back sandbox-6a4ac`);
+        // An app from before it named the swap: a rebuild's glyph and words, never the letters.
+        expect(processTileOf(recreate()).glyph).toEqual({ icon: `refresh` });
+        expect(processTileOf(recreate()).title).toBe(`Rebuilding sandbox-6a4ac`);
+    });
 });
 
 describe(`the rail's group`, () => {
