@@ -590,9 +590,7 @@ const keyringReach = (whole: () => Services, config: Config) => ({
 });
 
 export const createServices = (config: Config, logger: Logger, logFiles = openLogFiles(config)): Services => {
-    // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
-    // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
-    // finished services through this per call, and none is called before composing returns.
+    // These services read the completed graph per call; none runs before composition returns.
     const whole = (): Services => services;
 
     const workspaceSlice = createWorkspaceSlice({ config, logger });
