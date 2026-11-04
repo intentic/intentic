@@ -6,7 +6,6 @@ import {
     type AccountsBorrowed,
     type BorrowOutcome,
     sameSharedRef,
-    type ShareableAccount,
     type SharedAccountRef,
 } from "@intentic/sandbox-contract/schemas/providers/account-sharing";
 import { linkCardId } from "../../../components/linkPairing";
@@ -61,8 +60,6 @@ export const unionRefs = (current: readonly SharedAccountRef[], more: readonly S
 export const withoutRef = (current: readonly SharedAccountRef[], ref: SharedAccountRef): SharedAccountRef[] =>
     current.filter((held) => !sameSharedRef(held, ref)).map(refOf);
 
-/** The rows a press may bring: everything the source can share at all, one way or the other. */
-export const bringable = (accounts: readonly ShareableAccount[]): ShareableAccount[] => accounts.filter((account) => account.mode !== `no`);
 
 /** The accounts link card this sandbox saved for the source, if any. */
 export const accountsCardFor = (cards: readonly CapabilitySummary[], sourceId: string): CapabilitySummary | undefined =>

@@ -1,7 +1,9 @@
 // Sandbox ▸ Models' "From your other sandboxes": every other sandbox of the owner's is read without being asked, and once
-// they hold something this one does not, a quiet door on the page names how much; behind it, a dialog lists each with
-// where it is, brings one or all of it in, and names a sandbox it could not see into with why. The far and near calls are the fakes below; the press's
-// own order of them is shareAccounts.test.ts's to check.
+// they hold something this one does not, a quiet door on the page names how much; behind it, a section per sandbox. One
+// not linked here says what it holds in one line and offers Link, which is checked from this side before anything is
+// offered over it; a linked one lists its accounts one row per provider. Whatever a press could not do is said in the
+// section it was about. The far and near calls are the fakes below; the press's own order of them is
+// shareAccounts.test.ts's to check.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -36,7 +38,11 @@ jest.mock(`../../../parts/sandbox/SandboxOutdatedNotice.vue`, () => ({
 }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
-const add = jest.fn(async () => undefined);
+// What this sandbox's daemon says of an accounts card once it is saved: the link answering, unless a test says not.
+const cardStatus = ref<CapabilitySummary[`status`]>({ state: `active` });
+const add = jest.fn(async (card: { id: string; kind: string; config: Record<string, string> }) => {
+    capabilities.value = [...capabilities.value.filter((held) => held.id !== card.id), { ...card, kind: `link`, status: cardStatus.value, config: card.config, secrets: [`token`] }];
+});
 const refetch = jest.fn(async () => ({ data: { capabilities: capabilities.value, recommendations: [] } }));
 jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add, refetch }) }));
 
@@ -73,8 +79,10 @@ const borrowHere = jest.fn(
 );
 const mintAt = jest.fn(async (_id: string, _mint: unknown) => ({ id: `lnk_new`, token: `ilk_secret` }));
 const accountsMoved = jest.fn(async () => undefined);
+const linkStatus = jest.fn(async () => cardStatus.value);
 jest.mock(`./useAccountSharing`, () => ({
     shareableAt,
+    linkStatus,
     borrowHere,
     accountsMoved,
     useBorrowedAccounts: () => ({ query: { data: ref({ accounts: [] }) } }),
@@ -104,6 +112,14 @@ const openDoor = async (): Promise<void> => {
     door()?.click();
     await settle();
 };
+// An accounts card this sandbox already holds for `source`, as the daemon lists it.
+const linkedCard = (source: { id: string; name: string; daemonUrl: string | null }, status: CapabilitySummary[`status`] = { state: `active` }): CapabilitySummary => ({
+    id: `accounts-${source.name}`,
+    kind: `link`,
+    status,
+    config: { url: source.daemonUrl ?? ``, name: source.name, sandboxId: source.id, purpose: `accounts` },
+    secrets: [`token`],
+});
 const settle = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
@@ -126,88 +142,142 @@ afterEach(() => {
     document.body.innerHTML = ``;
     signIns.length = 0;
     capabilities.value = [];
+    cardStatus.value = { state: `active` };
     held.value = {};
     sandboxes.value = [HERE, LAPTOP, GUEST];
     borrowSupported.value = true;
-    for (const fake of [add, refetch, shareableAt, borrowHere, mintAt, accountsMoved]) {
+    for (const fake of [add, refetch, shareableAt, borrowHere, mintAt, accountsMoved, linkStatus]) {
         fake.mockClear();
     }
     forgetOperations();
     resetSandboxScope();
 });
 
-it(`reads every other sandbox the owner may make a link on, without a pick, and says where each account is`, async () => {
+it(`reads every other sandbox the owner may make a link on, and offers Link before any account, saying what it holds`, async () => {
     await mount();
     // Only the laptop: this sandbox is not asked, and a guest's sandbox is not the reader's to make a link on.
     expect(shareableAt.mock.calls.map(([id]) => id)).toEqual([LAPTOP.id]);
     // On the page, only the door, naming what can come; the list is behind it.
     await waitFor(() => expect(door()?.textContent?.trim()).toBe(`3 accounts on your other sandboxes`));
-    expect(shown()).not.toContain(`Claude Max`);
     await openDoor();
     expect(shown()).toContain(`From your other sandboxes`);
-    expect(shown()).toContain(`Claude Max`);
-    // The way each comes first on its line, then where it is, then whose it is.
-    expect(shown()).toContain(`Borrow turn by turn · on ada-laptop · ada@acme.dev`);
-    expect(shown()).toContain(`Copy its key · on ada-laptop · Cursor · ada@acme.dev`);
-    expect(shown()).toContain(`Copy its key · on ada-laptop · Model endpoint`);
-    expect(shown()).toContain(`Subscriptions stay on the sandbox that holds them for now · on ada-laptop · ada@acme.dev`);
+    expect(shown()).toContain(`ada-laptop`);
+    expect(shown()).toContain(`Not linked`);
+    // What linking would offer, in one line, and no account rows or Bring before it is linked.
+    expect(shown()).toContain(`Holds 4 accounts this sandbox doesn't have: Claude, Cursor, Model endpoint,`);
+    expect(shown()).not.toContain(`Claude Max`);
+    expect(buttons(`Bring`)).toHaveLength(0);
+    expect(buttons(`Link ada-laptop`)).toHaveLength(1);
+});
+
+it(`links a sandbox lending nothing yet, checks the link from here, then lists its accounts one row per provider`, async () => {
+    await mount();
+    await openDoor();
+    await waitFor(() => expect(buttons(`Link ada-laptop`)).toHaveLength(1));
+    buttons(`Link ada-laptop`)[0]?.click();
+
+    await waitFor(() => expect(shown()).toContain(`Linked`));
+    expect(mintAt).toHaveBeenCalledWith(LAPTOP.id, { label: HERE.name, from: { sandboxId: HERE.id, url: HERE.daemonUrl }, terms: { tasks: false, approve: false, accounts: [] } });
+    expect(add).toHaveBeenCalledWith({
+        id: `accounts-ada-laptop`,
+        kind: `link`,
+        config: { url: LAPTOP.daemonUrl, token: `ilk_secret`, name: LAPTOP.name, sandboxId: LAPTOP.id, purpose: `accounts` },
+    });
+    expect(linkStatus).toHaveBeenCalledWith(`accounts-ada-laptop`);
+    expect(borrowHere).not.toHaveBeenCalled();
+    await waitFor(() => expect(shown()).toContain(`Claude Max · ada@acme.dev`));
+    expect(shown()).toContain(`Borrow turn by turn`);
+    expect(shown()).toContain(`Cursor · Work · ada@acme.dev`);
+    expect(shown()).toContain(`Subscriptions stay on the sandbox that holds them for now`);
     // Claude, Cursor and the endpoint can come; ChatGPT cannot, and offers signing in here instead.
     expect(buttons(`Bring`)).toHaveLength(3);
-    expect(buttons(`Sign in here instead`)).toHaveLength(1);
-    expect(buttons(`Bring all`)).toHaveLength(1);
-
+    expect(buttons(`Bring all 3`)).toHaveLength(1);
     buttons(`Sign in here instead`)[0]?.click();
     expect(signIns).toEqual([`codex`]);
 });
 
+it(`says at the Link press, in the daemon's words, when this sandbox cannot reach the one it linked`, async () => {
+    cardStatus.value = { state: `pending`, detail: `the other sandbox did not answer: fetch failed (connect ECONNREFUSED)` };
+    await mount();
+    await openDoor();
+    await waitFor(() => expect(buttons(`Link ada-laptop`)).toHaveLength(1));
+    buttons(`Link ada-laptop`)[0]?.click();
+
+    await waitFor(() => expect(shown()).toContain(`Couldn't link ada-laptop.`));
+    expect(shown()).toContain(`connect ECONNREFUSED`);
+    expect(shown()).toContain(`Not answering`);
+    expect(shown()).not.toContain(`Claude Max`);
+    expect(buttons(`Check again`)).toHaveLength(1);
+});
+
+it(`offers Link again for a link the other sandbox revoked`, async () => {
+    capabilities.value = [linkedCard(LAPTOP, { state: `error`, code: `token`, detail: `revoked there` })];
+    await mount();
+    await openDoor();
+    await waitFor(() => expect(shown()).toContain(`ada-laptop no longer holds its link to this sandbox.`));
+    expect(shown()).toContain(`Link revoked`);
+    expect(buttons(`Link again`)).toHaveLength(1);
+});
+
 it(`leaves out what is already here, and lists an account two sandboxes hold once, from where it can come`, async () => {
     sandboxes.value = [HERE, LAPTOP, DESK];
+    capabilities.value = [linkedCard(LAPTOP), linkedCard(DESK)];
     held.value = { cursor: [{ id: `cur_here`, label: `Work`, email: `ADA@acme.dev`, connectedAt: 1 }] };
     await mount();
     await openDoor();
     await waitFor(() => expect(shown()).toContain(`Devin`));
     expect(shown()).not.toContain(`Work`);
     expect(shown()).not.toContain(`It is borrowed from ada-laptop`);
-    expect(shown()).toContain(`Borrow turn by turn · on ada-laptop`);
-    expect(shown()).toContain(`Copy its key · on ada-desk · ops@acme.dev`);
+    expect(rowAround(buttons(`Bring`)[0], `Claude Max`)?.textContent).toContain(`Borrow turn by turn`);
+    expect(shown()).toContain(`Devin · ops@acme.dev`);
 });
 
-it(`brings every account that can come in one press, a link on each sandbox they come from, and shows what became of each`, async () => {
-    sandboxes.value = [HERE, LAPTOP, DESK];
+it(`folds a provider's many accounts into one row that brings them all, and opens to bring one`, async () => {
+    const many: ShareableAccounts = {
+        sandbox: `ada-laptop`,
+        accounts: Array.from({ length: 12 }, (_, n) => ({ provider: `cursor`, account: `cur_${n}`, label: `Seat ${n}`, email: `seat${n}@acme.dev`, mode: `copy` as const })),
+    };
+    shareableAt.mockImplementation(async () => many);
+    capabilities.value = [linkedCard(LAPTOP)];
+    try {
+        await mount();
+        await openDoor();
+        await waitFor(() => expect(shown()).toContain(`Cursor · 12 accounts`));
+        expect(shown()).not.toContain(`seat3@acme.dev`);
+        document.body.querySelector<HTMLButtonElement>(`button[aria-label="Cursor · 12 accounts"]`)?.click();
+        await waitFor(() => expect(shown()).toContain(`Seat 3 · seat3@acme.dev`));
+        expect(buttons(`Bring`)).toHaveLength(12);
+        expect(buttons(`Bring 12`)).toHaveLength(1);
+        buttons(`Bring 12`)[0]?.click();
+        await waitFor(() => expect(borrowHere).toHaveBeenCalledTimes(1));
+        expect(borrowHere.mock.calls[0]?.[0].items).toHaveLength(12);
+    } finally {
+        shareableAt.mockImplementation(async (id: string) => (id === DESK.id ? DESK_LISTING : LISTING));
+    }
+});
+
+it(`brings everything a linked sandbox can send in one press, and says in its section what did not come and why`, async () => {
+    capabilities.value = [linkedCard(LAPTOP)];
     await mount();
     await openDoor();
-    await waitFor(() => expect(buttons(`Bring all`)).toHaveLength(1));
-    buttons(`Bring all`)[0]?.click();
+    await waitFor(() => expect(buttons(`Bring all 3`)).toHaveLength(1));
+    buttons(`Bring all 3`)[0]?.click();
 
     await waitFor(() => expect(shown()).toContain(`Borrowed`));
-    // A new link on the laptop lending exactly its three, and one on the desk lending its one, each card saved here.
-    expect(mintAt).toHaveBeenCalledWith(LAPTOP.id, {
-        label: HERE.name,
-        from: { sandboxId: HERE.id, url: HERE.daemonUrl },
-        terms: {
-            tasks: false,
-            approve: false,
-            accounts: [{ provider: `claude`, account: `acc_max` }, { provider: `cursor`, account: `cur_1` }, { provider: `endpoint/openrouter` }],
-        },
+    expect(borrowHere).toHaveBeenCalledWith({
+        card: `accounts-ada-laptop`,
+        items: [{ provider: `claude`, account: `acc_max` }, { provider: `cursor`, account: `cur_1` }, { provider: `endpoint/openrouter` }],
     });
-    expect(mintAt).toHaveBeenCalledWith(DESK.id, expect.objectContaining({ terms: expect.objectContaining({ accounts: [{ provider: `devin`, account: `dev_1` }] }) }));
-    expect(add).toHaveBeenCalledWith({
-        id: `accounts-ada-laptop`,
-        kind: `link`,
-        config: { url: LAPTOP.daemonUrl, token: `ilk_secret`, name: LAPTOP.name, sandboxId: LAPTOP.id, purpose: `accounts` },
-    });
-    expect(borrowHere).toHaveBeenCalledTimes(2);
     expect(accountsMoved).toHaveBeenCalledTimes(1);
     expect(shown()).toContain(`Copied`);
-    // The one that failed says why, in the daemon's words, and can be pressed again; the others offer no second press.
-    expect(shown()).toContain(`That key has expired on ada-laptop · on ada-laptop · Cursor`);
+    // The one that failed is said at the top of the section, in the daemon's words, and can be pressed again.
+    expect(shown()).toContain(`1 account didn't come in from ada-laptop.`);
+    expect(shown()).toContain(`That key has expired on ada-laptop.`);
     expect(buttons(`Bring`)).toHaveLength(1);
-    expect(buttons(`Bring all`)).toHaveLength(0);
+    expect(buttons(`Bring all 3`)).toHaveLength(0);
     // The door now names only what is still waiting: the one that failed.
     expect(door()?.textContent?.trim()).toBe(`1 account on your other sandboxes`);
-    const again = rowAround(buttons(`Bring`)[0], `Work`)?.textContent ?? ``;
-    expect(again).toContain(`That key has expired on ada-laptop`);
-    expect(again).not.toContain(`Claude Max`);
+    expect(rowAround(buttons(`Bring`)[0], `Work`)?.textContent).not.toContain(`Claude Max`);
 });
 
 it(`names, beside the accounts it lists, the sandboxes it could not see into and why`, async () => {
@@ -228,7 +298,7 @@ it(`names, beside the accounts it lists, the sandboxes it could not see into and
         await waitFor(() => expect(shown()).toContain(`ada-older runs a build too old to share accounts.`));
         expect(shown()).toContain(`Couldn't reach ada-desk, so its accounts aren't listed.`);
         expect(shown()).toContain(`ada-old isn't running.`);
-        expect(shown()).toContain(`Claude Max`);
+        expect(shown()).toContain(`Link ada-laptop`);
     } finally {
         shareableAt.mockImplementation(async (id: string) => (id === DESK.id ? DESK_LISTING : LISTING));
     }

@@ -14,12 +14,13 @@ import { accountsOf } from "../../../models/conversations/accounts/useChat-accou
 import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import { endpointProviders } from "../../../models/providers/providerCatalog";
 import { useOperation } from "../../../workbench/operations/operations";
-import { bySource, type HeldHere, type OtherAccount, otherAccounts, otherKey, type SourceRead, unseen } from "./otherAccounts";
-import { bringAccounts, refOf, type ShareSource } from "./shareAccounts";
-import { accountsMoved, borrowHere, farShareCalls, shareableAt, useBorrowedAccounts } from "./useAccountSharing";
+import { bySource, type HeldHere, type LinkState, linkStateOf, type OtherAccount, otherAccounts, otherKey, type SourceRead, unseen } from "./otherAccounts";
+import { type BringAsk, bringAccounts, openAccountsLink, refOf, type ShareSource } from "./shareAccounts";
+import { accountsMoved, borrowHere, farShareCalls, linkStatus, shareableAt, useBorrowedAccounts } from "./useAccountSharing";
 
 // THE WIRE behind otherAccounts.ts: every other sandbox of the owner's read once per visit (again after a minute), the
-// list of what they hold that this one does not, and the one press that brings some of them in. Shared by the Models
+// list of what they hold that this one does not, whether each is linked to this one for accounts, and the two presses:
+// Link (a link over there, its card here, checked before anything is offered over it) and Bring. Shared by the Models
 // page's "From your other sandboxes" and each provider's own panel, so both read one answer and one press runs at a time.
 
 // A sandbox that does not answer in this long is said to be unreachable rather than left reading.
@@ -62,7 +63,22 @@ const readSource = async (source: ShareSource, timeoutWords: string): Promise<vo
     }
 };
 
-const ALL = `all`;
+// Every press is tagged `<source id>\u0001…`, so the dialog shows a failure in the section of the sandbox it was about.
+const tagFor = (sourceId: string, what: string): string => `${sourceId}\u0001${what}`;
+/** The tag of a press that links `sourceId`. */
+export const linkTag = (sourceId: string): string => tagFor(sourceId, `\u0000link`);
+/** The tag of a press that brings every account of `provider` (or, without one, everything) from `sourceId`. */
+export const groupTag = (sourceId: string, provider?: string): string => tagFor(sourceId, `\u0000all${provider === undefined ? `` : `\u0000${provider}`}`);
+/** Whether a press's tag was about `sourceId`. */
+export const taggedFor = (tag: string | undefined, sourceId: string): boolean => tag !== undefined && tag.startsWith(`${sourceId}\u0001`);
+
+/** One other sandbox as the dialog draws it: what it answered, whether it is linked here, and its accounts. */
+export interface SourceSection {
+    readonly source: ShareSource;
+    readonly read: SourceRead;
+    readonly link: LinkState;
+    readonly rows: readonly OtherAccount[];
+}
 
 // What the owner's other sandboxes hold that this one does not, read as the page opens.
 export const useOtherAccounts = () => {
@@ -70,6 +86,7 @@ export const useOtherAccounts = () => {
     const { sandboxes, activeSandboxId } = useSandbox();
     const { canShip } = useRole();
     const { query: borrowedRead } = useBorrowedAccounts(canShip);
+    const { capabilities } = useCapabilities();
 
     // The owner's other sandboxes this editor may make a link on (linkPairing.ts), and those of theirs it cannot reach
     // at all for want of an address: stopped, or never started.
@@ -104,8 +121,12 @@ export const useOtherAccounts = () => {
     };
     watch(() => [sources.value.map((source) => source.id).join(`,`), canShip.value, canBorrowHere.value], () => refresh(), { immediate: true });
 
+    const links = computed(() => new Map(sources.value.map((source) => [source.id, linkStateOf(capabilities.value, source.id)] as const)));
+    // Linked sandboxes first, so an account two of them hold is listed from the one it can already come from.
     const listed = computed<readonly SourceRead[]>(() =>
-        sources.value.map((source) => reads.value.get(source.id) ?? ({ state: `reading`, source } satisfies SourceRead)),
+        sources.value
+            .map((source) => reads.value.get(source.id) ?? ({ state: `reading`, source } satisfies SourceRead))
+            .toSorted((a, b) => Number(links.value.get(b.source.id)?.state === `linked`) - Number(links.value.get(a.source.id)?.state === `linked`)),
     );
     const here = computed<HeldHere>(() => {
         const translator = translatorAccounts.value;
@@ -117,12 +138,23 @@ export const useOtherAccounts = () => {
         };
     });
 
+    const rows = computed(() => otherAccounts(listed.value, here.value, outcomes.value));
+    const sections = computed<readonly SourceSection[]>(() =>
+        listed.value.map((read) => ({
+            source: read.source,
+            read,
+            link: links.value.get(read.source.id) ?? { state: `unlinked` },
+            rows: rows.value.filter((row) => row.source.id === read.source.id),
+        })),
+    );
+
     return {
         relevant,
         canBorrowHere,
         offline,
         reading: computed(() => listed.value.some((read) => read.state === `reading`)),
-        rows: computed(() => otherAccounts(listed.value, here.value, outcomes.value)),
+        rows,
+        sections,
         missed: computed(() => unseen(listed.value)),
         outcomes,
         refresh,
@@ -143,18 +175,49 @@ export const useBringOther = () => {
     const bringOp = useOperation<readonly KeyedOutcome[]>(`models/share/bring`);
     const bringing = computed(() => (bringOp.busy.value ? bringOp.operation.value?.tag : undefined));
 
-    const bringFrom = async (source: ShareSource, rows: readonly OtherAccount[]): Promise<KeyedOutcome[]> => {
+    const calls = { ...farShareCalls, saveCard: (card: Parameters<typeof add>[0]) => add(card), borrow: borrowHere };
+    const askFor = async (source: ShareSource, rows: readonly OtherAccount[]): Promise<BringAsk> => {
         // This sandbox's cards as they stand now, so a card saved since the page loaded is widened, not made twice.
         const cards = (await refetch()).data?.capabilities ?? capabilities.value;
         const here = { id: activeSandboxId.value, name: active.value?.name ?? t(`capabilities.linkPairing.thisSandbox`), url: daemonUrl.value };
-        const answered = await bringAccounts(
-            { source, here, refs: rows.map((row) => refOf(row.account)), cards },
-            { ...farShareCalls, saveCard: (card) => add(card), borrow: borrowHere },
-        );
+        return { source, here, refs: rows.map((row) => refOf(row.account)), cards };
+    };
+
+    const bringFrom = async (source: ShareSource, rows: readonly OtherAccount[]): Promise<KeyedOutcome[]> => {
+        const answered = await bringAccounts(await askFor(source, rows), calls);
         return answered.map((outcome) => ({ key: otherKey(source.id, outcome), outcome }));
     };
 
-    const bring = async (picked: readonly OtherAccount[], tag: string = ALL): Promise<void> => {
+    /**
+     * Links `source` to this sandbox for accounts, lending nothing yet (Bring names what it lends), and checks the link
+     * from this sandbox's side before anything is offered over it: a link this daemon cannot use fails here, in its words.
+     */
+    const link = async (source: ShareSource): Promise<void> => {
+        if (bringing.value !== undefined) {
+            return;
+        }
+        const ended = await bringOp.run({
+            what: t(`connect.shareAccounts.linking`, { name: source.name }),
+            tag: linkTag(source.id),
+            quiet: true,
+            failed: t(`connect.shareAccounts.couldntLink`, { name: source.name }),
+            task: async () => {
+                const card = await openAccountsLink(await askFor(source, []), calls);
+                const status = await linkStatus(card);
+                // The list reads the card's status too: the section says linked, or what is wrong, from it.
+                await refetch();
+                if (status.state !== `active`) {
+                    throw new Error(status.detail ?? t(`connect.shareAccounts.noAnswer`));
+                }
+                return [];
+            },
+        });
+        if (ended?.state === `done`) {
+            bringOp.dismiss();
+        }
+    };
+
+    const bring = async (picked: readonly OtherAccount[], tag?: string): Promise<void> => {
         const groups = bySource(picked.filter((row) => row.account.mode !== `no`));
         if (bringing.value !== undefined || groups.length === 0) {
             return;
@@ -162,7 +225,7 @@ export const useBringOther = () => {
         const names = groups.map((group) => group.source.name).join(`, `);
         const ended = await bringOp.run({
             what: t(`connect.shareAccounts.bringing`, { name: names }),
-            tag,
+            tag: tag ?? groupTag(groups[0]?.source.id ?? ``),
             quiet: true,
             failed: t(`connect.shareAccounts.couldntBring`, { name: names }),
             task: async () => {
@@ -182,9 +245,9 @@ export const useBringOther = () => {
     };
 
     return {
+        link,
         bring,
         bringing,
-        bringingAll: computed(() => bringing.value === ALL),
         notice: bringOp.failure,
         // Which row the last press was for, so a panel shows only a failure of its own.
         tag: computed(() => bringOp.operation.value?.tag),

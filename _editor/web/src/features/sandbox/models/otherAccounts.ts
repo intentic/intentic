@@ -1,6 +1,7 @@
 import type { BorrowedAccount, BorrowOutcome, ShareableAccount, ShareableAccounts } from "@intentic/sandbox-contract/schemas/providers/account-sharing";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { refKey, type ShareSource } from "./shareAccounts";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { accountsCardFor, refKey, type ShareSource } from "./shareAccounts";
 
 // WHAT THE OWNER'S OTHER SANDBOXES HOLD THAT THIS ONE DOES NOT, as one list (useOtherAccounts.ts reads them). Nobody has
 // to pick a sandbox to find out: every one the editor may make a link on is read, and what is already here, or held twice
@@ -14,6 +15,27 @@ export type SourceRead =
     | { readonly state: `tooOld`; readonly source: ShareSource; readonly at: number }
     // Stopped, asleep, or refused: why, in words.
     | { readonly state: `unreachable`; readonly source: ShareSource; readonly problem: string; readonly at: number };
+
+/**
+ * Whether another sandbox is linked to this one for accounts, read off the accounts card saved here for it and the
+ * status this sandbox's daemon gives that card: `linked` once the link answers, `revoked` when the other side no longer
+ * holds it, `silent` when it did not answer. Accounts come only over a link, so a sandbox not linked offers Link first.
+ */
+export type LinkState =
+    | { readonly state: `unlinked` }
+    | { readonly state: `linked`; readonly card: string }
+    | { readonly state: `revoked` | `silent`; readonly card: string; readonly detail: string | undefined };
+
+export const linkStateOf = (cards: readonly CapabilitySummary[], sourceId: string): LinkState => {
+    const card = accountsCardFor(cards, sourceId);
+    if (card === undefined) {
+        return { state: `unlinked` };
+    }
+    if (card.status.state === `active`) {
+        return { state: `linked`, card: card.id };
+    }
+    return { state: card.status.code === `token` ? `revoked` : `silent`, card: card.id, detail: card.status.detail };
+};
 
 /** One account another sandbox holds, with where it is. */
 export interface OtherAccount {
@@ -100,6 +122,15 @@ export const bySource = (rows: readonly OtherAccount[]): { readonly source: Shar
         groups.set(row.source.id, group);
     }
     return [...groups.values()];
+};
+
+/** A sandbox's accounts by provider, in the order they were listed: one row of the dialog per provider. */
+export const byProvider = (rows: readonly OtherAccount[]): { readonly provider: string; readonly rows: readonly OtherAccount[] }[] => {
+    const groups = new Map<string, OtherAccount[]>();
+    for (const row of rows) {
+        groups.set(row.account.provider, [...(groups.get(row.account.provider) ?? []), row]);
+    }
+    return [...groups.entries()].map(([provider, members]) => ({ provider, rows: members }));
 };
 
 /** The first sandbox offering an account of `provider` that can come here, for that provider's own panel. */

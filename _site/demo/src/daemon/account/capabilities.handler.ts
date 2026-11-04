@@ -2,6 +2,7 @@ import { demoRegistry } from "../../fixture/registry";
 import {
     addCapability,
     capabilityList,
+    capabilityStatus,
     dismissRecommendation,
     loginCapability,
     mintSshKey,
@@ -17,6 +18,7 @@ import { type Doors, okAfter } from "../doors";
 // what its next read says, and an add streams its apply.
 export const capabilitiesDoors = {
     list: () => capabilityList(),
+    status: ({ id }) => capabilityStatus(id),
     add: (capability) => addCapability(capability),
     probe: (capability) => probeCapability(capability),
     sshKey: () => mintSshKey(),

@@ -204,6 +204,9 @@ export const setCapabilitySecret = (id: string, value: string): void => {
     pushRuntime(`capabilities`);
 };
 
+/** GET /capabilities/{id}/status: the row's own state, as the apply left it (a link answers at once in the demo). */
+export const capabilityStatus = (id: string): CapabilityStatus => existing(id).status;
+
 export const capabilityList = () => ({
     capabilities: connections(),
     recommendations: RECOMMENDED.filter((offer) => !dismissed.has(offer.entry) && !connections().some((row) => row.id === offer.entry)),

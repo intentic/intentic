@@ -48,6 +48,9 @@ export const shareableAt = (sandboxId: string) => sandboxRpc.sharing.shareable(u
 /** This sandbox bringing accounts in over the card it holds for the source. */
 export const borrowHere: ShareCalls[`borrow`] = (ask) => sandboxRpc.sharing.borrow(ask);
 
+/** The accounts card's status as this sandbox's daemon reads it right now: whether the link answers from here. */
+export const linkStatus = (card: string) => sandboxRpc.capabilities.status({ id: card });
+
 /** What this sandbox borrows, for a reader who may connect things, from a daemon that has the route. */
 export const useBorrowedAccounts = (enabled: MaybeRefOrGetter<boolean>) =>
     useSandboxQuery({ ...rpcQuery(`sharing.borrowed`), enabled: computed(() => toValue(enabled) && supportsRoute(`sharing.borrowed`)) });
