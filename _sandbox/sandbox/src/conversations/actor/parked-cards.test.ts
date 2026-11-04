@@ -1,5 +1,5 @@
 import { memoryFleet } from "../registry/agents-registry.testing.js";
-import { parkedCards, standingOn } from "./parked-cards.js";
+import { type NightAnswers, type NightCard, parkedCards, standingOn } from "./parked-cards.js";
 
 // The registry decides what every client is told about a card's fate: a real answer versus the abort's stand-in is the
 // one distinction it draws.
@@ -293,4 +293,65 @@ test("logs a card raised, answered with its verdict and by whom, and another can
     expect(lines[0]?.fields).toEqual({ conversationId: "c-1", requestId: permission.id, kind: "permission" });
     expect(lines[1]?.fields).toMatchObject({ conversationId: "c-1", decision: "once", by: OWNER_CALLER.email });
     expect(lines[3]?.fields).toMatchObject({ requestId: question.id, reason: "its deadline passed unanswered" });
+});
+
+// Night hours (agent/night): the registry answers a card the turn marked as one they may answer, while they are in force.
+const nightOf = (asleep: { value: boolean }): NightAnswers => ({
+    answer: (requestId, card) => {
+        if (!asleep.value) {
+            return undefined;
+        }
+        return "plan" in card
+            ? { kind: "plan", requestId, approve: true, night: { outcome: "approved", until: "07:00" } }
+            : { kind: "question", requestId, answers: { Which: ["A (Recommended)"] }, night: { outcome: "picked", until: "07:00" } };
+    },
+    recheckMs: 5,
+});
+const ASKED: NightCard = { questions: [{ question: "Which", header: "Which", multiSelect: false, options: [] }] };
+
+test("while the owner sleeps, an agent's own question is answered as it is raised, and its push is never sent", async () => {
+    const lines: [Record<string, unknown>, string][] = [];
+    const sleeping = parkedCards(memoryFleet().conversations, undefined, undefined, (fields, message) => lines.push([fields, message]), nightOf({ value: true }));
+    const { id, wait } = sleeping.create("question", onAbort, "c-1", { night: ASKED });
+
+    // Known before the frame announcing it goes out, which is when the push asks.
+    expect(sleeping.settledOnRaise(id)).toBe(true);
+    const { reply, resolved } = await wait(new AbortController().signal);
+    expect(reply).toEqual({ kind: "question", requestId: id, answers: { Which: ["A (Recommended)"] }, night: { outcome: "picked", until: "07:00" } });
+    // The frozen card carries the mark, so the morning reader sees the sandbox chose.
+    expect(resolved).toEqual({ kind: "resolved", requestId: id, reply });
+    expect(lines.find(([, message]) => message === "card: question answered")?.[0]).toMatchObject({ by: "night hours" });
+});
+
+test("a card that names no night, as a consent gate or a permission does, waits for a person whatever the hour", async () => {
+    const sleeping = parkedCards(memoryFleet().conversations, undefined, undefined, undefined, nightOf({ value: true }));
+    const { id, wait } = sleeping.create("question", onAbort, "c-1");
+    const settled = wait(new AbortController().signal);
+
+    expect(sleeping.settledOnRaise(id)).toBe(false);
+    expect(sleeping.resolve({ kind: "question", requestId: id, answers: { Which: ["B"] } })).toBe("settled");
+    expect((await settled).reply).toEqual({ kind: "question", requestId: id, answers: { Which: ["B"] } });
+});
+
+test("a question raised in the evening and left unanswered is answered once the night begins", async () => {
+    const asleep = { value: false };
+    const evening = parkedCards(memoryFleet().conversations, undefined, undefined, undefined, nightOf(asleep));
+    const { id, wait } = evening.create("question", onAbort, "c-1", { night: ASKED });
+    const settled = wait(new AbortController().signal);
+
+    expect(evening.settledOnRaise(id)).toBe(false);
+    asleep.value = true;
+    const { reply } = await settled;
+    expect(reply).toMatchObject({ kind: "question", requestId: id, night: { outcome: "picked" } });
+    // Answered by the night, so a person's late reply finds nothing left to answer.
+    expect(evening.resolve({ kind: "question", requestId: id, answers: { Which: ["B"] } })).toBe("missing");
+});
+
+test("a person's reply never carries night hours' mark, whatever the request said", async () => {
+    const { id, wait } = cards.create("plan", { kind: "plan", requestId: "", approve: false });
+    const settled = wait(new AbortController().signal);
+
+    cards.resolve({ kind: "plan", requestId: id, approve: true, night: { outcome: "approved", until: "07:00" } });
+
+    expect((await settled).reply).toEqual({ kind: "plan", requestId: id, approve: true });
 });

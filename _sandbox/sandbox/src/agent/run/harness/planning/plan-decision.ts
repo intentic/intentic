@@ -8,7 +8,7 @@ type PlanCard = Pick<Extract<AgentEvent, { kind: "plan" }>, "text" | "document">
 
 /** Raise the complete plan and wait for approval or revision before the SDK leaves plan mode. */
 export const planApprovalDecision = (
-    request: Pick<AgentRequest, "hooks" | "signal">,
+    request: Pick<AgentRequest, "hooks" | "signal" | "policy">,
     push: (event: AgentEvent) => void,
     cardOf: () => PlanCard | undefined,
     approved: (feedback: string | undefined) => Promise<PermissionMode>,
@@ -17,7 +17,10 @@ export const planApprovalDecision = (
     if (card === undefined) {
         return { behavior: "deny", message: "Write the complete plan in your response, then call ExitPlanMode again." };
     }
-    const { id, wait } = request.hooks.cards.create("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
+    // A plan the agent chose to make may be approved by night hours while the owner sleeps (agent/night); one the owner
+    // launched the turn in plan mode for is theirs to read, so it waits for them whatever the hour.
+    const night = request.policy.permissionMode === "plan" ? {} : { night: { plan: true } as const };
+    const { id, wait } = request.hooks.cards.create("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." }, undefined, night);
     push({ kind: "plan", requestId: id, ...card });
     const { reply, resolved } = await wait(request.signal);
     push(resolved);

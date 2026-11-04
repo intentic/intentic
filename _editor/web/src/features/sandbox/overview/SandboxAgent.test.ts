@@ -31,6 +31,7 @@ jest.mock(`../agent-settings/behaviour/AgentVoice.vue`, () => stub(`Voice`));
 jest.mock(`../agent-settings/behaviour/AgentDocumentSearch.vue`, () => stub(`Document search`));
 jest.mock(`../agent-settings/behaviour/AgentToolLoading.vue`, () => stub(`Tool loading`));
 jest.mock(`../agent-settings/behaviour/AgentClock.vue`, () => stub(`Clock`));
+jest.mock(`../agent-settings/behaviour/AgentNightHours.vue`, () => stub(`Night hours`));
 jest.mock(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
 jest.mock(`../agent-settings/behaviour/AgentRepoChecks.vue`, () => stub(`Checks after edits`));
 jest.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
@@ -67,6 +68,7 @@ const EVERY_GROUP = [
     `Disk space`,
     `Changelog`,
     `Clock`,
+    `Night hours`,
 ];
 
 const { default: SandboxAgent } = await import("./SandboxAgent.vue");
@@ -192,7 +194,7 @@ it(`writes the picked category to the address, and the default writes no param`,
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
-    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Disk space`, `Changelog`, `When a turn breaks`, `Clock`]);
+    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Disk space`, `Changelog`, `When a turn breaks`, `Clock`, `Night hours`]);
 
     pill(el, `Jobs`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());

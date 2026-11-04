@@ -87,3 +87,23 @@ test("a stable block leaves out exactly what the note says, and nothing else", (
         expect(note).toContain(paragraph);
     }
 });
+
+// The owner's night (agent/night): said as it begins, in place of the unwatched note, and in the words of what a
+// question gets then.
+test("the owner's night is said as it begins, and says what a question gets", () => {
+    const actors = fleet();
+    const decide = surroundingsNote(actors, "c1", FRESH, { ...UNWATCHED, night: { questions: "decide", until: "07:00" } });
+    expect(decide?.text).toContain("their night hours run until 07:00");
+    expect(decide?.text).toContain("Decided while you slept");
+    // Which one waits on its card until the owner answers is no longer what this turn is told.
+    expect(decide?.text).not.toContain("Nobody is watching this turn");
+    sent(actors, "c1", decide, true);
+
+    const defer = surroundingsNote(actors, "c1", RESUMED, { ...UNWATCHED, night: { questions: "defer", until: "07:00" } });
+    expect(defer?.text).toContain("Do not decide what is genuinely theirs either");
+    expect(defer?.text).toContain("Do not enter plan mode");
+    sent(actors, "c1", defer);
+
+    // Morning: the night is over, and the turn is told so.
+    expect(surroundingsNote(actors, "c1", RESUMED, UNWATCHED)?.text).toContain("Nobody is watching this turn");
+});

@@ -362,6 +362,50 @@ const messages: TranscriptRow[] = [
             status: `answered`,
         },
     },
+    // Answered by night hours while the owner slept (settings `nightHours`): picked the agent's recommendation, and kept
+    // one for the morning.
+    {
+        role: `assistant`,
+        text: ``,
+        question: {
+            requestId: `q_spec_night_picked`,
+            questions: [
+                {
+                    question: `Keep the old flag as an alias, or drop it?`,
+                    header: `Old flag`,
+                    multiSelect: false,
+                    options: [
+                        { label: `Keep it as an alias (Recommended)`, description: `Nothing that calls it today breaks.` },
+                        { label: `Drop it`, description: `One spelling, but every caller has to change.` },
+                    ],
+                },
+            ],
+            answers: { [`Keep the old flag as an alias, or drop it?`]: [`Keep it as an alias (Recommended)`] },
+            night: { outcome: `picked`, until: `07:00` },
+            status: `answered`,
+        },
+    },
+    {
+        role: `assistant`,
+        text: ``,
+        question: {
+            requestId: `q_spec_night_saved`,
+            questions: [
+                {
+                    question: `Publish 2.4.0 to npm once the kit passes?`,
+                    header: `Publish`,
+                    multiSelect: false,
+                    options: [
+                        { label: `Publish it`, description: `Tagged and pushed tonight.` },
+                        { label: `Wait for me`, description: `Left ready, unpublished.` },
+                    ],
+                },
+            ],
+            answers: { [`Publish 2.4.0 to npm once the kit passes?`]: [`Kept for the morning.`] },
+            night: { outcome: `saved`, until: `07:00` },
+            status: `answered`,
+        },
+    },
     {
         role: `assistant`,
         text: `The report, as a page. The numbers are the ones the hunt recorded.`,

@@ -22,7 +22,8 @@ import type { ChatMessage } from "../../../../models/conversations/transcript/tr
 export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
     switch (plan.status) {
         case "approved":
-            return { label: t(`chat.cardStatus.approved`), tone: "done" };
+            // Night hours approved it, not the reader: said on the card's own word.
+            return { label: plan.night === undefined ? t(`chat.cardStatus.approved`) : t(`chat.cardStatus.approvedForYou`), tone: "done" };
         case "rejected":
             return { label: t(`chat.cardStatus.keptPlanning`), tone: "gone" };
         case "cancelled":
@@ -33,6 +34,15 @@ export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
 };
 
 export const questionStatus = (question: TranscriptQuestion): CardStatus | undefined => {
+    // What night hours did with it, in the card's own word: picked the agent's recommendation, or set it aside for the
+    // reader's morning, which no answer settled.
+    const night = question.night?.outcome;
+    if (question.status === "answered" && night === "picked") {
+        return { label: t(`chat.cardStatus.pickedForYou`), tone: "done" };
+    }
+    if (question.status === "answered" && night === "saved") {
+        return { label: t(`chat.cardStatus.savedForMorning`), tone: "gone" };
+    }
     switch (question.status) {
         case "answered":
             return { label: t(`chat.cardStatus.answered`), tone: "done" };

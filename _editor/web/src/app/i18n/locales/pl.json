@@ -2897,7 +2897,10 @@
             "laneGateway": "Bramka poświadczeń zaraz dołączy je do żądania wysłanego przez agenta.",
             "laneSsh": "Agent SSH piaskownicy zaraz podpisze nim połączenie agenta.",
             "laneCapability": "Agent prosi o wczytanie tego podłączonego konta do rozmowy.",
-            "laneCredential": "Agent prosi o użycie tych danych logowania."
+            "laneCredential": "Agent prosi o użycie tych danych logowania.",
+            "pickedForYou": "Wybrane za ciebie",
+            "savedForMorning": "Zostawione na rano",
+            "approvedForYou": "Zatwierdzone za ciebie"
         },
         "catalog": {
             "askBeforeEachEdit": "Pytaj przed każdą zmianą i każdym poleceniem.",
@@ -3597,7 +3600,9 @@
             "dismissDropsAnswer": "Odrzucenie usunie wybraną odpowiedź i zatrzyma turę.",
             "dismissAnyway": "Odrzuć mimo to",
             "keepAnswer": "Zostaw odpowiedź",
-            "fewQuestions": "Kilka pytań"
+            "fewQuestions": "Kilka pytań",
+            "nightPicked": "Twoje godziny nocne trwały (do {until}), więc agent poszedł za własną rekomendacją. Napisz na czacie, jeśli chcesz to zmienić.",
+            "nightSaved": "Twoje godziny nocne trwały (do {until}), więc nikogo nie zapytano. Agent pracował dalej bez odpowiedzi i kończy tym pytaniem."
         },
         "chatQueue": {
             "edit": "Edytuj",
@@ -4505,7 +4510,8 @@
             "worktreeUnenforced": "Ten sandbox nie potrafi izolować tur agentów na poziomie systemu plików (utworzono go bez CAP_SYS_ADMIN). Praca jest przekierowywana do {branch}, ale polecenie, które samo buduje swoje ścieżki, wciąż może sięgnąć do wspólnej przestrzeni roboczej: utwórz sandbox na nowo, żeby przywrócić pełną izolację."
         },
         "chatPlanCard": {
-            "proposedPlan": "Proponowany plan"
+            "proposedPlan": "Proponowany plan",
+            "nightApproved": "Twoje godziny nocne trwały (do {until}), więc plan, który agent sam postanowił przygotować, został wykonany."
         },
         "noticeWatchStop": {
             "couldNotStop": "Nie udało się zatrzymać obserwacji."
@@ -5428,6 +5434,25 @@
             "scheduleTimesAreIn": "Harmonogramy działają według",
             "whatAnAutomations": "Który zegar liczy „09:00” automatyzacji; na ekranie widzisz swój, uruchomienia idą według tej strefy.",
             "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
+        },
+        "agentNightHours": {
+            "group": "Godziny nocne",
+            "keep": "Przestrzegaj godzin nocnych",
+            "keepNote": "Gdy śpisz i nikogo nie ma w edytorze, pytanie nie zatrzymuje już agenta do rana.",
+            "hours": "Noc",
+            "from": "Noc zaczyna się o",
+            "to": "Noc kończy się o",
+            "length": "{length} na noc",
+            "lengthOn": "{length} na noc, według czasu {zone}",
+            "hoursOnly": "{hours} godz.",
+            "hoursMinutes": "{hours} godz. {minutes} min",
+            "empty": "Zaczyna się wtedy, kiedy kończy, więc nocy nie ma",
+            "questions": "Gdy agent chciałby cię o coś zapytać",
+            "questionsNote": "Uprawnienia, wstrzymane polecenia i plany, które chciałeś przejrzeć, nadal czekają na ciebie.",
+            "decide": "Idź za jego wyborem",
+            "decideBrief": "Wybiera opcję, którą poleca, i w ostatniej wiadomości wypisuje, co zdecydował za ciebie.",
+            "defer": "Zostaw na rano",
+            "deferBrief": "Kończy wszystko, co nie zależy od odpowiedzi, a na końcu zadaje pytanie."
         },
         "agentCodeSearch": {
             "automationOff": "Comiesięczne przepisywanie jest wyłączone",
@@ -10098,6 +10123,7 @@
             "agentTurnBreaks": "limit użycia, limit zapytań, ponów, awaria, crash, brak pamięci, restart, błąd",
             "agentIdleChats": "pamięć podręczna promptu, cache, utrzymuj w gotowości, bezczynne, limit",
             "agentClock": "strefa czasowa, harmonogram, cron, czas lokalny, godzina",
+            "agentNightHours": "sen, spanie, noc, w nocy, godziny ciszy, nie przeszkadzać, pytania, nieobecny",
             "environmentEngines": "claude code, codex, gemini cli, cursor, opencode, wersja cli, aktualizuj agenta",
             "pages": {
                 "agent": "asystent, ai, sztuczna inteligencja, zachowanie, jak działa agent",

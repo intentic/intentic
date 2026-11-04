@@ -2897,7 +2897,10 @@
             "laneGateway": "Das Zugangsdaten-Gateway will es gleich an eine Anfrage des Agenten anhängen.",
             "laneSsh": "Der SSH-Agent der Sandbox will gleich für den Agenten mit seinem Schlüssel signieren.",
             "laneCapability": "Der Agent bittet darum, dieses verbundene Konto in die Unterhaltung zu laden.",
-            "laneCredential": "Der Agent bittet darum, diese Zugangsdaten zu verwenden."
+            "laneCredential": "Der Agent bittet darum, diese Zugangsdaten zu verwenden.",
+            "pickedForYou": "Für dich gewählt",
+            "savedForMorning": "Für morgen aufgehoben",
+            "approvedForYou": "Für dich genehmigt"
         },
         "catalog": {
             "askBeforeEachEdit": "Vor jeder Änderung und jedem Befehl fragen.",
@@ -3597,7 +3600,9 @@
             "dismissDropsAnswer": "Beim Verwerfen geht die gewählte Antwort verloren und der Zug wird gestoppt.",
             "dismissAnyway": "Trotzdem verwerfen",
             "keepAnswer": "Meine Antwort behalten",
-            "fewQuestions": "Ein paar Fragen"
+            "fewQuestions": "Ein paar Fragen",
+            "nightPicked": "Deine Nachtruhe galt (bis {until}), also ist der Agent seiner eigenen Empfehlung gefolgt. Sag es im Chat, wenn du es ändern willst.",
+            "nightSaved": "Deine Nachtruhe galt (bis {until}), also wurde niemand gefragt. Der Agent hat ohne Antwort weitergemacht und endet mit dieser Frage."
         },
         "chatQueue": {
             "edit": "Bearbeiten",
@@ -4505,7 +4510,8 @@
             "worktreeUnenforced": "Diese Sandbox kann Agentenzüge nicht auf Dateisystemebene isolieren (sie wurde ohne CAP_SYS_ADMIN erstellt). Die Arbeit wird nach {branch} umgeleitet, aber ein Befehl, der seine eigenen Pfade baut, kann den gemeinsamen Workspace trotzdem erreichen: Erstellen Sie die Sandbox neu, um die volle Isolation wiederherzustellen."
         },
         "chatPlanCard": {
-            "proposedPlan": "Vorgeschlagener Plan"
+            "proposedPlan": "Vorgeschlagener Plan",
+            "nightApproved": "Deine Nachtruhe galt (bis {until}), also wurde der Plan, den der Agent selbst erstellt hat, umgesetzt."
         },
         "noticeWatchStop": {
             "couldNotStop": "Die Beobachtung konnte nicht gestoppt werden."
@@ -6025,6 +6031,25 @@
             "scheduleTimesAreIn": "Zeitpläne richten sich nach",
             "whatAnAutomations": "Was „09:00“ bei einer Automatisierung bedeutet. Angezeigte Zeiten folgen immer deiner eigenen Uhr; diese hier entscheidet, wann etwas ausgelöst wird.",
             "yourOwnClockIs": "Was „09:00“ bei einer Automatisierung bedeutet. Dein Rechner läuft auf {zone}, die Zeiten hier stimmen also nicht mit dem überein, was du dort abliest."
+        },
+        "agentNightHours": {
+            "group": "Nachtruhe",
+            "keep": "Nachtruhe einhalten",
+            "keepNote": "Während du schläfst und niemand im Editor ist, hält eine Frage einen Agenten nicht mehr bis zum Morgen auf.",
+            "hours": "Nacht",
+            "from": "Die Nacht beginnt um",
+            "to": "Die Nacht endet um",
+            "length": "{length} pro Nacht",
+            "lengthOn": "{length} pro Nacht, nach der Uhr von {zone}",
+            "hoursOnly": "{hours} Std.",
+            "hoursMinutes": "{hours} Std. {minutes} Min.",
+            "empty": "Sie beginnt, wann sie endet, also gibt es keine Nacht",
+            "questions": "Wenn ein Agent dich etwas fragen würde",
+            "questionsNote": "Berechtigungen, angehaltene Befehle und Pläne, die du prüfen wolltest, warten weiter auf dich.",
+            "decide": "Seiner Empfehlung folgen",
+            "decideBrief": "Er nimmt die Option, die er empfiehlt, und listet in seiner letzten Nachricht auf, was er für dich entschieden hat.",
+            "defer": "Für morgen aufheben",
+            "deferBrief": "Er erledigt alles, was nicht von der Antwort abhängt, und endet mit der Frage."
         },
         "agentCodeSearch": {
             "automationOff": "Die monatliche Neufassung ist ausgeschaltet",
@@ -10695,6 +10720,7 @@
             "agentTurnBreaks": "Nutzungslimit, Ratenlimit, erneut versuchen, Ausfall, Absturz, Speicher voll, Neustart, Fehler",
             "agentIdleChats": "Prompt-Cache, Cache, warm halten, inaktiv, Kontingent",
             "agentClock": "Zeitzone, Zeitplan, cron, Ortszeit, Uhrzeit",
+            "agentNightHours": "schlafen, nacht, über nacht, nachtruhe, ruhezeiten, nicht stören, fragen, abwesend",
             "environmentEngines": "claude code, codex, gemini cli, cursor, opencode, CLI-Version, Agent aktualisieren",
             "pages": {
                 "agent": "Assistent, KI, ai, Verhalten, wie der Agent arbeitet",

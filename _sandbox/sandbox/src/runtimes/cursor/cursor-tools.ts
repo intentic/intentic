@@ -35,7 +35,7 @@ export interface CursorGuard {
 // ask.
 const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKCustomTool => ({
     description:
-        'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
+        'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together. If you recommend an option, put it first and end its label with "(Recommended)".',
     // JSON Schema, not zod: Cursor takes the schema as data, same shape the Claude SDK's tool() compiles from zod.
     inputSchema: {
         type: "object",
@@ -72,12 +72,11 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
         if (questions.length === 0) {
             return "No questions were supplied, so nothing was asked.";
         }
-        // Named with its conversation, like the Claude path: dismissing the card must name the turn it ends.
-        const { id, wait } = request.hooks.cards.create(
-            "question",
-            { kind: "question", requestId: "", cancelled: true },
-            request.spec.conversationId,
-        );
+        // Named with its conversation, like the Claude path: dismissing the card must name the turn it ends. The agent's
+        // own question, so night hours may answer it while the owner sleeps (agent/night).
+        const { id, wait } = request.hooks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, request.spec.conversationId, {
+            night: { questions },
+        });
         push({ kind: "question", requestId: id, questions });
         const { reply, resolved } = await wait(request.signal);
         // Picks belong in the frame log too, not just the result: what a replayed transcript freezes the card with.

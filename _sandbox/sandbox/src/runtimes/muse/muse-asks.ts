@@ -267,8 +267,10 @@ const QUESTIONS_DISMISSED = "The user dismissed the questions without answering.
 
 /** The question card the `ask` tool raises, answered back to Muse; a dismissal declines the prompt. */
 export const answerQuestions = async (asks: Omit<MuseAsks, "posture" | "gate" | "verdicts" | "always" | "restoredGrant">, request: MuseUserInputRequest): Promise<void> => {
-    const { id, wait } = asks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, asks.conversationId);
-    asks.push({ kind: "question", requestId: id, questions: request.questions.map(askQuestion) });
+    const questions = request.questions.map(askQuestion);
+    // Muse's own clarifying question, so night hours may answer it while the owner sleeps (agent/night).
+    const { id, wait } = asks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, asks.conversationId, { night: { questions } });
+    asks.push({ kind: "question", requestId: id, questions });
     const release = asks.hold();
     let reply: AgentReply;
     try {

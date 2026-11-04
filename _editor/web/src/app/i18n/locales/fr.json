@@ -2897,7 +2897,10 @@
             "laneGateway": "La passerelle d'identifiants s'apprête à l'attacher à une requête envoyée par l'agent.",
             "laneSsh": "L'agent ssh du sandbox s'apprête à signer avec sa clé pour l'agent.",
             "laneCapability": "L'agent demande que ce compte connecté soit chargé dans la conversation.",
-            "laneCredential": "L'agent demande à utiliser cet identifiant."
+            "laneCredential": "L'agent demande à utiliser cet identifiant.",
+            "pickedForYou": "Choisi pour vous",
+            "savedForMorning": "Gardé pour le matin",
+            "approvedForYou": "Approuvé pour vous"
         },
         "catalog": {
             "askBeforeEachEdit": "Demander avant chaque modification et chaque commande.",
@@ -3597,7 +3600,9 @@
             "dismissDropsAnswer": "Ignorer supprime la réponse que vous avez choisie et arrête le tour.",
             "dismissAnyway": "Ignorer quand même",
             "keepAnswer": "Garder ma réponse",
-            "fewQuestions": "Quelques questions"
+            "fewQuestions": "Quelques questions",
+            "nightPicked": "Vos heures de nuit étaient actives (jusqu'à {until}) : l'agent a donc suivi sa propre recommandation. Dites-le dans le chat pour la changer.",
+            "nightSaved": "Vos heures de nuit étaient actives (jusqu'à {until}) : personne n'a été sollicité. L'agent a continué sans réponse et termine par cette question."
         },
         "chatQueue": {
             "edit": "Modifier",
@@ -4505,7 +4510,8 @@
             "worktreeUnenforced": "Ce sandbox ne peut pas isoler les tours d'agents au niveau du système de fichiers (il a été créé sans CAP_SYS_ADMIN). Le travail est redirigé vers {branch}, mais une commande construisant ses propres chemins peut toujours accéder à l'espace de travail partagé : recréez le sandbox pour rétablir une isolation complète."
         },
         "chatPlanCard": {
-            "proposedPlan": "Plan proposé"
+            "proposedPlan": "Plan proposé",
+            "nightApproved": "Vos heures de nuit étaient actives (jusqu'à {until}) : le plan que l'agent a choisi de faire a donc été lancé."
         },
         "noticeWatchStop": {
             "couldNotStop": "Impossible d'arrêter la surveillance."
@@ -6025,6 +6031,25 @@
             "scheduleTimesAreIn": "Les planifications suivent",
             "whatAnAutomations": "Ce que « 09:00 » veut dire pour une automatisation. Les heures affichées suivent toujours votre propre horloge ; c'est celle-ci qui décide du déclenchement.",
             "yourOwnClockIs": "Ce que « 09:00 » veut dire pour une automatisation. Votre machine est sur {zone} : les heures indiquées ici ne correspondront donc pas à celles que vous y lisez."
+        },
+        "agentNightHours": {
+            "group": "Heures de nuit",
+            "keep": "Respecter vos heures de nuit",
+            "keepNote": "Pendant que vous dormez et que personne n'est dans l'éditeur, une question n'arrête plus un agent jusqu'au matin.",
+            "hours": "Nuit",
+            "from": "La nuit commence à",
+            "to": "La nuit se termine à",
+            "length": "{length} par nuit",
+            "lengthOn": "{length} par nuit, à l'heure de {zone}",
+            "hoursOnly": "{hours} h",
+            "hoursMinutes": "{hours} h {minutes} min",
+            "empty": "Elle commence quand elle se termine : il n'y a donc pas de nuit",
+            "questions": "Quand un agent vous poserait une question",
+            "questionsNote": "Les autorisations, les commandes retenues et les plans que vous avez demandé à relire vous attendent toujours.",
+            "decide": "Suivre sa recommandation",
+            "decideBrief": "Il prend l'option qu'il recommande et liste dans son dernier message ce qu'il a décidé pour vous.",
+            "defer": "Garder pour le matin",
+            "deferBrief": "Il termine tout ce qui ne dépend pas de la réponse, puis finit par la question."
         },
         "agentCodeSearch": {
             "automationOff": "La réécriture mensuelle est désactivée",
@@ -10695,6 +10720,7 @@
             "agentTurnBreaks": "limite d'utilisation, limite de débit, réessayer, panne, plantage, mémoire saturée, redémarrage, erreur",
             "agentIdleChats": "cache de prompt, cache, garder au chaud, inactif, quota",
             "agentClock": "fuseau horaire, planning, programmation, cron, heure locale",
+            "agentNightHours": "sommeil, dormir, nuit, la nuit, heures calmes, ne pas déranger, questions, absent",
             "environmentEngines": "claude code, codex, gemini cli, cursor, opencode, version de la cli, mettre à jour l'agent",
             "pages": {
                 "agent": "assistant, ia, ai, comportement, fonctionnement de l'agent",

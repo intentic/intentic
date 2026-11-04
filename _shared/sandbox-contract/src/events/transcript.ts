@@ -3,6 +3,7 @@ import { ShareDetailSchema } from "../schemas/share.js";
 import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
+import { NightAnswerSchema } from "../schemas/night-hours.js";
 import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
@@ -52,7 +53,11 @@ export type OfferStatus = z.infer<typeof OfferStatusSchema>;
 export const CapabilityOfferStatusSchema = z.enum(["pending", "connecting", "skipped", "cancelled"]);
 export type CapabilityOfferStatus = z.infer<typeof CapabilityOfferStatusSchema>;
 
-export const TranscriptPlanSchema = z.object({ ...planRequest, status: PlanStatusSchema.describe("Where the decision stands.") });
+export const TranscriptPlanSchema = z.object({
+    ...planRequest,
+    status: PlanStatusSchema.describe("Where the decision stands."),
+    night: NightAnswerSchema.optional().describe("Present when night hours approved it with nobody at the editor, rather than a person."),
+});
 export type TranscriptPlan = z.infer<typeof TranscriptPlanSchema>;
 export const TranscriptQuestionSchema = z.object({
     ...questionRequest,
@@ -65,6 +70,9 @@ export const TranscriptQuestionSchema = z.object({
         .record(z.string(), z.array(z.string()))
         .optional()
         .describe("Files the user attached to their own-words answer, keyed by the question, as workspace-relative paths."),
+    night: NightAnswerSchema.optional().describe(
+        "Present when night hours answered it with nobody at the editor, rather than a person: with the agent's own recommendation, or by keeping it for the morning.",
+    ),
 });
 export type TranscriptQuestion = z.infer<typeof TranscriptQuestionSchema>;
 // `explain`, the judge's sentence, arrives via PermissionAskSchema at raise time; nothing patches it in after.

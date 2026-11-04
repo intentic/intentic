@@ -70,7 +70,7 @@ export interface ParkedOn {
 // Tells the devices of whoever is away that a card waits, named after the conversation and in the card's own words; an
 // insistent card tells them whether they are away or not.
 export const notifyAwaiting = async (
-    services: Pick<Services, "agents" | "pushSender"> & Partial<Pick<Services, "logger">>,
+    services: Pick<Services, "agents" | "pushSender"> & Partial<Pick<Services, "logger" | "cards">>,
     parked: ParkedOn,
 ): Promise<PushDelivery> => {
     // A card the turn raised itself is announced just before its frame folds into the run (agent/run/turn/turn-runs.ts),
@@ -78,6 +78,11 @@ export const notifyAwaiting = async (
     // not yet folded a frame after it: a second card of the same kind would otherwise be read as this one.
     await Promise.resolve();
     const card = parked.run === undefined ? undefined : awaitingCard(parked.run.rows, parked.kind);
+    // Answered by night hours as it was raised, before its answer folded in: a phone woken for it at 3 a.m. would wake
+    // the very person the answer was given for (agent/night).
+    if (card !== undefined && services.cards?.settledOnRaise(card.requestId) === true) {
+        return { delivered: 0, failed: 0, skipped: "night hours answered it" };
+    }
     const title = services.agents.entry(parked.conversationId)?.social.title?.text;
     const notification = turnAwaiting(parked.conversationId, parked.kind, card, title);
     // In a home's family, its owner's devices alone (push-audience.ts).

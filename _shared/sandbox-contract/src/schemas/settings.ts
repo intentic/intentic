@@ -6,6 +6,7 @@ import { MODEL_ROLES, ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./command-admission.js";
 import { KeepWarmSettingsSchema } from "./keep-warm.js";
+import { NightHoursSchema } from "./night-hours.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
@@ -589,6 +590,12 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
         ),
+    // The owner's night (night-hours.ts): with nobody at the editor inside it, an agent's own question is answered by the
+    // sandbox rather than parking the turn until morning. Off until the owner sets the hours: a sleep window guessed for
+    // them would decide things in their name at an hour they never chose.
+    nightHours: NightHoursSchema.prefault({}).describe(
+        "The hours you sleep, on this sandbox's clock. While they last and nobody is at the editor, a question an agent asks no longer stops its turn until morning: it is answered with the agent's own recommendation, or kept for the morning while the agent finishes everything else, as `questions` says. A plan an agent chose to make is approved the same way under `decide`; permissions, held commands and anything asked of a named person still wait for you.",
+    ),
     // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
     // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its
     // fingerprint: the daemon finds the version that did in the repository's history, keeps running each check that is

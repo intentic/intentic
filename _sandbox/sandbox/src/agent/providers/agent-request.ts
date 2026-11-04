@@ -37,6 +37,7 @@ import type { TurnChecks } from "../run/turn-checks.js";
 import type { MainCatchUp } from "../run/main-catch-up.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
+import type { NightNow } from "../night/night-hours.js";
 
 // The one request every runtime is handed, in five groups: what to say and where (spec), what may happen (policy), what
 // is mounted (tools), what authenticates it (credential), and what the daemon answers while it runs (hooks). A runtime
@@ -126,6 +127,9 @@ export interface TurnPolicy {
     // No one was at a composer when this turn started (an automation, a loop, a spawned child). Information only: the
     // judge and the prompt are told, and every card still waits for the owner's answer.
     readonly unattended?: boolean;
+    // The owner's night hours, where they were in force as the turn was planned (agent/night): the prompt tells the turn
+    // not to stop and ask. A card raised later is judged again as it is raised (parked-cards.ts), whatever this says.
+    readonly night?: NightNow;
     // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise

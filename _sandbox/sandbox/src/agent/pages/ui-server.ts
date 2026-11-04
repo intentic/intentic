@@ -49,7 +49,7 @@ const lateAnswerPrompt = (questions: readonly AskQuestion[], answers: string): s
 const MAX_ANSWER_IMAGE_BASE64 = 5 * 1024 * 1024;
 
 export const ASK_TOOL_DESCRIPTION =
-    'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.';
+    'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together. If you recommend an option, put it first and end its label with "(Recommended)".';
 
 export const askTool = (deps: AskToolDeps) =>
     sdk().tool(
@@ -77,8 +77,9 @@ export const askTool = (deps: AskToolDeps) =>
             // SAFETY: the schema above is AskQuestion's own shape, multiSelect defaulted; zod spells an absent preview
             // `string | undefined` where AskQuestion leaves it out.
             const questions = args.questions as AskQuestion[];
-            // Named with its conversation: dismissing this ends the turn immediately, not on a second request.
-            const { id, wait } = deps.cards.create("question", { kind: "question", requestId: "", cancelled: true }, deps.conversationId);
+            // Named with its conversation: dismissing this ends the turn immediately, not on a second request. The agent's
+            // own question, so night hours may answer it while the owner sleeps (agent/night).
+            const { id, wait } = deps.cards.create("question", { kind: "question", requestId: "", cancelled: true }, deps.conversationId, { night: { questions } });
             // The turn's latest write-up rides along, already in hand, since a question about it needs it.
             const document = deps.document?.();
             deps.push({ kind: "question", requestId: id, questions, ...opt("document", document) });

@@ -47,6 +47,7 @@ import type { TurnTaint } from "../../guard/turn-taint.js";
 import { CODEX_FAST_TIER } from "./codex-model-list.js";
 import { CODEX_ADVISORY, CODEX_COMPACTION_NOTICE, CODEX_MODEL_RESUMED_ELSEWHERE, CODEX_RECONNECTING, isCodexModelInvalid } from "./codex-models.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
+import { nightPickedNote } from "../../sessions/vocabulary/question-answers.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // Codex provider adapter: same seam as agent.ts's runAgent (AgentRequest in, AgentEvent frames out), backed by the
@@ -186,7 +187,9 @@ const codexAnswers = (questions: readonly CodexQuestion[], reply: Extract<AgentR
             if (reply.cancelled || reply.answers === undefined) {
                 return [question.id, [QUESTIONS_DISMISSED]];
             }
-            return [question.id, reply.answers[question.question] ?? []];
+            // Picked by night hours rather than a person: said beside the pick, since Codex hands the agent picks alone.
+            const picks = reply.answers[question.question] ?? [];
+            return [question.id, reply.night?.outcome === "picked" ? [...picks, nightPickedNote(reply.night.until)] : picks];
         }),
     );
 
@@ -448,8 +451,10 @@ async function* codexQuestionCard(
         request.respond(Object.fromEntries(request.questions.map((question) => [question.id, [SECRET_REFUSED]])));
         return;
     }
-    const { id, wait } = context.cards.create("question", { kind: "question", requestId: "", cancelled: true }, context.conversationId);
-    yield { kind: "question", requestId: id, questions: asked.map(askQuestion) };
+    const questions = asked.map(askQuestion);
+    // Codex's own clarifying question, so night hours may answer it while the owner sleeps (agent/night).
+    const { id, wait } = context.cards.create("question", { kind: "question", requestId: "", cancelled: true }, context.conversationId, { night: { questions } });
+    yield { kind: "question", requestId: id, questions };
     const { reply, resolved } = await wait(context.signal);
     yield resolved;
     request.respond(codexAnswers(request.questions, reply));

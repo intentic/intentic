@@ -55,6 +55,10 @@ const needs = openFor(() => conversation.value.conversationId);
             max-height="min(58dvh, 40rem)"
             class="chat-card-doc-top-rule chat-card-doc-bottom-rule"
         />
+        <!-- Approved by night hours while the reader slept, a plan the agent chose to make (agent/night). -->
+        <p v-if="card.night" class="chat-card-row flex items-start gap-1.5 text-2xs leading-snug text-muted">
+            <Icon name="moon" class="shrink-0 text-2xs" />{{ t(`chat.chatPlanCard.nightApproved`, { until: card.night.until }) }}
+        </p>
         <div v-if="card.status === 'pending' && needs.length > 0" class="chat-card-row flex flex-col gap-1 text-2xs">
             <span class="font-medium text-content">{{ t(`needs.plan.alsoWaiting`, { count: needs.length }, needs.length) }}</span>
             <span v-for="need in needs" :key="need.id" class="flex items-center gap-1.5 text-content/85"><Icon :name="NEED_ICONS[need.subject.kind]" class="text-warning" />{{ need.title }}</span>

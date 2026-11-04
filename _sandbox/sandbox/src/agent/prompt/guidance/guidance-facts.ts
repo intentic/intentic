@@ -1,6 +1,7 @@
 import type { HostDeviceReach } from "../../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../../phones/phone-peer.js";
+import type { NightNow } from "../../night/night-hours.js";
 
 /* WHAT A TURN'S GUIDANCE IS COMPOSED FROM, WHICHEVER RUNTIME SERVES IT.
 
@@ -74,6 +75,8 @@ export const otherRuntime = (secrets: "masked" | "shell" | "none", toolPrefix?: 
 export interface GuidanceFacts {
     readonly runtime: RuntimeFacts;
     readonly unattended: boolean;
+    // The owner's night hours, where they are in force as the turn starts (agent/night/night-hours.ts).
+    readonly night?: NightNow | undefined;
     // Set beside a mounted browser server (`web`, `browser`): where its screenshots land.
     readonly browserOutputDir: string | undefined;
     // Whether the credential-free `web` browser is among them; absent reads as mounted, as it was before this fact.

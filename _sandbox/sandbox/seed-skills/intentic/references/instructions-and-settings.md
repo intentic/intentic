@@ -96,3 +96,13 @@ What does need more than a new turn:
 
 A restart stops running turns; they must be resumed afterwards unless **Resume turns after a restart** is on
 (Sandbox ▸ Agent ▸ Finishing).
+
+**Night hours** (Sandbox ▸ Agent ▸ Finishing, settings `nightHours`, off until the owner sets them): the hours the
+owner sleeps, on the sandbox's clock (the Clock row just above it). While they last and nobody is at the editor, an
+agent's own question no longer parks its turn until morning. **Go with its pick** answers it with the option the agent
+marked "(Recommended)", else its first, and the agent lists what was decided under "Decided while you slept" in its
+last message; **Save for morning** tells the agent to finish everything that does not depend on the answer and end
+with the question. A plan the agent chose to make is approved under the first and waits under the second; a plan the
+owner launched the turn in plan mode for, permissions, held commands and cards for a named person always wait. The
+turn is told under "Connected right now", and the frozen card says **Picked for you** or **Saved for morning**. Someone
+at the editor in the middle of the night is asked as usual.

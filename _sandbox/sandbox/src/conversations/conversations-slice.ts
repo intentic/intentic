@@ -15,7 +15,7 @@ import type { PerfTracker } from "../system/resources/perf.js";
 import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
-import { type ParkedCards, parkedCards } from "./actor/parked-cards.js";
+import { type NightAnswers, type ParkedCards, parkedCards } from "./actor/parked-cards.js";
 import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
@@ -82,6 +82,9 @@ export interface ConversationsDeps {
     // Whether the previous run died without its exit hook (system/boot/boot-marker.ts), passed in by composition so the
     // fleet does not import the system subsystem.
     readonly previousRunDied: () => boolean;
+    // The owner's night hours (agent/night), passed in by composition so the conversations do not import the agent;
+    // absent, every card waits for a person.
+    readonly night?: NightAnswers;
     // Replaces a settled card's "waiting on you" push wherever it showed (push.ts `withdraw`), passed in by composition so
     // the conversations do not import the push subsystem.
     readonly cardSettled: (requestId: string, conversationId: string) => void;
@@ -93,9 +96,35 @@ export interface ConversationsParts {
     readonly metrics: () => Readonly<Record<string, Readonly<Record<string, number>>>>;
 }
 
+// The card registry every turn parks on. The conversation-wide yes answered on any permission card, read from the grant
+// store as each card parks; a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`); and
+// the owner's night hours, which answer an agent's own question while they sleep and nobody is at the editor
+// (agent/night).
+const sliceCards = (
+    conversations: ConversationActors,
+    { whole, logger, cardSettled }: Pick<ConversationsDeps, "whole" | "logger" | "cardSettled">,
+    night: NightAnswers | undefined,
+): ParkedCards =>
+    parkedCards(
+        conversations,
+        {
+            allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
+            allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
+            failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
+        },
+        (requestId, conversationId) => {
+            if (conversationId !== undefined) {
+                cardSettled(requestId, conversationId);
+            }
+        },
+        // Each card raised, answered and cancelled, so whether one ever reached a person is on file.
+        (fields, message) => logger.info(fields, message),
+        night,
+    );
+
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
-export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, turns, turnEngine, previousRunDied, cardSettled }: ConversationsDeps): ConversationsParts => {
+export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, turns, turnEngine, previousRunDied, cardSettled, night }: ConversationsDeps): ConversationsParts => {
     // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
     // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
     const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });
@@ -159,23 +188,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             turns,
             turnEngine,
             conversations,
-            // The conversation-wide yes answered on any permission card, read from the grant store as each card parks; and
-            // a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`).
-            cards: parkedCards(
-                conversations,
-                {
-                    allowed: (conversationId) => whole().conversationGrants.everythingAllowed(conversationId),
-                    allow: (conversationId, by) => whole().conversationGrants.allowEverything(conversationId, by),
-                    failed: (cause) => logger.warn({ err: cause }, "conversation grants: allow everything could not be read or kept"),
-                },
-                (requestId, conversationId) => {
-                    if (conversationId !== undefined) {
-                        cardSettled(requestId, conversationId);
-                    }
-                },
-                // Each card raised, answered and cancelled, so whether one ever reached a person is on file.
-                (fields, message) => logger.info(fields, message),
-            ),
+            cards: sliceCards(conversations, { whole, logger, cardSettled }, night),
             agentWorktrees,
             branchCheckouts,
             turnJournal: sqliteTurnJournal(conversationsDb),

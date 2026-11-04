@@ -19,6 +19,7 @@ import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
 import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
+import AgentNightHours from "../agent-settings/behaviour/AgentNightHours.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
@@ -183,6 +184,8 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <!-- Beside the automation failure limit above (in its Advanced view), which is the other setting that only
                  matters once something runs on a clock rather than because somebody pressed send. -->
                 <AgentClock />
+                <!-- Under the clock its hours are read on: what a question an agent asks gets while the owner sleeps. -->
+                <AgentNightHours />
             </template>
         </Await>
     </div>

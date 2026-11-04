@@ -20,7 +20,8 @@ export interface PushDelivery {
     readonly delivered: number;
     readonly failed: number;
     // Why nothing was sent, when nothing was: no device registered, or every device's person is at a screen.
-    readonly skipped?: "no device registered" | "everyone is watching" | "it never showed";
+    // Or a card night hours answered as it was raised, which waits on nobody (agent/night).
+    readonly skipped?: "no device registered" | "everyone is watching" | "it never showed" | "night hours answered it";
 }
 
 export interface PushSender {

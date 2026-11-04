@@ -105,6 +105,33 @@ const askText = (facts: EntryFacts): string => {
     return [ask, plan].filter((paragraph) => paragraph !== undefined).join("\n\n");
 };
 
+// The owner's night, as their night hours say what a question gets then (settings `nightHours`). Told so the turn
+// decides rather than asks; a question it asks anyway is answered the same way by the card registry (parked-cards.ts).
+// A plan only where the loop has plan mode: under `decide` one it chose is approved for the owner, under `defer` it
+// waits for the morning like the rest.
+const nightText = (facts: EntryFacts): string => {
+    const until = facts.night?.until ?? "morning";
+    const asleep =
+        `It is the owner's night: their night hours run until ${until} on the sandbox's clock, and nobody is at the editor, ` +
+        "so they are asleep and will read your work in the morning. Do not stop to ask them anything.";
+    if (facts.night?.questions === "defer") {
+        const plan = facts.runtime.planMode ? " Do not enter plan mode: a plan would wait for their approval until morning." : "";
+        return (
+            `${asleep} Do not decide what is genuinely theirs either: do everything that does not depend on their answer, ` +
+            "leave the rest as it is, and end your turn with the open questions, each with your recommendation, at the top of " +
+            `your final message. A question you ask anyway is kept for the morning, and you are told to go on without it.${plan}`
+        );
+    }
+    const plan = facts.runtime.planMode ? " A plan you choose to make is approved for them the same way, so go straight to the work." : "";
+    return (
+        `${asleep} Where a decision is theirs, take the option you would recommend, keep it easy to undo, and carry on; a ` +
+        'question you ask anyway is answered at once with the option you put first or marked "(Recommended)".' +
+        `${plan} End your final message with a short list headed "Decided while you slept", one line per choice made for ` +
+        "them, so they can overturn any of it. Permission prompts, held commands and requests to connect something still " +
+        "wait for them, so prefer work that needs none of those."
+    );
+};
+
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
 // `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Both tools are named in full: "the
 // `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26). A loop whose
@@ -200,13 +227,21 @@ const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "unwatched",
         volatile: true,
-        // An automation, a loop or a scheduled wake: nobody is at the composer when it starts.
-        when: ({ unattended }) => unattended,
+        // An automation, a loop or a scheduled wake: nobody is at the composer when it starts. In the owner's night the
+        // entry below says what a question gets instead.
+        when: ({ unattended, night }) => unattended && night === undefined,
         text:
             "Nobody is watching this turn right now: it is an automation, a loop or a scheduled run. A question, a plan " +
             "approval or a held command waits on its card until the owner answers, which can take hours, and the turn " +
             "waits with it. Decide what you can yourself, finish everything that does not depend on the answer before you " +
             "ask, and ask only what is genuinely the owner's to decide.",
+    },
+    {
+        id: "night",
+        volatile: true,
+        // The owner's night hours, with nobody at the editor (agent/night/night-hours.ts).
+        when: ({ night }) => night !== undefined,
+        text: nightText,
     },
     {
         id: "checklist",
@@ -396,11 +431,11 @@ const SURROUNDINGS_HEADER = `## ${SURROUNDINGS_TITLE}`;
 // What a turn says when an earlier note under this heading named something that no longer holds, and nothing does now.
 export const SURROUNDINGS_CLEARED =
     `${SURROUNDINGS_HEADER}\n\nNothing an earlier note under this heading named holds any more: none of the owner's own ` +
-    "computers, browsers or phones is connected to this turn, and a person is at the composer.";
+    "computers, browsers or phones is connected to this turn, a person is at the composer, and it is not the owner's night.";
 
 // The facts the volatile entries read, and the runtime they spell tools for; every other fact is the session's own and
 // stays in the system block.
-export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "hostDevices" | "ownBrowsers" | "ownPhones">;
+export type SurroundingsFacts = Pick<GuidanceFacts, "runtime" | "unattended" | "night" | "hostDevices" | "ownBrowsers" | "ownPhones">;
 
 // The note's text for these facts, under its heading; undefined when no volatile entry applies.
 export const surroundingsText = (facts: SurroundingsFacts): string | undefined => {

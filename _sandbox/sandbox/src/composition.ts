@@ -140,6 +140,7 @@ import { createResourcesSlice, type ResourcesSlice } from "./system/resources/re
 import { createProvidersSlice, type ProvidersSlice } from "./agent/providers/providers-slice.js";
 import { previousRunDied } from "./system/boot/restarts/boot-marker.js";
 import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
+import { sandboxNightAnswers } from "./agent/night/night-answers.js";
 import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
 import { createPreviewKeeper, withPreviewHolders } from "./processes/dev-previews.js";
@@ -613,6 +614,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         ...turnEngineOf(whole),
         previousRunDied,
         cardSettled: (requestId, conversationId) => void whole().pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${requestId}`)),
+        night: sandboxNightAnswers(whole),
     });
     const { agents, conversations, cards } = conversationsParts.slice;
     const invariants = createInvariantRegistry(logger);

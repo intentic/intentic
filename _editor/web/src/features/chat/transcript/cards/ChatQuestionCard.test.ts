@@ -155,3 +155,27 @@ it(`picks up an upload a previous drawing of the card started, and drafts it onc
         { kind: `question`, answers: { "Which licence?": [`(see the attached file)`] }, attachments: { "Which licence?": [SHOT] } },
     ]);
 });
+
+// Night hours answered it while the reader slept (agent/night): the card says the sandbox chose, and a question saved
+// for the morning draws no pick, since the words the agent was handed are no answer of the reader's.
+const nightCard = (outcome: `picked` | `saved`, answer: string): ChatMessage => ({
+    ...CARD,
+    question: { ...CARD.question!, status: `answered`, answers: { "Which licence?": [answer] }, night: { outcome, until: `07:00` } },
+});
+
+it(`a pick made by night hours says so, beside the pick it made`, () => {
+    const card = mount(nightCard(`picked`, `MIT`));
+
+    expect(card.textContent).toContain(`Picked for you`);
+    expect(card.querySelector(`.chat-option-picked`)?.textContent).toContain(`MIT`);
+    expect(card.textContent).toContain(`Your night hours were on (until 07:00)`);
+});
+
+it(`a question saved for the morning draws no pick, and says the agent went on without one`, () => {
+    const card = mount(nightCard(`saved`, `Nobody answered: it is the owner's night (their night hours run until 07:00)…`));
+
+    expect(card.textContent).toContain(`Saved for morning`);
+    expect(card.querySelector(`.chat-option-picked`)).toBeNull();
+    expect(card.textContent).not.toContain(`Nobody answered`);
+    expect(card.textContent).toContain(`ends with this question`);
+});

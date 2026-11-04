@@ -28,6 +28,52 @@ const ATTACHED_NOTE = "The user attached files to their answer; read them with t
 
 const labelOf = (question: AskQuestion): string => question.header || question.question;
 
+// What the agent reads when night hours answered for the owner (agent/night): the night first, so it never mistakes the
+// pick for one a person made, then what to do with it. Both open the same way, which is how parseAnswers tells them.
+const NIGHT_OPENING = "Nobody answered: it is the owner's night";
+const nightHead = (until: string): string =>
+    `${NIGHT_OPENING} (their night hours run until ${until} on the sandbox's clock) and nobody is at the editor, so`;
+const NIGHT_PICKED_TAIL =
+    'Carry on with it, keep the choice easy to undo, and list it in your final message under "Decided while you slept", so they can overturn it in the morning.';
+const NIGHT_SAVED = "this question is kept for the morning instead of waiting on them";
+
+/** The answer night hours give a question kept for the morning: also what a runtime handed answers verbatim reads. */
+export const nightSavedWords = (until: string): string =>
+    `${nightHead(until)} ${NIGHT_SAVED}. Do not decide it yourself: finish everything that does not depend on the answer, ` +
+    "leave the rest as it is, and end your turn with this question and your recommendation at the top of your final message.";
+
+/** One line a runtime that hands picks over as they are adds beside them, so its agent knows who chose (codex-agent.ts). */
+export const nightPickedNote = (until: string): string => `${nightHead(until)} the sandbox picked the option you recommended. ${NIGHT_PICKED_TAIL}`;
+
+const nightPicked = (questions: readonly AskQuestion[], answers: Readonly<Record<string, readonly string[]>>, until: string): string => {
+    const lines = questions.map((question) => {
+        const picks = answers[question.question] ?? [];
+        return `- ${labelOf(question)}: ${picks.length > 0 ? picks.join(PICK_SEPARATOR) : NO_ANSWER}`;
+    });
+    return `${nightHead(until)} the sandbox answered for them with the option you recommended:\n${lines.join("\n")}\n\n${NIGHT_PICKED_TAIL}`;
+};
+
+// A night answer read back from what it wrote, for a session rebuilt from stored text.
+const parseNight = (questions: readonly AskQuestion[], requestId: string, text: string): QuestionReply | undefined => {
+    const until = /run until (\d{2}:\d{2})/.exec(text)?.[1];
+    if (until === undefined) {
+        return undefined;
+    }
+    if (text.includes(NIGHT_SAVED)) {
+        const words = nightSavedWords(until);
+        return { kind: "question", requestId, answers: Object.fromEntries(questions.map((question) => [question.question, [words]])), night: { outcome: "saved", until } };
+    }
+    const answers: Record<string, string[]> = {};
+    for (const question of questions) {
+        const line = text.split("\n").find((candidate) => candidate.startsWith(`- ${labelOf(question)}: `));
+        const picks = line?.slice(`- ${labelOf(question)}: `.length);
+        if (picks !== undefined) {
+            answers[question.question] = picks === NO_ANSWER ? [] : picks.split(PICK_SEPARATOR);
+        }
+    }
+    return { kind: "question", requestId, answers, night: { outcome: "picked", until } };
+};
+
 // Paths ride the reply workspace-relative (as the composer uploads them); the model is handed them absolute, against
 // the root it works in, or as they are when no root is given.
 const placed = (root: string | undefined, path: string): string => (root === undefined || isAbsolute(path) ? path : join(root, path));
@@ -43,6 +89,9 @@ export const formatAnswers = (questions: readonly AskQuestion[], reply: Question
         return DISMISSED;
     }
     const answers = reply.answers;
+    if (reply.night !== undefined) {
+        return reply.night.outcome === "saved" ? nightSavedWords(reply.night.until) : nightPicked(questions, answers, reply.night.until);
+    }
     const note = answerFiles(questions, reply).length > 0 ? `\n\n${ATTACHED_NOTE}` : "";
     const words = sharedOwnWords(questions, answers);
     if (words !== undefined) {
@@ -89,6 +138,9 @@ export const parseAnswers = (questions: readonly AskQuestion[], requestId: strin
     }
     if (text.startsWith(`${ANSWERED_ALL}\n`)) {
         return parseShared(questions, requestId, text);
+    }
+    if (text.startsWith(NIGHT_OPENING)) {
+        return parseNight(questions, requestId, text);
     }
     if (!text.startsWith(`${ANSWERED}\n`)) {
         return undefined;

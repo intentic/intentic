@@ -275,12 +275,25 @@ interface DecidedOption {
     readonly picked: boolean;
 }
 
+// Night hours answered it while the reader slept (agent/night): `saved` chose nothing, so the words the agent was handed
+// are no pick to draw; the line under the options says what happened instead.
+const nightSaved = computed(() => card.value.night?.outcome === `saved`);
+const nightLine = computed(() => {
+    const night = card.value.night;
+    if (night === undefined || night.outcome === `approved`) {
+        return undefined;
+    }
+    return night.outcome === `picked`
+        ? t(`chat.chatQuestionCard.nightPicked`, { until: night.until })
+        : t(`chat.chatQuestionCard.nightSaved`, { until: night.until });
+});
+
 // One reply in the reader's own words to every question at once (the composer's, composerAnswer): drawn once under the
 // questions, not repeated as each one's pick.
-const sharedAnswer = computed(() => sharedOwnWords(card.value.questions, card.value.answers));
+const sharedAnswer = computed(() => (nightSaved.value ? undefined : sharedOwnWords(card.value.questions, card.value.answers)));
 
 const decidedOptions = (question: AskQuestion): DecidedOption[] => {
-    const picks = sharedAnswer.value === undefined ? (card.value.answers?.[question.question] ?? []) : [];
+    const picks = sharedAnswer.value === undefined && !nightSaved.value ? (card.value.answers?.[question.question] ?? []) : [];
     const typed = picks.filter((pick) => !question.options.some((option) => option.label === pick));
     return [
         ...question.options.map((option) => ({ label: option.label, description: option.description, picked: picks.includes(option.label) })),
@@ -464,6 +477,10 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                     class="flex-wrap pt-1"
                 />
             </div>
+            <!-- Who answered, when it was not the reader: the moon is the night hours that did. -->
+            <p v-if="nightLine" class="flex items-start gap-1.5 text-2xs leading-snug text-muted">
+                <Icon name="moon" class="shrink-0 text-2xs" />{{ nightLine }}
+            </p>
         </div>
         <!-- In the shared answer row, like every other card, not floating under the last option. -->
         <template v-if="card.status === 'pending'" #actions>

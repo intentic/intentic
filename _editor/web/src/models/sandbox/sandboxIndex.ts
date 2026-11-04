@@ -333,6 +333,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.agentClock.clock`),
         terms: () => [t(`sandbox.agentClock.scheduleTimesAreIn`), t(`sandbox.search.agentClock`)],
     },
+    {
+        id: `agent-night-hours`,
+        slug: `agent`,
+        part: `finishing`,
+        partLabel: () => t(`sandbox.sandboxAgent.finishing`),
+        title: () => t(`sandbox.agentNightHours.group`),
+        terms: () => [t(`sandbox.agentNightHours.keep`), t(`sandbox.agentNightHours.questions`), t(`sandbox.search.agentNightHours`)],
+    },
 
     // Models has no card here: the page is one grid of providers, and the panel under it opens by `?open=`, which an
     // entry cannot name. The page's own words (sandbox.search.pages.models) find it.

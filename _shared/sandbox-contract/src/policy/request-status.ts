@@ -1,4 +1,12 @@
-import { type PermissionStatus, REQUEST_FIELDS, type RequestField, type TranscriptRequests, type TranscriptRow } from "../events/transcript.js";
+import {
+    type PermissionStatus,
+    REQUEST_FIELDS,
+    type RequestField,
+    type TranscriptPlan,
+    type TranscriptQuestion,
+    type TranscriptRequests,
+    type TranscriptRow,
+} from "../events/transcript.js";
 import type { AgentReply } from "../schemas/providers/plan-limits.js";
 import { startedChildCard } from "../events/child-run.js";
 
@@ -22,21 +30,41 @@ const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => 
     }
 };
 
+const settledPlan = (plan: TranscriptPlan, reply: AgentReply | undefined): TranscriptPlan => {
+    const settled: TranscriptPlan = { ...plan, status: reply?.kind !== "plan" ? "cancelled" : reply.approve ? "approved" : "rejected" };
+    // Approved by night hours rather than a person, which the frozen card says.
+    if (reply?.kind === "plan" && reply.night !== undefined) {
+        settled.night = reply.night;
+    }
+    return settled;
+};
+
+const settledQuestion = (question: TranscriptQuestion, reply: AgentReply | undefined): TranscriptQuestion => {
+    if (reply?.kind !== "question") {
+        return { ...question, status: "cancelled" };
+    }
+    const settled: TranscriptQuestion = { ...question, status: reply.cancelled === true ? "cancelled" : "answered" };
+    if (reply.answers !== undefined) {
+        settled.answers = reply.answers;
+    }
+    if (reply.attachments !== undefined) {
+        settled.attachments = reply.attachments;
+    }
+    // Which night answer it got, so the frozen card says the sandbox chose and not the reader.
+    if (reply.night !== undefined) {
+        settled.night = reply.night;
+    }
+    return settled;
+};
+
 export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | undefined): TranscriptRequests => {
     const out: Cards = {};
     const { plan, question, permission, browserHelp, terminalHelp, capabilityOffer, paymentOffer, credentialOffer, pageAsk } = cards;
     if (plan !== undefined) {
-        out.plan = { ...plan, status: reply?.kind !== "plan" ? "cancelled" : reply.approve ? "approved" : "rejected" };
+        out.plan = settledPlan(plan, reply);
     }
     if (question !== undefined) {
-        const answers = reply?.kind === "question" ? reply.answers : undefined;
-        const attachments = reply?.kind === "question" ? reply.attachments : undefined;
-        out.question = {
-            ...question,
-            status: reply?.kind === "question" && reply.cancelled !== true ? "answered" : "cancelled",
-            ...(answers === undefined ? {} : { answers }),
-            ...(attachments === undefined ? {} : { attachments }),
-        };
+        out.question = settledQuestion(question, reply);
     }
     if (permission !== undefined) {
         out.permission = {

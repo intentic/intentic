@@ -2897,7 +2897,10 @@
             "laneGateway": "The credential gateway is about to attach it to a request the agent sent.",
             "laneSsh": "The sandbox's ssh agent is about to sign with its key for the agent.",
             "laneCapability": "The agent is asking for this connected account to be loaded into the conversation.",
-            "laneCredential": "The agent is asking to use this credential."
+            "laneCredential": "The agent is asking to use this credential.",
+            "pickedForYou": "Picked for you",
+            "savedForMorning": "Saved for morning",
+            "approvedForYou": "Approved for you"
         },
         "catalog": {
             "askBeforeEachEdit": "Ask before each edit and command.",
@@ -3597,7 +3600,9 @@
             "dismissDropsAnswer": "Dismissing drops the answer you picked and stops the turn.",
             "dismissAnyway": "Dismiss anyway",
             "keepAnswer": "Keep my answer",
-            "fewQuestions": "A few questions"
+            "fewQuestions": "A few questions",
+            "nightPicked": "Your night hours were on (until {until}), so the agent went with its own recommendation. Say so in the chat to change it.",
+            "nightSaved": "Your night hours were on (until {until}), so nobody was asked. The agent went on without an answer and ends with this question."
         },
         "chatQueue": {
             "edit": "Edit",
@@ -4505,7 +4510,8 @@
             "worktreeUnenforced": "This sandbox can't isolate agent turns at the filesystem level (it was created without CAP_SYS_ADMIN). Work is redirected into {branch}, but a command that builds its own paths can still reach the shared workspace: recreate the sandbox to restore full isolation."
         },
         "chatPlanCard": {
-            "proposedPlan": "Proposed plan"
+            "proposedPlan": "Proposed plan",
+            "nightApproved": "Your night hours were on (until {until}), so the plan the agent chose to make went ahead."
         },
         "noticeWatchStop": {
             "couldNotStop": "The watch could not be stopped."
@@ -6025,6 +6031,25 @@
             "scheduleTimesAreIn": "Schedules are set by",
             "whatAnAutomations": "Which clock an automation's \"09:00\" uses; on-screen times show yours, but schedules fire by this zone.",
             "yourOwnClockIs": "What an automation's \"09:00\" means. Your own machine is on {zone}, so times here will not match what you read on it."
+        },
+        "agentNightHours": {
+            "group": "Night hours",
+            "keep": "Keep night hours",
+            "keepNote": "While you sleep and nobody is at the editor, a question no longer stops an agent until morning.",
+            "hours": "Night",
+            "from": "Night starts at",
+            "to": "Night ends at",
+            "length": "{length} a night",
+            "lengthOn": "{length} a night, on {zone} time",
+            "hoursOnly": "{hours} h",
+            "hoursMinutes": "{hours} h {minutes} min",
+            "empty": "It starts when it ends, so there is no night",
+            "questions": "When an agent would ask you",
+            "questionsNote": "Permissions, held commands and plans you asked to review still wait for you.",
+            "decide": "Go with its pick",
+            "decideBrief": "It takes the option it recommends and lists what it decided for you in its last message.",
+            "defer": "Save for morning",
+            "deferBrief": "It finishes everything that doesn't depend on the answer, then ends with the question."
         },
         "agentCodeSearch": {
             "automationOff": "The monthly rewrite is switched off",
@@ -10695,6 +10720,7 @@
             "agentTurnBreaks": "usage limit, rate limit, retry, outage, crash, out of memory, restart, error",
             "agentIdleChats": "prompt cache, cache, warm, idle, allowance",
             "agentClock": "timezone, time zone, schedule, cron, local time",
+            "agentNightHours": "sleep, bedtime, overnight, night, quiet hours, do not disturb, questions, away",
             "environmentEngines": "claude code, codex, gemini cli, cursor, opencode, cli version, update agent",
             "pages": {
                 "agent": "assistant, ai, behaviour, behavior, how the agent works",

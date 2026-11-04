@@ -4,6 +4,7 @@ import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/prov
 import { AgentHarnessSchema, AgentProviderSchema, ConversationIdSchema, EditorContextSchema } from "../agent.js";
 import { MENTION_LIMIT } from "../../text/mentions.js";
 import { HandoffModeSchema } from "./handoff.js";
+import { NightAnswerSchema } from "../night-hours.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
 // reads this one type.
@@ -199,6 +200,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
                 "Whether to go ahead. Approving means the plan then runs without a prompt per tool, because being asked whether a plan you just approved may run its first command is not a question worth having.",
             ),
         feedback: z.string().optional().describe("Instructions to follow while executing an approved plan, or changes requested when rejecting it."),
+        night: NightAnswerSchema.optional().describe("Set by the sandbox alone, when night hours approved the plan with nobody at the editor. A person's reply never carries it."),
     }),
     // Keyed by question text, valued by chosen option label(s), including free-text "Other".
     z.object({
@@ -218,6 +220,9 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .boolean()
             .optional()
             .describe("Dismissing it instead, which tells the agent to carry on using sensible defaults rather than leaving it waiting."),
+        night: NightAnswerSchema.optional().describe(
+            "Set by the sandbox alone, when night hours answered it with nobody at the editor: with the agent's recommendation, or by keeping it for the morning. A person's reply never carries it.",
+        ),
     }),
     // "always" may be narrowed further by the SDK's own suggestions. "everything" is the conversation-wide yes the card's
     // Allow menu offers: this call, and every later request in the conversation a person could have allowed once.

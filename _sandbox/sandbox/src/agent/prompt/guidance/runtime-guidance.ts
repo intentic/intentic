@@ -59,6 +59,7 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
         // How this runtime's tool list spells an MCP tool, as its arm said (TurnTools.mcpToolPrefix); absent is `mcp__<server>__<tool>`.
         runtime: otherRuntime(capabilities.secrets, request.tools.mcpToolPrefix, filesShellJobs(capabilities, request)),
         unattended: request.policy.unattended === true,
+        night: request.policy.night,
         browserOutputDir: browsers ? browserOutputDir(deps.workspace.root) : undefined,
         anonymousBrowser: mounted.has(ANONYMOUS_BROWSER_SERVER),
         browserAccounts: mounted.has(ROUTED_BROWSER_SERVER),

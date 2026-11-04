@@ -848,11 +848,10 @@ const turnEnv = async (request: AgentRequest): Promise<Record<string, string>> =
 const askVia =
     (request: AgentRequest): TurnAsk =>
     async (questions, push) => {
-        const { id, wait } = request.hooks.cards.create(
-            "question",
-            { kind: "question", requestId: "", cancelled: true },
-            request.spec.conversationId,
-        );
+        // OpenCode's own clarifying question, so night hours may answer it while the owner sleeps (agent/night).
+        const { id, wait } = request.hooks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, request.spec.conversationId, {
+            night: { questions },
+        });
         push({ kind: "question", requestId: id, questions: [...questions] });
         const { reply, resolved } = await wait(request.signal);
         push(resolved);

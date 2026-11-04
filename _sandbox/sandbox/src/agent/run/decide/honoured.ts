@@ -28,6 +28,8 @@ import { promptTrim } from "../../prompt/window/context-trim.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import type { TurnBase, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
+import { nightNow } from "../../night/night-hours.js";
+import { peopleAtEditor } from "../../../system/presence.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
 import type { TurnPremise } from "./turn-premise.js";
@@ -233,6 +235,8 @@ export const honoured = (
             // Read from the pair's own record, so a lying row changes turn behavior and not just what the composer shows.
             rulebook: capabilities.rulebook,
             dependencyInstallAllowed: persona.powers.files === "write" && persona.powers.shell,
+            // Whether the owner is asleep as the turn starts, which its instructions say (agent/night).
+            ...opt("night", nightNow(settings, peopleAtEditor(), Date.now())),
             // Anchored at the workspace root, not the start folder: a persona may start in one repo and read a sibling.
             ...opt("personaScope", personaScopeOf(persona, context.effectiveCwd)),
             ...(access.denied.length > 0 ? { disallowedTools: access.denied } : {}),
