@@ -1256,8 +1256,11 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
-             one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
-        <div v-if="chipRowShown" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
+             one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb.
+             One line at any width: agent chips shrink by cutting their names (logo and count stay, the hover card names
+             them), and only once nothing is left to cut does the row scroll sideways rather than wrap into a stack.
+             The 2px above and below keep a focus ring inside the scroller's clip; the negative margin gives it back. -->
+        <div v-if="chipRowShown" class="scrollbar-none -mb-0.5 flex shrink-0 items-center gap-1 overflow-x-auto px-2 pt-1.5 pb-0.5">
             <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
                  wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
@@ -1266,9 +1269,9 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="ui-chip min-w-0 max-w-full"
+                class="ui-chip min-w-0 max-w-full shrink"
                 :class="[
-                    originFilter === entry.id ? ['shrink chip-blade', originHue(entry.id).chip] : 'shrink-0',
+                    originFilter === entry.id ? ['chip-blade', originHue(entry.id).chip] : '',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
                 :style="originFilter === entry.id ? originBlade : undefined"
