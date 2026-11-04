@@ -8963,11 +8963,13 @@
             "impact": {
                 "missing": "Twój sandbox jeszcze tego nie ma, więc nic, co tego tutaj potrzebuje, nie zadziała, dopóki sandbox nie nadrobi zaległości.",
                 "drifted": "Obie strony oczekują tu trochę innych rzeczy. Coś może się pokazać puste albo zmiana może się nie zapisać.",
+                "additive": "Twój sandbox i ta strona współpracują tu bez problemu. Jedna ze stron ma opcję albo szczegół, którego druga jeszcze nie ma; pojawi się, gdy obie będą w tej samej wersji. Nic się nie zepsuło.",
                 "extra": "Twój sandbox to ma, ale ta strona jest za stara, żeby z tego korzystać. Nic się nie zepsuło — po prostu jeszcze tego nie dostajesz."
             },
             "tag": {
                 "missing": "Niedostępne",
                 "drifted": "Może działać źle",
+                "additive": "Drobne różnice",
                 "extra": "Jeszcze nieużywane"
             }
         },

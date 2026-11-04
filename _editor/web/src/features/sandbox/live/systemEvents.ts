@@ -98,7 +98,7 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     // Wakes held for approval arrive only via GET /agents, never the stream, so refetch them explicitly on every hello.
     void refreshAgents();
     // Route surface gates features for the rest of this connection; shapes ride the same frame.
-    setDaemonRoutes(event.routes, event.shapes, event.surface, { rawRoutes: event.rawRoutes, rawFingerprints: event.rawFingerprints });
+    setDaemonRoutes(event.routes, event.shapes, event.surface, { rawRoutes: event.rawRoutes, rawFingerprints: event.rawFingerprints, prints: event.prints });
     // Whether an upload may go gzipped: only to a daemon that names the coding.
     setUploadEncodings(event.uploadEncodings);
     // Whether the voice sockets may speak Opus: only to a daemon that names it.

@@ -4,6 +4,7 @@ import { Button, Notice, RowGroup, RowNote, type Tip } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, watchEffect } from "vue";
 import {
+    additiveRoutes,
     appBehind,
     comparedRouteCount,
     daemonBehind,
@@ -190,13 +191,15 @@ const runsOn = computed(() => (running.value === undefined ? undefined : t(`sand
 // there instead of chips, and the other two kinds keep theirs.
 const listed = computed(() => (driftScope.value === `wholesale` ? [] : driftedRoutes.value));
 const groups = computed((): readonly (DriftGroup & { readonly note?: string })[] => {
-    const found = driftGroups(driftAreas({ missing: missingRoutes.value, drifted: listed.value, extra: unknownDaemonRoutes.value }));
+    const found = driftGroups(
+        driftAreas({ missing: missingRoutes.value, drifted: listed.value, additive: additiveRoutes.value, extra: unknownDaemonRoutes.value }),
+    );
     if (driftScope.value !== `wholesale`) {
         return found;
     }
     // The drifted line keeps its place between the other two, holding the sentence instead of chips.
     const drifted = { kind: `drifted` as const, areas: [], note: t(`sandbox.sandboxBehindCard.wholesaleNote`) };
-    return [...found.filter((group) => group.kind === `missing`), drifted, ...found.filter((group) => group.kind === `extra`)];
+    return [...found.filter((group) => group.kind === `missing`), drifted, ...found.filter((group) => group.kind !== `missing`)];
 });
 
 // The bottom block holds only what is there to say: a restart in flight or done, a refusal, the printed command, the
@@ -206,7 +209,8 @@ const hasFooter = computed(() => !isDev || restartStatus.value || failed.value !
 </script>
 
 <template>
-    <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading">
+    <!-- data-drift-scope is read by the compat tier (_tools/e2e/compat), which fails a deploy on a wholesale disagreement. -->
+    <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading" :data-drift-scope="driftScope">
         <!-- RESTART, NEVER "RELOAD": this rebuilds and restarts the whole sandbox out there. Top right, where the fix
              for the whole group belongs, rather than under a list the reader has to get past first. -->
         <template v-if="isDev && hostId" #actions>

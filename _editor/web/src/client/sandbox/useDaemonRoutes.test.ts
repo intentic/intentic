@@ -1,7 +1,8 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
 import {
+    additiveRoutes,
     appBehind,
     comparedRouteCount,
     daemonBehind,
@@ -394,5 +395,71 @@ describe(`a folder on this computer`, () => {
         setDaemonRoutes(withoutVpn);
         resetSandboxScope();
         expect([folderSurface.value, supportsRoute(`vpn.list`)]).toEqual([false, true]);
+    });
+});
+
+// The second print: a daemon that sends it is compared on what each call needs, so an optional part one side lacks is
+// told apart from a payload that may misbehave.
+describe(`the second print`, () => {
+    beforeAll(async () => {
+        await loadContract();
+    });
+    beforeEach(() => resetSandboxScope());
+
+    const PRINTS = { ...sandboxRoutePrints() };
+    // The same prints with named routes changed: `wire` only (an optional field added), or the core too.
+    const reprinted = (wireOnly: readonly string[], core: readonly string[] = []): Record<string, readonly [string, string]> => ({
+        ...PRINTS,
+        ...Object.fromEntries(wireOnly.map((name) => [name, [`other`, PRINTS[name]?.[1] ?? ``] as const])),
+        ...Object.fromEntries(core.map((name) => [name, [`other`, `other`] as const])),
+    });
+    // A hello from a daemon whose FIRST print disagrees everywhere it names, as any page ahead of it would read one.
+    const hello = (prints: Record<string, readonly [string, string]>, firstDisagrees: readonly string[]): void =>
+        setDaemonRoutes(LEVEL, reshaped(...firstDisagrees), undefined, { rawRoutes: [...RAW_ROUTE_NAMES], rawFingerprints: rawRouteFingerprints(), prints });
+
+    it(`reads a different wire over the same core as an optional part, never as drift`, () => {
+        hello(reprinted([`settings.get`, `agent.reply`]), [`settings.get`, `agent.reply`]);
+        expect(additiveRoutes.value).toEqual([`agent.reply`, `settings.get`]);
+        expect(driftedRoutes.value).toEqual([]);
+        expect(daemonDrifted.value).toBe(false);
+        expect(driftScope.value).toBe(`none`);
+    });
+
+    it(`still reads a different core as drift`, () => {
+        hello(reprinted([`settings.get`], [`vpn.list`]), [`settings.get`, `vpn.list`]);
+        expect(driftedRoutes.value).toEqual([`vpn.list`]);
+        expect(additiveRoutes.value).toEqual([`settings.get`]);
+        expect(daemonDrifted.value).toBe(true);
+    });
+
+    it(`trusts the second print over the first when the daemon sends both`, () => {
+        // The first print says nothing moved; the second says a core did, and it is the one read.
+        hello(reprinted([], [`vpn.list`]), []);
+        expect(driftedRoutes.value).toEqual([`vpn.list`]);
+    });
+
+    it(`reads a daemon from before the field on the first print, as it always did`, () => {
+        setDaemonRoutes(LEVEL, reshaped(`vpn.list`));
+        expect(driftedRoutes.value).toEqual([`vpn.list`]);
+        expect(additiveRoutes.value).toEqual([]);
+    });
+
+    it(`counts every route both sides printed, hand-written ones included`, () => {
+        hello(PRINTS, []);
+        expect(comparedRouteCount.value).toBe(Object.keys(PRINTS).length);
+        expect(driftedRoutes.value).toEqual([]);
+        expect(additiveRoutes.value).toEqual([]);
+    });
+
+    it(`names an optional-part route when a call there is refused`, () => {
+        hello(reprinted([`settings.set`]), [`settings.set`]);
+        expect(driftedRouteReason(`settings.set`)).toEqual(expect.any(String));
+        expect(driftedRouteReason(`vpn.list`)).toBeUndefined();
+    });
+
+    it(`forgets the previous sandbox's prints on switch`, () => {
+        hello(reprinted([], [`vpn.list`]), []);
+        resetSandboxScope();
+        expect(driftedRoutes.value).toEqual([]);
     });
 });

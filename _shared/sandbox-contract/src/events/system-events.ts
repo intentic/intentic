@@ -44,9 +44,32 @@ export type BootProgress = z.infer<typeof BootProgressSchema>;
 export const BootSchema = z.object({ kind: z.literal("boot"), ...BootProgressSchema.shape });
 export type Boot = z.infer<typeof BootSchema>;
 
+// The hello's fields, named rather than inferred (agent-press.ts says the same of its press): spelled out inside the
+// `/events` route the frame took the aggregated contract's type past what the declaration emitter will write (TS7056).
+// A field added below is added here too, which the assignment checks.
+type OptionalStrings = z.ZodOptional<z.ZodArray<z.ZodString>>;
+type OptionalStringMap = z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+// A type rather than an interface: z.object needs the index signature only an object type literal is given.
+export type HelloFields = {
+    readonly kind: z.ZodLiteral<"hello">;
+    readonly workspaceId: z.ZodString;
+    readonly routes: OptionalStrings;
+    readonly shapes: OptionalStringMap;
+    readonly rawRoutes: OptionalStrings;
+    readonly rawFingerprints: OptionalStringMap;
+    readonly prints: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodTuple<[z.ZodString, z.ZodString], null>>>;
+    readonly uploadEncodings: OptionalStrings;
+    readonly voiceCodecs: OptionalStrings;
+    readonly build: z.ZodOptional<z.ZodString>;
+    readonly boot: z.ZodOptional<typeof BootProgressSchema>;
+    readonly projectDir: z.ZodOptional<z.ZodString>;
+    readonly surface: z.ZodOptional<z.ZodEnum<{ sandbox: "sandbox"; folder: "folder" }>>;
+    readonly recordsSwitches: z.ZodOptional<z.ZodBoolean>;
+};
+
 // The stream's first frame: `workspaceId` and `build` key the browser's persisted cache, so a wiped workspace or new
 // image doesn't hydrate stale data. `routes`/`shapes` turn a version-skewed 404 or missing field into a named gap.
-export const HelloSchema = z.object({
+export const HelloSchema: z.ZodObject<HelloFields, z.core.$strip> = z.object({
     kind: z.literal("hello"),
     workspaceId: z.string(),
     routes: z.array(z.string()).optional(),
@@ -58,6 +81,11 @@ export const HelloSchema = z.object({
     // `rawFingerprints` is what `shapes` is for a procedure, under the name the rest of the code gives it.
     rawRoutes: z.array(z.string()).optional(),
     rawFingerprints: z.record(z.string(), z.string()).optional(),
+    // Every route's second print, procedures and hand-written routes in one map: `[wire, core]` (protocol/routes.ts
+    // `RoutePrints`). `wire` is the shape without its prose, `core` only what has to hold for a call to work, so a page
+    // ahead of the sandbox can tell a part that arrives with the next update from one that may misbehave. Absent means
+    // a daemon from before the field, which the browser compares on `shapes` and `rawFingerprints` as it always did.
+    prints: z.record(z.string(), z.tuple([z.string(), z.string()])).optional(),
     // The codings `POST /workspace/upload` and `POST /workspace/upload-archive` decode a request body from
     // (`Content-Encoding`). Absent means a daemon that writes whatever bytes arrive, so the browser sends them plain.
     uploadEncodings: z.array(z.string()).optional(),

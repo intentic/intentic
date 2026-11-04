@@ -9560,11 +9560,13 @@
             "impact": {
                 "missing": "Ihre Sandbox hat diesen Teil noch nicht, daher funktioniert alles hier, was ihn braucht, erst, wenn die Sandbox aufholt.",
                 "drifted": "Die beiden Seiten erwarten hier leicht Unterschiedliches. Vielleicht bleibt etwas leer, oder eine Änderung lässt sich nicht speichern.",
+                "additive": "Ihre Sandbox und diese Seite arbeiten hier zusammen. Eine der beiden hat eine Option oder ein Detail, das die andere noch nicht hat; es kommt, sobald beide auf derselben Version sind. Nichts ist kaputt.",
                 "extra": "Ihre Sandbox hat das, und diese Seite ist zu alt, um es zu nutzen. Nichts ist kaputt — Sie bekommen es nur noch nicht."
             },
             "tag": {
                 "missing": "Nicht verfügbar",
                 "drifted": "Kann sich falsch verhalten",
+                "additive": "Kleine Unterschiede",
                 "extra": "Noch nicht genutzt"
             }
         },

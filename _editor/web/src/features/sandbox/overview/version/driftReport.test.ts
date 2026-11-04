@@ -109,3 +109,20 @@ it(`names everything in the language the reader switched to after the page loade
         await setLocale(`en`);
     }
 });
+
+// An area whose calls answer alike and differ only in an optional part: listed under its own neutral line, after the
+// kinds that break something and before the one that costs nothing.
+it(`puts an optional-part area between drifted and extra, in a tone that warns of nothing`, async () => {
+    const { KIND_TONE } = await import(`./driftReport`);
+    const areas = driftAreas({ missing: [], drifted: [`vpn.list`], additive: [`settings.get`], extra: [`future.thing`] });
+    expect(driftGroups(areas).map((group) => group.kind)).toEqual([`drifted`, `additive`, `extra`]);
+    expect(KIND_TONE.additive).toBe(`neutral`);
+    setLocale(`en`);
+    expect(kindTag(`additive`)).toBe(`Small differences`);
+    expect(kindImpact(`additive`)).toContain(`Nothing is broken`);
+});
+
+it(`files an area under the worst kind it holds, even when it holds an optional part too`, () => {
+    const [area] = driftAreas({ missing: [], drifted: [`settings.set`], additive: [`settings.get`], extra: [] });
+    expect(area).toMatchObject({ key: `settings`, kind: `drifted`, drifted: [`settings.set`], additive: [`settings.get`], count: 2 });
+});

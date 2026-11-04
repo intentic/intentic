@@ -2,10 +2,11 @@
 
 ## Why it happens
 
-The app at app.intentic.dev updates itself: it checks its own build every 15 minutes and offers a reload. The
-sandbox daemon moves only to a release: on its owner's own machine it takes a downloaded update by itself once
+The app at app.intentic.dev moves with each release, onto that release's own build, right after `:stable` does; an
+open page checks its own build every 15 minutes and offers a reload. A sandbox created from a release is the same
+build as the page. The sandbox daemon moves only to a release: on its owner's own machine it takes a downloaded update by itself once
 nothing is going on (unless the owner turned that off), and otherwise when the owner updates it. So a page newer
-than the daemon it drives is the normal case, and the one app talks to daemons of many versions at once. When the
+than a sandbox that has not updated yet is ordinary, and the one app talks to daemons of many versions at once. When the
 sandbox connects it tells the page its version and which routes it has, with a fingerprint of each one's shape. A
 daemon older than the oldest the app supports gets one page saying so in place of the sandbox's own; above that,
 the page hides what an older daemon lacks, and where a call still lands on a gap it says so in words:
@@ -19,7 +20,7 @@ the page hides what an older daemon lacks, and where a call still lands on a gap
 | This page is running older code than the sandbox: reload the page. | the page is the older side; a reload fixes it |
 | This sandbox's daemon didn't keep <field>. Update the sandbox to a newer image to use it. | a setting saved but not stored: the daemon predates it |
 | **This sandbox runs an older version** / **Update the sandbox** | a view needs a route the daemon lacks |
-| On Sandbox ▸ Overview: **Your sandbox is older than this page**, **This page and your sandbox are from different versions**, **This page and your sandbox are far apart**, **Some parts of this page may not work** | the version card, listing each part of the app as not available, may misbehave or not used yet |
+| On Sandbox ▸ Overview: **Your sandbox is older than this page**, **This page and your sandbox are from different versions**, **This page and your sandbox are far apart**, **Some parts of this page may not work** | the version card, listing each part of the app as not available, may misbehave, small differences (an optional part one side lacks; never shown on its own) or not used yet |
 
 A blank or failing panel, a button that does nothing, or a setting that snaps back can be the same gap without
 those words.

@@ -9560,11 +9560,13 @@
             "impact": {
                 "missing": "Your sandbox doesn't have this part yet, so anything here that needs it won't work until the sandbox catches up.",
                 "drifted": "The two sides expect slightly different things here. You might see something come up empty, or a change that won't save.",
+                "additive": "Your sandbox and this page work together here. One of them has an option or a detail the other doesn't have yet, which arrives when they're on the same version. Nothing is broken.",
                 "extra": "Your sandbox has this and this page is too old to use it. Nothing is broken — you just don't get it yet."
             },
             "tag": {
                 "missing": "Not available",
                 "drifted": "May misbehave",
+                "additive": "Small differences",
                 "extra": "Not used yet"
             }
         },

@@ -30,7 +30,8 @@ REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # content by construction, because everything here is one build pushed to all of them.
 IMAGE="${REGISTRIES%% *}/$APP"
 
-# `latest` tracks main; CI adds the commit tag. TAGS overrides both for hand runs (space-separated).
+# `latest` tracks main; CI adds the commit tag. TAGS overrides both (space-separated): the web never takes `latest` from
+# a push, since the hosted editor moves only with a release (ship-web.sh).
 # GITHUB_SHA is the full 40 chars, cut to 8 so `sha-` tags stay short and stable.
 # `${GITHUB_SHA:-}` first: under `set -u` a hand run, which has no GITHUB_SHA, would stop here.
 SHORT_SHA="${GITHUB_SHA:-}"

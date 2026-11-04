@@ -2,8 +2,7 @@ import { getEventIteratorSchemaDetails, isContractProcedure } from "@orpc/contra
 import type { z } from "zod";
 import { RAW_JSON_ROUTES } from "./protocol/raw/raw-json-routes.js";
 import { RAW_ROUTE_LIST } from "./protocol/raw/raw-routes.js";
-import type { ContractRoute } from "./protocol/routes.js";
-import { contractRoutes, rawRouteFingerprintsOf, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes, servedRoute } from "./protocol/routes.js";
+import { type ContractRoute,contractRoutes,rawRouteFingerprintsOf,requestPathFor,routeForProcedure,routeNameForRequest,routePrintsOf,type RoutePrints,routeShapes,servedRoute } from "./protocol/routes.js";
 import { accessProfilesContract } from "./contracts/access-profiles.contract.js";
 import { accountsContract } from "./contracts/accounts.contract.js";
 import { activityContract } from "./contracts/activity.contract.js";
@@ -140,6 +139,12 @@ export const RAW_ROUTE_NAMES: readonly string[] = RAW_ROUTE_LIST.map((route) => 
 // unfingerprinted route is compared on nothing.
 let rawFingerprints: Readonly<Record<string, string>> | undefined;
 export const rawRouteFingerprints = (): Readonly<Record<string, string>> => (rawFingerprints ??= rawRouteFingerprintsOf(RAW_JSON_ROUTES));
+
+// Every route's second print, procedures and hand-written routes in one map (routes.ts says why there are two):
+// memoised like the first, for the same startup reason.
+let routePrints: Readonly<Record<string, RoutePrints>> | undefined;
+export const sandboxRoutePrints = (): Readonly<Record<string, RoutePrints>> => (routePrints ??= routePrintsOf(sandboxContract, RAW_JSON_ROUTES));
+export type { RoutePrints };
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>

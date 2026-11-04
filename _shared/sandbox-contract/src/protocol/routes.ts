@@ -116,6 +116,88 @@ const wireShape = (schema: unknown, io: "input" | "output"): unknown => {
     return frame === undefined ? z.toJSONSchema(schema as z.ZodType, { io }) : { stream: z.toJSONSchema(frame, { io }) };
 };
 
+// THE SECOND PRINT, AND WHY THE FIRST ONE CRIED WOLF. The print above hashes the JSON Schema whole, and two things in
+// it change on almost every push without changing what either side can send or read: the prose (`description`,
+// `title`) every schema here carries at length, and a new optional field. Against a page deployed ahead of the
+// sandboxes, both read as "may misbehave" on routes that work exactly as before. So a route is printed twice more:
+//
+// - `wire`: the shape as above with the words taken out. It differs only where the payload's shape differs.
+// - `core`: what has to hold for the call to work at all, read as each side's parser reads the other's message (zod's
+//   `parse`, which is the input side of a schema whichever way the message travels: the daemon parses a request, the
+//   page parses every answer, sandboxRpc.ts). It drops defaults, and every optional property of an object that strips
+//   what it doesn't know, since such a property can be absent on either side and missing from either side's schema
+//   without the other refusing anything. A strict object (`additionalProperties: false`) keeps them all: there an
+//   unknown key is a refusal.
+//
+// Equal cores with different wires is a sandbox that answers every call and lacks some optional part of one, which is
+// a feature arriving with the next update rather than a fault. A different core is a real disagreement.
+//
+// What the core cannot see: an existing optional field whose type changed. That is a narrowing the contract-shrink gate
+// already makes a commit declare, and it still shows as a different `wire`.
+export type RoutePrints = [wire: string, core: string];
+
+// Keywords that carry words for a reader and never a constraint on the payload.
+const DOC_KEYWORDS = new Set(["description", "title", "examples", "$comment", "deprecated"]);
+// Keywords whose value maps a NAME to a schema; inside one a key is a field, never a keyword.
+const NAME_MAPS = new Set(["properties", "patternProperties", "$defs", "definitions", "dependentSchemas"]);
+// Keywords whose value is payload data, not schema, and is hashed as written.
+const DATA_KEYWORDS = new Set(["const", "enum", "default"]);
+
+// JSON as z.toJSONSchema writes it, which is all the prints ever walk.
+type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
+type JsonObject = { readonly [key: string]: Json };
+
+const isObject = (value: Json): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// The names a schema object requires, or none.
+const requiredOf = (schema: JsonObject): ReadonlySet<Json> => {
+    const required = schema["required"];
+    return new Set(Array.isArray(required) ? required : []);
+};
+
+// The schema with its words removed and, for the core, its defaults and its strip objects' optional properties too.
+// `named` is a map of field name → schema, whose keys are never keywords.
+const pruned = (value: Json, core: boolean, named = false): Json => {
+    if (Array.isArray(value)) {
+        return value.map((item) => pruned(item, core));
+    }
+    if (!isObject(value)) {
+        return value;
+    }
+    const out: Record<string, Json> = {};
+    for (const [key, nested] of Object.entries(value)) {
+        if (named) {
+            out[key] = pruned(nested, core);
+        } else if (!DOC_KEYWORDS.has(key) && !(core && key === "default")) {
+            out[key] = DATA_KEYWORDS.has(key) ? nested : pruned(nested, core, NAME_MAPS.has(key));
+        }
+    }
+    const properties = out["properties"];
+    if (core && !named && value["additionalProperties"] !== false && properties !== undefined && isObject(properties)) {
+        const required = requiredOf(value);
+        out["properties"] = Object.fromEntries(Object.entries(properties).filter(([name]) => required.has(name)));
+    }
+    return out;
+};
+
+// The two schemas of a route, whichever kind declares them.
+interface RawRouteSchemas {
+    readonly input?: unknown;
+    readonly output?: unknown;
+}
+
+// One side of a route as JSON for the prints. SAFETY: wireShape is z.toJSONSchema's output (or a `{ stream }` wrapper
+// around it, or undefined for a side with no schema), which is JSON by construction; undefined becomes null so the
+// side still counts.
+const sideOf = (route: RawRouteSchemas, side: keyof RawRouteSchemas, io: "input" | "output"): Json => (wireShape(route[side], io) ?? null) as Json;
+
+// Both prints of one route's two sides. The wire reads each side as the first print does (a `.default()` field is
+// optional in, required out); the core reads both as a parser does.
+const printsOf = (route: RawRouteSchemas): RoutePrints => [
+    fingerprint(pruned({ in: sideOf(route, "input", "input"), out: sideOf(route, "output", "output") }, false)),
+    fingerprint(pruned({ in: sideOf(route, "input", "input"), out: sideOf(route, "output", "input") }, true)),
+];
+
 // One route's wire shape, or undefined if it can't be expressed at all.
 const procedureShape = (value: unknown): string | undefined => {
     if (typeof value !== "object" || value === null || !("~orpc" in value)) {
@@ -129,25 +211,51 @@ const procedureShape = (value: unknown): string | undefined => {
     }
 };
 
-// Every route whose shape this build can express, as name → fingerprint. A separate map from ContractRoute since
-// existence and shape are advertised, and checked, independently.
-export const routeShapes = (contract: Record<string, unknown>): Record<string, string> => {
-    const shapes: Record<string, string> = {};
+// Every procedure of a contract that has a route, as `group.name` → procedure; the one walk every print shares.
+function* routedProcedures(contract: Record<string, unknown>): Generator<readonly [string, ContractSchemasLike]> {
     for (const [group, procedures] of Object.entries(contract)) {
         if (typeof procedures !== "object" || procedures === null) {
             continue;
         }
-        for (const [name, procedure] of Object.entries(procedures as Record<string, unknown>)) {
-            if (procedureRoute(procedure) === undefined) {
-                continue;
-            }
-            const shape = procedureShape(procedure);
-            if (shape !== undefined) {
-                shapes[`${group}.${name}`] = shape;
+        // SAFETY: a contract group is an object of procedures; procedureRoute below admits only what carries `~orpc`.
+        for (const [name, procedure] of Object.entries(procedures as Record<string, ContractSchemasLike>)) {
+            if (procedureRoute(procedure) !== undefined) {
+                yield [`${group}.${name}`, procedure];
             }
         }
     }
+}
+
+// Every route whose shape this build can express, as name → fingerprint. A separate map from ContractRoute since
+// existence and shape are advertised, and checked, independently.
+export const routeShapes = (contract: Record<string, unknown>): Record<string, string> => {
+    const shapes: Record<string, string> = {};
+    for (const [name, procedure] of routedProcedures(contract)) {
+        const shape = procedureShape(procedure);
+        if (shape !== undefined) {
+            shapes[name] = shape;
+        }
+    }
     return shapes;
+};
+
+// The second print of every route the first one prints (RoutePrints), procedures and hand-written routes in one map:
+// their names never collide, a raw one being `METHOD /path`. A route whose shape can't be expressed is left out, as
+// above.
+export const routePrintsOf = (contract: Record<string, unknown>, raw: Readonly<Record<string, RawRouteSchemas>>) => {
+    const prints: Record<string, RoutePrints> = {};
+    const sides: (readonly [string, RawRouteSchemas])[] = [
+        ...[...routedProcedures(contract)].map(([name, procedure]) => [name, { input: procedure["~orpc"].inputSchema, output: procedure["~orpc"].outputSchema }] as const),
+        ...Object.entries(raw),
+    ];
+    for (const [name, route] of sides) {
+        try {
+            prints[name] = printsOf(route);
+        } catch {
+            continue;
+        }
+    }
+    return prints;
 };
 
 // The same, for the hand-written routes that answer plain JSON (raw-json-routes.ts). They carry their schemas directly

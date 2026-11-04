@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
+import { additiveRoutes, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 import { namedArea, routeGroup } from "../../../../client/sandbox/daemon/routeAreas";
 
 // WHO IS FAILING TO TALK TO WHOM, IN WORDS SOMEONE WHO DID NOT WRITE THIS WOULD USE. The raw diff is three lists of
@@ -12,13 +12,17 @@ import { namedArea, routeGroup } from "../../../../client/sandbox/daemon/routeAr
 // No "route", "call", "endpoint", "contract", "schema" or "daemon" in anything a reader sees. Those are the words that
 // made the first version of this card unreadable to everyone who had not written it.
 
-// The three ways two builds fail to meet, worst first. They are genuinely different failures and no single sentence
-// covers them: one call is absent, one is present with different fields, one exists on a side that can't ask for it.
-export type DriftKind = "missing" | "drifted" | "extra";
+// The four ways two builds fail to meet, worst first. They are genuinely different failures and no single sentence
+// covers them: one call is absent, one is present with different fields, one answers alike but lacks an optional part
+// the other has, one exists on a side that can't ask for it.
+export type DriftKind = "missing" | "drifted" | "additive" | "extra";
+
+// Every kind, worst first: the order lines and explanations are read in.
+export const DRIFT_KINDS: readonly DriftKind[] = [`missing`, `drifted`, `additive`, `extra`];
 
 // Ranked by how much of an area it takes away: an absent call is that feature gone here; a drifted one still answers
-// and lies; an extra one costs nothing but an unused capability.
-const KIND_RANK: Readonly<Record<DriftKind, number>> = { missing: 0, drifted: 1, extra: 2 };
+// and lies; an additive one answers truly and lacks an option; an extra one costs nothing but an unused capability.
+const KIND_RANK: Readonly<Record<DriftKind, number>> = { missing: 0, drifted: 1, additive: 2, extra: 3 };
 
 export interface DriftArea {
     // Contract group the routes came from, which is also the row's key.
@@ -29,6 +33,7 @@ export interface DriftArea {
     readonly where: string | undefined;
     readonly missing: readonly string[];
     readonly drifted: readonly string[];
+    readonly additive: readonly string[];
     readonly extra: readonly string[];
     // The worst kind this area holds, which decides its glyph and how the row is read.
     readonly kind: DriftKind;
@@ -47,32 +52,40 @@ const nameOf = (key: string, theirsOnly: boolean): { label: string; where: strin
 
 // Folds three flat route lists into one row per area of the product. Pure, so the whole table above is testable
 // without a daemon.
-export const driftAreas = (lists: { missing: readonly string[]; drifted: readonly string[]; extra: readonly string[] }): readonly DriftArea[] => {
-    const byKey = new Map<string, { missing: string[]; drifted: string[]; extra: string[] }>();
+export const driftAreas = (lists: {
+    missing: readonly string[];
+    drifted: readonly string[];
+    additive?: readonly string[];
+    extra: readonly string[];
+}): readonly DriftArea[] => {
+    const byKey = new Map<string, Record<DriftKind, string[]>>();
     const file = (kind: DriftKind, routes: readonly string[]): void => {
         for (const route of routes) {
             const key = routeGroup(route);
-            const found = byKey.get(key) ?? { missing: [], drifted: [], extra: [] };
+            const found = byKey.get(key) ?? { missing: [], drifted: [], additive: [], extra: [] };
             found[kind].push(route);
             byKey.set(key, found);
         }
     };
     file(`missing`, lists.missing);
     file(`drifted`, lists.drifted);
+    file(`additive`, lists.additive ?? []);
     file(`extra`, lists.extra);
 
     return (
         [...byKey.entries()]
             .map(([key, found]): DriftArea => {
-                const kind: DriftKind = found.missing.length > 0 ? `missing` : found.drifted.length > 0 ? `drifted` : `extra`;
+                const kind = DRIFT_KINDS.find((each) => found[each].length > 0) ?? `extra`;
                 return {
                     key,
-                    ...nameOf(key, found.missing.length === 0 && found.drifted.length === 0),
+                    // Only the daemon names an `extra` area; every other kind is a call this build makes.
+                    ...nameOf(key, kind === `extra`),
                     missing: found.missing.toSorted(),
                     drifted: found.drifted.toSorted(),
+                    additive: found.additive.toSorted(),
                     extra: found.extra.toSorted(),
                     kind,
-                    count: found.missing.length + found.drifted.length + found.extra.length,
+                    count: DRIFT_KINDS.reduce((sum, each) => sum + found[each].length, 0),
                 };
             })
             // Worst kind first, then the areas most of which is affected; the label only breaks ties, so the order is
@@ -82,7 +95,7 @@ export const driftAreas = (lists: { missing: readonly string[]; drifted: readonl
 };
 
 export const driftedAreas = computed(() =>
-    driftAreas({ missing: missingRoutes.value, drifted: driftedRoutes.value, extra: unknownDaemonRoutes.value }),
+    driftAreas({ missing: missingRoutes.value, drifted: driftedRoutes.value, additive: additiveRoutes.value, extra: unknownDaemonRoutes.value }),
 );
 
 // What each kind COSTS, never what it is: the heading already says which disagreement this is, and a drawer that
@@ -90,6 +103,7 @@ export const driftedAreas = computed(() =>
 const KIND_IMPACT: Readonly<Record<DriftKind, () => string>> = {
     missing: () => t(`sandbox.driftReport.impact.missing`),
     drifted: () => t(`sandbox.driftReport.impact.drifted`),
+    additive: () => t(`sandbox.driftReport.impact.additive`),
     extra: () => t(`sandbox.driftReport.impact.extra`),
 };
 export const kindImpact = (kind: DriftKind): string => KIND_IMPACT[kind]();
@@ -99,12 +113,18 @@ export const kindImpact = (kind: DriftKind): string => KIND_IMPACT[kind]();
 const KIND_TAG: Readonly<Record<DriftKind, () => string>> = {
     missing: () => t(`sandbox.driftReport.tag.missing`),
     drifted: () => t(`sandbox.driftReport.tag.drifted`),
+    additive: () => t(`sandbox.driftReport.tag.additive`),
     extra: () => t(`sandbox.driftReport.tag.extra`),
 };
 export const kindTag = (kind: DriftKind): string => KIND_TAG[kind]();
 
-// A part that is gone reads red, one that may lie reads amber, and `extra`, the one kind that costs nothing, stays neutral.
-export const KIND_TONE: Readonly<Record<DriftKind, "danger" | "warning" | "neutral">> = { missing: `danger`, drifted: `warning`, extra: `neutral` };
+// A part that is gone reads red, one that may lie reads amber, and the two kinds that break nothing stay neutral.
+export const KIND_TONE: Readonly<Record<DriftKind, "danger" | "warning" | "neutral">> = {
+    missing: `danger`,
+    drifted: `warning`,
+    additive: `neutral`,
+    extra: `neutral`,
+};
 
 export interface DriftGroup {
     readonly kind: DriftKind;
@@ -115,6 +135,5 @@ export interface DriftGroup {
 // once, as the line's label, and the areas are chips after it. An area sits under the worst kind it holds, and its
 // popover names every kind it holds. Kinds with nothing in them are left out.
 export const driftGroups = (areas: readonly DriftArea[]): readonly DriftGroup[] =>
-    ([`missing`, `drifted`, `extra`] as const)
-        .map((kind) => ({ kind, areas: areas.filter((area) => area.kind === kind) }))
+    DRIFT_KINDS.map((kind) => ({ kind, areas: areas.filter((area) => area.kind === kind) }))
         .filter((group) => group.areas.length > 0);

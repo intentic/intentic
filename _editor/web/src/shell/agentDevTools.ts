@@ -6,7 +6,7 @@ import { perfSpans, perfTable, resetPerf } from "../app/perf/perf";
 import type { RenderTrace } from "../app/perf/renderTrace";
 import { readContractFreshness, uncompiledRoutes } from "../client/sandbox/contractFreshness";
 import { daemonReady } from "../client/sandbox/useDaemonBoot";
-import { driftedRoutes, driftScope, missingRoutes, unknownDaemonRoutes } from "../client/sandbox/useDaemonRoutes";
+import { additiveRoutes, driftedRoutes, driftScope, missingRoutes, unknownDaemonRoutes } from "../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../skins/themeRow";
 import { queryClient } from "../lib/queryPersistence";
@@ -106,6 +106,7 @@ const stateTool: WebMcpTool = {
                 sandboxLacks: missingRoutes.value,
                 appLacks: unknownDaemonRoutes.value,
                 shapedDifferently: driftedRoutes.value,
+                optionalPartsDiffer: additiveRoutes.value,
                 uncompiledInThisCheckout: uncompiledRoutes.value,
             },
             failingRequests: queryClient

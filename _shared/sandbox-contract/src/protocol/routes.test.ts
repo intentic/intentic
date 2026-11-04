@@ -1,9 +1,9 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { RAW_JSON_ROUTES } from "./raw/raw-json-routes.js";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints, sandboxRoutePrints } from "../index.js";
 import { procedure } from "./route-meta.js";
-import { contractRoutes, routeNameForRequest, routeShapes, servedRoute, streamOf } from "./routes.js";
+import { contractRoutes, routeNameForRequest, routePrintsOf, routeShapes, servedRoute, streamOf } from "./routes.js";
 
 const fixture = {
     vpn: {
@@ -228,6 +228,73 @@ describe(`routeShapes`, () => {
     });
 });
 
+describe(`routePrintsOf`, () => {
+    // [wire, core] of `vpn.list` answering `output` and taking `input`.
+    const printed = (output: z.ZodType, input?: z.ZodType) => {
+        const route = oc.route({ method: "GET", path: "/vpn" });
+        const prints = routePrintsOf({ vpn: { list: input === undefined ? route.output(output) : route.input(input).output(output) } }, {});
+        const found = prints[`vpn.list`];
+        if (found === undefined) {
+            throw new Error(`vpn.list was not printed`);
+        }
+        return { wire: found[0], core: found[1] };
+    };
+
+    it(`is blind to a description: rewording a field is not a wire change`, () => {
+        const one = printed(z.object({ a: z.string().describe(`one`) }));
+        const other = printed(z.object({ a: z.string().describe(`another`) }));
+        expect(other).toEqual(one);
+    });
+
+    it(`still reads a field that is itself called description`, () => {
+        expect(printed(z.object({ description: z.string() })).wire).not.toBe(printed(z.object({ title: z.string() })).wire);
+    });
+
+    it(`tells an added optional field apart on the wire and not in the core`, () => {
+        const before = printed(z.object({ a: z.string() }), z.object({ q: z.string() }));
+        const after = printed(z.object({ a: z.string(), b: z.number().optional() }), z.object({ q: z.string(), r: z.boolean().optional() }));
+        expect(after.wire).not.toBe(before.wire);
+        expect(after.core).toBe(before.core);
+    });
+
+    it(`keeps a defaulted field out of the core, since a parser fills it in`, () => {
+        const before = printed(z.object({ a: z.string() }));
+        const after = printed(z.object({ a: z.string(), hours: z.object({ from: z.string() }).prefault({ from: `23:00` }) }));
+        expect(after.wire).not.toBe(before.wire);
+        expect(after.core).toBe(before.core);
+    });
+
+    it(`changes the core when a required field is added or retyped`, () => {
+        const before = printed(z.object({ a: z.string() }));
+        expect(printed(z.object({ a: z.string(), b: z.number() })).core).not.toBe(before.core);
+        expect(printed(z.object({ a: z.number() })).core).not.toBe(before.core);
+    });
+
+    it(`changes the core when an enum moves, in either direction`, () => {
+        const before = printed(z.object({ a: z.enum([`x`, `y`]) }));
+        expect(printed(z.object({ a: z.enum([`x`, `y`, `z`]) })).core).not.toBe(before.core);
+        expect(printed(z.object({ a: z.enum([`x`]) })).core).not.toBe(before.core);
+    });
+
+    it(`keeps a strict object's optional fields in the core, since there an unknown key is a refusal`, () => {
+        const before = printed(z.object({ a: z.string() }), z.strictObject({ q: z.string() }));
+        const after = printed(z.object({ a: z.string() }), z.strictObject({ q: z.string(), r: z.boolean().optional() }));
+        expect(after.core).not.toBe(before.core);
+    });
+
+    it(`reaches optional fields nested inside required ones`, () => {
+        const before = printed(z.object({ a: z.object({ x: z.string() }) }));
+        const after = printed(z.object({ a: z.object({ x: z.string(), y: z.string().optional() }) }));
+        expect(after.core).toBe(before.core);
+        expect(after.wire).not.toBe(before.wire);
+    });
+
+    it(`prints the hand-written routes in the same map`, () => {
+        const prints = routePrintsOf({}, { "GET /x": { output: z.object({ a: z.string() }) } });
+        expect(Object.keys(prints)).toEqual([`GET /x`]);
+    });
+});
+
 describe(`the real sandbox contract`, () => {
     it(`fingerprints every route, streams included`, () => {
         // Nothing may opt out: a route with no fingerprint is a route the browser can never tell has drifted, and the
@@ -267,6 +334,12 @@ describe(`the real sandbox contract`, () => {
             `system.runDeviceAgentFlow`,
             `vpn.connect`,
         ]);
+    });
+
+    it(`prints every route the first print covers, procedures and hand-written ones in one map`, () => {
+        const prints = sandboxRoutePrints();
+        const first = [...Object.keys(sandboxRouteFingerprints()), ...Object.keys(rawRouteFingerprints())].toSorted();
+        expect(Object.keys(prints).toSorted()).toEqual(first);
     });
 
     it(`fingerprints every route exactly once`, () => {

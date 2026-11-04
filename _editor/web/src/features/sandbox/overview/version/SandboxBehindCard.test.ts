@@ -6,7 +6,7 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
-import { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { setDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 import { resetContractFreshness } from "../../../../client/sandbox/contractFreshness";
@@ -411,4 +411,35 @@ it(`keeps a restart going across the card closing and opening again`, async () =
     expect(restartExpected(`sbx-dev`)?.untilAnswered).toBe(true);
     expect(severingCalls).toEqual([`ada-laptop:dev-restart`]);
     activeSandboxId.value = before;
+});
+
+// A brand-new sandbox one release behind this page: every difference is an optional field the page added. That is a
+// sandbox working as it should, and the card stays away rather than greeting a new user with "may not work".
+describe(`a daemon that sends the second print`, () => {
+    const PRINTS = { ...sandboxRoutePrints() };
+    const hello = (wireOnly: readonly string[], core: readonly string[] = []): void =>
+        setDaemonRoutes(LEVEL, reshaped(...wireOnly, ...core), undefined, {
+            rawRoutes: [...RAW_ROUTE_NAMES],
+            rawFingerprints: rawRouteFingerprints(),
+            prints: {
+                ...PRINTS,
+                ...Object.fromEntries(wireOnly.map((name) => [name, [`other`, PRINTS[name]?.[1] ?? ``]])),
+                ...Object.fromEntries(core.map((name) => [name, [`other`, `other`]])),
+            },
+        });
+
+    it(`draws nothing when the only differences are optional parts`, () => {
+        hello([`settings.get`, `agent.reply`, `agents.transcript`]);
+        const text = mount().textContent ?? ``;
+        expect(text).not.toContain(`Some parts of this page may not work`);
+        expect(text).not.toContain(`May misbehave`);
+    });
+
+    it(`lists the optional parts on a line of their own once something real disagrees`, () => {
+        hello([`settings.get`], [`vpn.list`]);
+        const text = mount().textContent ?? ``;
+        expect(text).toContain(`Some parts of this page may not work`);
+        expect(text).toContain(`May misbehave`);
+        expect(text).toContain(`Small differences`);
+    });
 });

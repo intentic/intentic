@@ -9560,11 +9560,13 @@
             "impact": {
                 "missing": "Tu sandbox aún no tiene esta parte, así que lo que dependa de ella no funcionará hasta que se actualice.",
                 "drifted": "Ambos lados esperan cosas ligeramente distintas aquí. Puede que algo aparezca vacío o que un cambio no se guarde.",
+                "additive": "Tu sandbox y esta página funcionan juntas aquí. Una de las dos tiene una opción o un detalle que la otra aún no tiene, y llega cuando estén en la misma versión. Nada está roto.",
                 "extra": "Tu sandbox tiene esto, pero esta página es demasiado antigua para usarlo. Nada está roto: simplemente aún no puedes aprovecharlo."
             },
             "tag": {
                 "missing": "No disponible",
                 "drifted": "Puede fallar",
+                "additive": "Pequeñas diferencias",
                 "extra": "Aún no se usa"
             }
         },

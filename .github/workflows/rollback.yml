@@ -60,3 +60,8 @@ jobs:
           ROLLBACK_VERSION: ${{ inputs.version }}
           ROLLBACK_DOOR: ${{ inputs.door }}
           ROLLBACK_REASON: ${{ inputs.reason }}
+          # The hosted editor goes back with stable (ship-web.sh), which rolls the platform stack.
+          PLATFORM_DEPLOY_STACK: intentic-platform
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}

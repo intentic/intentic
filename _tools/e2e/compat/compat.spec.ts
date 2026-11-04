@@ -165,6 +165,24 @@ const keepSandboxSession = async (page: Page, person: Person): Promise<void> => 
     );
 };
 
+// WHAT THE VERSION CARD SAYS ABOUT THE RELEASED SANDBOX (SandboxBehindCard, on the Sandbox page). A wholesale
+// disagreement, most of the routes both sides print differing in what a call needs, is never an ordinary release gap:
+// it is a contract built from other source or another zod, and every sandbox out there would open on "far apart". That
+// fails. A partial one is how a page ahead of the last release reads every day (a route it added, an enum that grew),
+// and failing on it would stop every deploy until the next release; it is recorded on the run instead, so the
+// gap the next release closes is one look away. The hosted editor ships with the release (ship-web.sh), so no new
+// sandbox meets this page's drift.
+const judgeDrift = async (page: Page, daemon: DaemonUnderTest): Promise<void> => {
+    const card = page.locator(`[data-drift-scope]`);
+    if ((await card.count()) === 0) {
+        return;
+    }
+    const scope = await card.first().getAttribute(`data-drift-scope`);
+    const said = ((await card.first().textContent()) ?? ``).replace(/\s+/gu, ` `).trim();
+    test.info().annotations.push({ type: `drift`, description: `${scope ?? `unknown`} against ${daemon.version}: ${said}` });
+    expect(scope, `the editor reads ${daemon.version} as a wholly different contract: ${said}`).not.toBe(`wholesale`);
+};
+
 test(`today's editor opens its main pages on the released sandbox with nothing failing`, async ({ browser }) => {
     const daemon = daemonUnderTest();
     test.info().annotations.push({ type: `daemon`, description: `${daemon.version} at ${daemon.url}` });
@@ -205,6 +223,7 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
             // Nor any other gate (connecting, warming, refused): the page itself, drawn.
             await expect(page.locator(`[data-sandbox-gate]`)).toHaveCount(0);
             await drawn(page);
+            await judgeDrift(page, daemon);
         });
         await page.close();
     }

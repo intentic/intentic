@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ResponsiveOverlay, toneInk, toneRim, ui, useDevice } from "@intentic/ui";
 import { ref } from "vue";
-import { type DriftArea, type DriftKind, KIND_TONE, kindImpact } from "./driftReport";
+import { DRIFT_KINDS, type DriftArea, type DriftKind, KIND_TONE, kindImpact } from "./driftReport";
 
 // One part of the app the two builds disagree about, as a chip in its kind's line (SandboxBehindCard). The chip is the
 // name and nothing else: where the part lives, what the gap costs and the internal names wait in its popover, for the
@@ -15,9 +15,9 @@ const { mobile } = useDevice();
 const anchor = ref<HTMLElement>();
 
 // Only the kinds this area actually holds, so a drifted-only area doesn't explain what "missing" would have meant.
-const kinds = (): readonly DriftKind[] => ([`missing`, `drifted`, `extra`] as const).filter((kind) => area[kind].length > 0);
+const kinds = (): readonly DriftKind[] => DRIFT_KINDS.filter((kind) => area[kind].length > 0);
 // Every route this area contributes, in the order the kinds are explained above them.
-const evidence = (): readonly string[] => [...area.missing, ...area.drifted, ...area.extra];
+const evidence = (): readonly string[] => DRIFT_KINDS.flatMap((kind) => area[kind]);
 </script>
 
 <template>

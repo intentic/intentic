@@ -76,6 +76,14 @@ printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "${GITHUB_ACTOR:-r
 bash "$DIR/../image/promote-image-tag.sh" sandbox "$VERSION" stable
 bash "$DIR/../image/promote-image-tag.sh" sandbox "core-$VERSION" core-stable
 bash "$DIR/../image/promote-image-tag.sh" dind-host "$VERSION" stable
+# The hosted editor follows stable back, so a sandbox created after the rollback still matches the page (ship-web.sh).
+# A release from before the editor shipped with releases has no web image of its own: the editor stays where it is,
+# which is the page-newer side every sandbox already handles, and the rollback goes on.
+if docker buildx imagetools inspect "ghcr.io/intentic/web:$VERSION" >/dev/null 2>&1; then
+  bash "$DIR/../platform/ship-web.sh" "$VERSION"
+else
+  echo "==> no ghcr.io/intentic/web:${VERSION}, so the hosted editor stays where it is"
+fi
 
 # 2. The git pointer, back onto the released commit.
 gh_move_stable_tag "$TAG"

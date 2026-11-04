@@ -328,6 +328,13 @@ jobs:
       # thing that can stop a broken release stops it first.
       - run: bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-amd64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-amd64"
       - run: TAGS="$RELEASE_VERSION" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
+      # The hosted editor of this same commit, under the version alone: what app.intentic.dev serves once this
+      # release ships (publish runs ship-web.sh after `stable` moved), so the page and every new sandbox are one
+      # build. Built here rather than aliased off main's push, which may never have built this commit's editor (its
+      # images-platform runs on a platform change only), and stamped with the version like everything else here.
+      - run: pnpm turbo run build --filter=@intentic/web
+      - run: TAGS="$RELEASE_VERSION" TURBO_HASH='' bash ../../_tools/scripts/platform/docker-release.sh web
+        working-directory: _editor/web
 
   # The release's Linux-side artifacts, while Windows verifies: the Linux desktop bundles — installed and
   # launched on a bare Debian HERE, before they are uploaded — and the cross-compiled machine agents. These
@@ -582,6 +589,20 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=No release cut::main moved on during the build, so semantic-release published nothing at ${PLANNED_RELEASE_VERSION}. The next pipeline releases these commits. Nothing below this step runs."
           fi
+
+      # THE HOSTED EDITOR GOES WITH IT, after `stable` moved and never before (ship-web.sh says why): the page at
+      # app.intentic.dev becomes this release's own build, so a sandbox created from here on matches the page that
+      # opens it. A failed roll fails the release loudly with everything else already out, and the editor is left on
+      # the release before, which is the page-older side every sandbox already handles.
+      - name: Ship the hosted editor with the release
+        if: ${{ steps.release.outputs.released == 'true' }}
+        shell: bash
+        env:
+          PLATFORM_DEPLOY_STACK: intentic-platform
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+        run: bash _tools/scripts/platform/ship-web.sh "$PLANNED_RELEASE_VERSION"
 
       # The registries. Everything semantic-release just did lives on GitHub — the tag, the Release, the
       # installers attached to it — and the workflows that carry this version to npm and to the GitHub

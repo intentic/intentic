@@ -3,7 +3,7 @@ import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fenc
 import type { Hello, RosterFrames, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
 import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
 import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { errorMessage } from "@intentic/base/errors";
@@ -64,9 +64,8 @@ const shownProjectDir = (config: Services["config"], fence: Fence): { readonly p
     return projectDir !== undefined && fenceReaches(fence, projectDir) ? { projectDir } : {};
 };
 
-// The stream's first frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build
-// implements, the codings its uploads decode and its voice sockets speak, the build id for cache invalidation, boot progress, the project folder
-// the browser opens on, and that every turn's switch of provider, account, loop or model is in its record (turn-switch.ts).
+// The stream's first frame: workspace identity (a wipe/recreate gets a new one), the routes and prints this build serves, the
+// codings its uploads and voice sockets speak, build id, boot progress, project folder, and that turns record switches.
 const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => ({
     kind: "hello",
     workspaceId: await workspaceIdentity(services),
@@ -74,6 +73,7 @@ const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => (
     shapes: { ...sandboxRouteFingerprints() },
     rawRoutes: [...RAW_ROUTE_NAMES],
     rawFingerprints: { ...rawRouteFingerprints() },
+    prints: { ...sandboxRoutePrints() },
     uploadEncodings: [...UPLOAD_ENCODINGS],
     voiceCodecs: voiceCodecs(),
     build: buildId(),

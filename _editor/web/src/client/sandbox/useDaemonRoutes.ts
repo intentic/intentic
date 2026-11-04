@@ -44,6 +44,12 @@ const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined
 const advertisedRaw = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
 const advertisedRawPrints = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
 
+// Every route's second print, `[wire, core]` (sandbox-contract protocol/routes.ts `RoutePrints`), from a daemon recent
+// enough to send it. With it a route both sides shape differently splits in two: a different core may misbehave, and a
+// different wire over the same core is only an optional part one side lacks. Undefined is a daemon from before the
+// field, compared on the first print alone, as before.
+const advertisedPrints = sandboxRef<Readonly<Record<string, readonly [string, string]>> | undefined>(() => undefined);
+
 const advertisedSurface = sandboxRef<DaemonSurface>(() => (sidecarHello === undefined ? `sandbox` : `folder`));
 
 // Called on every hello frame; nothing advertised leaves the assume-supported state. A hello that names no surface is
@@ -52,12 +58,13 @@ export const setDaemonRoutes = (
     routes: readonly string[] | undefined,
     shapes?: Readonly<Record<string, string>>,
     surface?: DaemonSurface,
-    raw?: Pick<Hello, `rawRoutes` | `rawFingerprints`>,
+    raw?: Pick<Hello, `rawRoutes` | `rawFingerprints` | `prints`>,
 ): void => {
     advertised.value = routes === undefined ? undefined : new Set(routes);
     advertisedShapes.value = shapes;
     advertisedRaw.value = raw?.rawRoutes === undefined ? undefined : new Set(raw.rawRoutes);
     advertisedRawPrints.value = raw?.rawFingerprints;
+    advertisedPrints.value = raw?.prints;
     advertisedSurface.value = surface ?? `sandbox`;
     sidecarHello = surface === `folder` ? { routes: advertised.value, shapes } : undefined;
 };
@@ -148,22 +155,55 @@ const theirFingerprints = computed<Readonly<Record<string, string>> | undefined>
         : { ...advertisedShapes.value, ...advertisedRawPrints.value },
 );
 
-// Routes both sides published a fingerprint for: the only ones a disagreement can be read off. An unexpressed or
-// unpublished shape is no evidence, not a match.
-const comparableRoutes = computed<string[]>(() => {
+// How one route compares: the same, a different core (may misbehave), or a different wire over one core (an optional
+// part one side lacks). Read off the second print when the daemon sends it, and off the first, which can only say
+// "different", when it doesn't.
+type RouteVerdict = "same" | "drifted" | "additive";
+
+interface Comparison {
+    // Routes both sides published a print for: the only ones a disagreement can be read off. An unexpressed or
+    // unpublished shape is no evidence, not a match.
+    readonly compared: readonly string[];
+    readonly verdicts: Readonly<Record<string, RouteVerdict>>;
+}
+
+const comparison = computed((): Comparison => {
+    const contract = contractModule.value;
+    const theirPrints = advertisedPrints.value;
+    if (contract !== undefined && theirPrints !== undefined) {
+        const ours = contract.sandboxRoutePrints();
+        const compared = Object.keys(ours).filter((name) => theirPrints[name] !== undefined);
+        const verdicts: Record<string, RouteVerdict> = {};
+        for (const name of compared) {
+            const [ourWire, ourCore] = ours[name] ?? [];
+            const [theirWire, theirCore] = theirPrints[name] ?? [];
+            verdicts[name] = ourCore !== theirCore ? `drifted` : ourWire !== theirWire ? `additive` : `same`;
+        }
+        return { compared, verdicts };
+    }
     const theirs = theirFingerprints.value;
-    return theirs === undefined ? [] : Object.keys(ourFingerprints()).filter((name) => theirs[name] !== undefined);
+    if (theirs === undefined) {
+        return { compared: [], verdicts: {} };
+    }
+    const ours = ourFingerprints();
+    const compared = Object.keys(ours).filter((name) => theirs[name] !== undefined);
+    return { compared, verdicts: Object.fromEntries(compared.map((name) => [name, theirs[name] === ours[name] ? `same` : `drifted`])) };
 });
+
+const withVerdict = (verdict: RouteVerdict): string[] =>
+    comparison.value.compared.filter((name) => comparison.value.verdicts[name] === verdict).toSorted();
 
 // The denominator a drift count is only meaningful against: "3 routes disagree" says nothing without how many were
 // checked, and an old daemon publishing few shapes is checked on few.
-export const comparedRouteCount = computed(() => comparableRoutes.value.length);
+export const comparedRouteCount = computed(() => comparison.value.compared.length);
 
-export const driftedRoutes = computed<string[]>(() => {
-    const theirs = theirFingerprints.value;
-    const ours = ourFingerprints();
-    return theirs === undefined ? [] : comparableRoutes.value.filter((name) => theirs[name] !== ours[name]).toSorted();
-});
+// Routes whose core differs: what has to hold for the call to work is not the same on both sides.
+export const driftedRoutes = computed<string[]>(() => withVerdict(`drifted`));
+
+// Routes that answer on both sides alike and differ only in an optional part one of them lacks: a setting the sandbox
+// doesn't keep yet, a detail its answer leaves out. Nothing is broken, so on its own this raises no warning; it is
+// listed beside one, and the per-call words still name it when a call there is refused.
+export const additiveRoutes = computed<string[]>(() => withVerdict(`additive`));
 
 // Above this fraction, the two contracts disagree as wholes rather than in places: a different build entirely, a
 // different zod, or a contract compiled from other source. Naming the areas then indicts most of the product for one
@@ -178,7 +218,7 @@ export const driftScope = computed<DriftScope>(() => {
     if (drifted === 0) {
         return "none";
     }
-    return drifted > comparableRoutes.value.length * WHOLESALE_ABOVE ? "wholesale" : "partial";
+    return drifted > comparison.value.compared.length * WHOLESALE_ABOVE ? "wholesale" : "partial";
 });
 
 // True when the daemon shapes a shared route differently; independent of `daemonBehind`.
@@ -246,7 +286,8 @@ export const readFailure = (error: unknown): string => {
 // Why a call that reached route `name` still failed: the daemon has it, shaped differently, so it answers rather
 // than 404s. Separate from staleDaemonReason since nothing in the HTTP status routes to this.
 export const driftedRouteReason = (name: string): string | undefined => {
-    if (!driftedRoutes.value.includes(name)) {
+    // An additive route is named too: a refusal there may be the optional part the two sides don't share.
+    if (!driftedRoutes.value.includes(name) && !additiveRoutes.value.includes(name)) {
         return undefined;
     }
     const area = areaOf(name);

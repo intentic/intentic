@@ -1711,7 +1711,12 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm turbo run docker:release --filter=@intentic/api --filter=@intentic/web --filter=@intentic/ingress
+      - run: pnpm turbo run docker:release --filter=@intentic/api --filter=@intentic/ingress
+      # THE EDITOR IS PUBLISHED, NOT SHIPPED. Under its commit and `main`, never `latest`, which the stack serves:
+      # app.intentic.dev moves only with a release (ship-web.sh), so a sandbox created now boots the same build as the
+      # page that opens it, instead of a `stable` older than every contract change landed since the last release.
+      - run: TAGS="main sha-${GITHUB_SHA::8}" pnpm turbo run docker:release --filter=@intentic/web
+        shell: bash
       # `shell: bash` because the job's default is `sh`, where the `${VAR::N}` slice below is a Bad substitution.
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/platform/deploy-platform.sh
         shell: bash

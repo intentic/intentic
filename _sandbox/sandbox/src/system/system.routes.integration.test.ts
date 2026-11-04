@@ -339,6 +339,15 @@ test("events: the hello names the hand-written routes and their shapes, beside t
     expect(Object.keys(hello.rawFingerprints ?? {}).every((name) => hello.rawRoutes?.includes(name))).toBe(true);
 });
 
+// The second print is what lets a page ahead of this daemon tell an optional part it lacks from one that may misbehave:
+// every route the first print covers carries one, procedures and hand-written routes alike.
+test("events: the hello prints every fingerprinted route a second time, as wire and core", async () => {
+    const hello = await helloFrom(clientFor(createApp(services())));
+    const printed = Object.keys(hello.prints ?? {}).toSorted();
+    expect(printed).toEqual([...Object.keys(hello.shapes ?? {}), ...Object.keys(hello.rawFingerprints ?? {})].toSorted());
+    expect(hello.prints?.["GET /system/links"]).toEqual([expect.any(String), expect.any(String)]);
+});
+
 // The editor holds this daemon against the oldest one it supports by the version at the head of the hello's build id;
 // a build id that stopped opening with it would read as a daemon of no known age, never as one too old.
 test("events: the hello's build opens with this daemon's version", async () => {
@@ -414,6 +423,7 @@ test("events: a project sandbox's hello names its folder, workspace-relative, an
         "shapes",
         "rawRoutes",
         "rawFingerprints",
+        "prints",
         "uploadEncodings",
         "voiceCodecs",
         "build",
