@@ -25,6 +25,7 @@ import { sqliteAgentsStore } from "./registry/agents-store.js";
 import { createExpiryTracker } from "./registry/expiry.js";
 import { createTurnIsolation, type TurnIsolation } from "./worktrees/isolation.js";
 import { type AgentWorktrees, createAgentWorktrees } from "./worktrees/worktrees.js";
+import { profileTraits } from "../system/boot/profile.js";
 import { type BranchCheckouts, createBranchCheckouts } from "./worktrees/branches/branch-checkouts.js";
 
 // The conversations: their registry and actors, turns, parked cards, worktrees, journals and checkpoints.
@@ -143,7 +144,16 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
     });
     // Built before the registry, which derives a card's land standing through it rather than a stored verdict.
     const agentWorktrees = createAgentWorktrees(
-        { workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: turnIsolation, logger, perf },
+        {
+            workspace,
+            worktreesRoot: join(historyRoot, "worktrees"),
+            historyRoot,
+            isolation: turnIsolation,
+            logger,
+            perf,
+            // Read when a repo joins, long after composing: where the profile moves git dirs off /work at boot.
+            relocateGitDirs: () => profileTraits(whole().config).relocateGitDirs,
+        },
         // Demoted: a worktree ensure is bulk agent-plane IO that must lose to the daemon's own loop under contention.
         politeGit,
     );

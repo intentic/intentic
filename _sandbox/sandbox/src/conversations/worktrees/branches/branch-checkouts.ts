@@ -9,7 +9,7 @@ import type { Logger } from "pino";
 // Type only, as orphan-checkouts.ts takes it: a value import from system/ would close a cycle between the subsystems.
 import { type Chore, DAY_MS } from "../../../system/chore-clock.js";
 import { lockedBranchOf } from "../../../git/main-line-lock.js";
-import { commonDirOf, gitDirOf } from "../../../store/git/git-dir.js";
+import { checkedOutBranch, commonDirOf, gitDirOf } from "../../../store/git/git-dir.js";
 import { isValidRepoId } from "../../../workspace/layout/repo-discovery.js";
 import type { AgentWorktrees } from "../worktrees.js";
 
@@ -117,13 +117,6 @@ const localBranch = async (main: string, repo: string, branch: string, git: GitR
     await git(main, ["branch", branch, `origin/${branch}`]);
 };
 
-// Which branch a checkout's HEAD names, off the file; undefined when there is no checkout or it is detached.
-const attachedTo = async (dir: string): Promise<string | undefined> => {
-    const gitDir = await gitDirOf(dir);
-    const head = gitDir === undefined ? undefined : await readFile(join(gitDir, "HEAD"), "utf8").catch(undefinedIfMissing);
-    return head?.match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
-};
-
 const tipOf = async (main: string, branch: string, git: GitRunner): Promise<string> => {
     const gitDir = await gitDirOf(main);
     const onDisk = gitDir === undefined ? undefined : await tipOnDisk(await commonDirOf(gitDir), branch);
@@ -135,7 +128,7 @@ const ensureHeld = async (held: Held, repo: string, branch: string): Promise<str
     const { git } = held;
     const main = await admissible(held, repo, branch);
     const dir = held.checkoutDir(repo, branch);
-    if ((await attachedTo(dir)) === branch) {
+    if ((await checkedOutBranch(dir)) === branch) {
         return dir;
     }
     await localBranch(main, repo, branch, git);
@@ -249,7 +242,7 @@ export const createBranchCheckouts = (deps: BranchCheckoutsDeps, git: GitRunner 
             const settled = held.settledAt.get(keyOf(repo, branch));
             // allow(silent-catch): a tip that cannot be read takes the locked, settling path below, which reports its own failure.
             const tip = settled === undefined ? undefined : await tipOf(worktrees.mainDir(repo), branch, git).catch(() => undefined);
-            if (tip !== undefined && tip === settled && (await attachedTo(dir)) === branch) {
+            if (tip !== undefined && tip === settled && (await checkedOutBranch(dir)) === branch) {
                 return dir;
             }
             return withLock(repo, () => settleHeld(held, repo, branch));

@@ -1,8 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { gitDirOf } from "../store/git/git-dir.js";
+import { checkedOutBranch } from "../store/git/git-dir.js";
 import { headSha } from "./changes/changes.js";
 import { lockedBranchOf } from "./main-line-lock.js";
 
@@ -27,16 +24,9 @@ const lockedNow = async (dir: string, git: GitRunner): Promise<string | undefine
     return locked;
 };
 
-// The branch HEAD names, off the file; undefined for a detached HEAD or no checkout at all.
-const headBranchOf = async (dir: string): Promise<string | undefined> => {
-    const gitDir = await gitDirOf(dir);
-    const head = gitDir === undefined ? undefined : await readFile(join(gitDir, "HEAD"), "utf8").catch(undefinedIfMissing);
-    return head?.match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
-};
-
 /** Whether a shared checkout stands on its main line, as the cheap read above answers it; a no is worth asking git again. */
 export const standsOnMainLine = async (dir: string, git: GitRunner = defaultGit): Promise<boolean> => {
-    const [current, locked] = await Promise.all([headBranchOf(dir), lockedNow(dir, git)]);
+    const [current, locked] = await Promise.all([checkedOutBranch(dir), lockedNow(dir, git)]);
     return locked === undefined || current === locked;
 };
 

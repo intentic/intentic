@@ -24,6 +24,18 @@ export const gitDirOf = async (checkout: string): Promise<string | undefined> =>
     return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
 };
 
+// Which branch an admin dir's HEAD names, undefined for a detached HEAD, which is not a branch. Taking the admin dir
+// lets a caller that already has it tell a detached HEAD from no checkout, which the branch alone cannot say.
+export const headBranchIn = async (gitDir: string): Promise<string | undefined> =>
+    ((await readFile(join(gitDir, "HEAD"), "utf8").catch(undefinedIfMissing)) ?? ``).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
+
+// Which branch a checkout is on, off the files rather than through git, so a hot path pays no spawn; undefined when
+// there is no checkout or it is detached.
+export const checkedOutBranch = async (checkout: string): Promise<string | undefined> => {
+    const gitDir = await gitDirOf(checkout);
+    return gitDir === undefined ? undefined : headBranchIn(gitDir);
+};
+
 // The common dir behind an admin dir: `commondir`'s target resolved against the admin dir, or the admin dir itself
 // when it has none (a main checkout, a submodule).
 export const commonDirOf = async (gitDir: string): Promise<string> => {

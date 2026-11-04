@@ -6,8 +6,9 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
+import { checkedOutBranch, commonDirOf, gitDirOf, headBranchIn } from "../../store/git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
+import { convergeJoinedRepo } from "../../git/remote/repo-git-dirs.js";
 import { mainLineRev } from "../../git/main-line-tip.js";
 import { reserveCompositionSpace, selectedComposition } from "./composition-space.js";
 import type { HistorySpace } from "../../system/resources/storage/checkout-space.js";
@@ -170,6 +171,9 @@ export const createAgentWorktrees = (
         readonly logger: Logger;
         readonly perf: PerfTracker;
         readonly historySpace?: () => Promise<HistorySpace>;
+        // The profile's relocateGitDirs trait: a repo that joins after boot has its in-tree git dir moved off the
+        // workspace root before its first checkout, as boot moves every repo's. Never in a local daemon's own folder.
+        readonly relocateGitDirs?: () => boolean;
     },
     git: GitRunner = defaultGit,
 ): AgentWorktrees => {
@@ -186,20 +190,6 @@ export const createAgentWorktrees = (
     // (`fatal: not a git repository`); asked before retire tries to preserve anything. A worktree's admin dir lives in
     // `<main>/.git/worktrees/<name>`, which a deleted, re-cloned or renamed repo takes with it.
     const repoBehind = async (worktree: string): Promise<boolean> => (await gitDirOf(worktree)) !== undefined;
-
-    // Which branch an admin area's HEAD names, undefined for a detached HEAD, which is not a branch. Split from the
-    // lookup above so a caller that already has the gitDir (and so already knows a checkout stands here at all) can
-    // tell a detached HEAD from no checkout, which the branch alone cannot say.
-    const headBranchIn = async (gitDir: string): Promise<string | undefined> =>
-        ((await readFile(join(gitDir, "HEAD"), "utf8").catch(undefinedIfMissing)) ?? ``).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
-
-    // Which branch a checkout is on, read off the files rather than through git: `attached` asks this once per repo on
-    // every diff read, and a subprocess per ask is a cost the review would pay on every refresh. Undefined for a
-    // detached HEAD, which is not a branch.
-    const checkedOutBranch = async (worktree: string): Promise<string | undefined> => {
-        const gitDir = await gitDirOf(worktree);
-        return gitDir === undefined ? undefined : headBranchIn(gitDir);
-    };
 
     // Per-repo op chains: worktree add/remove and land touch the repo's admin area and, for land, the main index.
     const repoChain = keyedLock<string>();
@@ -273,8 +263,13 @@ export const createAgentWorktrees = (
     // The repos a new conversation spans: root plus discovered repos; unborn HEAD is skipped in createOne.
     const liveRepos = async (): Promise<string[]> => ["root", ...(await discoverRepos(workspace.root))];
 
+    // Under the repo's lock at both callers, so none of the daemon's own git runs in the repo while it moves.
+    const outOfTree = async (repo: string): Promise<void> =>
+        options.relocateGitDirs?.() === true ? convergeJoinedRepo(workspace, historyRoot, logger, repo, git) : undefined;
+
     const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
         const main = mainDir(repo);
+        await outOfTree(repo);
         const base = pinned ?? (await composableHead(repo));
         if (base === undefined) {
             return undefined;
@@ -416,6 +411,8 @@ export const createAgentWorktrees = (
 
     const repairOne = async (id: string, repo: string): Promise<void> => {
         const target = worktreeDir(id, repo);
+        // Before the link check: a checkout made over an in-tree git dir reads as linked from the daemon's own view.
+        await outOfTree(repo);
         if (await linked(id, repo)) {
             return;
         }

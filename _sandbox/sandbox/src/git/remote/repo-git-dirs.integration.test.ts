@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { ensureRepoGitDirs } from "./repo-git-dirs.js";
+import { convergeJoinedRepo, ensureRepoGitDirs } from "./repo-git-dirs.js";
 
 // Runs against real git: asserts what git itself resolves a pointer and worktree to, which no stub can stand in for.
 
@@ -154,4 +154,44 @@ test("every repo's own config syncs objects, refs and the index before git repor
 
     expect(await git(repo, "config", "--local", "--get", "core.fsync")).toBe("all");
     expect(await git(repo, "config", "--local", "--get", "core.fsyncMethod")).toBe("batch");
+});
+
+// The daemon's runtime door: a repo cloned after boot, moved before a conversation's first checkout links to it.
+test("a repo that joined after boot is moved off the workspace root, and one already moved costs nothing", async () => {
+    const { root, historyRoot, repo } = await workspace();
+
+    await convergeJoinedRepo(workspacePaths(root), historyRoot, logger, "app");
+
+    const target = repoGitDir(historyRoot, "app");
+    expect(await readFile(join(repo, ".git"), "utf8")).toBe(`gitdir: ${target}\n`);
+    expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+    expect(await git(repo, "config", "--local", "--get", "core.fileMode")).toBe("false");
+    // Converged: nothing in the repo's config moves again, even a value the convergence would otherwise reset.
+    await git(repo, "config", "core.fileMode", "true");
+    await convergeJoinedRepo(workspacePaths(root), historyRoot, logger, "app");
+    expect(await git(repo, "config", "--local", "--get", "core.fileMode")).toBe("true");
+});
+
+test("a relocation cut short after the pointer went in is undone, and the next pass completes it", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    // The state a daemon killed mid-move leaves: the original set aside, a pointer to a dir not yet renamed into place.
+    await rename(join(repo, ".git"), join(repo, ".git-relocating"));
+    await writeFile(join(repo, ".git"), `gitdir: ${repoGitDir(historyRoot, "app")}\n`);
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    expect(await readFile(join(repo, ".git"), "utf8")).toBe(`gitdir: ${repoGitDir(historyRoot, "app")}\n`);
+    expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+    await expect(lstat(join(repo, ".git-relocating"))).rejects.toThrow();
+});
+
+test("a relocation cut short after the copy went into place only loses the aside", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+    await mkdir(join(repo, ".git-relocating", "refs"), { recursive: true });
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    await expect(lstat(join(repo, ".git-relocating"))).rejects.toThrow();
+    expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
 });

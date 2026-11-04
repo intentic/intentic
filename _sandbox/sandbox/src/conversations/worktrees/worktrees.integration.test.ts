@@ -59,6 +59,7 @@ const setup = async (
             logger,
             perf,
             ...opt("historySpace", historySpace),
+            relocateGitDirs: () => true,
         },
         git,
     );
@@ -939,4 +940,76 @@ test("the predicted checkout cost refuses a write even above the free-space floo
         "The sandbox's disk has 10 GB free, too little to give this conversation its own copy of the workspace (about 13 GB).",
     );
     expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
+});
+
+// A repo that joins while the daemon runs, with git's ordinary in-tree `.git` (`git init`, `git clone`): the boot pass
+// that moves git dirs off /work has already run. Its checkouts must still point at /history, since inside an isolated
+// turn /work is the conversation's own checkout and `/work/<repo>/.git/worktrees/...` names nothing there.
+test("a repo cloned with an in-tree git dir after boot gets its git dir moved off /work before its first checkout", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    const later = join(work, "later");
+    await mkdir(later, { recursive: true });
+    await sh(later, "init", "-q", "-b", "main");
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
+
+    const again = await worktrees.ensure("c1", created.repos);
+    const fresh = await worktrees.ensure("c2", []);
+
+    const gitDir = repoGitDir(historyRoot, "later");
+    expect(await readFile(join(later, ".git"), "utf8")).toBe(`gitdir: ${gitDir}\n`);
+    for (const cwd of [again.cwd, fresh.cwd]) {
+        expect(await readFile(join(cwd, "later", ".git"), "utf8")).toMatch(new RegExp(`^gitdir: ${gitDir}/worktrees/`));
+        expect(await sh(join(cwd, "later"), "log", "--format=%s", "-1")).toBe("later");
+    }
+    expect(await sh(later, "log", "--format=%s", "-1")).toBe("later");
+});
+
+// The state the bug left behind: checkouts already made while the repo's git dir was still in-tree.
+test("checkouts made while a repo's git dir was in-tree are re-pointed at /history when it moves", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const later = join(work, "later");
+    await mkdir(later, { recursive: true });
+    await sh(later, "init", "-q", "-b", "main");
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
+    // Made the way the daemon made it before the fix: `worktree add` against the in-tree git dir.
+    const stale = join(historyRoot, "worktrees", "c0", "later");
+    await mkdir(join(historyRoot, "worktrees", "c0"), { recursive: true });
+    await sh(later, "worktree", "add", "-q", "-b", "agent/c0", stale, "HEAD");
+    expect(await readFile(join(stale, ".git"), "utf8")).toContain(join(later, ".git", "worktrees"));
+
+    await worktrees.ensure("c1", []);
+
+    const gitDir = repoGitDir(historyRoot, "later");
+    expect(await readFile(join(stale, ".git"), "utf8")).toMatch(new RegExp(`^gitdir: ${gitDir}/worktrees/`));
+    expect(await sh(stale, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/c0");
+    expect(await sh(stale, "status", "--porcelain")).toBe("");
+});
+
+// A local daemon runs over the user's own folder, whose git dirs are theirs: nothing moves, as at its boot.
+test("a local daemon leaves a repo that joined after boot with its in-tree git dir", async () => {
+    const { work, historyRoot } = await setup();
+    const local = createAgentWorktrees({
+        workspace: workspacePaths(work),
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: noIsolation(work, historyRoot),
+        logger,
+        perf,
+        relocateGitDirs: () => false,
+    });
+    const later = join(work, "later");
+    await mkdir(later, { recursive: true });
+    await sh(later, "init", "-q", "-b", "main");
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
+
+    await local.ensure("c1", []);
+
+    expect(lstatSync(join(later, ".git")).isDirectory()).toBe(true);
 });
