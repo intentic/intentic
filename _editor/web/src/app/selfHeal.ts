@@ -15,7 +15,7 @@
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
 import { noteReload, RELOAD_TAB_KEYS } from "@intentic/ui/reload-reason";
-import { storedValue, storeValue } from "@intentic/ui/storage";
+import { accountPartition, storedValue, storeValue } from "@intentic/ui/storage";
 import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
 import { EMBED_TAB_KEYS } from "./environments/nativeApp";
 
@@ -30,8 +30,11 @@ const HEALED_MARKER = `intentic.selfHealed`;
 const WIPE_KEY = `intentic.wipeOnBoot`;
 
 // Fallback list when `indexedDB.databases()` is unavailable: the vue-query mirror's default store, the transcript
-// mirror, and the loading placeholders' imprints (lib/skeletonPersistence.ts), which a render reads at boot too.
-const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`, `intentic.skeletons`];
+// mirror, and the loading placeholders' imprints (lib/skeletonPersistence.ts), which a render reads at boot too, each
+// also as the open account's own (app/storage/accountDatabases.ts).
+const MIRRORS = [`intentic.chat`, `intentic.skeletons`];
+const account = accountPartition();
+const KNOWN_DATABASES = [`keyval-store`, ...MIRRORS, ...(account === undefined ? [] : MIRRORS.map((base) => `${base}.${account}`))];
 
 // What a new chat runs on outlives the wipe (turnDefaultKeys.ts says why): one heal on 2026-10-13 reset the model
 // map, and the next four new chats all opened on an older Claude model without anyone choosing it.

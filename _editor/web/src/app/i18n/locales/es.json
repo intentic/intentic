@@ -1220,6 +1220,20 @@
             "notYou": "¿No lo pediste tú? Cierra esta página: no pasa nada sin pulsar el botón de arriba.",
             "linkDidntSignIn": "Este enlace no inició tu sesión.",
             "linkIncomplete": "Este enlace de inicio de sesión está incompleto. Pide un código nuevo en la página de inicio de sesión."
+        },
+        "accounts": {
+            "changedElsewhere": "Tu cuenta cambió en otra ventana.",
+            "add": "Añadir otra cuenta",
+            "addTitle": "Añadir una cuenta",
+            "addDetail": "Inicia sesión con otra cuenta. {email} sigue con la sesión iniciada y puedes volver desde el menú de la cuenta.",
+            "addBack": "Volver a {email}",
+            "signOutAll": "Cerrar sesión en todas las cuentas",
+            "switchTo": "Cambiar a {email}",
+            "switchEnded": "La sesión de {email} ha terminado. Vuelve a añadirla para cambiar a ella.",
+            "limit": "Hasta {count} cuentas a la vez. Cierra la sesión de una para añadir otra.",
+            "continueAs": "Continuar como {email}",
+            "stillSignedIn": "Con sesión iniciada en este dispositivo",
+            "others": "Otras cuentas"
         }
     },
     "browsers": {

@@ -9,6 +9,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useAccount } from "../client/auth/useAccount";
+import type { SignedOutAs } from "../client/auth/deviceAccounts";
+import type { DeviceSession } from "../client/auth/useAuth";
+import { MAX_DEVICE_ACCOUNTS } from "@intentic/api-contract";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { desktopApp, openThisComputer } from "../app/environments/desktop";
@@ -60,6 +63,27 @@ const avatarFailed = ref(false);
 // picks a box to work in. Read from the first rest on the avatar, so the row is there by the time the panel is.
 const deletedCount = useDeletedCount(() => !account.local && (open.value || menu.hovering.value));
 
+// The other accounts signed in on this browser, asked as the reader comes to the menu, as the deleted count is: a press on
+// one switches to it, the platform making it the active account and the page leaving for it (client/auth/deviceAccounts.ts).
+// A local window offers those the workspace signed in, and stays on its folder as the one it moves to (useAccount.ts);
+// neither it nor the Android app adds one here, the workspace's and the Android app's own screens signing in.
+const others = account.others;
+// Asked once as the control first draws too: a press on a phone has no rest before it, and rows arriving a frame after
+// the menu opened pushed everything under them down.
+onMounted(() => {
+    if (!account.local) {
+        void account.refreshOthers();
+    }
+});
+const comingToMenu = computed(() => open.value || menu.hovering.value);
+watch(comingToMenu, (coming) => {
+    if (coming) {
+        void account.refreshOthers();
+    }
+});
+const canAddAccount = computed(() => account.add !== undefined && account.canAdd.value);
+const switchingTo = ref<string | undefined>(undefined);
+
 // Computer tools are an occasional destination, reached here rather than among Home's sandbox tiles. A local window
 // is already on this computer, so it needs no link back to itself.
 const hasThisComputer = desktopApp() !== undefined && !account.local;
@@ -84,7 +108,8 @@ const dismiss = (event: MouseEvent): void => {
 
 // Why the last Sign out did not sign anybody out, in the words it came back with (the platform's, or the desktop app's
 // for a local window it could not carry the call for). Until 2026-10-12 a refused or unreachable sign-out left the menu
-// as it was and said nothing, and the reader stayed signed in without knowing it.
+// as it was and said nothing, and the reader stayed signed in without knowing it. A switch that could not happen (that
+// sign-in ended) says so here too.
 const signOutFailure = ref<string | undefined>(undefined);
 watch(open, (isOpen) => {
     if (!isOpen) {
@@ -92,22 +117,79 @@ watch(open, (isOpen) => {
     }
 });
 
-const logout = async (): Promise<void> => {
+// Said in the menu, pinned open: the palette's commands have no menu up to say it in.
+const fail = (message: string): void => {
+    signOutFailure.value = message;
+    open.value = true;
+};
+
+// A window on a folder stays on its folder whichever account it is now, or nobody's: what changes there is the account,
+// not the window's work. Settings, drawn for the account the menu was opened as, is left; the switch's row is freed,
+// since no navigation follows to take it away.
+const stayOnFolder = async (): Promise<void> => {
+    switchingTo.value = undefined;
+    open.value = false;
+    if (onSettings.value) {
+        await router.push(`/workspace`);
+    }
+};
+
+const switchTo = async (other: DeviceSession): Promise<void> => {
     signOutFailure.value = undefined;
+    switchingTo.value = other.token;
     try {
-        await account.signOut();
+        await account.switchTo(other);
     } catch (error) {
-        signOutFailure.value = errorMessage(error);
-        // Said in the menu, pinned open: the palette's Sign out has no menu up to say it in.
-        open.value = true;
+        switchingTo.value = undefined;
+        fail(errorMessage(error));
         return;
     }
     if (account.local) {
-        // A window on a folder stays on its folder: what signing out ends there is the account, not the window's work.
-        open.value = false;
-        if (onSettings.value) {
-            await router.push(`/workspace`);
-        }
+        await stayOnFolder();
+    }
+};
+
+const addAccount = async (): Promise<void> => {
+    const add = account.add;
+    if (add === undefined || !account.canAdd.value) {
+        return;
+    }
+    open.value = false;
+    if (`run` in add) {
+        add.run();
+        return;
+    }
+    await router.push(add.path);
+};
+
+const logoutAll = async (): Promise<void> => {
+    signOutFailure.value = undefined;
+    try {
+        await account.signOutAll();
+    } catch (error) {
+        fail(errorMessage(error));
+        return;
+    }
+    if (!account.local) {
+        leaveAfterSignOut();
+    }
+};
+
+const logout = async (): Promise<void> => {
+    signOutFailure.value = undefined;
+    let ended: SignedOutAs;
+    try {
+        ended = await account.signOut();
+    } catch (error) {
+        fail(errorMessage(error));
+        return;
+    }
+    if (account.local) {
+        await stayOnFolder();
+        return;
+    }
+    // Carried on as another account signed in here: the page is already on its way to it.
+    if (ended === `switched`) {
         return;
     }
     leaveAfterSignOut();
@@ -125,7 +207,12 @@ const reopenTour = (): void => {
 let commands: Disposable[] = [];
 
 onMounted(() => {
-    commands = [registerBuiltin(`account.signOut`, logout), registerBuiltin(`account.joinCommunity`, () => invite.open(`palette`))];
+    commands = [
+        registerBuiltin(`account.signOut`, logout),
+        registerBuiltin(`account.signOutAll`, logoutAll),
+        registerBuiltin(`account.add`, addAccount),
+        registerBuiltin(`account.joinCommunity`, () => invite.open(`palette`)),
+    ];
 });
 
 onUnmounted(() => {
@@ -210,6 +297,41 @@ const communityPressed = (): void => {
                 </div>
             </div>
 
+            <!-- The browser's other accounts, each a press away, and the way to add one: the same rows as the rest of the
+                 menu, the face and address telling company from personal at a glance. -->
+            <div v-if="others.length > 0" role="group" :aria-label="t(`auth.accounts.others`)" data-test="other-accounts">
+                <button
+                    v-for="other in others"
+                    :key="other.token"
+                    type="button"
+                    data-menu-row
+                    data-test="other-account"
+                    class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                    :aria-label="t(`auth.accounts.switchTo`, { email: other.user.email })"
+                    :title="other.user.email"
+                    :aria-busy="switchingTo === other.token || undefined"
+                    :disabled="switchingTo !== undefined"
+                    @click="switchTo(other)"
+                >
+                    <Avatar :size="20" :src="other.user.image" class="shrink-0" />
+                    <span class="min-w-0 flex-1 truncate">{{ other.user.email }}</span>
+                    <Icon v-if="switchingTo === other.token" name="spinner" spin class="shrink-0 text-2xs text-subtle" />
+                </button>
+            </div>
+            <button
+                v-if="account.add !== undefined"
+                type="button"
+                data-menu-row
+                data-test="add-account"
+                class="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 disabled:cursor-default disabled:text-subtle disabled:hover:bg-transparent pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                :disabled="!canAddAccount || switchingTo !== undefined"
+                :title="canAddAccount ? undefined : t(`auth.accounts.limit`, { count: MAX_DEVICE_ACCOUNTS })"
+                @click="addAccount"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted group-disabled:text-subtle" /></span>
+                {{ t(`auth.accounts.add`) }}
+            </button>
+
             <div class="my-1 border-t border-line-subtle"></div>
 
             <!-- The community ask, on the visit it is first seen on and only after the reader has been round the loop. -->
@@ -276,10 +398,23 @@ const communityPressed = (): void => {
                 type="button"
                 data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                data-test="sign-out"
                 v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
                 {{ t(`shell.words.signOut`) }}
+            </button>
+            <!-- Only with another account here: Sign out above ends this one and carries on as the next. -->
+            <button
+                v-if="others.length > 0"
+                type="button"
+                data-menu-row
+                data-test="sign-out-all"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                v-action="logoutAll"
+            >
+                <span class="h-5 w-5 shrink-0" aria-hidden="true"></span>
+                {{ t(`auth.accounts.signOutAll`) }}
             </button>
             <Notice v-if="signOutFailure" tone="danger" class="m-1 text-2xs" data-test="sign-out-failure">{{ signOutFailure }}</Notice>
         </div>

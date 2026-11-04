@@ -71,7 +71,8 @@ it(`clears every account-scoped key and the transcript mirror, and keeps the dev
 
     expect(Object.keys(localStorage).toSorted()).toEqual(Object.keys(DEVICE).toSorted());
     expect(Object.keys(sessionStorage)).toEqual([]);
-    expect(deleted).toEqual([`intentic.chat`]);
+    // Both of the account's mirrors: the transcripts, and the loading placeholders' shapes of its sandboxes' views.
+    expect(deleted.toSorted()).toEqual([`intentic.chat`, `intentic.skeletons`]);
     expect([clearSessions.mock.calls.length > 0, clearPersistedQueries.mock.calls.length > 0]).toEqual([true, true]);
 });
 

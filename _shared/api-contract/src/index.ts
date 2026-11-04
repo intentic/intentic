@@ -56,6 +56,7 @@ import {
 export * from "./schemas.js";
 export * from "./admin.js";
 export * from "./organisations.js";
+export * from "./device-accounts.js";
 
 // Current authenticated user, or null with no session. `export` is the caller's GDPR data export as JSON; credentials
 // (session/OAuth/connect tokens, setup payloads) are excluded.

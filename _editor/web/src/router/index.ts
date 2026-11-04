@@ -20,6 +20,7 @@ import { installNativeApp } from "./nativeHandoff";
 import { installSignInPlace } from "./signInPlace";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { restorePersistedQueries } from "../lib/queryPersistence";
+import { noteShellRoute } from "../lib/accounts/accountBoundary";
 import { useAuth } from "../client/auth/useAuth";
 import { useGoogleIdentity } from "../client/auth/useGoogleIdentity";
 import { mintsOnArrival } from "../features/auth/handoffSpent";
@@ -445,6 +446,9 @@ installSignInPlace(router);
 // From Home, a sandbox's own view (its Models, today) is shown where Home's chat was, with the way back to it, rather than
 // entered: every door to it is covered at once, so none has to know it was pressed on Home (lib/routes/homeDetour.ts).
 router.beforeEach((to, from) => homeViewGuard(to, from));
+// Whether the workspace shell is what is showing, for the account boundary: a page drawn for one account reloads when
+// the browser moves to another, a page outside the shell follows it (lib/accounts/accountBoundary.ts).
+router.afterEach((to) => noteShellRoute(to.matched[0]?.path === `/`));
 router.afterEach((to, _from, failure) => {
     if (failure === undefined && to.path !== `/` && to.matched.some((match) => match.path === `/`) && installedApp()) {
         rememberRoute(to.fullPath, Date.now());

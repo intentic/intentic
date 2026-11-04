@@ -78,3 +78,18 @@ describe(`placeAnchored`, () => {
         expect(pushed.arrow).toBe(20 - 8);
     });
 });
+
+// A panel opened beside its anchor runs up and down the window, so the window's height is its room: capped by the room
+// to its side instead, the phone rail's account menu (390px wide) was placed as if 320px tall and hung its last rows off
+// the screen (2026-11-04).
+describe(`a panel opened beside its anchor`, () => {
+    const phone = { width: 390, height: 844 };
+    // The phone rail's account avatar, at the foot of its left edge.
+    const avatar = { left: 8, top: 790, width: 36, height: 36 };
+
+    it(`may be as tall as the window, not as wide as the room beside it, and is placed whole inside it`, () => {
+        const placed = placeAnchored({ anchor: avatar, box: { width: 240, height: 395 }, view: phone, side: `right`, cross: `end`, gap: 8, edge: 8 });
+
+        expect([placed.side, placed.maxHeight, placed.top]).toEqual([`right`, phone.height - 16, avatar.top + avatar.height - 395]);
+    });
+});

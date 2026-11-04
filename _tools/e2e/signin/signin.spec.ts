@@ -184,10 +184,11 @@ test(`a person signs in to the desktop app through a browser that was signed out
 
     expect(await landingOutcome(window)).toBe(`left`);
     expect(await signedInAs(webview), `the app's window must hold its own session after the landing`).toBe(person.email);
-    // The Google credential crossed with the session, so the window's first sandbox call needs no sign-in of its own.
+    // The Google credential crossed with the session, so the window's first sandbox call needs no sign-in of its own. It
+    // is kept in the account's own storage drawer, `intentic@<accountId>/intentic.gid.<client>` (accounts.spec.ts).
     const credentialFor = await window.evaluate(() =>
         Object.entries(localStorage)
-            .filter(([key]) => key.startsWith(`intentic.gid.`))
+            .filter(([key]) => /^intentic@[^/]+\/intentic\.gid\./u.test(key))
             .map(([, token]) => JSON.parse(atob((token.split(`.`)[1] ?? ``).replaceAll(`-`, `+`).replaceAll(`_`, `/`))).email as string),
     );
     expect(credentialFor, `the Google credential must be adopted into the app's window`).toContain(person.email);

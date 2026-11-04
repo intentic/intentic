@@ -4,7 +4,8 @@ import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { desktopVersion } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
-import { removeStoredValue, storedValue, storeValue } from "../../app/storage/browserStorage";
+import { googleCredentialKey, removeStoredValue, storedValue, storeValue } from "../../app/storage/browserStorage";
+import { pageAccount } from "../../lib/accounts/accountBoundary";
 import { idTokenClaims } from "./googleToken";
 
 // Slim slice of Google Identity Services used to mint an ID token in the browser: a Google-signed JWT (audience =
@@ -14,6 +15,9 @@ interface GoogleIdConfig {
     readonly callback: (response: { readonly credential: string }) => void;
     // Silent re-auth: a returning user with one approved Google session gets a credential without interaction.
     readonly auto_select?: boolean;
+    // The Google account to answer with, when the page knows which one it wants: the account it is drawn for. Undefined
+    // names none, as leaving it out does.
+    readonly login_hint?: string | undefined;
 }
 // FedCM-era prompt surface: display/not-displayed moments no longer fire. Skip and dismissal are all a listener
 // sees; dismissal reason `credential_returned` means success, not something to act on.
@@ -46,8 +50,9 @@ declare global {
 }
 
 // Persisted in localStorage so the credential survives tab close/reopen; a stale entry is harmless since expiry is
-// re-verified. Keyed by client id, so a client-id change can't surface a stale token.
-const storageKey = (clientId: string): string => `intentic.gid.${clientId}`;
+// re-verified. Keyed by client id, so a client-id change can't surface a stale token, and kept in the account's own drawer
+// (browserStorage.ts `googleCredentialKey`), so an account switched to never presents the one it switched from.
+const storageKey = (clientId: string): string => googleCredentialKey(clientId);
 
 // Mints and caches a Google ID token for the configured web client, module-level singleton. A valid persisted
 // token is the fast path; otherwise FedCM One Tap tries silently first, and only when skipped, dismissed, or
@@ -74,6 +79,12 @@ let initializedAutoSelect: boolean | undefined;
 // True from the moment a caller asks to change accounts until that mint settles: no silent attempt is made, so
 // Google's chooser is the only road to a credential.
 let picking = false;
+// True while the mint in flight is for an account other than the one this page is drawn for (adding one, signing in on
+// another's behalf): its credential is handed to the caller and never kept as this page's, since this page's account
+// would otherwise present it to its own sandboxes as itself.
+let transient = false;
+// The hint GIS holds, alongside the auto-select posture, so a page drawn for one account asks Google for that account.
+let initializedHint: string | undefined;
 // The single in-flight mint, so concurrent callers share one prompt/gate instead of racing for it.
 let inflight: Promise<string | undefined> | undefined;
 // The mint in flight. Its signal aborts when it ends however it ends (settled, retired, replaced), which ends its silent
@@ -89,6 +100,10 @@ const acceptCredential = (credential: string): boolean => {
     const claims = idTokenClaims(credential);
     if (claims === undefined || Date.now() >= claims.expiresAt - 60_000) {
         return false;
+    }
+    if (transient) {
+        needsSignIn.value = false;
+        return true;
     }
     token = credential;
     expiresAt = claims.expiresAt;
@@ -157,10 +172,13 @@ const waitForGis = async (): Promise<GoogleAccountsId> => {
 const ensureInitialized = async (): Promise<void> => {
     const id = await waitForGis();
     const autoSelect = !picking;
-    if (initializedAutoSelect !== autoSelect) {
+    // A pick is for another account than the page's, so it names none.
+    const hint = picking ? undefined : pageAccount()?.email;
+    if (initializedAutoSelect !== autoSelect || initializedHint !== hint) {
         id.initialize({
             client_id: environment.auth.googleClientId,
             auto_select: autoSelect,
+            login_hint: hint,
             callback: (response) => {
                 if (!acceptingCredential) {
                     return;
@@ -180,6 +198,7 @@ const ensureInitialized = async (): Promise<void> => {
             },
         });
         initializedAutoSelect = autoSelect;
+        initializedHint = hint;
     }
 };
 
@@ -305,6 +324,7 @@ const mint = async (mode: MintMode): Promise<string | undefined> => {
         if (mints.isCurrent(signal)) {
             mints.done(signal);
             picking = false;
+            transient = false;
             inflight = undefined;
         }
         return undefined;
@@ -332,6 +352,7 @@ const mint = async (mode: MintMode): Promise<string | undefined> => {
     settle = undefined;
     acceptingCredential = false;
     picking = false;
+    transient = false;
     inflight = undefined;
     needsSignIn.value = false;
     return result;
@@ -346,6 +367,7 @@ const retireMint = (): void => {
     inflight = undefined;
     acceptingCredential = false;
     picking = false;
+    transient = false;
 };
 
 // Which failure road a mint takes, read off the asker's standing (see the MintMode table above).
@@ -386,14 +408,17 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
 // spend it for a while, so a soon-to-expire token counts as absent.
 // pick: true — the reader is changing accounts: the cached credential is the one being rejected, a mint in flight
 // would hand that same one back, and Google is asked with auto-select off so its chooser comes up.
+// forAnotherAccount: true — a pick for an Intentic account other than the one this page is drawn for (adding one): the
+// credential goes to the caller only, never into this page's account's keeping.
 const getIdToken = async (options?: {
     readonly gate?: boolean;
     readonly usableFor?: number;
     readonly interactive?: boolean;
     readonly silent?: boolean;
     readonly pick?: boolean;
+    readonly forAnotherAccount?: boolean;
 }): Promise<string | undefined> => {
-    const pick = options?.pick === true;
+    const pick = options?.pick === true || options?.forAnotherAccount === true;
     const valid = pick ? undefined : cached(options?.usableFor ?? NEAR_EXPIRY_MS);
     if (valid !== undefined) {
         return valid;
@@ -407,6 +432,7 @@ const getIdToken = async (options?: {
         // is settled with nothing, exactly as a dismissal settles one.
         retireMint();
         picking = true;
+        transient = options?.forAnotherAccount === true;
     } else {
         const joined = joinMint(mode);
         if (joined !== undefined) {

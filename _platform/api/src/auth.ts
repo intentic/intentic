@@ -1,12 +1,13 @@
-import { ImageDataUrlSchema } from "@intentic/api-contract";
+import { ImageDataUrlSchema, MAX_DEVICE_ACCOUNTS } from "@intentic/api-contract";
 import { LEGAL_VERSION, SIGN_IN_CODE_LENGTH } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
-import { emailOTP, oneTap, oneTimeToken } from "better-auth/plugins";
+import { emailOTP, multiSession, oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
+import { deviceSessions } from "./device-sessions/device-sessions.js";
 import { eraseAccount, OwnsOrganisationSandboxes } from "./account-erase.js";
 import { emailSignInEnabled, prismaCodeAllowances, SIGN_IN_CODE_ATTEMPTS, SIGN_IN_CODE_TTL_SECONDS, sendSignInCode } from "./sign-in.js";
 import type { PrismaClient } from "@intentic/prisma";
@@ -126,5 +127,13 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
             oneTap(),
             // Absent where email sign-in is off, so its routes do not exist there at all.
             ...(emailSignInEnabled(config) ? [emailCodes(config, prisma, logger)] : []),
+            // Several accounts in one browser (a company address and a personal one): each sign-in keeps its own signed
+            // cookie beside the active one, so the editor lists them, switches between them, and signs one out without
+            // the others. With it on, /sign-out ends every account in the browser; the editor revokes one at a time
+            // through multi-session/revoke when the reader means only the one they are in.
+            multiSession({ maximumSessions: MAX_DEVICE_ACCOUNTS }),
+            // What multi-session leaves to us (device-sessions/device-sessions.ts): sessions from before it are listed at their next
+            // check, and a call meant for one account never runs as another.
+            deviceSessions({ maximumSessions: MAX_DEVICE_ACCOUNTS }),
         ],
     });

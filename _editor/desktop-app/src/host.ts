@@ -3,7 +3,7 @@ import { type LocalFace, localFace } from "@intentic/web/local";
 import type { LocalHost, LocalProjectHost, LocalSetupAction, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
 import { track } from "./analytics";
-import { readAccount, signOutAccount, updateAccount } from "./account";
+import { readAccount, readDeviceAccounts, revokeAccount, signOutAccount, switchAccount, updateAccount } from "./account";
 import { onboardingHost } from "./onboarding";
 import { pcStanding } from "./onboarding/pc";
 import { repairHost } from "./repair";
@@ -163,6 +163,9 @@ export const nativeHost = (): LocalHost => ({
     account: () => readAccount(),
     updateAccount: (change) => updateAccount(change),
     signOut: () => signOutAccount(),
+    deviceAccounts: () => readDeviceAccounts(),
+    switchAccount: (token) => switchAccount(token),
+    revokeAccount: (token) => revokeAccount(token),
     project: PROJECT,
     onboarding: onboardingHost(),
     repair: repairHost(),

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { API_BASE_PATH, type BootReport, type SetupReport } from "@intentic/api-contract";
+import { ACCOUNT_HEADER, API_BASE_PATH, type BootReport, type SetupReport } from "@intentic/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -24,6 +24,7 @@ import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
+import { rpcAnswer, rpcExpectationRefusal } from "./device-sessions/device-sessions.js";
 import { ingressServer } from "./ingress.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
@@ -147,6 +148,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
                 return null;
             },
             credentials: true,
+            // Read by the page to tell an answer for its own account from one for an account the browser switched to.
+            exposeHeaders: [ACCOUNT_HEADER],
         }),
     );
     app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
@@ -574,23 +577,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {
         const context = await buildOrpcContext({ auth, prisma, config, logger: c.get(`logger`), wakeSignals }, c.req.raw.headers);
-        const result = await orpcHandler.handle(c.req.raw, { context, prefix: API_BASE_PATH });
-        if (result.matched) {
-            const cookies = context.sessionHeaders.getSetCookie();
-            if (cookies.length === 0) {
-                return result.response;
-            }
-            const headers = new Headers(result.response.headers);
-            for (const cookie of cookies) {
-                headers.append(`set-cookie`, cookie);
-            }
-            return new Response(result.response.body, {
-                status: result.response.status,
-                statusText: result.response.statusText,
-                headers,
-            });
-        }
-        return c.notFound();
+        // A call the page meant for another account than this session's is refused before any handler runs.
+        const refused = rpcExpectationRefusal(c.req.raw.headers, context.user?.id);
+        const response = refused ?? (await orpcHandler.handle(c.req.raw, { context, prefix: API_BASE_PATH })).response;
+        return response === undefined ? c.notFound() : rpcAnswer(response, context.sessionHeaders.getSetCookie(), context.user?.id);
     });
 
     return { app, auth };

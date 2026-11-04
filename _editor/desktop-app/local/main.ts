@@ -1,5 +1,5 @@
 import { faceOf, LOCAL_REPOINT_EVENT, type LocalFace } from "@intentic/web/local";
-import { accountRelay } from "../src/desktop";
+import { windowRelay } from "../src/account";
 import { installHost } from "../src/host";
 import { registerDesktopCatalog } from "../src/i18n";
 import { installPlatform, LOCAL_EMAIL, sandboxIdOf } from "./platform";
@@ -81,7 +81,7 @@ const boot = async (face: LocalFace): Promise<void> => {
     window.addEventListener(LOCAL_REPOINT_EVENT, seedPointedSession);
     await standInForTheApp();
     // The account's calls ride the app (platform.ts `RELAYED`), when there is an app: a page in a test's browser has none.
-    installPlatform(face, `__TAURI_INTERNALS__` in window ? accountRelay : undefined);
+    installPlatform(face, `__TAURI_INTERNALS__` in window ? windowRelay : undefined);
     // The app's own words (This device, the tile it adds), registered before the editor starts its languages, and its
     // half of the shell, on the window before the router reads it (src/host.ts).
     await registerDesktopCatalog();

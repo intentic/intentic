@@ -44,6 +44,17 @@ flowchart LR
   unset. In development the mail's link, code included, goes to the log instead. The login page reads
   `me.signInOptions` and offers only what is on (Google needs `GOOGLE_CLIENT_ID`). (2026-10-12) Better Auth's
   magicLink plugin was rejected: its verify step is a GET, so a scanner opening the link would use it up.
+- One browser can be signed in to up to five accounts at once (`MAX_DEVICE_ACCOUNTS`), say a company address and a
+  personal one. Better Auth's multiSession plugin keeps a signed cookie per account beside the active one, and the
+  editor lists, switches and revokes through it. With it on, `/sign-out` ends every account in the browser; the editor
+  revokes one at a time when only the current one should go. `src/device-sessions.ts` adds two things. A session made
+  before the plugin is listed at its next session check, so adding a second account never drops the first. And because
+  the cookie belongs to the browser rather than to one tab, a page names the account it is showing in
+  `x-intentic-account` on every call that changes something. A call meant for any other account (or for nobody) is
+  refused with 409 `ACCOUNT_CHANGED` before it runs, on Better Auth's account routes and on `/rpc`. Every `/rpc` answer
+  carries the same header naming the account it answered as, so a page drops an answer meant for someone else.
+  Sign-ins, the session check and the switch itself are exempt. A sixth sign-in still signs in, but it is listed
+  nowhere, so the editor stops offering "Add another account" at five.
 - `sandbox.identityAssertion` mints the platform's identity assertion: its signed word that the caller controls their
   address, for one sandbox they own or accepted an invitation to, valid for two minutes
   ([identity-assertion.ts](../../_shared/sandbox-contract/src/policy/identity-assertion.ts),

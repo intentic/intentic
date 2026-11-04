@@ -40,7 +40,7 @@ beforeEach(async () => {
     sendVerificationOtp.mockReset().mockResolvedValue({ data: { success: true }, error: null });
     signInEmailOtp.mockReset().mockResolvedValue({ data: {}, error: null });
     linkSocial.mockReset().mockResolvedValue({ data: {}, error: null });
-    getSession.mockReset().mockResolvedValue({ data: { user: SESSION_USER }, error: null });
+    getSession.mockReset().mockResolvedValue({ data: { user: SESSION_USER, session: { token: `session-token` } }, error: null });
     meGet.mockReset().mockResolvedValue({ ...SESSION_USER, signInMethods: [`email`] });
     // Each case starts signed out, with nothing remembered of the last account's ways in.
     await invalidatePlatformAuth(false);

@@ -46,6 +46,13 @@ const OPPOSITE: Record<Side, Side> = { top: `bottom`, bottom: `top`, left: `righ
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), Math.max(min, max));
 
+// How tall a box placed on `place` may be. Above or below the anchor the room is that side's; beside it the box runs up
+// and down the window, so the window's height is. Capped by the room to its side instead, a menu opened rightward on a
+// phone (the rail's account menu, 390px wide) was placed as if 320px tall and hung its last rows off the screen
+// (2026-11-04).
+const heightRoom = (place: Side, room: Readonly<Record<Side, number>>, viewHeight: number, edge: number): number =>
+    place === `top` || place === `bottom` ? room[place] : viewHeight - 2 * edge;
+
 export const placeAnchored = ({ anchor, box, view, side, cross, gap, edge }: PlacementInput): Placement => {
     const room: Record<Side, number> = {
         top: anchor.top - gap - edge,
@@ -58,7 +65,7 @@ export const placeAnchored = ({ anchor, box, view, side, cross, gap, edge }: Pla
     const chosen = span(side) <= room[side] || room[OPPOSITE[side]] <= room[side] ? side : OPPOSITE[side];
     const vertical = chosen === `top` || chosen === `bottom`;
     // A box taller than its room is capped; the cap is still reported for callers whose box grows later.
-    const height = Math.min(box.height, Math.max(room[chosen], 0));
+    const height = Math.min(box.height, Math.max(heightRoom(chosen, room, view.height, edge), 0));
 
     const left = vertical
         ? clamp(

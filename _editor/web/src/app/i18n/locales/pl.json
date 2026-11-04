@@ -1220,6 +1220,20 @@
             "notYou": "To nie ty prosiłeś o kod? Zamknij tę stronę: bez naciśnięcia przycisku nic się nie stanie.",
             "linkDidntSignIn": "Ten link cię nie zalogował.",
             "linkIncomplete": "Ten link logowania jest niekompletny. Poproś o nowy kod na stronie logowania."
+        },
+        "accounts": {
+            "changedElsewhere": "Konto zostało zmienione w innym oknie.",
+            "add": "Dodaj kolejne konto",
+            "addTitle": "Dodaj konto",
+            "addDetail": "Zaloguj się na inne konto. {email} pozostaje zalogowane i możesz do niego wrócić z menu konta.",
+            "addBack": "Wróć do {email}",
+            "signOutAll": "Wyloguj ze wszystkich kont",
+            "switchTo": "Przełącz na {email}",
+            "switchEnded": "Sesja konta {email} wygasła. Dodaj je ponownie, aby się przełączyć.",
+            "limit": "Maksymalnie {count} kont naraz. Wyloguj jedno, aby dodać kolejne.",
+            "continueAs": "Kontynuuj jako {email}",
+            "stillSignedIn": "Zalogowane na tym urządzeniu",
+            "others": "Inne konta"
         }
     },
     "browsers": {

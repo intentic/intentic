@@ -518,7 +518,8 @@
     "account": {
         "profileUpdateFailed": "Das Profil konnte nicht aktualisiert werden.",
         "sessionCheckFailed": "Ihre Sitzung konnte nicht geprüft werden.",
-        "signOutFailed": "Abmelden fehlgeschlagen."
+        "signOutFailed": "Abmelden fehlgeschlagen.",
+        "switchFailed": "Das Konto konnte nicht gewechselt werden."
     },
     "setup": {
         "stuckInstallerNotStopped": "Das hängende Installationsprogramm konnte nicht gestoppt werden: {error}"

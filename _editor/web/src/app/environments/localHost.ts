@@ -1,9 +1,8 @@
-import { parseJsonWith } from "@intentic/base/json";
-import { type User, UserSchema } from "@intentic/api-contract";
+import type { User } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import type { Component, Ref } from "vue";
-import { z } from "zod";
 import { askLocalApp } from "./local";
+import type { LocalDeviceAccount } from "./localHost/localAccountAnswers";
 import type { LocalNewSandboxHost, LocalProcessesHost } from "./processes/localProcessHost";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
@@ -503,8 +502,23 @@ export interface LocalHost {
     account(): Promise<User | null>;
     /** A new name, or a new picture as a data URL, as Settings › Profile saves them. */
     updateAccount(change: { readonly name?: string; readonly image?: string }): Promise<void>;
-    /** Signs the account out on the platform, for the workspace too: the app forgets the session and the sandboxes. */
+    /**
+     * Signs out on the platform, for the workspace too, of EVERY account signed in there: the app forgets the session
+     * and the sandboxes.
+     */
     signOut(): Promise<void>;
+    /**
+     * Every account signed in where the workspace signs in, the one signed in now among them, asked of the platform now.
+     * Rejects when it cannot be asked.
+     */
+    deviceAccounts(): Promise<readonly LocalDeviceAccount[]>;
+    /** Makes another of those accounts the one signed in; the app reloads the workspace as it. */
+    switchAccount(token: string): Promise<void>;
+    /**
+     * Signs out of that one account alone. Ending the one signed in now makes the platform carry on as another still
+     * signed in, and the app reloads the workspace as it.
+     */
+    revokeAccount(token: string): Promise<void>;
     /** A sandbox for this window's folder, made here; absent where the app cannot (a page with no app behind it). */
     readonly project?: LocalProjectHost;
     /** What a new computer needs before agents run on it, and the first task; absent where no app is behind the page. */
@@ -522,26 +536,9 @@ export interface LocalHost {
     readonly newSandbox?: LocalNewSandboxHost;
 }
 
-
-/* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads
-   them. Text that is not JSON (a proxy's error page) says nothing, as an answer out of shape says nothing. */
-
-// `get-session` answers `{ session, user }`, or `null` for nobody. Only what the editor's User holds is kept; a user
-// with no name or picture has them empty, and an answer out of shape is nobody rather than half someone.
-const SessionAnswerSchema = z
-    .object({ user: UserSchema.extend({ name: z.string().catch(``), image: z.string().nullable().catch(null) }) })
-    .nullable();
-
-export const accountOfSession = (text: string): User | null => {
-    return parseJsonWith(text, SessionAnswerSchema)?.user ?? null;
-};
-
-// A refusal's sentence, which Better Auth and oRPC both say as `message`.
-const RefusalSchema = z.object({ message: z.string().min(1) });
-
-export const refusalOf = (text: string): string | undefined => {
-    return parseJsonWith(text, RefusalSchema)?.message;
-};
+// The account's answers as the app hands them over (its src/account.ts), read as the editor reads its own
+// (localHost/localAccountAnswers.ts).
+export { accountOfSession, deviceAccountsOf, type LocalDeviceAccount, refusalOf } from "./localHost/localAccountAnswers";
 
 declare global {
     interface Window {
@@ -576,6 +573,9 @@ export const LINK_HOST: LocalHost = {
     account: () => Promise.resolve(null),
     updateAccount: nothing,
     signOut: nothing,
+    deviceAccounts: () => Promise.resolve([]),
+    switchAccount: nothing,
+    revokeAccount: nothing,
 };
 
 export const localHost = (): LocalHost => window.__INTENTIC_LOCAL_HOST__ ?? LINK_HOST;

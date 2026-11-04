@@ -255,6 +255,13 @@ value reads as absent, and every key declared in its scope. A `deviceKey` (theme
 pick) survives sign-out; an `accountKey`, `accountKeys` family or `sandboxKeys` family, and anything registered with
 `onAccountCleared`, goes with `clearAccountStorage`.
 
+A browser can be signed in to several accounts, so each account's keys sit in a partition of their own,
+`intentic@<accountId>/<key>`. Callers read and write the same names as before. The partition a page opens is read from
+the device key `intentic.signedInAs` on first use, `openAccountPartition` moves the browser to another account (and
+adopts account keys no partition holds yet), `clearAccountStorage(id)` clears one account, `clearEveryAccountStorage`
+all of them, and `sealAccountWrites` stops a page whose account has gone from writing any more account keys. The editor
+decides when the account changes (`_editor/web/src/lib/accounts/accountBoundary.ts`).
+
 ## Layout
 
 | Directory | Holds |

@@ -5,6 +5,7 @@ import { restorePersistedQueries } from "../lib/queryPersistence";
 import { signInAt } from "../lib/routes/signIn";
 import { restoreImprints } from "../lib/skeletonPersistence";
 import { isHomePath } from "../lib/routes/home";
+import { enterShell } from "../lib/accounts/accountBoundary";
 
 // Resolves the session once (Better Auth cookie); redirects to /login only when the platform authoritatively says none.
 // An unavailable platform gets its own retry screen, not treated as a sign-out.
@@ -44,6 +45,11 @@ export const requireAuth = async (to: RouteLocationNormalized): Promise<boolean 
         // Home's first run is useful before an account exists, and the bare address lands there (lib/routes/firstScreens.ts).
         // A link naming a sandbox (`?sandbox=`) is about an account's, and every other workspace route asks for sign-in.
         return isHomePath(to.path) && to.query[`sandbox`] === undefined && resolved.signedOut ? true : resolved.redirect;
+    }
+    // A page that read another account's drawer at import (the browser moved accounts since it loaded) enters by a full
+    // navigation, so nothing it holds reaches this account's shell (lib/accounts/accountBoundary.ts).
+    if (!enterShell(to.fullPath)) {
+        return false;
     }
     await Promise.all([restorePersistedQueries(resolved.user.id), restoreImprints()]);
     return true;

@@ -153,14 +153,19 @@ const signIn = async (context: BrowserContext, person: Person): Promise<Page> =>
 };
 
 // The sandbox's own sign-in, as an earlier one leaves it: the session the editor keeps per sandbox in this browser
-// (sandboxSession.ts, `intentic.session.<id>`). The daemon runs with its auth off, so the token is never checked; what is
+// (sandboxSession.ts, `intentic.session.<id>`, inside the signed-in account's own drawer `intentic@<account>/`, which
+// the browser's pointer `intentic.signedInAs` names). The daemon runs with its auth off, so the token is never checked; what is
 // spared is the exchange (`POST /system/session`), which a daemon that verifies nobody refuses, and which the sign-in
 // tier and the daemon's own suites cover. Far enough out that the editor never asks to renew it.
 const SESSION_DAYS = 30;
 const keepSandboxSession = async (page: Page, person: Person): Promise<void> => {
     // All visits share this origin's storage. Seed it here, where storage is available, rather than in each blank tab.
+    // A key outside the drawer is nobody's once one is open, and the editor would never read it.
     await page.evaluate(
-        ({ key, session }) => localStorage.setItem(key, JSON.stringify(session)),
+        ({ key, session }) => {
+            const account = localStorage.getItem(`intentic.signedInAs`);
+            localStorage.setItem(account === null ? key : `intentic@${account}/${key}`, JSON.stringify(session));
+        },
         { key: `intentic.session.${SANDBOX_ID}`, session: { token: `compat`, expiresAt: Date.now() + SESSION_DAYS * 86_400_000, email: person.email } },
     );
 };

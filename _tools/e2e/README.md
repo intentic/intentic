@@ -22,7 +22,11 @@ flowchart LR
   answered inside the api's process, so Better Auth's real one-tap verification accepts it. The desktop app's half
   (`desktop.ts`) is `auth.rs` in TypeScript: the state and verifier, the `intentic://` links read off Chrome
   DevTools, and the landing the app points its window at. The app opens Home before sign-in; the specs press its
-  Sign in link before continuing in the browser. `SIGNIN_E2E_REUSE_BUILD=1` serves the `dist` already there;
+  Sign in link before continuing in the browser. `accounts.spec.ts` covers several accounts in one browser: adding one
+  from the account menu, switching back, a second tab following the switch, a call meant for the account a page was
+  opened as refused once the browser moved on, signing out of one or of all, and Continue as on the sign-in screen
+  once the active account's sign-in ended. Its people sign in by emailed code, except the one whose Google credential
+  must stay in its own account's storage. `SIGNIN_E2E_REUSE_BUILD=1` serves the `dist` already there;
   `SIGNIN_E2E_DATABASE_URL` skips the container.
   Testcontainers must keep cleanup helpers owned by other runtimes separate: the CI fleet shares its Docker
   daemon with other jobs. Version 12.2.1 fixes reuse of a foreign Ryuk helper, whose owner could remove it during setup.
@@ -88,6 +92,7 @@ flowchart LR
 ## Key files
 
 - [signin/signin.spec.ts](signin/signin.spec.ts) — the sign-in gate: web and desktop sign-in, end to end.
+- [signin/accounts.spec.ts](signin/accounts.spec.ts) — several accounts in one browser: add, switch, other tabs, sign out.
 - [compat/compat.spec.ts](compat/compat.spec.ts) — the N-1 check: this commit's editor on the released daemon.
 - [stack.ts](stack.ts) — origins, ports, seeded rows and the Better Auth cookie recipe.
 - [global-setup.ts](global-setup.ts) — boots the stack in order and writes the storage state.

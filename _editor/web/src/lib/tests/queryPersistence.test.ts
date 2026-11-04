@@ -6,7 +6,7 @@ import { waitFor } from "@intentic/testing/bun";
 const set = jest.fn(async (_key: IDBValidKey, _client: PersistedClient): Promise<void> => {
     throw new DOMException(`The quota has been exceeded.`, `QuotaExceededError`);
 });
-jest.mock(`idb-keyval`, () => ({ get: async () => undefined, set, del: async () => undefined }));
+jest.mock(`idb-keyval`, () => ({ get: async () => undefined, set, del: async () => undefined, keys: async () => [] }));
 
 const { queryClient, restorePersistedQueries } = await import(`../queryPersistence`);
 

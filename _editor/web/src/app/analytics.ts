@@ -245,6 +245,12 @@ const firstTouch = () => ({
 });
 
 const identify = (posthog: PostHog, current: User): void => {
+    // A browser that was identified as another account before (several accounts signed in here, client/auth/
+    // deviceAccounts.ts): a new person starts, rather than one person's events carrying on as the other's.
+    if (posthog.get_property(`$user_state`) === `identified` && posthog.get_distinct_id() !== current.id) {
+        posthog.reset();
+        registerClient(posthog);
+    }
     if (Object.keys(landingCampaign).length === 0) {
         posthog.identify(current.id, { email: current.email, name: current.name });
     } else {

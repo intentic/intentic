@@ -49,7 +49,13 @@ jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
     }),
 }));
 jest.mock(`../../client/auth/useAuth`, () => ({
-    useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: jest.fn(), signInWithGoogleCredential: jest.fn() }),
+    useAuth: () => ({
+        user: ref({ email: `owner@example.com` }),
+        refresh: async () => null,
+        listDeviceSessions: async () => [],
+        signInWithGoogle: jest.fn(),
+        signInWithGoogleCredential: jest.fn(),
+    }),
 }));
 jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
 jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: jest.fn() } } }));

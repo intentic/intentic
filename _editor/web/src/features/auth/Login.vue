@@ -7,6 +7,8 @@ import { useAuth } from "../../client/auth/useAuth";
 import type { SignInOptions } from "@intentic/api-contract";
 import { useBrowserHandoff } from "./browserHandoff";
 import EmailCodeSignIn from "./EmailCodeSignIn.vue";
+import LoginAccounts from "./LoginAccounts.vue";
+import { useLoginAccounts } from "./loginAccounts";
 import { hasFedCm, useGooglePress } from "./googlePress";
 import { GOOGLE_ONLY, readSignInOptions } from "./signInOptions";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
@@ -26,6 +28,9 @@ const route = useRoute();
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (lib/routes/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
 const hosted = computed(() => destination.value.split(`?`)[0] === `/start/hosted`);
+// Adding an account beside the one signed in, or continuing as one still signed in here (loginAccounts.ts).
+const accounts = useLoginAccounts(destination);
+const { asked: addAsked, adding, remaining } = accounts;
 
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
@@ -90,6 +95,10 @@ const redirectSignIn = async (): Promise<void> => {
         handoff.start(destination.value);
         return;
     }
+    if (addAsked.value) {
+        await signInWithGoogle(destination.value, { chooseAccount: true });
+        return;
+    }
     await signInWithGoogle(destination.value);
 };
 
@@ -106,15 +115,16 @@ const signInWithCredential = async (): Promise<void> => {
     }
     try {
         // `gate: false`: this page's own button is the gate; the shared overlay would be a second one.
-        const idToken = await getIdToken({ gate: false });
+        // Adding an account: Google is asked which one, and what it answers is not kept as the signed-in account's.
+        const idToken = await getIdToken(addAsked.value ? { gate: false, forAnotherAccount: true } : { gate: false });
         if (idToken === undefined) {
             return; // Dismissed, or Google unavailable; the fallback is already on screen.
         }
         // Google answered: stop timing the press. Counted as a sign-in only once the platform has taken it.
         press.answered();
-        await signInWithGoogleCredential(idToken);
+        await (addAsked.value ? signInWithGoogleCredential(idToken, { adding: true }) : signInWithGoogleCredential(idToken));
         press.completed();
-        await router.replace(destination.value);
+        await accounts.arrive();
     } catch {
         // The platform can refuse a token Google actually signed (no endpoint, client-id mismatch); the redirect
         // doesn't
@@ -129,7 +139,7 @@ onMounted(() => void signInWithCredential());
 
 // The emailed code signed this window in: on to where the guard was sending the reader, as Google's road goes.
 const arrive = async (): Promise<void> => {
-    await router.replace(destination.value);
+    await accounts.arrive();
 };
 
 // Always rendered in light theme, never following the app's scheme: this screen has one near-black ground, and a
@@ -155,7 +165,13 @@ watch(
              window's "Your workspace"): this screen is outside the shell and its sandbox switcher, and the window has
              no frame of its own, so without this the only way off it is a sign-in. In the band the window's own
              buttons sit in, at the other end. -->
-        <div v-if="desktop" class="back-band">
+        <div v-if="adding" class="back-band">
+            <!-- Adding an account is a step the reader may take back: to where they were, as the account still signed in. -->
+            <Button :label="t(`auth.accounts.addBack`, { email: adding.email })" tier="quiet" class="back" data-test="add-back" @click="accounts.back">
+                <template #icon><Icon name="arrow-left" /></template>
+            </Button>
+        </div>
+        <div v-else-if="desktop" class="back-band">
             <Button :label="t(`shared.backToThisComputer`)" tier="quiet" class="back" @click="openThisComputer">
                 <template #icon><Icon name="arrow-left" /></template>
             </Button>
@@ -171,7 +187,13 @@ watch(
                 <span class="entry-lozenge"></span>
             </p>
 
-            <h1 class="headline">
+            <h1 v-if="adding" class="headline" data-test="add-title">
+                <span class="beat"
+                    ><span class="entry-display">{{ t(`auth.accounts.addTitle`) }}</span
+                    ><span class="entry-stop">.</span></span
+                >
+            </h1>
+            <h1 v-else class="headline">
                 <span class="beat"
                     ><span class="entry-display">{{ t(`ui.action.signIn`) }}</span
                     ><span class="entry-stop">.</span></span
@@ -182,7 +204,8 @@ watch(
                 >
             </h1>
 
-            <p class="hero-sub">{{ hosted ? t(`hostedStart.loginDetail`) : t(`auth.login.workspaceCodingAgents`) }}</p>
+            <p v-if="adding" class="hero-sub">{{ t(`auth.accounts.addDetail`, { email: adding.email }) }}</p>
+            <p v-else class="hero-sub">{{ hosted ? t(`hostedStart.loginDetail`) : t(`auth.login.workspaceCodingAgents`) }}</p>
 
             <!-- The one framed object here; the turned corner and lotus finial only appear on a panel big enough to carry them. -->
             <section class="entry-frame gate">
@@ -191,6 +214,13 @@ watch(
                 <span class="entry-corner entry-corner-bl"></span>
                 <span class="entry-corner entry-corner-br"></span>
                 <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
+                <LoginAccounts
+                    v-if="!addAsked"
+                    :accounts="remaining"
+                    :failure="accounts.failure.value"
+                    class="mb-4"
+                    @continue="accounts.continueWith"
+                />
 
                 <!-- A live region standing from the first frame, so a note that appears in it is read out, not just drawn. -->
                 <div role="status">
@@ -250,7 +280,7 @@ watch(
                     <p v-if="options.google" class="or" aria-hidden="true">
                         <span>{{ t(`auth.login.or`) }}</span>
                     </p>
-                    <EmailCodeSignIn :in-app="inApp" :google-offered="options.google" @signed-in="arrive" />
+                    <EmailCodeSignIn :in-app="inApp" :google-offered="options.google" :adding="addAsked" @signed-in="arrive" />
                 </template>
 
                 <p class="fine">
@@ -264,7 +294,8 @@ watch(
                 </p>
             </section>
 
-            <section class="rail">
+            <!-- Not while adding an account: the reader is past the first steps, with an account already here. -->
+            <section v-if="!adding" class="rail">
                 <p class="entry-eyebrow eyebrow-bare">{{ desktop ? t(`auth.login.twoStepsToFirst`) : t(`auth.login.threeStepsToFirst`) }}</p>
                 <ol class="steps" :style="{ '--steps': steps.length }">
                     <li v-for="(step, index) in steps" :key="step" class="step" :aria-current="index === 0 ? `step` : undefined">

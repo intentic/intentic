@@ -54,6 +54,15 @@ flowchart LR
   them. Inside the desktop webview and the iOS shell the code runs in place, typed, because the mail's link opens the
   system browser. An account's ways in come from `/me` (`signInMethods`, absent meaning Google), held in
   `client/auth/signInMethods.ts` for the session module.
+- **Several accounts in one browser.** The account menu lists the other accounts signed in here (Better Auth's
+  multi-session, up to five), switches with one press, adds one through `/login?add=1` (Google's chooser forced, the
+  first account kept), and signs out of just the account in front of the reader, carrying on as the next, or of all of
+  them (`client/auth/deviceAccounts.ts`). A page is drawn for exactly one account for its whole life
+  (`lib/accounts/accountBoundary.ts`): each account's storage is a partition of its own, so its daemon sessions, Google token,
+  drafts, open sandbox and caches are never another's and come back when it is switched back to; every platform answer
+  names the account it was made as, and every call that changes something names the account it is meant for, so a tab
+  still drawn for one account never acts as, or shows, the next; and any change of account (here, in another tab, a
+  session ending) is a full navigation.
 - **The proof chain a daemon session is minted from**, in order (`sandboxSession.ts`): a live daemon session; a cached
   Google token; the platform's identity assertion (`pa1.…`, minted per sandbox, spent at once, never stored) for an
   account with `email` among its ways in, only for a call somebody waits on and only where the daemon's `/health`

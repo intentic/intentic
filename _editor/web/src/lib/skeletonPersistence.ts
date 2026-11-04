@@ -2,6 +2,8 @@ import { IMPRINT_VERSION, type ImprintElement, type SkeletonImprint } from "@int
 import { adoptImprints, configureSkeletonSnapshots, loadImprintScope, type SkeletonPersistence } from "@intentic/ui/skeleton-store";
 import { z } from "zod";
 import { activeSandboxId } from "../app/storage/activeSandbox";
+import { accountDatabase } from "../app/storage/accountDatabases";
+import { SKELETON_DATABASE } from "../app/storage/browserStorage";
 import { whenIdle } from "./whenIdle";
 
 // Where the imprints loading placeholders are drawn from (@intentic/ui's <SkeletonSnapshot>) outlive the page:
@@ -10,9 +12,9 @@ import { whenIdle } from "./whenIdle";
 // route mounts (router/index.ts, beside the query cache), and every other sandbox's at the first idle moment after, so
 // switching sandboxes draws remembered placeholders on its first frame rather than a frame late. Unlike the query
 // cache, a new build keeps them: an imprint is geometry, still close for a view whose code changed, and taken again
-// the moment that view settles.
+// the moment that view settles. One database per account (app/storage/accountDatabases.ts), since the shapes are of its
+// sandboxes' views.
 
-const DB_NAME = `intentic.skeletons`;
 const DB_VERSION = 1;
 const STORE = `imprints`;
 // An imprint nobody took for this long belongs to a view nobody opens; it goes at the next sweep.
@@ -58,7 +60,7 @@ let connection: Promise<IDBDatabase | undefined> | undefined;
 const openDb = (): Promise<IDBDatabase | undefined> => {
     connection ??= new Promise<IDBDatabase | undefined>((resolve) => {
         try {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            const request = indexedDB.open(accountDatabase(SKELETON_DATABASE), DB_VERSION);
             request.addEventListener(`upgradeneeded`, () => {
                 if (!request.result.objectStoreNames.contains(STORE)) {
                     request.result.createObjectStore(STORE);

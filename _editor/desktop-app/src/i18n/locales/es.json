@@ -518,7 +518,8 @@
     "account": {
         "profileUpdateFailed": "No se pudo actualizar el perfil.",
         "sessionCheckFailed": "No se pudo comprobar tu sesión.",
-        "signOutFailed": "No se pudo cerrar la sesión."
+        "signOutFailed": "No se pudo cerrar la sesión.",
+        "switchFailed": "No se pudo cambiar de cuenta."
     },
     "setup": {
         "stuckInstallerNotStopped": "No se pudo detener el instalador atascado: {error}"

@@ -88,9 +88,11 @@ export const platformAnswer = (face: LocalFace, url: URL): Response => {
 // the plan and its checkout (useHostedPlan, Billing), API tokens, the data export, and the account's sandboxes as the
 // switcher removes, leaves, restores and rolls them back (SandboxSwitcher.vue, the same one the workspace draws). They
 // are not the folder's to answer, so the app sends them on with the session the workspace signed in with
-// (src-tauri/src/account.rs, whose list decides; this one only routes). The list itself is `accountList` below. Who is signed in is not among them: this page's own session check stays the folder's placeholder above, and
-// the shell asks for the account through its host (src/host.ts), so a platform that cannot be reached never holds the
-// window's first paint.
+// (src-tauri/src/account.rs, whose list decides; this one only routes), each that changes something meant for the
+// account the window last read (src/account.ts `windowRelay`). The list itself is `accountList` below. Better Auth's
+// own calls are not among them (who is signed in, the other accounts signed in beside them, switching, signing out):
+// this page's own auth client stays the folder's placeholder above, and the shell asks for the account through its
+// host (src/host.ts), so a platform that cannot be reached never holds the window's first paint.
 const RELAYED: ReadonlySet<string> = new Set([
     `/rpc/hosted-plan`,
     `/rpc/hosted-plan/slots`,

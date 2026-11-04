@@ -220,7 +220,8 @@ flowchart LR
   the cookie the workspace's sign-in set is in the store a local window's webview reads. `account_relay`
   (`src-tauri/src/account.rs`) reads it there, sends the call with the workspace's origin (Better Auth's check on an
   auth call that changes something), and writes back whatever cookie the answer sets, so the session rolls forward.
-  Only a short list may be asked, checked in Rust: `get-session`, `update-user`, `sign-out`, the hosted plan and
+  Only a short list may be asked, checked in Rust: `get-session`, `update-user`, `sign-out`, the other accounts signed
+  in beside it (`multi-session/list-device-sessions`, `set-active`, `revoke`), the hosted plan and
   its checkout and portal, the tokens, `me/export`, and the account's sandboxes as the switcher reads and tidies them
   (`sandbox/list`, `delete`, `leave`, `trash`, `restore`, `hosted-rollback`). Deleting the account is not on it, since
   it must first take the account's access off every sandbox's daemon, and a local window reaches no daemon but its
@@ -234,11 +235,16 @@ flowchart LR
   dialog's door onto this computer is the app's own `ic` (`machine` in `src/host.ts`), since every sandbox's daemon
   refuses this page's origin off the loopback port. As before, only the app's bundle can call the relay: the
   documents a local window draws run no script there._ A sign-out also
-  deletes the session from the store, empties `roster.json` and reloads the workspace window, so both faces are signed
-  out together. In the page, `src/account.ts` asks for the account (the host's `account`, `updateAccount`,
-  `signOut`) and `local/platform.ts` routes the plan, token and export calls of the editor's API client; who is
-  signed in for the page's own session check stays the folder's placeholder, so a platform out of reach never holds
-  the first paint.
+  deletes the session from the store (every account's, the `_multi-` cookies of the others among them), empties
+  `roster.json` and reloads the workspace window, so both faces are signed out together. A switch to another account
+  signed in beside it, or a sign-out of only the one in front of the reader (`set-active`, `revoke`), empties
+  `roster.json` and reloads the workspace too, as the account the platform moved to; the local window stays on its
+  folder and asks who is signed in again. A call that changes something names the account the window last read
+  (`account`, sent as `x-intentic-account` and refused in Rust unless it is an account id), so the platform turns it
+  away once the workspace has moved to someone else. In the page, `src/account.ts` asks for the account (the host's
+  `account`, `updateAccount`, `signOut`, `deviceAccounts`, `switchAccount`, `revokeAccount`) and
+  `local/platform.ts` routes the plan, token and export calls of the editor's API client; who is signed in for the
+  page's own session check stays the folder's placeholder, so a platform out of reach never holds the first paint.
 - **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip,
   deleting the account from a local window's Settings) draws the workspace face in the frame and, when its page is already loaded, tells
   that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page

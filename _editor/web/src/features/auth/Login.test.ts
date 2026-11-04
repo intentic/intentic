@@ -31,7 +31,7 @@ const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
 const sendEmailCode = jest.fn<(email: string) => Promise<void>>().mockResolvedValue(undefined);
 const signInWithEmailCode = jest.fn<(email: string, otp: string) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAuth`, () => ({
-    useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential, sendEmailCode, signInWithEmailCode }),
+    useAuth: () => ({ user: ref(null), refresh: async () => null, listDeviceSessions: async () => [], signInWithGoogle, signInWithGoogleCredential, sendEmailCode, signInWithEmailCode }),
 }));
 // Which ways in the platform offers: Google alone, as every platform before email sign-in, unless a test says more.
 const GOOGLE_ONLY = { google: true, email: false };

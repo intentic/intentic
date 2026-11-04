@@ -16,6 +16,9 @@ const ROUTES: &[(Method, &str)] = &[
     (Method::Get, "/api/auth/get-session"),
     (Method::Post, "/api/auth/update-user"),
     (Method::Post, SIGN_OUT),
+    (Method::Get, LIST_DEVICE_SESSIONS),
+    (Method::Post, SET_ACTIVE),
+    (Method::Post, REVOKE),
     (Method::Get, "/rpc/hosted-plan"),
     (Method::Post, "/rpc/hosted-plan/slots"),
     (Method::Post, "/rpc/hosted-plan/tier"),
@@ -36,6 +39,17 @@ const ROUTES: &[(Method, &str)] = &[
 const GET_SESSION: &str = "/api/auth/get-session";
 const SIGN_OUT: &str = "/api/auth/sign-out";
 
+/// The other accounts signed in beside the workspace's (Better Auth's multi-session): listing them, making one the active
+/// account, and ending one. A plain sign-out ends every one of them; a revoke ends one, and when it is the active one the
+/// platform carries on as another still signed in.
+const LIST_DEVICE_SESSIONS: &str = "/api/auth/multi-session/list-device-sessions";
+const SET_ACTIVE: &str = "/api/auth/multi-session/set-active";
+const REVOKE: &str = "/api/auth/multi-session/revoke";
+
+/// The header a call names the account it is meant for in, so the platform refuses it once the session is someone
+/// else's (`ACCOUNT_HEADER` in _shared/api-contract/src/device-accounts.ts).
+const ACCOUNT_HEADER: &str = "x-intentic-account";
+
 /// The session cookie's name, under either prefix: `__Secure-` over https, none on a plain-http dev platform.
 const SESSION_COOKIE: &str = "better-auth.session_token";
 
@@ -53,7 +67,8 @@ enum Method {
     Post,
 }
 
-/// What the page asks: a method, a path on the platform (with a query on a GET), and a JSON body on a POST.
+/// What the page asks: a method, a path on the platform (with a query on a GET), a JSON body on a POST, and the account
+/// the window is drawn for, which a call that changes something names so it cannot land on someone else.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelayAsk {
@@ -61,6 +76,8 @@ pub struct RelayAsk {
     pub path: String,
     #[serde(default)]
     pub body: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
 }
 
 /// The platform's answer as the page's fetch should see it.
@@ -72,9 +89,11 @@ pub struct RelayAnswer {
     pub content_type: Option<String>,
 }
 
-/// The ask, checked against [`ROUTES`]: its method, and its path exactly as it will be sent. A query rides only on a
-/// GET and only in characters a query needs, so nothing in it can name another host, path or fragment.
-fn checked(ask: &RelayAsk) -> Result<(Method, String), String> {
+/// The ask, checked against [`ROUTES`]: its method, its path exactly as it will be sent, and the account it is meant
+/// for. A query rides only on a GET and only in characters a query needs, so nothing in it can name another host, path
+/// or fragment; an account only in the alphabet and length of an account id (`ACCOUNT_ID_PATTERN`), so it cannot add a
+/// header of its own.
+fn checked(ask: &RelayAsk) -> Result<(Method, String, Option<String>), String> {
     let method = match ask.method.as_str() {
         "GET" => Method::Get,
         "POST" => Method::Post,
@@ -102,7 +121,15 @@ fn checked(ask: &RelayAsk) -> Result<(Method, String), String> {
         }
         _ => {}
     }
-    Ok((method, ask.path.clone()))
+    if let Some(account) = &ask.account {
+        let id = account
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if !id || account.is_empty() || account.len() > 128 {
+            return Err(refused(&ask.path));
+        }
+    }
+    Ok((method, ask.path.clone(), ask.account.clone()))
 }
 
 fn refused(path: &str) -> String {
@@ -236,11 +263,31 @@ struct Sent {
     set_cookies: Vec<String>,
 }
 
+/// The headers a call goes out with beside its body: the store's cookies, the workspace's origin, JSON asked for, and
+/// the account it is meant for when the page named one. Pure.
+fn request_headers(
+    cookie: &str,
+    origin: &str,
+    account: Option<&str>,
+) -> Vec<(reqwest::header::HeaderName, String)> {
+    let mut headers = vec![
+        (reqwest::header::COOKIE, cookie.to_string()),
+        (reqwest::header::ORIGIN, origin.to_string()),
+        (reqwest::header::ACCEPT, "application/json".to_string()),
+    ];
+    if let Some(account) = account {
+        headers.push((
+            reqwest::header::HeaderName::from_static(ACCOUNT_HEADER),
+            account.to_string(),
+        ));
+    }
+    headers
+}
+
 async fn send(
     method: Method,
     url: &str,
-    cookie: &str,
-    origin: &str,
+    headers: Vec<(reqwest::header::HeaderName, String)>,
     body: Option<String>,
     wait: Duration,
 ) -> Result<Sent, String> {
@@ -257,10 +304,10 @@ async fn send(
     let mut request = match method {
         Method::Get => client.get(url),
         Method::Post => client.post(url),
+    };
+    for (name, value) in headers {
+        request = request.header(name, value);
     }
-    .header(reqwest::header::COOKIE, cookie)
-    .header(reqwest::header::ORIGIN, origin)
-    .header(reqwest::header::ACCEPT, "application/json");
     if let Some(body) = body {
         request = request
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -296,35 +343,48 @@ async fn send(
     })
 }
 
-/// After a sign-out the platform has agreed to: no session in the store whatever the answer's cookies said, no
-/// account or sandboxes for the local windows to list, and a workspace window that finds out now rather than at its
-/// next call.
+/// After a sign-out the platform has agreed to: no session in the store whatever the answer's cookies said (every
+/// account's, the other accounts' `_multi-` cookies among them), and the rest as [`account_switched`].
 async fn signed_off(app: &AppHandle, window: &Webview, held: Vec<Cookie<'static>>) {
-    let leftovers = held
-        .into_iter()
+    apply(window, signed_off_cookies(held)).await;
+    account_switched(app);
+}
+
+/// The cookies a sign-out deletes of those the store held: every one of Better Auth's, which names an account kept
+/// beside the active one `<session cookie>_multi-<token>`. Pure.
+fn signed_off_cookies(held: Vec<Cookie<'static>>) -> Vec<CookieChange> {
+    held.into_iter()
         .filter(|cookie| cookie.name().contains("better-auth"))
         .map(CookieChange::Delete)
-        .collect();
-    apply(window, leftovers).await;
+        .collect()
+}
+
+/// After the platform moved the store's session to another account, or to nobody: the last account's sandboxes are
+/// not the local windows' to list, a folder waiting on a sign-in looks again, and the workspace window finds out now
+/// rather than at its next call, which would be refused as meant for someone else. The answer's own cookies already
+/// say whose the session is now.
+fn account_switched(app: &AppHandle) {
     app.state::<AppState>()
         .remember_roster(crate::setup_link::Roster::default());
     crate::local::holders_changed(app);
     crate::folder_setup::account_changed();
     if let Some(workspace) = crate::frame::face(app, crate::windows::WORKSPACE) {
         if let Err(error) = workspace.eval("location.reload()") {
-            eprintln!("intentic: the workspace could not be told of the sign-out: {error}");
+            eprintln!("intentic: the workspace could not be told the account changed: {error}");
         }
     }
 }
 
 /// One call with the session the store holds, its answer's cookies written back, as the page's own fetch would have; none
-/// when the store holds no session, since nothing this app asks answers anyone else.
+/// when the store holds no session, since nothing this app asks answers anyone else. `account` is the one the call is
+/// meant for, already checked.
 async fn with_session(
     app: &AppHandle,
     window: &Webview,
     method: Method,
     path: &str,
     body: Option<String>,
+    account: Option<&str>,
 ) -> Result<Option<(RelayAnswer, Vec<Cookie<'static>>)>, String> {
     let (platform, app_url) = {
         let state = app.state::<AppState>();
@@ -343,7 +403,8 @@ async fn with_session(
     } else {
         CALL_WAIT
     };
-    let sent = send(method, &url, &cookie, &origin_of(&app_url), body, wait).await?;
+    let headers = request_headers(&cookie, &origin_of(&app_url), account);
+    let sent = send(method, &url, headers, body, wait).await?;
     let now = now_unix();
     let changes = sent
         .set_cookies
@@ -361,11 +422,13 @@ pub async fn account_relay(
     window: Webview,
     ask: RelayAsk,
 ) -> Result<RelayAnswer, String> {
-    let (method, path) = checked(&ask)?;
+    let (method, path, account) = checked(&ask)?;
     // A local window asking who is signed in is the app finding out too, so the folder's dialog and its setup never
     // say otherwise than the account at the window's foot.
     let asks_session = path == GET_SESSION;
-    let Some((answer, held)) = with_session(&app, &window, method, &path, ask.body).await? else {
+    let Some((answer, held)) =
+        with_session(&app, &window, method, &path, ask.body, account.as_deref()).await?
+    else {
         if asks_session {
             take_session(&app, &Session::Nobody);
         }
@@ -374,8 +437,11 @@ pub async fn account_relay(
     if asks_session {
         take_session(&app, &session_of(answer.status, &answer.body));
     }
-    if path == SIGN_OUT && (200..300).contains(&answer.status) {
+    let done = (200..300).contains(&answer.status);
+    if path == SIGN_OUT && done {
         signed_off(&app, &window, held).await;
+    } else if (path == SET_ACTIVE || path == REVOKE) && done {
+        account_switched(&app);
     }
     Ok(answer)
 }
@@ -411,7 +477,15 @@ pub async fn platform_post(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<Answered, String> {
-    let sent = with_session(app, window, Method::Post, path, Some(body.to_string())).await?;
+    let sent = with_session(
+        app,
+        window,
+        Method::Post,
+        path,
+        Some(body.to_string()),
+        None,
+    )
+    .await?;
     Ok(match sent {
         None => Answered::SignedOut,
         Some((answer, _)) => answered(answer.status, &answer.body),
@@ -424,7 +498,7 @@ pub async fn platform_get(
     window: &Webview,
     path: &str,
 ) -> Result<Answered, String> {
-    let sent = with_session(app, window, Method::Get, path, None).await?;
+    let sent = with_session(app, window, Method::Get, path, None, None).await?;
     Ok(match sent {
         None => Answered::SignedOut,
         Some((answer, _)) => answered(answer.status, &answer.body),
@@ -531,7 +605,7 @@ pub fn take_session(app: &AppHandle, session: &Session) {
 /// session in the store is nobody, as the platform would say it; the platform out of reach is unknown and changes
 /// nothing.
 pub async fn learn_account(app: &AppHandle, window: &Webview) -> Session {
-    let session = match with_session(app, window, Method::Get, GET_SESSION, None).await {
+    let session = match with_session(app, window, Method::Get, GET_SESSION, None, None).await {
         Ok(None) => Session::Nobody,
         Ok(Some((answer, _))) => session_of(answer.status, &answer.body),
         Err(error) => {
@@ -552,6 +626,14 @@ mod tests {
             method: method.into(),
             path: path.into(),
             body: body.map(str::to_string),
+            account: None,
+        }
+    }
+
+    fn meant_for(account: &str, ask: RelayAsk) -> RelayAsk {
+        RelayAsk {
+            account: Some(account.into()),
+            ..ask
         }
     }
 
@@ -562,24 +644,24 @@ mod tests {
     fn only_the_listed_calls_are_carried_each_by_its_own_method() {
         assert_eq!(
             checked(&ask("GET", "/api/auth/get-session", None)),
-            Ok((Method::Get, "/api/auth/get-session".into()))
+            Ok((Method::Get, "/api/auth/get-session".into(), None))
         );
         assert_eq!(
             checked(&ask("POST", "/rpc/tokens/create", Some("{}"))),
-            Ok((Method::Post, "/rpc/tokens/create".into()))
+            Ok((Method::Post, "/rpc/tokens/create".into(), None))
         );
         assert_eq!(
             checked(&ask("GET", "/rpc/me/export?x=1&y=a%20b", None)),
-            Ok((Method::Get, "/rpc/me/export?x=1&y=a%20b".into()))
+            Ok((Method::Get, "/rpc/me/export?x=1&y=a%20b".into(), None))
         );
         // The switcher's own calls, so a local window lists and removes the account's sandboxes as the workspace does.
         assert_eq!(
             checked(&ask("GET", "/rpc/sandbox/list", None)),
-            Ok((Method::Get, "/rpc/sandbox/list".into()))
+            Ok((Method::Get, "/rpc/sandbox/list".into(), None))
         );
         assert_eq!(
             checked(&ask("POST", "/rpc/sandbox/delete", Some("{}"))),
-            Ok((Method::Post, "/rpc/sandbox/delete".into()))
+            Ok((Method::Post, "/rpc/sandbox/delete".into(), None))
         );
         for (method, path) in [
             ("POST", "/api/auth/delete-user"),
@@ -601,6 +683,115 @@ mod tests {
                 "{method} {path}"
             );
         }
+    }
+
+    /// The other accounts signed in beside the workspace's, as the account menu lists, switches and signs out of them.
+    #[test]
+    fn the_other_accounts_are_listed_switched_to_and_ended_each_by_its_own_method() {
+        let sent = r#"{"sessionToken":"t2"}"#;
+        assert_eq!(
+            checked(&ask("GET", LIST_DEVICE_SESSIONS, None)),
+            Ok((Method::Get, LIST_DEVICE_SESSIONS.into(), None))
+        );
+        for path in [SET_ACTIVE, REVOKE] {
+            assert_eq!(
+                checked(&meant_for("u_ada", ask("POST", path, Some(sent)))),
+                Ok((Method::Post, path.into(), Some("u_ada".into())))
+            );
+        }
+        for (method, path) in [
+            ("POST", LIST_DEVICE_SESSIONS),
+            ("GET", SET_ACTIVE),
+            ("GET", REVOKE),
+            ("POST", "/api/auth/multi-session/revoke-all"),
+            ("GET", "/api/auth/multi-session/list-device-sessions/"),
+        ] {
+            assert_eq!(
+                checked(&ask(method, path, None)),
+                Err(refused(path)),
+                "{method} {path}"
+            );
+        }
+    }
+
+    /// An account is an id and nothing else: anything that could end the header or start another is refused with the
+    /// whole call, as a path off the list is.
+    #[test]
+    fn an_account_is_carried_only_when_it_is_an_account_id() {
+        let longest = "a".repeat(128);
+        assert_eq!(
+            checked(&meant_for(&longest, ask("POST", SIGN_OUT, Some("{}")))),
+            Ok((Method::Post, SIGN_OUT.into(), Some(longest.clone())))
+        );
+        for account in [
+            "",
+            "u 1",
+            "u1\r\nx-evil: 1",
+            "u1;",
+            "u1/../x",
+            "ünï",
+            &"a".repeat(129),
+        ] {
+            assert_eq!(
+                checked(&meant_for(account, ask("POST", REVOKE, Some("{}")))),
+                Err(refused(REVOKE)),
+                "{account:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_call_says_which_account_it_is_meant_for_only_when_the_page_named_one() {
+        let named = |headers: Vec<(reqwest::header::HeaderName, String)>| -> Vec<(String, String)> {
+            headers
+                .into_iter()
+                .map(|(name, value)| (name.as_str().to_string(), value))
+                .collect()
+        };
+        let base = vec![
+            ("cookie".to_string(), "a=1".to_string()),
+            ("origin".to_string(), "https://app.intentic.dev".to_string()),
+            ("accept".to_string(), "application/json".to_string()),
+        ];
+        assert_eq!(
+            named(request_headers("a=1", "https://app.intentic.dev", None)),
+            base
+        );
+        let mut meant = base.clone();
+        meant.push(("x-intentic-account".to_string(), "u_ada".to_string()));
+        assert_eq!(
+            named(request_headers(
+                "a=1",
+                "https://app.intentic.dev",
+                Some("u_ada")
+            )),
+            meant
+        );
+    }
+
+    #[test]
+    fn a_sign_out_deletes_every_accounts_cookies_the_other_accounts_among_them() {
+        let held = [
+            "__Secure-better-auth.session_token",
+            "__Secure-better-auth.session_token_multi-abc123",
+            "better-auth.session_token_multi-def456",
+            "__Secure-better-auth.session_data",
+            "ph_flag",
+        ]
+        .map(|name| Cookie::new(name, "v"));
+        let deleted: Vec<String> = signed_off_cookies(held.to_vec())
+            .into_iter()
+            .map(|change| match change {
+                CookieChange::Delete(cookie) => cookie.name().to_string(),
+                CookieChange::Write(cookie) => panic!("{} was written", cookie.name()),
+            })
+            .collect();
+        assert_eq!(
+            deleted,
+            held[..4].iter().map(|c| c.name()).collect::<Vec<_>>()
+        );
+        // A kept account's cookie is not the active session: it alone sends nothing.
+        assert_eq!(cookie_header(&held[1..2]), None);
     }
 
     /// A sandbox a folder's window asks for is made with fixed paths the app writes, never a page's: a page still cannot

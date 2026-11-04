@@ -1220,6 +1220,20 @@
             "notYou": "Didn't ask for this? Close this page: nothing happens without the press above.",
             "linkDidntSignIn": "This link didn't sign you in.",
             "linkIncomplete": "This sign-in link is incomplete. Ask for a new code on the sign-in page."
+        },
+        "accounts": {
+            "changedElsewhere": "Your account changed in another window.",
+            "add": "Add another account",
+            "addTitle": "Add an account",
+            "addDetail": "Sign in with another account. {email} stays signed in, and you can switch back from the account menu.",
+            "addBack": "Back to {email}",
+            "signOutAll": "Sign out of all accounts",
+            "switchTo": "Switch to {email}",
+            "switchEnded": "The sign-in for {email} has ended. Add it again to switch to it.",
+            "limit": "Up to {count} accounts at once. Sign one out to add another.",
+            "continueAs": "Continue as {email}",
+            "stillSignedIn": "Signed in on this device",
+            "others": "Other accounts"
         }
     },
     "browsers": {

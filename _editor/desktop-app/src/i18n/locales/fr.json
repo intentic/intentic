@@ -518,7 +518,8 @@
     "account": {
         "profileUpdateFailed": "La mise à jour du profil a échoué.",
         "sessionCheckFailed": "Impossible de vérifier votre session.",
-        "signOutFailed": "La déconnexion a échoué."
+        "signOutFailed": "La déconnexion a échoué.",
+        "switchFailed": "Impossible de changer de compte."
     },
     "setup": {
         "stuckInstallerNotStopped": "L'installateur bloqué n'a pas pu être arrêté : {error}"

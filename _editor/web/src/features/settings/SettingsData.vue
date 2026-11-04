@@ -7,7 +7,7 @@ import { leaveAfterSignOut } from "../../app/environments/afterSignOut";
 import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
 import { useAccount } from "../../client/auth/useAccount";
-import { useAuth } from "../../client/auth/useAuth";
+import { useDeviceAccounts } from "../../client/auth/deviceAccounts";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useOperation } from "../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
@@ -17,7 +17,7 @@ const t = useT();
 
 /* Data & privacy: GDPR self-service: export everything the platform stores about the account, or delete it. */
 
-const { deleteAccount } = useAuth();
+const { deleteAndContinue } = useDeviceAccounts();
 const { sandboxes } = useSandbox();
 
 // A desktop window on a folder knows only its folder, and deleting the account takes this account's access off every
@@ -77,11 +77,13 @@ const confirmDelete = async (): Promise<void> => {
     await removal.run({
         what: t(`settings.settingsData.deletingAccount`),
         failed: t(`settings.settingsData.accountDeletionFailed`),
-        // Ends where a sign-out ends (the login page; Home in the desktop app), which is the answer.
+        // Ends where a sign-out ends (the login page; Home in the desktop app), which is the answer; or, with another
+        // account still signed in on this browser, on Home as that account (client/auth/deviceAccounts.ts).
         quiet: true,
         task: async () => {
-            await deleteAccount(sandboxes.value);
-            leaveAfterSignOut();
+            if ((await deleteAndContinue(sandboxes.value)) === `signed-out`) {
+                leaveAfterSignOut();
+            }
         },
     });
 };

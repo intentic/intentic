@@ -21,15 +21,20 @@ import * as actualDesktop from "../../app/environments/desktop";
 })();
 
 const replace = jest.fn();
+// The address's query, which a case sets: `{ add: "1" }` is the account menu's "Add another account".
+const query: Record<string, string> = {};
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRouter: () => ({ push: jest.fn(), replace }) as never,
-    useRoute: () => ({ query: {} }) as never,
+    useRoute: () => ({ query }) as never,
 }));
+// Leaving for the account just added, beside the one signed in (client/auth/deviceAccounts.ts).
+const arriveAsAdded = jest.fn(async (_destination: string): Promise<void> => undefined);
+jest.mock(`../../client/auth/deviceAccounts`, () => ({ useDeviceAccounts: () => ({ arriveAsAdded, continueAs: jest.fn() }) }));
 const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
 const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAuth`, () => ({
-    useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
+    useAuth: () => ({ user: ref(null), refresh: async () => null, listDeviceSessions: async () => [], signInWithGoogle, signInWithGoogleCredential }),
 }));
 // An ordinary browser: the desktop webview never shows Google's button at all (signInSurfaces.test.ts). Partial, over
 // the real module, for Login.test.ts's reason.
@@ -83,6 +88,8 @@ const mount = async (): Promise<HTMLElement> => {
 
 beforeEach(() => {
     localStorage.clear();
+    delete query[`add`];
+    arriveAsAdded.mockClear();
     initialize.mockReset();
     gisRenderButton.mockClear();
     replace.mockReset();
@@ -167,4 +174,31 @@ it(`counts the sign-in the platform took`, async () => {
 
     expect(replace).toHaveBeenCalledWith(`/`);
     expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, surface: `login`, stall_shown: false });
+});
+
+// Adding an account beside the one signed in: Google's answer is the new account's, spent on the platform as an addition
+// and never kept as the signed-in account's own credential, and the page leaves as the account added.
+it(`adds the account Google answered with, keeping none of its credential, and leaves as it`, async () => {
+    query[`add`] = `1`;
+    await mount();
+
+    answer(GOOD);
+    await flush();
+
+    expect(signInWithGoogleCredential).toHaveBeenCalledWith(GOOD, { adding: true });
+    expect([arriveAsAdded.mock.calls, replace.mock.calls]).toEqual([[[`/`]], []]);
+    expect(Object.keys(localStorage).filter((key) => key.includes(`intentic.gid.`))).toEqual([]);
+});
+
+it(`sends Google's own page an add as one that asks which account`, async () => {
+    query[`add`] = `1`;
+    const el = await mount();
+    // The road around Google's button, whichever form this browser draws it in.
+    const road = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find(
+        (button) => button.classList.contains(`escape`) || button.textContent?.includes(`Continue on Google's page`) === true,
+    );
+    road?.click();
+    await flush();
+
+    expect(signInWithGoogle).toHaveBeenCalledWith(`/`, { chooseAccount: true });
 });

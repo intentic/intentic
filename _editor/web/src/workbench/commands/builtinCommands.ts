@@ -118,6 +118,8 @@ export const BUILTIN_COMMANDS = {
 
     // The account menu (AccountPanel.vue).
     "account.signOut": { title: () => t(`shell.accountPanel.signOut2`), category: ACCOUNT, icon: `sign-out` },
+    "account.signOutAll": { title: () => t(`auth.accounts.signOutAll`), category: ACCOUNT, icon: `sign-out` },
+    "account.add": { title: () => t(`auth.accounts.add`), category: ACCOUNT, icon: `plus` },
     "account.joinCommunity": { title: () => t(`community.command`), category: ACCOUNT, icon: `discord` },
 
     // The sandbox switcher (useSwitchCommands.ts); Alt+0 is this computer, inside the desktop app.

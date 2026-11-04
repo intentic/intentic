@@ -16,7 +16,14 @@ export const RESEND_AFTER_MS = 60_000;
 
 export type EmailCodeStep = `address` | `code`;
 
-export const useEmailCode = (options: { readonly lockedEmail?: Readonly<Ref<string | undefined>>; readonly onSignedIn: () => void | Promise<void> }) => {
+interface EmailCodeOptions {
+    readonly lockedEmail?: Readonly<Ref<string | undefined>>;
+    // An account being added beside the one signed in: the sign-in is not taken as this page's (useAuth `afterSignIn`).
+    readonly adding?: Readonly<Ref<boolean>>;
+    readonly onSignedIn: () => void | Promise<void>;
+}
+
+export const useEmailCode = (options: EmailCodeOptions) => {
     const t = useT();
     const { sendEmailCode, signInWithEmailCode } = useAuth();
 
@@ -88,7 +95,7 @@ export const useEmailCode = (options: { readonly lockedEmail?: Readonly<Ref<stri
         verifying.value = true;
         notice.value = undefined;
         try {
-            await signInWithEmailCode(to, code.value);
+            await (options.adding?.value === true ? signInWithEmailCode(to, code.value, { adding: true }) : signInWithEmailCode(to, code.value));
             await options.onSignedIn();
         } catch (error) {
             notice.value = noticeFrom(error, t(`auth.emailCode.signInFailed`), { tone: `warning` });

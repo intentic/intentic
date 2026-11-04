@@ -1220,6 +1220,20 @@
             "notYou": "Vous n'avez rien demandé ? Fermez cette page : rien ne se passe sans un clic sur le bouton ci-dessus.",
             "linkDidntSignIn": "Ce lien ne vous a pas connecté.",
             "linkIncomplete": "Ce lien de connexion est incomplet. Demandez un nouveau code sur la page de connexion."
+        },
+        "accounts": {
+            "changedElsewhere": "Votre compte a changé dans une autre fenêtre.",
+            "add": "Ajouter un autre compte",
+            "addTitle": "Ajouter un compte",
+            "addDetail": "Connectez-vous avec un autre compte. {email} reste connecté, et vous pourrez y revenir depuis le menu du compte.",
+            "addBack": "Revenir à {email}",
+            "signOutAll": "Se déconnecter de tous les comptes",
+            "switchTo": "Passer à {email}",
+            "switchEnded": "La connexion de {email} a expiré. Ajoutez-le à nouveau pour y passer.",
+            "limit": "Jusqu'à {count} comptes à la fois. Déconnectez-en un pour en ajouter un autre.",
+            "continueAs": "Continuer en tant que {email}",
+            "stillSignedIn": "Connecté sur cet appareil",
+            "others": "Autres comptes"
         }
     },
     "browsers": {

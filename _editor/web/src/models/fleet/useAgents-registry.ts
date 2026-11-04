@@ -12,6 +12,7 @@ import { agentTranscriptKey } from "../conversations/transcript/agentTranscript"
 import { useChat } from "../conversations/run/useChat";
 import { reportClient } from "../../app/clientDiagnostics";
 import { buildId } from "../../app/buildEpoch";
+import { rosterKey, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { onScreen } from "../../workbench/window/onScreen";
 import { AGENT_REVIEW, rpcKey, rpcKeyAt } from "../../lib/queryKeys";
@@ -31,7 +32,7 @@ import { withNext } from "../agent-status/agentStatus-standing";
 // screen waited on the whole connection (session, sandbox list, the stream's first frame) before drawing a single card.
 // Written when the page is hidden, which is the last moment a phone is sure to give; only a roster the stream actually
 // sent is written, never one restored from here, and never across a build, whose summaries may be shaped differently.
-const ROSTER_PREFIX = `intentic.roster.`;
+// The account's (app/storage/browserStorage.ts `rosterKey`): another account opening the same sandbox paints its own.
 // Past this, a roster is not worth a synchronous write on the way out; the next start simply waits for the stream.
 const ROSTER_MAX_CHARS = 1_000_000;
 const { activeSandboxId } = useSandbox();
@@ -48,7 +49,7 @@ export const readStoredRoster = (sandboxId: string | undefined, build: string): 
     try {
         // Only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is refused
         // by its build stamp before its agents are read, and a record that is not this shape is no roster at all.
-        const stored: unknown = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`);
+        const stored: unknown = JSON.parse(storedValue(rosterKey(sandboxId)) ?? `null`);
         if (StoredStamp.safeParse(stored).data?.build !== build) {
             return undefined;
         }
@@ -560,21 +561,17 @@ export const loadArchived = async (): Promise<void> => {
 // One roster per window: a hot update re-executes this module while the stream keeps writing to the old instance,
 // freezing the board. The revision audit can't fix this since the heartbeat reaches that same stale object; only a
 // reload can.
-// The roster as last heard, written on the way out (see ROSTER_PREFIX): when the page hides, and when the reader
+// The roster as last heard, written on the way out (see `rosterKey`): when the page hides, and when the reader
 // switches to another sandbox, which is the way out of this one. Called for a switch before the scope resets, while
 // `registry` still holds the sandbox being left, so the id is the one being left too, not the active one.
 export const saveRoster = (sandboxId = activeSandboxId.value): void => {
     if (sandboxId === undefined || !rosterHeard.value) {
         return;
     }
-    try {
-        const json = JSON.stringify({ build: buildId(), agents: registry.value });
-        if (json.length <= ROSTER_MAX_CHARS) {
-            localStorage.setItem(`${ROSTER_PREFIX}${sandboxId}`, json);
-        }
-        // allow(silent-catch): Denied or full storage disables only the next startup's cached roster.
-    } catch {
-        // A full or refused storage costs the next start its early board, nothing else.
+    // A full or refused storage costs the next start its early board, nothing else (the kit drops the write).
+    const json = JSON.stringify({ build: buildId(), agents: registry.value });
+    if (json.length <= ROSTER_MAX_CHARS) {
+        storeValue(rosterKey(sandboxId), json);
     }
 };
 if (`document` in globalThis) {

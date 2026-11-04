@@ -518,7 +518,8 @@
     "account": {
         "profileUpdateFailed": "Profile update failed.",
         "sessionCheckFailed": "Couldn't check your session.",
-        "signOutFailed": "Sign out failed."
+        "signOutFailed": "Sign out failed.",
+        "switchFailed": "Couldn't switch accounts."
     },
     "setup": {
         "stuckInstallerNotStopped": "The stuck installer could not be stopped: {error}"

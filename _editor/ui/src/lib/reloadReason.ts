@@ -17,11 +17,14 @@
 
 import { deviceKey, removeStoredValue, storedValue, storeValue } from "./browserStorage";
 
-const REASONS = [`update`, `stale-chunk`, `self-heal`, `opener-fallback`, `sign-out`, `sign-in`] as const;
+// `account-switch`: the reader switched or added an account, or signed one out and carried on as another. `account-change`:
+// the page found itself drawn for an account that is no longer the browser's (another tab switched, a session ended),
+// which nobody here pressed for.
+const REASONS = [`update`, `stale-chunk`, `self-heal`, `opener-fallback`, `sign-out`, `sign-in`, `account-switch`, `account-change`] as const;
 export type ReloadReason = (typeof REASONS)[number];
 
-// The ones that follow a press: the update offer's button, the sign-in dialog, Sign out.
-const PRESSED: ReadonlySet<ReloadReason> = new Set<ReloadReason>([`update`, `sign-in`, `sign-out`]);
+// The ones that follow a press: the update offer's button, the sign-in dialog, Sign out, the account menu's switch.
+const PRESSED: ReadonlySet<ReloadReason> = new Set<ReloadReason>([`update`, `sign-in`, `sign-out`, `account-switch`]);
 
 // Device-scope keys: notes about this tab's loads, not about whoever is signed in.
 const KEY = deviceKey(`intentic.reloadReason`);

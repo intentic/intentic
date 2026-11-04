@@ -1220,6 +1220,20 @@
             "notYou": "Nicht angefordert? Schließen Sie diese Seite: Ohne den Klick oben passiert nichts.",
             "linkDidntSignIn": "Dieser Link hat Sie nicht angemeldet.",
             "linkIncomplete": "Dieser Anmeldelink ist unvollständig. Fordern Sie auf der Anmeldeseite einen neuen Code an."
+        },
+        "accounts": {
+            "changedElsewhere": "Ihr Konto wurde in einem anderen Fenster gewechselt.",
+            "add": "Weiteres Konto hinzufügen",
+            "addTitle": "Konto hinzufügen",
+            "addDetail": "Melden Sie sich mit einem anderen Konto an. {email} bleibt angemeldet, und Sie können über das Kontomenü zurückwechseln.",
+            "addBack": "Zurück zu {email}",
+            "signOutAll": "Von allen Konten abmelden",
+            "switchTo": "Zu {email} wechseln",
+            "switchEnded": "Die Anmeldung für {email} ist abgelaufen. Fügen Sie das Konto erneut hinzu, um zu wechseln.",
+            "limit": "Bis zu {count} Konten gleichzeitig. Melden Sie eines ab, um ein weiteres hinzuzufügen.",
+            "continueAs": "Weiter als {email}",
+            "stillSignedIn": "Auf diesem Gerät angemeldet",
+            "others": "Weitere Konten"
         }
     },
     "browsers": {

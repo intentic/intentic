@@ -1,4 +1,5 @@
 import { accountKey, accountKeys, onAccountCleared, sandboxKeys } from "@intentic/ui/storage";
+import { deleteAccountDatabases } from "./accountDatabases";
 
 // The kit's one door to browser storage (`@intentic/ui/storage`: safe reads and writes, JSON through a schema, the
 // device / account / sandbox scopes), plus every key the signed-in account leaves in this browser, declared HERE rather
@@ -6,12 +7,19 @@ import { accountKey, accountKeys, onAccountCleared, sandboxKeys } from "@intenti
 // (a chunk the reader never opened) has registered nothing by then; declared in this module, which sign-out imports,
 // each is known from the first paint.
 export {
+    ACCOUNT_POINTER_KEY,
     type AccountClearer,
+    accountPartition,
     clearAccountStorage,
+    clearEveryAccountStorage,
     deviceKey,
     isAccountKey,
     onAccountCleared,
+    type OpenedPartition,
+    openAccountPartition,
     removeStoredValue,
+    resetAccountPartitionForTests,
+    sealAccountWrites,
     type StorageArea,
     type StoredJsonValue,
     storedJson,
@@ -21,6 +29,13 @@ export {
     storeJson,
     storeValue,
 } from "@intentic/ui/storage";
+
+// The credentials each account proves itself to its sandboxes with, in its own drawer: the daemon session minted for
+// it, per sandbox (client/session/sandboxSession.ts), and the Google ID token it last signed in to them with, per web
+// client (client/auth/useGoogleIdentity.ts). Kept beside each other's for a sandbox two accounts can open, never
+// handed from one to the other.
+export const daemonSessionKey = sandboxKeys(`intentic.session.`);
+export const googleCredentialKey = accountKeys(`intentic.gid.`);
 
 // Which sandbox this browser last had open: the account's, so the next person to sign in is not put on it.
 export const ACTIVE_SANDBOX_KEY = accountKey(`intentic.activeSandboxId`);
@@ -47,26 +62,18 @@ export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
 export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
 // Whether the chat's usage rail last had anything to show, per sandbox (features/chat/panel/capacity/capacityMemory.ts).
 export const capacityRailKey = sandboxKeys(`intentic.capacityRail.`);
+// The board's last roster heard, per sandbox, painted before the stream answers (models/fleet/useAgents-registry.ts).
+export const rosterKey = sandboxKeys(`intentic.roster.`);
 // Where each repository was last run from in the Run dialog, per sandbox (features/workspace/directory-ui/runPlaceMemory.ts).
 export const runPlaceKey = sandboxKeys(`intentic.runPlace.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
-// conversation, in IndexedDB. Deleted whole on sign-out; a window holding it open closes on the version change, so the
-// delete is never blocked by this page.
+// conversation, in IndexedDB, one database per account (accountDatabases.ts). Deleted with that account; a window holding
+// it open closes on the version change, so the delete is never blocked by this page.
 export const TRANSCRIPT_DATABASE = `intentic.chat`;
+// The loading placeholders' imprints (lib/skeletonPersistence.ts): the shapes of the account's sandboxes' views, how many
+// secrets, rows and agents each one held, so the account's too.
+export const SKELETON_DATABASE = `intentic.skeletons`;
 
-const deleteDatabase = (name: string): Promise<void> =>
-    new Promise((resolve) => {
-        try {
-            const request = globalThis.indexedDB.deleteDatabase(name);
-            request.onsuccess = () => resolve();
-            request.addEventListener(`error`, () => resolve());
-            // Another tab holds it open past its version-change handler: it is deleted once that tab lets go.
-            request.onblocked = () => resolve();
-        } catch {
-            // Unavailable (private mode, disabled storage), then nothing was mirrored.
-            resolve();
-        }
-    });
-
-onAccountCleared(() => deleteDatabase(TRANSCRIPT_DATABASE));
+onAccountCleared((account) => deleteAccountDatabases(TRANSCRIPT_DATABASE, account));
+onAccountCleared((account) => deleteAccountDatabases(SKELETON_DATABASE, account));

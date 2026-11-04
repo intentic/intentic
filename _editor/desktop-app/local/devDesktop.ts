@@ -633,8 +633,7 @@ const accountAnswer = (machine: Machine, ask: AccountAsk): AccountAnswer => {
     }
     switch (route) {
         case `/api/auth/get-session`:
-            return replied({ session: { id: `s_dev`, userId: ACCOUNT.id, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, user: ACCOUNT });
-        case `/api/auth/update-user`:
+            return replied({ session: { id: `s_dev`, userId: ACCOUNT.id, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, user: ACCOUNT });        case `/api/auth/update-user`:
             Object.assign(ACCOUNT, JSON.parse(ask.body ?? `{}`));
             return replied({ status: true });
         case `/api/auth/sign-out`:

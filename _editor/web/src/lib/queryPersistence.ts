@@ -2,7 +2,8 @@ import { errorMessage } from "@intentic/base/errors";
 import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClientRestore, persistQueryClientSave } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
-import { del, get, set } from "idb-keyval";
+import { del, get, keys, set } from "idb-keyval";
+import { accountPartition } from "@intentic/ui/storage";
 import { buildId } from "../app/buildEpoch";
 import { reportClient } from "../app/clientDiagnostics";
 import { trackPerf } from "../app/perf/perf";
@@ -15,7 +16,11 @@ import { windowRole } from "./windows/windowRole";
 // on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
 // invalidates on every (re)connect. `sandbox.list` and auth state stay out of the persisted cache.
 
-const IDB_KEY = `intentic-query-cache`;
+// One snapshot per account, beside each other's in the one store: `intentic-query-cache:<account>`, the open account's
+// (@intentic/ui/storage `accountPartition`), so switching back to an account paints its workspace at once rather than
+// starting cold. The bare name is the snapshot from before accounts had their own, cleared with the next account.
+const IDB_BASE = `intentic-query-cache`;
+const idbKey = (account: string | undefined = accountPartition()): string => (account === undefined ? IDB_BASE : `${IDB_BASE}:${account}`);
 
 // Marks a key whose value must stay only in memory, since the cache mirrors to disk as one whole clone.
 // - small, shape-stable (rosters): mirror it too, cheap and worth the reload paint.
@@ -95,12 +100,12 @@ let lastTimedAt = Number.NEGATIVE_INFINITY;
 const write = async (client: PersistedClient): Promise<void> => {
     const now = Date.now();
     if (now - lastTimedAt < TIMED_EVERY_MS) {
-        await set(IDB_KEY, client);
+        await set(idbKey(), client);
         return;
     }
     lastTimedAt = now;
     // Timed since this write scales with everything cached; `queries` shows if the mirror has grown too big.
-    await trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client));
+    await trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(idbKey(), client));
 };
 
 const drainPersist = (): void => {
@@ -137,10 +142,10 @@ const flushPersist = throttleTrailing(drainPersist, PERSIST_WINDOW_MS);
 let earlyRead: Promise<PersistedClient | undefined> | undefined;
 export const readPersistedQueriesEarly = (): void => {
     // allow(silent-catch): an unreadable store restores as empty, which is what the restore itself does with a failed read.
-    earlyRead ??= get<PersistedClient>(IDB_KEY).catch(() => undefined);
+    earlyRead ??= get<PersistedClient>(idbKey()).catch(() => undefined);
 };
 const takeEarlyRead = (): Promise<PersistedClient | undefined> => {
-    const read = earlyRead ?? get<PersistedClient>(IDB_KEY);
+    const read = earlyRead ?? get<PersistedClient>(idbKey());
     earlyRead = undefined;
     return read;
 };
@@ -193,7 +198,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
                 flushPersist();
             },
             restoreClient: takeEarlyRead,
-            removeClient: () => del(IDB_KEY),
+            removeClient: () => del(idbKey()),
         },
         buster: `${userId}:${buildId()}`,
         // A Monday-morning open after Friday still paints; anything older restores as empty.
@@ -251,9 +256,10 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
     following.push(queryClient.getQueryCache().subscribe(onChange), queryClient.getMutationCache().subscribe(onChange));
 };
 
-// Logout / account deletion: stop persisting, drop memory and disk so the next login starts clean. A failed delete
-// means IndexedDB never worked, so nothing was persisted; do not let it abort the sign-out.
-export const clearPersistedQueries = async (): Promise<void> => {
+// Logout / account deletion: stop persisting, drop memory and disk so the next login starts clean: this account's
+// snapshot (the open one's by default) with the one from before accounts had their own, or every account's. A failed
+// delete means IndexedDB never worked, so nothing was persisted; do not let it abort the sign-out.
+export const clearPersistedQueries = async (which: { readonly account?: string } | `every` = {}): Promise<void> => {
     uninstall?.();
     uninstall = undefined;
     earlyRead = undefined;
@@ -261,17 +267,13 @@ export const clearPersistedQueries = async (): Promise<void> => {
     latestClient = undefined;
     await persisting;
     queryClient.clear();
-    await del(IDB_KEY).catch((cause: unknown) => {
-        console.warn("Could not remove the persisted query cache", cause);
-        return undefined;
-    });
-    // The boards' stored rosters (useAgents-registry.ts) belong to the account signing out as much as the cache does.
     try {
-        for (const key of Object.keys(localStorage).filter((name) => name.startsWith(`intentic.roster.`))) {
-            localStorage.removeItem(key);
-        }
-        // allow(silent-catch): Denied local storage cannot yield readable cached rosters to remove.
-    } catch {
-        // No storage, then nothing was stored.
+        const doomed =
+            which === `every`
+                ? (await keys()).filter((key): key is string => typeof key === `string` && (key === IDB_BASE || key.startsWith(`${IDB_BASE}:`)))
+                : [...new Set([idbKey(which.account ?? accountPartition()), IDB_BASE])];
+        await Promise.all(doomed.map(async (key) => del(key)));
+    } catch (cause) {
+        console.warn("Could not remove the persisted query cache", cause);
     }
 };

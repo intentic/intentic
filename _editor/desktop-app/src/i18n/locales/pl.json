@@ -518,7 +518,8 @@
     "account": {
         "profileUpdateFailed": "Nie udało się zaktualizować profilu.",
         "sessionCheckFailed": "Nie udało się sprawdzić Twojej sesji.",
-        "signOutFailed": "Nie udało się wylogować."
+        "signOutFailed": "Nie udało się wylogować.",
+        "switchFailed": "Nie udało się przełączyć konta."
     },
     "setup": {
         "stuckInstallerNotStopped": "Nie udało się zatrzymać zawieszonego instalatora: {error}"

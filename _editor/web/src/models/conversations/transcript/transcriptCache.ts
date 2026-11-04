@@ -2,12 +2,13 @@ import { fitPageRow } from "@intentic/sandbox-contract/text/transcript-page";
 import type { Ref } from "vue";
 import type { ChatMessage } from "./transcript";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
+import { accountDatabase, deleteAccountDatabases } from "../../../app/storage/accountDatabases";
 import { onAccountCleared, TRANSCRIPT_DATABASE } from "../../../app/storage/browserStorage";
 
 // Local IndexedDB mirror of each conversation's transcript, so reopening paints from disk instead of a sandbox
 // round-trip; the daemon stays authoritative and replaces the cache once it answers, so a stale mirror only costs a
-// repaint. The account's: sign-out deletes the database (lib/browserStorage.ts), which this page's connection gives way
-// to on the version change.
+// repaint. The account's: one database per account (app/storage/accountDatabases.ts), deleted with it, which this page's
+// connection gives way to on the version change.
 
 // An entry is one sandbox's conversation, never an id alone: an id can name a conversation in every sandbox at once (a
 // person's home conversation is named after them in each, ids/conversation-ids.ts homeConversationId), and keyed by the id
@@ -18,7 +19,6 @@ export const mirrorKey = (sandboxId: string | undefined, conversationId: string)
 export const mirrorKeyOf = (conversation: { readonly conversationId: string; readonly box: Readonly<Ref<string | undefined>> }): string =>
     mirrorKey(conversation.box.value ?? activeSandboxId.value, conversation.conversationId);
 
-const DB_NAME = TRANSCRIPT_DATABASE;
 const DB_VERSION = 1;
 const STORE = `transcripts`;
 
@@ -27,20 +27,17 @@ const KEPT_MESSAGES = 300;
 
 let connection: Promise<IDBDatabase | undefined> | undefined;
 
-// A build change may reshape ChatMessage, so this drops the whole store (see buildEpoch). Called at boot, before any
-// open memoizes `connection`, so the delete can't race a live transaction.
+// A build change may reshape ChatMessage, so this drops the whole store (see buildEpoch), every account's: another
+// account's mirror is read under the new build the next time it is switched to. Called at boot, before any open memoizes
+// `connection`, so the delete can't race a live transaction.
 export const dropTranscriptStore = (): void => {
-    try {
-        indexedDB.deleteDatabase(DB_NAME);
-    } catch {
-        // Unavailable (private mode, disabled storage), then nothing was mirrored to drop.
-    }
+    void deleteAccountDatabases(TRANSCRIPT_DATABASE, undefined);
 };
 
 const openDb = (): Promise<IDBDatabase | undefined> => {
     connection ??= new Promise<IDBDatabase | undefined>((resolve) => {
         try {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            const request = indexedDB.open(accountDatabase(TRANSCRIPT_DATABASE), DB_VERSION);
             request.onupgradeneeded = () => {
                 if (!request.result.objectStoreNames.contains(STORE)) {
                     request.result.createObjectStore(STORE);

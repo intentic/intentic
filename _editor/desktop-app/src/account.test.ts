@@ -1,5 +1,5 @@
 import type { User } from "@intentic/api-contract";
-import { readAccount, sessionHolds, signOutAccount, updateAccount } from "./account";
+import { meantFor, readAccount, readDeviceAccounts, revokeAccount, sessionHolds, signOutAccount, switchAccount, updateAccount } from "./account";
 import type { AccountAnswer, AccountAsk } from "./desktop";
 
 // The app's carrying of the call is account.rs's (and its tests'); this is the page's half: what it asks, and how it
@@ -13,7 +13,9 @@ const answering =
         return Promise.resolve({ status, body, contentType: `application/json` });
     };
 
-beforeEach(() => {
+// Each case starts with the window having read nobody, so no call it makes is meant for anyone yet.
+beforeEach(async () => {
+    await readAccount(answering(200, `null`));
     asked.length = 0;
 });
 
@@ -83,5 +85,60 @@ describe(`updateAccount and signOutAccount`, () => {
             `That picture is too large.`,
         );
         await expect(signOutAccount(answering(401, `{}`))).rejects.toThrow(`desktop.account.signOutFailed`);
+    });
+});
+
+describe(`the other accounts signed in beside this one`, () => {
+    const BO = { id: `u2`, email: `bo@example.com`, name: `Bo`, image: null };
+
+    it(`are listed as the platform lists them, an entry out of shape left out`, async () => {
+        const listed = [SESSION, { session: { token: `t2` }, user: BO }, { session: {}, user: BO }];
+        expect(await readDeviceAccounts(answering(200, JSON.stringify(listed)))).toStrictEqual([
+            { token: `never-read`, user: { id: `u1`, email: `ada@example.com`, name: `Ada`, image: `https://example.com/ada.png`, createdAt: `2026-01-01T00:00:00.000Z` } },
+            { token: `t2`, user: BO },
+        ]);
+        expect(asked).toEqual([{ method: `GET`, path: `/api/auth/multi-session/list-device-sessions` }]);
+    });
+
+    it(`are none while nobody is signed in, and reject when the platform is in trouble`, async () => {
+        expect(await readDeviceAccounts(answering(401, `{"message":"Not signed in."}`))).toEqual([]);
+        await expect(readDeviceAccounts(answering(502, `<html>Bad gateway</html>`))).rejects.toThrow(`desktop.account.sessionCheckFailed`);
+    });
+
+    it(`are switched to and signed out of by their token, each refusal said as the platform said it`, async () => {
+        await switchAccount(`t2`, answering(200, JSON.stringify({ session: { token: `t2` }, user: BO })));
+        await revokeAccount(`t1`, answering(200, `{"status":true}`));
+        expect(asked).toEqual([
+            { method: `POST`, path: `/api/auth/multi-session/set-active`, body: `{"sessionToken":"t2"}` },
+            { method: `POST`, path: `/api/auth/multi-session/revoke`, body: `{"sessionToken":"t1"}` },
+        ]);
+        await expect(switchAccount(`t9`, answering(401, `{"message":"Invalid session token"}`))).rejects.toThrow(`Invalid session token`);
+        await expect(revokeAccount(`t9`, answering(500, `{}`))).rejects.toThrow(`desktop.account.signOutFailed`);
+        await expect(switchAccount(`t9`, answering(500, `{}`))).rejects.toThrow(`desktop.account.switchFailed`);
+    });
+});
+
+describe(`the account a call is meant for`, () => {
+    it(`is the one the window last read, on every call that changes something and none that only reads`, async () => {
+        await readAccount(answering(200, JSON.stringify(SESSION)));
+        await updateAccount({ name: `Ada L.` }, answering(200, `{"status":true}`));
+        await revokeAccount(`never-read`, answering(200, `{"status":true}`));
+        await readDeviceAccounts(answering(200, `[]`));
+        expect(asked.slice(1)).toEqual([
+            { method: `POST`, path: `/api/auth/update-user`, body: `{"name":"Ada L."}`, account: `u1` },
+            { method: `POST`, path: `/api/auth/multi-session/revoke`, body: `{"sessionToken":"never-read"}`, account: `u1` },
+            { method: `GET`, path: `/api/auth/multi-session/list-device-sessions` },
+        ]);
+        // The account's other calls, as local/platform.ts carries them.
+        expect(meantFor({ method: `POST`, path: `/rpc/tokens/create`, body: `{}` })).toEqual({ method: `POST`, path: `/rpc/tokens/create`, body: `{}`, account: `u1` });
+        expect(meantFor({ method: `GET`, path: `/rpc/tokens` })).toEqual({ method: `GET`, path: `/rpc/tokens` });
+    });
+
+    it(`is nobody once the window reads nobody, or an id the app would refuse the call for`, async () => {
+        await readAccount(answering(200, JSON.stringify(SESSION)));
+        await readAccount(answering(200, `null`));
+        expect(meantFor({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` })).toEqual({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` });
+        await readAccount(answering(200, JSON.stringify({ ...SESSION, user: { ...SESSION.user, id: `u 1` } })));
+        expect(meantFor({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` })).toEqual({ method: `POST`, path: `/api/auth/sign-out`, body: `{}` });
     });
 });

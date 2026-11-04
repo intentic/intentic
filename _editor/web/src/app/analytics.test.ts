@@ -6,7 +6,7 @@ import { nextTick, ref } from "vue";
 // re-imported analytics modules (one evaluation per test) watch the same instance.
 const user = ref<User | null>(null);
 jest.mock("posthog-js", () => ({
-    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), opt_in_capturing: jest.fn(), opt_out_capturing: jest.fn(), startSessionRecording: jest.fn(), stopSessionRecording: jest.fn(), register: jest.fn(), alias: jest.fn() },
+    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), opt_in_capturing: jest.fn(), opt_out_capturing: jest.fn(), startSessionRecording: jest.fn(), stopSessionRecording: jest.fn(), register: jest.fn(), alias: jest.fn(), get_property: jest.fn(), get_distinct_id: jest.fn(() => `anonymous`) },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -73,6 +73,27 @@ describe(`initAnalytics`, () => {
         user.value = null;
         await nextTick();
         expect(posthog.reset).toHaveBeenCalledTimes(1);
+    });
+
+    // Another account signed in on this browser before (client/auth/deviceAccounts.ts): the person who switched in starts
+    // afresh, rather than carrying on as the one identified last.
+    it(`starts afresh for an account other than the one this browser was identified as`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        mocked(posthog.get_property).mockReturnValue(`identified`);
+        mocked(posthog.get_distinct_id).mockReturnValue(`u-work`);
+        // As PostHog does: an identify makes that account the distinct id.
+        mocked(posthog.identify).mockImplementation((id: string) => {
+            mocked(posthog.get_distinct_id).mockReturnValue(id);
+        });
+        const resetsBefore = mocked(posthog.reset).mock.calls.length;
+
+        user.value = { id: `u-personal`, email: `a@personal.example`, name: `A`, image: null };
+        await nextTick();
+
+        const resets = mocked(posthog.reset).mock.calls.length - resetsBefore;
+        expect([resets, mocked(posthog.identify).mock.calls.at(-1)?.[0]]).toEqual([1, `u-personal`]);
+        user.value = null;
+        await nextTick();
     });
 
     // Canvas, console, request bodies and network timing follow the PostHog project's own settings unless the client says

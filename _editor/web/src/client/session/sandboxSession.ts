@@ -15,7 +15,7 @@ import {
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
-import { removeStoredValue, storedKeys, storedValue, storeValue } from "../../app/storage/browserStorage";
+import { accountPartition, daemonSessionKey, removeStoredValue, storedKeys, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { accountWaysIn, emailOnly, signsInByEmail } from "../auth/signInMethods";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../endpoint/endpoint";
@@ -60,8 +60,10 @@ export interface SandboxBearer {
     readonly kind: "session" | "google";
 }
 
-const SESSION_KEY_PREFIX = `intentic.session.`;
-const storageKey = (sandboxId: string): string => `${SESSION_KEY_PREFIX}${sandboxId}`;
+// Each account's own (browserStorage.ts `daemonSessionKey`): two accounts that can both open a sandbox each hold the
+// session minted for them, and neither ever presents the other's.
+const SESSION_KEY_PREFIX = daemonSessionKey(``);
+const storageKey = daemonSessionKey;
 
 // Never serve a token about to die mid-flight (the same guard the Google layer uses on its own tokens).
 const EXPIRY_MARGIN_MS = 60_000;
@@ -106,10 +108,15 @@ const retire = (sandboxId: string): void => {
     retirements.delete(sandboxId);
 };
 
-type SessionMessage =
+// Every message names the account whose sessions it is about (its drawer, `accountPartition`), and a tab drawn for another
+// account ignores it: a tab still on one account while another tab already moved the browser to the next would otherwise
+// store the next account's session in its own drawer, and present it as itself.
+type SessionMessage = { readonly account?: string | null } & (
     | { readonly kind: `clear` }
     | { readonly kind: `invalidate`; readonly sandboxId: string }
-    | { readonly kind: `write`; readonly sandboxId: string; readonly session: StoredSession };
+    | { readonly kind: `write`; readonly sandboxId: string; readonly session: StoredSession }
+);
+const accountOfMessages = (): string | null => accountPartition() ?? null;
 
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.sandbox-auth`);
 
@@ -149,7 +156,7 @@ const write = (sandboxId: string, session: StoredSession, broadcast = true): voi
     storeValue(storageKey(sandboxId), JSON.stringify(session));
     if (broadcast) {
         // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
-        channel?.postMessage({ kind: `write`, sandboxId, session } satisfies SessionMessage);
+        channel?.postMessage({ kind: `write`, sandboxId, session, account: accountOfMessages() } satisfies SessionMessage);
     }
 };
 
@@ -658,7 +665,7 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
     removeStoredValue(storageKey(sandboxId));
     if (broadcast) {
         // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
-        channel?.postMessage({ kind: `invalidate`, sandboxId } satisfies SessionMessage);
+        channel?.postMessage({ kind: `invalidate`, sandboxId, account: accountOfMessages() } satisfies SessionMessage);
     }
 };
 
@@ -688,12 +695,16 @@ const clearSessions = (broadcast = true): void => {
     }
     if (broadcast) {
         // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
-        channel?.postMessage({ kind: `clear` } satisfies SessionMessage);
+        channel?.postMessage({ kind: `clear`, account: accountOfMessages() } satisfies SessionMessage);
     }
 };
 
 if (channel !== undefined) {
     channel.addEventListener(`message`, (event: MessageEvent<SessionMessage>) => {
+        // A tab from before messages named their account says nothing about whose; it is taken as this tab's, as it was.
+        if (event.data.account !== undefined && event.data.account !== accountOfMessages()) {
+            return;
+        }
         if (event.data.kind === `clear`) {
             clearSessions(false);
         } else if (event.data.kind === `invalidate`) {

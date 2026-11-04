@@ -445,6 +445,9 @@ export interface AccountAsk {
     path: string;
     // JSON, on a POST.
     body?: string;
+    // The account id the window is drawn for, on a call that changes something: the platform refuses it once the
+    // session is someone else's (ACCOUNT_HEADER), and the app refuses anything that is not an account id.
+    account?: string;
 }
 export interface AccountAnswer {
     status: number;

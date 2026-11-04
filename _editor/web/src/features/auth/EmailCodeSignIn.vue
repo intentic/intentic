@@ -10,6 +10,8 @@ import { useEmailCode } from "./useEmailCode";
 const props = defineProps<{
     // The invite's address: shown, never editable, since the platform accepts the invite for no other.
     readonly lockedEmail?: string | undefined;
+    // An account being added beside the one signed in (Login.vue's add mode).
+    readonly adding?: boolean | undefined;
     // The desktop app's webview or the iOS shell, where the mail's link opens the system browser rather than this
     // window: the code is typed here, and the copy says so.
     readonly inApp?: boolean;
@@ -40,7 +42,11 @@ const {
     verify,
     typeCode,
     changeAddress,
-} = useEmailCode({ lockedEmail: toRef(props, `lockedEmail`), onSignedIn: () => emit(`signedIn`) });
+} = useEmailCode({
+    lockedEmail: toRef(props, `lockedEmail`),
+    adding: computed(() => props.adding === true),
+    onSignedIn: () => emit(`signedIn`),
+});
 
 const addressId = useId();
 const codeId = useId();
