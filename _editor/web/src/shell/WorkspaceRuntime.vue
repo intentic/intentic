@@ -12,6 +12,7 @@ import { startDraftingReceipts } from "../features/workspace/changes/commit/draf
 import { reportAway, reportIdle, reportSessionId, reportView } from "../workbench/presence/usePresence";
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
 import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
+import { useSandbox } from "../client/sandbox/useSandbox";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import { startAutoUpdateWatch } from "../features/sandbox/overview/version/autoUpdateWatch";
 import { startBrowserTab } from "./browser-tab/browserTab";
@@ -69,11 +70,18 @@ watch(awayFromWindow, (away) => reportAway(away), { immediate: true });
 // The one fact about the owner that only the browser holds: which clock they are on. Offered as soon as a sandbox is
 // attached rather than from the settings screen, because the schedule that gets this wrong is usually created before
 // anybody opens settings. Take-if-empty at the daemon, so a second window or a second member changes nothing.
-onMounted(() => {
-    if (fullWindow) {
-        void offerTimezone();
-    }
-});
+// Each sandbox as it becomes reachable, not once at load: a sandbox created or switched to later in the session, or
+// one still booting when the editor opened, would otherwise never hear it.
+const { activeSandboxId, reachable } = useSandbox();
+watch(
+    () => [activeSandboxId.value, reachable.value] as const,
+    ([sandboxId, up]) => {
+        if (fullWindow && up) {
+            void offerTimezone(sandboxId ?? ``);
+        }
+    },
+    { immediate: true },
+);
 
 // One long-lived stream keeps `reachable` live for the session, detecting a killed sandbox from anywhere.
 onMounted(() => liveness.start());

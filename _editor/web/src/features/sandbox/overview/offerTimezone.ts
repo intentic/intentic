@@ -11,19 +11,25 @@ import { rpcKey } from "../../../lib/queryKeys";
 // workspace cannot move its chores onto its own clock, and a laptop carried to another country cannot either. Changing
 // a zone already chosen is a deliberate edit on the settings screen.
 
-let offered = false;
+// Per sandbox, and only once one has ANSWERED: the editor outlives any one sandbox (a new one created from Home, a
+// switch in the sidebar), and a sandbox still booting refuses the first call. A latch set at the first attempt left
+// every sandbox but the one open at load, and any that was not up yet, on UTC with a blank clock.
+const answered = new Set<string>();
+const pending = new Set<string>();
 
 /**
- * Tells the sandbox which clock this browser is on, once per app session. Silent on failure: a workspace whose zone
- * could not be set still works, it just reads its schedules in UTC and says so on every screen that shows one.
+ * Tells a sandbox which clock this browser is on, once per sandbox per app session. Silent on failure: a workspace
+ * whose zone could not be set still works, it just reads its schedules in UTC, and the next time it is reachable the
+ * offer goes again.
  */
-export const offerTimezone = async (): Promise<void> => {
-    if (offered) {
+export const offerTimezone = async (sandboxKey: string): Promise<void> => {
+    if (answered.has(sandboxKey) || pending.has(sandboxKey)) {
         return;
     }
-    offered = true;
+    pending.add(sandboxKey);
     try {
         const state = await sandboxRpc.settings.adoptTimezone({ timezone: localZone() });
+        answered.add(sandboxKey);
         // Only when this call is what set it: an offer the sandbox declined changed nothing, and invalidating then
         // would refetch every settings screen in every window for no new fact.
         if (state.adopted) {
@@ -31,11 +37,14 @@ export const offerTimezone = async (): Promise<void> => {
         }
     } catch {
         // A daemon too old to know this route, or one not reachable yet. Neither is worth a notice: the zone is
-        // visible wherever it matters, and the next app load offers again.
+        // visible wherever it matters, and the next time this sandbox comes up the offer goes again.
+    } finally {
+        pending.delete(sandboxKey);
     }
 };
 
-/** Test seam: the once-per-session latch is module state, which a second test would otherwise inherit. */
+/** Test seam: the per-sandbox latch is module state, which a second test would otherwise inherit. */
 export const resetTimezoneOffer = (): void => {
-    offered = false;
+    answered.clear();
+    pending.clear();
 };

@@ -15,7 +15,9 @@ const t = useT();
 
 const { settings, patch, refusal } = useSandboxSettings();
 
-const ZONE_OPTIONS = Intl.supportedValuesOf(`timeZone`);
+// UTC first and always: it is what an unset sandbox runs on, and ICU's list leaves it out (it names places, and UTC is
+// none), so without it the select had no option matching its own value and drew blank.
+const ZONE_OPTIONS = [UTC, ...Intl.supportedValuesOf(`timeZone`).filter((zone) => zone !== UTC)];
 
 // Empty is not a zone, it is an unanswered question, and the honest thing to show is the UTC that will actually be
 // used rather than a blank that reads as "no opinion, therefore fine".
