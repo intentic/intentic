@@ -32,7 +32,11 @@ test("names a contract the aggregate misses, and writes it back in name order", 
             `import { localModelsContract } from "./contracts/local-models.contract.js";`,
             `import { usageContract } from "./contracts/usage.contract.js";`,
             ``,
-            `export const sandboxContract = {`,
+            `export const sandboxContract: {`,
+            `    agents: typeof agentsContract;`,
+            `    localModels: typeof localModelsContract;`,
+            `    usage: typeof usageContract;`,
+            `} = {`,
             `    agents: agentsContract,`,
             `    localModels: localModelsContract,`,
             `    usage: usageContract,`,
@@ -41,4 +45,44 @@ test("names a contract the aggregate misses, and writes it back in name order", 
         ].join("\n"),
     );
     assert.deepEqual(departures(written, stems), []);
+});
+
+test("updates the annotation and value together when a typed aggregate adds and removes contracts", () => {
+    const text = [
+        `import { usageContract } from "./contracts/usage.contract.js";`,
+        ``,
+        `export const sandboxContract: {`,
+        `    usage: typeof usageContract;`,
+        `} = {`,
+        `    usage: usageContract,`,
+        `};`,
+        ``,
+        `export const untouched = true;`,
+        ``,
+    ].join("\n");
+    const stems = ["agents"];
+    assert.deepEqual(departures(text, stems), [
+        "missing  agents: agentsContract",
+        "extra    usage: usageContract",
+        "missing  agentsContract agents",
+        "extra    usageContract usage",
+    ]);
+    const written = rewritten(text, stems);
+    assert.equal(
+        written,
+        [
+            `import { agentsContract } from "./contracts/agents.contract.js";`,
+            ``,
+            `export const sandboxContract: {`,
+            `    agents: typeof agentsContract;`,
+            `} = {`,
+            `    agents: agentsContract,`,
+            `};`,
+            ``,
+            `export const untouched = true;`,
+            ``,
+        ].join("\n"),
+    );
+    assert.deepEqual(departures(written, stems), []);
+    assert.equal(rewritten(written, stems), written);
 });

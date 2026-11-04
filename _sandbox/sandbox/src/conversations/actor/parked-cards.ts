@@ -209,7 +209,7 @@ export interface NightAnswers {
 }
 
 // Who the card log names as having answered a card night hours settled.
-export const NIGHT_HOURS = "night hours";
+const NIGHT_HOURS = "night hours";
 
 // How many recently raised cards are remembered as answered the moment they were raised: enough to outlast the push that
 // announces a card a microtask after its frame, never a list that grows with the sandbox's life.
@@ -226,7 +226,7 @@ export interface NightOnCards {
 const NOTHING_TO_STOP = (): void => undefined;
 
 /** The registry's side of night hours; with no answers given, nothing is ever answered and nothing is watched. */
-export const nightOnCards = (night: NightAnswers | undefined): NightOnCards => {
+const nightOnCards = (night: NightAnswers | undefined): NightOnCards => {
     // Newest last, so the oldest is the first to go.
     const raised = new Set<string>();
     return {
@@ -258,7 +258,7 @@ export const nightOnCards = (night: NightAnswers | undefined): NightOnCards => {
 };
 
 /** A person's reply never carries night hours' mark, whatever the request said: only the registry's own answer does. */
-export const asPersons = (reply: AgentReply): AgentReply => {
+const asPersons = (reply: AgentReply): AgentReply => {
     if ((reply.kind !== "question" && reply.kind !== "plan") || reply.night === undefined) {
         return reply;
     }

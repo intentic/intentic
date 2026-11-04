@@ -63,7 +63,7 @@ export const nightReply = (requestId: string, card: NightCard, night: NightNow):
 const RECHECK_MS = 60_000;
 
 /** The card registry's night answers, read off the clock at each ask. */
-export const nightAnswers = (clock: NightClock): NightAnswers => ({
+const nightAnswers = (clock: NightClock): NightAnswers => ({
     answer: (requestId, card) => {
         const night = clock.now();
         return night === undefined ? undefined : nightReply(requestId, card, night);

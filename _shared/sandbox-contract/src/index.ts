@@ -45,8 +45,8 @@ import { secretsContract } from "./contracts/secrets.contract.js";
 import { servicesContract } from "./contracts/services.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
-import { sharingContract } from "./contracts/sharing.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
+import { sharingContract } from "./contracts/sharing.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
@@ -60,7 +60,59 @@ export { HISTORY_ROOT, HOST_STATE_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@inten
 
 // The aggregated contract; implemented server-side by per-domain route factories, consumed by the browser's typed oRPC
 // client. Mounted at the sandbox root, alongside plain Hono routes like /health and /workspace/raw.
-export const sandboxContract = {
+export const sandboxContract: {
+    accessProfiles: typeof accessProfilesContract;
+    accounts: typeof accountsContract;
+    activity: typeof activityContract;
+    agent: typeof agentContract;
+    agents: typeof agentsContract;
+    approvals: typeof approvalsContract;
+    areas: typeof areasContract;
+    audit: typeof auditContract;
+    automations: typeof automationsContract;
+    capabilities: typeof capabilitiesContract;
+    chores: typeof choresContract;
+    ci: typeof ciContract;
+    compliance: typeof complianceContract;
+    diff: typeof diffContract;
+    endpoints: typeof endpointsContract;
+    exit: typeof exitContract;
+    extensions: typeof extensionsContract;
+    git: typeof gitContract;
+    history: typeof historyContract;
+    intentic: typeof intenticContract;
+    inventory: typeof inventoryContract;
+    issues: typeof issuesContract;
+    logs: typeof logsContract;
+    loops: typeof loopsContract;
+    needs: typeof needsContract;
+    netdisk: typeof netdiskContract;
+    offload: typeof offloadContract;
+    org: typeof orgContract;
+    pages: typeof pagesContract;
+    panels: typeof panelsContract;
+    personas: typeof personasContract;
+    ports: typeof portsContract;
+    privacy: typeof privacyContract;
+    providers: typeof providersContract;
+    public: typeof publicContract;
+    push: typeof pushContract;
+    runs: typeof runsContract;
+    safety: typeof safetyContract;
+    secrets: typeof secretsContract;
+    services: typeof servicesContract;
+    sessions: typeof sessionsContract;
+    settings: typeof settingsContract;
+    share: typeof shareContract;
+    sharing: typeof sharingContract;
+    skills: typeof skillsContract;
+    system: typeof systemContract;
+    translator: typeof translatorContract;
+    usage: typeof usageContract;
+    vpn: typeof vpnContract;
+    workflows: typeof workflowsContract;
+    workspace: typeof workspaceContract;
+} = {
     accessProfiles: accessProfilesContract,
     accounts: accountsContract,
     activity: activityContract,
@@ -103,8 +155,8 @@ export const sandboxContract = {
     services: servicesContract,
     sessions: sessionsContract,
     settings: settingsContract,
-    sharing: sharingContract,
     share: shareContract,
+    sharing: sharingContract,
     skills: skillsContract,
     system: systemContract,
     translator: translatorContract,
