@@ -6,7 +6,9 @@ import type { RunLine } from "./runLine";
 // A stage or commit run, in the press bar's one reading line (runLine.ts decides it): a flex item of the bar that grows
 // into the line's room and is never taller than a press. `pressed` is the panel saying its own press is spinning for this
 // run: the press already shows the wait, so the line drops its spinner and starts on the field's edge, words only. One
-// spinner per wait, never two side by side.
+// spinner per wait, never two side by side. It drops its width floor too: the spinning press is what says a commit is
+// under way, so the words are context that truncates beside the buttons (full on the hover) rather than wrapping them
+// onto a row of their own in a sidebar-wide box.
 const { line, pressed = false } = defineProps<{ line: RunLine; pressed?: boolean }>();
 
 // The bar's quiet icon press, the same size as the panel's other icon buttons, so Stop never reads as a second commit.
@@ -14,10 +16,11 @@ const STOP_BUTTON = ui.iconButton(`shrink-0`);
 </script>
 
 <template>
-    <span class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted" aria-live="polite">
+    <span class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-muted" :class="{ 'basis-28': !pressed }" aria-live="polite">
         <!-- The panels' leading-glyph slot (ReviewPanel's LEAD), so a stage run's spinner shares the rows' chevron column. -->
         <span v-if="!pressed" class="flex w-2.5 shrink-0 items-center justify-center"><Icon name="spinner" spin /></span>
-        <span class="min-w-0 truncate whitespace-nowrap" v-tooltip.right="line.tip">{{ line.words }}</span>
+        <span v-if="line.tip !== undefined" class="min-w-0 truncate whitespace-nowrap" v-tooltip.right="line.tip">{{ line.words }}</span>
+        <span v-else class="min-w-0 truncate whitespace-nowrap" v-tooltip.right.overflow="line.words">{{ line.words }}</span>
         <span v-if="line.others > 0" class="shrink-0 tabular-nums text-subtle">{{
             t(`workspace.indexRunPrompt.andMore`, { count: line.others })
         }}</span>

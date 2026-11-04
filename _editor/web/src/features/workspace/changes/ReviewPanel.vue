@@ -1078,7 +1078,13 @@ const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailu
                         <span v-else-if="bar.kind === `conflicts`" :class="BAR_LINE" class="text-danger">
                             {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                         </span>
-                        <span v-else-if="bar.kind === `committing`" :class="BAR_LINE" class="text-muted">{{ bar.words }}</span>
+                        <!-- The press spins for it, so its words are context: no floor, truncated beside the buttons, full on the hover. -->
+                        <span
+                            v-else-if="bar.kind === `committing`"
+                            class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted"
+                            v-tooltip.right.overflow="bar.words"
+                            >{{ bar.words }}</span
+                        >
                         <span v-else-if="bar.kind === `refused`" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="bar.reason">
                             {{ bar.reason }}
                         </span>
