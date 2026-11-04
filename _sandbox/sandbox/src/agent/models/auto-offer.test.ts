@@ -140,3 +140,41 @@ test("a catalog that will not load leaves its provider out rather than failing t
         "auto model: catalog unreadable, leaving this provider out of the offer",
     );
 });
+
+// A member held to some AI accounts (Access ▸ People): one list, as credential-reach.ts builds it for one person.
+const heldTo = (...keys: string[]) => ({ kind: "some" as const, lists: [new Set(keys)], who: ["ann@example.com"] });
+
+test("a member held to some accounts is offered those alone, so the judge never names one their turn is refused on", async () => {
+    accountLists.mockReturnValue({ claude: [account("work", usage([session(38, IN_TWO_HOURS)])), account("owner-max")] });
+    const offer = await autoOffer(services(), NOW, heldTo("claude:work"));
+    expect(offer.accounts["claude"]?.map((entry) => entry.id)).toEqual(["work"]);
+    expect(offer.models.map((model) => model.model)).toEqual([OPUS.id, HAIKU.id]);
+});
+
+test("a provider none of whose accounts the member may spend is left out whole", async () => {
+    accountLists.mockReturnValue({ claude: [account("owner-max")] });
+    const offer = await autoOffer(services(), NOW, heldTo("codex"));
+    expect(offer.models).toEqual([]);
+    expect(offer.accounts["claude"]).toBeUndefined();
+});
+
+test("the member's own accounts being spent benches the model for them, whatever room another account has", async () => {
+    accountLists.mockReturnValue({ claude: [account("work", usage([session(100)])), account("owner-max")] });
+    refused = [claudeLimitRefusal({ account: "work", at: NOW - 60_000 })];
+    expect((await autoOffer(services(), NOW, heldTo("claude:work"))).models).toEqual([]);
+    // The owner, held to nothing, still has the other account's room.
+    expect((await autoOffer(services(), NOW)).models.map((model) => model.model)).toEqual([OPUS.id, HAIKU.id]);
+});
+
+test("a provider granted whole hands over every account, and one with none on file is theirs only when granted whole", async () => {
+    accountLists.mockReturnValue({ claude: [account("work"), account("owner-max")] });
+    expect((await autoOffer(services(), NOW, heldTo("claude"))).accounts["claude"]?.map((entry) => entry.id)).toEqual(["work", "owner-max"]);
+    accountLists.mockReturnValue({ claude: [] });
+    expect((await autoOffer(services(), NOW, heldTo("claude:work"))).models).toEqual([]);
+});
+
+test("a reach that cannot be read offers nothing rather than every account", async () => {
+    accountLists.mockReturnValue({ claude: [account("work")] });
+    const offer = await autoOffer(services(), NOW, { kind: "some", lists: [], who: ["ann@example.com"], unreadable: "roster unreadable" });
+    expect(offer.models).toEqual([]);
+});

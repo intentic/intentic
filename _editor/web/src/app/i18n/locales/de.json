@@ -3486,7 +3486,8 @@
             "ranStandardBecause": "Der letzte Zug lief mit Standardgeschwindigkeit ({reason}).",
             "turnKeepsItsModel": "Dieser Zug endet auf dem Modell, mit dem er begonnen hat. Was Sie hier wählen, gilt ab Ihrer nächsten Nachricht.",
             "turnKeepsModel": "Dieser Zug endet auf {model}. Was Sie hier wählen, gilt ab Ihrer nächsten Nachricht.",
-            "autoNeedsModel": "Braucht verbundene Modelle zur Auswahl"
+            "autoNeedsModel": "Braucht verbundene Modelle zur Auswahl",
+            "autoNewChatOnly": "Wählt das Modell anhand der ersten Nachricht eines neuen Chats. Starten Sie einen neuen Agenten, um es zu nutzen"
         },
         "chatNotes": {
             "addedContext": "Beigefügter Kontext",

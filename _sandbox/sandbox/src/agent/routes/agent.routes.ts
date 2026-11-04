@@ -366,7 +366,7 @@ export const createAgentRoutes = (services: Services) => {
         // composer waits on this before the first turn goes out, so a failure here must cost that turn nothing but a
         // sentence. Read within the asker's own fence, so a persona it lands on is one they may actually send through.
         routeChat: i.routeChat.handler(({ input, context, signal }) =>
-            routeChat(services, input, context.identity?.areas, signal, assistantsOf(context.identity)),
+            routeChat(services, input, context.identity?.areas, signal, assistantsOf(context.identity), context.identity?.email),
         ),
     };
 };

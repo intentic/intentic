@@ -5,6 +5,7 @@ import type { ModelOffer, OfferedAccount, OfferedModel, OfferedWindow } from "@i
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { fleetCapacity, gatingWindows, type RefusalsOnFile, type ServiceFacts, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../composition.js";
+import { ACCOUNTS_ALL, type AccountReach, accountReachAllows } from "../../secrets/credential-reach.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { providerReadiness } from "../providers/provider-registry.js";
 
@@ -17,6 +18,11 @@ import { providerReadiness } from "../providers/provider-registry.js";
 // Endpoint providers and the free trial are deliberately absent. The premise of this feature is choosing against a
 // readable allowance, and neither publishes one; an endpoint's cost is invisible here, and the trial is a disclosed
 // bargain its owner opts into rather than one a router moves them to.
+//
+// Read as the person asking may spend (`reach`, Access ▸ People, a person's AI accounts): a member held to some accounts
+// is offered those alone, by the rule their turn is then held to (agent/run/decide/account-reach.ts). Offered the
+// sandbox's whole fleet, the judge picked an account their turn was refused on, so Auto failed exactly the people it is
+// most useful to: the ones who cannot see which accounts are theirs.
 
 // The pools the judge is shown: every one gating a model, less any whose window closed since it was read (a lapsed pool
 // reads at the floor, not a measurement), so it is never told an allowance is fresher than it is.
@@ -77,7 +83,18 @@ const factsOf = async (services: Services, provider: NativeProvider): Promise<re
     }
 };
 
-export const autoOffer = async (services: Services, now: number = Date.now()): Promise<ModelOffer> => {
+// The accounts of one provider the asker may spend. A provider granted whole hands over every account; otherwise only the
+// accounts their lists name, and a provider with no account on file is theirs only when granted whole, which is how the
+// turn's own reach judges one (account-reach.ts).
+const withinReach = (reach: AccountReach, provider: NativeProvider, facts: readonly ServiceFacts[]): readonly ServiceFacts[] | undefined => {
+    if (accountReachAllows(reach, provider, undefined)) {
+        return facts;
+    }
+    const allowed = facts.filter((entry) => accountReachAllows(reach, provider, entry.account));
+    return allowed.length === 0 ? undefined : allowed;
+};
+
+export const autoOffer = async (services: Services, now: number = Date.now(), reach: AccountReach = ACCOUNTS_ALL): Promise<ModelOffer> => {
     const [ready, refusals] = await Promise.all([
         providerReadiness(services),
         services.providerRefusals.onFile().catch((cause: unknown) => {
@@ -88,7 +105,11 @@ export const autoOffer = async (services: Services, now: number = Date.now()): P
     const providers = (Object.keys(ready) as NativeProvider[]).filter((provider) => ready[provider]);
     const gathered = await Promise.all(
         providers.map(async (provider) => {
-            const [facts, catalog] = await Promise.all([factsOf(services, provider), catalogOf(services, provider)]);
+            const [held, catalog] = await Promise.all([factsOf(services, provider), catalogOf(services, provider)]);
+            const facts = withinReach(reach, provider, held);
+            if (facts === undefined) {
+                return { provider, offered: [], models: [] };
+            }
             const models = catalog.filter((model) => runnable(facts, model, refusals[provider] ?? [], now));
             return { provider, offered: offeredOf(facts), models };
         }),

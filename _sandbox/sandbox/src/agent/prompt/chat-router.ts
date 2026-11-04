@@ -340,17 +340,20 @@ const halves = (
 
 // `held` is the asker's areas, undefined for an unfenced one: the persona half picks only from personas that person may
 // actually wear, since routing onto one they cannot use would open the chat on a persona every message is refused by.
+// `asker` is the signed-in person's email, undefined for the owner's own tools: the model half picks only from the AI
+// accounts that person may spend (Access ▸ People), since their turn is held to exactly those (account-reach.ts).
 export const routeChat = async (
     services: Services,
     ask: ChatRouteAsk,
     held: readonly string[] | undefined,
     signal?: AbortSignal,
     assistants?: readonly string[],
+    asker?: string,
 ): Promise<ChatRoute> => {
     // Read together, and only what this ask is paying for: an offer costs live allowance readings, which a chat that
     // only wants a persona must not be charged for.
     const [offer, personas, settings] = await Promise.all([
-        ask.model ? autoOffer(services) : undefined,
+        ask.model ? services.accountReach(undefined, asker === undefined ? [] : [asker]).then((reach) => autoOffer(services, undefined, reach)) : undefined,
         ask.persona ? reachablePersonas(services, held, assistants) : [],
         services.sandboxSettings.get(),
     ]);

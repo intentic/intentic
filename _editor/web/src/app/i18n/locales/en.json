@@ -3486,7 +3486,8 @@
             "ranStandardBecause": "The last turn ran at standard speed ({reason}).",
             "turnKeepsItsModel": "This turn finishes on the model it started on. What you pick here applies from your next message.",
             "turnKeepsModel": "This turn finishes on {model}. What you pick here applies from your next message.",
-            "autoNeedsModel": "Needs a connected model to choose from"
+            "autoNeedsModel": "Needs a connected model to choose from",
+            "autoNewChatOnly": "Picks a model from a new chat's first message. Start a new agent to use it"
         },
         "chatNotes": {
             "addedContext": "Added context",

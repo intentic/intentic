@@ -270,19 +270,34 @@ it(`offers Auto on a chat with nothing sent, gated by no setting of the sandbox'
     expect(leadLabels()).toEqual([`Auto`]);
 });
 
-// chatRoute.ts reads the OPENING message and never asks again, so on a chat already under way the row would arm a
-// question nothing will answer and disarm itself at the next send.
-it(`withdraws Auto once the chat has a turn behind it`, () => {
+// SAFETY: the stub keeps the attrs ChatModelPicker bound, and this one is the function its `unpickable` declares.
+const refusal = (): ((entry: { key: string; provider: AgentProvider }) => string | false) =>
+    pickerProps.value[`unpickable`] as (entry: { key: string; provider: AgentProvider }) => string | false;
+const AUTO_ROW = { key: `auto:`, provider: `claude` as const };
+const NEW_CHAT_ONLY = `Picks a model from a new chat's first message. Start a new agent to use it`;
+
+// chatRoute.ts reads the OPENING message and never asks again, so on a chat already under way an armed row would ask a
+// question nothing will answer and disarm itself at the next send. Listed and refused, saying where Auto is: withdrawn,
+// a member who searched "auto" on a chat under way read "no model matches" as Auto being withheld from them.
+it(`lists Auto on a chat with a turn behind it, refused with the way to it`, () => {
     mount(CEILING, { sent: 1 });
 
-    expect(leadLabels()).toEqual([]);
+    expect(leadLabels()).toEqual([`Auto`]);
+    expect(refusal()(AUTO_ROW)).toBe(NEW_CHAT_ONLY);
 });
 
 // A first message booked for later went to the sandbox with its model: a reading armed now would read nothing.
-it(`withdraws Auto from a chat whose first message already waits in its queue`, () => {
+it(`refuses Auto on a chat whose first message already waits in its queue`, () => {
     mount(CEILING, { open: false });
 
-    expect(leadLabels()).toEqual([]);
+    expect(leadLabels()).toEqual([`Auto`]);
+    expect(refusal()(AUTO_ROW)).toBe(NEW_CHAT_ONLY);
+});
+
+it(`leaves Auto pickable on a chat with nothing sent`, () => {
+    mount(CEILING);
+
+    expect(refusal()(AUTO_ROW)).toBe(false);
 });
 
 /* A PICK MADE WHILE A TURN IS LIVE IS FOR THE NEXT ONE, AND THE PANEL SAYS SO BEFORE THE PRESS. */

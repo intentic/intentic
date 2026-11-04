@@ -3486,7 +3486,8 @@
             "ranStandardBecause": "Ostatnia tura poszła w standardowym tempie ({reason}).",
             "turnKeepsItsModel": "Ta tura zakończy się na modelu, na którym się zaczęła. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
             "turnKeepsModel": "Ta tura zakończy się na {model}. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
-            "autoNeedsModel": "Potrzebuje podłączonych modeli do wyboru"
+            "autoNeedsModel": "Potrzebuje podłączonych modeli do wyboru",
+            "autoNewChatOnly": "Wybiera model na podstawie pierwszej wiadomości nowego czatu. Uruchom nowego agenta, aby go użyć"
         },
         "chatNotes": {
             "addedContext": "Dodany kontekst",

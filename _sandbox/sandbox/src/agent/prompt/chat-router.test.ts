@@ -5,6 +5,7 @@ import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import type { AccountReach } from "../../secrets/credential-reach.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionService } from "../../workload/agent-execution.js";
 import { rootExecutionService } from "../../workload/agent-execution.testing.js";
@@ -42,7 +43,17 @@ jest.mock("../models/role-model.js", () => ({
 }));
 
 const offer = jest.fn<() => ModelOffer>();
-jest.mock("../models/auto-offer.js", () => ({ autoOffer: async () => offer() }));
+// The reach the offer was read within, as the route handed it over: the asker's AI accounts.
+const offeredWithin = jest.fn<(reach: AccountReach | undefined) => void>();
+jest.mock("../models/auto-offer.js", () => ({
+    autoOffer: async (_services: Services, _now?: number, reach?: AccountReach) => {
+        offeredWithin(reach);
+        return offer();
+    },
+}));
+// Who was asked about: the people whose AI accounts the offer is held to.
+const reachAsked = jest.fn<(people: readonly string[]) => void>();
+const MEMBER_REACH: AccountReach = { kind: "some", lists: [new Set(["claude:work"])], who: ["ann@example.com"] };
 
 const { candidateLine, routeAnswer, routeChat, routerPrompt } = await import("./chat-router.js");
 
@@ -91,6 +102,10 @@ const services = (over: { guidance?: string; cards?: readonly Persona[]; executi
                 ] as Awaited<ReturnType<Services["capabilities"]["list"]>>,
         }),
         logger: unstubbed<Services["logger"]>("logger", { warn } as Partial<Services["logger"]>),
+        accountReach: async (_conversation, people = []) => {
+            reachAsked(people);
+            return people.length === 0 ? { kind: "all" } : MEMBER_REACH;
+        },
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => ({ autoModelGuidance: over.guidance ?? "" }) as Awaited<ReturnType<Services["sandboxSettings"]["get"]>>,
         }),
@@ -109,6 +124,21 @@ beforeEach(() => {
     modelSet.mockReturnValue(true);
     offer.mockReset();
     offer.mockReturnValue(OFFER);
+    offeredWithin.mockReset();
+    reachAsked.mockReset();
+});
+
+test("the model half is offered within the asker's own AI accounts, not the whole sandbox's", async () => {
+    ask.mockResolvedValue("model: claude:claude-opus-5");
+    await routeChat(services(), MODEL_ONLY, undefined, undefined, undefined, "ann@example.com");
+    expect(reachAsked).toHaveBeenCalledWith(["ann@example.com"]);
+    expect(offeredWithin).toHaveBeenCalledWith(MEMBER_REACH);
+});
+
+test("a chat that only wants a persona reads nobody's AI accounts", async () => {
+    ask.mockResolvedValue("persona: backend");
+    await routeChat(services(), PERSONA_ONLY, undefined, undefined, undefined, "ann@example.com");
+    expect(reachAsked).not.toHaveBeenCalled();
 });
 
 test("a persona is one line: its own sentence, then what it carries, where it starts, and the sites it speaks through", () => {

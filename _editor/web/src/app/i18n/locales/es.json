@@ -3486,7 +3486,8 @@
             "ranStandardBecause": "El último turno se ejecutó a velocidad estándar ({reason}).",
             "turnKeepsItsModel": "Este turno termina con el modelo con el que empezó. Lo que elijas aquí se aplica desde tu próximo mensaje.",
             "turnKeepsModel": "Este turno termina con {model}. Lo que elijas aquí se aplica desde tu próximo mensaje.",
-            "autoNeedsModel": "Necesita modelos conectados entre los que elegir"
+            "autoNeedsModel": "Necesita modelos conectados entre los que elegir",
+            "autoNewChatOnly": "Elige un modelo a partir del primer mensaje de un chat nuevo. Inicia un agente nuevo para usarlo"
         },
         "chatNotes": {
             "addedContext": "Contexto añadido",

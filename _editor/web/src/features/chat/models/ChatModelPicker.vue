@@ -34,12 +34,15 @@ const { autoOpen } = conversation.selection;
 // Gated by no setting: which model a chat runs on is a per-chat question, and a mode that only appears once you have
 // found a switch on a settings page is a mode nobody finds. Which model does the reading IS a setting (the
 // New chat routing job under Models), and that is the only part a sandbox configures.
-// Offered exactly where the reading can happen, which is chatRoute.ts's own rule: a chat of this sandbox's with
-// nothing sent yet. A chat already under way has a model, and it is running — an Auto row there would disarm itself at
-// the next send, which is a control that lies. So would one on a chat whose first message is already booked or held:
-// that message went to the sandbox with its model, and no reading reaches it (autoOpen).
-const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined && autoOpen.value);
-const leadRows = computed(() => (autoOffered.value ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
+// Pickable exactly where the reading can happen, which is chatRoute.ts's own rule: a chat of this sandbox's with
+// nothing sent yet. A chat already under way has a model, and it is running — an armed Auto there would disarm itself
+// at the next send, which is a control that lies. So would one on a chat whose first message is already booked or
+// held: that message went to the sandbox with its model, and no reading reaches it (autoOpen).
+// Listed there all the same, refused with the way to it (unpickable below): withdrawn, the row simply vanished, and a
+// member who opened the picker on a chat under way and searched "auto" was told no such model exists, which read as
+// Auto being withheld from them (2026-11-04).
+const autoOpenHere = computed(() => messages.value.length === 0 && autoOpen.value);
+const leadRows = computed(() => (box.value === undefined ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
 // Whether the account rows draw for this provider, and a refusal no row carries; needed before the footer renders its own padding.
@@ -70,9 +73,13 @@ const accountsShown = computed(() => listed.value && accountsHere.value);
 
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session). Refused with its reason,
 // said where the row's description would be: a greyed provider with no reason read as one that was not connected.
+// Auto on a chat past its first message, since the reading only ever happens there, said with the way to it.
 // Auto, likewise, with nothing connected here: it picks among the models this sandbox can run, and with none of them a
 // press on it armed a mode that changed nothing on screen and could never run (2026-10-25).
 const unpickable = (entry: PickerEntry): string | false => {
+    if (entry.key === AUTO_KEY && !autoOpenHere.value) {
+        return t(`chat.chatModelPicker.autoNewChatOnly`);
+    }
     if (entry.key === AUTO_KEY && accessKnown.value && !anyProviderReady()) {
         return t(`chat.chatModelPicker.autoNeedsModel`);
     }
