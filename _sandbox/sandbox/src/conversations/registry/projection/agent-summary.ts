@@ -1,6 +1,7 @@
 import type { AgentChecklist, AgentReaction, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { keepWarmCap } from "@intentic/sandbox-contract/schemas/keep-warm";
 import { opt } from "../../../opt.js";
+import { sealHeld } from "../../../auth/seal-scope.js";
 import { queueView } from "../../actor/conversation-queue.js";
 import { awaitingWake, type ConversationState, type TurnUsage, nextPromptDayAt } from "../../actor/conversation-state.js";
 import type { PersistedAgent, Postures, Social, Totals } from "../agents-store.js";
@@ -83,7 +84,7 @@ export const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queu
 
 // What the card says the conversation is: where it works, where it came from and as whom, its name, who answers for it
 // and what people left on it, and the settings its last turn ran under.
-export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending }: PersistedAgent) => ({
+export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending, seal }: PersistedAgent) => ({
     provider: profile.provider,
     harness: profile.harness,
     // `branches`: what it was started from and lands onto instead of the main line (land/branch-repos.ts).
@@ -101,6 +102,8 @@ export const describedBy = ({ placement, identity, profile, social, sessionId, a
     ...opt("forkedFrom", identity.forkedFrom),
     ...opt("fresh", identity.fresh),
     ...opt("home", identity.home),
+    // Whole here; every door frames it for its caller (auth/fleet-scope.ts framedSummary), a sealed card for a non-reader.
+    ...opt("seal", seal === undefined ? undefined : sealHeld(seal)),
     ...opt("commits", commits),
     ...opt("freshPending", freshPending),
     ...opt("title", social.title?.text),

@@ -1,4 +1,4 @@
-import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessListed } from "../../auth/fleet-scope.js";
 import { call, getRouter, isProcedure, ORPCError } from "@orpc/server";
 import { GitViewQuerySchema, type GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
 import type { Services } from "../../composition.js";
@@ -18,7 +18,7 @@ export const gitRoutesInViews = (services: Pick<Services, "agents">, build: (vie
         const view = parsed.success ? parsed.data.view : undefined;
         if (view?.agent !== undefined) {
             const entry = services.agents.entry(view.agent);
-            if (entry !== undefined) { refuseUnlessVisible(context.identity, provenanceOf(entry)); }
+            if (entry !== undefined) { refuseUnlessListed(context.identity, provenanceOf(entry)); }
         }
         const key = gitViewKey(view);
         if (key === "" || view === undefined) {

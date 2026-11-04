@@ -1088,6 +1088,10 @@
         "cardDiskUse": {
             "onDisk": "{bytes} on disk",
             "lastScan": "At the last disk scan. Free it from the Disk card."
+        },
+        "sealedCard": {
+            "open": "Open {name}'s private conversation",
+            "reviewDiff": "Review diff"
         }
     },
     "app": {
@@ -4944,6 +4948,66 @@
             "retestNote": "Held again if still off",
             "connect": "Connect another {provider} account",
             "chooseAnother": "Choose another model"
+        },
+        "seal": {
+            "privateConversation": "Private conversation",
+            "shared": "Shared",
+            "private": "Private",
+            "privateOnlyYou": "Private · only you",
+            "privateWith": "Private · you and {name}",
+            "privateWithMany": "Private · you and {count} other | Private · you and {count} others",
+            "who": "Who reads this",
+            "whoReads": "Who reads this: {label}",
+            "sharedHint": "Everyone who can see this part of the workspace",
+            "privateHint": "Only you and the people you add",
+            "removeReader": "Remove {name}",
+            "addPerson": "Add person",
+            "findPerson": "Name or email address",
+            "typeAddress": "Type their whole email address to add someone who isn't listed.",
+            "footnote": "What lands is shared. The conversation isn't. Its subagents and reviews are private too.",
+            "saveFailed": "Couldn't change who reads this.",
+            "open": {
+                "noPasskey": "Opening a conversation without asking needs your passkey, and you haven't added one.",
+                "addPasskey": "Add one under Access ▸ Sign-in",
+                "failed": "Couldn't open it.",
+                "reason": "Reason",
+                "reasonPlaceholder": "Why you need to read it. {name} reads this.",
+                "reasonHint": "{count} characters, {min} to {max}",
+                "for": "For",
+                "readOnlyUntil": "Read-only, until {until}",
+                "isTold": "Is told now",
+                "forGood": "The reason stays on the conversation for good, and nobody can remove it. You can read. You can't write, continue it or land as {name}.",
+                "twoPerson": "A second person with Full access must agree before it opens.",
+                "confirm": "Confirm with passkey"
+            },
+            "openings": {
+                "opened": "{name} opened this without asking · {at}",
+                "pending": "{name} asked to open this without asking; waiting for a second person",
+                "refused": "{name} asked to open this without asking. {by} refused.",
+                "readOnlyUntil": "Read-only until {until}",
+                "readUntil": "Could read it until {until}",
+                "agreedBy": "agreed by {name}",
+                "approve": "Approve",
+                "refuse": "Refuse",
+                "answerFailed": "Couldn't send your answer."
+            },
+            "asks": {
+                "asks": "{name} asks to read this",
+                "day": "Show for a day",
+                "add": "Add {name}",
+                "decline": "Decline",
+                "failed": "Couldn't send your answer."
+            },
+            "gate": {
+                "heading": "{name}'s private conversation",
+                "explain": "Only its readers can read what is said in it. Its work is shared: what it lands belongs to the team.",
+                "ask": "Ask {name} to show you",
+                "asked": "Asked · waiting for {name}",
+                "askFailed": "Couldn't send your ask.",
+                "openWithout": "Open without asking…",
+                "waitingSecond": "Waiting for a second person with Full access",
+                "approveAsk": "{name} asks to open {author}'s conversation without asking."
+            }
         }
     },
     "common": {
@@ -5061,7 +5125,8 @@
                 "collaborator": "Needs agent access",
                 "agentsOff": "Agents off for you",
                 "notShared": "Not shared with you",
-                "org": "Managed by {org}"
+                "org": "Managed by {org}",
+                "sealed": "Private"
             },
             "title": {
                 "owner": "Only the owner can open {place}",
@@ -5072,7 +5137,8 @@
                 "guest": "{place} isn't shared with you",
                 "area": "This folder isn't shared with you",
                 "org": "{org} manages {place}",
-                "aiAccounts": "No AI account is shared with you"
+                "aiAccounts": "No AI account is shared with you",
+                "sealed": "{place} is private"
             },
             "note": {
                 "owner": "You can look around. Only the owner can change things here.",
@@ -5083,12 +5149,16 @@
                 "guest": "This isn't shared with you.",
                 "area": "This folder isn't shared with you.",
                 "org": "{org} manages this. You can look; changes go through your organisation's admin.",
-                "aiAccounts": "You can follow along. Running a model needs an AI account shared with you."
+                "aiAccounts": "You can follow along. Running a model needs an AI account shared with you.",
+                "sealed": "This conversation is private. Only its readers can read or write in it.",
+                "sealedUntil": "You can read this until {until}. Only its readers can write in it.",
+                "sealedUntilBy": "You can read this until {until}. Only {author}'s readers can write in it."
             },
             "line": {
                 "ask": "Ask the owner for access. It opens here as soon as they grant it.",
                 "asked": "You asked the owner for access. It opens here as soon as they grant it.",
-                "org": "Changes here go through your organisation's admin."
+                "org": "Changes here go through your organisation's admin.",
+                "sealed": "Ask its author to show it to you."
             },
             "ask": "Ask for access",
             "asked": "Asked",
@@ -6220,6 +6290,23 @@
             "n1Day": "1 day",
             "n1Week": "1 week",
             "n3Days": "3 days"
+        },
+        "agentCommitAuthor": {
+            "group": "Commit author",
+            "attribution": "Name people in commits",
+            "attributionNote": "Whose name an agent's commits carry: the person it worked for as the author (intentic commits it), in a Co-authored-by line, or nobody. Only ever by the name and address that person set below; pushed commits publish the address.",
+            "asAuthor": "Author",
+            "asCoAuthor": "Co-author",
+            "nobody": "Nobody",
+            "yours": "Your commit name and address",
+            "yoursNote": "Used for the work you do and ask for here, never your sign-in address; until you set one, your commits name nobody. A provider's noreply address keeps yours private.",
+            "name": "Name",
+            "email": "Email address",
+            "forget": "Forget",
+            "suggested": "Your connected git account commits as {name}, {email}.",
+            "useSuggested": "Use these",
+            "couldntSave": "Couldn't save your commit name and address.",
+            "couldntRead": "Couldn't read your commit name and address."
         },
         "agentInstructions": {
             "builtInPromptTo": "Which built-in prompt to read",
@@ -10803,6 +10890,7 @@
             "agentOffload": "runner, remote machine, another computer, offload, builds, busy",
             "agentMainCi": "github actions, ci, pipeline, failing build, broken main, auto fix",
             "agentFinishedWork": "auto land, auto merge, commit, git, pull, sync, archive, version",
+            "agentCommitAuthor": "author, committer, co-author, co-authored-by, git identity, user.name, user.email, email, noreply, attribution",
             "agentChangelog": "release notes, changes file, history",
             "agentTurnBreaks": "usage limit, rate limit, retry, outage, crash, out of memory, restart, error",
             "agentIdleChats": "prompt cache, cache, warm, idle, allowance",
@@ -11185,6 +11273,26 @@
             "reapBelowNote": "Build output goes from every conversation with nothing running, the longest idle first, until there is room again. You are told under 10% and again under 5%.",
             "leanRust": "Lean Rust builds",
             "leanRustNote": "Agents build Rust with line tables only for debug info. Targets take less disk and backtraces keep their file and line, but a debugger sees no local variables. Overrides what a repository's Cargo.toml says about debug info."
+        },
+        "sealHouse": {
+            "title": "Who reads whose conversations",
+            "rule": "House rule",
+            "mode": {
+                "everyone": "Everyone",
+                "chooses": "The author chooses",
+                "private": "Private by default"
+            },
+            "hint": {
+                "everyone": "No new conversation can be made private.",
+                "chooses": "Each author decides, conversation by conversation.",
+                "private": "New ones start private."
+            },
+            "locked": "Your organisation set this, so it can't be changed here.",
+            "whoChanges": "Full access and the owner change this.",
+            "honest": "Private conversations are sealed in the app and from every agent, yours included. Opening one always tells its author.",
+            "ownMachine": "This sandbox runs on your own computer, so a shell on that machine can still read the files on disk.",
+            "count": "{count} conversation is private now. | {count} conversations are private now.",
+            "saveFailed": "Couldn't change who reads whose conversations."
         }
     },
     "settings": {
@@ -11625,6 +11733,12 @@
             "productAnalytics": "telemetry, tracking, usage data, opt out",
             "exportData": "download, backup, gdpr, takeout",
             "deleteAccount": "close account, remove account, delete me"
+        },
+        "conversations": {
+            "title": "Conversations",
+            "startPrivate": "Start my conversations private",
+            "startPrivateHint": "In {sandbox}. A new conversation can still be shared before its first message.",
+            "saveFailed": "Couldn't save that."
         }
     },
     "setup": {

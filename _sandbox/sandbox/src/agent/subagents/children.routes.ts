@@ -1,4 +1,4 @@
-import { conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
+import { turnReader } from "../../auth/scope/turn-reader.js";
 import type { Context } from "hono";
 import { AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
@@ -330,7 +330,7 @@ const createChildrenRoutes = (services: Services) => ({
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
         // The header is the caller's to write: a member reads only the children of a conversation they may read.
-        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
+        const reads = await turnReader(services, c);
         const sessions =
             conversationId === undefined || !reads(conversationId)
                 ? []

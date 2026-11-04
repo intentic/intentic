@@ -20,5 +20,7 @@ describe(`wantOf`, () => {
     it(`asks for nothing a grant could not give`, () => {
         expect(wantOf({ kind: `tier`, floor: `owner` })).toBeUndefined();
         expect(wantOf({ kind: `org`, org: `Acme`, section: `models` })).toBeUndefined();
+        // A seal is lifted by the conversation's author, never by the owner's grant.
+        expect(wantOf({ kind: `sealed`, until: 1, author: `Anna` })).toBeUndefined();
     });
 });

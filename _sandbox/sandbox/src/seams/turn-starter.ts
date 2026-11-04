@@ -1,3 +1,4 @@
+import type { Seal } from "@intentic/sandbox-contract/schemas/seal";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type {
     AgentHarness,
@@ -61,6 +62,9 @@ export type TurnInput = AgentTurn & {
     // Set by POST /agent alone, once it verified the id is the speaker's own home conversation (agent.routes.ts homeTurn);
     // read only by the turn that opens the conversation.
     readonly home?: true;
+    // Set by POST /agent alone, from the house rule and the composer's pill (seal/seal-birth.ts); read only by the turn
+    // that opens the conversation.
+    readonly seal?: Seal;
 };
 
 // A turn as the engine takes it: provider and loop named, by the port it came in through (routeTurn), so

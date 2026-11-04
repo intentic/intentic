@@ -1,4 +1,4 @@
-import { WORKLOAD_ENV, workloadStamp } from "../../seams/workload-stamp.js";
+import { TURN_PROOF_ENV, turnProof, WORKLOAD_ENV, workloadStamp } from "../../seams/workload-stamp.js";
 import { leftoverProcesses, type SweptProcess } from "./leftovers.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 
@@ -19,7 +19,7 @@ const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}
 });
 
 test("the stamp says whose work it is and nothing else: no daemon identity to misread", () => {
-    expect(workloadStamp("conv:with:colons")).toEqual({ [WORKLOAD_ENV]: "conv:with:colons" });
+    expect(workloadStamp("conv:with:colons")).toEqual({ [WORKLOAD_ENV]: "conv:with:colons", [TURN_PROOF_ENV]: turnProof("conv:with:colons") });
     expect(WORKLOAD_ENV).not.toBe("INTENTIC_WORKLOAD");
 });
 

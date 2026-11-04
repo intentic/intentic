@@ -5,6 +5,7 @@ import { unregistered } from "../../../models/agent-status/agentStatus-standing"
 import { useAgents } from "../../../models/fleet/useAgents";
 import { type FleetAgent, windowFinished } from "../../../models/fleet/useAgents-fleet";
 import { agentTranscriptQuery } from "../../../models/conversations/transcript/agentTranscript";
+import { isSealed } from "../../../models/agent-status/sealView";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import type { WarmBand, WarmTask } from "../warmPlan";
@@ -21,12 +22,11 @@ const MAX_CARDS = 40;
 const { lanes } = useAgents();
 const { active } = useChat();
 
+// A card sealed from the reader has no words to warm (the daemon refuses them); its changes are the team's, and warm.
 const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => {
     const band: WarmBand = focused ? `now` : `near`;
-    return [
-        warmQuery(`agent:${agent.id}:transcript`, band, agentTranscriptQuery(agent.id)),
-        warmQuery(`agent:${agent.id}:changes`, band, { queryKey: agentChangesKey(agent.id), queryFn: () => fetchAgentChanges(agent.id) }),
-    ];
+    const changes = warmQuery(`agent:${agent.id}:changes`, band, { queryKey: agentChangesKey(agent.id), queryFn: () => fetchAgentChanges(agent.id) });
+    return isSealed(agent) ? [changes] : [warmQuery(`agent:${agent.id}:transcript`, band, agentTranscriptQuery(agent.id)), changes];
 };
 
 // Rows for a review whose list is already in hand, warmed the beat after it lands. A card with no

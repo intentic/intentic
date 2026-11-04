@@ -42,6 +42,7 @@ import { type AccessProfiles, accessProfilesDocument, fileAccessProfiles } from 
 import { fileServices, servicesDocument, type ServicesStore } from "./principals/services-store.js";
 import { type AccessRequestsStore, fileAccessRequests } from "./members/access-requests.js";
 import { type AccountConnectorsStore, fileAccountConnectors } from "./members/account-connectors.js";
+import { fileSealHouse, type SealHouseStore } from "./members/seal-house.js";
 import {
     createPreviewGuards,
     filePreviewGuardStore,
@@ -78,6 +79,8 @@ export interface AuthSlice {
     readonly accessRequests: AccessRequestsStore;
     // Who connected each AI account, so an account a person connected is always theirs (members/account-connectors.ts).
     readonly accountConnectors: AccountConnectorsStore;
+    // The house rule for private conversations and each person's own default (conversations/seal/seal-house.ts).
+    readonly sealHouse: SealHouseStore;
     // The access profiles people and services hold, the sandbox's own and its organisation's (docs/architecture/access.md).
     readonly accessProfiles: AccessProfiles;
     // Who unattended work runs as: each a steward's authority narrowed by a profile.
@@ -258,6 +261,7 @@ export const createAuthSlice = (
         members,
         accessRequests: fileAccessRequests(config.historyRoot),
         accountConnectors: fileAccountConnectors(config.historyRoot),
+        sealHouse: fileSealHouse(config.historyRoot),
         accessProfiles: fileAccessProfiles({
             path: join(config.historyRoot, accessProfilesDocument.path),
             orgPolicy,

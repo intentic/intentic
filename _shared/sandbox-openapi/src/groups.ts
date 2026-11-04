@@ -202,6 +202,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "A profile names the areas, connections, secrets, AI accounts and tools its holders reach, so a team or a service is pointed at one answer rather than given its own copy. A maintainer reads them; both writes are the sandbox owner's, since editing one changes what everybody holding it may do and closes their open connections. A profile anyone or anything still holds cannot be deleted.",
     },
     {
+        name: "seal",
+        shelf: "workspace",
+        label: "Private conversations",
+        summary: "Who reads whose conversations, and how a private one is opened",
+        description:
+            "The house rule, each person's default, making a conversation private or shared, asking its author to read it and their answer. The sandbox owner alone may open one without asking, with their passkey over a reason the author is shown; no agent can do any of it.",
+    },
+    {
         name: "services",
         shelf: "workspace",
         label: "Services",

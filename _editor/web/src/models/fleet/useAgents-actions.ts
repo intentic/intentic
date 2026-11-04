@@ -8,6 +8,7 @@ import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { uuid } from "../../lib/uuid";
 import { agentById, type FleetAgent } from "./useAgents-fleet";
 import { optimistic, underClaim } from "./useAgents-provisional";
+import { isSealed, sealedTitle } from "../agent-status/sealView";
 import { markSeen, registry } from "./useAgents-registry";
 
 // What one card can be told to do: per-agent writes (rename, posture override, resend, disarm a watch) and opening its
@@ -120,6 +121,7 @@ export const agentSeed = (
         | "limitResetsAt"
         | "limitHeld"
         | "next"
+        | "seal"
     >,
 ): AgentTabSeed => ({
     id: agent.id,
@@ -136,7 +138,8 @@ export const agentSeed = (
     // erases the card under the click and pins the empty tab open past the focus-leave sweep.
     registered: !unregistered(agent.status),
     ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
-    ...(agent.title !== undefined ? { title: agent.title } : {}),
+    // Never the title of a conversation sealed from the reader, which its tab calls what it is (sealView.ts).
+    ...(isSealed(agent) ? { title: sealedTitle() } : agent.title !== undefined ? { title: agent.title } : {}),
     ...(agent.account !== undefined ? { account: agent.account } : {}),
     // The settings this agent's turns ran under, so the composer describes this agent, not the last pick made
     // elsewhere.

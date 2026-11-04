@@ -138,6 +138,9 @@ const base64url = (bytes: ArrayBuffer | Uint8Array): string =>
 
 const sha256 = (text: string): Promise<ArrayBuffer> => crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(text));
 
+/** The WebAuthn challenge a passkey signs a document's text with: the sha256 of its bytes, base64url (seal.ts too). */
+export const challengeOf = async (text: string): Promise<string> => base64url(await sha256(text));
+
 /** How long a signed change is good for: under the machine's five-minute ceiling, with room for a clock a little ahead. */
 export const PROOF_LIFETIME_MS = 4 * 60_000;
 
@@ -169,5 +172,5 @@ export const changeToSign = async (
         nonce,
     };
     const text = egressChangeDocumentText(document);
-    return { document, text, challenge: base64url(await sha256(text)) };
+    return { document, text, challenge: await challengeOf(text) };
 };

@@ -15,6 +15,8 @@ import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import { defineInFlight } from "../../seams/restart/in-flight.js";
 import { isCiWatchCommand, onCiDeliveries } from "./ci-rechecks.js";
 import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
+import { sealJailWanted } from "../../conversations/seal/seal-jail.js";
+import { gitsRoot } from "../../workspace/layout/git-dir-owners.js";
 import type { JournalledWatch, WatchJournal } from "../../store/journals/watch-journal.js";
 
 // A daemon-owned condition watch wakes its conversation when it fires, times out or can no longer run, never silently.
@@ -573,7 +575,11 @@ export const startWatcherRuntime = (live: WatcherRuntime): (() => void) => {
 export const startWatchers = (services: Services, disarmed: (conversationId: string) => void): (() => void) =>
     startWatcherRuntime({
         logger: services.logger,
-        runCheck: watchCheck(services.turnIsolation),
+        runCheck: watchCheck(services.turnIsolation, {
+            wanted: () => sealJailWanted(services),
+            root: services.workspace.root,
+            gits: gitsRoot(services.config.historyRoot),
+        }),
         turns: services.turns,
         journal: services.watchJournal,
         // The same function that builds a turn's shell env, so a restored check can't drift from an arming turn's.

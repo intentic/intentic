@@ -1,3 +1,5 @@
+import { inheritedSeal } from "../seal/seal-birth.js";
+import type { Seal } from "@intentic/sandbox-contract/schemas/seal";
 import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type SessionOwner, type TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { planParts } from "@intentic/sandbox-contract/text/title";
@@ -170,6 +172,8 @@ const openedEntry = (
         sessionId: routingFor(held.profile, turn.profile).continues ? held.sessionId : undefined,
         ending: { kind: "interrupted" },
         social: socialOf(held, turn, entryOf, now),
+        // Born with it, never restated by a later turn: inherited from the words it carries, else its opening's.
+        ...opt("seal", existing === undefined ? (inheritedSeal({ startedBy: turn.startedBy, fresh: turn.fresh, forkedFrom: turn.forkedFrom }, entryOf) ?? turn.seal) : held.seal),
         updatedAt: now,
     };
 };
@@ -327,6 +331,8 @@ export interface AgentsRegistry {
     // Makes a member answerable for the conversation; who may is the route's decision (conversations/ownership.ts). Leaves
     // `updatedAt` alone: changing hands is not the conversation doing something.
     readonly assign: (id: string, to: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
+    // Rewrites one conversation's seal (conversations/seal/): absent makes it shared. Its own writers decide who may.
+    readonly setSeal: (id: string, seal: Seal | undefined) => Promise<AgentSummary | undefined>;
     // Adds or takes back one person's mark. `on` is the intent, not a flip, so a retried request settles where the
     // first one did. Leaves `updatedAt` alone: somebody reacting is not the conversation doing something.
     readonly react: (id: string, emoji: string, by: { email: string; name?: string }, on: boolean, at: number) => Promise<AgentSummary | undefined>;
@@ -1050,6 +1056,8 @@ export const createFleet = (
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } })),
         assign: (id, to, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),
+        setSeal: (id, seal) =>
+            amend(id, ({ seal: _held, ...entry }) => (seal === undefined ? entry : { ...entry, seal })),
         react: async (id, emoji, by, on, at) => {
             const entry = entryOf(id);
             if (entry === undefined) {

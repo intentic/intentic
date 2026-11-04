@@ -22,6 +22,8 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
 import { observeRoster } from "../agent-status/sandboxClock";
 import { withNext } from "../agent-status/agentStatus-standing";
+import { isSealed, sealedTitle } from "../agent-status/sealView";
+import { readSealsWith } from "../conversations/run/sealedReads";
 
 // Daemon's agent registry mirrored: the roster pushed by /events, the archived half pulled separately, ordered by
 // a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it. All of it belongs
@@ -436,6 +438,9 @@ const titlesMoved = (entries: readonly AgentSummary[]): boolean => {
     return true;
 };
 
+// A conversation sealed from this reader is never read (its gate stands in its chat's place): the sessions ask the roster.
+readSealsWith((conversationId) => isSealed(registry.value.find((agent) => agent.id === conversationId)));
+
 watch(registry, (entries) => {
     if (!titlesMoved(entries)) {
         return;
@@ -443,9 +448,11 @@ watch(registry, (entries) => {
     const { conversations } = useChat();
     for (const agent of entries) {
         const conversation = conversations.value.find((candidate) => candidate.conversationId === agent.id);
+        // A conversation sealed from this reader is called what it is, so a title the tab learned before the seal goes.
+        const title = isSealed(agent) ? sealedTitle() : agent.title;
         // An entry with no title yet (turn not started) must not blank a tab that already named itself.
-        if (agent.title !== undefined && conversation !== undefined && conversation.title.value !== agent.title) {
-            conversation.title.value = agent.title;
+        if (title !== undefined && conversation !== undefined && conversation.title.value !== title) {
+            conversation.title.value = title;
         }
     }
 });

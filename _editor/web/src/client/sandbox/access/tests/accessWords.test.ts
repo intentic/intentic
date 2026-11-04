@@ -31,6 +31,14 @@ describe(`accessWords`, () => {
         expect(accessWords({ kind: `area` }).short).toBe(`Not shared with you`);
     });
 
+    it(`says a private conversation read for a while is read-only until then, and whose readers write in it`, () => {
+        const until = new Date(2026, 10, 5, 14, 2).getTime();
+        expect(accessWords({ kind: `sealed` }).note).toBe(`This conversation is private. Only its readers can read or write in it.`);
+        expect(accessWords({ kind: `sealed`, until, author: `Anna` }).note).toMatch(/^You can read this until .*14:02.*\. Only Anna's readers can write in it\.$/u);
+        expect(accessWords({ kind: `sealed`, until }).note).toMatch(/^You can read this until .*14:02.*\. Only its readers can write in it\.$/u);
+        expect(accessWords({ kind: `sealed` }, { place: `Chat` })).toMatchObject({ short: `Private`, title: `Chat is private`, line: `Ask its author to show it to you.` });
+    });
+
     it(`reads a floor under the collaborator's as the next tier a grant would give`, () => {
         expect(accessWords({ kind: `tier`, floor: `viewer` }).short).toBe(`Needs agent access`);
     });

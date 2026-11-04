@@ -80,6 +80,7 @@ import {
     unpairedRunner,
 } from "./placement/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
+import { jailedPlacementOf } from "./placement/jail-placement.js";
 import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
@@ -429,6 +430,11 @@ const isolationOf = async (
         }
         const plan = await services.turnIsolation.planFor(localCwd, worktree.fence);
         return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
+    }
+    // While conversations can be private, every other turn too, main tree and worktree alike (jail-placement.ts).
+    const jailed = await jailedPlacementOf(services, input, localCwd, cliEnv["SSH_AUTH_SOCK"]);
+    if (jailed !== undefined) {
+        return jailed;
     }
     if (worktree === undefined || !entersNamespace(input)) {
         return undefined;

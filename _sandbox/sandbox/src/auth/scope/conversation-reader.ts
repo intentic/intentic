@@ -2,6 +2,7 @@ import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { Caller } from "../auth.js";
 import { type Provenance, provenanceOf, visibleTo } from "../fleet-scope.js";
+import { sealedFrom } from "../seal-scope.js";
 
 // Whether a caller may read what one conversation wrote, for the routes that hand out a conversation's words by its id
 // rather than through the roster (the activity log, the fleet's recall, a loop's prompt, a privacy ledger excerpt, a
@@ -20,9 +21,14 @@ export const readsEverything = (caller: Caller | undefined): boolean => caller =
 export const seesWholeFleet = (caller: Caller | undefined): boolean =>
     readsEverything(caller) || (caller !== undefined && caller.role !== "guest" && caller.areas === undefined);
 
+// A private conversation is read by its readers alone (seal-scope.ts), so reading everything stops at a seal: the owner, a
+// maintainer and the owner's own tools read every conversation that has none.
 export const conversationReader = (caller: Caller | undefined, agentOf: (id: string) => Provenance | undefined): ConversationReader => {
     if (readsEverything(caller)) {
-        return () => true;
+        return (conversationId) => {
+            const agent = conversationId === undefined ? undefined : agentOf(conversationId);
+            return agent === undefined || !sealedFrom(caller, agent.seal);
+        };
     }
     return (conversationId) => {
         const agent = conversationId === undefined ? undefined : agentOf(conversationId);

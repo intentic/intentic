@@ -16,7 +16,7 @@ import { isRendition, isVideo, thumbnailable, videoToolsPresent, workspaceThumbn
 import { insideArchive, scopedTarget, workspaceWriteRootFor } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
-import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessListed } from "../../auth/fleet-scope.js";
 import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { decodedBody } from "../../http/request-body.js";
@@ -46,7 +46,7 @@ const scopedFileTarget = async (
         if (scope.agent !== undefined) {
             const entry = services.agents.entry(scope.agent);
             if (entry !== undefined) {
-                refuseUnlessVisible(caller, provenanceOf(entry));
+                refuseUnlessListed(caller, provenanceOf(entry));
             }
         }
         refuseFenced(callerFence(await services.areas.list(), caller), path);
@@ -134,7 +134,7 @@ const uploadRoot = async (services: WorkspaceBytesRoutesDeps, c: Context<AppEnv>
         try {
             const agent = c.req.query("agent");
             const entry = agent === undefined ? undefined : services.workspaceScope.entry(agent);
-            if (entry !== undefined) { refuseUnlessVisible(c.get("identity"), provenanceOf(entry)); }
+            if (entry !== undefined) { refuseUnlessListed(c.get("identity"), provenanceOf(entry)); }
             return await workspaceWriteRootFor(services.workspaceScope, {
                 agent: c.req.query("agent"), branch: c.req.query("branch"), repo: c.req.query("repo"),
             }, c.req.query("path") ?? "");

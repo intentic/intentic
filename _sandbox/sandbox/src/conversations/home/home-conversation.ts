@@ -12,7 +12,8 @@ import { opt } from "../../opt.js";
 // and commits by itself when its turn ends, so its owner never reviews anything. What that rests on, kept here:
 //
 // - Whose it is comes from the verified caller, never from a body. The id is derived from the email, so a client may
-//   compute it, but only its owner may speak into it; the sandbox's owner may read it (auth/fleet-scope.ts visibleTo).
+//   compute it, but only its owner may speak into it; the sandbox's owner may read it unless it is private
+//   (auth/fleet-scope.ts visibleTo, conversations/seal/).
 // - Its opening latches `home` (agents-store.ts Identity). Whether its work lands by itself is its owner's own authority to
 //   land (sandbox-contract `landsHere`), read again at every land (`homeOwnerLands`), so a re-grade moves the next land
 //   rather than the one after a new home: the authority it gets is its owner's, never more and never staler. A

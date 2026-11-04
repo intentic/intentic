@@ -15,7 +15,10 @@ export type AccessReason =
     | { readonly kind: `guest` }
     | { readonly kind: `area` }
     | { readonly kind: `ai-accounts` }
-    | { readonly kind: `org`; readonly org: string; readonly section: string };
+    | { readonly kind: `org`; readonly org: string; readonly section: string }
+    // A private conversation the person reads, if at all, read-only (schemas/seal.ts): `author` names whose readers may
+    // write in it, `until` when their reading ends. Bare, the daemon's refusal of a conversation sealed from them.
+    | { readonly kind: `sealed`; readonly author?: string; readonly until?: number };
 
 /** The reason the shared access check (sandbox-contract protocol/member-reach.ts) gives, in the editor's terms. */
 export const reasonOfRefusal = (refusal: MemberRefusal): AccessReason => {
@@ -42,7 +45,7 @@ export const reasonOfAnswer = (status: number, said: RefusalWords): AccessReason
     if (reason === `org-locked` && org !== undefined && section !== undefined) {
         return { kind: `org`, org, section };
     }
-    if (reason === `guest` || reason === `agents-off` || reason === `area`) {
+    if (reason === `guest` || reason === `agents-off` || reason === `area` || reason === `sealed`) {
         return { kind: reason };
     }
     const tier = MemberRoleSchema.safeParse(floor);

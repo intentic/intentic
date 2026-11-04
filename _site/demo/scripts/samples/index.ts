@@ -42,6 +42,7 @@ import { servicesSamples } from "./services.samples.ts";
 import { sessionsSamples } from "./sessions.samples.ts";
 import { settingsSamples } from "./settings.samples.ts";
 import { shareSamples } from "./share.samples.ts";
+import { sealSamples } from "./seal.samples.ts";
 import { sharingSamples } from "./sharing.samples.ts";
 import { skillsSamples } from "./skills.samples.ts";
 import { systemSamples } from "./system.samples.ts";
@@ -104,6 +105,7 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         public: publicSamples(context),
         push: pushSamples(context),
         share: shareSamples(context),
+        seal: sealSamples(context),
         issues: issuesSamples(context),
         logs: logsSamples(context),
     };

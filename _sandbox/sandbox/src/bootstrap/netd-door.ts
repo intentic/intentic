@@ -28,7 +28,8 @@ import { claimHolder, type ContainerRole } from "../system/boot/container-owner.
 import type { ProfileTraits } from "../system/boot/profile.js";
 import { sameProcess } from "../system/resources/proc-stat.js";
 import { createTerminalCapture } from "../secrets/device/terminal-capture.js";
-import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
+import { type TerminalAnswer, planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
+import { placePeopleShells } from "../agent/run/placement/jail-placement.js";
 import { buildId } from "../version.js";
 import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
 import { visitWorkspaceApp } from "../scaffold/app-rest.js";
@@ -173,6 +174,18 @@ const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
             : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
     guard: { guards: services.previewGuards, editorOrigin: editorOriginOf(config.webOrigin) },
 });
+
+// A person's shell is placed in the jail before netd makes it, while conversations can be private (jail-placement.ts
+// placePeopleShells); one that cannot be is refused, never opened outside it.
+const jailedTerminal = async ({ logger, services }: BootPhase, answer: TerminalAnswer): Promise<TerminalAnswer> => {
+    try {
+        await placePeopleShells(services);
+        return answer;
+    } catch (error) {
+        logger.warn({ err: error }, "terminal: the shell could not be placed in the jail, so the terminal is refused");
+        return { ...answer, plan: { plan: "refused", code: 1011, reason: "the shell could not be isolated" } };
+    }
+};
 
 const terminalDepsOf = ({ logger, services }: BootPhase): TerminalPlanDeps => ({
     auth: services.auth,
@@ -329,8 +342,10 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
             switch (question.question) {
                 case "preview":
                     return { answer: "preview", route: await previewRoute(question.host, question.probe, preview) };
-                case "terminal":
-                    return planTerminal(terminal, question.query);
+                case "terminal": {
+                    const answer = planTerminal(terminal, question.query);
+                    return answer.plan.plan === "session" ? jailedTerminal(phase, answer) : answer;
+                }
             }
         },
         // netd repeats where the tunnel stands to every Node that says hello; only a change is news.

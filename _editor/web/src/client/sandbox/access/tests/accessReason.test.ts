@@ -37,6 +37,11 @@ describe(`accessReasonOf`, () => {
         });
     });
 
+    it(`reads a seal's refusal, from the body or an oRPC handler's data, as a private conversation`, () => {
+        expect(accessReasonOf(refusal(403, { error: `This conversation is private.`, reason: `sealed` }))).toEqual({ kind: `sealed` });
+        expect(accessReasonOf(refusal(403, { message: `not one of your conversations`, data: { reason: `sealed` } }))).toEqual({ kind: `sealed` });
+    });
+
     it(`leaves a 403 that names no reason, any other status, and a non-refusal as failures`, () => {
         expect(accessReasonOf(refusal(403, { error: `not authorized for this sandbox` }))).toBeUndefined();
         expect(accessReasonOf(refusal(403, { error: `x`, floor: `nobody` }))).toBeUndefined();

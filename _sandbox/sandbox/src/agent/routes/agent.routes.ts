@@ -1,3 +1,4 @@
+import { withOpeningSeal } from "../../conversations/seal/seal-birth.js";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { agentContract } from "@intentic/sandbox-contract/contracts/agent.contract";
 import { type ConversationQueue, DEFAULT_PROVIDER, type FreshOf } from "@intentic/sandbox-contract/schemas/agent";
@@ -118,7 +119,7 @@ export const createAgentRoutes = (services: Services) => {
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             drive(context, conversationId);
             await refuseFromBranch(services, conversationId, input);
-            const opening = openingOf(services, context, conversationId, input);
+            const opening = await withOpeningSeal(services, context, conversationId, openingOf(services, context, conversationId, input), input.private);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);
             // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.
@@ -127,7 +128,7 @@ export const createAgentRoutes = (services: Services) => {
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
             // so a request naming one would pass its sender's words off as the sandbox's. The opening answer to whether
             // work lands by itself is a maintainer's alone, as `agents.autoLand` is: a collaborator's work waits for a land.
-            const { errand, continues, conversationAutoLand: _opening, draft, ...asked } = withBranchFolder(input);
+            const { errand, continues, conversationAutoLand: _opening, draft, private: _private, ...asked } = withBranchFolder(input);
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
                 const started = await carryOnTurn(services, {

@@ -1,5 +1,6 @@
 import { type HandleResolution,candidateOf,fleetRecall,fleetRoster,fleetSearch,present,type RosterOptions } from "./fleet-recall.js";
-import { type ConversationReader, conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
+import type { ConversationReader } from "../../auth/scope/conversation-reader.js";
+import { turnReader } from "../../auth/scope/turn-reader.js";
 import type { Context } from "hono";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
@@ -153,7 +154,7 @@ const createFleetRoutes = (services: Services) => ({
         const options = rosterOptionsOf(c);
         const found = query === undefined || query === "" ? fleetRoster(services, options) : await fleetSearch(services, query, options);
         // Only the conversations this caller may read: a row is a title, and a search hit a line of the transcript.
-        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
+        const reads = await turnReader(services, c);
         const agents = found.filter((row) => reads(row.id));
         // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists;
         // `coverage` says how far through the conversations that pass has got.
@@ -168,7 +169,7 @@ const createFleetRoutes = (services: Services) => ({
      *  `?stored=1` adds what the daemon keeps for it, raw: its row in every table and the files in its directory. */
     show: async (c: Context<AppEnv>): Promise<Response> => {
         const handle = c.req.param("handle") ?? "";
-        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
+        const reads = await turnReader(services, c);
         const resolved = readableHandle(await resolveFleetHandle(services, handle), reads);
         if (resolved.kind === "ambiguous") {
             // Named, never picked: 409 because the request is answerable, just not unique.
@@ -214,6 +215,10 @@ const createFleetRoutes = (services: Services) => ({
             return c.json({ ok: false, message: `Pass JSON like {"to": "<handle>", "message": "…"}, with "wait": true and "timeoutSeconds" up to ${WAIT_MAX_S} to wait for the turn it reaches.` }, 400);
         }
         const wait = body.wait === true ? { timeoutMs: Math.round((body.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000), signal: c.req.raw.signal } : undefined;
+        // Words in front of a conversation this turn may not read would read its reply back (`--wait`): as no conversation.
+        if (readableHandle(await resolveFleetHandle(services, body.to), await turnReader(services, c)).kind === "unknown") {
+            return c.json(refusalBody(`No conversation answers to \`${body.to}\`.`, undefined), 404);
+        }
         const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message, undefined, wait);
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     },

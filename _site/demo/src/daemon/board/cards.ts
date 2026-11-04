@@ -8,6 +8,7 @@ import { discardReview, refuseWhileRunning, settleReview } from "./review";
 import { landAgentDelta, landedPaths, sessions } from "../../fixture/workspace";
 import { agentAnswer, broadcastRoster, listeners, OWNER, patchAgent, roster } from "./roster";
 import { releaseAfter } from "./queue";
+import { sealedFromCaller } from "../seal/sealWorld";
 
 // The card verbs: the mutations the board's menu, the chat's controls and the search field make on one agent's card.
 
@@ -216,7 +217,10 @@ export const searchAgents = (query: string, caseSensitive: boolean): AgentSearch
     const matches =
         needle === ``
             ? []
-            : [...roster.agents, ...archived].filter((agent) => folded(agent.title ?? ``, caseSensitive).includes(needle)).map((agent) => ({ id: agent.id }));
+            : [...roster.agents, ...archived]
+                  // A conversation sealed from the reader is never found by its title (seal/sealWorld.ts), as the daemon finds none.
+                  .filter((agent) => !sealedFromCaller(agent.id) && folded(agent.title ?? ``, caseSensitive).includes(needle))
+                  .map((agent) => ({ id: agent.id }));
     // No phrase index behind this; nothing is ever still being indexed. The archive is searched with the live board.
     return { matches, scanned: roster.agents.length + archived.length, indexing: false };
 };

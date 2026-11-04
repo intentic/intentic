@@ -26,19 +26,20 @@ import { copyIntoMain, ignoredSkipOf, namedIgnoredOutputs } from "../git/changes
 import { anchorOf } from "./land/agent-changes.js";
 import { historyOf, liveConflicts } from "./land/review/review.js";
 import { createReviewReader } from "./land/review/review-cache.js";
-import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
+import type { IsolatedAgent, PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { standingsForRead } from "./standings-read.js";
 import { endingOf } from "./registry/projection/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landByHandLeased, settleByHand } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
-import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
+import { framedSummary, listedTo, visibleTo } from "../auth/fleet-scope.js";
+import { agentLookups } from "./agent-lookups.js";
+import { refuseUnlessHome } from "./home/home-conversation.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { draftRoutes } from "./drafts/drafts.routes.js";
-import { refuseUnlessHome } from "./home/home-conversation.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -64,30 +65,8 @@ const settleRoute =
 
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
-    // The one lookup every route here addresses a conversation through: unknown is NOT_FOUND, and one the caller may not
-    // see (a guest's colleague's, or work outside a fenced member's areas) is FORBIDDEN (auth/fleet-scope.ts). A route's
-    // role floor says what a caller may do, never to whose conversation, so no route reads or acts on an id without it.
-    // `drive`: a write a home-only member makes on their own home alone (home-conversation.ts refuseUnlessHome).
-    const entryFor = (id: string, context: OrpcContext, drive?: "drive"): PersistedAgent => {
-        const entry = services.agents.entry(id);
-        if (entry === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-        }
-        refuseUnlessVisible(context.identity, provenanceOf(entry));
-        if (drive !== undefined) {
-            refuseUnlessHome(services, context, id);
-        }
-        return entry;
-    };
-    // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
-    // so it's BAD_REQUEST, not NOT_FOUND.
-    const isolatedEntryOf = (id: string, context: OrpcContext, drive?: "drive"): IsolatedAgent => {
-        const entry = entryFor(id, context, drive);
-        if (!isIsolated(entry)) {
-            throw new ORPCError("BAD_REQUEST", { message: "this conversation works in the shared workspace and has no isolated branch" });
-        }
-        return entry;
-    };
+    // How each route reaches a conversation, its words or only its work (agent-lookups.ts).
+    const { entryFor, workEntryFor, isolatedEntryOf, framed } = agentLookups(services, refuseUnlessHome);
     // Every tab and panel showing a conversation asks for its review at once; one reading under way serves them all.
     const reviewsUnderway = new Map<string, Promise<AgentChanges>>();
     const readReview = createReviewReader(services);
@@ -142,7 +121,8 @@ export const createAgentsRoutes = (services: Services) => {
             // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs. A guest sees its
             // own conversations and no held wake: a wake is somebody else's automation.
             const caller = context.identity;
-            const agents = services.agents.list().filter((agent) => visibleTo(caller, agent));
+            const now = Date.now();
+            const agents = services.agents.list().flatMap((agent) => framedSummary(caller, agent, now) ?? []);
             const reads = conversationReader(caller, registryProvenance(services.agents));
             const held = caller?.role === "guest" ? [] : (await services.heldWakes.list()).filter((wake) => reads(wake.conversationId));
             return { agents, rev: services.agents.revision(), held };
@@ -150,7 +130,7 @@ export const createAgentsRoutes = (services: Services) => {
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
         // (registry.listArchived).
         archived: i.archived.handler(({ context }) => ({
-            agents: services.agents.listArchived().filter((agent) => visibleTo(context.identity, agent)),
+            agents: services.agents.listArchived().flatMap((agent) => framedSummary(context.identity, agent) ?? []),
             rev: services.agents.revision(),
         })),
         // Answers over the live roster and the archive, since the board hides finished/archived agents from the live
@@ -184,8 +164,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            refuseUnlessVisible(context.identity, summary);
-            return summary;
+            return framed(context, summary);
         }),
         // Root-scoped: the workspace root is the working dir every turn saw, so restored paths match what streamed.
         // Answers for every agent from the daemon's own record (sessions/transcript-record.ts), not only ones a harness
@@ -276,7 +255,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "title is empty" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // Legal mid-turn: the flag is read at completion, so flipping it mid-run holds this turn's work for review.
         autoLand: i.autoLand.handler(async ({ input, context }) => {
@@ -285,7 +264,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // Uses `entryOf`, not `isolatedEntryOf`: every one of these walls hits a workspace chat too. The resume pass
         // re-polls often, so answering just after a dying turn answers for the very turn that bounced, and a limit's
@@ -298,7 +277,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent, or an answer that ending cannot take" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // Legal on any conversation between turns; a refusal says why nothing can be kept, in words the press can show.
         keepWarm: i.keepWarm.handler(async ({ input, context }) => {
@@ -311,7 +290,7 @@ export const createAgentsRoutes = (services: Services) => {
                     throw new ORPCError("CONFLICT", { message: answer.refused });
                 }
             }
-            return summaryAfter(services, entry.id);
+            return framed(context, summaryAfter(services, entry.id));
         }),
         // Isolated agents only, a workspace conversation has no land to ask for. Legal mid-turn, like `autoLand`; needs
         // a verified identity to attribute the request to.
@@ -328,7 +307,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // Changes hands. Legal in every state, like a reaction: it says who answers for the work, not anything about it.
         assign: i.assign.handler(async ({ input, context }) => {
@@ -356,7 +335,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // The one write in this family a viewer may make (sandbox-contract protocol/member-reach.ts): a mark says something about the people
         // reading the board, not about the work. Legal in every state — mid-turn, archived, conflicted — since it
@@ -380,7 +359,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         // Daemon-side read marker: the unread badge survives a browser cache wipe and clears on other devices too.
         ...draftRoutes(i, services),
@@ -390,7 +369,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
-            return summary;
+            return framed(context, summary);
         }),
         seenAll: i.seenAll.handler(async ({ context }) => {
             const caller = context.identity;
@@ -402,7 +381,7 @@ export const createAgentsRoutes = (services: Services) => {
             } else {
                 await services.agents.markAllSeen(Date.now());
             }
-            return { agents: services.agents.list().filter((agent) => visibleTo(caller, agent)), rev: services.agents.revision() };
+            return { agents: services.agents.list().flatMap((agent) => framedSummary(caller, agent) ?? []), rev: services.agents.revision() };
         }),
         // The only user-initiated way to end a watch; every other exit is automatic (it fires, times out, or a later
         // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
@@ -412,7 +391,7 @@ export const createAgentsRoutes = (services: Services) => {
             // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
             await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
             // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
-            return summaryAfter(services, entry.id);
+            return framed(context, summaryAfter(services, entry.id));
         }),
         // A person's way to end what a conversation left running: the server it handed over, the build it waits on.
         // Legal in every state, mid-turn included; the job's watch is disarmed before it ends, so nothing wakes.
@@ -423,7 +402,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (job !== undefined) {
                 await stopJob({ conversations: services.conversations, logger: services.logger }, job, "person");
             }
-            return summaryAfter(services, entry.id);
+            return framed(context, summaryAfter(services, entry.id));
         }),
         // Measured against main as it stands, not the last land's record. A committed row leaves the list; uncommitted
         // stays flagged `landed`; discarded-after-land goes back to unflagged.
@@ -534,6 +513,8 @@ export const createAgentsRoutes = (services: Services) => {
             return landByHandLeased(services, entry, input.mode ?? "check", input.span ?? "outstanding", input.includeDocuments === true);
         }),
         discard: i.discard.handler(async ({ input, context }) => {
+            // Deleting it deletes what it said, so only someone who may read it may (agent-lookups.ts).
+            entryFor(input.id, context);
             const entry = isolatedEntryOf(input.id, context);
             notRunning(input.id);
             // Read while the conversation exists, since its dispose takes the records of the children it supervises.
@@ -550,25 +531,28 @@ export const createAgentsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Held work somebody brought in by hand, recorded as landed with nothing written (land/land-by-hand.ts).
-        settle: i.settle.handler(settleRoute(services, isolatedEntryOf, notRunning)),
+        settle: i.settle.handler(async (call) => framed(call.context, await settleRoute(services, isolatedEntryOf, notRunning)(call))),
         // Archives exactly the ids named, the board's Clear included. Answers with what moved, not the roster, so
         // overlapping requests can't undo each other.
         archive: i.archive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
-                entryFor(id, context, "drive");
+                workEntryFor(id, context, "drive");
                 notRunning(id);
             }
             const { archived, failed } = await archiveAgents(services, input.ids, Date.now());
             // Read after the archive: summaries carry a fresh archivedAt and revision; a failed id is only reported.
             return {
-                moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
+                moved: archived.flatMap((id) => {
+                    const summary = services.agents.get(id);
+                    return summary === undefined ? [] : (framedSummary(context.identity, summary) ?? []);
+                }),
                 failed,
                 rev: services.agents.revision(),
             };
         }),
         unarchive: i.unarchive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
-                entryFor(id, context, "drive");
+                workEntryFor(id, context, "drive");
             }
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch.
             await services.agents.clearArchived(input.ids);
@@ -581,7 +565,7 @@ export const createAgentsRoutes = (services: Services) => {
         // since their steps must not point into an emptied archive.
         purge: i.purge.handler(async ({ context }) => {
             // The whole archive or nothing (purgeArchived), so a caller who cannot see all of it cannot empty it.
-            if (services.agents.listArchived().some((agent) => !visibleTo(context.identity, agent))) {
+            if (services.agents.listArchived().some((agent) => !listedTo(context.identity, agent))) {
                 throw new ORPCError("FORBIDDEN", { message: "the archive holds conversations outside your areas; only someone who can see all of it can empty it" });
             }
             // Same disarm-before-delete as `discard`: an outlived watch would try to start a turn on a removed id.

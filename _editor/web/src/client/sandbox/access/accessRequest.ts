@@ -31,6 +31,8 @@ export const wantOf = (reason: AccessReason): AccessWant | undefined => {
         case `ai-accounts`:
             return `aiAccounts`;
         case `org`:
+        // A seal is lifted by the conversation's author (seal.ask), never by the owner's grant.
+        case `sealed`:
             // An organisation's lock is lifted by its admin, not by the owner's grant.
             return undefined;
     }

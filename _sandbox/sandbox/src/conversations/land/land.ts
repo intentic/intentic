@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -407,7 +408,7 @@ const tipOf = async ({ worktrees, entry, git }: LandRun, repo: string, main: str
         return tip === undefined ? undefined : { tip, refDir: main };
     }
     // Stages staged/unstaged/untracked alike; a no-op when the only change is a nested repo's gitlink.
-    await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${entry.social.title?.text ?? entry.id}`, entry.id), worktrees.mainDir("root"), git);
+    await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${sharedTitleOf(entry) ?? entry.id}`, entry.id), worktrees.mainDir("root"), git);
     return { tip: (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim(), refDir: worktree };
 };
 

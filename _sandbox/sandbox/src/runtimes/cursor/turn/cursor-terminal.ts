@@ -6,7 +6,7 @@ import type { TurnPlacement } from "../../../conversations/worktrees/isolation.j
 import { envKeyFlags, NO_PROMPTS, paneHop, PIPESTATUS_TRAP, POLITE_PREFIX, runRootFor, tmuxRunEnabled } from "../../../agent/tools/agent-terminals.js";
 import { writeRunFile } from "../../../agent/tools/jobs/run-files.js";
 import { AGENT_SESSION_ENV } from "../../../system/boot/container-owner.js";
-import { WORKLOAD_ENV } from "../../../seams/workload-stamp.js";
+import { TURN_PROOF_ENV, turnProof, WORKLOAD_ENV } from "../../../seams/workload-stamp.js";
 import { TMUX_RUN_BIN } from "../../../terminal/terminal-run.js";
 
 // A Cursor turn's shell in the terminal panel: every command the model runs goes through bin/tmux-run into the
@@ -45,7 +45,7 @@ export const paneCommand = (terminal: CursorTerminal, command: string, said: str
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const agentFile = join(dir, "agent");
     writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${command}\n`);
-    const owner = terminal.owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(terminal.owner) ? `${WORKLOAD_ENV}=${terminal.owner} ` : "";
+    const owner = terminal.owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(terminal.owner) ? `${WORKLOAD_ENV}=${terminal.owner} ${TURN_PROOF_ENV}=${turnProof(terminal.owner)} ` : "";
     const stamp = `${AGENT_SESSION_ENV}=${shellQuote(terminal.sessionId)} ${owner}`;
     writeRunFile(dir, "line", `${stamp}${paneHop(terminal.isolation)}${POLITE_PREFIX}${NO_PROMPTS}bash ${shellQuote(agentFile)}\n`);
     writeRunFile(dir, "said", said);

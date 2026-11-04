@@ -18,7 +18,7 @@ import type { OutboxEntry } from "./sendOutbox";
 import { TurnOutbox, unsentOf } from "./turnOutbox";
 import type { AgentStatusEntry, PageDraftView } from "./turnLiveState";
 import { bookContinue, chipOf, heldRouting, newerQueue, queueRefusal, repeatsNudge, takeBackInto, withBooked } from "./queueCalls";
-import { accountIntent, type ForkLink, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import { accountIntent, type ForkLink, openingAnswers, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../drafts/sendLater";
 import { bookingOfMessage, holdOfQueue, perMessage, unbookedOf } from "../drafts/bookings";
 import { sentFrom } from "../drafts/composerDrafts";
@@ -543,7 +543,7 @@ export class TurnClient {
             editorContext: message.editorContext,
             errand: occasion.errand,
             booking: occasion.booking,
-            conversationAutoLand: host.autoLandDraft.value,
+            ...openingAnswers(host),
             // Read as the words leave: the draft they were typed into, which the daemon clears with them.
             draft: sentFrom(host.conversationId),
         });

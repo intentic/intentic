@@ -1088,6 +1088,10 @@
         "cardDiskUse": {
             "onDisk": "{bytes} en disco",
             "lastScan": "En el último análisis del disco. Libéralo desde la tarjeta Disco."
+        },
+        "sealedCard": {
+            "open": "Abrir la conversación privada de {name}",
+            "reviewDiff": "Revisar cambios"
         }
     },
     "app": {
@@ -4944,6 +4948,66 @@
             "retestNote": "Vuelve a esperar si sigue bloqueado",
             "connect": "Conectar otra cuenta de {provider}",
             "chooseAnother": "Elegir otro modelo"
+        },
+        "seal": {
+            "privateConversation": "Conversación privada",
+            "shared": "Compartida",
+            "private": "Privada",
+            "privateOnlyYou": "Privada · solo tú",
+            "privateWith": "Privada · tú y {name}",
+            "privateWithMany": "Privada · tú y {count} persona más | Privada · tú y {count} personas más",
+            "who": "Quién lo lee",
+            "whoReads": "Quién lo lee: {label}",
+            "sharedHint": "Todos los que pueden ver esta parte del espacio de trabajo",
+            "privateHint": "Solo tú y las personas que añadas",
+            "removeReader": "Quitar a {name}",
+            "addPerson": "Añadir persona",
+            "findPerson": "Nombre o correo electrónico",
+            "typeAddress": "Escribe su correo completo para añadir a alguien que no aparece.",
+            "footnote": "Lo que se integra es compartido. La conversación no. Sus subagentes y revisiones también son privados.",
+            "saveFailed": "No se pudo cambiar quién lo lee.",
+            "open": {
+                "noPasskey": "Abrir una conversación sin preguntar requiere tu llave de acceso, y aún no has añadido ninguna.",
+                "addPasskey": "Añade una en Acceso ▸ Inicio de sesión",
+                "failed": "No se pudo abrir.",
+                "reason": "Motivo",
+                "reasonPlaceholder": "Por qué necesitas leerla. {name} lo leerá.",
+                "reasonHint": "{count} caracteres, de {min} a {max}",
+                "for": "Por",
+                "readOnlyUntil": "Solo lectura, hasta {until}",
+                "isTold": "Recibe aviso ahora",
+                "forGood": "El motivo queda en la conversación para siempre y nadie puede quitarlo. Puedes leer. No puedes escribir, continuarla ni integrar como {name}.",
+                "twoPerson": "Una segunda persona con acceso total debe aceptar antes de que se abra.",
+                "confirm": "Confirmar con llave de acceso"
+            },
+            "openings": {
+                "opened": "{name} la abrió sin preguntar · {at}",
+                "pending": "{name} pidió abrirla sin preguntar; esperando a una segunda persona",
+                "refused": "{name} pidió abrirla sin preguntar. {by} lo rechazó.",
+                "readOnlyUntil": "Solo lectura hasta {until}",
+                "readUntil": "Pudo leerla hasta {until}",
+                "agreedBy": "aceptado por {name}",
+                "approve": "Aprobar",
+                "refuse": "Rechazar",
+                "answerFailed": "No se pudo enviar tu respuesta."
+            },
+            "asks": {
+                "asks": "{name} pide leerla",
+                "day": "Mostrar un día",
+                "add": "Añadir a {name}",
+                "decline": "Rechazar",
+                "failed": "No se pudo enviar tu respuesta."
+            },
+            "gate": {
+                "heading": "Conversación privada de {name}",
+                "explain": "Solo sus lectores pueden leer lo que se dice en ella. Su trabajo es compartido: lo que integra pertenece al equipo.",
+                "ask": "Pedir a {name} que te la muestre",
+                "asked": "Pedido · esperando a {name}",
+                "askFailed": "No se pudo enviar tu petición.",
+                "openWithout": "Abrir sin preguntar…",
+                "waitingSecond": "Esperando a una segunda persona con acceso total",
+                "approveAsk": "{name} pide abrir la conversación de {author} sin preguntar."
+            }
         }
     },
     "common": {
@@ -5061,7 +5125,8 @@
                 "collaborator": "Requiere agentes",
                 "agentsOff": "Agentes desactivados",
                 "notShared": "No compartido contigo",
-                "org": "Gestionado por {org}"
+                "org": "Gestionado por {org}",
+                "sealed": "Privada"
             },
             "title": {
                 "owner": "Solo el propietario puede abrir {place}",
@@ -5072,7 +5137,8 @@
                 "guest": "{place} no está compartido contigo",
                 "area": "Esta carpeta no está compartida contigo",
                 "org": "{org} gestiona {place}",
-                "aiAccounts": "Ninguna cuenta de IA está compartida contigo"
+                "aiAccounts": "Ninguna cuenta de IA está compartida contigo",
+                "sealed": "{place} es privado"
             },
             "note": {
                 "owner": "Puedes mirar. Solo el propietario puede cambiar cosas aquí.",
@@ -5083,12 +5149,16 @@
                 "guest": "Esto no está compartido contigo.",
                 "area": "Esta carpeta no está compartida contigo.",
                 "org": "{org} gestiona esto. Puedes verlo, pero los cambios los hace el administrador de tu organización.",
-                "aiAccounts": "Puedes seguir la conversación. Ejecutar un modelo necesita una cuenta de IA compartida contigo."
+                "aiAccounts": "Puedes seguir la conversación. Ejecutar un modelo necesita una cuenta de IA compartida contigo.",
+                "sealed": "Esta conversación es privada. Solo sus lectores pueden leer o escribir en ella.",
+                "sealedUntil": "Puedes leerla hasta {until}. Solo sus lectores pueden escribir en ella.",
+                "sealedUntilBy": "Puedes leerla hasta {until}. Solo los lectores de {author} pueden escribir en ella."
             },
             "line": {
                 "ask": "Pide acceso al propietario. Se abrirá aquí en cuanto lo conceda.",
                 "asked": "Pediste acceso al propietario. Se abrirá aquí en cuanto lo conceda.",
-                "org": "Los cambios aquí los hace el administrador de tu organización."
+                "org": "Los cambios aquí los hace el administrador de tu organización.",
+                "sealed": "Pide a su autor que te la muestre."
             },
             "ask": "Pedir acceso",
             "asked": "Pedido",
@@ -6220,6 +6290,23 @@
             "n1Day": "1 día",
             "n1Week": "1 semana",
             "n3Days": "3 días"
+        },
+        "agentCommitAuthor": {
+            "group": "Autor de los commits",
+            "attribution": "Nombrar a personas en los commits",
+            "attributionNote": "Qué nombre llevan los commits de un agente: la persona para la que trabajó como autora (intentic hace el commit), en una línea Co-authored-by, o ninguno. Siempre con el nombre y la dirección que esa persona puso abajo; los commits subidos publican la dirección.",
+            "asAuthor": "Autor",
+            "asCoAuthor": "Coautor",
+            "nobody": "Nadie",
+            "yours": "Tu nombre y dirección de commit",
+            "yoursNote": "Se usan para el trabajo que haces y pides aquí, nunca tu dirección de inicio de sesión; hasta que pongas uno, tus commits no nombran a nadie. La dirección noreply de un proveedor mantiene la tuya en privado.",
+            "name": "Nombre",
+            "email": "Correo electrónico",
+            "forget": "Olvidar",
+            "suggested": "Tu cuenta de git conectada hace commits como {name}, {email}.",
+            "useSuggested": "Usar estos",
+            "couldntSave": "No se pudieron guardar tu nombre y dirección de commit.",
+            "couldntRead": "No se pudieron leer tu nombre y dirección de commit."
         },
         "agentInstructions": {
             "builtInPromptTo": "Qué indicación integrada se lee",
@@ -10803,6 +10890,7 @@
             "agentOffload": "runner, máquina remota, otro ordenador, descargar trabajo, compilaciones, ocupado",
             "agentMainCi": "github actions, ci, pipeline, compilación fallida, main roto, arreglo automático",
             "agentFinishedWork": "integrar automáticamente, auto merge, commit, git, pull, sincronizar, archivar, versión",
+            "agentCommitAuthor": "autor, committer, coautor, co-authored-by, identidad de git, user.name, user.email, correo, noreply, atribución",
             "agentChangelog": "notas de la versión, registro de cambios, historial",
             "agentTurnBreaks": "límite de uso, límite de tasa, reintentar, caída, fallo, sin memoria, reinicio, error",
             "agentIdleChats": "caché de prompt, caché, mantener caliente, inactivo, cuota",
@@ -11185,6 +11273,26 @@
             "reapBelowNote": "Se quita la salida de compilación de cada conversación sin nada en marcha, empezando por la más inactiva, hasta que vuelva a haber sitio. Se te avisa por debajo del 10 % y otra vez por debajo del 5 %.",
             "leanRust": "Compilaciones de Rust ligeras",
             "leanRustNote": "Los agentes compilan Rust solo con tablas de líneas como información de depuración. Los targets ocupan menos y las trazas conservan archivo y línea, pero un depurador no ve variables locales. Anula lo que el Cargo.toml de un repositorio diga sobre la información de depuración."
+        },
+        "sealHouse": {
+            "title": "Quién lee las conversaciones de quién",
+            "rule": "Regla de la casa",
+            "mode": {
+                "everyone": "Todos",
+                "chooses": "El autor elige",
+                "private": "Privadas por defecto"
+            },
+            "hint": {
+                "everyone": "Ninguna conversación nueva puede ser privada.",
+                "chooses": "Cada autor decide, conversación por conversación.",
+                "private": "Las nuevas empiezan privadas."
+            },
+            "locked": "Tu organización lo fijó, así que no se puede cambiar aquí.",
+            "whoChanges": "Lo cambian quienes tienen acceso total y el propietario.",
+            "honest": "Las conversaciones privadas están selladas en la app y ante cualquier agente, también los tuyos. Abrir una siempre avisa a su autor.",
+            "ownMachine": "Este sandbox se ejecuta en tu propio ordenador, así que una terminal en esa máquina aún puede leer los archivos del disco.",
+            "count": "{count} conversación es privada ahora. | {count} conversaciones son privadas ahora.",
+            "saveFailed": "No se pudo cambiar quién lee las conversaciones de quién."
         }
     },
     "settings": {
@@ -11625,6 +11733,12 @@
             "productAnalytics": "telemetría, seguimiento, datos de uso, desactivar",
             "exportData": "descargar, copia de seguridad, RGPD, exportación",
             "deleteAccount": "cerrar cuenta, quitar cuenta, borrar cuenta"
+        },
+        "conversations": {
+            "title": "Conversaciones",
+            "startPrivate": "Empezar mis conversaciones como privadas",
+            "startPrivateHint": "En {sandbox}. Una conversación nueva aún se puede compartir antes de su primer mensaje.",
+            "saveFailed": "No se pudo guardar."
         }
     },
     "setup": {

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { link, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { HISTORY_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { requires } from "@intentic/testing/requires";
 import { nsenterArgv } from "../../workload/namespace-entry.js";
 import { hiddenIn, type IsolationAnchor } from "./isolation.js";
@@ -216,6 +216,75 @@ test.skipIf(!sandbox.runs)(sandbox.title("released, the sandbox ends once nothin
         // Still up while it runs; gone within a few anchor ticks once it has ended.
         expect(await until(() => !alive(anchor.pid), 4_000)).toBe(false);
         expect(await until(() => !alive(anchor.pid), 15_000)).toBe(true);
+    } finally {
+        anchor.dispose();
+    }
+});
+
+// THE WHOLE-WORKSPACE JAIL around a main checkout whose repository keeps its git directory apart, as the workspace's do
+// on the history volume: everything of the workspace is there and git works whole, but the daemon's own state and
+// another conversation's words are not.
+const jailWorld = async () => {
+    const base = await mkdtemp(join(HISTORY_ROOT, ".turn-jail-"));
+    bases.push(base);
+    const main = join(base, "work");
+    const gits = join(base, "gits");
+    const state = join(main, STATE_DIR);
+    for (const dir of [join(main, "support"), join(main, "finance"), join(state, "secrets"), join(state, "records", "sessions", "claude", "projects", "-work"), gits]) {
+        await mkdir(dir, { recursive: true });
+    }
+    await writeFile(join(main, "support", "notes.md"), "notes\n");
+    await writeFile(join(main, "finance", "payroll.csv"), "rows\n");
+    await writeFile(join(state, "secrets", "ci.json"), "{}");
+    await writeFile(join(state, "records", "sessions", "claude", "projects", "-work", "theirs.jsonl"), "another conversation\n");
+    const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: main, encoding: "utf8" });
+    expect(git("init", "-q", `--separate-git-dir=${join(gits, "root")}`).status).toBe(0);
+    expect(git("add", "support", "finance").status).toBe(0);
+    expect(git("commit", "-qm", "start").status).toBe(0);
+    const neighbour = join(base, "history", "conversations", "conv-2");
+    await mkdir(neighbour, { recursive: true });
+    await writeFile(join(neighbour, "record.jsonl"), "their words\n");
+    const plan: FencedPlan = {
+        worktree: main,
+        root: main,
+        mirrors: [],
+        overlays: join(base, "history", "overlays", "work"),
+        fence: { folders: [""], hidden: [], sessions: join(base, "history", "conversations", "conv-1", "jail-sessions"), gitPointers: [], whole: { gits } },
+    };
+    await mkdir(plan.fence.sessions, { recursive: true });
+    const sources: SandboxSources = { home: join(base, "home"), engines: join(base, "engines"), queue: join(base, "queue") };
+    await mkdir(sources.home, { recursive: true });
+    return { base, plan, sources, neighbour, git };
+};
+
+test.skipIf(!sandbox.runs)(sandbox.title("a jailed turn sees every folder, writes any of them, and runs git whole: status, log, commit, branch"), async () => {
+    const w = await jailWorld();
+    const anchor = await startSandboxAnchor(w.plan, w.sources);
+    try {
+        expect(inside(anchor, "cat finance/payroll.csv && echo more >> support/notes.md")).toEqual({ code: 0, out: "rows" });
+        expect(inside(anchor, "git status --porcelain")).toEqual({ code: 0, out: "M support/notes.md" });
+        const commit = inside(anchor, "git -c user.name=t -c user.email=t@t commit -qam 'from the jail' && git switch -qc side && git log --format=%s");
+        expect(commit).toEqual({ code: 0, out: "from the jail\nstart" });
+        // Written where the daemon's own git reads it.
+        expect(w.git("log", "-1", "--format=%s", "side").stdout).toBe("from the jail\n");
+    } finally {
+        anchor.dispose();
+    }
+});
+
+test.skipIf(!sandbox.runs)(sandbox.title("a jailed turn reaches neither the history volume, the workspace's secrets, nor another conversation's sessions"), async () => {
+    const w = await jailWorld();
+    const anchor = await startSandboxAnchor(w.plan, w.sources);
+    try {
+        expect(inside(anchor, `test -e ${join(w.neighbour, "record.jsonl")}`).code).toBe(1);
+        expect(inside(anchor, `ls ${join(w.base, "history", "conversations")}`).code).not.toBe(0);
+        expect(inside(anchor, `ls -A ${STATE_DIR}/secrets`).out).toBe("");
+        // The runtime's store is the conversation's own, and what it writes there is in that store.
+        const store = `${STATE_DIR}/records/sessions/claude`;
+        expect(inside(anchor, `ls -A ${store}/projects/-work 2>/dev/null; echo mine > ${store}/mine.txt`).out).toBe("");
+        expect(await readFile(join(w.plan.fence.sessions, "mine.txt"), "utf8")).toBe("mine\n");
+        // And the main checkout's own copies are untouched.
+        expect(existsSync(join(w.plan.root, STATE_DIR, "secrets", "ci.json"))).toBe(true);
     } finally {
         anchor.dispose();
     }

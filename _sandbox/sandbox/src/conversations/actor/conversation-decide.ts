@@ -1,3 +1,4 @@
+import type { Seal } from "@intentic/sandbox-contract/schemas/seal";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentJob, AgentSummary, AgentWatch, ReviewTally, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
@@ -78,6 +79,8 @@ export interface BeginTurn {
     // owner's home conversation, which only the route that verified whose it is says (agent.routes.ts homeTurn).
     readonly fresh?: FreshSession;
     readonly home?: true;
+    // The seal a person's opening is born with (seal/seal-birth.ts); an inherited one wins over it.
+    readonly seal?: Seal;
 }
 
 // Why a turn does not claim the conversation: a turn or a rewind holds it, or it is archived and no person sent this one.

@@ -341,6 +341,9 @@ export const AgentRunSchema = AgentTurnSchema.safeExtend({
         .describe(
             "Carry the conversation on from where its last turn stopped instead of saying anything: nothing of yours is added to the conversation, and `prompt` is ignored. A turn the sandbox still holds runs again as it was; otherwise the agent is told to continue in its own session. Refused while a turn is running.",
         ),
+    // Read on the message that opens the conversation and ignored after (schemas/seal.ts): the composer's pill, pressed
+    // before the first send. Leave it out to start as the house rule and your own default say.
+    private: z.boolean().optional().describe("On the message that opens a conversation: start it private (true) or shared (false). Ignored afterwards."),
 });
 // What a turn naming no provider or loop runs on, stated once. Applied where a request comes in (the daemon's turn port),
 // so nothing downstream defaults them again: the engine takes a turn with both named (withRuntimeDefaults).

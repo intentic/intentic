@@ -3,7 +3,7 @@ import { errnoCode, stderrOf } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/base/git";
 import { CONTAINER_SECRET_ENV } from "../env.config.js";
-import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
+import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, TURN_PROOF_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
 
 // tmux's answer for "no sessions exist": no binary, no socket, nothing listening on it, or a server holding no session.
 // The last is the daemon's own normal state between boot and the first terminal (pinTmuxServer keeps an emptied server
@@ -87,6 +87,11 @@ export const prepareTmuxServer = async (logger: Logger, serverEnv: Readonly<Reco
         }
         if (!copiesOwnerStamp(stdout)) {
             await forkedExec("tmux", ["set-option", "-ga", "update-environment", WORKLOAD_ENV], { timeout: 10_000 });
+        }
+        // The owner's proof rides with the stamp (seams/workload-stamp.ts), so a session an agent made by hand can still
+        // prove whose it is to the routes that read a conversation for a turn.
+        if (!updateEnvironmentNames(stdout).includes(TURN_PROOF_ENV)) {
+            await forkedExec("tmux", ["set-option", "-ga", "update-environment", TURN_PROOF_ENV], { timeout: 10_000 });
         }
     } catch (err) {
         // No server yet: the daemon's own pin starts it from an environment that no longer holds them.

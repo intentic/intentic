@@ -158,6 +158,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         queue: shallowRef<ConversationQueue | undefined>(),
         sendLater: shallowRef<SendLater | undefined>(),
         autoLandDraft: ref<boolean | undefined>(),
+        privateDraft: ref<boolean | undefined>(),
     };
     const client = new TurnClient(host);
     const transcript = new TranscriptView(() => undefined, {
@@ -841,6 +842,17 @@ describe(`saying something`, () => {
         expect(host.queue.value).toMatchObject({ items: [{ text: `ship it after the auth refactor`, after: `brave-otter` }], paused: `scheduled`, after: `brave-otter` });
         expect(host.queue.value).not.toHaveProperty(`until`);
         expect(host.queue.value?.items[0]).not.toHaveProperty(`until`);
+    });
+
+    // The composer's pill, pressed before the first message (ComposerSealPill): the message that opens the chat carries it.
+    it(`carries whether the chat starts private on the message that opens it`, async () => {
+        const { client, host } = clientOf();
+        host.privateDraft.value = true;
+        answers({ delivered: `queued` });
+
+        await client.schedule(`a note only I read`, { sendAfter: `brave-otter` });
+
+        expect(run.mock.calls.map(([body]) => body.private)).toEqual([true]);
     });
 
     // A sandbox from before bookings could open a chat has nothing to hold one on: it goes the ordinary way, drawn as any send is.

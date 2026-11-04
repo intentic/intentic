@@ -71,6 +71,7 @@ import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerLandPill from "../composer/ComposerLandPill.vue";
 import ComposerStartPill from "../composer/ComposerStartPill.vue";
+import ComposerSealPill from "./seal/ComposerSealPill.vue";
 import { useStartFrom } from "../composer/composerStartFrom";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
@@ -114,7 +115,7 @@ const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
 const { mobile } = useDevice();
 const { isGuest, canShip } = useRole();
-const readOnly = useDriveRefusal(); // a viewer, or a writer with agents off: one quiet line stands in the composer's place
+const readOnly = useDriveRefusal(() => props.conversation.conversationId); // a viewer, a writer with agents off, a seal read-only: one quiet line
 // Plain words name the assistant and simplify shaping controls. Model and effort remain available to non-guests
 // in either audience: the way somebody reads the app does not decide which model they can use.
 const { maker } = useAudience();
@@ -160,14 +161,7 @@ const backToParent = (): void => {
 
 // The roster the board's trays read too (one cache), so a subagent's card says how it is doing after its turn stopped.
 const { sessions: subagents } = useSubagentRoster();
-provide(
-    CHAT_SURFACE,
-    paneSurface(
-        () => props.conversation,
-        useRouter(),
-        () => subagents.value,
-    ),
-);
+provide(CHAT_SURFACE, paneSurface(() => props.conversation, useRouter(), () => subagents.value));
 
 const { composerCap, grow } = useComposerSize({ scroller, footer, input });
 const { pin, realizing } = usePaneScroll({
@@ -739,6 +733,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             </button>
 
                                             <ComposerStartPill :start="startFrom" :conversation="conversation" :ride="inRow.startFrom" :fallback="morePill ?? composerForm" />
+                                            <!-- Whether the conversation starts private, before its first message only (ComposerSealPill). -->
+                                            <ComposerSealPill :conversation="conversation" />
                                             <!-- Persona: who the chat is to the outside world. -->
                                             <button
                                                 v-if="inRow.persona"

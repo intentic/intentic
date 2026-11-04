@@ -111,3 +111,33 @@ test.skipIf(!namespace.runs)(namespace.title("a fenced conversation's check cann
         await w.dispose();
     }
 });
+
+const jailRuns = requires(
+    existsSync(HISTORY_ROOT) &&
+        spawnSync("bwrap", ["--unshare-user", "--unshare-pid", "--disable-userns", "--cap-drop", "ALL", "--ro-bind", "/", "/", "true"], { timeout: 10_000 })
+            .status === 0,
+    `bubblewrap with user namespaces, and the history volume at ${HISTORY_ROOT}`,
+    { lane: "machine" },
+);
+
+// While conversations can be private, a main-tree conversation's check runs in the jail its turns do: the directory it
+// was armed in, and nothing of the history volume around the workspace. Asked per check, so the rule applies at once.
+test.skipIf(!jailRuns.runs)(jailRuns.title("while conversations can be private a check runs in the jail, out of reach of the history volume"), async () => {
+    const base = await mkdtemp(join(HISTORY_ROOT, ".watch-jail-"));
+    try {
+        const root = join(base, "work");
+        const unit = join(base, "history", "conversations", "conv-2");
+        await mkdir(join(root, "app"), { recursive: true });
+        await mkdir(unit, { recursive: true });
+        await writeFile(join(unit, "record.jsonl"), "their words\n");
+        const isolation = createTurnIsolation({ root, historyRoot: join(base, "history"), logger });
+        let wanted = true;
+        const check = watchCheck(isolation, { wanted: async () => wanted, root, gits: join(base, "gits") });
+        const script = `pwd; test -e ${join(unit, "record.jsonl")} && echo reached || echo out-of-reach`;
+        expect(await check(script, { cwd: join(root, "app"), env: {} })).toEqual({ exitCode: 0, output: `${join(root, "app")}\nout-of-reach` });
+        wanted = false;
+        expect(await check(script, { cwd: join(root, "app"), env: {} })).toEqual({ exitCode: 0, output: `${join(root, "app")}\nreached` });
+    } finally {
+        await rm(base, { recursive: true, force: true });
+    }
+});

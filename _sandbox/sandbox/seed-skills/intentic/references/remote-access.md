@@ -85,6 +85,27 @@ of the other ways in (webhooks, gated workflows, CI, paired machines). **Allowed
 conversations were allowed past their persona or area and the sandbox-wide yeses, each with its own Revoke, counted
 on the tab. A member below maintainer sees People and Sign-in only.
 
+## Private conversations
+
+People who share a sandbox can keep their conversations from each other. The house rule is on **Access ▸ People**, under
+**Who reads whose conversations**: **Everyone** (every conversation readable by everyone who can see its part of the
+workspace, which is the default), **The author chooses**, or **Private by default**. An organisation can fix it. Under
+the last two, each person's home conversation is private to them, and a person's own default for new chats is in their
+Settings.
+
+- A private conversation's words (title, transcript, prompts, its subagents' reports) are read only by its author and
+  the people they add, from the chat header's **Private** pill. Its work is not private: the diff stays on the board
+  for whoever lands it, and what lands is the team's.
+- Everyone else sees a sealed card, **Private conversation**, with whose it is, its lane and its diff, never its title.
+  They can **Ask** its author, who answers **Show for a day**, **Add**, or **Decline**.
+- Nobody reads past a seal by role, the owner and Full access included, and no agent does: a turn reads other
+  conversations only as the people it acts for. The owner alone can **Open without asking**, with a reason and their
+  passkey. It is read-only for a day, the author is told at once, and the reason stays on the conversation for good.
+  An organisation can ask for a second person with Full access to agree first.
+- Changing the house rule never opens a conversation that is already private.
+- While anything may be private, every turn runs jailed, away from the sandbox's history volume. On a sandbox that runs
+  on the owner's own computer, a shell on that machine can still read the files on disk, and Access ▸ People says so.
+
 ## Not a way into the workspace
 
 A shared conversation link is a read-only page. Files in `/work/public/` are public on the internet at the

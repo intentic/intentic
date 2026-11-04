@@ -12,6 +12,8 @@ const PORT = process.env.SANDBOX_PORT ?? "8787";
 // The conversation this shell was spawned for (platform/leftovers.ts workloadStamp): whose chat the card goes in. The
 // daemon falls back to the sole live turn when it is unset, and refuses rather than guessing between two.
 const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+// The proof that goes with that name, which this daemon run alone can make: what lets a read count as that turn's.
+const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
 
 export const EXIT_OPEN = 3;
 
@@ -50,6 +52,10 @@ export const call = (command, method, path, body) =>
         req.setHeader("x-intentic-agent", token(command));
         if (CONVERSATION !== "") {
             req.setHeader("x-intentic-conversation", CONVERSATION);
+            // The daemon believes the name only with its proof (seams/workload-stamp.ts TURN_PROOF_ENV).
+            if (PROOF !== "") {
+                req.setHeader("x-intentic-turn-proof", PROOF);
+            }
         }
         if (body !== undefined) {
             req.setHeader("content-type", "application/json");

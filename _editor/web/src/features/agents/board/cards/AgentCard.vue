@@ -26,6 +26,7 @@ import { BAR_EMOJI } from "./reactions";
 import CardLandPresses from "./CardLandPresses.vue";
 import CardStrandedClones from "./CardStrandedClones.vue";
 import CardDiskUse from "./CardDiskUse.vue";
+import SealedCard from "./SealedCard.vue";
 import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
@@ -565,8 +566,9 @@ const grab = (event: PointerEvent): void => {
 </script>
 
 <template>
+    <SealedCard v-if="agent.seal?.sealed === true" :agent="agent" :dense="dense" :selected="selected" :pending="pending" @open="(event) => emit(`open`, event)" @changes="emit(`changes`)" @land="emit(`land`)" @grab="(event, card) => emit(`grab`, event, card)" />
     <div
-        ref="cardRoot"
+        v-else ref="cardRoot"
         role="group"
         :aria-label="displayTitle"
         class="session-card group relative flex w-full select-none flex-col rounded-2xl border text-left"

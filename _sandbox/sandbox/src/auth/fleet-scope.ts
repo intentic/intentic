@@ -4,7 +4,9 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics"
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { Caller } from "./auth.js";
+import { readerView, type SealHold, sealedCard, sealedFrom, readVia } from "./seal-scope.js";
 import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { supervisorOf } from "./principal.js";
 
@@ -26,15 +28,18 @@ export interface Provenance {
     readonly home?: true | undefined;
     // For a review or test an agent opened on its own subagent's work, that agent (principal.ts supervisorOf).
     readonly fresh?: { readonly by?: string | undefined } | undefined;
+    // Set while it is private: who reads it (seal-scope.ts). A seal narrows who reads it, never who sees its card.
+    readonly seal?: SealHold | undefined;
 }
 
 // A registry entry's provenance, read off its latched identity and whoever answers for it now.
-export const provenanceOf = ({ identity, social }: Pick<PersistedAgent, "identity" | "social">): Provenance => ({
+export const provenanceOf = ({ identity, social, seal }: Pick<PersistedAgent, "identity" | "social" | "seal">): Provenance => ({
     startedBy: identity.startedBy,
     owner: social.owner,
     areas: identity.areas,
     home: identity.home,
     fresh: identity.fresh,
+    seal,
 });
 
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
@@ -62,10 +67,11 @@ export const areasCover = (holder: readonly string[] | undefined, work: readonly
 
 const withinFence = (caller: Caller, agent: Provenance): boolean => areasCover(caller.areas, agent.areas);
 
-// Whether the caller may see this conversation. Undefined identity is the owner's own tool (a panel, loopback), which
-// sees everything. A home conversation is its owner's own chat with the sandbox: the sandbox's owner may read it, as they
-// may read everything here, and no other member is shown it (its subagents' work stays on the board like anyone's).
-export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolean => {
+// Whether the caller is shown this conversation at all: its card on the board, its diff for whoever lands it. Undefined
+// identity is the owner's own tool (a panel, loopback), which is shown everything. A home conversation is its owner's own
+// chat with the sandbox: the sandbox's owner is shown it, and no other member is (its subagents' work stays on the board
+// like anyone's). Whether they may also READ it is `visibleTo`, which a seal narrows.
+export const listedTo = (caller: Caller | undefined, agent: Provenance): boolean => {
     if (caller === undefined) {
         return true;
     }
@@ -80,10 +86,39 @@ export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolea
     return withinFence(caller, agent);
 };
 
+// Whether the caller may read this conversation: its transcript, its title, anything it said. Everything `listedTo` shows
+// them, less a private conversation they are not a reader of (seal-scope.ts), whatever their role: a seal is the one
+// narrowing the sandbox's owner and Full access are held to as well, and a program reads past none.
+export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolean => listedTo(caller, agent) && !sealedFrom(caller, agent.seal);
+
+/** A summary as this caller is shown it: whole for a reader, a sealed card for anyone else it is listed to, else nothing. */
+export const framedSummary = (caller: Caller | undefined, summary: AgentSummary, now: number = Date.now()): AgentSummary | undefined => {
+    if (!listedTo(caller, summary)) {
+        return undefined;
+    }
+    if (summary.seal === undefined) {
+        return summary;
+    }
+    const via = readVia(caller?.email, summary.seal, now);
+    return via === undefined ? sealedCard(summary, caller) : readerView(summary, via);
+};
+
 // The refusal a guest meets on someone else's conversation. Unnamed on purpose: whose it is would say what the guest
 // may not know.
 export const refuseUnlessVisible = (caller: Caller | undefined, agent: Provenance): void => {
-    if (!visibleTo(caller, agent)) {
+    if (!listedTo(caller, agent)) {
+        throw new ORPCError("FORBIDDEN", { message: "not one of your conversations" });
+    }
+    // One its card is shown to: saying it is private names nothing the card does not already say.
+    if (sealedFrom(caller, agent.seal)) {
+        throw new ORPCError("FORBIDDEN", { message: "this conversation is private", data: { reason: "sealed" } });
+    }
+};
+
+// The refusal for the routes that act on a conversation's work rather than its words (its diff, its land, its archive):
+// whoever is shown its card may, a private one included.
+export const refuseUnlessListed = (caller: Caller | undefined, agent: Provenance): void => {
+    if (!listedTo(caller, agent)) {
         throw new ORPCError("FORBIDDEN", { message: "not one of your conversations" });
     }
 };
@@ -95,7 +130,7 @@ export const framedMetrics = (caller: Caller | undefined, metrics: SandboxMetric
     sessions: Object.fromEntries(
         Object.entries(metrics.sessions).filter(([id]) => {
             const agent = agentOf(id);
-            return agent !== undefined && visibleTo(caller, agent);
+            return agent !== undefined && listedTo(caller, agent);
         }),
     ),
 });
@@ -169,16 +204,17 @@ export const framedEvent = (
     event: SystemEvent,
     agentOf: (id: string) => Provenance | undefined,
 ): SystemEvent | undefined => {
+    // The cards a progress tick moved are cut like the whole roster, and the frame goes out even with none left: its
+    // revision is the next link of the line this reader follows. Cut for the owner's own tools too, which read past
+    // every fence but no seal.
+    if (event.kind === "agents" || event.kind === "agentsChanged") {
+        const now = Date.now();
+        return { ...event, agents: event.agents.flatMap((agent) => framedSummary(caller, agent, now) ?? []) };
+    }
     if (caller === undefined) {
         return event;
     }
     switch (event.kind) {
-        // The cards a progress tick moved are cut like the whole roster, and the frame goes out even with none left: its
-        // revision is the next link of the line this reader follows.
-        case "agents":
-        case "agentsChanged": {
-            return { ...event, agents: event.agents.filter((agent) => visibleTo(caller, agent)) };
-        }
         case "presence": {
             return { ...event, users: event.users.map((user) => framedPresence(caller, fence, user, agentOf)) };
         }

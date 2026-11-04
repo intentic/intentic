@@ -112,7 +112,8 @@ const workspaceNotes = (
         ...(isolated && capabilities.isolation === "cwd"
             ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
             : []),
-        ...(context.base.spec.isolation?.anchor?.sandbox !== undefined
+        // A fenced turn's sandbox holds only its areas and no git; the whole-workspace jail holds both, so says nothing.
+        ...(context.base.spec.isolation?.anchor?.sandbox !== undefined && context.base.spec.isolation.plan.fence?.whole === undefined
             ? [context.base.spec.sessionId === undefined ? fencedNote(facts.root) : fencedReminder(facts.root)]
             : []),
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),

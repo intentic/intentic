@@ -37,6 +37,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "identity/members.json", portability: "identity", note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy." },
     { path: "identity/owner.json", portability: "identity", note: "The target is bound by its own owner's first sign-in." },
     { path: "identity/passkeys.json", portability: "identity", note: "Passkeys are bound to the sandbox they were registered with: add them again on the new one from its Access tab." },
+    { path: "identity/seal-house.json", portability: "identity", note: "The house rule for private conversations is set again on the target, and each person answers their own default there." },
     { path: "identity/services.json", portability: "identity", note: "Write the services again on the target's Access page; automations that run as one are skipped until it exists there." },
     { path: "kept-jobs/", portability: "derived" },
     { path: "links/linked-children.json", portability: "carry" },

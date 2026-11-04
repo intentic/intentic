@@ -157,6 +157,10 @@ const fixture = (options: FixtureOptions = {}) => {
             },
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
+        // The house rule unset and nothing private, as on every existing sandbox: no turn here is jailed (jail-placement.ts).
+        sealHouse: unstubbed<Services["sealHouse"]>("sealHouse", { read: async () => ({ defaults: {} }) }),
+        orgPolicy: unstubbed<Services["orgPolicy"]>("orgPolicy", { current: async () => undefined }),
+        agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [] }),
         cards: unstubbed<Services["cards"]>("cards", {}),
         adapters: unstubbed<Services["adapters"]>("adapters", { for: () => adapter }),
         perf: unstubbed<Services["perf"]>("perf", { track: async (_op, _fields, run) => run() }),

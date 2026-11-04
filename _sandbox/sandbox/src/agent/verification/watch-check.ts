@@ -1,8 +1,10 @@
-import { access } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type IsolationPlan, isolationScript, type MountView, prepareMountView, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
-import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
+import { jailPlanOf, sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { runCheck } from "../../workload/run-check.js";
 import { errorMessage } from "@intentic/base/errors";
@@ -114,7 +116,7 @@ const mountedCheck = async (command: string, options: CheckOptions, plan: Isolat
 
 // A fenced conversation's check runs where its turns do: in a sandbox of its own (turn-sandbox.ts), built for the one
 // check and released after it. Never run open: a check that cannot have its sandbox is broken, not waiting.
-const sandboxedCheck = async (command: string, options: CheckOptions, plan: IsolationPlan): Promise<CheckResult> => {
+const sandboxedCheck = async (command: string, options: CheckOptions, plan: IsolationPlan, cwd?: string): Promise<CheckResult> => {
     let anchor: Awaited<ReturnType<typeof startAnchor>>;
     try {
         anchor = await startAnchor(plan);
@@ -122,7 +124,7 @@ const sandboxedCheck = async (command: string, options: CheckOptions, plan: Isol
         return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${errorMessage(error)}` };
     }
     try {
-        const entry = nsenterArgv(namespaceTargetOf(anchor), anchor.cwd, "bash", ["-lc", command]);
+        const entry = nsenterArgv(namespaceTargetOf(anchor), cwd ?? anchor.cwd, "bash", ["-lc", command]);
         const env = { ...options.env };
         if (anchor.sandbox !== undefined) {
             Object.assign(env, sandboxEnv(anchor.sandbox));
@@ -136,10 +138,40 @@ const sandboxedCheck = async (command: string, options: CheckOptions, plan: Isol
     }
 };
 
+// What a watch check needs to run in the jail private conversations put every turn in (agent/run/placement/jail-placement.ts).
+export interface WatchJail {
+    readonly wanted: () => Promise<boolean>;
+    readonly root: string;
+    readonly gits: string;
+}
+
+// While conversations can be private a check runs where its conversation's turns do: in the jail over its worktree, or
+// over the main checkout for a main-tree conversation, in the directory it was armed in. Its runtime session store is a
+// throwaway of its own, since a check resumes nothing. Never run open: no jail is a broken check, not a waiting one.
+const jailedCheck = async (command: string, options: CheckOptions, isolation: TurnIsolation, jail: WatchJail): Promise<CheckResult> => {
+    if (!(await isolation.sandboxAvailable())) {
+        return { exitCode: undefined, output: "", broken: "conversations here can be private, and this sandbox cannot build the isolated environment its checks then run in" };
+    }
+    const worktree = options.placement?.worktree ?? jail.root;
+    const cwd = options.placement === undefined ? options.cwd : undefined;
+    if (!(await exists(cwd ?? worktree))) {
+        return { exitCode: undefined, output: "", broken: `the directory it runs in, ${cwd ?? worktree}, is gone` };
+    }
+    const sessions = await mkdtemp(join(tmpdir(), "intentic-watch-sessions-"));
+    try {
+        return await sandboxedCheck(command, options, jailPlanOf(await isolation.planFor(worktree, undefined), sessions, { gits: jail.gits }), cwd);
+    } finally {
+        await rm(sessions, { recursive: true, force: true });
+    }
+};
+
 export const watchCheck =
-    (isolation: TurnIsolation): RunCheck =>
+    (isolation: TurnIsolation, jail?: WatchJail): RunCheck =>
     async (command, options) => {
         const placement = options.placement;
+        if (jail !== undefined && placement?.fenced !== true && (await jail.wanted())) {
+            return jailedCheck(command, options, isolation, jail);
+        }
         if (placement === undefined) {
             return plainCheck(command, options);
         }

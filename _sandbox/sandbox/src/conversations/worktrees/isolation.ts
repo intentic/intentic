@@ -3,7 +3,7 @@ import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { isMissing } from "@intentic/base/errors";
+import { errorMessage, isMissing } from "@intentic/base/errors";
 import { sessionsDir } from "../../sessions/session-store.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
@@ -13,7 +13,7 @@ import type { Logger } from "pino";
 import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
-import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
+import { gitPointersIn, type SandboxLayout, sandboxAvailable, startSandboxAnchor, type WholeJail } from "./turn-sandbox.js";
 import { currentBoot, OVERLAY_FS_NAME, overlayOptions, prepareLayer } from "./overlay-layers.js";
 import {
     type CargoWarmRequest,
@@ -98,6 +98,9 @@ export interface FencedPlacement {
     // Worktree-relative directories holding a repository's `.git` pointer ("" is the root): each is masked, since the
     // repository behind it holds every folder's history, not just the fence's.
     readonly gitPointers: readonly string[];
+    // Set for the whole-workspace jail private conversations put every turn in (turn-sandbox.ts WholeJail): no folder
+    // narrowed, covered or masked, only the history volume and other conversations' runtime state kept out.
+    readonly whole?: WholeJail;
 }
 
 export interface IsolationPlan {
@@ -250,7 +253,7 @@ export const warmMountsOf = async (plan: IsolationPlan, boot: string | undefined
                 mounts.push({ rel, lower });
             }
         } catch (error) {
-            process.emitWarning(`cargo-warm: ${rel} builds a target of its own this turn: ${error instanceof Error ? error.message : String(error)}`);
+            process.emitWarning(`cargo-warm: ${rel} builds a target of its own this turn: ${errorMessage(error)}`);
         }
     }
     return mounts;
@@ -493,19 +496,6 @@ const holdMountAnchor = async (
         lifetime.end();
         throw error;
     }
-};
-
-// Every directory in a checkout holding a `.git` entry, root-relative ("" is the root): the root repository's pointer
-// and each nested repository's. A fenced sandbox masks them all. Bounded like the mirror walk, and never into a mirror.
-export const gitPointersIn = async (worktree: string): Promise<string[]> => {
-    const found: string[] = [];
-    await walkDirs(worktree, { maxDepth: MAX_LINK_DEPTH + 1 }, async (dir, entries, subdirs) => {
-        if (entries.some((entry) => entry.name === ".git")) {
-            found.push(dir.rel);
-        }
-        return subdirs.filter((subdir) => subdir.name !== ".git" && !MIRRORED_DIRS.has(subdir.name));
-    });
-    return found.toSorted();
 };
 
 // Dependency trees, which a folder inside the fence resolves through from above it (the workspace's root

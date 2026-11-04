@@ -14,6 +14,7 @@ import ChatLandStrip from "./landing/ChatLandStrip.vue";
 import { landStripOf } from "./landing/landStrip";
 import { useRole } from "../../../client/sandbox/useRole";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
+import SealAsks from "./seal/SealAsks.vue";
 import { useT } from "@intentic/ui/i18n";
 import { modelsPath } from "../../../lib/routes/modelsPath";
 
@@ -78,6 +79,8 @@ const activeAccountReauth = computed(() => {
 <template>
     <!-- What this conversation still waits on people for (docs/architecture/needs.md): answerable here, above the composer. -->
     <NeedsStrip :conversation-id="conversation.conversationId" />
+    <!-- Who asked to read this private conversation, answered by its reader here (SealAsks). -->
+    <SealAsks />
     <!-- This conversation's agent is off the board. -->
     <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />

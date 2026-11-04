@@ -20,7 +20,7 @@ export const WSL_GPU_LIBRARY_PATH = "/usr/lib/wsl/lib";
 export const GPU_LIBRARY_ENV = "INTENTIC_GPU_LIBRARY_PATH";
 export const GPU_RUN_BIN = "/usr/local/bin/gpu-run";
 // Read per call, so a test can point it elsewhere; gpu-run reads the same variable.
-const gpuStateFile = (): string => process.env["INTENTIC_GPU_STATE"] ?? "/run/intentic/gpu-state";
+export const gpuStateFile = (): string => process.env["INTENTIC_GPU_STATE"] ?? "/run/intentic/gpu-state";
 
 const isWslGpuLibraries = (entry: string): boolean => entry.replace(/\/+$/u, "") === WSL_GPU_LIBRARY_PATH;
 

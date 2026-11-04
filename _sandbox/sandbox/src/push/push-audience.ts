@@ -32,6 +32,11 @@ const homeAbove = (entryOf: (id: string) => PersistedAgent | undefined, conversa
 
 /** Who hears that a turn finished: a home's owner for the home, nobody for its subagents, everyone else as ever. */
 export const finishedAudience = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): PushAudience => {
+    // A private conversation's news is its author's alone, whatever family it is in: a push carries its words.
+    const author = sealAuthorOf(entryOf, conversationId);
+    if (author !== undefined) {
+        return { kind: "member", email: author };
+    }
     const above = homeAbove(entryOf, conversationId);
     const owner = above?.home.social.owner?.email;
     if (above === undefined || owner === undefined) {
@@ -42,7 +47,11 @@ export const finishedAudience = (entryOf: (id: string) => PersistedAgent | undef
 
 /** Who hears that a card or a need waits on a person: in a home's family, its owner alone (undefined: everyone away). */
 export const askedOf = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): string | undefined =>
-    homeAbove(entryOf, conversationId)?.home.social.owner?.email;
+    sealAuthorOf(entryOf, conversationId) ?? homeAbove(entryOf, conversationId)?.home.social.owner?.email;
+
+// The author of a private conversation (schemas/seal.ts), the first of its readers; undefined for a shared one.
+const sealAuthorOf = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): string | undefined =>
+    entryOf(conversationId)?.seal?.readers[0]?.email;
 
 /** The member a send is narrowed to, or `false` for one nobody should get. */
 const audienceTo = (audience: PushAudience): string | undefined | false =>

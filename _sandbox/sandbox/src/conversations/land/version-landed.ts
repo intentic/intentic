@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import { landedCommitMessage } from "@intentic/sandbox-contract/state/landed-commit";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { sleep } from "@intentic/base/async";
@@ -6,7 +7,8 @@ import { AgentDomainRefusedError } from "../../workload/agent-execution.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { headSha } from "../../git/changes/changes.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
-import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
+import { withConversationTrailer, withTrailers } from "../../git-identity.js";
+import { attributionFor, memberOfConversation } from "../../git/attribution/commit-attribution.js";
 import { isProjectFolderRepo } from "../../git/remote/project-repo.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
@@ -90,7 +92,7 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
     // the same.
     const landed = drafted ? entry.landing.message : undefined;
     const trailers = landed === undefined ? await conversationTrailers(services, entry) : {};
-    const title = entry.social.title?.text;
+    const title = sharedTitleOf(entry);
     // The title stands in only when it could head a commit itself; the prefix would hide a narrated one from the check.
     const written = landed?.subject ?? (title === undefined || commitSubjectFlaw(title) === undefined ? fallbackSubject(title, id) : ``);
     const built = committableSubject(written, claims.flatMap((claim) => claim.paths));
@@ -99,15 +101,20 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
     if (subject !== written) {
         services.logger.warn({ agent: id, refused: written, subject }, "landed: its subject could not head a commit, committed under one built from the change");
     }
-    // Trailed with the conversation like its branch commits: this commit is one conversation's land, and every land has
-    // the same author, so the trailer is the only way `git log` on main says which conversation it came from. It joins
-    // the Test-Note/Allow paragraph rather than following it, and passes commitlint as an ordinary footer.
-    const message = withConversationTrailer(
-        landedCommitMessage({
-            ...(landed ?? { ...opt("testNote", trailers.testNote), ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]) }),
-            subject,
-        }),
-        id,
+    // Trailed with the conversation like its branch commits: this commit is one conversation's land, so the trailer is
+    // how `git log` on main says which conversation it came from. It joins the Test-Note/Allow paragraph rather than
+    // following it, and passes commitlint as an ordinary footer. The person who answers for the conversation is named as
+    // the owner's policy says (git/attribution/commit-attribution.ts): as its author, in a Co-authored-by line, or not.
+    const attribution = await attributionFor(services, memberOfConversation(services, id));
+    const message = withTrailers(
+        withConversationTrailer(
+            landedCommitMessage({
+                ...(landed ?? { ...opt("testNote", trailers.testNote), ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]) }),
+                subject,
+            }),
+            id,
+        ),
+        attribution.trailers,
     );
     const committed: { repo: string; sha: string }[] = [];
     for (const claim of claims) {
@@ -115,7 +122,7 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
             // Another land may have reached the tree while this commit queued. Read the claim under the same lock
             // as the commit, after that land's writers, rather than staging a file list captured before them.
             const [current] = await claimsOf(services, id, [claim.repo]);
-            if (current === undefined || !(await commitOnly(current.dir, current.paths, message, AGENT_GIT_AUTHOR))) {
+            if (current === undefined || !(await commitOnly(current.dir, current.paths, message, attribution.signer))) {
                 return undefined;
             }
             // Read under the same lock, so it is this commit and not one a later land made on top of it.

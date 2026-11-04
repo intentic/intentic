@@ -7,7 +7,7 @@ import { z } from "zod";
 import { handoffDirOf, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { namespaceTargetOf, nsenterPrefix } from "../../workload/namespace-entry.js";
 import { AGENT_SESSION_ENV } from "../../system/boot/container-owner.js";
-import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { TURN_PROOF_ENV, turnProof, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -415,7 +415,7 @@ export const bashTmuxHooks = (
                         }
                         // Rides the namespace hop so every forked process carries it; lets the daemon tell an
                         // agent-started run apart.
-                        const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ` : ""}`;
+                        const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ${TURN_PROOF_ENV}=${turnProof(owner)} ` : ""}`;
                         // The table every program of the line is judged by as it starts; a line that resolved a
                         // secret offloads nothing, since the value would travel to another machine.
                         const heavyEnv = await (async (): Promise<string> => {

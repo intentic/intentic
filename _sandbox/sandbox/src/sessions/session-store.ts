@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { statePath, stateRelPath } from "../state-paths.js";
 import { conversationUnit } from "../store/conversation-units.js";
@@ -11,6 +13,11 @@ import { SESSION_STATE } from "../workload/worktree-paths.js";
 export const sessionsDir = (historyRoot: string, id: string): string => join(conversationUnit(historyRoot, id), "sessions");
 
 export { SESSION_STATE } from "../workload/worktree-paths.js";
+
+// The store a conversation keeps while private conversations put its turns in the jail (conversations/seal/seal-jail.ts,
+// sessions/jail-store.ts): the shared one holds every unfenced conversation's sessions, which no jailed turn may read.
+// Apart from a fenced conversation's own (sessionsDir), whose store is its own for life, and made only by the jail.
+export const jailStoreDir = (historyRoot: string, id: string): string => join(conversationUnit(historyRoot, id), "jail-sessions");
 
 // Effectively "never": the CLI's sweep would now delete real transcripts (0 is rejected by the CLI).
 const RETENTION_DAYS = 3650;
@@ -40,9 +47,15 @@ export interface StoreOwner {
  * Where a conversation's runtime session state is: its transcripts, plans, backups, shell snapshots and checklists.
  * A conversation born fenced keeps its own, outside the workspace; its turn's namespace binds that over the shared
  * path (conversations/worktrees/isolation.ts), so the CLI writing to `~/.claude` and the daemon reading here name one file.
+ * Any other keeps the shared one, unless the jail moved its sessions into a store of their own (jailStoreDir).
  */
-export const claudeStoreOf = (workspaceRoot: string, historyRoot: string, entry: StoreOwner | undefined): string =>
-    entry?.identity.areas === undefined ? statePath(workspaceRoot, ".intentic/records/sessions/claude/") : sessionsDir(historyRoot, entry.id);
+export const claudeStoreOf = (workspaceRoot: string, historyRoot: string, entry: StoreOwner | undefined): string => {
+    if (entry?.identity.areas !== undefined) {
+        return sessionsDir(historyRoot, entry.id);
+    }
+    const jailed = entry !== undefined && isConversationId(entry.id) ? jailStoreDir(historyRoot, entry.id) : undefined;
+    return jailed !== undefined && existsSync(jailed) ? jailed : statePath(workspaceRoot, ".intentic/records/sessions/claude/");
+};
 
 export const linkClaudeState = async (workspaceRoot: string, home = homedir()): Promise<void> => {
     const store = statePath(workspaceRoot, ".intentic/records/sessions/claude/");

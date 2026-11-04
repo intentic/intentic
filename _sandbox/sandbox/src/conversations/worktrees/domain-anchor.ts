@@ -9,7 +9,8 @@ import { openPaneDoor } from "../../terminal/pane-door.js";
 import { startAgentDomain } from "../../workload/domain/agent-domain.js";
 import { AGENT_RUN, prepareAgentDomainView } from "../../workload/domain/agent-domain-view.js";
 import { daemonGitConfig, provisionAgentHome } from "../../workload/domain/agent-home.js";
-import { gitPointersIn, type IsolationAnchor, type IsolationPlan } from "./isolation.js";
+import type { IsolationAnchor, IsolationPlan } from "./isolation.js";
+import { gitPointersIn } from "./turn-sandbox.js";
 
 // A TURN'S PLACE IN THE UNPRIVILEGED AGENT DOMAIN. What startAnchor is for a root-mode turn: one call that hands back an
 // anchor every runtime and pane joins, here a domain (workload/domain/agent-domain.ts) over its view (agent-domain-view.ts), with

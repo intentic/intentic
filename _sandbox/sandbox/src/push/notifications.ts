@@ -22,7 +22,7 @@ const summarize = (prompt: string, limit = 90): string => {
 };
 
 // Must match the route the web client uses to open a conversation.
-const conversationUrl = (conversationId: string): string => `/?conversation=${encodeURIComponent(conversationId)}`;
+export const conversationUrl = (conversationId: string): string => `/?conversation=${encodeURIComponent(conversationId)}`;
 
 export const turnFinished = (conversationId: string, prompt: string, outcome: { ok: boolean; error?: string }): PushNotification => ({
     title: outcome.ok ? "Turn finished" : "Turn failed",

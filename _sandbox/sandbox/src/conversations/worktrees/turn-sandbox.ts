@@ -5,13 +5,22 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
+import { STATE_DIR } from "@intentic/constants";
+import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
+import { ROOM_SOCKET } from "@intentic/constants/memory-room";
+import { AGENT_TOKEN_PATH } from "../../auth/tokens/agent-token.js";
+import { hostsDir } from "../../capabilities/ssh-hosts.js";
 import { enginesRoot } from "../../engines/engine-store.js";
+import { gpuStateFile } from "../../hosts/gpu/gpu-state.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { SESSION_STATE } from "../../sessions/session-store.js";
 import { stateRelPath } from "../../state-paths.js";
 import { queueRoot } from "../../system/resources/queue-slots.js";
+import { PROMPT_SIGNAL_DIR } from "../../terminal/prompt-signal.js";
 import { registerSandboxEntry } from "../../workload/namespace-entry.js";
 import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
+import { SHARED_STATE } from "../../workload/worktree-paths.js";
+import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolation.js";
 
 // Fence turns with unprivileged bubblewrap (no capabilities/user namespaces), private PID/proc and an allowlisted filesystem.
@@ -49,6 +58,44 @@ const HOME_OVERLAID = [".claude"] as const;
 const SESSION_STORE = stateRelPath(".intentic/records/sessions/claude/");
 const SHELF = "refs";
 const PACKAGE_STORE = ".pnpm-store";
+
+/* THE WHOLE-WORKSPACE JAIL (2026-11-04). While conversations can be private (conversations/seal/seal-jail.ts), every turn
+   runs in this sandbox, not only a fenced one: as root over the shared tree a turn reads the history volume whole (every
+   transcript, the roster, the session secret) and every conversation's runtime session files. Its fence is the whole
+   workspace: every folder visible and writable as before, git whole, nothing narrowed, covered or masked. Over the
+   fenced sandbox it keeps what an unfenced turn needs and reaches nothing of another conversation: the repositories' git
+   directories, the agent token and memory room its CLIs and heavy commands ask, its own ssh agent and the machines' public
+   halves, the GPU and KVM devices, and the caches its installs and browsers read. The workspace's secrets and identity
+   files (PRIVATE_STATE), every other runtime's store under HOME, docker and netd stay out. */
+export interface WholeJail {
+    // The repositories' real git directories (workspace/layout/git-dir-owners.ts gitsRoot), bound whole and writable:
+    // what every checkout's `.git` pointer leads into, so status, log, commit and branches work as they do unjailed.
+    readonly gits: string;
+    // The conversation's own ssh agent socket (agent/run/harness/turn-env.ts), bound at its path when it has one.
+    readonly sshSocket?: string;
+}
+
+/** The whole-workspace jail over a turn's ordinary plan: nothing narrowed, covered or masked, its own session store. */
+export const jailPlanOf = (base: IsolationPlan, sessions: string, jail: WholeJail): FencedPlan => ({
+    ...base,
+    fence: { folders: [""], hidden: [], sessions, gitPointers: [], whole: jail },
+});
+
+// The workspace's state the jail never shows, workspace-relative: the secrets and the identity files (the roster, the
+// control tokens, the passkeys), as the agent domain masks them (workload/domain/agent-domain-view.ts PRIVATE_STATE).
+const PRIVATE_STATE = [join(STATE_DIR, "secrets"), join(STATE_DIR, "identity")];
+// What of /run/intentic a jailed turn reaches: the token its CLIs present (bin/agents), the memory room its heavy
+// commands ask (workload/room-socket.ts), the GPU state gpu-run reads, and the prompt signal a shell touches. Never
+// netd's control socket, the daemon's own, or another conversation's ssh agent.
+const runEndpoints = (): string[] => [AGENT_TOKEN_PATH, ROOM_SOCKET, gpuStateFile(), PROMPT_SIGNAL_DIR];
+// Devices an unfenced turn's builds and emulators use, passed through where the container has them.
+const JAIL_DEVICES = ["/dev/dri", "/dev/dxg", "/dev/kvm", "/dev/nvidiactl", "/dev/nvidia-modeset", "/dev/nvidia-uvm", "/dev/nvidia-uvm-tools", "/dev/nvidia0", "/dev/nvidia1"];
+// The caches an unfenced turn's installs and browsers read (Playwright's browsers, pnpm's and npm's downloads), behind a
+// throwaway layer each like the Claude config. Tool configs and credential files stay out, as they do for a fenced turn.
+const JAIL_HOME_OVERLAID = [".cache", ".npm"] as const;
+// Other runtimes' stores and logs inside what the home shows, each holding the words of every conversation that runtime
+// served, and the daemon's own local certificate authority: covered by an empty layer.
+const JAIL_HOME_MASKED = [".cache/claude-cli-nodejs", ".cache/opencode", ".cache/devin", ".local/share/opencode", ".local/state/opencode", ".local/share/devin", ".local/share/intentic"] as const;
 
 // Paths inside the sandbox's own dir.
 export interface SandboxLayout {
@@ -119,7 +166,35 @@ export const hostPathsFor = (plan: IsolationPlan, sources: SandboxSources): stri
     ...HOME_OVERLAID.map((name) => join(sources.home, name)),
     ...shelfFolders(plan.fence?.folders ?? []).map((folder) => join(plan.root, folder)),
     join(plan.root, PACKAGE_STORE),
+    ...(plan.fence?.whole === undefined ? [] : jailHostPaths(plan, plan.fence.whole, sources)),
 ];
+
+// What else of the host a whole-workspace jail's argv depends on: each read in the daemon's view, where a path under the
+// workspace root names the main checkout's copy.
+const jailHostPaths = (plan: IsolationPlan, jail: WholeJail, sources: SandboxSources): string[] => [
+    ...JAIL_DEVICES,
+    ...runEndpoints(),
+    ...(jail.sshSocket === undefined ? [] : [jail.sshSocket]),
+    jail.gits,
+    hostsDir(),
+    join(sources.home, ".ssh", "config"),
+    ...[...JAIL_HOME_OVERLAID, ...JAIL_HOME_MASKED].map((name) => join(sources.home, name)),
+    ...[...SHARED_STATE, ...PRIVATE_STATE, SHELF].flatMap((rel) => [join(plan.root, rel), join(plan.worktree, rel)]),
+];
+
+// Every directory in a checkout holding a `.git` entry, root-relative ("" is the root): the root repository's pointer
+// and each nested repository's. A fenced sandbox masks them all. Bounded like the mirror walk (isolation.ts), and never
+// into a mirror.
+export const gitPointersIn = async (worktree: string): Promise<string[]> => {
+    const found: string[] = [];
+    await walkDirs(worktree, { maxDepth: 4 }, async (dir, entries, subdirs) => {
+        if (entries.some((entry) => entry.name === ".git")) {
+            found.push(dir.rel);
+        }
+        return subdirs.filter((subdir) => subdir.name !== ".git" && !MIRRORED_DIRS.has(subdir.name));
+    });
+    return found.toSorted();
+};
 
 // Where a layer over a main-checkout directory keeps this conversation's writes; the mirrors' convention, shared.
 export const layerOf = (plan: Pick<IsolationPlan, "overlays">, rel: string): string => join(plan.overlays, encodeURIComponent(rel));
@@ -149,7 +224,7 @@ const present = (host: HostView, paths: readonly string[], toArgs: (path: string
 
 // The system, read-only: /usr, the top-level paths that are links into it or directories of their own, /etc with what
 // no turn needs masked, /opt and the runtime engines.
-const systemArgs = (layout: SandboxLayout, host: HostView, sources: SandboxSources): string[] => {
+const systemArgs = (empty: string, host: HostView, sources: SandboxSources): string[] => {
     const args = ["--ro-bind", "/usr", "/usr"];
     for (const path of SYSTEM_PATHS) {
         const link = host.links.get(path);
@@ -160,7 +235,7 @@ const systemArgs = (layout: SandboxLayout, host: HostView, sources: SandboxSourc
         }
     }
     args.push("--ro-bind", "/etc", "/etc");
-    args.push(...present(host, ETC_FILES_MASKED, (path) => ["--ro-bind", layout.empty, path]));
+    args.push(...present(host, ETC_FILES_MASKED, (path) => ["--ro-bind", empty, path]));
     args.push(...present(host, ETC_DIRS_MASKED, (path) => ["--tmpfs", path]));
     args.push(...present(host, ["/opt", sources.engines], (path) => ["--ro-bind", path, path]));
     return args;
@@ -188,6 +263,57 @@ const overlayArgs = (plan: FencedPlan, rel: string): string[] => {
     return ["--overlay-src", join(plan.root, rel), "--overlay", join(layer, "upper"), join(layer, "work"), join(plan.root, rel)];
 };
 
+// A whole-workspace jail's own devices, /run endpoints and HOME, each only where the host has it. The ssh client reads
+// the machines' configs and public halves (capabilities/ssh-hosts.ts), never a private key: the agent socket signs.
+const jailDeviceArgs = (host: HostView): string[] => present(host, JAIL_DEVICES, (path) => ["--dev-bind", path, path]);
+
+const jailRunArgs = (jail: WholeJail, host: HostView): string[] => [
+    ...present(host, [AGENT_TOKEN_PATH, gpuStateFile()], (path) => ["--ro-bind", path, path]),
+    ...present(host, [ROOM_SOCKET, PROMPT_SIGNAL_DIR, ...(jail.sshSocket === undefined ? [] : [jail.sshSocket])], (path) => ["--bind", path, path]),
+];
+
+const jailHomeArgs = (host: HostView, sources: SandboxSources): string[] => [
+    ...present(host, [join(sources.home, ".ssh", "config"), hostsDir()], (path) => ["--ro-bind", path, path]),
+    ...present(
+        host,
+        JAIL_HOME_OVERLAID.map((name) => join(sources.home, name)),
+        (path) => ["--overlay-src", path, "--tmp-overlay", path],
+    ),
+    ...present(
+        host,
+        JAIL_HOME_MASKED.map((name) => join(sources.home, name)),
+        (path) => ["--tmpfs", path],
+    ),
+];
+
+// The whole workspace at its root, read-write, with nothing covered and no pointer masked. An isolated turn's checkout
+// gets the shared state back from the main checkout as its mount namespace would (isolation.ts mountTable), the shelf
+// read-only and the package store and the mirrors behind its own layers, as a fenced turn's; a main-tree turn's checkout
+// is the main checkout, which holds all of them already. Then the workspace's secrets and identity files are covered,
+// the conversation's own session store stands over the shared one, and the git directories every pointer leads into.
+// `store` is how the session store is laid over the shared one: the conversation's own bound there, or an empty layer.
+const jailCheckoutArgs = (plan: FencedPlan, jail: WholeJail, host: HostView, store: readonly string[]): string[] => {
+    const isolated = plan.worktree !== plan.root;
+    const fromMain = (rel: string, flag: string): string[] => {
+        const path = join(plan.root, rel);
+        return isolated && host.present.has(path) ? [flag, path, path] : [];
+    };
+    const covered = PRIVATE_STATE.filter((rel) => host.present.has(join(plan.root, rel)) || host.present.has(join(plan.worktree, rel)));
+    return [
+        "--bind",
+        plan.worktree,
+        plan.root,
+        ...SHARED_STATE.filter((rel) => !PRIVATE_STATE.includes(rel)).flatMap((rel) => fromMain(rel, "--bind")),
+        ...covered.flatMap((rel) => ["--tmpfs", join(plan.root, rel)]),
+        ...store,
+        join(plan.root, SESSION_STORE),
+        ...fromMain(SHELF, "--ro-bind"),
+        ...(isolated && host.present.has(join(plan.root, PACKAGE_STORE)) ? overlayArgs(plan, PACKAGE_STORE) : []),
+        ...plan.mirrors.flatMap((rel) => overlayArgs(plan, rel)),
+        ...present(host, [jail.gits], (path) => ["--bind", path, path]),
+    ];
+};
+
 // The conversation's checkout at the workspace root, what the fence does not reach in it covered, its repository
 // pointers masked, its own session store, and what it shares with the main checkout: the fence's part of the shelf
 // read-only, and the package store and the mirrors behind layers of its own. The covers come right after the checkout,
@@ -212,52 +338,99 @@ const checkoutArgs = (plan: FencedPlan, layout: SandboxLayout, host: HostView): 
     ];
 };
 
-// The whole bwrap command line for one fenced turn, up to and excluding the command it runs. bwrap applies mounts in
-// order, so a parent always comes before what is laid over it. Sources are read in the daemon's own view, before any of
-// these binds, which is why a path under the workspace root names the main checkout's copy.
-export const sandboxArgs = (plan: FencedPlan, layout: SandboxLayout, host: HostView, sources: SandboxSources): string[] => [
-    "--unshare-user",
-    "--uid",
-    String(SANDBOX_UID),
-    "--gid",
-    String(SANDBOX_GID),
-    "--unshare-pid",
-    "--unshare-ipc",
-    "--unshare-uts",
-    "--unshare-cgroup-try",
-    "--disable-userns",
-    "--cap-drop",
-    "ALL",
-    "--hostname",
-    "fenced",
-    ...systemArgs(layout, host, sources),
-    "--proc",
-    "/proc",
-    "--dev",
-    "/dev",
-    "--tmpfs",
-    "/tmp",
-    "--tmpfs",
-    "/run",
-    "--tmpfs",
-    "/var",
-    ...homeArgs(host, sources),
-    "--bind",
-    layout.dir,
-    layout.dir,
+// The namespaces, the system, /proc, /dev, the temp dirs and HOME: every sandbox's, a person's shell's included. A
+// whole-workspace jail keeps the container's hostname, as the turn had it unjailed; a fenced one is named for what it is.
+const viewArgs = (plan: FencedPlan, empty: string, host: HostView, sources: SandboxSources): string[] => {
+    const jail = plan.fence.whole;
+    return [
+        "--unshare-user",
+        "--uid",
+        String(SANDBOX_UID),
+        "--gid",
+        String(SANDBOX_GID),
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--unshare-cgroup-try",
+        "--disable-userns",
+        "--cap-drop",
+        "ALL",
+        ...(jail === undefined ? ["--hostname", "fenced"] : []),
+        ...systemArgs(empty, host, sources),
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        ...(jail === undefined ? [] : jailDeviceArgs(host)),
+        "--tmpfs",
+        "/tmp",
+        "--tmpfs",
+        "/run",
+        "--tmpfs",
+        "/var",
+        ...(jail === undefined ? [] : jailRunArgs(jail, host)),
+        ...homeArgs(host, sources),
+        ...(jail === undefined ? [] : jailHomeArgs(host, sources)),
+    ];
+};
+
+// The whole bwrap command line for one fenced or jailed turn, up to and excluding the command it runs. bwrap applies
+// mounts in order, so a parent always comes before what is laid over it. Sources are read in the daemon's own view,
+// before any of these binds, which is why a path under the workspace root names the main checkout's copy.
+export const sandboxArgs = (plan: FencedPlan, layout: SandboxLayout, host: HostView, sources: SandboxSources): string[] => {
+    const jail = plan.fence.whole;
+    return [
+        ...viewArgs(plan, layout.empty, host, sources),
+        "--bind",
+        layout.dir,
+        layout.dir,
+        "--bind",
+        sources.queue,
+        sources.queue,
+        ...(jail === undefined ? checkoutArgs(plan, layout, host) : jailCheckoutArgs(plan, jail, host, ["--bind", plan.fence.sessions])),
+        "--chdir",
+        plan.root,
+        "--setenv",
+        "HOME",
+        sources.home,
+        ...Object.entries(sandboxEnv(layout, sources.queue)).flatMap(([name, value]) => ["--setenv", name, value]),
+        "--info-fd",
+        String(INFO_FD),
+    ];
+};
+
+// A PERSON'S SHELL IN THE JAIL (terminal/shell-jail.ts): the main checkout as a main-tree turn's jail shows it, with no
+// anchor to hold, since each shell is a sandbox of its own that tmux starts in its pane and ends with it. Its session
+// store is an empty layer, so a `claude` a person runs by hand reads no conversation's sessions and keeps none past the
+// shell; its temp dir is its own /tmp. Everything but the directory it opens in, which the pane names as it starts.
+export const shellJailArgs = (plan: FencedPlan & { readonly fence: { readonly whole: WholeJail } }, empty: string, host: HostView, sources: SandboxSources): string[] => [
+    ...viewArgs(plan, empty, host, sources),
     "--bind",
     sources.queue,
     sources.queue,
-    ...checkoutArgs(plan, layout, host),
-    "--chdir",
-    plan.root,
+    ...jailCheckoutArgs(plan, plan.fence.whole, host, ["--tmpfs"]),
     "--setenv",
     "HOME",
     sources.home,
-    ...Object.entries(sandboxEnv(layout, sources.queue)).flatMap(([name, value]) => ["--setenv", name, value]),
-    "--info-fd",
-    String(INFO_FD),
+    "--setenv",
+    "TMPDIR",
+    "/tmp",
+    "--setenv",
+    "INTENTIC_QUEUE_DIR",
+    sources.queue,
+    // The server these name is outside the shell's sandbox; a tmux run inside would take itself for a nested client.
+    "--unsetenv",
+    "TMUX",
+    "--unsetenv",
+    "TMUX_PANE",
 ];
+
+/** A person's shell's jail over the workspace at `root`, read from the host as it stands now. */
+export const peopleShellArgs = (root: string, jail: WholeJail, empty: string, sources: SandboxSources = defaultSources()): string[] => {
+    // No session store and no layers of its own: the shell's store is an empty layer, and the main checkout has no mirrors.
+    const plan = { worktree: root, root, mirrors: [], overlays: root, fence: { folders: [""], hidden: [], sessions: root, gitPointers: [], whole: jail } };
+    return shellJailArgs(plan, empty, readHostView(hostPathsFor(plan, sources)), sources);
+};
 
 // The process that holds the sandbox open. bwrap's own init ends the namespace, and everything still in it, the moment
 // this exits, so it stays while the turn holds it (`held` exists) and, once released, while anything the turn left
@@ -349,7 +522,9 @@ export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSourc
     }
     await writeFile(layout.held, "");
     await writeFile(layout.empty, "", { mode: 0o444 });
-    for (const rel of [...plan.mirrors, PACKAGE_STORE]) {
+    // A main-tree jail reads the package store in place, as part of the main checkout, so it needs no layer for it.
+    const layered = plan.fence.whole !== undefined && plan.worktree === plan.root ? plan.mirrors : [...plan.mirrors, PACKAGE_STORE];
+    for (const rel of layered) {
         await mkdir(join(layerOf(plan, rel), "upper"), { recursive: true });
         await mkdir(join(layerOf(plan, rel), "work"), { recursive: true });
     }

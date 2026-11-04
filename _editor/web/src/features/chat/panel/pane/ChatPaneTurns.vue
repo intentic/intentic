@@ -33,6 +33,7 @@ import { retryHydrate } from "../../../../models/conversations/run/useChat-sessi
 import { useBusySince, useElapsedWords } from "../../../../components/progress/useProgress";
 import { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
 import { useDriveRefusal } from "../../session/driveRefusal";
+import ChatSealHead from "../seal/ChatSealHead.vue";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 
@@ -47,7 +48,7 @@ const props = defineProps<{
 const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
 // A reader who follows this chat without driving it reads every card the agent parks on, and is told who answers it
 // instead of being handed answers the daemon would refuse (ChatCard).
-const driveRefusal = useDriveRefusal();
+const driveRefusal = useDriveRefusal(() => conversation.value.conversationId);
 provide(
     CARD_ANSWERS_WITHHELD,
     computed(() => (driveRefusal.value === undefined ? undefined : t(`chat.cardReplies.waitsOnDriver`))),
@@ -146,6 +147,8 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
     <div ref="column" class="chat-turns flex flex-1 flex-col pt-4">
         <!-- One preview for every file link in the column, hanging off whichever link the pointer or focus is on. -->
         <FileRefPeek :host="column" />
+        <!-- A private conversation's head: who reads it (the pill a reader changes it from), and every time it was opened without asking (ChatSealHead). -->
+        <ChatSealHead v-if="!props.subagent" />
         <!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
         <div v-if="conversation.transcript.historyMore.value && whole" class="flex justify-center py-2">
             <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->

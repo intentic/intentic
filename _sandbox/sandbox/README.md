@@ -475,6 +475,13 @@ flowchart LR
   (`workload/namespace-entry.ts`), and its Bash panes run on a tmux server inside the sandbox. It shares the container's
   network for now. A fenced turn on a runtime other than Claude Code, on a runner, or in a container where the sandbox
   cannot be built, is refused.
+- While conversations can be private (`conversations/seal/seal-jail.ts`: the house rule is not `everyone`, or one is
+  still sealed), every other root-mode turn runs in that sandbox too, fenced to the whole workspace
+  (`agent/run/placement/jail-placement.ts`, `turn-sandbox.ts` `WholeJail`): every folder writable, git whole, the agent
+  token and its own ssh agent, but no `/history` beyond the engines and the git directories, no workspace secrets or
+  identity files, and a session store of the conversation's own (`sessions/jail-store.ts` moves its session in and out).
+  A shell a person opens from the editor starts in a sandbox of its own then (`terminal/shell-jail.ts`). Otherwise
+  nothing about a turn or a shell changes.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
   The panel token that repo operator panels hold reaches no route that returns a stored secret. A listener provider

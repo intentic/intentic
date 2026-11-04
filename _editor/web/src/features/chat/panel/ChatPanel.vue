@@ -18,6 +18,9 @@ import { MIN_PANE_PX, useLayout } from "../../../workbench/window/useLayout";
 import { toAppPx, uiLength } from "../../../workbench/window/uiScale";
 import ChatPane from "./ChatPane.vue";
 import ChatSubagentPane from "./subagent/ChatSubagentPane.vue";
+import SealGate from "./seal/SealGate.vue";
+import { isSealed } from "../../../models/agent-status/sealView";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { keepSubagentWhileShown, subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
@@ -92,6 +95,13 @@ const split = computed(() => shown.value.length > 1);
 // lasts only while that parent's column is drawn.
 const subagentIn = (conversation: Conversation): string | undefined =>
     !bar && subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
+// The board's card for a conversation sealed from this reader (schemas/seal.ts), whose gate is drawn instead of its chat.
+// The quick bar's scratch pad has no room for a gate, and a composer there would only be refused: it draws nothing.
+const { agentById } = useAgents();
+const sealedCard = (conversation: Conversation) => {
+    const card = agentById(conversation.conversationId);
+    return isSealed(card) ? card : undefined;
+};
 watch(
     () => shown.value.map((conversation) => conversation.conversationId),
     (drawn) => keepSubagentWhileShown(drawn),
@@ -319,8 +329,11 @@ watch(
             >
                 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <template v-for="conversation in shown" :key="conversation.conversationId">
+                    <!-- A private conversation the reader cannot read: its gate stands in the chat's place, and no transcript is asked for. -->
+                    <SealGate v-if="sealedCard(conversation) !== undefined && !bar" :conversation-id="conversation.conversationId" />
                     <!-- Kept mounted while a subagent is shown over it, so stepping back finds the parent where it was left. -->
                     <ChatPane
+                        v-else-if="sealedCard(conversation) === undefined"
                         v-show="subagentIn(conversation) === undefined"
                         :conversation="conversation"
                         :focused="only !== undefined || conversation.conversationId === activeId"

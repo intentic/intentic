@@ -8,6 +8,7 @@ import { demoOutage, withOutage } from "./outage";
 import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_USER, platform } from "./platform";
 import { readsNote, withReads } from "./reads";
 import { withFloors } from "./floors";
+import { withSeals } from "./daemon/seal/sealGate";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { sandboxAddress, sandboxSocket } from "./world/addresses";
 import { withWorld } from "./world/fresh";
@@ -62,7 +63,7 @@ const openOnFleet = (): void => {
 // refused request is refused before the sandbox is reached, as the daemon's bearer middleware refuses it. The world
 // innermost: which sandbox an address is (one the visitor made answers as its own) is the daemon's own knowledge.
 // The preview proxy in front of all of it: its hostnames are a started dev server's, not the daemon's API.
-const answering = withPreviewSites(withFloors(withOutage(withReads(withWorld(daemon)))));
+const answering = withPreviewSites(withFloors(withSeals(withOutage(withReads(withWorld(daemon))))));
 const handlers = { platform, daemon: answering, sandboxAt: sandboxAddress };
 installFetch(handlers);
 installXhr(handlers);

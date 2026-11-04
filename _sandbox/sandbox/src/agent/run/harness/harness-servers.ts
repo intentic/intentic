@@ -180,16 +180,14 @@ const typistServer = (deps: HarnessServersDeps, turn: TypistTurn): McpSdkServerC
     });
 };
 
+// A whole-workspace jail is no fence on folders (turn-sandbox.ts WholeJail): its watch is placed as an unfenced turn's.
+const placementFor = (plan: TurnPlacement["plan"]): WatchPlacement => {
+    const fence = plan.fence?.whole === undefined ? plan.fence : undefined;
+    return { worktree: plan.worktree, fenced: fence !== undefined, ...opt("fence", fence?.folders) };
+};
+
 const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
-    !ownWorktree(isolation)
-        ? {}
-        : {
-              placement: {
-                  worktree: isolation.plan.worktree,
-                  fenced: isolation.plan.fence !== undefined,
-                  ...(isolation.plan.fence === undefined ? {} : { fence: isolation.plan.fence.folders }),
-              },
-          };
+    !ownWorktree(isolation) ? {} : { placement: placementFor(isolation.plan) };
 
 // The condition watch: the agent names an outside check command the daemon polls, waking the conversation when it exits
 // 0; a replacement for hand-rolled sleep loops, which can't fire once the turn's process is gone.

@@ -64,6 +64,8 @@ jest.mock(`../../../models/fleet/useAgents`, () => ({
 jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
 // The needs strip reads the sandbox's needs store, which is not what these notices are about.
 jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name: `NeedsStrip`, setup: () => () => undefined }) }));
+// Who asks to read a private conversation is answered through the seal's writes, which pull in the fleet's action layer.
+jest.mock(`./seal/SealAsks.vue`, () => ({ default: defineComponent({ name: `SealAsks`, setup: () => () => undefined }) }));
 // The privacy shield's strip reads the shield's own status, and has its own test (privacy/ChatPrivacyStrip.test.ts).
 jest.mock(`./privacy/ChatPrivacyStrip.vue`, () => ({ default: defineComponent({ name: `ChatPrivacyStrip`, setup: () => () => undefined }) }));
 // The land strip has its own tests (landing/); its presses would pull in the fleet's whole action layer here.

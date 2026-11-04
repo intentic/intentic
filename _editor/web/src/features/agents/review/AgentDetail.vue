@@ -19,7 +19,7 @@ import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch }
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import AgentLandFailure from "./landing/AgentLandFailure.vue";
-import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
+import { agentDisplayTitle, agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
 import { unregistered, writingNow } from "../../../models/agent-status/agentStatus-standing";
 import { agentWork, assignAgent, startAgent } from "../../../models/fleet/agentActions";
 import { useLandRequest } from "./landing/useLandRequest";
@@ -209,7 +209,7 @@ const view = useAgentView(mobile, inApp, agentId);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
-const named = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value);
+const named = computed(() => (fleetAgent.value?.seal?.sealed === true ? agentDisplayTitle(fleetAgent.value) : (fleetAgent.value?.title ?? conversation.value?.title.value)));
 const title = computed(() => named.value ?? t(`shared.agent`));
 
 const edit = createInlineRename(

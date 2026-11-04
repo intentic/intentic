@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../../seal/seal-family.js";
 import type { PersistedAgent, WorktreePlacement } from "../../registry/agents-store.js";
 
 // A CONVERSATION STARTED FROM A BRANCH (2026-10-29). Its copy of one repository was cut from a branch's tip rather than
@@ -26,7 +27,7 @@ export const liveBranchStarts = (agents: { readonly ids: () => readonly string[]
         if (entry === undefined || entry.archivedAt !== undefined || entry.placement.kind !== "worktree") {
             return [];
         }
-        return (entry.placement.branches ?? []).map(({ repo, branch }) => ({ conversationId: id, title: entry.social.title?.text, repo, branch }));
+        return (entry.placement.branches ?? []).map(({ repo, branch }) => ({ conversationId: id, title: sharedTitleOf(entry), repo, branch }));
     });
 
 /** The repos whose land reaches the shared tree: none for a conversation that commits onto branches. */

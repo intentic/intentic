@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../../composition.js";
@@ -44,7 +45,7 @@ const supervisorOf = (deps: ChildNewsDeps, childId: string): { readonly parent: 
     if (parent === undefined || !deps.conversations.running(parent)) {
         return undefined;
     }
-    return { parent, name: nameOf(childId, entry?.social.title?.text) };
+    return { parent, name: nameOf(childId, (entry === undefined ? undefined : sharedTitleOf(entry))) };
 };
 
 // Says it into the parent's turn: whether the parent has it now (said into its turn, or a turn of its own), not merely

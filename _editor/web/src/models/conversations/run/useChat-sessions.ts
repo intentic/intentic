@@ -13,6 +13,7 @@ import type { RecordCursor } from "../transcript/transcriptState";
 import { storedOutbox, storeOutbox } from "../session/sendOutbox";
 import type { Conversation } from "../session/conversation";
 import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
+import { sealedFrom } from "./sealedReads";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
@@ -123,7 +124,8 @@ const hydrate = async (conversation: Conversation, current: () => boolean): Prom
     // Must run before attaching, or the live turn paints over an empty transcript and clobbers the mirror.
     await conversation.transcript.paintCached();
     // A draft the daemon never filed has no record or run to read; the roster registering it re-hydrates (paneAttach).
-    if (!conversation.registered.value && conversation.session.value === undefined) {
+    // Nor has one sealed from this reader, whose gate stands in its place (SealGate) until a reader lets them in.
+    if ((!conversation.registered.value && conversation.session.value === undefined) || sealedFrom(conversation.conversationId)) {
         return true;
     }
     // Whether anything is there already, not whether this call put it there (the sweep may have painted it).

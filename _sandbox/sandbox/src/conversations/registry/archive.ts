@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { parentOfActor } from "../../auth/principal.js";
@@ -150,7 +151,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             return;
         }
         try {
-            await deps.agentWorktrees.retire(id, entry.placement.repos, entry.social.title?.text);
+            await deps.agentWorktrees.retire(id, entry.placement.repos, sharedTitleOf(entry));
             done[index] = id;
         } catch (error) {
             deps.logger.warn({ err: error, id }, "agents: archive skipped, worktree retire failed");
@@ -366,7 +367,7 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
 // does. Not forced: a terminal a person is attached to right now stays theirs.
 const retireCheckout = async (deps: AgentArchiveDeps, entry: IsolatedAgent): Promise<void> => {
     await deps.reaper?.reapConversation(entry.id);
-    await deps.agentWorktrees.retire(entry.id, entry.placement.repos, entry.social.title?.text);
+    await deps.agentWorktrees.retire(entry.id, entry.placement.repos, sharedTitleOf(entry));
 };
 
 // A per-conversation press the conversation's state refuses; the route answers it as a conflict, with the reason.

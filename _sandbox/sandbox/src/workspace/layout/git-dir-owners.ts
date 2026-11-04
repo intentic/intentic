@@ -24,7 +24,7 @@ import { repoGitDir } from "./git-layout.js";
 
    A dir is renamed or copied only into a name nothing holds or leads to; one that something does is left, and said. */
 
-const gitsRoot = (historyRoot: string): string => join(historyRoot, "gits");
+export const gitsRoot = (historyRoot: string): string => join(historyRoot, "gits");
 const trashRoot = (historyRoot: string): string => join(historyRoot, "trash");
 
 // One checkout's `.git` pointer into /history/gits: the entry (URI-encoded repo id) it leads to, and whether it is a

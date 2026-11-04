@@ -1,4 +1,5 @@
 import { t } from "@intentic/ui/i18n";
+import { formatUntil } from "@intentic/ui/time";
 import type { AccessReason } from "./accessReason";
 
 // EVERY SENTENCE THE EDITOR SAYS ABOUT WHAT A PERSON MAY NOT DO, built from the reason alone so the same "no" reads the
@@ -19,7 +20,7 @@ export interface AccessWords {
 }
 
 // The key each reason reads its words under: a tier by its name, the rest by what they are.
-type ReasonKey = `owner` | `maintainer` | `writer` | `collaborator` | `agentsOff` | `guest` | `area` | `aiAccounts` | `org`;
+type ReasonKey = `owner` | `maintainer` | `writer` | `collaborator` | `agentsOff` | `guest` | `area` | `aiAccounts` | `org` | `sealed`;
 
 const keyOf = (reason: AccessReason): ReasonKey => {
     switch (reason.kind) {
@@ -34,6 +35,7 @@ const keyOf = (reason: AccessReason): ReasonKey => {
         case `guest`:
         case `area`:
         case `org`:
+        case `sealed`:
             return reason.kind;
     }
 };
@@ -42,7 +44,30 @@ const shortOf = (key: ReasonKey, reason: AccessReason): string => {
     if (reason.kind === `org`) {
         return t(`common.access.short.org`, { org: reason.org });
     }
+    if (reason.kind === `sealed`) {
+        return t(`common.access.short.sealed`);
+    }
     return key === `guest` || key === `area` || key === `aiAccounts` ? t(`common.access.short.notShared`) : t(`common.access.short.${key}`);
+};
+
+// The quiet line over a private conversation the person reads but cannot write in: until when, and whose readers can.
+const sealedNote = (reason: Extract<AccessReason, { kind: `sealed` }>): string => {
+    if (reason.until === undefined) {
+        return t(`common.access.note.sealed`);
+    }
+    return reason.author === undefined
+        ? t(`common.access.note.sealedUntil`, { until: formatUntil(reason.until) })
+        : t(`common.access.note.sealedUntilBy`, { until: formatUntil(reason.until), author: reason.author });
+};
+
+const lineOf = (reason: AccessReason, asked: boolean): string => {
+    if (reason.kind === `org`) {
+        return t(`common.access.line.org`);
+    }
+    if (reason.kind === `sealed`) {
+        return t(`common.access.line.sealed`);
+    }
+    return asked ? t(`common.access.line.asked`) : t(`common.access.line.ask`);
 };
 
 /**
@@ -56,7 +81,7 @@ export const accessWords = (reason: AccessReason, options: { readonly place?: st
     return {
         short: shortOf(key, reason),
         title: t(`common.access.title.${key}`, { place, org }),
-        note: t(`common.access.note.${key}`, { org }),
-        line: reason.kind === `org` ? t(`common.access.line.org`) : options.asked === true ? t(`common.access.line.asked`) : t(`common.access.line.ask`),
+        note: reason.kind === `sealed` ? sealedNote(reason) : t(`common.access.note.${key}`, { org }),
+        line: lineOf(reason, options.asked === true),
     };
 };

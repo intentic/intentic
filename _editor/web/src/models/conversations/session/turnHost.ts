@@ -27,4 +27,5 @@ export type TurnHost = Pick<
     | "queue"
     | "sendLater"
     | "autoLandDraft"
+    | "privateDraft"
 >;

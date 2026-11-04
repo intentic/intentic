@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AccessRequests from "./AccessRequests.vue";
+import AccessConversations from "./AccessConversations.vue";
 import type { InviteRecord } from "@intentic/api-contract";
 import {
     Avatar,
@@ -349,6 +350,9 @@ watch(
                 </div>
             </Section>
         </div>
+
+        <!-- Who reads whose conversations, beside who may come in: the house rule for private conversations (AccessConversations). -->
+        <AccessConversations />
 
         <!-- Live presence: who else is connected right now (everyone sees this). Drawn only while somebody is: an empty
              card saying nobody is here was the tallest thing on a one-person sandbox's page. -->

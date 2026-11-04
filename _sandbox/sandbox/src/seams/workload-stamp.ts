@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { INSTANCE_ENV, NETD_SOCKET_ENV, NODE_GENERATION_ENV, NODE_SOCKET_ENV } from "@intentic/sandbox-contract/netd-wire";
 
 // Whose work a process the daemon spawned is, stamped into its environment by every spawner (a turn's runtime, a
@@ -8,9 +8,30 @@ import { INSTANCE_ENV, NETD_SOCKET_ENV, NODE_GENERATION_ENV, NODE_SOCKET_ENV } f
 // The stamp naming whose work a process is; identity itself is the process group, not this env var.
 export const WORKLOAD_ENV = "INTENTIC_TURN_OWNER";
 
+// THE PROOF THAT A CALL COMES FROM THE TURN IT NAMES (2026-11-04). The owner stamp above is a name anyone can write, and
+// every turn's CLIs present the same per-boot agent token, so on its own `x-intentic-conversation` proves nothing: a turn
+// could name another conversation and read as it. Beside the name every workload gets an HMAC of it under a key this
+// daemon run holds only in memory (never in an environment a child inherits), and the routes that read a conversation's
+// words for a turn (auth/scope/turn-reader.ts) believe a name only with its proof. A jailed turn
+// (conversations/worktrees/turn-sandbox.ts) has a private /proc, so another turn cannot read the proof out of its
+// environment; an unjailed one runs as root and could, which is why private conversations put every turn in the jail.
+export const TURN_PROOF_ENV = "INTENTIC_TURN_PROOF";
+const proofKey = randomBytes(32);
+
+/** The proof that goes with an owner stamp, for this daemon run. */
+export const turnProof = (owner: string): string => createHmac("sha256", proofKey).update(`turn-owner:${owner}`).digest("hex");
+
+/** Whether `proof` is this run's proof for `owner`. */
+export const provesOwner = (owner: string, proof: string | undefined): boolean => {
+    if (proof === undefined || proof.length !== 64) {
+        return false;
+    }
+    return timingSafeEqual(Buffer.from(turnProof(owner), "utf8"), Buffer.from(proof, "utf8"));
+};
+
 // Env to spread into a spawned workload's environment; owner is a conversation id or one of the two reserved names
-// below.
-export const workloadStamp = (owner: string): Record<string, string> => ({ [WORKLOAD_ENV]: owner });
+// below. The proof rides with it, so whatever carries the stamp carries the proof.
+export const workloadStamp = (owner: string): Record<string, string> => ({ [WORKLOAD_ENV]: owner, [TURN_PROOF_ENV]: turnProof(owner) });
 
 // The two owners that are not conversations: `daemon` for pooled ACP processes kept alive across turns, and `one-shot`
 // for toolless maxTurns-1 helper calls nothing will ever report live.

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AccessProfileSchema } from "./access-profiles.js";
 import { PRESET_GROUPS, type PresetGroup, PresetGroupSchema } from "./compliance.js";
 import { AiAccountKeySchema } from "./members.js";
+import { SealModeSchema } from "./seal.js";
 import { ToolCeilingSchema } from "./tool-ceiling.js";
 
 // An ORGANISATION'S POLICY as a sandbox holds it (docs/architecture/organisations.md). A sandbox that belongs to an
@@ -47,6 +48,17 @@ export const OrgCeilingSchema = z.object({
 });
 export type OrgCeiling = z.infer<typeof OrgCeilingSchema>;
 
+// How an organisation holds private conversations in its sandboxes: `mode` fixes the house rule (absent leaves it to each
+// sandbox), `twoPerson` makes an opening without asking wait for a second person with Full access.
+export const OrgConversationsSchema = z.object({
+    mode: SealModeSchema.optional().describe("The house rule every bound sandbox holds. Absent leaves it to each sandbox."),
+    twoPerson: z
+        .boolean()
+        .optional()
+        .describe("Opening a private conversation without asking needs a second person with Full access to agree, besides the owner."),
+});
+export type OrgConversations = z.infer<typeof OrgConversationsSchema>;
+
 // Omitted policy sections stay open. preset pins effective settings and refuses undoing writes, regardless of underlying files.
 // Unknown preset groups are skipped/reported as unenforced so newer policies still reach older daemons; the platform validates saved names.
 // membersOnly fences roster grants/removals by organisation membership, excluding the owner who is not a roster entry.
@@ -73,6 +85,9 @@ export const OrgPolicyRulesSchema = z.object({
         .optional()
         .describe("Access profiles every bound sandbox may grant, read-only there. Areas and connections they name are each sandbox's own ids."),
     ceiling: OrgCeilingSchema.optional().describe("What no turn in a bound sandbox may exceed, the owner's included."),
+    // Private conversations (seal.ts): the house rule every bound sandbox holds, and whether opening one without asking
+    // needs a second person. Optional like the rest: a policy stored before it fixes neither.
+    conversations: OrgConversationsSchema.optional().describe("Who reads whose conversations in every bound sandbox, and how one is opened without asking."),
 });
 export type OrgPolicyRules = z.infer<typeof OrgPolicyRulesSchema>;
 

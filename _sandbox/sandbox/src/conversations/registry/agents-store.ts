@@ -1,3 +1,4 @@
+import { SealSchema } from "@intentic/sandbox-contract/schemas/seal";
 import {
     AgentHarnessSchema,
     AgentOriginSchema,
@@ -253,6 +254,9 @@ export const PersistedAgentSchema = z.object({
     postures: PosturesSchema,
     landing: LandingSchema,
     social: SocialSchema,
+    // Set while it is private (schemas/seal.ts): who reads it, who asked, and every opening without asking, kept for good.
+    // Added 2026-11-04, optional: every row before it is shared.
+    seal: SealSchema.optional(),
     totals: TotalsSchema,
     createdAt: z.number(),
     updatedAt: z.number(),

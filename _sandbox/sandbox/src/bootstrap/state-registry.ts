@@ -23,6 +23,7 @@ import { membersDocument, ownerDocument } from "../auth/auth.js";
 import { accessRequestsDocument } from "../auth/members/access-requests.js";
 import { accountConnectorsDocument } from "../auth/members/account-connectors.js";
 import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
+import { sealHouseDocument } from "../auth/members/seal-house.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { previewGuardDocument } from "../auth/previews/preview-guard.js";
 import { accessProfilesDocument } from "../auth/principals/access-profiles-store.js";
@@ -150,6 +151,7 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ownerDocument,
     accessRequestsDocument,
     accountConnectorsDocument,
+    sealHouseDocument,
     passkeysDocument,
     previewGuardDocument,
     accessProfilesDocument,
@@ -227,10 +229,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
+    credentialReleasesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,

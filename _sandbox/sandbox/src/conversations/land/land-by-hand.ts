@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import { waitForRunBuilds } from "../../hosts/runs/run-builds.js";
 import { includeProducedFiles } from "../produced-files.js";
 import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
@@ -31,7 +32,7 @@ const syncedComposition = async (services: LandByHandDeps, entry: IsolatedAgent,
         return [
             ...(await syncBeforeLand(
                 services.agentWorktrees,
-                { id: entry.id, title: entry.social.title?.text, repos: entry.placement.repos, lines },
+                { id: entry.id, title: sharedTitleOf(entry), repos: entry.placement.repos, lines },
                 services.agents.recordWorktree,
                 upstreamOf(entry, target),
             )),
@@ -50,7 +51,7 @@ const announceLanded = (services: LandByHandDeps, entry: IsolatedAgent, span: re
     services.events.publish("workspace", {
         event: "agent.landed",
         agentId: entry.id,
-        ...opt("title", entry.social.title?.text),
+        ...opt("title", sharedTitleOf(entry)),
         branch: entry.placement.branch,
         outcome: "landed",
         repos: [...span],
@@ -112,7 +113,7 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
             .reconcileLand({
                 kind: "land",
                 agentId: entry.id,
-                ...opt("title", entry.social.title?.text),
+                ...opt("title", sharedTitleOf(entry)),
                 branch: entry.placement.branch,
                 repos: [...span],
             })

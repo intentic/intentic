@@ -2,11 +2,13 @@ import type { IconName } from "@intentic/ui";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentStatus, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { LoopState } from "@intentic/sandbox-contract/schemas/loops";
+import type { SealView } from "@intentic/sandbox-contract/schemas/seal";
 import type { SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
 import { t } from "@intentic/ui/i18n";
 import { useAudience } from "../../app/useAudience";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { plainToolWords } from "../../lib/toolWords/toolWords";
+import { isSealed, sealedTitle } from "./sealView";
 import { type AgentStanding, type ClientAgentStatus, memoryHeld } from "./agentStatus-standing";
 
 // One entry per status, no fallthrough. A table rather than an if-chain: `satisfies` over the full union makes an
@@ -106,7 +108,14 @@ export const subagentStatusMeta = (status: SubagentStatus): { icon: IconName; sp
 // The composer's own unsent words beat any placeholder: they are what the reader wrote, and what they will recognise.
 // Those words are passed in rather than read off the card: they live in `chatPreviews`, keyed by id, so that typing
 // rebuilds nothing but the one thing drawing them (useAgents-fleet.FleetAgent.unsent).
-export const agentDisplayTitle = (agent: { readonly title?: string; readonly status: AgentStatus | ClientAgentStatus }, preview?: string): string => {
+// A conversation sealed from the reader is called what it is, never its title (sealView.ts), whatever else is known.
+export const agentDisplayTitle = (
+    agent: { readonly title?: string; readonly status: AgentStatus | ClientAgentStatus; readonly seal?: SealView | undefined },
+    preview?: string,
+): string => {
+    if (isSealed(agent)) {
+        return sealedTitle();
+    }
     if (agent.title !== undefined) {
         return agent.title;
     }

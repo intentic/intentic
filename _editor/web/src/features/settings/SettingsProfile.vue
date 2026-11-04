@@ -6,6 +6,7 @@ import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAccount } from "../../client/auth/useAccount";
 import { signsInByEmail, signsInWithGoogle } from "../../client/auth/signInMethods";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
+import SettingsConversations from "./SettingsConversations.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -150,5 +151,8 @@ const linkGoogle = async (): Promise<void> => {
                 <p class="text-xs text-danger">{{ linkError }}</p>
             </RowNote>
         </RowGroup>
+
+        <!-- Whether the conversations you start in this sandbox begin private, where its house rule leaves it to you. -->
+        <SettingsConversations />
     </div>
 </template>

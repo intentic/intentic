@@ -92,6 +92,10 @@ export class Conversation {
     // to hold one: the message that opens it carries it (`conversationAutoLand`). Once registered, the card's is the answer.
     readonly autoLandDraft = ref<boolean | undefined>();
 
+    // Whether it starts private (schemas/seal.ts), pressed in the composer before the daemon has a record of it: the
+    // message that opens it carries the answer (`private`). Undefined starts it as the house rule says for this reader.
+    readonly privateDraft = ref<boolean | undefined>();
+
     // This conversation's composer draft: unsent text and staged attachments; per-tab, persisted per sandbox.
     readonly draft = ref(``);
     readonly attachments = ref<PendingAttachment[]>([]);

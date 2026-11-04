@@ -82,6 +82,15 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
     });
 
+    // Whether it starts private rides the message that opens the conversation here, and no later one, nor another box's.
+    it(`sends private only on the opening message of a conversation on this sandbox`, () => {
+        expect(wire(turnRequestBody({ ...base, conversationPrivate: true }))).toMatchObject({ private: true });
+        expect(wire(turnRequestBody({ ...base, conversationPrivate: false }))).toMatchObject({ private: false });
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`private`);
+        expect(wire(turnRequestBody({ ...base, registered: true, conversationPrivate: true }))).not.toHaveProperty(`private`);
+        expect(wire(turnRequestBody({ ...base, box: `other`, conversationPrivate: true }))).not.toHaveProperty(`private`);
+    });
+
     // Which session a turn goes on in is the daemon's to say (routing.ts). The id rides only for a past session resumed
     // from history, which no record holds yet; on a conversation the daemon holds, it picks the session itself.
     it(`names a session only for a conversation the daemon has no record of, while the selection reads as continuing it`, () => {

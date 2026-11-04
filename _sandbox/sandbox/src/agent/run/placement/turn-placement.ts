@@ -159,6 +159,7 @@ export const conversationIdentity = (
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),
     ...opt("fresh", freshSessionOf(input, now)),
     ...opt("home", input.home),
+    ...opt("seal", input.seal),
 });
 
 // A fresh conversation naming a runner nobody paired, refused in the same words whether it is sent now or booked.

@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import type { GitView } from "@intentic/sandbox-contract/schemas/git/git-view";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { OriginAgent } from "@intentic/sandbox-contract/schemas/git/git";
@@ -189,7 +190,7 @@ export const createAgentOrigins = (
                 }
                 identities[id] = {
                     provider: entry.profile.provider,
-                    ...opt("title", entry.social.title?.text),
+                    ...opt("title", sharedTitleOf(entry)),
                     // Written at land time from the diff, describing the change, not the ask the title names.
                     ...opt("landedMessage", entry.landing.message),
                 };

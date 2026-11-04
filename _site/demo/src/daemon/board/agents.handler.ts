@@ -31,7 +31,7 @@ export const agentsDoors = {
     list: (_input, call) => ({ agents: boardAgents(homeSandboxOf(call.url)), rev: roster.rev, held: heldApprovals() }),
     archived: () => ({ agents: archivedAgents(), rev: roster.rev, held: [] }),
     search: ({ query, caseSensitive }) => searchAgents(query, caseSensitive === true),
-    seenAll: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
+    seenAll: () => ({ agents: boardAgents(), rev: roster.rev, held: heldApprovals() }),
     // The recorded delta with this page load's presses on it: scratch carried or deleted, settled work absorbed.
     diff: ({ id }) => reviewOf(id),
     conflicts: ({ id }) => conflictsOf(id),

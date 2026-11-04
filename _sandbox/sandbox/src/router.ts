@@ -54,6 +54,8 @@ import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createPrivacyRoutes } from "./privacy/privacy.routes.js";
 import { createSafetyRoutes } from "./safety/safety.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
+import { createSealRoutes } from "./conversations/seal/seal.routes.js";
+import { placePeopleShells } from "./agent/run/placement/jail-placement.js";
 import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
 import { createAreasRoutes } from "./areas/areas.routes.js";
@@ -163,6 +165,10 @@ export const createRouter = (services: Services): SandboxRouter => ({
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),
+    // People's shells follow a change to who reads what at once (agent/run/placement/jail-placement.ts).
+    seal: createSealRoutes(services, () => {
+        void placePeopleShells(services).catch((error) => services.logger.warn({ err: error }, "seal: people's shells could not be placed"));
+    }),
     share: createShareRoutes(services),
     // Model accounts brought in from, or lent to, another of the owner's sandboxes (links/accounts/).
     sharing: createSharingRoutes(services),

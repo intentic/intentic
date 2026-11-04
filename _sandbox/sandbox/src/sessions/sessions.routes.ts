@@ -10,16 +10,18 @@ export type SessionsRoutesDeps = Pick<Services, "agents" | "sessions" | "workspa
 // Which past sessions a caller may read. Someone every conversation is visible to reads them all; anyone else (fenced
 // to areas, or a guest) reads a session only through the conversation it belongs to, since a session id is a provider's
 // and names no fence of its own. A session the registry ties to no conversation is not theirs.
+// A session a private conversation ran is read through that conversation by everyone, so a seal holds here too.
 const sessionReader = (services: Pick<Services, "agents">, caller: Caller | undefined): ((sessionId: string) => boolean) => {
-    if (seesWholeFleet(caller)) {
-        return () => true;
-    }
+    const whole = seesWholeFleet(caller);
     const reads = conversationReader(caller, registryProvenance(services.agents));
     const owners = new Map(services.agents.ids().flatMap((id) => {
         const sessionId = services.agents.entry(id)?.sessionId;
         return sessionId === undefined ? [] : [[sessionId, id] as const];
     }));
-    return (sessionId) => reads(owners.get(sessionId));
+    return (sessionId) => {
+        const owner = owners.get(sessionId);
+        return owner === undefined ? whole : reads(owner);
+    };
 };
 
 // Past conversations in this workspace (SDK-native session store, keyed on the working dir). A read that

@@ -156,6 +156,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     // slice) or below; anything else names itself if reached. From `inertOwnMembers` on: the members Services declares
     // itself.
     const merged = unstubbed<Services>("services", {
+        // The house rule as every existing sandbox holds it, unset and so `everyone`: no turn and no shell is jailed for
+        // private conversations (conversations/seal/seal-jail.ts). First, so a slice fake or a suite naming its own wins.
+        sealHouse: unstubbed("sealHouse", { read: async () => ({ defaults: {} }) }),
         ...authSliceFake({ auth }, rest.passkeys),
         ...automationsSliceFake((conversationId) => conversationsFake.agents.entry(conversationId)?.archivedAt !== undefined),
         ...capabilitiesSliceFake(),

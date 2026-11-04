@@ -12,6 +12,7 @@ import { accessWallCard, specimenCard } from "../../fixture/specimen";
 import { homeAgent } from "../../fixture/home/recording";
 import type { HomeSandbox } from "../../fixture/home/sandboxes";
 import { homeCardOf } from "./homeCards";
+import { framedForCaller } from "../seal/sealWorld";
 import { demoMode, demoQuiet, deskEdition, freshEdition, homeRecording, photographed } from "../../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
@@ -51,7 +52,9 @@ const withNeeds = (agent: AgentSummary): AgentSummary => {
           };
 };
 // `sandbox` is the one asking (fixture/home/sandboxes.ts): its own home turn shows on its home card (homeCards.ts).
-export const boardAgents = (sandbox: HomeSandbox = `shop`): AgentSummary[] => roster.agents.map((agent) => withNeeds(homeCardOf(agent, sandbox)));
+// Framed for the demo's one person last (seal/sealWorld.ts): a conversation sealed from her goes out as its sealed card.
+export const boardAgents = (sandbox: HomeSandbox = `shop`): AgentSummary[] =>
+    roster.agents.map((agent) => framedForCaller(withNeeds(homeCardOf(agent, sandbox))));
 
 // Held automation approvals project onto the board's attention lane; a desk runs no automations.
 export const heldApprovals = () => (deskEdition || freshEdition ? [] : automationApprovals(Date.now()));

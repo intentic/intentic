@@ -1,7 +1,7 @@
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { OrpcContext } from "../app-env.js";
 import { callerFence } from "../areas/area-scope.js";
-import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessListed } from "../auth/fleet-scope.js";
 import type { Services } from "../composition.js";
 import { refuseFenced } from "./layout/workspace-fence.js";
 import { scopedTarget } from "./layout/workspace-scope.js";
@@ -22,7 +22,7 @@ export const workspaceReads = (services: Pick<Services, "areas" | "agents" | "wo
         const entry = services.agents.entry(agent);
         // An unknown id stays NOT_FOUND from the scope resolver; saying FORBIDDEN here would answer whether it exists.
         if (entry !== undefined) {
-            refuseUnlessVisible(context.identity, provenanceOf(entry));
+            refuseUnlessListed(context.identity, provenanceOf(entry));
         }
     };
     // Every scoped read asks both questions before a path reaches the resolver: whose copy, and whether this caller

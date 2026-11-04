@@ -45,6 +45,7 @@ import { secretsContract } from "./contracts/secrets.contract.js";
 import { servicesContract } from "./contracts/services.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
+import { sealContract } from "./contracts/seal.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
 import { sharingContract } from "./contracts/sharing.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
@@ -103,6 +104,7 @@ export const sandboxContract: {
     services: typeof servicesContract;
     sessions: typeof sessionsContract;
     settings: typeof settingsContract;
+    seal: typeof sealContract;
     share: typeof shareContract;
     sharing: typeof sharingContract;
     skills: typeof skillsContract;
@@ -155,6 +157,7 @@ export const sandboxContract: {
     services: servicesContract,
     sessions: sessionsContract,
     settings: settingsContract,
+    seal: sealContract,
     share: shareContract,
     sharing: sharingContract,
     skills: skillsContract,

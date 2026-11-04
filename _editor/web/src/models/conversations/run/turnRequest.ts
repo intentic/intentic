@@ -4,6 +4,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import type { TurnErrand } from "@intentic/sandbox-contract/schemas/speaker";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import type { TurnBooking } from "../drafts/sendLater";
+import type { TurnHost } from "../session/turnHost";
 import { offeredHarness, offeredLoops } from "../../providers/offeredLoops";
 
 // The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
@@ -167,6 +168,8 @@ export const turnRequestBody = (input: {
     // This conversation's own answer to whether its finished work lands by itself, for the message that opens it; the
     // daemon reads it there only, and only from a maintainer.
     readonly conversationAutoLand?: boolean | undefined;
+    // Whether the conversation starts private (schemas/seal.ts), for the message that opens it; read there only.
+    readonly conversationPrivate?: boolean | undefined;
     // A Continue: the daemon carries the conversation on without the words, which only a daemon from before reads.
     readonly continues?: boolean | undefined;
     // The revision of this conversation's draft the words were sent from (composerDrafts.sentFrom), which the daemon
@@ -230,7 +233,12 @@ export const turnRequestBody = (input: {
 // conversation here, its own answer to whether its finished work lands by itself. Written onto the body in place.
 const stateOccasions = (
     body: ProcedureInput<`agent.run`>,
-    input: { readonly booking?: TurnBooking | undefined; readonly conversationAutoLand?: boolean | undefined; readonly registered: boolean },
+    input: {
+        readonly booking?: TurnBooking | undefined;
+        readonly conversationAutoLand?: boolean | undefined;
+        readonly conversationPrivate?: boolean | undefined;
+        readonly registered: boolean;
+    },
     here: boolean,
 ): void => {
     const { sendAt, sendAfter, sendAtReopen } = input.booking ?? {};
@@ -247,4 +255,19 @@ const stateOccasions = (
     if (!input.registered && here && input.conversationAutoLand !== undefined) {
         body.conversationAutoLand = input.conversationAutoLand;
     }
+    if (!input.registered && here && input.conversationPrivate !== undefined) {
+        body.private = input.conversationPrivate;
+    }
 };
+
+/** What a conversation holds for the message that opens it, until the daemon has a record to hold it. */
+export interface OpeningAnswers {
+    readonly conversationAutoLand: boolean | undefined;
+    readonly conversationPrivate: boolean | undefined;
+}
+
+/** The answers a conversation holds for the message that opens it (Conversation.autoLandDraft, privateDraft). */
+export const openingAnswers = (host: Pick<TurnHost, "autoLandDraft" | "privateDraft">): OpeningAnswers => ({
+    conversationAutoLand: host.autoLandDraft.value,
+    conversationPrivate: host.privateDraft.value,
+});

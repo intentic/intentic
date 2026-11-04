@@ -1,3 +1,4 @@
+import { sharedTitleOf } from "../seal/seal-family.js";
 import { waitForRunBuilds } from "../../hosts/runs/run-builds.js";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -237,7 +238,7 @@ async function* recordLand(
         hooks.settleLanding(id, land);
     }
     // The moment a dependency change starts costing every later turn's node_modules.
-    const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", finished.social.title?.text), branch: books.branch, repos: books.span };
+    const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", sharedTitleOf(finished)), branch: books.branch, repos: books.span };
     const reconciled = landed.landed ? await deps.dependencies.reconcileLand(origin) : undefined;
     yield landedFrame(landed, reconciled, land);
     if (!landed.landed) {
@@ -255,7 +256,7 @@ async function* recordLand(
     deps.events.publish("workspace", {
         event: "agent.landed",
         agentId: id,
-        ...opt("title", finished.social.title?.text),
+        ...opt("title", sharedTitleOf(finished)),
         branch: books.branch,
         outcome: "landed",
         repos: books.span,
