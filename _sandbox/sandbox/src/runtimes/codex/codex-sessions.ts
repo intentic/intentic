@@ -35,4 +35,10 @@ export const removeCodexRollout = async (home: string, threadId: string): Promis
     }
 };
 
+// What deletes a purged Codex conversation's rollout, from the sandbox-wide CODEX_HOME beside the credentials.
+export const codexRolloutRemover =
+    (authRoot: string) =>
+    (threadId: string): Promise<void> =>
+        removeCodexRollout(join(authRoot, "codex"), threadId);
+
 export const codexThreadExists = async (home: string, threadId: string): Promise<boolean> => (await findRollout(home, threadId)) !== undefined;

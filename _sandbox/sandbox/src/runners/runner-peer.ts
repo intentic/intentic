@@ -50,6 +50,8 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
         // sides read (runner-protocol.ts) rather than here.
         heartbeatMs: RUNNER_HEARTBEAT_MS,
         callTimeoutMs: 15 * 60 * 1000,
+        // A runner serves runnerContract, which has no `mcp`: asking it for tools on every connect was a NOT_FOUND each time.
+        listsTools: false,
         offline: (id) => `The runner "${id}" is offline — its machine is asleep, or the runner container is down.`,
     },
     hello: {

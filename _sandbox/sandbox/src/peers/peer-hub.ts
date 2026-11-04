@@ -38,12 +38,22 @@ export interface Pinged {
     readonly answer: unknown;
 }
 
+// One socket as the hub holds it. `terminate`, where the socket has one, drops it at once: `close` waits out a close
+// handshake that a half-open socket never answers (ws gives it 30 s), and every call riding the socket waits with it.
+export interface PeerConnection<Client, Announced> {
+    readonly client: Client;
+    readonly close: (code: number, reason: string) => void;
+    readonly terminate?: () => void;
+    readonly announced: Announced;
+}
+
 interface LivePeer<Client, Announced, Facts> {
     // The id it is held under now: a rename moves a live peer to a new id without touching its socket (`rekey`), so
     // everything that outlives the attach (its heartbeat, its detach) reads this rather than the id it attached with.
     key: string;
     readonly client: Client;
     readonly close: (code: number, reason: string) => void;
+    readonly hangUp: (code: number, reason: string) => void;
     readonly heartbeat: NodeJS.Timeout;
     announced: Announced;
     facts: Facts | undefined;
@@ -53,7 +63,7 @@ interface LivePeer<Client, Announced, Facts> {
 
 export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes> {
     // Takes over as this peer's connection, closing any old socket; the returned detach no-ops once replaced.
-    readonly attach: (id: string, connection: { client: Client; close: (code: number, reason: string) => void; announced: Announced }) => () => void;
+    readonly attach: (id: string, connection: PeerConnection<Client, Announced>) => () => void;
     // Replaces what the peer announced mid-session (e.g. a runner whose settings were just pushed).
     readonly announce: (id: string, announced: Announced) => void;
     // What the peer answered to `describe`.
@@ -80,6 +90,10 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     // Resolves true the moment this peer is connected and greeted (at once if it already holds a socket), false once
     // `timeoutMs` passes without one: how a call to a phone the sandbox just woke waits for it to dial in.
     readonly whenOnline: (id: string, timeoutMs: number) => Promise<boolean>;
+    // The peer's client once it holds a socket other than `previous`'s, at once if it already does; undefined once
+    // `timeoutMs` passes or `signal` aborts first. How a caller whose call died with a socket waits for the redial rather
+    // than retrying on the socket that just failed it (runner-dispatch.ts).
+    readonly reconnected: (id: string, previous: Client | undefined, timeoutMs: number, signal?: AbortSignal) => Promise<Client | undefined>;
     // Every peer holding a socket now; checked against the enrollment store by the peers invariant.
     readonly connected: () => readonly string[];
     // Those plus the ones remembered since they dropped: what a machine's environment list is built from, since a
@@ -121,9 +135,96 @@ const startHeartbeat = (
             .catch((err: unknown) => failed(peerFailureFields(err, heartbeatMs)));
     }, heartbeatMs);
 
+// A peer that stopped answering, or whose socket another replaced. Dropped at once where the socket allows.
+const hangUp =
+    <Client, Announced>(connection: PeerConnection<Client, Announced>) =>
+    (code: number, reason: string): void => {
+        if (connection.terminate !== undefined) {
+            connection.terminate();
+            return;
+        }
+        connection.close(code, reason);
+    };
+
+// The slice of a pino logger the hub writes through; a suite hands in a stub.
+export interface PeerHubLogger {
+    warn: (data: object, message: string) => void;
+    info?: (data: object, message: string) => void;
+}
+
+// A peer whose ping went unanswered by the next beat: dropped, not left looking online, since the dot must mean
+// reachable now, not remembered. A half-open socket neither answers nor closes, so without a deadline it would read as
+// online until TCP gave up, with one more unanswered ping piling up on every beat. A ping already on its way when its
+// socket was replaced fails too, and that peer is fine on its new socket: only the old one is hung up on, and the log
+// says so rather than claiming a drop (it misled a diagnosis, 2026-11-04). True when the caller should drop the peer.
+const unansweredPing = (
+    peer: { readonly key: string; readonly hangUp: (code: number, reason: string) => void },
+    current: boolean,
+    { logger, domain }: { readonly logger: PeerHubLogger; readonly domain: string },
+    fields: ReturnType<typeof peerFailureFields>,
+): boolean => {
+    peer.hangUp(1001, "no answer");
+    if (!current) {
+        logger.info?.({ ...fields, id: peer.key }, `${domain}: a replaced connection's last ping went unanswered; the one that replaced it is unaffected`);
+        return false;
+    }
+    logger.warn({ ...fields, id: peer.key }, `${domain}: heartbeat failed, dropping the connection`);
+    return true;
+};
+
+// Callers waiting for a peer's next socket (`reconnected`), told at attach rather than once it is greeted: a call that
+// died with the old socket needs the new one, not the grant.
+const attachWaiters = () => {
+    const waiting = new Map<string, Set<() => void>>();
+    return {
+        tell: (id: string): void => {
+            const waiters = waiting.get(id);
+            waiting.delete(id);
+            for (const tell of waiters ?? []) {
+                tell();
+            }
+        },
+        // Resolves at the peer's next attach, its deadline, or the signal's abort, whichever comes first.
+        next: (id: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<void> =>
+            new Promise<void>((resolve) => {
+                const waiters = waiting.get(id) ?? new Set<() => void>();
+                waiting.set(id, waiters);
+                const done = (): void => {
+                    clearTimeout(timer);
+                    signal?.removeEventListener("abort", done);
+                    waiters.delete(done);
+                    resolve();
+                };
+                const timer = setTimeout(done, timeoutMs);
+                signal?.addEventListener("abort", done, { once: true });
+                waiters.add(done);
+            }),
+    };
+};
+
+const awaitNewClient = async <Client>(
+    current: () => Client | undefined,
+    previous: Client | undefined,
+    nextAttach: (remainingMs: number) => Promise<void>,
+    { timeoutMs, signal }: { readonly timeoutMs: number; readonly signal: AbortSignal | undefined },
+): Promise<Client | undefined> => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        const client = current();
+        if (client !== undefined && client !== previous) {
+            return client;
+        }
+        const remaining = deadline - Date.now();
+        if (remaining <= 0 || signal?.aborted === true) {
+            return undefined;
+        }
+        await nextAttach(remaining);
+    }
+};
+
 export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes>(
     spec: PeerHubSpec,
-    logger: { warn: (data: object, message: string) => void; info?: (data: object, message: string) => void },
+    logger: PeerHubLogger,
     // Where tool tables outlive this process; in-memory when a caller has no durable one (tests, the bench).
     memory: PeerToolMemory = memoryPeerTools(),
 ): PeerHub<Client, Announced, Facts, Scopes> => {
@@ -147,7 +248,7 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
     // Asked for the moment a peer connects rather than whenever a turn first happens to list them: a browser paired
     // between turns, or one whose laptop shut since, must still publish its tools rather than dropping out of the turn.
     const learnTools = async (id: string, client: Client): Promise<void> => {
-        if (client.mcp === undefined) {
+        if (client.mcp === undefined || spec.listsTools === false) {
             return;
         }
         const answer = (await client.mcp(
@@ -181,35 +282,34 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
         said();
     };
 
+    const attaches = attachWaiters();
+
+    const unanswered = (peer: LivePeer<Client, Announced, Facts>, fields: ReturnType<typeof peerFailureFields>): void => {
+        if (unansweredPing(peer, live.get(peer.key) === peer, { logger, domain: spec.domain }, fields)) {
+            drop(peer.key, peer, "heartbeat unanswered");
+        }
+    };
+
     return {
         attach: (id, connection) => {
             const previous = live.get(id);
             if (previous !== undefined) {
                 clearInterval(previous.heartbeat);
-                previous.close(1000, "replaced");
+                previous.hangUp(1000, "replaced");
                 live.delete(id);
             }
             const peer: LivePeer<Client, Announced, Facts> = {
                 key: id,
                 client: connection.client,
                 close: connection.close,
-                // Dropped on heartbeat failure, not left looking online; the dot must mean reachable now, not
-                // remembered. A ping unanswered by the next beat counts as a failure: a half-open socket neither
-                // answers nor closes, so without a deadline it would read as online until TCP gave up, with one more
-                // unanswered ping piling up on every beat.
-                heartbeat: startHeartbeat(connection.client, spec.heartbeatMs, (pinged) => (peer.pinged = pinged), (fields) => {
-                    logger.warn({ ...fields, id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
-                    connection.close(1001, "no answer");
-                    const current = live.get(peer.key);
-                    if (current?.client === connection.client) {
-                        drop(peer.key, current, "heartbeat unanswered");
-                    }
-                }),
+                hangUp: hangUp(connection),
+                heartbeat: startHeartbeat(connection.client, spec.heartbeatMs, (pinged) => (peer.pinged = pinged), (fields) => unanswered(peer, fields)),
                 announced: connection.announced,
                 facts: seen.get(id)?.facts,
                 lastSeen: Date.now(),
             };
             live.set(id, peer);
+            attaches.tell(id);
             const last = seen.get(id)?.lastSeen;
             attachedAt.set(id, Date.now());
             logger.info?.(
@@ -366,6 +466,7 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                       };
                       waiters.add(tell);
                   }),
+        reconnected: (id, previous, timeoutMs, signal) => awaitNewClient(() => live.get(id)?.client, previous, (remaining) => attaches.next(id, remaining, signal), { timeoutMs, signal }),
         connected: () => [...live.keys()],
         // Every peer this hub can say anything about: holding a socket now, or remembered since it dropped. What a
         // machine's environment list is built from, where `connected` alone would lose a distro that went to sleep.

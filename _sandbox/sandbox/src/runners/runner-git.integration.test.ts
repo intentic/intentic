@@ -195,3 +195,31 @@ test("a second pull is incremental and reconciles the branch onto what the paren
     expect(await git(runnerWork, ["rev-parse", mainBranch])).toBe(await git(parentWork, ["rev-parse", mainBranch]));
     expect(existsSync(join(runnerWork, "second.md"))).toBe(true);
 });
+
+// 2026-11-04: a pull for a new turn hard-reset a checkout whose previous turn was still working in it on the runner, and
+// a commit and the edits after it were gone. A pull now keeps what the parent never received before it resets.
+test("a pull keeps work the parent never received before it resets the conversation's checkout", async () => {
+    const runner = freshRunner();
+    await syncFromParent(runner, identity, sync("pull"), () => undefined);
+    const checkout = join(mkdtempSync(join(tmpdir(), "runner-checkout-")), "conv1");
+    await git(runner.workspaceRoot, ["worktree", "add", checkout, "agent/conv1"]);
+    const attached = { ...runner, worktrees: { attached: async () => true, worktreeDir: () => checkout } };
+    const said: string[] = [];
+    await syncFromParent(attached, identity, sync("pull"), (line) => void said.push(line));
+    expect(said.filter((line) => line.includes("kept work"))).toEqual([]);
+
+    await writeFile(join(checkout, "unpushed.md"), "never pushed\n");
+    await git(checkout, ["add", "."]);
+    await git(checkout, ["commit", "-m", "unpushed"]);
+    const unpushed = await git(checkout, ["rev-parse", "HEAD"]);
+    await writeFile(join(checkout, "readme.md"), "edited, never committed\n");
+    await syncFromParent(attached, identity, sync("pull"), (line) => void said.push(line));
+
+    expect(said.filter((line) => line.includes("kept work"))).toHaveLength(1);
+    const kept = await git(runner.workspaceRoot, ["for-each-ref", "--format=%(objectname)", "refs/runner-rescue/conv1/"]);
+    expect(kept).not.toBe("");
+    expect(await git(runner.workspaceRoot, ["show", `${kept}:readme.md`])).toBe("edited, never committed");
+    expect(await git(runner.workspaceRoot, ["merge-base", "--is-ancestor", unpushed, kept]).then(() => true, () => false)).toBe(true);
+    // The checkout itself is the parent's branch again, as before.
+    expect(existsSync(join(checkout, "unpushed.md"))).toBe(false);
+});

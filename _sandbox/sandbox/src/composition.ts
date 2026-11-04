@@ -59,7 +59,7 @@ import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-pr
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
 import { GROK_BUILD } from "./runtimes/grok-build/grok-build-cli.js";
 import { createCliParts } from "./runtimes/vendor-cli/vendor-cli-slice.js";
-import { removeCodexRollout } from "./runtimes/codex/codex-sessions.js";
+import { codexRolloutRemover } from "./runtimes/codex/codex-sessions.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
@@ -558,7 +558,6 @@ const voiceOf = (whole: () => Services, workspaceRoot: string, logger: Services[
 const turnHold = (heldCards: HeldCards, conversations: Parameters<typeof turnRunOf>[0]) =>
     holdDepsOf(heldCards, (conversationId) => turnRunOf(conversations, conversationId));
 
-// What deletes a purged Codex conversation's rollout, from the sandbox-wide CODEX_HOME beside the credentials.
 // The turn engine's doors, bound to streamAgent here, the one module that may name the turn body, and the rest of what
 // the fleet asks of the engine.
 const turnEngineOf = (whole: () => Services) => ({
@@ -569,11 +568,6 @@ const turnEngineOf = (whole: () => Services) => ({
     ),
     turnEngine: { askRoleModel, roleModelIsSet, familyOf, cancelFamily, cancelWatchersFor } satisfies TurnEngine,
 });
-
-const codexRolloutRemover =
-    (authRoot: string) =>
-    (threadId: string): Promise<void> =>
-        removeCodexRollout(join(authRoot, "codex"), threadId);
 
 // Hoisted: the HTTP locks, the roster and the pins (compliance/org-pins.ts) the settings and the privacy shield are read
 // through all read the one policy this sandbox holds.
@@ -840,6 +834,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         agents,
         conversations,
         agentWorktrees: services.agentWorktrees,
+        remoteTurns: services.remoteTurns,
         areas,
         ...accessRosterOf(services),
         personas,

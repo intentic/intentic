@@ -40,6 +40,9 @@ export interface PeerHubSpec {
     readonly callTimeoutMs: number;
     // What the model reads when the peer holds no socket; asleep or shut is a normal state, not a fault.
     readonly offline: (id: string) => string;
+    // Whether the peer publishes a tool table to ask for as it connects; false for a door with no `mcp` procedure (a
+    // runner), where the ask is a guaranteed NOT_FOUND. An oRPC client answers any property, so the hub cannot tell.
+    readonly listsTools?: boolean;
 }
 
 export interface PeerMcpSpec {

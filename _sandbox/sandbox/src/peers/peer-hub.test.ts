@@ -383,3 +383,75 @@ test("connects and drops are logged with why and for how long, and a changed pre
     live.attach("laptop", fakePeer().connection);
     expect(said[3]?.data).toMatchObject({ id: "laptop", awayForMs: expect.any(Number) });
 });
+
+/* 2026-11-04: a runner redialled after its socket went half-open. The parent replaced the old socket with a graceful
+   close it never got an answer to, so every call on it hung for ws's 30 s close handshake, and the old socket's last
+   ping then read in the log as the new connection being dropped. */
+
+test("a replaced socket is hung up on at once where it can be, not asked to close", () => {
+    const live = hub();
+    const first = fakePeer();
+    const terminated: string[] = [];
+    live.attach("laptop", { ...first.connection, terminate: () => void terminated.push("first") });
+    live.attach("laptop", fakePeer().connection);
+    expect(terminated).toEqual(["first"]);
+    expect(first.closed).toEqual([]);
+});
+
+test("a ping still on its way when its socket was replaced neither drops the new socket nor says it did", async () => {
+    jest.useFakeTimers();
+    try {
+        const said: string[] = [];
+        const record = (_data: object, message: string): void => void said.push(message);
+        const live = createPeerHub<Client, { version: string }, Facts, Scopes>(spec, { warn: record, info: record });
+        const first = fakePeer();
+        let failPing: (error: Error) => void = () => undefined;
+        first.client.ping.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    failPing = reject;
+                }),
+        );
+        live.attach("laptop", first.connection);
+        await advanceTimersByTimeAsync(spec.heartbeatMs);
+        const second = fakePeer();
+        live.attach("laptop", second.connection);
+        failPing(new Error("no answer"));
+        await advanceTimersByTimeAsync(0);
+        expect(live.online("laptop")).toBe(true);
+        expect(live.client("laptop")).toBe(second.client);
+        expect(said.filter((message) => message.includes("dropping"))).toEqual([]);
+        expect(said).toContain("hosts: a replaced connection's last ping went unanswered; the one that replaced it is unaffected");
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("reconnected answers the peer's next socket, never the one the caller already has", async () => {
+    const live = hub();
+    const first = fakePeer();
+    live.attach("laptop", first.connection);
+    const waiting = live.reconnected("laptop", first.client, 60_000);
+    const second = fakePeer();
+    live.attach("laptop", second.connection);
+    expect(await waiting).toBe(second.client);
+    // Already holding a socket other than the caller's: answered at once.
+    expect(await live.reconnected("laptop", first.client, 60_000)).toBe(second.client);
+});
+
+test("reconnected gives up at its deadline, or when the caller stops waiting", async () => {
+    const live = hub();
+    expect(await live.reconnected("laptop", undefined, 10)).toBeUndefined();
+    const stop = new AbortController();
+    const waiting = live.reconnected("laptop", undefined, 60_000, stop.signal);
+    stop.abort();
+    expect(await waiting).toBeUndefined();
+});
+
+test("a door that publishes no tools is not asked for them as it connects", async () => {
+    const live = createPeerHub<Client, { version: string }, Facts, Scopes>({ ...spec, listsTools: false }, logger);
+    const peer = fakePeer();
+    live.attach("laptop", peer.connection);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(peer.client.mcp).not.toHaveBeenCalled();
+});

@@ -32,10 +32,15 @@ const exclusively = <T>(work: () => Promise<T>): Promise<T> => {
     return run;
 };
 
+// What the parent last had of a conversation's branch, per repo: moved by every pull (what came in) and every push (what
+// went out). With the parent's own branch, it is how a pull tells work the parent has from work it never received.
+const deliveredRef = (conversationId: string): string => `refs/runner-delivered/${conversationId}`;
+const rescueRef = (conversationId: string, at: number): string => `refs/runner-rescue/${conversationId}/${at}`;
+
 export interface RunnerSyncDeps {
     readonly workspaceRoot: string;
     readonly historyRoot: string;
-    readonly worktrees: AgentWorktrees;
+    readonly worktrees: Pick<AgentWorktrees, "attached" | "worktreeDir">;
 }
 
 export const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
@@ -88,6 +93,50 @@ const ensureRepo = async (deps: RunnerSyncDeps, identity: RunnerIdentity, repo: 
     return workingDir;
 };
 
+const revParse = (identity: RunnerIdentity, cwd: string, ref: string): Promise<string> =>
+    // allow(silent-catch): an absent ref is an answer here (no branch yet, nothing delivered yet), not a failure.
+    git(identity, cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).catch(() => "");
+
+const contains = async (identity: RunnerIdentity, cwd: string, tip: string, ref: string): Promise<boolean> => {
+    const target = await revParse(identity, cwd, ref);
+    if (target === "") {
+        return false;
+    }
+    if (target === tip) {
+        return true;
+    }
+    return await git(identity, cwd, ["merge-base", "--is-ancestor", tip, target]).then(
+        () => true,
+        () => false,
+    );
+};
+
+// Before a pull moves a conversation's branch onto the parent's, keeps whatever the parent never had under a rescue ref:
+// commits neither on the parent's branch nor delivered by a push, and (in a checkout) uncommitted edits. A pull used to
+// hard-reset them away; it did on 2026-11-04 to a turn the parent had lost track of, which was still working there.
+const keepUndelivered = async (
+    identity: RunnerIdentity,
+    at: { readonly cwd: string; readonly ref: string; readonly checkout: boolean },
+    conversationId: string,
+    said: (kept: string) => void,
+): Promise<void> => {
+    const tip = await revParse(identity, at.cwd, at.ref);
+    if (tip === "") {
+        return;
+    }
+    const dirty = at.checkout && (await git(identity, at.cwd, ["status", "--porcelain", "--untracked-files=no"])) !== "";
+    if (!dirty && ((await contains(identity, at.cwd, tip, PARENT_TURN_REF)) || (await contains(identity, at.cwd, tip, deliveredRef(conversationId))))) {
+        return;
+    }
+    // Named here, since a snapshot commit needs an author and a runner's machine may have none configured.
+    const snapshot = dirty
+        ? await git(identity, at.cwd, ["-c", "user.name=intentic runner", "-c", "user.email=runner@intentic.invalid", "stash", "create", `undelivered work of ${conversationId}`])
+        : "";
+    const kept = rescueRef(conversationId, Date.now());
+    await git(identity, at.cwd, ["update-ref", kept, snapshot === "" ? tip : snapshot]);
+    said(kept);
+};
+
 export const syncFromParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
     exclusively(() => pullFromParent(deps, identity, input, onLine));
 
@@ -117,10 +166,18 @@ const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, in
             continue;
         }
         if (await deps.worktrees.attached(input.conversationId, repo)) {
-            await git(identity, deps.worktrees.worktreeDir(input.conversationId, repo), ["reset", "--hard", PARENT_TURN_REF]);
+            const checkout = deps.worktrees.worktreeDir(input.conversationId, repo);
+            await keepUndelivered(identity, { cwd: checkout, ref: "HEAD", checkout: true }, input.conversationId, (kept) =>
+                onLine(`${repo}: kept work the parent never received under ${kept} before syncing`),
+            );
+            await git(identity, checkout, ["reset", "--hard", PARENT_TURN_REF]);
         } else {
+            await keepUndelivered(identity, { cwd: workingDir, ref: `refs/heads/${input.branch}`, checkout: false }, input.conversationId, (kept) =>
+                onLine(`${repo}: kept work the parent never received under ${kept} before syncing`),
+            );
             await git(identity, workingDir, ["branch", "-f", input.branch, PARENT_TURN_REF]);
         }
+        await git(identity, workingDir, ["update-ref", deliveredRef(input.conversationId), PARENT_TURN_REF]);
         onLine(`${repo}: up to date`);
     }
 };
@@ -137,5 +194,6 @@ const deliverToParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, i
         }
         onLine(`${repo}: pushing ${tip.slice(0, 7)}…`);
         await git(identity, workingDir, ["push", "--no-verify", url, `+refs/heads/${input.branch}:${runnerIncomingRef(input.conversationId)}`]);
+        await git(identity, workingDir, ["update-ref", deliveredRef(input.conversationId), tip]);
     }
 };

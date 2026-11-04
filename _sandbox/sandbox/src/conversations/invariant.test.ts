@@ -54,12 +54,14 @@ const run = async (
     running: Readonly<Record<string, boolean>>,
     live: readonly { conversationId: string; startedAt: number }[],
     since: Readonly<Record<string, number>> = {},
+    remote: readonly { conversationId: string }[] = [],
 ): Promise<void> => {
     const check = checkNamed("live-turns-are-running-on-the-board", {
         agents: registryOf(running),
         conversations: actorsOf(running, since),
         agentWorktrees: SETTLED,
         live: () => live,
+        remoteTurns: { live: () => remote },
         now: () => NOW,
     });
     await check.run({ moment: "sweep", fail });
@@ -84,6 +86,12 @@ test("a turn younger than the grace is not yet due: begin may still be a tick aw
 });
 
 // The mirror: a phase stuck at running answers every `begin` busy, so the conversation's queue never drains.
+// On a runner, a dispatched turn is held by the runner's own registry rather than as a conversation run; it fired on every
+// healthy remote turn before (2026-11-04, omen).
+test("a runner's held turn is the live turn behind its running card", async () => {
+    await expect(run({ remote: true }, [], {}, [{ conversationId: "remote" }])).resolves.toBeUndefined();
+});
+
 test("a conversation running on the board past the grace with no live turn behind it is named", async () => {
     await expect(run({ spinning: true }, [])).rejects.toThrow(/running on the fleet board with no live turn behind.*spinning/);
 });

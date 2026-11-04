@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { upgradeWebSocket } from "@hono/node-server";
+import { upgradeWebSocket, type WebSocketLike } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import { PEER_TRY_AGAIN, PEER_UNAUTHORIZED } from "@intentic/sandbox-contract/peer-dial";
 import { converterReadable, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
@@ -15,6 +15,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { RawRouteTable } from "../http/raw-route-server.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
+import { opt } from "../opt.js";
 import { type CallDeadline, callFailure } from "./call-failure.js";
 import type { PeerDoor, PeerKind, PeerSlug } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
@@ -37,6 +38,9 @@ const PROTOCOL_ERROR = 1002;
 
 // Standard WebSocket "going away", as the hub's heartbeat closes with: a peer that stopped answering, redialled as usual.
 const PEER_GONE_QUIET = 1001;
+
+// The real `ws` socket under hono's WebSocketLike, which names no way to drop it at once.
+const terminable = (socket: WebSocketLike | undefined): socket is WebSocketLike & { terminate: () => void } => socket !== undefined && "terminate" in socket;
 
 // A gate on a tool call before it crosses to the peer: a refusal returns as a tool result the model reads.
 export type PeerCallGate = (
@@ -386,8 +390,16 @@ export const createPeerRoutes = <
                 // `.raw` is the real `ws` socket with the surface oRPC's link needs; WSContext is only a send/close
                 // façade.
                 const socket = ws.raw as unknown as WebSocket;
+                const hangable = ws.raw;
                 const client = deps.client?.(socket) ?? (createORPCClient(new RPCLink({ websocket: socket })) as unknown as Client);
-                detach = hub.attach(id, { client, close: (code, reason) => ws.close(code, reason), announced: door.hello.announced(hello.data) });
+                detach = hub.attach(id, {
+                    client,
+                    close: (code, reason) => ws.close(code, reason),
+                    // The replaced and the unanswering are hung up on, not asked to close: a half-open socket never
+                    // answers the close handshake, and every call riding it waits out ws's 30 s (peer-hub.ts).
+                    ...opt("terminate", terminable(hangable) ? () => hangable.terminate() : undefined),
+                    announced: door.hello.announced(hello.data),
+                });
                 await greetPeer(services, door.slug, hub, {
                     id,
                     client,

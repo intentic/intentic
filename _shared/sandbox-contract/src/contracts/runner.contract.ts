@@ -3,10 +3,12 @@ import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
 import {
+    RunnerAttachSchema,
     RunnerCommandFrameSchema,
     RunnerCommandSchema,
     RunnerDefinitionAppliedSchema,
     RunnerFactsSchema,
+    RunnerHeldTurnSchema,
     RunnerSyncLineSchema,
     RunnerSyncSchema,
     RunnerTurnSchema,
@@ -25,6 +27,16 @@ export const runnerContract = {
     syncWorkspace: oc.input(RunnerSyncSchema).output(streamOf(RunnerSyncLineSchema)),
     // One turn in, the frames a local turn would produce out; the parent republishes them into the local pipeline.
     runTurn: oc.input(RunnerTurnSchema).output(streamOf(AgentEventSchema)),
+    // The same turn's frames again, from `after` on, then live until it ends: how a parent whose socket dropped mid-turn
+    // picks it back up. NOT_FOUND when the runner holds no turn for the conversation (it restarted, or is older than
+    // this procedure); the parent then says the turn was lost and collects whatever its branch holds.
+    attachTurn: oc.input(RunnerAttachSchema).output(streamOf(AgentEventSchema)),
+    // What the runner holds for a conversation: asked before a new turn, so one that carried on after the parent lost it
+    // is collected before its checkout is touched.
+    heldTurn: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(RunnerHeldTurnSchema),
+    // How many of the held turn's frames the parent has, said every few seconds while it relays them: the count a parent
+    // that restarted mid-turn reads on from (`heldTurn().acked`), since its own count died with it.
+    ackTurn: oc.input(RunnerAttachSchema).output(OkSchema),
     // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND.
     reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
     // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root.

@@ -20,6 +20,9 @@ export interface FleetRegistryDeps {
     readonly conversations: Pick<ConversationActors, "running" | "holdings" | "state">;
     readonly agentWorktrees: AgentWorktrees;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
+    // On a runner, the turns it runs for its parent (runners/remote-turns.ts): a dispatched turn is no conversation run
+    // here, yet it is what keeps the card running, so it counts as the live turn behind it.
+    readonly remoteTurns?: { readonly live: () => readonly { readonly conversationId: string }[] };
     readonly now?: () => number;
     // Which checkouts stand off `agent/<id>` and whether their work there is carried; git-backed unless handed in.
     readonly strays?: (id: string, repos: readonly { readonly repo: string }[]) => Promise<readonly StrayStanding[]>;
@@ -32,6 +35,7 @@ export const checks = ({
     conversations,
     agentWorktrees,
     live = () => liveTurnConversations(conversations),
+    remoteTurns,
     now = Date.now,
     strays = (id, repos) => strayStandings(agentWorktrees, id, repos),
 }: FleetRegistryDeps): readonly InvariantCheck[] => [
@@ -104,7 +108,7 @@ export const checks = ({
                 );
             }
             // The mirror: a phase stuck at running answers every `begin` busy, so the conversation's queue never drains.
-            const alive = new Set(runs.map((run) => run.conversationId));
+            const alive = new Set([...runs, ...(remoteTurns?.live() ?? [])].map((run) => run.conversationId));
             const stuck = [...known].filter((id) => {
                 const phase = conversations.state(id)?.phase;
                 return phase?.kind === "running" && now() - phase.startedAt > REGISTRY_GRACE_MS && !alive.has(id);

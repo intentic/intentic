@@ -3,6 +3,7 @@ import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
 import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
+import { createRemoteTurns, type RemoteTurns } from "./held-turns/remote-turns.js";
 import type { ParentCredentials } from "./runner-credentials.js";
 import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, type RunnerStore } from "./runner-peer.js";
 
@@ -14,6 +15,9 @@ export interface RunnersSlice {
     // Set only when this daemon is a runner: the parent sandbox as a credential source, read off /history at boot.
     // Genuinely late, so a holder: runner mode enrolls after the boot gate opens (main.ts), long after composing.
     readonly runnerParent: { current?: ParentCredentials };
+    // When this daemon is a runner, the turns it runs for its parent, held past the socket that dispatched them
+    // (remote-turns.ts); empty on any other daemon.
+    readonly remoteTurns: RemoteTurns;
 }
 
 // Builds the runners slice: the same peer door as a device or a browser, with the parent left for runner mode to fill.
@@ -21,6 +25,7 @@ const createRunnersSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): R
     runners: filePeerStore(historyRoot, RUNNER_PEER.store),
     runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
     runnerParent: {},
+    remoteTurns: createRemoteTurns(),
 });
 
 export const runnersSlice = defineSlice<RunnersSlice>({

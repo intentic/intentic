@@ -185,7 +185,14 @@ export type RunnerSync = z.infer<typeof RunnerSyncSchema>;
 
 export const RunnerSyncLineSchema = z.union([
     z.object({ kind: z.literal("line"), text: z.string() }),
-    z.object({ kind: z.literal("done"), ok: z.boolean(), detail: z.string().optional() }),
+    z.object({
+        kind: z.literal("done"),
+        ok: z.boolean(),
+        detail: z.string().optional(),
+        // Why a pull touched nothing: the conversation's previous turn is still running on the runner, in the checkout
+        // a pull would reset. The parent collects a held turn before it pulls (runner-dispatch.ts), so this is a guard.
+        code: z.enum(["busy"]).optional(),
+    }),
 ]);
 export type RunnerSyncLine = z.infer<typeof RunnerSyncLineSchema>;
 
@@ -210,6 +217,26 @@ export const RunnerTurnSchema = z.object({
     attachments: z.array(z.object({ path: z.string().min(1), bytesBase64: z.string() })).optional(),
 });
 export type RunnerTurn = z.infer<typeof RunnerTurnSchema>;
+
+// A turn the runner holds for a conversation, which outlives the socket it was dispatched over: the runner runs it to
+// its end whoever is listening, and keeps every frame it produced until the parent has collected the turn's branch, so a
+// `finished` one is always one the parent has not collected yet (a restart, a wait that ran out). `events` counts those
+// frames; a parent that saw N of them re-attaches with `after: N` and misses nothing.
+export const RunnerHeldTurnSchema = z.object({
+    state: z.enum(["none", "live", "finished"]),
+    events: z.number().int().nonnegative(),
+    // How many the parent last said it has (runnerContract.ackTurn): where a parent that lost its own count, a restart,
+    // reads on from without repeating what it already drew.
+    acked: z.number().int().nonnegative(),
+});
+export type RunnerHeldTurn = z.infer<typeof RunnerHeldTurnSchema>;
+
+export const RunnerAttachSchema = z.object({
+    conversationId: z.string().min(1),
+    // How many of the turn's frames the parent already has; the replay starts with the next one.
+    after: z.number().int().nonnegative(),
+});
+export type RunnerAttach = z.infer<typeof RunnerAttachSchema>;
 
 // OFFLOADED COMMANDS: one shell line the parent hands a runner instead of running it itself (settings `offload`). The
 // code travels as a snapshot commit of the parent's working tree, uncommitted and untracked work included, parked under
