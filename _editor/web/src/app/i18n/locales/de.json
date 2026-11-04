@@ -7496,12 +7496,10 @@
             "runners": "Runner",
             "sandboxKeepsNoRunner": "Diese Sandbox hält auf {label} keinen Runner. Fügen Sie einen hinzu, um ihm Unterhaltungen zum Ausführen zu übergeben.",
             "settingsFailed": "Die Einstellungen haben diesen Runner nicht erreicht.",
-            "startingOnDevice": "Wird auf diesem Gerät gestartet…",
             "syncSettings": "Synchronisierungseinstellungen",
             "syncing": "Wird synchronisiert…",
             "unread": "Die Runner dieser Sandbox ließen sich nicht lesen ({reason}).",
-            "updating": "Runner {name} wird aktualisiert",
-            "buildTakesMinutes": "Seinen Container auf diesem Computer zu bauen kann einige Minuten dauern."
+            "updating": "Runner {name} wird aktualisiert"
         },
         "discoverCard": {
             "cantClone": "Nicht klonbar",
@@ -9969,6 +9967,24 @@
             "swapLabel": "Neustart mit der neuen Version",
             "swapNote": "Die Sandbox ist etwa eine Minute nicht erreichbar",
             "layersOf": "{done} von {total} Schicht | {done} von {total} Schichten"
+        },
+        "runnerStages": {
+            "pullingImageLabel": "Das Sandbox-Image wird heruntergeladen",
+            "pullingImageNote": "Schnell, wenn dieser Computer es schon hat",
+            "buildingEnvironmentLabel": "Seine Umgebung wird gebaut",
+            "buildingEnvironmentNote": "Die Werkzeuge, die die Umgebung dieser Sandbox hinzufügt",
+            "startingSandboxLabel": "Der Runner wird gestartet",
+            "startingSandboxNote": "Ein eigener Container, neben Ihren Sandboxes",
+            "waitingHealthLabel": "Warten, bis er antwortet",
+            "waitingHealthNote": "Danach koppelt er sich mit dieser Sandbox",
+            "removingLabel": "Sein Container wird entfernt",
+            "removingNote": "Seine Arbeit lebt im Git dieser Sandbox"
+        },
+        "runnerProgress": {
+            "carriesOn": "Das läuft auf {machine} und geht daher weiter, wenn Sie diese Seite verlassen.",
+            "addedIn": "In {elapsed} hinzugefügt.",
+            "addedPairing": "In {elapsed} hinzugefügt. Er erscheint in der Liste oben, sobald er sich mit dieser Sandbox gekoppelt hat.",
+            "removedIn": "In {elapsed} entfernt."
         },
         "deviceUpdateProgress": {
             "updating": "{name} wird aktualisiert",

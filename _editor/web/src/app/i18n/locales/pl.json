@@ -6948,12 +6948,10 @@
             "runners": "Runnery",
             "sandboxKeepsNoRunner": "Ten sandbox nie trzyma żadnego runnera na {label}. Dodaj jednego, żeby przekazywać mu rozmowy do uruchomienia tam.",
             "settingsFailed": "Ustawienia nie dotarły do tamtego runnera.",
-            "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
             "syncSettings": "Ustawienia synchronizacji",
             "syncing": "Synchronizowanie…",
             "unread": "Nie udało się odczytać runnerów tego sandboxa ({reason}).",
-            "updating": "Aktualizowanie runnera {name}",
-            "buildTakesMinutes": "Budowanie kontenera na tym komputerze może potrwać kilka minut."
+            "updating": "Aktualizowanie runnera {name}"
         },
         "discoverCard": {
             "cantClone": "Nie do sklonowania",
@@ -9371,6 +9369,24 @@
             "swapLabel": "Restart na nowym obrazie",
             "swapNote": "Sandbox znika na około minutę",
             "layersOf": "{done} z {total} warstwy | {done} z {total} warstw | {done} z {total} warstw"
+        },
+        "runnerStages": {
+            "pullingImageLabel": "Pobieranie obrazu sandboxa",
+            "pullingImageNote": "Szybko, jeśli ten komputer już go ma",
+            "buildingEnvironmentLabel": "Budowanie jego środowiska",
+            "buildingEnvironmentNote": "Narzędzia, które dodaje środowisko tego sandboxa",
+            "startingSandboxLabel": "Uruchamianie runnera",
+            "startingSandboxNote": "Własny kontener, obok twoich sandboxów",
+            "waitingHealthLabel": "Czekanie, aż odpowie",
+            "waitingHealthNote": "Potem paruje się z tym sandboxem",
+            "removingLabel": "Usuwanie jego kontenera",
+            "removingNote": "Jego praca żyje w gicie tego sandboxa"
+        },
+        "runnerProgress": {
+            "carriesOn": "To dzieje się na {machine}, więc idzie dalej, nawet jeśli opuścisz tę stronę.",
+            "addedIn": "Dodano w {elapsed}.",
+            "addedPairing": "Dodano w {elapsed}. Pojawi się na liście powyżej, gdy tylko sparuje się z tym sandboxem.",
+            "removedIn": "Usunięto w {elapsed}."
         },
         "deviceUpdateProgress": {
             "updating": "Aktualizowanie {name}",

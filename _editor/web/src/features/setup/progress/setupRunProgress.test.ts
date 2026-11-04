@@ -1,5 +1,6 @@
 import { advance, startProgress } from "@intentic/sandbox-run/setup-progress";
-import { appendedLines, machinePlan, setupRunView, stagedPlan } from "./setupRunProgress";
+import { setupRunView } from "../../../components/progress/phasedRunView";
+import { appendedLines, machinePlan, stagedPlan } from "./setupRunProgress";
 
 // The English catalog is loaded for tests, so the words are asserted as a reader sees them.
 

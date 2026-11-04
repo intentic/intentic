@@ -128,6 +128,8 @@ pub fn up(args: Up) -> Result<()> {
     let log = Log::create("runner-up")?;
 
     ui::act(&format!("Starting runner {name}"));
+    // Its phases go out as `intentic: [<phase>]` markers (ui::step), in the setup's own vocabulary: the web draws a
+    // runner being added from them, step by step, as it draws a sandbox being set up (the web's runnerStages.ts).
 
     // Read both shape files up front, so a missing path is a sentence naming it rather than a mid-flow stop.
     let overlay = overlay_file
@@ -153,10 +155,13 @@ pub fn up(args: Up) -> Result<()> {
             let workdir = tempfile::tempdir()?;
             let overlay_path = workdir.path().join("overlay.Dockerfile");
             std::fs::write(&overlay_path, content)?;
-            ui::note(&format!(
-                "building {} from the parent's approved overlay…",
-                verified.target
-            ));
+            ui::step(
+                "building-environment",
+                &format!(
+                    "building {} from the parent's approved overlay…",
+                    verified.target
+                ),
+            );
             recreate::build_overlay(
                 &verified.target,
                 &slug,
@@ -235,6 +240,7 @@ pub fn up(args: Up) -> Result<()> {
     sandbox::ensure_network(&slug)?;
     // Its volumes too, labelled like a sandbox's; a launch that never starts leaves none of the ones it made.
     let made = sandbox::connect::make_volumes(&slug);
+    ui::step("starting-sandbox", &format!("starting runner {name}…"));
     log.section(&format!("docker run {run_image}"));
     if let Err(refusal) = docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
@@ -244,7 +250,7 @@ pub fn up(args: Up) -> Result<()> {
             log.path.display()
         );
     }
-    ui::note("waiting for the runner daemon to come up…");
+    ui::step("waiting-health", "waiting for the runner daemon to come up…");
     health::wait_answering(&container, &log, "")?;
     ui::done(&format!(
         "Runner {name} is up and enrolling with {parent_url}."

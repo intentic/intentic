@@ -1,7 +1,6 @@
-import { type Progress, remainingMsOf, type SetupStep, setupSteps } from "@intentic/sandbox-run/setup-progress";
-import { formatBytes } from "@intentic/ui/format";
+import { type SetupStep, setupSteps } from "@intentic/sandbox-run/setup-progress";
 import { t } from "@intentic/ui/i18n";
-import type { ProgressStatus, ProgressStep } from "../../../components/progress/stagedSteps";
+import type { ProgressStep } from "../../../components/progress/stagedSteps";
 
 // A SANDBOX BEING SET UP ON A COMPUTER, AS THE READER SEES IT: the run's own lines read by the same engine the desktop
 // app reads its install with (sandbox-run's setup-progress.ts), said in this page's words, and drawn by the card every
@@ -71,45 +70,3 @@ export const appendedLines = (prev: readonly string[], next: readonly string[]):
     const at = next.lastIndexOf(last);
     return at < 0 ? undefined : next.slice(at + 1);
 };
-
-export interface SetupRunView {
-    readonly status: ProgressStatus;
-    /** The step under way, or the one the run stopped on; the first step before ic has named one. */
-    readonly stage: string;
-    /** How far along, 0 to 1, never falling, and 1 only once the run said it finished. */
-    readonly measured: number;
-    /** What the running step is on this second: the image's bytes while they come, else ic's own sentence. */
-    readonly detail: string | undefined;
-    /** "about 3 minutes left", or nothing while there is nothing honest to say. */
-    readonly remaining: string | undefined;
-}
-
-const remainingWords = (ms: number | undefined): string | undefined => {
-    if (ms === undefined) {
-        return undefined;
-    }
-    if (ms < 60_000) {
-        return t(`setup.setupRunProgress.lessThanMinute`);
-    }
-    const minutes = Math.round(ms / 60_000);
-    return t(`setup.setupRunProgress.aboutMinutes`, { count: minutes }, minutes);
-};
-
-const detailOf = (progress: Progress): string | undefined => {
-    const download = progress.download;
-    if (download !== undefined) {
-        return download.completeAt === undefined
-            ? t(`setup.setupRunProgress.downloadedOf`, { done: formatBytes(download.done), total: formatBytes(download.total) })
-            : t(`setup.setupRunProgress.loadingImage`);
-    }
-    return progress.detail === `` ? undefined : progress.detail;
-};
-
-/** The run as the reader sees it at `now` (`progress` already ticked to it). */
-export const setupRunView = (progress: Progress, now: number): SetupRunView => ({
-    status: progress.ended === `ok` ? `done` : progress.ended === `failed` ? `stopped` : `running`,
-    stage: progress.plan[Math.max(progress.index, 0)]?.phase ?? ``,
-    measured: progress.percent / 100,
-    detail: progress.ended === undefined ? detailOf(progress) : undefined,
-    remaining: remainingWords(remainingMsOf(progress, now)),
-});

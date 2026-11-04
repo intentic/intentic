@@ -103,6 +103,12 @@ const runners: RunnerSummary[] = [
 
 export const runnersList = (): RunnerSummary[] => runners.map((runner) => ({ ...runner }));
 
+/** A runner a machine just built, dialled in and current, as the list shows one once it has paired. */
+export const addDemoRunner = (id: string, host: string): void => {
+    runners.push({ id, host, online: true, version: `1.320.4`, image: `ghcr.io/intentic/sandbox:stable`, channel: `stable`, lastSeen: Date.now(), parity: `current` });
+    pushDomains(`runners`);
+};
+
 export const forgetRunner = (id: string): RawJsonOutput<`DELETE /system/runners/{id}`> => {
     const at = runners.findIndex((runner) => runner.id === id);
     if (at === -1) {

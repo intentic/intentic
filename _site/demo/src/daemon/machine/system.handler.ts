@@ -69,7 +69,7 @@ export const systemDoors = {
     runDeviceAgentFlow: ({ id, op }) => agentFlow(id, op),
     // The container verbs and the unpair a removal ends with, answered the way a machine does, so a batch over
     // several rows can be pressed and watched rather than refused as a route nobody serves.
-    manageDeviceSandbox: ({ slug, op, setupCode }) => sandboxFlow(slug, op, setupCode),
+    manageDeviceSandbox: ({ id, slug, op, setupCode }) => sandboxFlow(slug, op, setupCode, id),
     runDeviceCommand: ({ id, command, sandboxId }) => {
         switchDemoPairings(id, command, sandboxId);
         return { ok: true, refused: false, message: demoCommandSaid(command, sandboxId) };

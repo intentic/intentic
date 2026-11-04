@@ -2,7 +2,8 @@ import { advance, type Progress, startProgress, tick } from "@intentic/sandbox-r
 import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef, type MaybeRefOrGetter, ref, toValue, watch } from "vue";
 import type { ProgressStep } from "../../../components/progress/stagedSteps";
-import { appendedLines, machinePlan, type SetupRunView, setupRunView, stagedPlan } from "./setupRunProgress";
+import { type SetupRunView, setupRunView } from "../../../components/progress/phasedRunView";
+import { appendedLines, machinePlan, stagedPlan } from "./setupRunProgress";
 
 // A RUN'S LINES, AS THEY ARRIVE, FOLDED INTO ITS PROGRESS: each new line once, at the moment it is heard, since the
 // engine times a quiet step by when its line came; the clock moves the bar on between lines while the run goes. What

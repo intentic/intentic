@@ -2,6 +2,7 @@ import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices"
 import { Frames } from "@intentic/contract-serve";
 import { forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "../../fixture/devices";
 import { connectLines, redeem, STEPS_TO_CHECK_IN } from "../../world/machines";
+import { addDemoRunner, forgetRunner } from "./peers";
 
 // A paired machine's verbs, streamed as the machine sends them: progress lines, then its own sentence, paced so a
 // press is watchable rather than over before the row has drawn its log.
@@ -88,8 +89,40 @@ const UPDATE_LINES = (slug: string): string[] => [
     `intentic: sandbox updated to ghcr.io/intentic/sandbox:stable (channel stable).`,
     `          Roll back with: ic sandbox rollback ${slug}`,
 ];
+// What `ic runner up` streams (runner.rs): the setup's own phase markers, docker's pull, and the parent's approved overlay
+// built by BuildKit, so the runners list draws a runner being added from the words a real machine sends.
+const RUNNER_UP_LINES = (name: string): string[] => [
+    `intentic: starting runner ${name}…`,
+    `intentic: [pulling-image] pulling sandbox image ghcr.io/intentic/sandbox:stable (first run can take a minute)…`,
+    `stable: Pulling from intentic/sandbox`,
+    ...LAYERS.map((layer) => `${layer}: Already exists`),
+    `Status: Image is up to date for ghcr.io/intentic/sandbox:stable`,
+    `intentic: [building-environment] building intentic-sandbox-env-runner-${name}:1f4c9ab2d0e3 from the parent's approved overlay…`,
+    `#5 [1/3] FROM ghcr.io/intentic/sandbox:stable`,
+    `#6 [2/3] RUN apt-get update && apt-get install -y postgresql-client`,
+    `#6 3.912 Setting up postgresql-client-16 (16.4-1) ...`,
+    `#6 DONE 6.1s`,
+    `#7 [3/3] RUN npx playwright install --with-deps chromium`,
+    `#7 DONE 21.4s`,
+    `#8 exporting to image`,
+    `#8 DONE 2.3s`,
+    `intentic: [starting-sandbox] starting runner ${name}…`,
+    `intentic: [waiting-health] waiting for the runner daemon to come up…`,
+    `intentic: Runner ${name} is up and enrolling with https://sandbox-demo.sbx.intentic.dev.`,
+];
+// The machine's own sentence at the end of a runner op (_devices/machine/src/device/tools/sandboxes.ts).
+const RUNNER_DONE = {
+    "runner-up": (name: string) => `Runner "${name}" is up on this device and pairing with the sandbox that asked for it.`,
+    "runner-remove": (name: string) => `Removed runner "${name}". Its work lives in the parent sandbox's git, so nothing was lost with it.`,
+} as const satisfies Record<string, (name: string) => string>;
+const isRunnerOp = (op: string): op is keyof typeof RUNNER_DONE => Object.hasOwn(RUNNER_DONE, op);
+
 const flowLines = (slug: string, op: string): string[] => {
     switch (op) {
+        case `runner-up`:
+            return RUNNER_UP_LINES(slug);
+        case `runner-remove`:
+            return [`intentic: Removing runner-${slug}…`, `intentic: Removed runner-${slug}.`];
         case `logs`:
             return [`[${slug}] listening on :8080`, `[${slug}] GET /health 200 2ms`];
         case `update`:
@@ -138,12 +171,17 @@ const createFlow = (slug: string, setupCode: string): Frames<DeviceFlowLine> =>
         return () => clearTimeout(timer);
     });
 
-export const sandboxFlow = (slug: string, op: string, setupCode?: string): Frames<DeviceFlowLine> =>
+// A runner op lands in the runners list (peers.ts) on the machine it was asked of, `host`.
+export const sandboxFlow = (slug: string, op: string, setupCode?: string, host?: string): Frames<DeviceFlowLine> =>
     op === `create` && setupCode !== undefined ? createFlow(slug, setupCode) : paced({
         lines: flowLines(slug, op),
-        result: `${SANDBOX_DONE[op] ?? `Ran ${op} on`} sandbox "${slug}".`,
+        result: isRunnerOp(op) ? RUNNER_DONE[op](slug) : `${SANDBOX_DONE[op] ?? `Ran ${op} on`} sandbox "${slug}".`,
         after: () => {
-            if (op === `start` || op === `restart` || op === `update` || op === `rollback`) {
+            if (op === `runner-up` && host !== undefined) {
+                addDemoRunner(slug, host);
+            } else if (op === `runner-remove`) {
+                forgetRunner(slug);
+            } else if (op === `start` || op === `restart` || op === `update` || op === `rollback`) {
                 setDemoSandboxRunning(slug, true);
             } else if (op === `stop`) {
                 setDemoSandboxRunning(slug, false);

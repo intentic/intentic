@@ -7496,12 +7496,10 @@
             "runners": "Runners",
             "sandboxKeepsNoRunner": "Ce sandbox ne garde aucun runner sur {label}. Ajoutez-en un pour lui confier des conversations à exécuter là-bas.",
             "settingsFailed": "Les réglages ne sont pas parvenus à ce runner.",
-            "startingOnDevice": "Démarrage sur cet appareil…",
             "syncSettings": "Réglages de synchronisation",
             "syncing": "Synchronisation…",
             "unread": "Impossible de lire les runners de ce sandbox ({reason}).",
-            "updating": "Mise à jour du runner {name}",
-            "buildTakesMinutes": "La construction de son conteneur sur cet ordinateur peut prendre quelques minutes."
+            "updating": "Mise à jour du runner {name}"
         },
         "discoverCard": {
             "cantClone": "Non clonable",
@@ -9969,6 +9967,24 @@
             "swapLabel": "Redémarrage sur la nouvelle version",
             "swapNote": "Le sandbox est indisponible pendant environ une minute",
             "layersOf": "{done} couche sur {total} | {done} couches sur {total}"
+        },
+        "runnerStages": {
+            "pullingImageLabel": "Téléchargement de l'image du sandbox",
+            "pullingImageNote": "Rapide si cet ordinateur l'a déjà",
+            "buildingEnvironmentLabel": "Construction de son environnement",
+            "buildingEnvironmentNote": "Les outils qu'ajoute l'environnement de ce sandbox",
+            "startingSandboxLabel": "Démarrage du runner",
+            "startingSandboxNote": "Son propre conteneur, à côté de vos sandboxes",
+            "waitingHealthLabel": "Attente de sa réponse",
+            "waitingHealthNote": "Puis il s'associe à ce sandbox",
+            "removingLabel": "Suppression de son conteneur",
+            "removingNote": "Son travail vit dans le git de ce sandbox"
+        },
+        "runnerProgress": {
+            "carriesOn": "L'opération s'exécute sur {machine} : elle se poursuit si vous quittez cette page.",
+            "addedIn": "Ajouté en {elapsed}.",
+            "addedPairing": "Ajouté en {elapsed}. Il apparaît dans la liste ci-dessus dès qu'il s'est associé à ce sandbox.",
+            "removedIn": "Supprimé en {elapsed}."
         },
         "deviceUpdateProgress": {
             "updating": "Mise à jour de {name}",

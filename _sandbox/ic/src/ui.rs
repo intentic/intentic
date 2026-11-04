@@ -2258,6 +2258,7 @@ mod tests {
             include_str!("sandbox/connect.rs"),
             include_str!("platform.rs"),
             include_str!("prepare/mod.rs"),
+            include_str!("runner.rs"),
         ] {
             // The marker lines (`step`) and ic's own plan (`phase:`); the platform report's stages are a vocabulary
             // of its own (it has a `done`), so `reporter.stage` is not read here.

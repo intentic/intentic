@@ -1268,42 +1268,80 @@ it(`marks a runner whose build has drifted from this sandbox, and offers the upd
 // THE CASE THIS LEDGER EXISTS FOR. Building a runner on somebody's laptop takes minutes, and the reader goes back to
 // the board meanwhile: the page they return to must still be reading the build, hold its buttons, and then say how it
 // ended, rather than offering "Add runner" again over a container still being made.
-it(`keeps a runner being added, its log and then its answer, through leaving the machine's page and coming back`, async () => {
+const PULLING = `intentic: [pulling-image] pulling sandbox image ghcr.io/intentic/sandbox:stable (first run can take a minute)…`;
+
+const addRunner = async (el: HTMLElement, runner: string): Promise<void> => {
+    rowButton(el, `Add runner`)?.click();
+    await nextTick();
+    const name = el.querySelector(`input[type="text"]`) as HTMLInputElement;
+    name.value = runner;
+    name.dispatchEvent(new Event(`input`));
+    await nextTick();
+    rowButton(el, `Create`)?.click();
+    await settle();
+};
+
+it(`keeps a runner being added, its steps and then its answer, through leaving the machine's page and coming back`, async () => {
     let finish: ((said: string) => void) | undefined;
     createRunnerFlow = (onLine) => {
-        onLine?.(`pulling the runner image`);
+        onLine?.(PULLING);
+        onLine?.(`aaaaaaaaaaaa: Pulling fs layer`);
         return new Promise((resolve) => {
             finish = resolve;
         });
     };
     const el = mount([managed(true)]);
     await nextTick();
-    rowButton(el, `Add runner`)?.click();
-    await nextTick();
-    const name = el.querySelector(`input[type="text"]`) as HTMLInputElement;
-    name.value = `omen`;
-    name.dispatchEvent(new Event(`input`));
-    await nextTick();
-    rowButton(el, `Create`)?.click();
-    await settle();
-    expect(el.textContent ?? ``).toContain(`pulling the runner image`);
+    await addRunner(el, `omen`);
+    // The steps `ic` takes, the running one in ic's own words; docker's lines stay behind the output toggle.
+    const first = el.textContent ?? ``;
+    expect(first).toContain(`Downloading the sandbox image`);
+    expect(first).toContain(`pulling sandbox image ghcr.io/intentic/sandbox:stable`);
+    expect(first).not.toContain(`Pulling fs layer`);
+    // Nothing to add while the first one is on its way: the card already says what is coming.
+    expect(first).not.toContain(`This sandbox keeps no runner`);
 
     await showBoard();
-    expect(el.textContent ?? ``).not.toContain(`pulling the runner image`);
+    expect(el.textContent ?? ``).not.toContain(`Downloading the sandbox image`);
     await select(`host-1`);
     await nextTick();
     const back = el.textContent ?? ``;
     expect(back).toContain(`Adding runner omen`);
-    expect(back).toContain(`pulling the runner image`);
+    expect(back).toContain(`pulling sandbox image ghcr.io/intentic/sandbox:stable`);
     expect(rowButton(el, `Add runner`)?.disabled).toBe(true);
 
     await showBoard();
-    finish?.(`runner omen is up`);
+    finish?.(`Runner "omen" is up on this device and pairing with the sandbox that asked for it.`);
     await settle();
     await select(`host-1`);
     await nextTick();
-    expect(el.textContent ?? ``).toContain(`runner omen is up`);
+    // Up, and not yet in the list: it says so rather than leaving a finished card over an empty list.
+    expect(el.textContent ?? ``).toContain(`It joins the list above once it has paired with this sandbox.`);
     expect(rowButton(el, `Add runner`)?.disabled).toBe(false);
+});
+
+it(`opens a stopped runner build's output by itself, says why under it, and tries it again on a press`, async () => {
+    let calls = 0;
+    createRunnerFlow = (onLine) => {
+        calls += 1;
+        onLine?.(PULLING);
+        onLine?.(`intentic: [building-environment] building intentic-sandbox-env-runner-omen:0123456789ab from the parent's approved overlay…`);
+        onLine?.(`#6 ERROR: process "/bin/sh -c apt-get install -y ffmpeg" did not complete successfully: exit code: 100`);
+        return Promise.reject(new Error(`the overlay build failed — nothing was started.`));
+    };
+    const el = mount([managed(true)]);
+    await nextTick();
+    await addRunner(el, `omen`);
+    const text = el.textContent ?? ``;
+    // The step it stopped on is drawn, the output is open because it is the answer now, and the reason is under it.
+    expect(text).toContain(`Building its environment`);
+    expect(text).toContain(`#6 ERROR`);
+    expect(text).toContain(`the overlay build failed`);
+    expect(rowButton(el, `Try again`)?.disabled).toBe(false);
+
+    rowButton(el, `Try again`)?.click();
+    await settle();
+    expect(calls).toBe(2);
 });
 
 it(`says nothing about the build of a runner that matches`, async () => {

@@ -7496,12 +7496,10 @@
             "runners": "Runners",
             "sandboxKeepsNoRunner": "This sandbox keeps no runner on {label}. Add one to hand it conversations to run there.",
             "settingsFailed": "The settings didn't reach that runner.",
-            "startingOnDevice": "Starting on that device…",
             "syncSettings": "Sync settings",
             "syncing": "Syncing…",
             "unread": "Couldn't read this sandbox's runners ({reason}).",
-            "updating": "Updating runner {name}",
-            "buildTakesMinutes": "Building its container on that computer can take a few minutes."
+            "updating": "Updating runner {name}"
         },
         "discoverCard": {
             "cantClone": "Can't clone",
@@ -9969,6 +9967,24 @@
             "swapLabel": "Restarting onto it",
             "swapNote": "The sandbox is away for about a minute",
             "layersOf": "{done} of {total} layer | {done} of {total} layers"
+        },
+        "runnerStages": {
+            "pullingImageLabel": "Downloading the sandbox image",
+            "pullingImageNote": "Quick when this computer already has it",
+            "buildingEnvironmentLabel": "Building its environment",
+            "buildingEnvironmentNote": "The tools this sandbox's environment adds",
+            "startingSandboxLabel": "Starting the runner",
+            "startingSandboxNote": "Its own container, beside your sandboxes",
+            "waitingHealthLabel": "Waiting for it to answer",
+            "waitingHealthNote": "Then it pairs with this sandbox",
+            "removingLabel": "Removing its container",
+            "removingNote": "Its work lives in this sandbox's git"
+        },
+        "runnerProgress": {
+            "carriesOn": "This runs on {machine}, so it carries on if you leave this page.",
+            "addedIn": "Added in {elapsed}.",
+            "addedPairing": "Added in {elapsed}. It joins the list above once it has paired with this sandbox.",
+            "removedIn": "Removed in {elapsed}."
         },
         "deviceUpdateProgress": {
             "updating": "Updating {name}",

@@ -7496,12 +7496,10 @@
             "runners": "Runners",
             "sandboxKeepsNoRunner": "Este sandbox no mantiene ningún runner en {label}. Añade uno para pasarle conversaciones que ejecutar allí.",
             "settingsFailed": "Los ajustes no llegaron a ese runner.",
-            "startingOnDevice": "Iniciando en ese dispositivo…",
             "syncSettings": "Ajustes de sincronización",
             "syncing": "Sincronizando…",
             "unread": "No se pudieron leer los runners de este sandbox ({reason}).",
-            "updating": "Actualizando el runner {name}",
-            "buildTakesMinutes": "Construir su contenedor en ese ordenador puede tardar unos minutos."
+            "updating": "Actualizando el runner {name}"
         },
         "discoverCard": {
             "cantClone": "No clonable",
@@ -9969,6 +9967,24 @@
             "swapLabel": "Reiniciando con ella",
             "swapNote": "El sandbox deja de estar disponible durante aproximadamente un minuto",
             "layersOf": "{done} de {total} capa | {done} de {total} capas"
+        },
+        "runnerStages": {
+            "pullingImageLabel": "Descargando la imagen del sandbox",
+            "pullingImageNote": "Rápido si este ordenador ya la tiene",
+            "buildingEnvironmentLabel": "Construyendo su entorno",
+            "buildingEnvironmentNote": "Las herramientas que añade el entorno de este sandbox",
+            "startingSandboxLabel": "Iniciando el runner",
+            "startingSandboxNote": "Su propio contenedor, junto a tus sandboxes",
+            "waitingHealthLabel": "Esperando a que responda",
+            "waitingHealthNote": "Después se empareja con este sandbox",
+            "removingLabel": "Quitando su contenedor",
+            "removingNote": "Su trabajo vive en el git de este sandbox"
+        },
+        "runnerProgress": {
+            "carriesOn": "Esto se ejecuta en {machine}, así que continúa aunque salgas de esta página.",
+            "addedIn": "Añadido en {elapsed}.",
+            "addedPairing": "Añadido en {elapsed}. Aparece en la lista de arriba en cuanto se empareje con este sandbox.",
+            "removedIn": "Quitado en {elapsed}."
         },
         "deviceUpdateProgress": {
             "updating": "Actualizando {name}",

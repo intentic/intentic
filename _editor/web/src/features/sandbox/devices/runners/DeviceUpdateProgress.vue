@@ -24,6 +24,8 @@ const props = defineProps<{
     self: boolean;
     /** The machine's last word, for a run that ended before it needed to restart anything. */
     outcome: string | undefined;
+    /** Said in place of "Updating <name>" where the row is something else first (a runner). */
+    heading?: string | undefined;
 }>();
 
 defineEmits<{ dismiss: [] }>();
@@ -32,13 +34,13 @@ const live = computed(() => props.run.phase === `running`);
 const steps = computed(() => stagedSteps(props.run.verb));
 const lastStep = computed(() => steps.value.at(-1)?.key);
 
-const STATUS: Record<DeviceUpdateRun[`phase`], ProgressStatus> = {
+const STATUS = {
     running: `running`,
     done: `done`,
     failed: `stopped`,
     // The swap is under way out of this page's sight: not known done, and not known stuck either.
     severed: `unheard`,
-};
+} as const satisfies Record<DeviceUpdateRun[`phase`], ProgressStatus>;
 
 // The run's own count fills the bar; the clock stops where the run ended.
 const progress = useProgress(
@@ -46,11 +48,14 @@ const progress = useProgress(
     () => ({ endedAt: props.run.endedAt, measured: props.run.fraction }),
 );
 const elapsed = computed(() => Math.round((progress.value?.elapsedMs ?? 0) / 1000));
-const heading = computed(() =>
-    props.run.verb === `update`
+const heading = computed(() => {
+    if (props.heading !== undefined) {
+        return props.heading;
+    }
+    return props.run.verb === `update`
         ? t(`sandbox.deviceUpdateProgress.updating`, { name: props.name })
-        : t(`sandbox.deviceUpdateProgress.rollingBack`, { name: props.name }),
-);
+        : t(`sandbox.deviceUpdateProgress.rollingBack`, { name: props.name });
+});
 
 // The one sentence about what the run costs right now, which flips at the swap: up to it the sandbox works as before.
 const cost = computed(() => {
@@ -123,5 +128,7 @@ watch(
             <Icon :name="ended.icon" class="shrink-0" :class="ended.tone" />
             <span class="whitespace-pre-line">{{ ended.text }}</span>
         </p>
+        <!-- The way past a stopped run, where the caller has one (a runner's Try again). -->
+        <template v-if="$slots[`actions-end`]" #actions-end><slot name="actions-end" /></template>
     </StagedProgress>
 </template>

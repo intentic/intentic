@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Button, ConfirmDialog, DeviceRunLog, Icon, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, Icon, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useOperation, useOperations } from "../../../../workbench/operations/operations";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
+import RunnerProgress from "./RunnerProgress.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
+import { foldRunnerFlow, type RunnerFlow, settleRunnerFlow, startRunnerFlow } from "./runnerStages";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { DeviceFlowLostError } from "../../../../models/sandbox/devices/useDevices";
 import { lastRun, sentTo } from "./runnerWork";
 import { beginDeviceWork } from "./deviceWork";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
@@ -14,7 +17,6 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { type DeviceRow, type MachineRow, managerOf } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useT } from "@intentic/ui/i18n";
-import ProgressMeter from "../../../../components/progress/ProgressMeter.vue";
 
 // This sandbox's runners on one MACHINE: containers it keeps there to run agents,
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
@@ -64,21 +66,21 @@ const working = (op: RunnerOp, name: string): string =>
 
 // One flow at a time on one machine, same rule the sandbox rows above follow. Building a container on somebody's
 // laptop takes minutes, so the flow is the machine's rather than this view's: leaving the page and coming back finds
-// its log still growing, the buttons still held, and its end (the device's answer, or the notice and the line that
-// does the same thing on the machine itself) waiting to be read. The machine's card on the board carries it while the
-// reader is elsewhere, and a receipt says how it ended if nobody was here to see.
-const flow = useOperation<string, RunnerFailure>(() => `devices/${machine.key}/runners`);
+// its steps still moving, the buttons still held, and its end (the device's answer, or the notice and the line that
+// does the same thing on the machine itself) waiting to be read. Each line is folded into the run's own entry as it
+// arrives (runnerStages.ts), so the steps it draws on return are timed from when they really began. The machine's card
+// on the board carries it while the reader is elsewhere, and a receipt says how it ended if nobody was here to see.
+const flow = useOperation<string, RunnerFailure, RunnerFlow>(() => `devices/${machine.key}/runners`);
 const busy = flow.busy;
 const lines = flow.lines;
 const done = flow.value;
+const runnerRun = flow.progress;
 // A settings push has no log, only an end; its failure is said where the flow's would be.
 const syncs = useOperations<void, RunnerFailure>(() => `devices/${machine.key}/runner-sync`);
 const syncing = (id: string): boolean => syncs.at(id)?.state === `running`;
 const failure = computed(() => flow.failure.value ?? mine.value.map((runner) => syncs.at(runner.id)?.failure).find((found) => found !== undefined));
-// How long the flow has run, beside its log: a container build prints nothing for long stretches, and a log that has
-// gone quiet read as one that had stopped. Building is the part that takes minutes; a removal is quicker.
-const flowWait = flow.meter;
-const building = computed(() => busy.value && flow.operation.value?.tag !== `remove`);
+// An added runner has dialled in once the list shows it online, which is the last thing its card waits to say.
+const paired = (name: string): boolean => mine.value.some((runner) => runner.id === name && runner.online);
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
     if (!runner.online) {
@@ -164,12 +166,25 @@ const execute = async (op: RunnerOp, name: string): Promise<void> => {
     await flow.run({
         what: t(`sandbox.deviceOps.doingOn`, { doing, machine: label }),
         tag: op,
+        progress: startRunnerFlow(op, name, Date.now()),
         failed: (error, heard) => runnerFailure(op, name, label, error, heard),
         task: async (report) => {
             // The board's card for this machine turns too, as it does for every other thing done to it.
             const endMark = beginDeviceWork({ machine: key, doing, what: t(`sandbox.deviceOps.doingOn`, { doing, machine: label }) });
+            const fold = (next: (previous: RunnerFlow) => RunnerFlow): void =>
+                report.progress((previous) => next(previous ?? startRunnerFlow(op, name, Date.now())));
+            const heard = (line: string): void => {
+                report.line(line);
+                fold((previous) => foldRunnerFlow(previous, line, Date.now()));
+            };
             try {
-                return await { create: createRunner, remove: removeRunner, update: updateRunner }[op](host, name, report.line);
+                const said = await { create: createRunner, remove: removeRunner, update: updateRunner }[op](host, name, heard);
+                fold((previous) => settleRunnerFlow(previous, `ok`, Date.now()));
+                return said;
+            } catch (error) {
+                // A dropped stream is the machine carrying on with nobody listening, not a refusal.
+                fold((previous) => settleRunnerFlow(previous, error instanceof DeviceFlowLostError ? `lost` : `failed`, Date.now()));
+                throw error;
             } finally {
                 endMark();
                 // The list is the sandbox's, not this view's: it is read again whether or not anybody is here to see it.
@@ -292,26 +307,28 @@ const add = async (): Promise<void> => {
             </template>
         </Row>
 
-        <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. -->
-        <RowNote v-if="mine.length === 0 && !adding" variant="empty">{{
+        <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. Not while the
+             first one is being added: the card below already says what is on its way. -->
+        <RowNote v-if="mine.length === 0 && !adding && runnerRun?.op !== `create`" variant="empty">{{
             t(`sandbox.deviceRunners.sandboxKeepsNoRunner`, { label: machine.label })
         }}</RowNote>
 
-        <!-- The machine's own output while `ic` works, kept after a failure as the record of how far it got. -->
-        <RowNote v-if="busy || failure || done" variant="block" class="flex flex-col gap-1">
-            <!-- Named, since the view may be new to it: a reader back from elsewhere sees which runner the log is about. -->
-            <p v-if="busy && flow.operation.value" class="text-xs text-content">{{ flow.operation.value.what }}</p>
-            <p v-if="building" class="text-2xs text-muted">{{ t(`sandbox.deviceRunners.buildTakesMinutes`) }}</p>
-            <ProgressMeter v-if="flowWait" :progress="flowWait" />
-            <DeviceRunLog
-                v-if="busy || (failure !== undefined && lines.length > 0)"
+        <!-- A runner being added, updated or removed, drawn as the steps `ic` takes, the machine's output a press away and
+             open by itself when the run stops. Kept once it ends, its verdict under the list until the reader puts it away. -->
+        <RowNote v-if="runnerRun || failure" variant="block" class="flex flex-col gap-2">
+            <RunnerProgress
+                v-if="runnerRun"
+                :flow="runnerRun"
+                :live="busy"
                 :lines="lines"
-                :running="busy"
-                :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
-                :note="t(`sandbox.words.runningOnDeviceKeeps`)"
+                :machine="machine.label"
+                :outcome="done"
+                :paired="paired(runnerRun.name)"
+                :can-retry="!busy && door.device.online === true"
+                @dismiss="flow.dismiss()"
+                @retry="execute(runnerRun.op, runnerRun.name)"
             />
             <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="machine.label" />
-            <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>
         </RowNote>
 
         <ConfirmDialog
