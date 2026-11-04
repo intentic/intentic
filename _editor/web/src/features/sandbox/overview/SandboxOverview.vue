@@ -34,6 +34,7 @@ import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxFenceRow from "./SandboxFenceRow.vue";
 import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxGpuRow from "./SandboxGpuRow.vue";
+import SandboxModeRow from "./mode/SandboxModeRow.vue";
 import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
@@ -350,6 +351,8 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                 v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
                 class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:gap-1.5"
             >
+                <!-- First: how it runs decides what the rest of the app asks of the reader (overview/mode/SandboxModeRow.vue). -->
+                <SandboxModeRow />
                 <!-- Stack facts against the pane, not the window; technical values stay readable in full. -->
                 <div v-if="info?.image" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.words.image`) }}</dt>

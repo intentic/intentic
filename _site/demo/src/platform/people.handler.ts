@@ -1,3 +1,4 @@
+import type { AccountPreferences, AccountPreferencesPatch } from "@intentic/api-contract";
 import { inviteRecords } from "../fixture/access";
 import { signedOut } from "../mode";
 import { DEMO_USER } from "../world/account";
@@ -36,8 +37,25 @@ const exportOf = () => {
     };
 };
 
+// The account's own look and reading preferences (the live platform's me/preferences.ts), for this page's life: the
+// visitor has one device here, so the account starts with nothing and keeps what the editor sends it.
+let preferences: AccountPreferences[`values`] = {};
+
 export const meAnswers = {
     get: () => (signedOut ? null : DEMO_USER),
+    preferences: () => ({ values: { ...preferences } }),
+    setPreferences: ({ values }: AccountPreferencesPatch) => {
+        const next: AccountPreferences[`values`] = { ...preferences };
+        for (const [name, value] of Object.entries(values)) {
+            if (value === null) {
+                delete next[name];
+            } else {
+                next[name] = value;
+            }
+        }
+        preferences = next;
+        return { values: { ...preferences } };
+    },
     export: async () => {
         await new Promise((resolve) => setTimeout(resolve, GATHER_MS));
         return exportOf();

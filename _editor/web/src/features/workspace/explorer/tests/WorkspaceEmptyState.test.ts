@@ -51,15 +51,10 @@ it(`shows the clone field immediately, and enables submission only for a nonempt
     }
 });
 
-// Last, since answering is remembered for the rest of this file's module: the card is the newcomer's one question.
-it(`asks the newcomer how they work, once`, async () => {
+// How the sandbox runs is asked where it is made (features/setup/add/AddSandboxForm.vue), and the words follow it, so an
+// empty workspace asks a newcomer nothing about themselves.
+it(`asks a newcomer nothing about how they work`, () => {
     const el = mount();
-    expect(el.textContent).toContain(`How will you work here?`);
-
-    buttonSaying(el, `I write code`)!.click();
-    await nextTick();
-
     expect(el.textContent).not.toContain(`How will you work here?`);
-    expect(localStorage.getItem(`ui-audience`)).toBe(`developer`);
-    expect(mount().textContent).not.toContain(`How will you work here?`);
+    expect(buttonSaying(el, `I write code`)).toBeUndefined();
 });

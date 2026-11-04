@@ -1,24 +1,28 @@
+import type { SandboxMode } from "./sandbox-mode.js";
+
 // A PROFILE is one named answer to "who is arriving", decided at intentic.dev and carried to the app on the link they
-// click. It has three halves and they land in three different stores, because they have three different lifetimes: the
-// look and the audience are facts about a browser (localStorage, seeded before first paint), and the sandbox defaults
-// are facts about a sandbox (a definition seed applied once, at its first boot).
+// click. It decides nothing by itself any more (2026-11). All it still says is which answer the app preselects when
+// this reader makes a sandbox ("Who handles the code here?"), a question they see and can answer the other way.
+//
+// It used to seed the look and the audience into the browser, and a definition into the sandbox, which let one link
+// decide every sandbox that browser would ever open. Those are now three different owners: how a sandbox runs is the
+// sandbox's own setting (sandbox-mode.ts), the words follow that setting unless a person overrides them for
+// themselves, and how the app looks belongs to the person and travels with their account.
 //
 // Here so the site, the app's pre-paint script and the platform cannot drift on the names; every value below is
-// spelled somewhere that cannot import it (an inline <script>, a TOML file), and each of those places is pinned by a
-// test that reads this module.
+// spelled somewhere that cannot import it (an inline <script>), and that place is pinned by a test that reads this
+// module.
 
 /** Names the profile on a link from the site to the app. */
 export const PROFILE_PARAM = "profile";
 
-/** Where the app remembers which profile brought this browser; read long after the link that carried it is gone. */
+/** Where the app remembers which profile brought this browser: read when it asks how a new sandbox should run. */
 export const PROFILE_STORAGE_KEY = "ui-profile";
 
-// THE COOKIE IS THE SECOND WAY A PROFILE REACHES THE APP, and the only one that survives an installer. The site
-// writes it on the registrable domain both origins share (sharedCookieDomain), so app.intentic.dev reads it too: a
-// reader who took the desktop app from intentic.dev/desk never clicked a link into the app, and the sign-in page the
-// app opens in their browser is the first thing on the app's origin they meet. `desk` means the desk profile; any
-// other value is the site's way out, which is the default profile; absent is no opinion.
-/** The site's edition cookie, readable by the app. */
+// The site's edition cookie. Only the site reads it now, to keep its own skin from page to page; the app stopped
+// taking a profile from it in 2026-11, since a cookie nobody sees deciding how a sandbox runs is exactly what the
+// creation question replaced. Still set on the registrable domain both origins share (sharedCookieDomain).
+/** The site's edition cookie. */
 export const PROFILE_COOKIE = "variant";
 
 /**
@@ -45,34 +49,16 @@ export const PROFILE_IDS = ["default", "desk"] as const;
 
 export type Profile = (typeof PROFILE_IDS)[number];
 
-// `system` is the stored spelling of "nobody has chosen": the scheme follows `prefers-color-scheme` and the skin
-// follows the scheme. It is a value rather than an absence so a profile can hand a browser back to it.
-export type ProfileScheme = "system" | "light" | "dark";
-export type ProfileSkin = "system" | "none" | "sanctum" | "silver";
-export type ProfileAudience = "developer" | "maker";
-
-/** The localStorage keys a profile seeds, each owned by the composable named beside it. */
-export const PROFILE_KEYS = {
-    // _editor/ui/src/composables/useTheme.ts
-    scheme: "ui-color-scheme",
-    // _editor/web/src/skins/useSkin.ts
-    skin: "ui-skin",
-    // _editor/web/src/app/useAudience.ts
-    audience: "ui-audience",
-} as const;
-
-export interface ProfileLook {
-    readonly scheme: ProfileScheme;
-    readonly skin: ProfileSkin;
-    // Absent means the profile does not answer it: AudienceAsk still asks, which is what `default` wants.
-    readonly audience?: ProfileAudience;
+/** What a profile still says on arrival: the answer preselected where a sandbox is made, if it has one. */
+export interface ProfileArrival {
+    readonly mode?: SandboxMode;
 }
 
-// `default` is listed, not implied, because it is also the way back: a profile may overwrite what the last profile
-// wrote, so `?profile=default` undoes a desk link for anyone who has not since chosen for themselves.
-export const PROFILES: Record<Profile, ProfileLook> = {
-    default: { scheme: "system", skin: "system" },
-    desk: { scheme: "light", skin: "none", audience: "maker" },
+// `default` is listed, not implied, because it is also the way back: `?profile=default` replaces a desk link's
+// preselect for a reader who came back by the developer's page.
+export const PROFILES: Record<Profile, ProfileArrival> = {
+    default: {},
+    desk: { mode: "hands-off" },
 };
 
 export const DEFAULT_PROFILE: Profile = "default";

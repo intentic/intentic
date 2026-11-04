@@ -6,7 +6,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
-import { arrivingProfile } from "../../app/useProfile";
+import type { SandboxMode } from "@intentic/constants";
 import { DESKTOP_SANDBOX_WAKES_LINK, desktopApp, openDesktopLink } from "../../app/environments/desktop";
 import { removeStoredValue, storeValue } from "../../app/storage/browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "../../app/storage/activeSandbox";
@@ -156,10 +156,10 @@ const create = async (name: string, requestId?: string): Promise<SandboxSummary>
 // A provision response cannot overwrite a cancellation that started after it.
 const hostedChanges = new Map<string, number>();
 
-const hostedProvision = async (sandboxId: string, token: string): Promise<SandboxSummary> => {
+const hostedProvision = async (sandboxId: string, token: string, mode?: SandboxMode): Promise<SandboxSummary> => {
     const version = hostedChanges.get(sandboxId);
-    // The machine composes its environment from this: the profile's own sandbox.toml is applied at its first boot.
-    const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token, profile: arrivingProfile() });
+    // The machine composes its environment from this: a hands-off sandbox is seeded hands-off at its first boot.
+    const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token, mode });
     await landOnList(updated, { current: () => hostedChanges.get(sandboxId) === version });
     return updated;
 };

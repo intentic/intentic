@@ -49,49 +49,26 @@
                 }
             }
         </script>
-<!-- Adopt an arriving profile, then restore saved display preferences — all before first paint. -->
+<!-- Remember an arriving profile, then restore saved display preferences — all before first paint. -->
         <script>
             try {
-                // WHO ARRIVED. A link from intentic.dev names the profile the reader was reading in; the values
-                // below are @intentic/constants profile.ts, and src/bootProfile.test.ts fails if they part.
-                var PROFILE_KEYS = ["ui-color-scheme", "ui-skin", "ui-audience"];
-                var PROFILES = {
-                    default: { "ui-color-scheme": "system", "ui-skin": "system" },
-                    desk: { "ui-color-scheme": "light", "ui-skin": "none", "ui-audience": "maker" },
-                };
-                var owns = Object.prototype.hasOwnProperty;
+                // WHO ARRIVED. A link from intentic.dev names the profile the reader was reading in, and the name is
+                // all this keeps, for the answer preselected when this reader makes a sandbox (src/app/useProfile.ts).
+                // The look is the reader's own and the words follow the sandbox, so since 2026-11 a link writes
+                // neither. The names are @intentic/constants profile.ts's, and src/bootProfile.test.ts fails if they
+                // part.
+                var PROFILE_IDS = ["default", "desk"];
                 var url = new URL(window.location.href);
                 var asked = url.searchParams.get("profile");
-                var linked = asked !== null;
-                // A reader who came by no link at all — the address typed, or the desktop app's sign-in page opening
-                // in this browser after an installer taken from intentic.dev — is still one the site has met: its
-                // edition cookie is set on the domain both origins share. `desk` is that profile; any other value is
-                // the site's way out, which is the default one; no cookie is no opinion.
-                if (!linked) {
-                    var jar = /(?:^|; )variant=([^;]*)/.exec(document.cookie);
-                    if (jar !== null) asked = decodeURIComponent(jar[1]) === "desk" ? "desk" : "default";
-                }
-                if (asked !== null && owns.call(PROFILES, asked)) {
-                    var next = PROFILES[asked];
-                    var last = localStorage.getItem("ui-profile");
-                    var was = last !== null && owns.call(PROFILES, last) ? PROFILES[last] : {};
-                    for (var i = 0; i < PROFILE_KEYS.length; i++) {
-                        var key = PROFILE_KEYS[i];
-                        var have = localStorage.getItem(key);
-                        // A profile may write a key while nobody else has: unset, or still carrying what the last
-                        // profile put there. So a link never overrides a choice made in Settings, and leaving a
-                        // profile releases the keys it set rather than stranding them.
-                        if (have !== null && have !== (owns.call(was, key) ? was[key] : null)) continue;
-                        if (owns.call(next, key)) localStorage.setItem(key, next[key]);
-                        else localStorage.removeItem(key);
-                    }
+                // Only a link says it. The site's edition cookie reaches this origin too, but it is the site's own
+                // memory of its skin, and a cookie nobody sees steering how a sandbox runs is what asking "Who
+                // handles the code here?" replaced.
+                if (asked !== null && PROFILE_IDS.indexOf(asked) !== -1) {
                     localStorage.setItem("ui-profile", asked);
-                    // Consumed here so the router never sees it and a reload can't re-apply it over a later choice;
-                    // any other query the app was given (?machine=) is left where it was.
-                    if (linked) {
-                        url.searchParams.delete("profile");
-                        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
-                    }
+                    // Consumed here so the router never sees it and an address kept or passed on from here does not
+                    // carry it further; any other query the app was given (?machine=) is left where it was.
+                    url.searchParams.delete("profile");
+                    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
                 }
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
@@ -123,6 +100,7 @@
                 // (src/app/environments/nativeApp.ts reads the same, and src/bootProfile.test.ts runs this against it).
                 // Each look is the pair of choices the Theme row stores for it (src/skins/themeRow.ts).
                 var EMBED_LOOKS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
+                var owns = Object.prototype.hasOwnProperty;
                 var embedLook = null;
                 try {
                     var tab = window.sessionStorage;
@@ -138,21 +116,25 @@
                     }
                 } catch (e) {}
                 // INSIDE THE DESKTOP APP the look is the one the reader was last seen in on any of its pages
-                // (windows.rs `look_init_script`): each of those pages is an origin with a storage of its own, so a
-                // first sandbox used to open in an arriving profile's daylight under a reader the app had just shown
-                // sanctum. Adopted only while this origin holds no look the reader chose (nothing stored, or what a
-                // profile put there), and stored, so useTheme and useSkin read the same a module later and a look
-                // chosen here is never undone by one handed later (src/bootProfile.test.ts runs this).
+                // (windows/mode.rs `look_init_script`): each of those pages is an origin with a storage of its own, so
+                // a first sandbox would otherwise open in the OS's light, or in the daylight a desk link once left
+                // there, under a reader the app had just shown sanctum. Adopted only while this origin holds no look
+                // the reader chose (nothing stored, or what a desk link wrote before 2026-11), and stored, so useTheme
+                // and useSkin read the same a module later and a look chosen here is never undone by one handed later
+                // (src/bootProfile.test.ts runs this).
                 try {
                     var appLook = window.__INTENTIC_LOOK__;
                     if (embedLook === null && typeof appLook === "string" && owns.call(EMBED_LOOKS, appLook)) {
-                        var profiledBy = localStorage.getItem("ui-profile");
-                        var profiled = profiledBy !== null && owns.call(PROFILES, profiledBy) ? PROFILES[profiledBy] : {};
+                        // What a desk link wrote into the browser until 2026-11, when a profile stopped choosing the
+                        // look. No link writes it any more, but a browser one reached still holds it beside its
+                        // `ui-profile`, and it is no more that reader's choice now than it was then.
+                        var DESK_USED_TO_SEED = { "ui-color-scheme": "light", "ui-skin": "none" };
+                        var seeded = localStorage.getItem("ui-profile") === "desk" ? DESK_USED_TO_SEED : {};
                         var LOOK_KEYS = ["ui-color-scheme", "ui-skin"];
                         var chosen = false;
                         for (var k = 0; k < LOOK_KEYS.length; k++) {
                             var kept = localStorage.getItem(LOOK_KEYS[k]);
-                            if (kept !== null && kept !== (owns.call(profiled, LOOK_KEYS[k]) ? profiled[LOOK_KEYS[k]] : null)) chosen = true;
+                            if (kept !== null && kept !== (owns.call(seeded, LOOK_KEYS[k]) ? seeded[LOOK_KEYS[k]] : null)) chosen = true;
                         }
                         if (!chosen) {
                             localStorage.setItem("ui-color-scheme", EMBED_LOOKS[appLook][0]);

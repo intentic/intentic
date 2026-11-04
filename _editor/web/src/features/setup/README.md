@@ -17,7 +17,9 @@ bookmark, an emailed link, an older desktop app or the site's pricing page lands
 answers `/setup` for an account with nothing to open, is settled to Home's first run (`app/environments/nothingToOpen.ts`),
 and a guard test fails on any navigation to `/setup` written anywhere else (`router/noSetupNavigation.test.ts`).
 
-- **The press** (`add/useAddSandbox.ts`): a name and where it runs, one press for what starts in one press (this computer
+- **The press** (`add/useAddSandbox.ts`): a name, who handles the code (hands-off or hands-on, carried to the machine as
+  its settings `mode`; a link from intentic.dev/desk only preselects hands-off) and where it runs, one press for what
+  starts in one press (this computer
   in the app, a connected machine, a machine of ours with room), and "More ways" in the same form (`add/AddSandboxForm.vue`):
   - **A command for a server** (`add/useAddCommand.ts`, `add/AddSandboxCommand.vue`): the row is made, its code minted,
     and the command shown to copy (each shell, or the compose file), with the reader's own Cloudflare zone riding it if

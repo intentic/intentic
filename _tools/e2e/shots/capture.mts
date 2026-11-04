@@ -894,7 +894,8 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
         }, shot.storage);
     }
     const mode = modeOf(shot);
-    // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
+    // The desk is read as a maker, in the words a hands-off sandbox speaks: the one key here that changes what the screen
+    // says rather than how it looks.
     if (mode === "desk") {
         await context.addInitScript(() => window.localStorage.setItem(`ui-audience`, `maker`));
     }

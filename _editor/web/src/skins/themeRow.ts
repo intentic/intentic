@@ -4,8 +4,8 @@ import type { Skin, SkinChoice } from "./useSkin";
 // ONE ROW OVER TWO STORED CHOICES. The app's look is a scheme (`system`/`light`/`dark`) and a skin
 // (`system`/`none`/`sanctum`/`silver`), but two controls could show a light scheme under a dark skin with no way back, so
 // Appearance offers five looks and this module is the map between them. Kept out of the SFC because the mapping has
-// a side the row cannot show: pairs nobody picked here — a scheme pinned from the design kit, a profile link, a
-// value already in storage — still have to name a look, and naming the wrong one is invisible until someone reads
+// a side the row cannot show: pairs nobody picked here — a scheme pinned from the design kit, the look a first hands-off
+// sandbox gives, a value already in storage — still have to name a look, and naming the wrong one is invisible until someone reads
 // the row against the screen.
 
 /** The five looks the Theme row offers. */

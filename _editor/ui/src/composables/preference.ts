@@ -56,6 +56,38 @@ if (typeof window !== `undefined`) {
     window.addEventListener(`storage`, (event: StorageEvent) => receivePreferenceChange({ key: event.key, raw: event.newValue }));
 }
 
+/** Hears a choice made in this window: the storage key and the string stored for it, `null` when the key was removed. */
+export type PreferenceWriteListener = (key: string, raw: string | null) => void;
+
+// Whatever keeps preferences beyond this browser (the account, web's app/accountPreferences.ts) hears only choices made
+// here. A change adopted from another window or from the account is never one, or the account would be handed back
+// what it had just given out, normalised by `read` to whatever this window can show.
+const writeListeners = new Set<PreferenceWriteListener>();
+
+/** Hear every choice made in this window, once stored and told to the others; never a change adopted from elsewhere. Returns the unsubscribe. */
+export const onPreferenceWrite = (listener: PreferenceWriteListener): (() => void) => {
+    writeListeners.add(listener);
+    return () => {
+        writeListeners.delete(listener);
+    };
+};
+
+const tell = (key: string, raw: string | null): void => {
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
+    channel?.postMessage({ key, raw } satisfies PreferenceNote);
+};
+
+/**
+ * Take a value kept outside every window (the account's): this window wears it as it would another window's change,
+ * stores it, and tells the other windows, and nobody hears it as a choice made here (`onPreferenceWrite`). Stored even
+ * where this window holds no preference by that key, so a window that does, or the next load, reads it.
+ */
+export const adoptPreference = (key: string, raw: string | null): void => {
+    persist(key, raw);
+    held.get(key)?.(raw);
+    tell(key, raw);
+};
+
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
 export const definePreference = <T>({ key: name, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
     const key = deviceKey(name);
@@ -84,8 +116,10 @@ export const definePreference = <T>({ key: name, read, write, apply }: Preferenc
             }
             const raw = write(value);
             persist(key, raw);
-            // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
-            channel?.postMessage({ key, raw } satisfies PreferenceNote);
+            tell(key, raw);
+            for (const listener of writeListeners) {
+                listener(key, raw);
+            }
         },
         { flush: `sync` },
     );
@@ -93,7 +127,7 @@ export const definePreference = <T>({ key: name, read, write, apply }: Preferenc
     return state;
 };
 
-/** Read one stored preference string without holding it, for the one caller that needs it before this is set up. */
+/** Read one stored preference string without holding it: what this device keeps, whether or not this window declared it. */
 export const storedPreference = (key: string): string | null => stored(key);
 
 // The three shapes nearly every preference takes, so what a stored string means is said once.

@@ -3,7 +3,7 @@ import type { Skin, SkinChoice } from "./useSkin";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
 
 // The Theme row is one control over two preferences, so the mapping has to answer for pairs the row cannot make:
-// a scheme pinned from the design kit, a profile link, a value already in storage. The bug this pins is that one
+// a scheme pinned from the design kit, the look a first hands-off sandbox gives, a value already in storage. The bug this pins is that one
 // of them — a dark scheme with the skin left following — wore sanctum while the row read "Dark".
 
 /** useSkin's own rule, so the cases below name the pair and the resolved skin comes out of one place. */

@@ -94,7 +94,7 @@ export const fleetHttpRoutes = ({
         }
         const { sandbox } = await mintSandbox(prisma, config, { name: parsed.name, ownerId: caller.userId });
         try {
-            // The body carries TOML; the seed is base64, the encoding the daemon decodes and every profile seed uses.
+            // The body carries TOML; the seed is base64, the encoding the daemon decodes and the hands-off seed uses.
             const { definition } = parsed;
             const definitionSeed = definition === undefined ? undefined : Buffer.from(definition, `utf8`).toString(`base64`);
             const minted = await mintSetupCodeFor(prisma, config, sandbox, { ownerEmail: caller.email, definitionSeed });

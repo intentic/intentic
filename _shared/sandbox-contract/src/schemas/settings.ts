@@ -13,6 +13,7 @@ import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
+import { DEFAULT_SANDBOX_MODE, SandboxModeSchema } from "./sandbox-mode.js";
 import { VoiceSettingsSchema } from "./voice.js";
 import {
     AiNoticeSchema,
@@ -244,19 +245,31 @@ export {
 export { type GpuSettings, GpuSettingsSchema, GpuShellsSchema } from "./gpu-settings.js";
 
 // Who the editor's screens are written for: `developer` reads git's own words (branch, land, commit), `maker` plain ones
-// (draft, accept, save) over the same mechanisms. The editor's vocabulary, never anything an agent does. A person's own
-// answer, kept by the sandbox per member rather than in each browser, so the desktop app and a browser tab name one
-// button one way while two people on one sandbox can still read it in their own words.
+// (draft, accept, save) over the same mechanisms. The editor's vocabulary, never anything an agent does. Decided by the
+// sandbox's mode for everyone (sandbox-mode.ts audienceOfMode), unless a person chose their own here: that choice is
+// kept by the sandbox per member rather than in each browser, so the desktop app and a browser tab name one button one
+// way while two people on one sandbox can still read it in their own words.
 export const AudienceSchema = z.enum(["developer", "maker"]);
 export type Audience = z.infer<typeof AudienceSchema>;
 
-// The caller's own answer as the sandbox keeps it; absent until they have given one here.
+// The caller's words here and where they come from. A daemon from before the mode answered only `audience`, and only
+// once the person had chosen; a reader that finds no `mode` reads `audience` as that choice.
 export const MemberAudienceSchema = z.object({
-    audience: AudienceSchema.optional().describe("developer for git's own words, maker for plain ones. Absent until this person has chosen here."),
+    audience: AudienceSchema.optional().describe(
+        "The words your editor uses here: developer for git's own, maker for plain ones. Your own choice when you made one, otherwise what this sandbox's mode speaks.",
+    ),
+    override: AudienceSchema.optional().describe("Your own choice of words on this sandbox. Absent means you follow the sandbox's mode."),
+    mode: SandboxModeSchema.optional().describe("How this sandbox runs, which decides the words for everyone who has not chosen their own."),
 });
 export type MemberAudience = z.infer<typeof MemberAudienceSchema>;
 
 export const SandboxSettingsSchema = z.object({
+    // How this sandbox runs (sandbox-mode.ts): first, since it decides what several of the settings below are. Hands-off
+    // owns the land, version and back-up rules in `rules`, which the daemon's settings store keeps standing on every
+    // read and write while it says so; the editor's words follow it for everyone who has not chosen their own.
+    mode: SandboxModeSchema.default(DEFAULT_SANDBOX_MODE).describe(
+        "How this sandbox runs. hands-on: you review and ship the work, and every setting here is yours. hands-off: the sandbox lands finished work by itself, saves each landing as a version and backs that version up wherever a branch tracks a remote; those three rules stay on for as long as it runs this way, and everyone who has not chosen otherwise for themselves reads plain words instead of git's. Switching back to hands-on keeps the rules as they stand, yours to change from then on.",
+    ),
     // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says
     // "at 09:00" instead of naming an instant. It is not a display preference: nothing formats through it, and an
     // instant on screen is still drawn in the reader's own clock.
@@ -607,7 +620,7 @@ export const SandboxSettingsSchema = z.object({
             message: "a command belongs in the repository's own .intentic/checks.json, not in settings",
         })
         .describe(
-            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed, back that version up to the remote. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
+            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed, back that version up to the remote. Empty is the default and is exactly the behaviour of a fresh hands-on sandbox, because each of those defaults is what no rule matched means at its own moment. A hands-off sandbox keeps auto-land, auto-version and auto-push standing here whatever is written, so change those by switching `mode` to hands-on first. A command to run is a repository's own check, declared in its .intentic/checks.json.",
         ),
     automationFailureLimit: z
         .number()
@@ -708,21 +721,24 @@ export const SandboxSettingsWriteSchema = SandboxSettingsSchema.refine((settings
     path: ["rules"],
 });
 
-// A browser's answer to who the screens are written for, for the person signed in to it. `offer` is the one that must
-// not overwrite: a browser handing over the answer it kept on its own, taken only while the sandbox keeps none for them.
+// A person's own choice of words on this sandbox, or null to follow its mode again. `offer` is what a browser from before
+// the mode sends: the answer it kept on its own, handed to every sandbox it opened. The sandbox declines every offer now
+// and answers the words it speaks, which that browser then adopts, so one browser's answer no longer travels to
+// sandboxes it was never given for.
 export const AudienceAnswerSchema = z.object({
-    audience: AudienceSchema.describe("developer for git's own words, maker for plain ones."),
+    audience: AudienceSchema.nullable().describe("developer for git's own words, maker for plain ones, null to follow this sandbox's mode again."),
     offer: z
         .boolean()
         .optional()
-        .describe("Take it only while this person has no answer kept here yet. Absent or false replaces whatever is kept."),
+        .describe("A browser handing over an answer it kept on its own. Always declined: the words come back as this sandbox speaks them to you."),
 });
 export type AudienceAnswer = z.infer<typeof AudienceAnswerSchema>;
 
-// What the sandbox keeps for this person after the answer, and whether this call set it: false is an offer it declined.
+// The words this person reads after the call, and whether the call changed their choice: false is a declined offer.
 export const AudienceStateSchema = z.object({
-    audience: AudienceSchema.describe("The words this sandbox's editor now uses."),
-    adopted: z.boolean().describe("Whether this call set it. False means an offer met an answer already kept, which stands."),
+    audience: AudienceSchema.describe("The words this sandbox's editor now uses for you."),
+    adopted: z.boolean().describe("Whether this call set your choice. False means an offer, which is never taken."),
+    override: AudienceSchema.optional().describe("Your own choice, as it now stands. Absent means you follow the sandbox's mode."),
 });
 export type AudienceState = z.infer<typeof AudienceStateSchema>;
 

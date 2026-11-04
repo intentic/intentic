@@ -339,12 +339,12 @@ describe(`provisionHosted`, () => {
         tier: FREE_TIER.id,
     };
     /* A PROJECT'S MACHINE is told its folder exactly as `ic` tells a project container (connect.rs): the whole of
-     * `/work/<name>`, and the profile's seed beside it as any machine gets it. A probe keeps the folder and nothing
+     * `/work/<name>`, and the hands-off seed beside it as any machine gets it. A probe keeps the folder and nothing
      * else of the config, since the folder is no credential and a dead probe's replacement reads it back. */
     it(`names a project's folder in its environment, and nobody else's`, () => {
         const before = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
-        const project = hostedMachineConfig(config(), { ...args, project: `My_App.v2`, profile: `desk` }, `intentic-sbx-a`, `vol_1`);
-        expect([project.env[ENV_PROJECT_DIR], project.env[ENV_DEFINITION_SEED]]).toEqual([`${WORKSPACE_ROOT}/My_App.v2`, definitionSeedFor(`desk`)]);
+        const project = hostedMachineConfig(config(), { ...args, project: `My_App.v2`, mode: `hands-off` }, `intentic-sbx-a`, `vol_1`);
+        expect([project.env[ENV_PROJECT_DIR], project.env[ENV_DEFINITION_SEED]]).toEqual([`${WORKSPACE_ROOT}/My_App.v2`, definitionSeedFor(`hands-off`)]);
         expect(probeConfig(project, before).env).toEqual({ [STATE_PROBE_ENV]: before, [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/My_App.v2` });
         const ordinary = hostedMachineConfig(config(), args, `intentic-sbx-a`, `vol_1`);
         expect(Object.keys(ordinary.env)).not.toContain(ENV_PROJECT_DIR);

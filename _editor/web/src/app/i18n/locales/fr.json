@@ -5024,17 +5024,18 @@
                 "waitingSecond": "En attente d’une deuxième personne avec un accès complet",
                 "approveAsk": "{name} demande à ouvrir la conversation de {author} sans demander."
             }
+        },
+        "handsOffOffer": {
+            "line": "Voulez-vous que le travail terminé comme celui-ci soit intégré tout seul ?",
+            "notNow": "Pas maintenant",
+            "tipNote": "Intègre, enregistre, sauvegarde",
+            "tipTitle": "Automatique",
+            "yes": "Laisser le sandbox s'en charger"
         }
     },
     "common": {
         "asyncView": {
             "viewCouldntLoad": "Cette vue n'a pas pu être chargée."
-        },
-        "audienceAsk": {
-            "dontWriteCodeAssistants": "Si vous n'écrivez pas de code : les changements de l'assistant s'appliquent tout seuls et chacun est enregistré comme une version. Vous pouvez toujours revenir en arrière.",
-            "howWorkHere": "Comment allez-vous travailler ici ?",
-            "iDontWriteCode": "Je n'écris pas de code",
-            "picksWordsAppUses": "Choisit les mots employés par l'application et sa page d'accueil. Rien ne change pour vos fichiers ni pour vos agents, et vous pouvez basculer dans les Paramètres à tout moment."
         },
         "matchLine": {
             "agent": "Agent :",
@@ -10985,7 +10986,8 @@
             "guardrailsAdmission": "déclencheurs, webhooks, automatisations, planifications, cron, visiteurs, entrant, qui peut lancer du travail",
             "retentionPeriods": "supprimer les anciens chats, historique, combien de temps, conserver, nettoyer, stockage, espace disque, expiration, suppression automatique, conversations",
             "retentionAudit": "journal d'audit, piste d'audit, SIEM, transférer les journaux, exporter les journaux, qui a ouvert quoi, conformité",
-            "dataProtectionDocuments": "RGPD, registre des traitements, analyse d'impact, mesures techniques, documents de conformité, article 30"
+            "dataProtectionDocuments": "RGPD, registre des traitements, analyse d'impact, mesures techniques, documents de conformité, article 30",
+            "overviewMode": "automatique manuel hands-off hands-on qui s'occupe du code intégrer enregistrer versions sauvegarder vocabulaire"
         },
         "agentTools": {
             "simple": "Simple",
@@ -11338,6 +11340,33 @@
             "ownMachine": "Ce sandbox tourne sur votre propre ordinateur : un shell sur cette machine peut donc toujours lire les fichiers sur le disque.",
             "count": "{count} conversation est privée en ce moment. | {count} conversations sont privées en ce moment.",
             "saveFailed": "Impossible de changer qui lit les conversations de qui."
+        },
+        "mode": {
+            "finishedWork": {
+                "byItself": "Automatique",
+                "note": "Ce sandbox fonctionne en automatique : il intègre, enregistre et sauvegarde le travail terminé tout seul.",
+                "setMyself": "Régler moi-même"
+            },
+            "handsOff": {
+                "note": "Automatique. Le travail terminé est intégré tout seul, enregistré comme version et sauvegardé, avec des mots simples.",
+                "summary": "Automatique · Intentic s'occupe du code",
+                "title": "Intentic s'en charge"
+            },
+            "handsOn": {
+                "note": "Manuel. Vous relisez chaque modification et décidez de ce qui part, avec le vocabulaire de git.",
+                "summary": "Manuel · vous vous occupez du code",
+                "title": "Moi"
+            },
+            "howItRuns": "Fonctionnement",
+            "preview": {
+                "alreadyOn": "Le travail terminé est déjà intégré, enregistré et sauvegardé tout seul ; désormais, cela restera ainsi.",
+                "handsOn": "Rien ne change tout de suite : ce qui arrive au travail terminé reste tel quel, et c'est désormais à vous d'en décider.",
+                "land": "Le travail terminé est intégré tout seul.",
+                "push": "Les versions enregistrées sont sauvegardées là où ce projet a un dépôt distant.",
+                "version": "Chaque travail intégré est enregistré comme version.",
+                "words": "Toute personne qui n'a pas choisi son propre vocabulaire ici voit des mots simples."
+            },
+            "question": "Qui s'occupe du code ici ?"
         }
     },
     "settings": {
@@ -11410,8 +11439,6 @@
             },
             "work": {
                 "developerHint": "Les mots de git, l'arborescence comme accueil, tous les panneaux.",
-                "hint": "Change les mots employés par l'application et la page d'accueil. Rien pour vos fichiers ni vos agents.",
-                "maker": "Pas moi",
                 "makerHint": "Des mots simples, les fichiers d'outillage à l'écart."
             },
             "motion": {
@@ -11424,8 +11451,7 @@
             },
             "plain": {
                 "languageHint": "La langue de cette interface. Vos fichiers et conversations restent intacts.",
-                "wallpaperHint": "Une image derrière le tableau des assistants, dans la version claire ou sombre de votre thème.",
-                "workHint": "Change les mots de l'application et la page d'accueil. Rien dans vos fichiers ni vos conversations."
+                "wallpaperHint": "Une image derrière le tableau des assistants, dans la version claire ou sombre de votre thème."
             }
         },
         "hostedHours": {
@@ -11706,10 +11732,16 @@
             "serverTrouble": "Le serveur a rencontré un problème. Réessayez dans un instant."
         },
         "words": {
-            "iWriteCode": "J'écris du code",
             "iconRailCompact": "Compact",
             "iconRailComfortable": "Confortable",
-            "group": "Comment vous travaillez"
+            "group": "Vocabulaire",
+            "follow": "Comme le sandbox",
+            "followHint": "Simples sur un sandbox automatique, ceux de git sur un sandbox manuel.",
+            "technical": "Technique",
+            "plain": "Simple",
+            "followingHandsOff": "Ce sandbox fonctionne en automatique, vous voyez donc des mots simples. Un choix ici ne vaut que pour ce sandbox.",
+            "followingHandsOn": "Ce sandbox fonctionne en manuel, vous voyez donc le vocabulaire de git. Un choix ici ne vaut que pour ce sandbox.",
+            "overriding": "Votre propre choix, sur ce sandbox uniquement. Les autres suivent son fonctionnement."
         },
         "analytics": {
             "title": "Analyse du produit",

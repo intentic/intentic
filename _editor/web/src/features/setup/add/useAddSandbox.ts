@@ -1,5 +1,5 @@
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
-import type { HostedTierId } from "@intentic/constants";
+import { DEFAULT_SANDBOX_MODE, type HostedTierId, type SandboxMode } from "@intentic/constants";
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import type { NoticeModel } from "@intentic/ui";
 import { engineCapacity, type OsMark } from "@intentic/ui/device-machine";
@@ -8,7 +8,8 @@ import { t } from "@intentic/ui/i18n";
 import { computed, ref, type Ref } from "vue";
 import { track } from "../../../app/analytics";
 import { type DesktopSetupArgs, desktopSetupLink, desktopSetupStopLink } from "../../../app/environments/desktop";
-import { arrivingProfile } from "../../../app/useProfile";
+import { arrivingMode, profileForMode } from "../../../app/useProfile";
+import { seedLookForHandsOff } from "./seedLook";
 import type { apiClient } from "../../../lib/useApi";
 import { autoSandboxName, SANDBOX_NAME_MAX } from "../../../client/sandbox/sandboxName";
 import { osLabel, osMark } from "../../../models/sandbox/devices/deviceFacts";
@@ -133,6 +134,8 @@ interface Flows {
     readonly hosted: HostedLaneApi;
     readonly setup: Ref<SetupCode | null>;
     readonly mintedFor: Ref<string | undefined>;
+    // The form's answer to "Who handles the code here?", which every way of starting the row carries to the machine.
+    readonly mode: Ref<SandboxMode>;
 }
 
 // Where it can run: the platform's two offers, read once the dialog opens (an unreadable one offers nothing rather
@@ -214,14 +217,15 @@ const useAddForm = (
     return { name, pick, problem: computed(() => nameProblem(name.value)) };
 };
 
-// The app on this computer, handed the code as /setup's button hands it, syncing a folder of this computer by default.
-const handToApp = (host: AddSandboxHost, minted: SetupCode, sandboxId: string, sandboxName: string): void => {
+// The app on this computer, handed the code as /setup's button hands it, syncing a folder of this computer by default. The
+// code was minted with the mode already; the link carries it again in the app's own spelling, for a re-mint.
+const handToApp = (host: AddSandboxHost, minted: SetupCode, sandboxId: string, sandboxName: string, mode: SandboxMode): void => {
     const link: DesktopSetupArgs = {
         code: minted.code,
         sandboxId,
         name: sandboxName,
         syncDir: syncFolder(sandboxName, minted.hostname),
-        profile: arrivingProfile(),
+        profile: profileForMode(mode),
     };
     if (host.platformUrl !== undefined) {
         link.platformUrl = host.platformUrl;
@@ -234,7 +238,7 @@ const handToApp = (host: AddSandboxHost, minted: SetupCode, sandboxId: string, s
 
 // The two ways a start goes after the row exists: a machine of ours, or a code handed to the app or a connected machine.
 const useAddStarts = (flows: Flows, onMachine: SetupOnMachineApi) => {
-    const { host, row, hosted, setup, mintedFor } = flows;
+    const { host, row, hosted, setup, mintedFor, mode } = flows;
     // Where the press went, once it went: the dialog draws that run instead of the form. Undefined again after a start
     // refused before anything reached a machine, so the form comes back with the reason on it.
     const started = ref<Started>();
@@ -263,7 +267,7 @@ const useAddStarts = (flows: Flows, onMachine: SetupOnMachineApi) => {
     const startWithCode = async (target: string, sandboxId: string, sandboxName: string): Promise<void> => {
         let minted: SetupCode;
         try {
-            minted = await host.platform.setupCode({ sandboxId, profile: arrivingProfile() });
+            minted = await host.platform.setupCode({ sandboxId, mode: mode.value });
         } catch (err) {
             await refused(noticeFrom(err, t(`setup.useCommandLane.couldntPrepare`)));
             return;
@@ -276,7 +280,7 @@ const useAddStarts = (flows: Flows, onMachine: SetupOnMachineApi) => {
         }
         if (target === HERE) {
             started.value = { kind: `here` };
-            handToApp(host, minted, sandboxId, sandboxName);
+            handToApp(host, minted, sandboxId, sandboxName, mode.value);
             return;
         }
         const door = onMachine.doors.value.find((each) => each.machineKey === target);
@@ -335,7 +339,8 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
                 error.value = noticeFrom(err, t(`setup.setup.couldNotCreateSandbox`));
                 return;
             }
-            track(`sandbox_add_started`, { target: target === HERE || target === HOSTED || target === COMMAND ? target : `machine` });
+            track(`sandbox_add_started`, { target: target === HERE || target === HOSTED || target === COMMAND ? target : `machine`, mode: flows.mode.value });
+            seedLookForHandsOff(flows.mode.value, host.sandbox.sandboxes.value.filter((each) => each.id !== row.created.value?.id).length);
             await (target === HOSTED ? startHosted() : startWithCode(target, row.created.value.id, sandboxName));
         } finally {
             creating.value = false;
@@ -401,8 +406,11 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
 export const useAddSandbox = (host: AddSandboxHost) => {
     const { sandbox, platform } = host;
     const row = useSetupRow({ sandbox, enter: host.enter });
-    const hosted = useHostedLane({ platform, sandbox, row, project: undefined, appTakesProjects: () => false, tier: host.tier });
-    const flows: Flows = { host, row, hosted, setup: ref<SetupCode | null>(null), mintedFor: ref<string | undefined>(undefined) };
+    // Preselected by the profile the reader arrived in (a link from intentic.dev/desk preselects hands-off), and asked on
+    // the form either way: nothing decides how a sandbox runs but the answer its maker gives here.
+    const mode = ref<SandboxMode>(arrivingMode() ?? DEFAULT_SANDBOX_MODE);
+    const hosted = useHostedLane({ platform, sandbox, row, project: undefined, appTakesProjects: () => false, tier: host.tier, mode: () => mode.value });
+    const flows: Flows = { host, row, hosted, setup: ref<SetupCode | null>(null), mintedFor: ref<string | undefined>(undefined), mode };
     // Opens the workspace once the row reports in (and, for a machine of ours, once it is ready to be used).
     useRegistryWatch({ sandbox, row, hosted, mintedFor: flows.mintedFor });
     const offers = useAddOffers(flows);
@@ -420,6 +428,7 @@ export const useAddSandbox = (host: AddSandboxHost) => {
 
     return {
         ...form,
+        mode,
         ...presses,
         options: offers.options,
         moreOptions: offers.moreOptions,

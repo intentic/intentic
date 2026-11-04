@@ -44,6 +44,8 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.sandboxOverview.sandboxName`),
         terms: () => [t(`sandbox.sandboxOverview.renameSandbox`), t(`sandbox.sandboxOverview.logoChange`), t(`sandbox.search.overviewName`)],
     },
+    // How it runs (overview/mode/SandboxModeRow.vue): either mode's name, and the question it answers, find it.
+    { id: `overview-mode`, slug: `overview`, title: () => t(`sandbox.mode.howItRuns`), terms: () => [t(`sandbox.search.overviewMode`)] },
     {
         id: `overview-resources`,
         slug: `overview`,

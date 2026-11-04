@@ -5024,17 +5024,18 @@
                 "waitingSecond": "Waiting for a second person with Full access",
                 "approveAsk": "{name} asks to open {author}'s conversation without asking."
             }
+        },
+        "handsOffOffer": {
+            "line": "Want finished work like this to go in by itself?",
+            "notNow": "Not now",
+            "tipNote": "Accepts, saves and backs up",
+            "tipTitle": "Hands-off",
+            "yes": "Let the sandbox handle it"
         }
     },
     "common": {
         "asyncView": {
             "viewCouldntLoad": "This view couldn't load."
-        },
-        "audienceAsk": {
-            "dontWriteCodeAssistants": "If you don't write code: the assistant's changes apply on their own and every change is saved as a version. You can always go back.",
-            "howWorkHere": "How will you work here?",
-            "iDontWriteCode": "I don't write code",
-            "picksWordsAppUses": "Picks the words the app uses and what its home page is. Nothing about your files or your agents changes, and you can switch in Settings any time."
         },
         "matchLine": {
             "agent": "Agent:",
@@ -10985,7 +10986,8 @@
             "guardrailsAdmission": "triggers, webhooks, automations, schedules, cron, visitors, inbound, who can start work",
             "retentionPeriods": "delete old chats, history, how long, keep, cleanup, storage, disk space, expire, auto delete, conversations",
             "retentionAudit": "audit trail, audit log, siem, forward logs, export logs, who opened what, compliance",
-            "dataProtectionDocuments": "gdpr, records of processing, impact assessment, technical measures, compliance paperwork, article 30"
+            "dataProtectionDocuments": "gdpr, records of processing, impact assessment, technical measures, compliance paperwork, article 30",
+            "overviewMode": "hands-off hands-on who handles the code automatic manual land save versions back up words"
         },
         "agentTools": {
             "simple": "Simple",
@@ -11338,6 +11340,33 @@
             "ownMachine": "This sandbox runs on your own computer, so a shell on that machine can still read the files on disk.",
             "count": "{count} conversation is private now. | {count} conversations are private now.",
             "saveFailed": "Couldn't change who reads whose conversations."
+        },
+        "mode": {
+            "finishedWork": {
+                "byItself": "By itself",
+                "note": "This sandbox runs hands-off, so it lands, saves and backs up finished work by itself.",
+                "setMyself": "Set these myself"
+            },
+            "handsOff": {
+                "note": "Hands-off. Finished work goes in by itself, is saved as a version and backed up, in plain words.",
+                "summary": "Hands-off · Intentic handles the code",
+                "title": "Intentic does"
+            },
+            "handsOn": {
+                "note": "Hands-on. You review each change and decide what ships, in git's own words.",
+                "summary": "Hands-on · you handle the code",
+                "title": "I do"
+            },
+            "howItRuns": "How it runs",
+            "preview": {
+                "alreadyOn": "Finished work already goes in, is saved and is backed up by itself; from now on it stays that way.",
+                "handsOn": "Nothing changes right away: what happens to finished work stays as it is, and is yours to change from now on.",
+                "land": "Finished work goes in by itself.",
+                "push": "Saved versions are backed up wherever this project has a remote.",
+                "version": "Each piece of work that goes in is saved as a version.",
+                "words": "Everyone who hasn't picked their own words here sees plain ones."
+            },
+            "question": "Who handles the code here?"
         }
     },
     "settings": {
@@ -11410,8 +11439,6 @@
             },
             "work": {
                 "developerHint": "Git's own words, the file tree as the home, every panel.",
-                "hint": "Changes the words the app uses and which page is home. Nothing about your files or your agents.",
-                "maker": "I don't",
                 "makerHint": "Plain words, tooling files out of the way."
             },
             "motion": {
@@ -11424,8 +11451,7 @@
             },
             "plain": {
                 "languageHint": "The language this interface is written in. Your files and conversations are untouched.",
-                "wallpaperHint": "A picture behind the assistants board, in the light or dark version of your theme.",
-                "workHint": "Changes the words the app uses and which page is home. Nothing about your files or conversations."
+                "wallpaperHint": "A picture behind the assistants board, in the light or dark version of your theme."
             }
         },
         "hostedHours": {
@@ -11706,10 +11732,16 @@
             "serverTrouble": "The server had a problem. Try again in a moment."
         },
         "words": {
-            "iWriteCode": "I write code",
             "iconRailCompact": "Compact",
             "iconRailComfortable": "Comfortable",
-            "group": "How you work"
+            "group": "Words",
+            "follow": "Follow sandbox",
+            "followHint": "Plain on a hands-off sandbox, git's own on a hands-on one.",
+            "technical": "Technical",
+            "plain": "Plain",
+            "followingHandsOff": "This sandbox runs hands-off, so you read plain words. A choice here holds on this sandbox only.",
+            "followingHandsOn": "This sandbox runs hands-on, so you read git's own words. A choice here holds on this sandbox only.",
+            "overriding": "Your own choice, on this sandbox only. Everyone else follows how it runs."
         },
         "analytics": {
             "title": "Product analytics",

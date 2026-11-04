@@ -5024,17 +5024,18 @@
                 "waitingSecond": "Esperando a una segunda persona con acceso total",
                 "approveAsk": "{name} pide abrir la conversación de {author} sin preguntar."
             }
+        },
+        "handsOffOffer": {
+            "line": "¿Quieres que el trabajo terminado como este se incorpore solo?",
+            "notNow": "Ahora no",
+            "tipNote": "Incorpora, guarda y respalda",
+            "tipTitle": "Automático",
+            "yes": "Que se encargue el sandbox"
         }
     },
     "common": {
         "asyncView": {
             "viewCouldntLoad": "Esta vista no se pudo cargar."
-        },
-        "audienceAsk": {
-            "dontWriteCodeAssistants": "Si no escribes código: los cambios del asistente se aplican solos y cada cambio se guarda como una versión. Siempre puedes volver atrás.",
-            "howWorkHere": "¿Cómo vas a trabajar aquí?",
-            "iDontWriteCode": "No escribo código",
-            "picksWordsAppUses": "Elige las palabras que usa la aplicación y cuál es su página de inicio. No cambia nada de tus archivos ni de tus agentes, y puedes cambiarlo en Ajustes cuando quieras."
         },
         "matchLine": {
             "agent": "Agente:",
@@ -10985,7 +10986,8 @@
             "guardrailsAdmission": "disparadores, webhooks, automatizaciones, programaciones, cron, visitantes, entrantes, quién puede iniciar trabajo",
             "retentionPeriods": "borrar chats antiguos, historial, cuánto tiempo, conservar, limpiar, almacenamiento, espacio en disco, caducar, borrado automático, conversaciones",
             "retentionAudit": "registro de auditoría, rastro de auditoría, SIEM, reenviar registros, exportar registros, quién abrió qué, cumplimiento",
-            "dataProtectionDocuments": "RGPD, registro de actividades de tratamiento, evaluación de impacto, medidas técnicas, documentación de cumplimiento, artículo 30"
+            "dataProtectionDocuments": "RGPD, registro de actividades de tratamiento, evaluación de impacto, medidas técnicas, documentación de cumplimiento, artículo 30",
+            "overviewMode": "automático manual hands-off hands-on quién se encarga del código incorporar guardar versiones respaldar palabras"
         },
         "agentTools": {
             "simple": "Sencillo",
@@ -11338,6 +11340,33 @@
             "ownMachine": "Este sandbox se ejecuta en tu propio ordenador, así que una terminal en esa máquina aún puede leer los archivos del disco.",
             "count": "{count} conversación es privada ahora. | {count} conversaciones son privadas ahora.",
             "saveFailed": "No se pudo cambiar quién lee las conversaciones de quién."
+        },
+        "mode": {
+            "finishedWork": {
+                "byItself": "Automático",
+                "note": "Este sandbox funciona en automático: incorpora, guarda y respalda el trabajo terminado por sí solo.",
+                "setMyself": "Ajustarlo yo"
+            },
+            "handsOff": {
+                "note": "Automático. El trabajo terminado se incorpora solo, se guarda como versión y se respalda, con palabras sencillas.",
+                "summary": "Automático · Intentic se encarga del código",
+                "title": "Intentic se encarga"
+            },
+            "handsOn": {
+                "note": "Manual. Revisas cada cambio y decides qué se publica, con los términos propios de git.",
+                "summary": "Manual · tú te encargas del código",
+                "title": "Yo"
+            },
+            "howItRuns": "Cómo funciona",
+            "preview": {
+                "alreadyOn": "El trabajo terminado ya se incorpora, se guarda y se respalda solo; a partir de ahora seguirá así.",
+                "handsOn": "No cambia nada de inmediato: lo que pasa con el trabajo terminado sigue igual, y a partir de ahora lo decides tú.",
+                "land": "El trabajo terminado se incorpora solo.",
+                "push": "Las versiones guardadas se respaldan allí donde este proyecto tenga un remoto.",
+                "version": "Cada trabajo incorporado se guarda como versión.",
+                "words": "Quien no haya elegido sus propias palabras aquí verá palabras sencillas."
+            },
+            "question": "¿Quién se encarga del código aquí?"
         }
     },
     "settings": {
@@ -11410,8 +11439,6 @@
             },
             "work": {
                 "developerHint": "Las palabras de git, el árbol de archivos como inicio, todos los paneles.",
-                "hint": "Cambia las palabras que usa la aplicación y qué página es el inicio. Nada de tus archivos ni de tus agentes.",
-                "maker": "Yo no",
                 "makerHint": "Palabras llanas, los archivos de herramientas apartados."
             },
             "motion": {
@@ -11424,8 +11451,7 @@
             },
             "plain": {
                 "languageHint": "El idioma de esta interfaz. Tus archivos y conversaciones no cambian.",
-                "wallpaperHint": "Una imagen detrás del tablero de asistentes, en la versión clara u oscura de tu tema.",
-                "workHint": "Cambia las palabras que usa la aplicación y qué página es la de inicio. Nada de tus archivos ni conversaciones."
+                "wallpaperHint": "Una imagen detrás del tablero de asistentes, en la versión clara u oscura de tu tema."
             }
         },
         "hostedHours": {
@@ -11706,10 +11732,16 @@
             "serverTrouble": "El servidor tuvo un problema. Inténtalo de nuevo en un momento."
         },
         "words": {
-            "iWriteCode": "Escribo código",
             "iconRailCompact": "Compacto",
             "iconRailComfortable": "Cómodo",
-            "group": "Cómo trabajas"
+            "group": "Palabras",
+            "follow": "Como el sandbox",
+            "followHint": "Sencillas en un sandbox automático, las de git en uno manual.",
+            "technical": "Técnicas",
+            "plain": "Sencillas",
+            "followingHandsOff": "Este sandbox funciona en automático, así que ves palabras sencillas. Lo que elijas aquí solo vale para este sandbox.",
+            "followingHandsOn": "Este sandbox funciona en manual, así que ves los términos de git. Lo que elijas aquí solo vale para este sandbox.",
+            "overriding": "Tu propia elección, solo en este sandbox. Los demás siguen cómo funciona."
         },
         "analytics": {
             "title": "Análisis del producto",

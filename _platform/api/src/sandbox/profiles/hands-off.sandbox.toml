@@ -1,0 +1,17 @@
+# The HANDS-OFF sandbox, as a definition (see _sandbox/sandbox/src/definition/definition.ts). Whoever answers "Who
+# handles the code here?" with "Intentic does" gets this applied once, at their sandbox's first boot, on an empty
+# workspace: the daemon's own `definitionSeed` step, which refuses to run over work that already exists.
+#
+# It only names the mode (@intentic/constants sandbox-mode.ts). What hands-off means is the daemon's: its settings store
+# keeps auto-land, auto-version and auto-push standing for as long as `mode` says hands-off, so finished work lands,
+# is saved as a version and is backed up wherever a branch tracks a remote, and nothing here repeats those rules. The
+# editor's words follow the mode too, for everyone who has not chosen their own. A hands-on sandbox has no file here:
+# a sandbox with nothing applied to it IS hands-on.
+#
+# Extensions belong in a `[[capabilities]]` section here, which is a typed document section applied natively. NOT in a
+# `[workspace]` repo: that path deliberately rewrites extension-enablement.json so everything it carries lands off,
+# because a workspace repo is how a stranger's sandbox arrives and its extensions are somebody else's code.
+schemaVersion = 1
+
+[settings]
+mode = "hands-off"

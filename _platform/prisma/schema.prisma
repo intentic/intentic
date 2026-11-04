@@ -28,6 +28,11 @@ model User {
     // account, its own-machine sandboxes and its data are untouched. Null is good standing.
     hostedSuspendedAt     DateTime?
     hostedSuspendedReason String?
+    // The person's own look and reading preferences (api-contract account-preferences.ts): the editor's preference
+    // names (`ui-color-scheme`) to the strings it stores for them, so every browser, device and sandbox they open shows
+    // them the same. Kept with the account because none of it is a fact about a sandbox: how a sandbox runs is its own
+    // setting. Null is nothing kept yet, which reads as an empty set.
+    preferences           Json?
     createdAt        DateTime           @default(now())
     updatedAt        DateTime           @updatedAt
     sessions         Session[]

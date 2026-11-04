@@ -12,6 +12,9 @@ import { initAnalytics } from "./app/analytics";
 import { sandboxAnalyticsGate } from "./features/sandbox/analytics/analyticsGate";
 import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
+import { directMode } from "./client/directory/directState";
+import { apiClient } from "./lib/useApi";
+import { startAccountPreferences } from "./app/accountPreferences";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { dropTranscriptStore } from "./models/conversations/transcript/transcriptCache";
 import { describeError, installClientDiagnostics, reportAutomaticReloads, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
@@ -147,6 +150,13 @@ installNotificationTaps(router);
 
 // Every window reads which words to use (developer or maker) from the sandbox once it answers, so two devices agree.
 startAudienceSync();
+// And wears the look and reading preferences the account keeps, sending it each one chosen here, so every device the
+// person signs in on agrees too. A sandbox opened while the platform is down names an account the platform is not there
+// to keep anything for.
+startAccountPreferences(
+    computed(() => (directMode.value ? null : useAuth().user.value)),
+    apiClient.me,
+);
 
 // The reader's language, fetched before a single component renders in the wrong one. On `en` this resolves in the
 // same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is

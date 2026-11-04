@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
+import { useRole } from "../../../../client/sandbox/useRole";
+import { useSandboxMode } from "../../../../models/sandbox/mode/useSandboxMode";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { autoLandRule, autoPushRule, autoVersionRule, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
 import { useRules } from "../../../../models/sandbox/environment/useRules";
@@ -16,6 +18,15 @@ const { settings, patch, refusal } = useSandboxSettings();
 const { byId, upsert, remove, refusal: rulesRefusal } = useRules();
 // Two saves write this group, the settings' own and the rules'; either one refused is said once, under the group.
 const groupRefusal = computed(() => refusal.value ?? rulesRefusal.value);
+
+// A HANDS-OFF SANDBOX OWNS THE FIRST THREE ROWS (settings `mode`, sandbox-mode.ts): its settings store keeps landing,
+// saving and backing up switched on whatever a save says, so each row says what the sandbox does instead of offering a
+// switch that would snap back. Setting them by hand is one press away, and that press is the switch to hands-on, which
+// keeps all three as they stand.
+const { mode, switchTo, saving: switching } = useSandboxMode();
+const { canShip } = useRole();
+const handsOff = computed(() => mode.value === `hands-off`);
+const setMyself = (): void => void switchTo(`hands-on`);
 
 // A verdict rule (allow/hold, the same vocabulary as permission rules), not a bool: the landing pass always
 // runs, the rule decides which way. No rule means held, so switching off deletes the rule rather than writing `hold`.
@@ -69,6 +80,21 @@ const HELD_RETENTION_OPTIONS = computed(() => [
 
 <template>
     <RowGroup data-setting="agent-finished-work" :label="t(`sandbox.agentFinishedWork.finishedWork`)">
+        <!-- Hands-off: what the next three rows are, said once above them, with the one way to take them over. -->
+        <RowNote v-if="handsOff" variant="block" data-finished-work-hands-off>
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <span class="min-w-0 flex-1 text-xs text-muted">{{ t(`sandbox.mode.finishedWork.note`) }}</span>
+                <Button
+                    v-if="canShip"
+                    size="small"
+                    tier="boring"
+                    :label="t(`sandbox.mode.finishedWork.setMyself`)"
+                    :loading="switching"
+                    @click="setMyself"
+                />
+            </div>
+        </RowNote>
+
         <!-- Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with no browser present. -->
         <Row
             icon="download"
@@ -76,21 +102,25 @@ const HELD_RETENTION_OPTIONS = computed(() => [
             :description="t(`sandbox.agentFinishedWork.applyCompletedWorkDirectly`)"
         >
             <template #control>
-                <ToggleSwitch :model-value="land()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setLand" />
+                <span v-if="handsOff" class="text-xs text-muted">{{ t(`sandbox.mode.finishedWork.byItself`) }}</span>
+                <ToggleSwitch v-else :model-value="land()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setLand" />
             </template>
         </Row>
 
         <!-- Worktrees are cut from HEAD, so an owner who never commits would start every agent on a tree without the last one's work. -->
         <Row icon="history" :title="t(`sandbox.words.saveVersionAcceptedWork`)" :description="t(`sandbox.agentFinishedWork.commitWhatEachLanded`)">
             <template #control>
-                <ToggleSwitch :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
+                <span v-if="handsOff" class="text-xs text-muted">{{ t(`sandbox.mode.finishedWork.byItself`) }}</span>
+                <ToggleSwitch v-else :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
             </template>
         </Row>
 
         <!-- Under the versioner, and only with it on: it pushes what a land's version committed, nothing else. -->
         <Row icon="upload" :title="t(`sandbox.agentFinishedWork.backUpSaved`)" :description="t(`sandbox.agentFinishedWork.backUpSavedNote`)">
             <template #control>
+                <span v-if="handsOff" class="text-xs text-muted">{{ t(`sandbox.mode.finishedWork.byItself`) }}</span>
                 <ToggleSwitch
+                    v-else
                     :model-value="versioned && (backUp()?.enabled ?? false)"
                     :disabled="settings === undefined || !versioned"
                     @update:model-value="setBackUp"

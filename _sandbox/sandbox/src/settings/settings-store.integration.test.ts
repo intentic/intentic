@@ -95,3 +95,46 @@ test("a write is heard once it is down, and not after the listener leaves", asyn
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(read.map((settings) => settings.iqSearch)).toEqual([false]);
 });
+
+// A hands-off sandbox owns its land, version and back-up rules (sandbox-mode.ts): every read hands them back standing,
+// whatever the file says, and never writes the file to say so, since an uncommitted settings.json in the main tree would
+// read as the owner's own edit and refuse the next land.
+describe("a hands-off sandbox", () => {
+    const managedIds = (settings: SandboxSettings): string[] => settings.rules.filter((rule) => rule.enabled).map((rule) => rule.id);
+
+    test("reads its three rules standing, and leaves the file as it was", async () => {
+        const { store, path } = tempStore();
+        await mkdir(dirname(path), { recursive: true });
+        const written = JSON.stringify({ mode: "hands-off" });
+        await writeFile(path, written);
+
+        expect(managedIds(await store.get())).toEqual(["auto-land", "auto-version", "auto-push"]);
+        expect((await store.load()).settings.rules).toHaveLength(3);
+        expect(await readFile(path, "utf8")).toBe(written);
+    });
+
+    test("keeps them standing through a save that switched one off, and writes that down", async () => {
+        const { store, path } = tempStore();
+        await store.set({ ...DEFAULTS, mode: "hands-off" });
+        const run = await store.get();
+        await store.set({ ...run, rules: run.rules.map((rule) => (rule.id === "auto-land" ? { ...rule, enabled: false } : rule)) });
+
+        expect(managedIds(await store.get())).toEqual(["auto-land", "auto-version", "auto-push"]);
+        const onDisk = SandboxSettingsSchema.parse(JSON.parse(await readFile(path, "utf8")));
+        expect(managedIds(onDisk)).toEqual(["auto-land", "auto-version", "auto-push"]);
+    });
+
+    test("leaves a hands-on sandbox's rules exactly as the owner set them", async () => {
+        const { store } = tempStore();
+        await store.set({ ...DEFAULTS, mode: "hands-on" });
+        expect((await store.get()).rules).toEqual([]);
+    });
+
+    // Switching back is not a reset: what stood is the owner's from then on.
+    test("switched back to hands-on, keeps the rules that stood", async () => {
+        const { store } = tempStore();
+        await store.set({ ...DEFAULTS, mode: "hands-off" });
+        await store.set({ ...(await store.get()), mode: "hands-on" });
+        expect(managedIds(await store.get())).toEqual(["auto-land", "auto-version", "auto-push"]);
+    });
+});

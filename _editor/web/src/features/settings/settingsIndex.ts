@@ -62,7 +62,7 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         id: `audience`,
         slug: `appearance`,
         title: () => t(`settings.words.group`),
-        terms: () => [t(`settings.words.iWriteCode`), t(`settings.search.audience`)],
+        terms: () => [t(`settings.words.technical`), t(`settings.words.plain`), t(`settings.words.follow`), t(`settings.search.audience`)],
     },
     { id: `language`, slug: `appearance`, title: () => t(`settings.appearance.look.language`), terms: () => [t(`settings.search.language`)] },
     { id: `theme`, slug: `appearance`, title: () => t(`settings.appearance.look.theme`), terms: () => [t(`settings.search.theme`)] },

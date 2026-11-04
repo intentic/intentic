@@ -3,7 +3,8 @@ import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbo
 import { AI_LITERACY_TEXT } from "@intentic/sandbox-contract/schemas/ai-literacy";
 import type { GitPerson, RepoChecksList } from "@intentic/sandbox-contract/schemas/settings";
 import { refuse } from "@intentic/contract-serve";
-import { demoQuiet } from "../../mode";
+import { DEFAULT_SANDBOX_MODE, effectiveAudience } from "@intentic/sandbox-contract/schemas/sandbox-mode";
+import { deskEdition, demoQuiet } from "../../mode";
 import { DEMO_USER } from "../../platform";
 import { DEMO_REPO_CHECKS, DEMO_SAFETY_POLICY, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
 import { STARTED_AT } from "../board/roster";
@@ -14,7 +15,8 @@ import { STARTED_AT } from "../board/roster";
 
 type Settings = SandboxHandlerOutput<`settings`, `get`>;
 
-let settingsNow: Settings = DEMO_SETTINGS;
+// The desk recording's sandbox runs hands-off, as a desk reader's would: it lands and saves by itself, and speaks plain words.
+let settingsNow: Settings = deskEdition ? { ...DEMO_SETTINGS, mode: `hands-off` } : DEMO_SETTINGS;
 export const currentSettings = (): Settings => settingsNow;
 export const writeSettings = (settings: Settings): void => {
     settingsNow = settings;
@@ -30,15 +32,32 @@ export const adoptTimezone = ({ timezone }: SandboxHandlerInput<`settings`, `ado
     return { timezone, adopted: true };
 };
 
-// The demo's one reader keeps one answer; absent until they give it, as the daemon's per-member store reads.
-let audience: SandboxHandlerOutput<`settings`, `audience`>[`audience`];
-export const readAudience = (): SandboxHandlerOutput<`settings`, `audience`> => (audience === undefined ? {} : { audience });
-export const answerAudience = (answer: SandboxHandlerInput<`settings`, `setAudience`>): SandboxHandlerOutput<`settings`, `setAudience`> => {
-    if (answer.offer === true && audience !== undefined) {
-        return { audience, adopted: false };
+// The demo's one reader: their own choice of words, if they made one, over what the sandbox's mode speaks, as the
+// daemon's settings/audience.routes.ts answers. An offer is never taken, as the daemon declines every one. Plain words
+// this browser holds on the code recording, whose sandbox runs hands-on, can only have been chosen (Appearance, or an
+// accessibility run writing them before boot), so they stand in for a choice kept on an earlier visit; any other copy
+// is only what last painted, and the desk recording's sandbox speaks plain words by itself.
+type Words = SandboxHandlerOutput<`settings`, `audience`>[`override`];
+let override: Words = !deskEdition && window.localStorage.getItem(`ui-audience`) === `maker` ? `maker` : undefined;
+const spoken = (): SandboxHandlerOutput<`settings`, `audience`> => {
+    const mode = settingsNow.mode ?? DEFAULT_SANDBOX_MODE;
+    const words: SandboxHandlerOutput<`settings`, `audience`> = { audience: effectiveAudience(mode, override), mode };
+    if (override !== undefined) {
+        words.override = override;
     }
-    audience = answer.audience;
-    return { audience, adopted: true };
+    return words;
+};
+export const readAudience = (): SandboxHandlerOutput<`settings`, `audience`> => spoken();
+export const answerAudience = (answer: SandboxHandlerInput<`settings`, `setAudience`>): SandboxHandlerOutput<`settings`, `setAudience`> => {
+    if (answer.offer !== true) {
+        override = answer.audience ?? undefined;
+    }
+    const { audience, override: kept } = spoken();
+    const state: SandboxHandlerOutput<`settings`, `setAudience`> = { audience: audience ?? `developer`, adopted: answer.offer !== true };
+    if (kept !== undefined) {
+        state.override = kept;
+    }
+    return state;
 };
 
 // The demo's one reader is the sandbox's owner, so the daemon offers them the connected GitHub account's identity

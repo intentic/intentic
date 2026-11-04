@@ -3,16 +3,17 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { parseDefinitionToml } from "./definition.js";
 
-// The platform ships one sandbox.toml per profile and hands it to a new machine as base64 in SANDBOX_DEFINITION_SEED;
-// main.ts decodes and applies it on first boot. That step swallows its own failure on purpose — a sandbox that cannot
-// read its seed still has to come up — so a typo in one of these files costs the reader everything the profile
-// promised and says nothing anywhere they will look. This is where it is caught instead: the real parser, on the real
-// files, through the same base64 the daemon is handed.
+// The platform ships a sandbox.toml for each way a new sandbox can be seeded (today one: hands-off.sandbox.toml, for a
+// sandbox whose maker said Intentic handles the code) and hands it to a new machine as base64 in
+// SANDBOX_DEFINITION_SEED; main.ts decodes and applies it on first boot. That step swallows its own failure on purpose —
+// a sandbox that cannot read its seed still has to come up — so a typo in one of these files costs the reader everything
+// the choice promised and says nothing anywhere they will look. This is where it is caught instead: the real parser, on
+// the real files, through the same base64 the daemon is handed.
 
 const PROFILES_DIR = join(repoRoot(import.meta.url), `_platform/api/src/sandbox/profiles`);
 const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox.toml`));
 
-describe(`the profile definitions the platform seeds`, () => {
+describe(`the definitions the platform seeds new sandboxes from`, () => {
     it(`ships at least one, or the seed path is dead code`, () => {
         expect(files.length).toBeGreaterThan(0);
     });

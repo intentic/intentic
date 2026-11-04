@@ -5024,17 +5024,18 @@
                 "waitingSecond": "Wartet auf eine zweite Person mit Vollzugriff",
                 "approveAsk": "{name} möchte die Unterhaltung von {author} ohne Nachfrage öffnen."
             }
+        },
+        "handsOffOffer": {
+            "line": "Soll fertige Arbeit wie diese von selbst übernommen werden?",
+            "notNow": "Nicht jetzt",
+            "tipNote": "Übernimmt, speichert, sichert",
+            "tipTitle": "Automatisch",
+            "yes": "Der Sandbox überlassen"
         }
     },
     "common": {
         "asyncView": {
             "viewCouldntLoad": "Diese Ansicht ließ sich nicht laden."
-        },
-        "audienceAsk": {
-            "dontWriteCodeAssistants": "Wenn Sie keinen Code schreiben: Die Änderungen des Assistenten gelten von selbst, und jede Änderung wird als Version gesichert. Sie können jederzeit zurück.",
-            "howWorkHere": "Wie werden Sie hier arbeiten?",
-            "iDontWriteCode": "Ich schreibe keinen Code",
-            "picksWordsAppUses": "Bestimmt die Worte, die die App benutzt, und was ihre Startseite ist. An Ihren Dateien und Ihren Agenten ändert sich nichts, und Sie können in den Einstellungen jederzeit wechseln."
         },
         "matchLine": {
             "agent": "Agent:",
@@ -10985,7 +10986,8 @@
             "guardrailsAdmission": "Auslöser, Webhooks, Automatisierungen, Zeitpläne, Cron, Besucher, eingehend, wer Arbeit starten darf",
             "retentionPeriods": "alte Chats löschen, Verlauf, wie lange, aufbewahren, aufräumen, Speicherplatz, ablaufen, automatisch löschen, Unterhaltungen",
             "retentionAudit": "Prüfprotokoll, Audit-Log, SIEM, Protokolle weiterleiten, Protokolle exportieren, wer was geöffnet hat, Compliance",
-            "dataProtectionDocuments": "DSGVO, Verarbeitungsverzeichnis, Folgenabschätzung, technische Maßnahmen, Compliance-Unterlagen, Artikel 30"
+            "dataProtectionDocuments": "DSGVO, Verarbeitungsverzeichnis, Folgenabschätzung, technische Maßnahmen, Compliance-Unterlagen, Artikel 30",
+            "overviewMode": "automatisch manuell hands-off hands-on wer kümmert sich um den code übernehmen speichern versionen sichern begriffe"
         },
         "agentTools": {
             "simple": "Einfach",
@@ -11338,6 +11340,33 @@
             "ownMachine": "Diese Sandbox läuft auf deinem eigenen Computer, daher kann eine Shell auf diesem Rechner die Dateien auf der Festplatte trotzdem lesen.",
             "count": "{count} Unterhaltung ist gerade privat. | {count} Unterhaltungen sind gerade privat.",
             "saveFailed": "Konnte nicht ändern, wer wessen Unterhaltungen liest."
+        },
+        "mode": {
+            "finishedWork": {
+                "byItself": "Automatisch",
+                "note": "Diese Sandbox läuft automatisch: Sie übernimmt, speichert und sichert fertige Arbeit von selbst.",
+                "setMyself": "Selbst einstellen"
+            },
+            "handsOff": {
+                "note": "Automatisch. Fertige Arbeit wird von selbst übernommen, als Version gespeichert und gesichert, in einfachen Worten.",
+                "summary": "Automatisch · Intentic kümmert sich um den Code",
+                "title": "Intentic übernimmt das"
+            },
+            "handsOn": {
+                "note": "Manuell. Sie prüfen jede Änderung und entscheiden, was übernommen wird, in Gits eigenen Begriffen.",
+                "summary": "Manuell · Sie kümmern sich um den Code",
+                "title": "Ich selbst"
+            },
+            "howItRuns": "Arbeitsweise",
+            "preview": {
+                "alreadyOn": "Fertige Arbeit wird schon von selbst übernommen, gespeichert und gesichert; ab jetzt bleibt das so.",
+                "handsOn": "Sofort ändert sich nichts: Was mit fertiger Arbeit geschieht, bleibt, wie es ist, und liegt ab jetzt bei Ihnen.",
+                "land": "Fertige Arbeit wird von selbst übernommen.",
+                "push": "Gespeicherte Versionen werden gesichert, wo dieses Projekt ein Remote hat.",
+                "version": "Jede übernommene Arbeit wird als Version gespeichert.",
+                "words": "Alle, die hier keine eigenen Begriffe gewählt haben, sehen einfache Worte."
+            },
+            "question": "Wer kümmert sich hier um den Code?"
         }
     },
     "settings": {
@@ -11410,8 +11439,6 @@
             },
             "work": {
                 "developerHint": "Gits eigene Worte, der Dateibaum als Startseite, alle Panels.",
-                "hint": "Ändert die Worte, die die App benutzt, und welche Seite die Startseite ist. Nichts an Ihren Dateien oder Ihren Agenten.",
-                "maker": "Ich nicht",
                 "makerHint": "Einfache Worte, Werkzeugdateien aus dem Weg."
             },
             "motion": {
@@ -11424,8 +11451,7 @@
             },
             "plain": {
                 "languageHint": "Die Sprache dieser Oberfläche. Deine Dateien und Gespräche bleiben unberührt.",
-                "wallpaperHint": "Ein Bild hinter der Assistententafel, in der hellen oder dunklen Version deines Designs.",
-                "workHint": "Ändert die Wörter der App und welche Seite die Startseite ist. Nichts an deinen Dateien oder Gesprächen."
+                "wallpaperHint": "Ein Bild hinter der Assistententafel, in der hellen oder dunklen Version deines Designs."
             }
         },
         "hostedHours": {
@@ -11706,10 +11732,16 @@
             "serverTrouble": "Der Server hatte ein Problem. Versuch es gleich noch einmal."
         },
         "words": {
-            "iWriteCode": "Ich schreibe Code",
             "iconRailCompact": "Kompakt",
             "iconRailComfortable": "Bequem",
-            "group": "Wie Sie arbeiten"
+            "group": "Begriffe",
+            "follow": "Wie die Sandbox",
+            "followHint": "Einfach bei einer automatischen Sandbox, Gits eigene bei einer manuellen.",
+            "technical": "Technisch",
+            "plain": "Einfach",
+            "followingHandsOff": "Diese Sandbox läuft automatisch, daher sehen Sie einfache Worte. Eine Wahl hier gilt nur für diese Sandbox.",
+            "followingHandsOn": "Diese Sandbox läuft manuell, daher sehen Sie Gits eigene Begriffe. Eine Wahl hier gilt nur für diese Sandbox.",
+            "overriding": "Ihre eigene Wahl, nur für diese Sandbox. Alle anderen folgen ihrer Arbeitsweise."
         },
         "analytics": {
             "title": "Produktanalyse",

@@ -126,8 +126,8 @@ export const settingsContract = {
         })
         .input(TimezoneOfferSchema)
         .output(TimezoneStateSchema),
-    // A person's own preference rather than a sandbox setting: kept per member, so every device a person opens this
-    // sandbox on reads it, and nobody's answer changes another member's screen. Anyone signed in may read and give their
+    // The words follow the sandbox's mode; a person may choose their own, kept per member, so every device they open this
+    // sandbox on reads it and nobody's choice changes another member's screen. Anyone signed in may read and give their
     // own, a guest included, since it changes nothing but the words they are shown.
     audience: procedure
         .route({
@@ -135,19 +135,19 @@ export const settingsContract = {
             path: "/settings/audience",
             summary: "Which words the editor uses for you here",
             description:
-                "Whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, in every browser and on every device. Absent until you have chosen here.",
+                "Whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, in every browser and on every device: your own choice when you made one, otherwise what the sandbox's mode speaks (plain on a hands-off sandbox). Also says which of the two it is, and the mode.",
         })
         .meta({ guest: true })
         .output(MemberAudienceSchema),
-    // A browser handing over the answer it kept on its own must not overwrite one the person already gave on another
-    // device, which is what `offer` says; a plain answer replaces it.
+    // A choice replaces the person's own, null forgets it; an `offer` (a browser from before the mode handing over what it
+    // kept) is always declined, and the words come back as the sandbox speaks them.
     setAudience: procedure
         .route({
             method: "POST",
             path: "/settings/audience",
             summary: "Choose which words the editor uses for you here",
             description:
-                "Sets whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, for every browser and device you open it on. Other members keep their own. With `offer` it is taken only while you have none kept, and the kept answer comes back unchanged.",
+                "Sets whether your editor speaks git's own words (developer) or plain ones (maker) on this sandbox, for every browser and device you open it on, or with null follows the sandbox's mode again. Other members keep their own. An `offer` is never taken: the words come back as this sandbox speaks them to you.",
         })
         .meta({ guest: true, floor: "viewer" })
         .input(AudienceAnswerSchema)

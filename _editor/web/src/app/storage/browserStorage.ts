@@ -58,6 +58,8 @@ export const questionDraftKey = accountKeys(`intentic.questionDraft.`);
 export const commitMessageKey = sandboxKeys(`intentic.commitMessage.`);
 // How long the last commit messages took to draft, for the field's progress ring (features/workspace/changes/commit/draftPace.ts).
 export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
+// Whether this device has offered the account the preferences it holds (app/accountPreferences.ts); sign-out forgets it.
+export const PREFERENCES_OFFERED_KEY = accountKey(`intentic.preferencesOffered`);
 // The size each markdown document's workspace picture last loaded at, per sandbox (lib/markdown/pictureSizes.ts).
 export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
 // When a setup last opened a sandbox it had just set up, per sandbox (models/sandbox/live/justSetUp.ts).

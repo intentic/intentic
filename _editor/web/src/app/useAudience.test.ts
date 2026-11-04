@@ -1,5 +1,6 @@
-// Pins the audience preference's reading of storage: unset and unknown both read as developer, and only an answer
-// marks the question as asked. jsdom: definePreference writes to localStorage.
+// Pins the words preference: the browser's copy only paints until the sandbox answers, the sandbox's answer is taken
+// whole and never sent back, and a choice made here is worn at once and handed to the keeper. jsdom: definePreference
+// writes to localStorage.
 import "@intentic/testing/dom";
 import { freshImport } from "@intentic/testing/bun";
 
@@ -11,77 +12,66 @@ beforeEach(() => {
 });
 
 describe(`useAudience`, () => {
-    it(`reads as developer and unanswered with nothing stored`, async () => {
+    it(`reads as developer with nothing stored, following no sandbox yet`, async () => {
         const { useAudience } = await load();
 
         expect(useAudience().audience.value).toBe(`developer`);
         expect(useAudience().maker.value).toBe(false);
-        expect(useAudience().chosen.value).toBe(false);
+        expect(useAudience().mode.value).toBeUndefined();
+        expect(useAudience().override.value).toBeUndefined();
     });
 
-    it(`restores a stored answer as answered`, async () => {
+    it(`paints the words it was last told before any sandbox answers`, async () => {
         localStorage.setItem(`ui-audience`, `maker`);
         const { useAudience } = await load();
 
-        expect(useAudience().audience.value).toBe(`maker`);
         expect(useAudience().maker.value).toBe(true);
-        expect(useAudience().chosen.value).toBe(true);
     });
 
-    it(`treats a stored value that is not an audience as unanswered`, async () => {
+    it(`treats a stored value that is not an audience as developer`, async () => {
         localStorage.setItem(`ui-audience`, `wizard`);
         const { useAudience } = await load();
 
         expect(useAudience().audience.value).toBe(`developer`);
-        expect(useAudience().chosen.value).toBe(false);
     });
 
-    it(`answering stores the value and marks the question asked`, async () => {
-        const { useAudience } = await load();
-
-        useAudience().setAudience(`maker`);
-
-        expect(localStorage.getItem(`ui-audience`)).toBe(`maker`);
-        expect(useAudience().maker.value).toBe(true);
-        expect(useAudience().chosen.value).toBe(true);
-    });
-
-    it(`an answer given here reaches the sandbox's keeper`, async () => {
-        const { keepAudienceWith, useAudience } = await load();
-        const kept: string[] = [];
+    it(`takes the sandbox's answer whole and never sends it back`, async () => {
+        const { adoptSandboxWords, keepAudienceWith, useAudience } = await load();
+        const kept: (string | null)[] = [];
         keepAudienceWith((value) => kept.push(value));
 
-        useAudience().setAudience(`maker`);
+        adoptSandboxWords({ audience: `maker`, mode: `hands-off` });
 
-        expect(kept).toEqual([`maker`]);
-    });
-
-    it(`adopting the sandbox's answer marks the question asked and is never sent back`, async () => {
-        const { adoptAudience, keepAudienceWith, useAudience } = await load();
-        const kept: string[] = [];
-        keepAudienceWith((value) => kept.push(value));
-
-        adoptAudience(`maker`);
-
+        expect(useAudience().audience.value).toBe(`maker`);
+        expect(useAudience().mode.value).toBe(`hands-off`);
+        expect(useAudience().override.value).toBeUndefined();
         expect(localStorage.getItem(`ui-audience`)).toBe(`maker`);
-        expect(useAudience().chosen.value).toBe(true);
         expect(kept).toEqual([]);
     });
-});
 
-describe(`audienceStep`, () => {
-    it(`takes a kept answer this browser does not hold, or holds without having answered`, async () => {
-        const { audienceStep } = await load();
+    it(`a choice made here is worn at once and reaches the keeper`, async () => {
+        const { adoptSandboxWords, keepAudienceWith, useAudience } = await load();
+        const kept: (string | null)[] = [];
+        keepAudienceWith((value) => kept.push(value));
+        adoptSandboxWords({ audience: `maker`, mode: `hands-off` });
 
-        expect(audienceStep(`maker`, `developer`, true)).toBe(`adopt`);
-        expect(audienceStep(`developer`, `developer`, false)).toBe(`adopt`);
-        expect(audienceStep(`maker`, `maker`, true)).toBe(`none`);
+        useAudience().setAudience(`developer`);
+
+        expect(useAudience().audience.value).toBe(`developer`);
+        expect(useAudience().override.value).toBe(`developer`);
+        expect(kept).toEqual([`developer`]);
     });
 
-    it(`hands its own answer to a sandbox that keeps none, and only an answer`, async () => {
-        const { audienceStep } = await load();
+    it(`following the sandbox again wears the words its mode speaks`, async () => {
+        const { adoptSandboxWords, keepAudienceWith, useAudience } = await load();
+        const kept: (string | null)[] = [];
+        keepAudienceWith((value) => kept.push(value));
+        adoptSandboxWords({ audience: `developer`, override: `developer`, mode: `hands-off` });
 
-        expect(audienceStep(undefined, `maker`, true)).toBe(`offer`);
-        expect(audienceStep(undefined, `developer`, false)).toBe(`none`);
+        useAudience().setAudience(null);
+
+        expect(useAudience().audience.value).toBe(`maker`);
+        expect(useAudience().override.value).toBeUndefined();
+        expect(kept).toEqual([null]);
     });
 });

@@ -32,7 +32,7 @@ import { hostReportsOf, mintFixCode, sleepOf } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, SandboxHeldByOrganisation, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
-import { definitionSeedFor } from "./profiles/profiles.js";
+import { arrivalMode, definitionSeedFor } from "./profiles/profiles.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
@@ -302,7 +302,7 @@ export const sandboxRoutes = {
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
                 tier: arrivalTier(admitted),
-                profile: input.profile,
+                mode: arrivalMode(input),
                 project: input.project,
             });
             // Written once the machine exists, so a refused build leaves no count behind; a lost write costs the
@@ -571,11 +571,11 @@ export const sandboxRoutes = {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         try {
-            // The profile's own sandbox, for the lane where the machine is the owner's: the connect script exports the
-            // minted map, and the daemon applies the definition once, on a workspace that arrived empty.
+            // The mode's own sandbox, for the lane where the machine is the owner's: the connect script exports the minted
+            // map, and the daemon applies the definition once, on a workspace that arrived empty.
             return await mintSetupCodeFor(context.prisma, context.config, sandbox, {
                 ownerEmail: user.email,
-                definitionSeed: definitionSeedFor(input.profile),
+                definitionSeed: definitionSeedFor(arrivalMode(input)),
             });
         } catch (error) {
             if (error instanceof ReachabilityUnavailable) {

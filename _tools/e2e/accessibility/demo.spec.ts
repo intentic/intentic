@@ -1,6 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { PROFILES } from "@intentic/constants";
 import { auditPage, WCAG_22_AA } from "./audit.js";
 
 const looks = [`light`, `dark`, `sanctum`, `silver`] as const;
@@ -11,13 +10,13 @@ test.describe(`composer model controls`, () => {
             test.describe(`${profile} profile at ${width}px`, () => {
                 test.beforeEach(async ({ page }) => {
                     await page.setViewportSize({ width, height: 1000 });
-                    // The audience Desk seeds before Vue loads. bootProfile.test.ts covers the link and cookie handoff;
-                    // these cases verify that the resulting audience still has working controls on the real Home view.
-                    await page.addInitScript((audience) => {
-                        if (audience !== undefined) {
-                            localStorage.setItem(`ui-audience`, audience);
-                        }
-                    }, PROFILES[profile].audience);
+                    // A desk reader's sandbox runs hands-off, which speaks a maker's words. The demo's one reader keeps
+                    // the words this browser last held as their own choice (daemon/account/preferences.ts), so writing
+                    // them here before Vue loads reads the page in them; these cases verify that those words still come
+                    // with working controls on the real Home view.
+                    if (profile === `desk`) {
+                        await page.addInitScript(() => localStorage.setItem(`ui-audience`, `maker`));
+                    }
                 });
 
                 test(`keeps the free trial model visible and opens its picker on a fresh home`, async ({ page }) => {

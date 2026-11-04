@@ -1,12 +1,12 @@
 import { GOOGLE_REQUIRED_REASON, type HostedOffer, type HostedStatus, type SandboxSummary } from "@intentic/api-contract";
-import type { HostedTierId } from "@intentic/constants";
+import type { HostedTierId, SandboxMode } from "@intentic/constants";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, type Ref, ref, shallowReactive } from "vue";
 import { z } from "zod";
 import { track } from "../../../app/analytics";
-import { arrivingProfile } from "../../../app/useProfile";
+import { arrivingMode } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
 import type { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useOperations } from "../../../workbench/operations/operations";
@@ -53,6 +53,9 @@ const hostOf = (url: string | null | undefined): string | undefined => {
 
 export interface HostedLaneHost {
     readonly tier?: HostedTierId | undefined;
+    // How the new sandbox runs, as its maker answered "Who handles the code here?"; a lane that never asked takes what the
+    // arriving profile preselects (useProfile.ts arrivingMode), as it took the profile itself before the question.
+    readonly mode?: (() => SandboxMode | undefined) | undefined;
     readonly platform: Pick<Platform, `hostedOffer` | `hostedStatus` | `hostedRestart` | `wake` | `hostedProvision`>;
     readonly sandbox: Pick<SandboxStore, `hostedProvision` | `hostedRelease`>;
     readonly row: SetupRow;
@@ -69,12 +72,14 @@ export interface HostedLaneHost {
 const holdsProjects = (offer: Readonly<Ref<HostedOffer | null>>, appTakesProjects: () => boolean) => (): boolean =>
     offer.value?.projects === true && appTakesProjects();
 
-// The store's provision names no folder, so a project's machine is asked of the platform directly, with the profile the
+// The store's provision names no folder, so a project's machine is asked of the platform directly, with the mode the
 // store would have sent; the store's list learns the machine at the registry watch's next read.
-const provisionFor = ({ platform, sandbox, project, tier }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> =>
-    project === undefined && tier === undefined
-        ? sandbox.hostedProvision(sandboxId, token)
-        : platform.hostedProvision({ sandboxId, token, project, tier, profile: arrivingProfile() });
+const provisionFor = ({ platform, sandbox, project, tier, mode: asked }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> => {
+    const mode = asked?.() ?? arrivingMode();
+    return project === undefined && tier === undefined
+        ? sandbox.hostedProvision(sandboxId, token, mode)
+        : platform.hostedProvision({ sandboxId, token, project, tier, mode });
+};
 
 // Why a machine call failed, and whether it was for want of room, which the card answers with another rung instead, or for
 // want of a Google sign-in on the account, which it answers with the ways on from there.

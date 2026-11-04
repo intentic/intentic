@@ -14,7 +14,8 @@ import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
 import { createAiLiteracyRoutes } from "./ai-literacy.routes.js";
-import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
+import { createAudienceRoutes } from "./audience.routes.js";
+import { memberOf } from "./member-of.js";
 import { fileMemberGettingStarted, memberGettingStartedDocument, type MemberGettingStarted } from "./member-getting-started.js";
 import { settingsDocument } from "./settings-store.js";
 import { createCommitIdentityRoutes } from "./commit-identity.routes.js";
@@ -26,15 +27,9 @@ import { settingsPinRefusal } from "../compliance/org-pins.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
-// Whose answer a call reads and writes: the verified address, and "" for the one person of a sandbox nobody signs in to.
-const memberOf = (context: OrpcContext): string => context.identity?.email.toLowerCase() ?? "";
-
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
     // Opened on first use, not here: most of these routes never touch it, and a route under test may carry no config.
-    let audiences: MemberAudiences | undefined;
-    const memberAudiences = (): MemberAudiences =>
-        (audiences ??= fileMemberAudiences(join(services.config.historyRoot, memberAudienceDocument.path)));
     let gettingStarted: MemberGettingStarted | undefined;
     const memberGettingStarted = (): MemberGettingStarted =>
         (gettingStarted ??= fileMemberGettingStarted(join(services.config.historyRoot, memberGettingStartedDocument.path)));
@@ -96,14 +91,7 @@ export const createSettingsRoutes = (services: Services) => {
             services.logger.info({ timezone: input.timezone }, "sandbox timezone adopted from a browser");
             return { timezone: input.timezone, adopted: true };
         }),
-        // The caller's own words, by the address they signed in with. An answer replaces theirs; an offer (a browser
-        // handing over what it kept on its own) is taken only while they have none, so their second device adopts the
-        // first one's words instead of overwriting them.
-        audience: i.audience.handler(async ({ context }) => {
-            const audience = await memberAudiences().get(memberOf(context));
-            return audience === undefined ? {} : { audience };
-        }),
-        setAudience: i.setAudience.handler(({ input, context }) => memberAudiences().answer(memberOf(context), input.audience, input.offer === true)),
+        ...createAudienceRoutes(services),
         ...createCommitIdentityRoutes(services),
         // The caller's own choices about the getting-started checklist, by the address they signed in with.
         gettingStarted: i.gettingStarted.handler(({ context }) => memberGettingStarted().get(memberOf(context))),

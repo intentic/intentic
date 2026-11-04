@@ -1,5 +1,15 @@
 import "@intentic/testing/dom";
-import { boolPreference, definePreference, enumPreference, numberPreference, receivePreferenceChange, textPreference } from "@intentic/ui/preference";
+import {
+    adoptPreference,
+    boolPreference,
+    definePreference,
+    enumPreference,
+    numberPreference,
+    onPreferenceWrite,
+    type PreferenceNote,
+    receivePreferenceChange,
+    textPreference,
+} from "@intentic/ui/preference";
 
 // Pins the defect this primitive exists for: a popped-out panel is a whole other window with its own modules and
 // `<html>`, so a setting change on one window used to repaint only that window. There was no shared "account
@@ -117,6 +127,80 @@ describe(`a change made in another window`, () => {
 
         expect(skin.value).toBe(`none`);
         expect(textSize.value).toBe(`compact`);
+    });
+});
+
+// The account keeps a copy of some preferences (web's app/accountPreferences.ts). Its value arrives from outside every
+// window, so it must land as another window's change does and reach the other windows too, and the account must hear
+// only the choices made here: one it was handed back would have gone through this window's `read`.
+describe(`a value kept beyond this browser`, () => {
+    it(`is worn, stored, and told to the other windows`, async () => {
+        const applied: string[] = [];
+        const wallpaper = definePreference<string>({
+            key: `ui-wallpaper`,
+            read: (raw) => raw ?? `mist`,
+            write: (value) => value,
+            apply: (v) => applied.push(v),
+        });
+        const another = new BroadcastChannel(`intentic.preferences`);
+        const told = new Promise<PreferenceNote>((resolve) => {
+            another.addEventListener(`message`, (event: MessageEvent<PreferenceNote>) => {
+                if (event.data.key === `ui-wallpaper`) {
+                    resolve(event.data);
+                }
+            });
+        });
+
+        adoptPreference(`ui-wallpaper`, `valley`);
+
+        expect(wallpaper.value).toBe(`valley`);
+        expect(applied).toEqual([`mist`, `valley`]);
+        expect(localStorage.getItem(`ui-wallpaper`)).toBe(`valley`);
+        expect(await told).toEqual({ key: `ui-wallpaper`, raw: `valley` });
+        another.close();
+    });
+
+    it(`stores what it was given, not this window's reading of it`, () => {
+        const width = definePreference<number>({
+            key: `ui-width-kept`,
+            read: (raw) => Math.min(400, Number.parseInt(raw ?? `400`, 10)),
+            write: String,
+        });
+
+        adoptPreference(`ui-width-kept`, `2000`);
+
+        expect(width.value).toBe(400);
+        expect(localStorage.getItem(`ui-width-kept`)).toBe(`2000`);
+    });
+
+    it(`is stored where no preference in this window holds it, for the window that does and the next load`, () => {
+        adoptPreference(`ui-held-elsewhere`, `on`);
+        expect(localStorage.getItem(`ui-held-elsewhere`)).toBe(`on`);
+
+        adoptPreference(`ui-held-elsewhere`, null);
+        expect(localStorage.getItem(`ui-held-elsewhere`)).toBeNull();
+    });
+
+    it(`is never heard as a choice made here, and a choice made here always is`, () => {
+        const heard: (readonly [string, string | null])[] = [];
+        const stop = onPreferenceWrite((key, raw) => heard.push([key, raw]));
+        const motion = definePreference<string>({ key: `ui-motion`, read: (raw) => raw ?? `system`, write: (value) => (value === `system` ? null : value) });
+
+        adoptPreference(`ui-motion`, `off`);
+        receivePreferenceChange({ key: `ui-motion`, raw: `on` });
+        receivePreferenceChange({ key: null, raw: null });
+        expect(heard).toEqual([]);
+
+        motion.value = `off`;
+        // `system` is stored as nothing: the account hears the removal as one.
+        motion.value = `system`;
+        stop();
+        motion.value = `on`;
+
+        expect(heard).toEqual([
+            [`ui-motion`, `off`],
+            [`ui-motion`, null],
+        ]);
     });
 });
 

@@ -1,7 +1,7 @@
 import { sharedCookieDomain } from "../profile.js";
 
-// The site writes its edition cookie on this domain so the app's origin reads it; a wrong answer here is a reader who
-// took the installer from /desk and opened the app as a developer.
+// The site writes its edition cookie on this domain, the one both origins share. Only the site reads it now (profile.ts),
+// but a cookie of the same name written host-only would sit beside the shared one rather than replace it.
 
 test("the site and the app share the registrable domain, and that is what the cookie is set on", () => {
     expect(sharedCookieDomain("https://intentic.dev", "https://app.intentic.dev")).toBe("intentic.dev");

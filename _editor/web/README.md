@@ -665,7 +665,8 @@ too-old page below the supported floor, and for a sandbox from before home conve
 `agents.home`) the update notice with a press that goes inside, rather than a failure whose retry could never succeed.
 **A new sandbox is made on Home, in a tile of its own** (2026-10-26, `features/home/newSandbox/`): every "Add sandbox" on
 a desktop (the rail's +, the first run's Create, the switcher inside a sandbox, the palette, the desktop app's folder
-window) opens `/home?add=sandbox`, which puts a dialog over Home asking for a name and where it runs. Create closes it
+window) opens `/home?add=sandbox`, which puts a dialog over Home asking for a name, who handles the code (the sandbox's
+mode, hands-off or hands-on, `parts/sandbox/ModeChoice.vue`) and where it runs. Create closes it
 and leaves the reader on the chat they were in (a first sandbox, with no chat to go back to, on its run instead), with a
 tile at the end of the rail wearing the rail's spinning mark, or a warning mark when the run waits on the reader or
 stopped. Pressing the tile shows the run in the chat's place (the app's install, a connected machine's steps, a machine

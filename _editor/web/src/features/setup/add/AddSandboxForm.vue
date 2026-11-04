@@ -9,6 +9,7 @@ import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useId } from "vue";
 import { RouterLink } from "vue-router";
+import ModeChoice from "../../../parts/sandbox/ModeChoice.vue";
 import SetupNeedsGoogle from "../SetupNeedsGoogle.vue";
 import AddSandboxAttach from "./AddSandboxAttach.vue";
 import AddSandboxWays from "./AddSandboxWays.vue";
@@ -21,7 +22,7 @@ const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
 const emit = defineEmits<{ submit: [] }>();
 
 const t = useT();
-const { name, problem, pick, options, moreOptions, hostedProblem, loaded, busy, error, attach } = add;
+const { name, problem, pick, options, moreOptions, hostedProblem, loaded, busy, error, attach, mode } = add;
 const nothingOffered = computed(() => loaded.value && options.value.length === 0);
 const morePicked = computed(() => moreOptions.value.some((option) => option.value === pick.value));
 // Open by itself where nothing starts in one press, or where one of its ways is already the pick.
@@ -45,6 +46,7 @@ const hostedProblemLine = computed(() => {
     }
 });
 const runsOnId = useId();
+const modeId = useId();
 // The name it was given is a suggestion: the first focus selects it, so typing replaces it and a press keeps it.
 let suggested = true;
 const takeSuggestion = (event: FocusEvent): void => {
@@ -74,6 +76,15 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
                 {{ problem }}
             </span>
         </label>
+
+        <!-- WHO HANDLES THE CODE: how the sandbox runs, asked of the one making it (ModeChoice.vue), never of an address
+             that already answers, which runs as it already does. -->
+        <div v-if="pick !== ATTACH" class="flex flex-col gap-1.5" data-add-sandbox-mode>
+            <span :id="modeId" class="ui-field-label">{{ t(`sandbox.mode.question`) }}</span>
+            <fieldset :disabled="busy" class="min-w-0">
+                <ModeChoice v-model="mode" :labelled-by="modeId" />
+            </fieldset>
+        </div>
 
         <!-- WHERE IT RUNS: one list of rows, each saying what the place is; "More ways" folds the two that are not one press
              under the same list, so the pick is one choice whichever row it lands on. -->

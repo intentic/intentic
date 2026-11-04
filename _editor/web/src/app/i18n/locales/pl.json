@@ -5024,17 +5024,18 @@
                 "waitingSecond": "Czeka na drugą osobę z pełnym dostępem",
                 "approveAsk": "{name} chce bez pytania otworzyć rozmowę, której autor to {author}."
             }
+        },
+        "handsOffOffer": {
+            "line": "Chcesz, żeby gotowa praca taka jak ta trafiała do projektu sama?",
+            "notNow": "Nie teraz",
+            "tipNote": "Scala, zapisuje i wysyła",
+            "tipTitle": "Automatycznie",
+            "yes": "Niech sandbox się tym zajmie"
         }
     },
     "common": {
         "asyncView": {
             "viewCouldntLoad": "Nie udało się wczytać tego widoku."
-        },
-        "audienceAsk": {
-            "dontWriteCodeAssistants": "Jeśli nie piszesz kodu: zmiany asystenta stosują się same, a każda zmiana jest zapisywana jako wersja. Zawsze możesz się cofnąć.",
-            "howWorkHere": "Jak będziesz tu pracować?",
-            "iDontWriteCode": "Nie piszę kodu",
-            "picksWordsAppUses": "Decyduje, jakich słów używa aplikacja i co jest jej stroną główną. Nic w Twoich plikach ani agentach się nie zmienia, a przełączysz to w Ustawieniach w każdej chwili."
         },
         "matchLine": {
             "agent": "Agent:",
@@ -10387,7 +10388,8 @@
             "guardrailsAdmission": "wyzwalacze, webhooki, automatyzacje, harmonogramy, cron, odwiedzający, przychodzące, kto może zacząć pracę",
             "retentionPeriods": "usuwanie starych czatów, historia, jak długo, przechowywanie, sprzątanie, miejsce na dysku, wygasanie, automatyczne usuwanie, rozmowy",
             "retentionAudit": "dziennik audytu, ślad audytowy, SIEM, przekazywanie logów, eksport logów, kto co otworzył, zgodność",
-            "dataProtectionDocuments": "RODO, rejestr czynności przetwarzania, ocena skutków, środki techniczne, dokumentacja zgodności, artykuł 30"
+            "dataProtectionDocuments": "RODO, rejestr czynności przetwarzania, ocena skutków, środki techniczne, dokumentacja zgodności, artykuł 30",
+            "overviewMode": "automatycznie ręcznie hands-off hands-on kto zajmuje się kodem scalaj zapisuj wersje wysyłaj słownictwo"
         },
         "agentTools": {
             "simple": "Prosty",
@@ -10740,6 +10742,33 @@
             "ownMachine": "Ta piaskownica działa na twoim komputerze, więc powłoka na tym urządzeniu nadal może odczytać pliki na dysku.",
             "count": "Prywatna jest teraz {count} rozmowa. | Prywatne są teraz {count} rozmowy. | Prywatnych jest teraz {count} rozmów.",
             "saveFailed": "Nie udało się zmienić, kto czyta czyje rozmowy."
+        },
+        "mode": {
+            "finishedWork": {
+                "byItself": "Automatycznie",
+                "note": "Ten sandbox działa automatycznie: sam scala, zapisuje i wysyła gotową pracę.",
+                "setMyself": "Ustaw samodzielnie"
+            },
+            "handsOff": {
+                "note": "Automatycznie. Gotowa praca trafia do projektu sama, jest zapisywana jako wersja i wysyłana, prostymi słowami.",
+                "summary": "Automatycznie · Intentic zajmuje się kodem",
+                "title": "Intentic się tym zajmie"
+            },
+            "handsOn": {
+                "note": "Ręcznie. Przeglądasz każdą zmianę i decydujesz, co trafia dalej, w języku gita.",
+                "summary": "Ręcznie · Ty zajmujesz się kodem",
+                "title": "Ja"
+            },
+            "howItRuns": "Jak działa",
+            "preview": {
+                "alreadyOn": "Gotowa praca już trafia do projektu, zapisuje się i wysyła sama; od teraz tak zostanie.",
+                "handsOn": "Nic nie zmienia się od razu: to, co dzieje się z gotową pracą, zostaje jak jest, a od teraz decydujesz Ty.",
+                "land": "Gotowa praca trafia do projektu sama.",
+                "push": "Zapisane wersje są wysyłane wszędzie tam, gdzie ten projekt ma zdalne repozytorium.",
+                "version": "Każda przyjęta praca jest zapisywana jako wersja.",
+                "words": "Każdy, kto nie wybrał tu własnych słów, zobaczy proste."
+            },
+            "question": "Kto zajmuje się tutaj kodem?"
         }
     },
     "settings": {
@@ -10820,14 +10849,11 @@
             },
             "work": {
                 "developerHint": "Własne słowa gita, drzewo plików jako strona główna, wszystkie panele.",
-                "hint": "Zmienia słowa, których używa aplikacja, i to, która strona jest główna. Nic w Twoich plikach ani agentach.",
-                "maker": "Ja nie",
                 "makerHint": "Proste słowa, pliki narzędziowe zejdą z drogi."
             },
             "plain": {
                 "languageHint": "Język, w którym napisany jest ten interfejs. Twoje pliki i rozmowy pozostają nietknięte.",
-                "wallpaperHint": "Obraz za tablicą asystentów, w jasnej lub ciemnej wersji Twojego motywu.",
-                "workHint": "Zmienia słowa, których używa aplikacja, i to, która strona jest główna. Nic w Twoich plikach ani rozmowach."
+                "wallpaperHint": "Obraz za tablicą asystentów, w jasnej lub ciemnej wersji Twojego motywu."
             }
         },
         "hostedHours": {
@@ -11108,10 +11134,16 @@
             "serverTrouble": "Serwer miał problem. Spróbuj ponownie za chwilę."
         },
         "words": {
-            "iWriteCode": "Piszę kod",
             "iconRailCompact": "Kompaktowo",
             "iconRailComfortable": "Wygodnie",
-            "group": "Jak pracujesz"
+            "group": "Słownictwo",
+            "follow": "Jak sandbox",
+            "followHint": "Proste w automatycznym sandboxie, gitowe w ręcznym.",
+            "technical": "Techniczne",
+            "plain": "Proste",
+            "followingHandsOff": "Ten sandbox działa automatycznie, więc widzisz proste słowa. Wybór tutaj obowiązuje tylko w tym sandboxie.",
+            "followingHandsOn": "Ten sandbox działa ręcznie, więc widzisz słowa gita. Wybór tutaj obowiązuje tylko w tym sandboxie.",
+            "overriding": "Twój własny wybór, tylko w tym sandboxie. Pozostali widzą to, co wynika z jego trybu."
         },
         "analytics": {
             "title": "Analityka produktu",

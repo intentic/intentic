@@ -15,6 +15,9 @@ const get = jest.fn<SandboxRpc[`settings`][`get`]>();
 const set = jest.fn<SandboxRpc[`settings`][`set`]>();
 jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
+jest.mock(`../../../../client/sandbox/useRole`, () => ({ useRole: () => ({ canShip: ref(true) }) }));
+// A switch of mode reads the words again; nothing here reads them.
+jest.mock(`../../../../client/sandbox/audienceSync`, () => ({ refreshSandboxWords: async () => undefined }));
 
 const { queryClient } = await import(`../../../../lib/queryPersistence`);
 const { default: AgentFinishedWork } = await import(`./AgentFinishedWork.vue`);
@@ -55,8 +58,8 @@ const switchBeside = (el: HTMLElement, title: string): HTMLInputElement => {
 };
 
 // Kept as the daemon keeps it: read through the schema, answered on the next read.
-const daemonHolding = (rules: Rule[]): void => {
-    let stored: SandboxSettings = { ...DEFAULTS, rules };
+const daemonHolding = (rules: Rule[], mode: SandboxSettings[`mode`] = `hands-on`): void => {
+    let stored: SandboxSettings = { ...DEFAULTS, rules, mode };
     get.mockImplementation(async () => stored);
     set.mockImplementation(async (written) => {
         stored = SandboxSettingsSchema.parse(written);
@@ -102,4 +105,21 @@ test(`switching Save a version off takes the back-up with it, in one save`, asyn
     expect(ruleIds(0)).toEqual([]);
     await waitFor(() => expect(switchBeside(el, BACK_UP).disabled).toBe(true));
     expect(switchBeside(el, BACK_UP).getAttribute(`aria-checked`)).toBe(`false`);
+});
+
+// Hands-off (settings `mode`): the sandbox keeps landing, saving and backing up on, so the three rows say so instead of
+// offering switches that would snap back, and the one press there is the switch to hands-on, which changes no rule.
+test(`a hands-off sandbox's rows say what it does, and taking them over is the switch to hands-on`, async () => {
+    const managed = [`auto-land`, `auto-version`, `auto-push`] as const;
+    daemonHolding([autoVersionRule(), autoPushRule()], `hands-off`);
+    const el = mount();
+    await waitFor(() => expect(el.querySelector(`[data-finished-work-hands-off]`)).not.toBeNull());
+    expect(el.textContent).toContain(`By itself`);
+    expect([...el.querySelectorAll(`input[role="switch"]`)].length).toBe(1);
+
+    [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Set these myself`))?.click();
+
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(1));
+    expect(set.mock.calls[0]?.[0]?.mode).toBe(`hands-on`);
+    expect(ruleIds(0)).toEqual(managed.filter((id) => id !== `auto-land`));
 });

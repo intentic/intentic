@@ -53,17 +53,33 @@ const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, hideTechnica
 // a list built once at setup holds the words it was born with and never hears the language change under it.
 const t = useT();
 
-// Who the screens are written for: the same workspace with git's words or plain ones.
-// A maker's page keeps the look and the words; the file tree's code preview, its ignore and test filters, how a diff
-// opens, tool calls and the status bar's gauges are a developer's, and leave the page with the answer that hides them.
-const { audience, setAudience, maker } = useAudience();
-const audienceOptions = computed(
+// Which words the screens use on THIS sandbox: whatever it runs as (plain on a hands-off sandbox, git's own on a hands-on
+// one), or this person's own choice, kept by the sandbox for them alone (useAudience.ts). A maker's page keeps the look
+// and the words; the file tree's code preview, its ignore and test filters, how a diff opens, tool calls and the status
+// bar's gauges are a developer's, and leave the page with the words that hide them.
+const { maker, mode, override, setAudience } = useAudience();
+type WordsChoice = Audience | `follow`;
+const wordsChoice = computed<WordsChoice>(() => override.value ?? `follow`);
+const wordsOptions = computed(
     () =>
         [
-            { label: t(`settings.words.iWriteCode`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
-            { label: t(`settings.appearance.work.maker`), value: `maker`, title: t(`settings.appearance.work.makerHint`) },
-        ] satisfies readonly { label: string; value: Audience; title: string }[],
+            { label: t(`settings.words.follow`), value: `follow`, title: t(`settings.words.followHint`) },
+            { label: t(`settings.words.technical`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
+            { label: t(`settings.words.plain`), value: `maker`, title: t(`settings.appearance.work.makerHint`) },
+        ] satisfies readonly { label: string; value: WordsChoice; title: string }[],
 );
+const pickWords = (value: WordsChoice): void => setAudience(value === `follow` ? null : value);
+// Says where the words on screen come from, so a sandbox that switched to hands-off never reads as the app changing its
+// mind; a daemon from before the mode says nothing of how it runs, and gets the general line.
+const wordsHint = computed(() => {
+    if (override.value !== undefined) {
+        return t(`settings.words.overriding`);
+    }
+    if (mode.value === `hands-off`) {
+        return t(`settings.words.followingHandsOff`);
+    }
+    return mode.value === `hands-on` ? t(`settings.words.followingHandsOn`) : t(`settings.words.followHint`);
+});
 
 // Order a reader gives up ground: top, then past imports, then the biggest changed block.
 const diffOpenOptions = computed(
@@ -176,16 +192,10 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
+        <!-- Which words this sandbox's screens use; first, since it decides what the rest of the app is called. -->
         <RowGroup data-setting="audience" :label="t(`settings.words.group`)">
-            <Row
-                icon="user"
-                :title="t(`settings.words.group`)"
-                :description="maker ? t(`settings.appearance.plain.workHint`) : t(`settings.appearance.work.hint`)"
-            >
-                <template #control
-                    ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
-                /></template>
+            <Row icon="user" :title="t(`settings.words.group`)" :description="wordsHint" wide-control>
+                <template #control><SegmentedControl :model-value="wordsChoice" :options="wordsOptions" @update:model-value="pickWords" /></template>
             </Row>
         </RowGroup>
 

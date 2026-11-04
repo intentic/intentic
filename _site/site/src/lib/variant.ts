@@ -3,15 +3,17 @@ import { APP_URL, DESK_PATH as DESK_PAGE, SITE_URL } from "@intentic/site-conten
 
 // Select the site's developer/desk skin before first paint via data-variant, keeping one cacheable HTML document per URL.
 // Product-page wording follows its URL. With no explicit choice, follow prefers-color-scheme without writing a cookie or app profile.
-// Explicit choices cross into the app through links and a shared-domain cookie; this module alone maps site variants to app profiles.
+// Explicit choices cross into the app only on its links (?profile=), as the answer it preselects for how a new sandbox runs;
+// this module alone maps site variants to app profiles.
 
-/** Written by the pre-paint script, read by it on every later page, and by the app's on the same domain. */
+/** Written by the pre-paint script and read by it on every later page. The app stopped reading it in 2026-11. */
 export const VARIANT_COOKIE = PROFILE_COOKIE;
 
-// The domain the cookie is written on, so the app's origin reads it too. Decided in the browser rather than baked
-// in: the same built script runs on localhost and on a preview host, where a cookie naming intentic.dev is refused
-// outright and the skin would be lost between pages — there a host-only cookie already reaches the app (ports do not
-// scope cookies), so the attribute is left off.
+// The domain the cookie is written on: the one the site shares with the app, as it was while the app read it too
+// (until 2026-11, @intentic/constants profile.ts). It stays there because the cookies already out there live on it, and
+// the same name written host-only would be a second cookie beside the first rather than a replacement for it. Decided
+// in the browser rather than baked in: the same built script runs on localhost and on a preview host, where a cookie
+// naming intentic.dev is refused outright and the skin would be lost between pages, so there the attribute is left off.
 const COOKIE_DOMAIN = sharedCookieDomain(SITE_URL, APP_URL) ?? "";
 
 /** The light skin's name, and the value of `<html data-variant>` when it is on. Any other value means the default. */
@@ -81,9 +83,10 @@ export const variantScript = (): string => `(function () {
         }
     }
     // An unchosen reader hands the app nothing: no cookie, no path, no link means no opinion, and the app keeps
-    // whatever it already had — including a reader painted light by their system, whose system the app can read
-    // for itself and whose profile is more than paint. Anything chosen that is not desk is the default, including
-    // the footer's way out, which is what lets that link put the app back too.
+    // whatever it already had — including a reader painted light by their system, since that light is their OS's and
+    // a profile says only how a sandbox they make should run, which a light screen says nothing about. Anything chosen
+    // that is not desk is the default, including the footer's way out, which is what lets that link take the app's
+    // preselect back too.
     if (chosen === "") {
         return;
     }

@@ -157,6 +157,12 @@ flowchart LR
   never sends `project` gets an ordinary sandbox, as before. The folder itself arrives from the desktop app, which the
   editor's setup page hands a sync pairing once the machine is reachable: agents work on that copy, and the owner
   brings their changes back from the folder's window.
+- How a new sandbox runs is its maker's answer to "Who handles the code here?" (`@intentic/constants` sandbox-mode.ts).
+  `hostedProvision` and `setupCode` take an optional `mode`; `hands-off` puts
+  `src/sandbox/profiles/hands-off.sandbox.toml` (which only sets `mode = "hands-off"`) in the machine's
+  `SANDBOX_DEFINITION_SEED`, which the daemon applies once on an empty workspace, and the daemon then keeps the land,
+  version and back-up rules standing for as long as the mode says so. `hands-on`, or no mode, seeds nothing. An older
+  desktop app re-minting a setup code still sends `profile=desk`, read as hands-off (`arrivalMode`).
 - A hosted image change goes through the state gate (`src/sandbox/hosted/gate/state-gate.ts`), the hosted half of
   the stored-state promise in [COMPATIBILITY.md](../../COMPATIBILITY.md#stored-data). A restart, a rebuild, a rollback,
   or a wake that heals a stale tunnel first runs the target image's planner (`state-plan.js`) over the machine's own
@@ -328,7 +334,7 @@ flowchart LR
 | `src/desktop` | Desktop sign-in handoff over the `intentic://` deep link |
 | `src/fleet` | `/fleet`: an API token lets a sandbox create sandboxes for its owner |
 | `src/invite` | Emailed invitations to share a sandbox |
-| `src/me` | The caller's profile and GDPR data export |
+| `src/me` | The caller's profile, their look and reading preferences kept with the account (`/me/preferences`), and the GDPR data export |
 | `src/tokens` | Account-level API tokens |
 | `src/push-relay` | Push relay for native installs: APNs for the iPhone app, FCM for the Android editor and Intentic Device apps, never carrying a notification's words to Android |
 | `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |

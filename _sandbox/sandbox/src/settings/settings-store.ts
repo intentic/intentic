@@ -1,5 +1,6 @@
 import { SETTINGS_HISTORY } from "@intentic/sandbox-contract/schemas/settings-history";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { handsOffRules } from "@intentic/sandbox-contract/schemas/sandbox-mode";
 import type { Pin } from "../compliance/org-pins.js";
 import { pinDefault } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -29,6 +30,26 @@ export interface SandboxSettingsStore {
     readonly onSet: (listener: () => void) => () => void;
 }
 
+// A HANDS-OFF SANDBOX'S RULES STAND (sandbox-mode.ts): while `mode` says hands-off, the land, version and back-up rules
+// are in the table and switched on, whatever the file holds, so the land, its version commit, the back-up push and the
+// Agent tab all read one table. On a read only in what is handed back, never written to the file: settings.json is
+// tracked, and an uncommitted edit to it in the main tree reads as the owner's own and refuses the next land. A save
+// writes them down, unless they would take the list past what the schema holds (a hand-edited file already at its
+// limit), where the read keeps applying them instead of the write failing. Before the organisation's pins on both
+// paths, so a pin on the rules still wins.
+const asRun = (settings: SandboxSettings): SandboxSettings => {
+    if (settings.mode !== "hands-off") {
+        return settings;
+    }
+    const rules = handsOffRules(settings.rules);
+    return rules === settings.rules ? settings : { ...settings, rules };
+};
+
+const asWritten = (settings: SandboxSettings): SandboxSettings => {
+    const run = asRun(settings);
+    return run === settings || SandboxSettingsSchema.safeParse(run).success ? run : settings;
+};
+
 // `pin` is the organisation's (compliance/org-pins.ts): with it, every read is the file with the organisation's pinned values
 // applied, a read that finds the file looser writes the pinned values back, and every write is stored pinned. Without
 // it (a personal sandbox's composition still passes one; a policy-less pin changes nothing) the file is read as is.
@@ -48,9 +69,9 @@ export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings
     // file holds by then, under the file's own queue, so it can never write back a value a save replaced meanwhile.
     const pinned = async (stored: SandboxSettings, unreadable: boolean): Promise<SandboxSettings> => {
         if (pin === undefined) {
-            return stored;
+            return asRun(stored);
         }
-        const outcome = await pin(stored);
+        const outcome = await pin(asRun(stored));
         if (outcome.loosened.length > 0 && !unreadable) {
             void file.update(outcome.reapply).catch((error: Error) => warn?.("settings: writing the organisation's pinned values back failed", error));
         }
@@ -67,7 +88,8 @@ export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings
             return { settings: await pinned(value, unreadable), unreadable };
         },
         set: async (settings) => {
-            const stored = pin === undefined ? settings : (await pin(settings)).value;
+            const run = asWritten(settings);
+            const stored = pin === undefined ? run : (await pin(run)).value;
             await file.update(() => stored);
             for (const listener of written) {
                 listener();

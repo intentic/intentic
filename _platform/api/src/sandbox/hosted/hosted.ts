@@ -1,4 +1,4 @@
-import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
+import { FREE_TIER, type HostedShape, type HostedTierId, type SandboxMode } from "@intentic/constants";
 import { projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
@@ -123,8 +123,9 @@ export interface HostedProvisionArgs {
     readonly region: string;
     // Which rung of the ladder this machine is on, which is what decides its shape (hosted-shape.ts).
     readonly tier: HostedTierId;
-    // Which profile the browser arrived in, if any; decides the definition this machine seeds itself from on first boot.
-    readonly profile?: string | undefined;
+    // How this sandbox runs, as its maker answered where it was made (profiles.ts arrivalMode); hands-off decides the
+    // definition this machine seeds itself from on first boot, and absent is hands-on, which seeds nothing.
+    readonly mode?: SandboxMode | undefined;
     // The folder a project sandbox is made for (`/work/<project>`, a name the api contract validated); absent for any
     // other sandbox. A config replacing a machine's reads it off the config it replaces (hosted-project.ts).
     readonly project?: string | undefined;
@@ -153,7 +154,7 @@ export const hostedMachineConfig = (
     guest: HostedShape = hostedShapeFor(config, args.tier),
 ) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
-    const seed = definitionSeedFor(args.profile);
+    const seed = definitionSeedFor(args.mode);
     return {
         ...flyMachineConfig({
             name: machineName,

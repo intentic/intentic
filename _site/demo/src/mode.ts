@@ -321,9 +321,11 @@ const resolveSeats = (): boolean => {
 /** Whether every Claude account on this page load is turned off by its organization, resolved once before boot. */
 export const seatsOff = resolveSeats();
 
-// The look and the audience the desk recording is read in, the same three keys the desk PROFILE seeds (@intentic/constants
-// profile.ts): light, unskinned, a maker. index.html's pre-paint script writes them for the first frame; this writes
-// them on a switch, and takes them back on the way out so the code recording opens in the reader's own light again.
+// The look and the words the desk recording is read in: light and unskinned, like the intentic.dev/desk page its
+// screenshots are taken for, and a maker's, the words a hands-off sandbox speaks. The recording's own, not a profile's:
+// a desk link stopped choosing look or words in 2026-11 (@intentic/constants profile.ts). index.html's pre-paint script
+// writes them for the first frame; this writes them on a switch, and takes them back on the way out so the code
+// recording opens in the reader's own light again.
 const DESK_LOOK: Record<string, string> = { "ui-color-scheme": `light`, "ui-skin": `none`, "ui-audience": `maker` };
 
 const applyLook = (desk: boolean): void => {

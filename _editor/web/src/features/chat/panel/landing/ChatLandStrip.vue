@@ -18,6 +18,7 @@ import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import AgentLandPress from "../../../../parts/fleet/AgentLandPress.vue";
 import { useCardRequests } from "../../../../models/fleet/presses/cardRequests";
 import type { LandStrip } from "./landStrip";
+import HandsOffOffer from "./HandsOffOffer.vue";
 
 const props = defineProps<{ agent: FleetAgent; strip: LandStrip }>();
 
@@ -85,6 +86,8 @@ const conflict = computed(() => ({
                     @request="requestLand"
                 />
             </span>
+            <!-- Under work that waits for a press: the one time letting the sandbox take such presses over is worth asking. -->
+            <HandsOffOffer />
         </template>
         <span v-else-if="strip.kind === `landing`" class="flex min-w-0 items-center gap-2 text-muted">
             <Icon name="spinner" spin class="shrink-0 text-link" />

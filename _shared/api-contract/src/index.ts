@@ -1,4 +1,4 @@
-import { HOSTED_TIER_IDS, PROFILE_IDS, SANDBOX_NAME_MAX } from "@intentic/constants";
+import { HOSTED_TIER_IDS, PROFILE_IDS, SANDBOX_MODES, SANDBOX_NAME_MAX } from "@intentic/constants";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { ManageRightSchema } from "@intentic/sandbox-contract/schemas/members";
 import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
@@ -6,6 +6,7 @@ import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { orgContract } from "./organisations.js";
+import { AccountPreferencesPatchSchema, AccountPreferencesSchema } from "./account-preferences.js";
 import {
     AddressOfferSchema,
     AdoptionTicketSchema,
@@ -54,6 +55,7 @@ import {
 } from "./admin.js";
 
 export * from "./schemas.js";
+export * from "./account-preferences.js";
 export * from "./admin.js";
 export * from "./organisations.js";
 export * from "./device-accounts.js";
@@ -65,15 +67,23 @@ export const meContract = {
     export: oc.route({ method: "GET", path: "/me/export" }).output(z.record(z.string(), z.unknown())),
     // Which ways in this platform offers; sessionless, read by the login page.
     signInOptions: oc.route({ method: "GET", path: "/me/sign-in-options" }).output(SignInOptionsSchema),
+    // The person's own look and reading preferences, kept with the account so every browser, device and sandbox they open
+    // shows them the same (the editor's accountPreferences.ts). Only the editor's own strings, never interpreted here.
+    preferences: oc.route({ method: "GET", path: "/me/preferences" }).output(AccountPreferencesSchema),
+    // A patch: each named preference set, or removed with null; every other one stands. Answers the whole set after it.
+    setPreferences: oc.route({ method: "POST", path: "/me/preferences" }).input(AccountPreferencesPatchSchema).output(AccountPreferencesSchema),
 };
 
 // Owner and shared sandboxes; every route takes `sandboxId`, owner-only ones reject non-owners. `attach` records an
 // address the owner already runs; the platform never calls into it.
 const sandboxIdInput = z.object({ sandboxId: z.string() });
 
-// Which profile the browser arrived in, on the two calls that compose a new machine's environment. Optional
-// everywhere: a caller that names none gets a sandbox with nothing applied to it, which is the default profile.
-const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional() });
+// How the new sandbox runs, on the two calls that compose a new machine's environment: its maker's answer to "Who
+// handles the code here?" (@intentic/constants sandbox-mode.ts), seeded into the machine's settings at its first boot.
+// `profile` is the older spelling of the same answer (desk meant hands-off), still sent by desktop apps from before the
+// question, which re-mint a setup code with whatever the setup link carried. Both optional: a caller that names neither
+// gets a hands-on sandbox with nothing applied to it.
+const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional(), mode: z.enum(SANDBOX_MODES).optional() });
 // The folder a project sandbox is made for, as `/work/<project>` names it, held to the rule `ic` and the desktop app
 // hold it to (sandbox-contract's `isProjectDirName`). Optional: any other sandbox names none, and a platform from before
 // hosted projects drops it unread, which is why the editor sends it only where `hostedOffer` answers `projects`.

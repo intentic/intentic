@@ -7,8 +7,7 @@ import type { OrpcContext } from "../app-env.js";
 import { noteAudit } from "../audit/audit-http.js";
 import type { Services } from "../composition.js";
 import { fileMemberAiLiteracy, memberAiLiteracyDocument } from "./member-ai-literacy.js";
-
-const memberOf = (context: OrpcContext): string => context.identity?.email.toLowerCase() ?? "";
+import { memberOf } from "./member-of.js";
 
 // Only what the notice reads: its settings, and the history root its confirmations are kept under.
 export const createAiLiteracyRoutes = (services: Pick<Services, "config" | "sandboxSettings">) => {

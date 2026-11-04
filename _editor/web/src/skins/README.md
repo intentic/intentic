@@ -19,8 +19,10 @@ flowchart LR
   scheme to dark. Settings offers them as two of five looks on the theme row (`themeRow.ts`) rather than as their
   own control, since two controls could put a light scheme under a dark skin.
 - `index.html` runs the same rule in its pre-paint script, so the attribute is in place before the bundle loads
-  and there is no flash of the plain look. Anything that needs a fixed look, such as a profile link or the
-  screenshot tooling, writes `ui-skin` and `ui-color-scheme` before boot.
+  and there is no flash of the plain look. Anything that needs a fixed look, such as the screenshot tooling, writes
+  `ui-skin` and `ui-color-scheme` before boot. A profile link no longer does (2026-11): the look is the person's own,
+  given the plain light one once only when their first sandbox is made hands-off and they never chose
+  (`features/setup/add/seedLook.ts`).
 - Sanctum's accent is its gold. It restates the whole `--color-primary-*` ramp, with 500 as the house gold and
   300 as the bright gold, so every selection, tab, check, toggle, focus ring and the Send button share that one
   metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The colour picked in
