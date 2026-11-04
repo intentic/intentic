@@ -93,7 +93,8 @@ export const useProviderSharing = () => {
 
     /** "Lent to …" for a row of this sandbox's own, or undefined when no other sandbox borrows it. */
     const lentNote = (account: SharedAccountRef): string | undefined => {
-        const names = lendable(account) ? lentOn(links.value, account).map((link) => link.label) : [];
+        // Each borrower once: two links to one sandbox read "Lent to eg-infra, eg-infra" (2026-11-04).
+        const names = lendable(account) ? [...new Set(lentOn(links.value, account).map((link) => link.label))] : [];
         return names.length === 0 ? undefined : t(`connect.providerPanel.lentTo`, { names: names.join(`, `) });
     };
 

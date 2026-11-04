@@ -204,7 +204,15 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     // One field, and it is the secret: a fleet entry with its token vaulted is a config with nothing else in it, which
     // is the narrowest case this guard has.
     fleet: [{ id: "fleet", kind: "fleet", config: { token: "itk_x" } }],
-    link: [{ id: "ops", kind: "link", config: { url: "https://sandbox-ops.sbx.test", token: "ilk_x", name: "ops", sandboxId: "sbx-ops" } }],
+    link: [
+        { id: "ops", kind: "link", config: { url: "https://sandbox-ops.sbx.test", token: "ilk_x", name: "ops", sandboxId: "sbx-ops" } },
+        // An accounts link: its purpose is an enum, so a vaulted one is a card the manifest cannot read back.
+        {
+            id: "accounts-ops",
+            kind: "link",
+            config: { url: "https://sandbox-ops.sbx.test", token: "ilk_y", name: "ops", sandboxId: "sbx-ops", purpose: "accounts" },
+        },
+    ],
 };
 
 // Reproduces what withSecretVault's upsert writes (vaulted keys replaced by the marker) without going through the

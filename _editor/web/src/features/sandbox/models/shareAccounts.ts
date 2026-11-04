@@ -115,9 +115,15 @@ export interface BringAsk {
     readonly cards: readonly CapabilitySummary[];
 }
 
+// What a press changed on the source's link, so what it lent for accounts that never came in here can be taken back.
+type OpenedLink =
+    | { readonly card: string; readonly change: `none` }
+    | { readonly card: string; readonly change: `minted`; readonly linkId: string }
+    | { readonly card: string; readonly change: `widened`; readonly link: InboundLinkSummary; readonly accounts: readonly SharedAccountRef[] };
+
 // A new link on the source, naming this sandbox and lending exactly `refs`, and the card that holds its token here. A
 // card that cannot be saved leaves no link behind over there to lend to nobody.
-const mintLink = async ({ source, here, refs }: BringAsk, calls: ShareCalls, cardId: string): Promise<string> => {
+const mintLink = async ({ source, here, refs }: BringAsk, calls: ShareCalls, cardId: string): Promise<{ readonly card: string; readonly linkId: string }> => {
     const from: NonNullable<InboundLinkMint[`from`]> = {};
     if (here.id !== undefined) {
         from.sandboxId = here.id;
@@ -135,34 +141,77 @@ const mintLink = async ({ source, here, refs }: BringAsk, calls: ShareCalls, car
         await calls.revokeAt(source.id, minted.id).catch(() => undefined);
         throw failure;
     }
-    return cardId;
+    return { card: cardId, linkId: minted.id };
 };
 
-/**
- * Makes sure the source lends `refs` to this sandbox, and answers the card here the accounts come in through: the
- * existing link widened when its card is here and the link still stands there, else a new link and its card.
- */
-export const openAccountsLink = async (ask: BringAsk, calls: ShareCalls): Promise<string> => {
+// The existing link widened when its card is here and the link still stands there, else a new link and its card.
+const openLink = async (ask: BringAsk, calls: ShareCalls): Promise<OpenedLink> => {
     const card = accountsCardFor(ask.cards, ask.source.id);
     if (card !== undefined) {
         const link = accountsLinkFrom(await calls.linksAt(ask.source.id), ask.here.id);
         if (link !== undefined) {
             const accounts = unionRefs(link.terms.accounts, ask.refs);
-            if (accounts.length !== link.terms.accounts.length) {
-                await calls.retermAt(ask.source.id, link.id, accountsTerms(link, accounts));
+            if (accounts.length === link.terms.accounts.length) {
+                return { card: card.id, change: `none` };
             }
-            return card.id;
+            await calls.retermAt(ask.source.id, link.id, accountsTerms(link, accounts));
+            return { card: card.id, change: `widened`, link, accounts };
         }
         // Revoked over there: a new link, its token saved over the card that held the old one.
-        return mintLink(ask, calls, card.id);
+        return { ...(await mintLink(ask, calls, card.id)), change: `minted` };
     }
-    return mintLink(ask, calls, accountsCardId(ask.source.name, ask.cards));
+    return { ...(await mintLink(ask, calls, accountsCardId(ask.source.name, ask.cards))), change: `minted` };
 };
 
-/** The whole press: the link, then this sandbox bringing each account in, each answering on its own. */
+/** Makes sure the source lends `refs` to this sandbox, and answers the card here the accounts come in through. */
+export const openAccountsLink = async (ask: BringAsk, calls: ShareCalls): Promise<string> => (await openLink(ask, calls)).card;
+
+const without = (refs: readonly SharedAccountRef[], gone: readonly SharedAccountRef[]): SharedAccountRef[] =>
+    refs.filter((ref) => !gone.some((other) => sameSharedRef(other, ref))).map(refOf);
+
+/**
+ * Takes back what a press opened over there for the accounts that did not come in here, so a failed bring lends
+ * nothing: the source read "Lent to …" for loans nobody held, and every retry minted one more link (2026-11-04: four
+ * links lending to a sandbox that had borrowed nothing). An account the link already lent before the press stays lent.
+ */
+const takeBack = async (opened: OpenedLink, ask: BringAsk, failed: readonly SharedAccountRef[], calls: ShareCalls): Promise<void> => {
+    if (opened.change === `none` || failed.length === 0) {
+        return;
+    }
+    if (opened.change === `minted`) {
+        const kept = without(ask.refs, failed);
+        // Minted for this press alone, so with nothing brought over it, it goes as a card that could not be saved does.
+        await (kept.length === 0
+            ? calls.revokeAt(ask.source.id, opened.linkId)
+            : calls.retermAt(ask.source.id, opened.linkId, { approve: false, tasks: false, accounts: kept }));
+        return;
+    }
+    const added = without(ask.refs, opened.link.terms.accounts);
+    const drop = added.filter((ref) => failed.some((gone) => sameSharedRef(gone, ref)));
+    if (drop.length > 0) {
+        await calls.retermAt(ask.source.id, opened.link.id, accountsTerms(opened.link, without(opened.accounts, drop)));
+    }
+};
+
+/**
+ * The whole press: the link, then this sandbox bringing each account in, each answering on its own. What the link was
+ * opened for and did not come in is taken off it again, best effort: the outcomes are what the reader is told.
+ */
 export const bringAccounts = async (ask: BringAsk, calls: ShareCalls): Promise<readonly BorrowOutcome[]> => {
-    const card = await openAccountsLink(ask, calls);
-    return (await calls.borrow({ card, items: ask.refs.map(refOf) })).results;
+    const opened = await openLink(ask, calls);
+    const undo = (failed: readonly SharedAccountRef[]): Promise<void> =>
+        takeBack(opened, ask, failed, calls).catch((failure) => {
+            console.warn(`models: could not take back a link for accounts that did not come in`, failure);
+        });
+    let results: readonly BorrowOutcome[];
+    try {
+        results = (await calls.borrow({ card: opened.card, items: ask.refs.map(refOf) })).results;
+    } catch (failure) {
+        await undo(ask.refs);
+        throw failure;
+    }
+    await undo(results.filter((result) => result.outcome === `failed`).map(refOf));
+    return results;
 };
 
 /** What a press answered, merged over what earlier presses this visit did, by account. */

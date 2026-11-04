@@ -34,9 +34,18 @@ const statusOf = (link: LinkConfig, answer: Awaited<ReturnType<typeof linkHello>
 
 export const linkHandler: CapabilityHandler = {
     secret: () => "token",
+    // Every key left out of the echo is vaulted as a credential (credentials/secret-fields.ts). `purpose` once was: the
+    // manifest then held the marker where the schema wants "tasks" or "accounts", dropped the card as unreadable, and
+    // the editor, reading this echo, never found the accounts card it had saved (2026-11-04).
     echo: (config) => {
         const link = LinkConfigSchema.parse(config);
-        return { url: link.url, ...opt("name", link.name), ...opt("sandboxId", link.sandboxId), hasToken: link.token !== "" };
+        return {
+            url: link.url,
+            ...opt("name", link.name),
+            ...opt("sandboxId", link.sandboxId),
+            ...opt("purpose", link.purpose),
+            hasToken: link.token !== "",
+        };
     },
     // The id is the agent's name for the sandbox (`delegate`'s `to`); a task already handed over is followed by its
     // address too, so a rename strands nothing.

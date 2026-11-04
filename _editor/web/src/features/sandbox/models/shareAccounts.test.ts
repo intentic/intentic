@@ -213,8 +213,37 @@ describe(`bringAccounts`, () => {
             { ...CURSOR, label: `Cursor`, mode: `copy` as const },
         ];
         expect(await bringAccounts(ask({ refs: shareable }), wire.share)).toEqual(outcomes);
-        expect(wire.calls).toEqual([`mint@sbx-laptop`, `save`, `borrow`]);
+        expect(wire.calls).toEqual([`mint@sbx-laptop`, `save`, `borrow`, `reterm@sbx-laptop`]);
         expect(wire.borrowed).toEqual([{ card: `accounts-ada-s-laptop`, items: [CLAUDE, CURSOR] }]);
+        // The key that did not come in is taken off the link minted for it; the borrowed sign-in stays lent.
+        expect(wire.retermed).toEqual([{ linkId: `lnk_new`, terms: { approve: false, tasks: false, accounts: [CLAUDE] } }]);
+    });
+
+    // The source otherwise reads "Lent to …" for a loan nobody holds, and each retry mints one more (2026-11-04).
+    it(`revokes the link it minted when nothing came in over it`, async () => {
+        const wire = recorded([], [{ ...CLAUDE, outcome: `failed`, message: `No link card by that id is saved here.` }]);
+        await bringAccounts(ask(), wire.share);
+        expect(wire.calls).toEqual([`mint@sbx-laptop`, `save`, `borrow`, `revoke@sbx-laptop:lnk_new`]);
+    });
+
+    it(`revokes the link it minted when this sandbox could not be asked at all, and still says why`, async () => {
+        const wire = recorded();
+        const unreachable = { ...wire.share, borrow: () => Promise.reject(new Error(`offline`)) };
+        await expect(bringAccounts(ask(), unreachable)).rejects.toThrow(`offline`);
+        expect(wire.calls).toEqual([`mint@sbx-laptop`, `save`, `revoke@sbx-laptop:lnk_new`]);
+    });
+
+    it(`narrows a link it widened back to what it lent before, for the accounts that did not come in`, async () => {
+        const wire = recorded([link(`lnk_ours`, { terms: terms({ accounts: [CURSOR] }) })], [{ ...CLAUDE, outcome: `failed`, message: `no` }]);
+        await bringAccounts(ask({ cards: [accountsCard] }), wire.share);
+        expect(wire.calls).toEqual([`links@sbx-laptop`, `reterm@sbx-laptop`, `borrow`, `reterm@sbx-laptop`]);
+        expect(wire.retermed.at(-1)).toEqual({ linkId: `lnk_ours`, terms: { approve: false, turnsPerHour: 20, tasks: false, accounts: [CURSOR] } });
+    });
+
+    it(`leaves an account the link already lent before the press, even when it did not come in this time`, async () => {
+        const wire = recorded([link(`lnk_ours`, { terms: terms({ accounts: [CLAUDE] }) })], [{ ...CLAUDE, outcome: `failed`, message: `no` }]);
+        await bringAccounts(ask({ cards: [accountsCard] }), wire.share);
+        expect(wire.calls).toEqual([`links@sbx-laptop`, `borrow`]);
     });
 });
 
