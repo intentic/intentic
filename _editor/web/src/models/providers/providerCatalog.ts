@@ -219,6 +219,9 @@ export const modelLabelFor = (provider: AgentProvider, modelId: string): string 
     return humanizeModelId(modelId);
 };
 
+// Its compact form for a chip that sits beside the provider, display only (shortModelLabel.ts).
+export { shortModelLabel } from "./shortModelLabel";
+
 // Provider tabs for account pickers, derived from PROVIDER_SPECS so a new provider always gets a tab.
 export const providerTabs: readonly { value: AgentProvider; label: string }[] = PROVIDER_SPECS.map((spec) => ({
     value: spec.id,

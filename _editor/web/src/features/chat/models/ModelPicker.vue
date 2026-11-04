@@ -18,6 +18,7 @@ import {
 import { formatReset } from "../../../models/providers/usageStatus";
 import { providerWithheld, spentModels } from "../../../models/providers/aiReach";
 import { badgeMeta } from "./catalog";
+import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 import { type CatalogLoadState, providerModelsState } from "../../../models/providers/providerCatalog";
 import {
     customEntryFor,
@@ -482,7 +483,7 @@ onMounted(() => {
                                 class="max-w-[55%] shrink-0 truncate text-sm md:text-xs"
                                 :class="isSelected(row.entry) ? 'text-link' : 'text-content'"
                             >
-                                {{ row.entry.label }}
+                                {{ shortModelLabel(row.entry.label) }}
                             </span>
                             <span
                                 v-if="isOlderEntry(row.entry)"

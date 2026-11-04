@@ -416,7 +416,7 @@ it(`draws a sent turn the daemon has not filed as work in flight, with what this
     const card = mount(starting());
     expect(card.querySelector(`[data-card-when="working"]`)).not.toBeNull();
     // The model it went out under, and an elapsed measured from the send.
-    expect(card.textContent).toContain(`Claude Opus 5`);
+    expect(card.textContent).toContain(`Opus 5`);
     expect(card.textContent).toContain(`0s`);
 });
 

@@ -32,6 +32,7 @@ import { useAccessWall } from "../../../models/conversations/endings/accessWall"
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../client/sandbox/useRole";
+import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 
 // One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
 // asks exactly one question: what happens next. Three lines, in the order a reader needs them — what happened, what
@@ -571,7 +572,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 class="ui-row-select flex flex-col rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="continueOnModel(option.value)"
             >
-                <span class="truncate text-sm text-content md:text-xs">{{ option.label }}</span>
+                <span class="truncate text-sm text-content md:text-xs">{{ shortModelLabel(option.label) }}</span>
                 <span v-if="option.description !== undefined" class="truncate text-2xs text-subtle">{{ option.description }}</span>
             </button>
         </div>

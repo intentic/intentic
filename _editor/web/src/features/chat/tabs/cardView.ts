@@ -16,6 +16,7 @@ import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { isArchived, originOf } from "./tabs";
 import { statusLookOf } from "./statusLook";
+import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 import { t } from "@intentic/ui/i18n";
 
 // Everything a rail row is handed that isn't a primitive, derived in one place per card. Kept apart from the list
@@ -64,6 +65,12 @@ const recordedModel = (entry: OpenChat): string | undefined => {
     const provider = agent?.provider ?? conversation.selection.provider.value;
     const model = agent?.model ?? conversation.activeModel.value ?? conversation.selection.state.value.sentModel ?? conversation.selection.model.value;
     return model !== null && model !== `` ? modelLabelFor(provider, model) : undefined;
+};
+
+// The card's own model line, shortened as a chip draws it (shortModelLabel); modelOrProvider keeps the full name.
+const shortRecordedModel = (entry: OpenChat): string | undefined => {
+    const model = recordedModel(entry);
+    return model === undefined ? undefined : shortModelLabel(model);
 };
 
 // What tells a chat apart from another of the same title: the model it runs on, else at least its provider, since the
@@ -138,7 +145,7 @@ export const createCardViews = (): CardViews => {
                 live: liveOf(entry),
                 snippet,
                 // A filed agent always names what it runs on, its provider at least; an unfiled draft only a model picked.
-                model: recordedModel(entry) ?? (entry.agent === undefined ? undefined : providerLabel(entry.agent.provider)),
+                model: shortRecordedModel(entry) ?? (entry.agent === undefined ? undefined : providerLabel(entry.agent.provider)),
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
                 stamps,

@@ -208,20 +208,20 @@ it(`shows current browsing models while disconnected and switches to the connect
     browsingCatalog.snapshots.value = [{ provider: `claude`, verifiedAt: Date.now(), models: [{ id: `claude-opus-15`, label: `Claude Opus 15` }] }];
     browsingCatalog.clock.value = Date.now();
     const element = mount();
-    expect(element.textContent).toContain(`Claude Opus 15`);
-    expect(element.textContent).not.toContain(`Claude Opus 4 6`);
+    expect(element.textContent).toContain(`Opus 15`);
+    expect(element.textContent).not.toContain(`Opus 4 6`);
     expect(element.textContent).toContain(`Connect to check model availability.`);
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
     await nextTick();
-    expect(element.textContent).toContain(`Claude Opus 4 6`);
-    expect(element.textContent).not.toContain(`Claude Opus 15`);
+    expect(element.textContent).toContain(`Opus 4 6`);
+    expect(element.textContent).not.toContain(`Opus 15`);
 });
 
 it(`advertises the connection without stale model numbers when no current browsing catalog exists`, () => {
     browsingCatalog.snapshots.value = [];
     const element = mount();
     expect(element.textContent).toContain(`Connect to discover available models`);
-    expect(element.textContent).not.toContain(`Claude Opus 4 6`);
+    expect(element.textContent).not.toContain(`Opus 4 6`);
     expect(element.textContent).not.toContain(`Couldn't load models`);
     expect(element.querySelectorAll(`[role="option"]`)).toHaveLength(0);
 });
@@ -264,7 +264,7 @@ describe(`for a person held to some AI accounts`, () => {
         // No price and no Connect on a lane connecting would not open to them.
         expect([...element.querySelectorAll(`a`)].some((link) => link.textContent?.trim() === `Connect`)).toBe(false);
         expect(element.textContent).not.toContain(`Needs ChatGPT subscription`);
-        const claude = options(element).find((row) => row.textContent?.includes(`Claude Opus 4 6`));
+        const claude = options(element).find((row) => row.textContent?.includes(`Opus 4 6`));
         expect(claude?.disabled).toBe(true);
         expect(options(element).find((row) => row.textContent?.includes(`GPT 5 6`))?.disabled).toBe(false);
     });

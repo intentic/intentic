@@ -49,7 +49,7 @@ describe(`pickedChildRun`, () => {
 
 describe(`the run as the card reads it`, () => {
     it(`names the model the way the app does, with its speed`, () => {
-        expect(childRunLine({ provider: `claude`, model: `claude-opus-4-6`, fast: true })).toBe(`Claude Opus 4.6 · Fast`);
+        expect(childRunLine({ provider: `claude`, model: `claude-opus-4-6`, fast: true })).toBe(`Opus 4.6 · Fast`);
     });
 
     it(`says which machine, and names an account nobody here has connected by its id`, () => {

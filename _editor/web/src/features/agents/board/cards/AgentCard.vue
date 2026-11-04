@@ -77,7 +77,7 @@ import type { OwnerHold } from "../../../../models/conversations/review/ownerHol
 import CardOwnerHold from "./CardOwnerHold.vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { modelLabelFor, shortModelLabel } from "../../../../models/providers/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
@@ -785,7 +785,7 @@ const grab = (event: PointerEvent): void => {
                     <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
                         <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
                         <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
-                        <span class="truncate text-muted">{{ model }}</span>
+                        <span class="truncate text-muted" v-tooltip.top="shortModelLabel(model) === model ? undefined : model">{{ shortModelLabel(model) }}</span>
                     </span>
                     <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
                     <span

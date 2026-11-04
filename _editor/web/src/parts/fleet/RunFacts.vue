@@ -6,6 +6,7 @@ import { computed } from "vue";
 import ProviderLogo from "../providers/ProviderLogo.vue";
 import { effortRungFill } from "../../models/providers/effortScale";
 import type { RunLook } from "../../models/fleet/board/childLook";
+import { shortModelLabel } from "../../models/providers/shortModelLabel";
 import { useAudience } from "../../app/useAudience";
 
 // WHAT A CHILD RUNS ON: the model by its catalog name and the tier it ran at, drawn on the composer's own ladder
@@ -42,7 +43,7 @@ const rungs = computed(() =>
             :aria-label="`${t(`shared.model`)}: ${providerLabel(run.provider)} ${run.modelId}`"
         >
             <ProviderLogo :provider="run.provider" class="shrink-0 text-2xs text-link" />
-            <span class="min-w-0 truncate" aria-hidden="true">{{ run.model }}</span>
+            <span class="min-w-0 truncate" aria-hidden="true">{{ shortModelLabel(run.model) }}</span>
         </span>
         <span v-if="run.effort !== undefined" class="flex shrink-0 items-center gap-1.5" :aria-label="`${t(`shared.effort`)}: ${run.effort.label}`">
             <span v-if="rungs.length > 0" class="flex items-center" aria-hidden="true">
@@ -70,7 +71,7 @@ const rungs = computed(() =>
             :class="columns ? 'w-24 shrink-0' : ''"
             :aria-label="`${t(`shared.model`)}: ${providerLabel(run.provider)} ${run.modelId}`"
         >
-            <span class="min-w-0 truncate" aria-hidden="true">{{ run.model }}</span>
+            <span class="min-w-0 truncate" aria-hidden="true">{{ shortModelLabel(run.model) }}</span>
         </span>
         <span
             v-if="run.effort !== undefined"

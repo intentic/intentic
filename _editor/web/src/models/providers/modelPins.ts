@@ -1,14 +1,15 @@
 import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
 import { providerReady } from "./access";
 import { modelLabelFor, providerDisplayLabel } from "./providerCatalog";
+import { shortModelLabel } from "./shortModelLabel";
 
 // Naming a stored pin, shared by the settings rows that keep one (Quick model, Agent runs, the automatic tier's
 // cheaper model): all draw the list the user wrote, not the resolved one. A pin whose account is disconnected
 // stays visible, greyed, rather than disappearing, so this describes what the resolver has already discarded.
 
 // What a resolved choice is called, provider included: a label like "GPT-OSS 120B" doesn't name its vendor, and
-// the account a click spends is the point.
-export const modelChoiceLabel = (choice: ModelChoice): string => `${providerDisplayLabel(choice.provider)} · ${modelLabelFor(choice.provider, choice.model)}`;
+// the account a click spends is the point. The provider leads, so the model's own brand word is not said twice.
+export const modelChoiceLabel = (choice: ModelChoice): string => `${providerDisplayLabel(choice.provider)} · ${shortModelLabel(modelLabelFor(choice.provider, choice.model))}`;
 
 export interface DescribedPin {
     readonly choice: ModelChoice | undefined;

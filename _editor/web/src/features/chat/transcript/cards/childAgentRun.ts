@@ -3,6 +3,7 @@ import { childRunOf, sameChildRun } from "@intentic/sandbox-contract/events/chil
 import { loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { shortModelLabel } from "../../../../models/providers/shortModelLabel";
 import { accountsOf } from "../../../../models/conversations/accounts/useChat-accounts";
 import type { ModelChoice } from "../../../../models/conversations/accounts/hostModelPicker";
 import { effortLabelOf } from "../../../../models/providers/effortScale";
@@ -15,7 +16,7 @@ import { defaultPinRunSettings } from "../../../../models/providers/pickerRunSet
 /** The run in one line, as the picker's commit bar and a run button's caret spell it: model, the tier it thinks at, speed. */
 export const childRunLine = (run: ChildRun): string =>
     [
-        modelLabelFor(run.provider, run.model),
+        shortModelLabel(modelLabelFor(run.provider, run.model)),
         effortLabelOf(run.effort, run.provider, run.model, run.thinking),
         run.fast === true ? t(`chat.chatChildAgentAsk.fast`) : undefined,
     ]

@@ -775,7 +775,7 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
         expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
         expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Port the parser to zig, keeping the tests green.`);
-        expect(chip(element)?.textContent).toContain(`Claude Opus 4.6`);
+        expect(chip(element)?.textContent).toContain(`Opus 4.6`);
         expect(element.textContent).toContain(`Account: work`);
         expect(element.textContent).toContain(`On rog`);
         // The gate's reason, as a sentence of its own behind the shield, rather than a clause after a label.
@@ -808,7 +808,7 @@ describe(`ChatMessageView child-agent card`, () => {
         // The card now reads the owner's pick and says what it replaced; the title, naming the move alone, stands.
         expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(true);
         expect(chip(element)?.textContent).toContain(`GPT 5.5`);
-        expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
+        expect(element.textContent).toContain(`Changed from the agent's pick: Opus 4.6`);
         expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
 
         button(element, `Start it`)?.click();
@@ -849,7 +849,7 @@ describe(`ChatMessageView child-agent card`, () => {
         );
         expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Message a subagent?`);
         expect(element.textContent).toContain(`Now the lexer too.`);
-        expect(element.textContent).toContain(`Claude Opus 4.6`);
+        expect(element.textContent).toContain(`Opus 4.6`);
         expect(chip(element)).toBeNull();
         expect(answers(element)).toEqual([`Send it`, `Skip this, keep going`, `No`]);
     });
@@ -868,7 +868,7 @@ describe(`ChatMessageView child-agent card`, () => {
             ),
         );
         expect(element.querySelector(`[data-icon="check"]`)?.parentElement?.textContent?.trim()).toBe(`Allowed`);
-        expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
+        expect(element.textContent).toContain(`Changed from the agent's pick: Opus 4.6`);
         expect(chip(element)).toBeNull();
         expect(button(element, `Use the agent's pick`)).toBeUndefined();
         expect(answers(element)).toEqual([]);
@@ -878,7 +878,7 @@ describe(`ChatMessageView child-agent card`, () => {
     it(`once answered, folds to the task and the run, with the words one press away`, async () => {
         const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { status: `allowed` }));
         expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
-        expect(element.querySelector(`[data-child-run]`)?.textContent).toContain(`Claude Opus 4.6`);
+        expect(element.querySelector(`[data-child-run]`)?.textContent).toContain(`Opus 4.6`);
         expect(element.querySelector(`[data-child-message]`)).toBeNull();
         expect(element.querySelector(`[data-child-reason]`)).toBeNull();
         expect(element.textContent).not.toContain(`shell-fetch`);

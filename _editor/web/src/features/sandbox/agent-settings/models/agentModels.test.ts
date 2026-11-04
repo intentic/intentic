@@ -272,8 +272,8 @@ test("a preset is worked out from the connected accounts' catalogs, and says so"
     };
     const host = await mountPage();
 
-    expect(orderOn(card(host, `Low`))).toEqual([`CLAUDE · Claude Haiku 4.5`, `CODEX · GPT 5.6 Luna`]);
-    expect(orderOn(card(host, `High`))).toEqual([`CLAUDE · Claude Opus 5`]);
+    expect(orderOn(card(host, `Low`))).toEqual([`CLAUDE · Haiku 4.5`, `CODEX · GPT 5.6 Luna`]);
+    expect(orderOn(card(host, `High`))).toEqual([`CLAUDE · Opus 5`]);
     expect(card(host, `Low`).textContent).toContain(`Suggested`);
 });
 
@@ -306,7 +306,7 @@ test("reordering a setup writes that setup's list and touches no job", async () 
 
     const high = card(host, `High`);
     expect(button(high, `Move CODEX · GPT 5.6 Luna earlier`).disabled).toBe(true);
-    button(high, `Move CLAUDE · Claude Haiku 4.5 earlier`).click();
+    button(high, `Move CLAUDE · Haiku 4.5 earlier`).click();
 
     expect(patch).toHaveBeenCalledWith({ modelSetups: [{ id: `high`, pins: [haiku, luna] }] });
 });
@@ -315,7 +315,7 @@ test("keeps a pin whose account went away on screen, and greys it", async () => 
     settings.value = { ...settings.value, modelSetups: [{ id: `low`, pins: [entry(`gemini`, `gemini-3-flash-lite`), haiku] }] };
     const host = await mountPage();
 
-    expect(orderOn(card(host, `Low`))).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
+    expect(orderOn(card(host, `Low`))).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Haiku 4.5`]);
     expect(card(host, `Low`).querySelector(`ol li`)?.className).toMatch(/subtle/);
 });
 
@@ -336,7 +336,7 @@ test("a knob moved in the picker lands on that entry alone", async () => {
     settings.value = { ...settings.value, modelSetups: [{ id: `high`, pins: [luna, haiku] }] };
     const host = await mountPage();
 
-    button(card(host, `High`), `Change CLAUDE · Claude Haiku 4.5`).click();
+    button(card(host, `High`), `Change CLAUDE · Haiku 4.5`).click();
     await flush();
     expect([opened?.pin, opened?.knobs, opened?.taken]).toEqual([haiku, true, [`codex:gpt-5.6`, `claude:claude-haiku-4-5`]]);
 

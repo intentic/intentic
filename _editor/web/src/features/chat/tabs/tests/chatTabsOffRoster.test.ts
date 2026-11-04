@@ -12,6 +12,7 @@ jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSand
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { shortModelLabel } from "../../../../models/providers/shortModelLabel";
 import { useChat } from "../../../../models/conversations/run/useChat";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
@@ -61,7 +62,7 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
 
     const card = host!.querySelector(`[data-chat-tab]`);
     expect(card?.textContent).toContain(`Detached intentic chat · fix`);
-    expect(card?.textContent).toContain(modelLabelFor(`claude`, `claude-opus-4-5`));
+    expect(card?.textContent).toContain(shortModelLabel(modelLabelFor(`claude`, `claude-opus-4-5`)));
     // No spend from either half of the join: that's the board's fact, not the switcher's.
     expect(card?.textContent).not.toContain(`$7.02`);
 });

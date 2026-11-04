@@ -6,6 +6,7 @@ import type { Conversation } from "../../../models/conversations/session/convers
 import { trialBadge } from "../../../models/providers/access";
 import { modelLabelFor, newerVersionOf, trialStatus } from "../../../models/providers/providerCatalog";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
+import { shortModelLabel } from "../../../models/providers/shortModelLabel";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -122,7 +123,7 @@ defineExpose({ el, label: modelLabelText });
         <!-- Auto's own mark, so the armed state is legible with the label hidden on a narrow composer. -->
         <Icon v-else-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
-        <span ref="nameEl" class="truncate" :class="[revealed ? `` : labelClass, { 'text-muted': reading.unset }]">{{ modelLabelText }}</span>
+        <span ref="nameEl" class="truncate" :class="[revealed ? `` : labelClass, { 'text-muted': reading.unset }]">{{ shortModelLabel(modelLabelText) }}</span>
         <Icon v-if="reading.locked" name="lock" class="shrink-0 text-[0.6rem] text-subtle" aria-hidden="true" />
         <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
         <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
