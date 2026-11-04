@@ -6,6 +6,7 @@ import { useNotifications } from "../../workbench/notifications/notifications";
 import type { ScreenPoint } from "../../workbench/window/floating";
 import { useLayout } from "../../workbench/window/useLayout";
 import { toScreenPx } from "../../workbench/window/uiScale";
+import { swallowClick } from "../../lib/swallowClick";
 
 // THE CHAT TILE, DRAGGED OFF THE RAIL. The middle opens a window where the tile was let go; the right edge docks the
 // chat beside the current section. Let go over the rail, or press Escape, and nothing happens.
@@ -67,16 +68,6 @@ export interface ChatTileDragOptions {
     /** What a release outside the rail and the dock target does. */
     readonly drop: (at: ScreenPoint) => void;
 }
-
-// A drag's release also lands as a click. Capture it before the tile's router link can navigate to /chat.
-const swallowClick = (): void => {
-    const swallow = (event: MouseEvent): void => {
-        event.preventDefault();
-        event.stopPropagation();
-    };
-    window.addEventListener(`click`, swallow, { capture: true, once: true });
-    setTimeout(() => window.removeEventListener(`click`, swallow, { capture: true }), 0);
-};
 
 export function useChatTileDrag({ rail, dockWidth, dock, drop }: ChatTileDragOptions) {
     const phase = ref<ChatDragPhase>(`idle`);

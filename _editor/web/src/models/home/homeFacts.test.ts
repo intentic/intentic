@@ -7,15 +7,18 @@ const check = (kind: `review` | `test`, status: AgentSummary[`status`], at: numb
     worker({ id: kind, status, updatedAt: at, fresh: { of: `worker`, by: `home`, kind, at } });
 
 describe(`home tiles`, () => {
-    test(`owners lead without changing order within memberships`, () => {
-        expect(
-            orderedSandboxes([
-                { id: `a`, role: `viewer` },
-                { id: `b`, role: `owner` },
-                { id: `c`, role: `owner` },
-                { id: `d`, role: `writer` },
-            ]).map((box) => box.id),
-        ).toEqual([`b`, `c`, `a`, `d`]);
+    const roster = [
+        { id: `a`, name: `zeta`, role: `viewer` },
+        { id: `b`, name: `Mail`, role: `owner` },
+        { id: `c`, name: `box 10`, role: `owner` },
+        { id: `d`, name: `Alpha`, role: `writer` },
+        { id: `e`, name: `box 2`, role: `owner` },
+    ];
+    test(`unarranged, owners lead and each part goes by name`, () => {
+        expect(orderedSandboxes(roster).map((box) => box.id)).toEqual([`e`, `c`, `b`, `d`, `a`]);
+    });
+    test(`an arranged order wins, and a sandbox it does not name follows in the unarranged order`, () => {
+        expect(orderedSandboxes(roster, [`a`, `gone`, `b`]).map((box) => box.id)).toEqual([`a`, `b`, `e`, `c`, `d`]);
     });
     test(`unanswered is unknown and a failed refresh retains the last count`, () => {
         expect(mergeAttention(undefined, undefined)).toEqual({ needsYou: undefined, unreachable: true });

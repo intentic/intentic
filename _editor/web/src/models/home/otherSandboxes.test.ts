@@ -27,6 +27,10 @@ describe(`clusterOf`, () => {
         expect(clusterOf([box(`m`, `member`), box(`o`)], undefined, none).slots.map((slot) => slot.id)).toEqual([`o`, `m`]);
     });
 
+    it(`keeps the reader's own arrangement`, () => {
+        expect(clusterOf([box(`b`), box(`c`), box(`d`)], undefined, none, [`d`, `b`]).slots.map((slot) => slot.id)).toEqual([`d`, `b`, `c`]);
+    });
+
     it(`moves a sandbox that needs the reader ahead, so the overflow never hides it`, () => {
         const readings = new Map<string, AttentionReading>([[`e`, { needsYou: 2, unreachable: false }]]);
         const cluster = clusterOf([box(`b`), box(`c`), box(`d`), box(`e`)], undefined, readings);

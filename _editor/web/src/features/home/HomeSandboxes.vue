@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, TransitionGroup } from "vue";
+import type { MenuItem } from "primevue/menuitem";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { Beacon, SandboxLogo, ui } from "@intentic/ui";
+import { Beacon, ContextMenu, SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
+import { movedOrder, sandboxOrder } from "../../models/home/sandboxOrder";
+import { useSandboxTileDrag } from "./sandboxTileDrag";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
@@ -39,7 +42,43 @@ const { user } = useAuth();
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
 // The sandbox Home is making (newSandbox.ts) is its own tile until its run ends, not a second one beside it.
 const making = computed(() => newSandbox.value?.here.add.created.value?.id);
-const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)).filter((box) => box.id !== making.value));
+// In the reader's own order once they have dragged one into place (sandboxOrder.ts), else owned first and by name.
+const boxes = computed(() =>
+    orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value), sandboxOrder.value).filter((box) => box.id !== making.value),
+);
+// A tile carried along the rail: the others make way for it (sandboxTileDrag.ts), and where it is let go is kept.
+const list = ref<HTMLElement | null>(null);
+const drag = useSandboxTileDrag({
+    list: () => list.value,
+    ids: () => boxes.value.map((box) => box.id),
+    commit: (ids) => (sandboxOrder.value = ids),
+});
+const drawn = computed(() => {
+    const preview = drag.preview.value;
+    return preview === undefined ? boxes.value : preview.flatMap((id) => boxes.value.filter((box) => box.id === id));
+});
+// The same arrangement from a tile's own menu, for a keyboard (the menu key) and for going back to the order by name.
+const tileMenu = ref<{ show: (event: Event) => void }>();
+const menuIndex = ref(-1);
+const moveBy = (step: number): void => {
+    const ids = boxes.value.map((box) => box.id);
+    sandboxOrder.value = movedOrder(ids, menuIndex.value, menuIndex.value + step);
+};
+const tileMenuItems = computed<MenuItem[]>(() => [
+    { label: t(`home.moveTileUp`), disabled: menuIndex.value <= 0, command: () => moveBy(-1) },
+    { label: t(`home.moveTileDown`), disabled: menuIndex.value >= boxes.value.length - 1, command: () => moveBy(1) },
+    { separator: true },
+    { label: t(`home.sortByName`), disabled: sandboxOrder.value.length === 0, command: () => (sandboxOrder.value = []) },
+]);
+// Beside the rail at the tile's height, as the shell's own tile menu opens (ShellDesktop.vue `showBesideRail`).
+const openTileMenu = (event: MouseEvent, id: string): void => {
+    event.preventDefault();
+    menuIndex.value = boxes.value.findIndex((box) => box.id === id);
+    const tile = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const rail = (tile?.closest(`nav`) ?? tile)?.getBoundingClientRect();
+    const top = tile?.getBoundingClientRect().top;
+    tileMenu.value?.show(rail === undefined || top === undefined ? event : new MouseEvent(`click`, { clientX: rail.right, clientY: top }));
+};
 // Before the first sandbox the + wears getting started's beacon, a quiet second way to the press the page itself leads
 // with (HomeNoSandbox.vue). No coach mark beside it any more: the page says what it would have said, and a popover over
 // a page that already asks for the same press is two voices for one thing.
@@ -151,23 +190,41 @@ const choose = (id: string, input: `click` | `enter`): void => {
     <!-- On a desktop, the tiles of the shell's own rail (ShellDesktop.vue draws the rail around them, account included),
          worn like every other tile: the same size, selection and corner chip. Only what needs you is counted; a quiet box
          wears nothing, and one that has not answered is dimmed rather than counted. -->
-    <div v-else v-bind="$attrs" :aria-label="t(`home.sandboxes`)" role="group" class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
-        <button
-            v-for="box in boxes"
-            :key="box.id"
-            type="button"
-            class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg"
-            :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': selected(box.id) }"
-            :aria-label="labelOf(box.id, box.name)"
-            :aria-current="selected(box.id) ? 'true' : undefined"
-            v-tooltip.right="{ title: box.name, note: noteOf(box.id) }"
-            @click="choose(box.id, 'click')"
-            @keydown.enter.prevent="choose(box.id, 'enter')"
-        >
-            <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
-            <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
-            <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
-        </button>
+    <div
+        v-else
+        ref="list"
+        v-bind="$attrs"
+        :aria-label="t(`home.sandboxes`)"
+        role="group"
+        class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain"
+        :class="{ 'cursor-grabbing select-none': drag.carried.value !== undefined }"
+    >
+        <!-- Drag a tile to arrange them; the others slide aside rather than jump. -->
+        <TransitionGroup move-class="motion-safe:transition-transform motion-safe:duration-150">
+            <button
+                v-for="box in drawn"
+                :key="box.id"
+                type="button"
+                data-sandbox-tile
+                class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg"
+                :class="{
+                    'opacity-40': readings.get(box.id)?.unreachable,
+                    'ui-row-select-on': selected(box.id),
+                    'z-10 bg-card shadow-lg ring-2 ring-primary-500': drag.carried.value === box.id,
+                }"
+                :aria-label="labelOf(box.id, box.name)"
+                :aria-current="selected(box.id) ? 'true' : undefined"
+                v-tooltip.right="drag.carried.value === undefined && { title: box.name, note: noteOf(box.id) }"
+                @pointerdown="drag.press($event, box.id)"
+                @click="choose(box.id, 'click')"
+                @keydown.enter.prevent="choose(box.id, 'enter')"
+                @contextmenu="openTileMenu($event, box.id)"
+            >
+                <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-lg" />
+                <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
+                <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
+            </button>
+        </TransitionGroup>
         <NewSandboxTile />
         <span class="relative flex shrink-0">
             <button
@@ -183,5 +240,6 @@ const choose = (id: string, input: `click` | `enter`): void => {
             </button>
             <Beacon v-if="!boxes.length && !making && !newSandbox" size="sm" class="absolute right-1 top-1" />
         </span>
+        <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="11" />
     </div>
 </template>

@@ -33,10 +33,18 @@ export interface Cluster {
 
 const CIRCLES = 3;
 
-// Home's own order (owned boxes first), with every box that needs the reader moved ahead, so a "+n" only ever folds away
+// Home's own order (homeFacts.ts `orderedSandboxes`, the reader's arrangement included), with every box that needs the reader moved ahead, so a "+n" only ever folds away
 // quiet ones and the circle that carries the point is always one that is drawn.
-export const clusterOf = (boxes: readonly OtherBox[], activeId: string | undefined, readings: ReadonlyMap<string, AttentionReading>): Cluster => {
-    const others = orderedSandboxes(boxes.filter((box) => box.id !== activeId)).map(
+export const clusterOf = (
+    boxes: readonly OtherBox[],
+    activeId: string | undefined,
+    readings: ReadonlyMap<string, AttentionReading>,
+    arranged: readonly string[] = [],
+): Cluster => {
+    const others = orderedSandboxes(
+        boxes.filter((box) => box.id !== activeId),
+        arranged,
+    ).map(
         (box): ClusterSlot => ({
             id: box.id,
             name: box.name,

@@ -1,9 +1,25 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 
-export const orderedSandboxes = <T extends { role: string }>(boxes: readonly T[]): T[] => [
-    ...boxes.filter((box) => box.role === `owner`),
-    ...boxes.filter((box) => box.role !== `owner`),
-];
+// Names as a reader sorts them: case and accents aside, and "box 2" before "box 10".
+const byName = new Intl.Collator(undefined, { sensitivity: `base`, numeric: true });
+
+/**
+ * The order of the sandboxes on Home's rail and in the door up to it (otherSandboxes.ts). Unarranged, the reader's own
+ * sandboxes lead the ones shared with them, each part by name. Arranged (`arranged`, the ids in the order the reader
+ * dragged them to, sandboxOrder.ts), that order wins outright; a sandbox it does not name yet, one made or shared since,
+ * follows the arranged ones in the unarranged order, where the add tile that made it stands.
+ */
+export const orderedSandboxes = <T extends { id: string; name: string; role: string }>(boxes: readonly T[], arranged: readonly string[] = []): T[] => {
+    const rank = new Map(arranged.map((id, index) => [id, index]));
+    const owned = (box: T): number => (box.role === `owner` ? 0 : 1);
+    return boxes.toSorted(
+        (left, right) =>
+            (rank.get(left.id) ?? Infinity) - (rank.get(right.id) ?? Infinity) ||
+            owned(left) - owned(right) ||
+            byName.compare(left.name, right.name) ||
+            (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+    );
+};
 
 export interface AttentionReading {
     readonly needsYou?: number;

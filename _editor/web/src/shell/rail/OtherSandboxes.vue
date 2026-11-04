@@ -11,6 +11,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { identityHue } from "../../lib/identityHue";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { clusterOf } from "../../models/home/otherSandboxes";
+import { sandboxOrder } from "../../models/home/sandboxOrder";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { commandShortcut } from "../../workbench/commands/useCommands";
@@ -21,7 +22,9 @@ const sandbox = useSandbox();
 // Home's own count of what waits for the reader in each box, so the point here and the chip on Home's tile agree. At the
 // across-sandboxes store's ambient pace, and never the box the shell is in: its own tiles count that one.
 const readings = useHomeAttention({ everyMs: 45_000, skip: () => sandbox.activeSandboxId.value });
-const cluster = computed(() => clusterOf(switchableSandboxes(sandbox.sandboxes.value), sandbox.activeSandboxId.value, readings.value));
+const cluster = computed(() =>
+    clusterOf(switchableSandboxes(sandbox.sandboxes.value), sandbox.activeSandboxId.value, readings.value, sandboxOrder.value),
+);
 
 // Where each circle sits, in circle diameters (iconRail.css `--cluster-d`): a pair on top and one below between them, the
 // Olympic rings' fold. Fewer circles keep the same box, centred in it, so the rail below never moves.
