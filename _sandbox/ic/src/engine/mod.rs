@@ -9,6 +9,16 @@ pub mod choice;
 mod commands;
 mod disk;
 mod disk_consumers;
+
+/// What a process that is not root may still write on the intentic engine's disk, when this PC's sandboxes run on it
+/// and its distro answers; None otherwise (another engine, a stopped distro, a reading that failed). The disk guards
+/// (checks.rs `check_disk`, `ic sandbox fix`) ask this before the Windows drive: the sandboxes write here, not to C:.
+pub fn engine_disk_available() -> Option<u64> {
+    match disk::look() {
+        disk::Seen::Measured(reading) => Some(reading.available_bytes),
+        _ => None,
+    }
+}
 mod fetch;
 mod install_plan;
 pub mod leave;

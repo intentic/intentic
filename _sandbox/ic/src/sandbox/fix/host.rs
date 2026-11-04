@@ -511,7 +511,15 @@ it reported 680 GB free on a host with 2 (setup-wsl-fleet.ps1). */
 fn free_space(os: Os, engine_up: bool) -> (Option<u64>, String) {
     const KIB_PER_GIB: u64 = 1024 * 1024;
     match os {
-        Os::Windows => windows_free(),
+        // The intentic engine's own disk when it is the engine in use (checks.rs `check_disk` says why).
+        Os::Windows => crate::engine::engine_disk_available()
+            .map(|bytes| {
+                (
+                    Some(bytes / KIB_PER_GIB / 1024),
+                    "the intentic engine's disk".to_string(),
+                )
+            })
+            .unwrap_or_else(windows_free),
         #[cfg(unix)]
         Os::Wsl => (
             crate::checks::free_kib("/mnt/c").map(|kib| kib / KIB_PER_GIB),

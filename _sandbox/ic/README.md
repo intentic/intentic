@@ -197,7 +197,9 @@ flowchart LR
   is gone", and a healthy 1.380.0 was rolled back to 1.378.2, killing every turn in flight.
 - **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
   are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
-  keeps its data on is read directly, where the check used to skip), and `ic sandbox versions` lists them for
+  keeps its data on is read directly, where the check used to skip; since 2026-11-04 the intentic engine's own disk
+  instead, whenever it is the engine in use and answers, since sandboxes on it never write to C:), and
+  `ic sandbox versions` lists them for
   `rollback --to <version>`. A release nothing kept is downloaded by its version tag, and so is a pin whose image was
   pruned outside ic; a pin with neither its image nor a version is no longer offered (`versions.rs`, 2026-10-05). A
   rollback remembers the version it left (`rolled_back_from`), as the watch's own going back does, so the background

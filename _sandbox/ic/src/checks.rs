@@ -300,8 +300,14 @@ pub fn free_kib(path: &str) -> Option<u64> {
 /// prepare's "not now", how many rollback builds a swap keeps, a backup's "the disk is short") engage on Windows as
 /// they do everywhere else. (2026-10-05: it answered "skip" here, and none of them ever did.) A drive that will not say
 /// is still a skip.
+/// (2026-11-04) Sandboxes on the intentic engine write to its own disk, not to C:: on rog the engine's disk was full
+/// while C: had 316 GB free, and this read the disk as fine. So the engine's disk is asked first, whenever it is the
+/// engine in use and it answers.
 #[cfg(not(unix))]
 pub fn check_disk() -> Outcome {
+    if let Some(bytes) = crate::engine::engine_disk_available() {
+        return disk_outcome(Some(bytes / 1024), "the intentic engine's disk");
+    }
     let (free, drive) = windows_free_bytes();
     disk_outcome(free.map(|bytes| bytes / 1024), &drive)
 }
