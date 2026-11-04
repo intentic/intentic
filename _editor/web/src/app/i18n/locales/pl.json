@@ -12327,8 +12327,8 @@
             "noMessageWritten": "Nie napisano wiadomości: {reason}",
             "yourChangesNameIt": "Twoje zmiany — nazwij ten commit samodzielnie",
             "keepingYourMessage": "Zostaje Twoja wiadomość. Wyczyść pole, żeby użyć wiadomości od „{origin}”.",
-            "writingMessageFor": "Trwa pisanie wiadomości dla „{origin}”…",
-            "modelWritingFor": "{model} pisze wiadomość…",
+            "writingMessageFor": "Pisze dla „{origin}”…",
+            "modelWritingFor": "{model} pisze…",
             "noMessageFor": "Brak wiadomości dla „{origin}”"
         },
         "changeRowMenu": {

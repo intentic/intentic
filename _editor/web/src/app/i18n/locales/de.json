@@ -12925,8 +12925,8 @@
             "noMessageWritten": "Keine Nachricht geschrieben: {reason}",
             "yourChangesNameIt": "Ihre Änderungen -- benennen Sie diesen Commit selbst",
             "keepingYourMessage": "Ihre Nachricht bleibt. Leeren Sie das Feld, um die von {origin} zu verwenden.",
-            "writingMessageFor": "Nachricht für {origin} wird geschrieben…",
-            "modelWritingFor": "{model} schreibt die Nachricht…",
+            "writingMessageFor": "Schreibt für {origin}…",
+            "modelWritingFor": "{model} schreibt…",
             "noMessageFor": "Keine Nachricht für {origin} geschrieben"
         },
         "changeRowMenu": {
