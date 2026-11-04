@@ -206,25 +206,34 @@ test("two windows polling the same read call the daemon about as often as one", 
     const chat = window(`chat`);
     await settle();
     let calls = 0;
-    const poll = (side: Window): (() => void) =>
+    const asked = { main: 0, chat: 0 };
+    const poll = (side: Window, name: keyof typeof asked): (() => void) =>
         new QueryObserver(side.client, {
             queryKey: [`usage`],
-            queryFn: (context) =>
-                side.sibling.fetchShared(context.queryKey, async () => {
+            queryFn: (context) => {
+                asked[name] += 1;
+                return side.sibling.fetchShared(context.queryKey, async () => {
                     calls += 1;
                     await new Promise((resolve) => setTimeout(resolve, 5));
                     return calls;
-                }),
+                });
+            },
             refetchInterval: 40,
             refetchIntervalInBackground: true,
             staleTime: 0,
         }).subscribe(() => undefined);
-    const stops = [poll(main), poll(chat)];
-    await new Promise((resolve) => setTimeout(resolve, 420));
+    const stops = [poll(main, `main`), poll(chat, `chat`)];
+    // Counted in the main window's own reads rather than in wall time: a loaded runner fires both windows' intervals
+    // late alike, so a fixed span can hold too few reads to tell shared from unshared. The deadline only bounds a hang.
+    const deadline = Date.now() + 5_000;
+    while (asked.main < 10 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     for (const stop of stops) {
         stop();
     }
-    // One window alone makes ~11 calls in this time (its first read and ~10 intervals); two unshared made twice that.
-    expect(calls).toBeLessThanOrEqual(14);
+    expect(asked.main).toBeGreaterThanOrEqual(10);
+    // One window alone calls once per read it makes; two unshared made twice that.
+    expect(calls).toBeLessThanOrEqual(asked.main + 3);
     expect(calls).toBeGreaterThan(4);
 });

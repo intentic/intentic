@@ -154,7 +154,7 @@ describe(`in a desktop window on a folder`, () => {
 
     it(`writes the two pages it has at its own addresses, and any other where the shell has it`, () => {
         const inTheShell = here(page.agents());
-        wearFace({ id: `f1`, name: `shop`, path: `/home/ada/shop` });
+        wearFace({ daemonUrl: `http://127.0.0.1:47201`, token: `t`.repeat(64), id: `f1`, name: `shop`, path: `/home/ada/shop` });
 
         expect(here(page.account(`keybindings`, { hash: `chords` }))).toBe(localPath(`account`, { tab: `keybindings` }, { hash: `chords` }));
         expect(here(page.workspace(`src/main.ts`))).toBe(localPath(`files`, { path: `src/main.ts` }));

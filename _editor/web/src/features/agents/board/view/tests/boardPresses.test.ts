@@ -124,7 +124,7 @@ describe(`a workflow run's row`, () => {
     it(`opens its diagram on the workflows page`, () => {
         const { push, presses } = pressesOf();
         presses.openRunGraph(run(`r1`, `running`));
-        expect(push.mock.calls.map(([to]) => linkOf(to))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
+        expect(push.mock.calls.map(([to]) => linkOf(String(to)))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
     });
 
     // The page is a listed extension: a sandbox without it still answers the press, in the chat, never with a 404.
@@ -158,7 +158,7 @@ describe(`a press on a workflow run's row`, () => {
     it(`opens the diagram for an ended run a docked chat has nothing of, and leaves the chat alone`, () => {
         const { chat, push, presses } = pressesOf();
         presses.openRun(stepped(`r1`, `done`));
-        expect(push.mock.calls.map(([to]) => linkOf(to))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
+        expect(push.mock.calls.map(([to]) => linkOf(String(to)))).toEqual([page.extension(`workflows`, undefined, { query: { run: `r1` } })]);
         expect(chat.follow).not.toHaveBeenCalled();
     });
 
