@@ -3,13 +3,15 @@ import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
 import { useLoaded } from "@intentic/extension-api";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
-import { LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { Await, Button, Icon, type IconName, type NoticeModel, Row, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
-import { computed, watch } from "vue";
+import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { Await, Button, ConfirmDialog, Icon, type IconName, type NoticeModel, Row, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { suggestName } from "../../../models/capabilities/tiles";
+import { localPrefetchStopped } from "./localPrefetch";
+import { deleteLocalModelWeights } from "./useLocalModelFit";
 import { useT } from "@intentic/ui/i18n";
 
 // The machine the reader already owns, inside the Local models panel (LocalModelsPanel). Two rungs and no arithmetic: one
@@ -33,7 +35,7 @@ const emit = defineEmits<{ ready: [provider: string]; stopPrefetch: [] }>();
 // Nothing is offered before the machine has answered: until its measurement is in, the lane waits.
 const measured = useLoaded(() => ({ data: fit, error: undefined, fetching: fit === undefined, wanted: true }));
 
-const { capabilities, add } = useCapabilities();
+const { capabilities, add, remove } = useCapabilities();
 const card = CAPABILITY_CATALOG.find((entry) => entry.id === `localmodel`)!;
 
 const installed = computed(() => (capabilities.value ?? []).filter((entry) => entry.kind === `localmodel`));
@@ -150,6 +152,79 @@ const addModel = async (model: string, context: string): Promise<void> => {
                 }
             });
             return model;
+        },
+    });
+};
+
+// TAKING ONE BACK. A model costs gigabytes of disk, and nothing used to give them back: a taken rung only reported, and
+// removing its connection elsewhere kept the weights for the next start. Each rung with weights on disk has one way back
+// beside its state or its button: a taken one is removed and its download deleted, one only downloaded (the prefetch
+// fetches the quick model on a first visit, unasked) has its download deleted. Confirmed first, naming what is lost.
+// Kept in the ledger like the add, so a refusal is still there to read when the reader comes back.
+const discarding = useOperation<void>(`models/local/discard`);
+const discardFailure = computed(() => discarding.failure.value?.detail ?? discarding.failure.value?.title);
+interface Discard {
+    readonly model: string;
+    readonly label: string;
+    readonly size: string;
+    readonly entry: CapabilitySummary | undefined;
+}
+const asked = ref<Discard>();
+// Only a rung with something to give back has the press: an entry, or weights on disk.
+const discardable = (model: string): boolean => installedFor(model) !== undefined || optionOf(model)?.held === true;
+// The press's own name, said by its tooltip and to a screen reader: which of the two it does.
+const discardWords = (model: string): string =>
+    installedFor(model) === undefined
+        ? t(`connect.localModelLane.deleteDownload`)
+        : t(`connect.localModelLane.removeModel`, { label: optionOf(model)?.label ?? humanizeModelId(model) });
+const ask = (model: string): void => {
+    const option = optionOf(model);
+    asked.value = {
+        model,
+        label: option?.label ?? humanizeModelId(model),
+        size: option === undefined ? `` : gb(option.weightsBytes),
+        entry: installedFor(model),
+    };
+};
+const askWords = computed(() => {
+    const target = asked.value;
+    if (target === undefined) {
+        return undefined;
+    }
+    const { label, size } = target;
+    return target.entry === undefined
+        ? {
+              header: t(`connect.localModelLane.deleteHeader`, { label }),
+              body: t(`connect.localModelLane.deleteBody`, { size }),
+              confirm: t(`connect.localModelLane.delete`),
+          }
+        : {
+              header: t(`connect.localModelLane.removeHeader`, { label }),
+              body: t(`connect.localModelLane.removeBody`, { size }),
+              confirm: t(`connect.localModelLane.remove`),
+          };
+});
+const discard = async (): Promise<void> => {
+    const target = asked.value;
+    asked.value = undefined;
+    if (target === undefined || discarding.busy.value) {
+        return;
+    }
+    const { label } = target;
+    await discarding.run({
+        what: t(`connect.localModelLane.removing`, { label }),
+        tag: target.model,
+        done: () => t(`connect.localModelLane.removed`, { label }),
+        failed: t(`connect.localModelLane.couldntRemove`, { label }),
+        task: async () => {
+            if (target.entry !== undefined) {
+                await remove.mutateAsync(target.entry.id);
+            }
+            // A deleted quick model is a declined one: the page's prefetch must not fetch it again on the next visit.
+            if (target.model === LOCAL_MODEL_INSTANT.id) {
+                localPrefetchStopped.value = true;
+            }
+            await deleteLocalModelWeights(target.model);
         },
     });
 };
@@ -288,18 +363,33 @@ const rungs = computed(() => {
                         <template #control>
                             <!-- Taken: where it has got to, in place of a button whose second press would write a second entry and
                                  leave this one without the machine's single server slot. -->
-                            <StatusBadge v-if="rung.status" :variant="rung.status.variant" dot>
-                                <Icon v-if="rung.status.icon" :name="rung.status.icon" spin class="text-2xs" />{{ rung.status.label }}
-                            </StatusBadge>
-                            <Button
-                                tier="boring"
-                                v-else
-                                size="small"
-                                :label="rung.action"
-                                :loading="busy === rung.model"
-                                :disabled="busy !== undefined"
-                                @click="addModel(rung.model, rung.context)"
-                            />
+                            <div class="flex items-center gap-1">
+                                <StatusBadge v-if="rung.status" :variant="rung.status.variant" dot>
+                                    <Icon v-if="rung.status.icon" :name="rung.status.icon" spin class="text-2xs" />{{ rung.status.label }}
+                                </StatusBadge>
+                                <Button
+                                    tier="boring"
+                                    v-else
+                                    size="small"
+                                    :label="rung.action"
+                                    :loading="busy === rung.model"
+                                    :disabled="busy !== undefined || discarding.busy.value"
+                                    @click="addModel(rung.model, rung.context)"
+                                />
+                                <!-- The way back, beside the state it undoes: remove a taken model, or delete a download. -->
+                                <button
+                                    v-if="discardable(rung.model)"
+                                    type="button"
+                                    :class="ui.iconButton()"
+                                    :aria-label="discardWords(rung.model)"
+                                    v-tooltip.top="discardWords(rung.model)"
+                                    :disabled="busy !== undefined || discarding.busy.value"
+                                    :data-local-model-discard="rung.key"
+                                    @click="ask(rung.model)"
+                                >
+                                    <Icon :name="discarding.busy.value && discarding.operation.value?.tag === rung.model ? `spinner` : `trash`" :spin="discarding.busy.value && discarding.operation.value?.tag === rung.model" class="text-sm" />
+                                </button>
+                            </div>
                         </template>
                         <!-- Only what needs a second look: a warning, the daemon's own words, where to use it, a download running. -->
                         <template v-if="hasBelow(rung)" #below>
@@ -362,12 +452,24 @@ const rungs = computed(() => {
                     </Row>
 
                     <!-- The add's last log line, or why it failed: only while there is one, never an empty row. -->
-                    <RowNote v-if="note || failure" variant="block">
+                    <RowNote v-if="note || failure || discardFailure" variant="block">
                         <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
                         <p v-if="failure" class="text-2xs text-danger">{{ failure }}</p>
+                        <p v-if="discardFailure" class="text-2xs text-danger">{{ discardFailure }}</p>
                     </RowNote>
                 </div>
             </template>
         </Await>
+
+        <ConfirmDialog
+            :open="askWords !== undefined"
+            :header="askWords?.header ?? ``"
+            :description="askWords?.body"
+            :confirm-label="askWords?.confirm ?? ``"
+            confirm-icon="trash"
+            destructive
+            @cancel="asked = undefined"
+            @confirm="discard"
+        />
     </div>
 </template>

@@ -3,9 +3,10 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { LocalModelSource } from "./local-model.js";
-import { ensureWeights, verifyWeights, weightsTrusted } from "./local-model-weights.js";
+import { join,dirname } from "node:path";
+import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type LocalModelSource, localModelSource, localModelWeightsPath } from "./local-model.js";
+import { deleteLocalModelWeights, ensureWeights, verifyWeights, weightsTrusted } from "./local-model-weights.js";
 
 // A pinned download against a real loopback server and a real cache directory: the digest is checked on the bytes that
 // reached the disk, a resumed transfer included, and bytes that do not match are never left where a start would serve
@@ -105,4 +106,48 @@ test("an unpinned source has nothing to be held to and is served as fetched", as
     expect(await weightsTrusted(unpinned, destination)).toBe(true);
     await verifyWeights(unpinned, destination);
     expect(await readFile(destination)).toEqual(WEIGHTS);
+});
+
+// DELETING A DOWNLOAD: the gigabytes a model took are given back on request, the part a stopped transfer left included,
+// but never from under a connection that still runs on them.
+describe("deleting a curated model's weights", () => {
+    const model = LOCAL_MODEL_INSTANT.id;
+    const seeded = async (): Promise<{ root: string; files: string[] }> => {
+        const root = await mkdtemp(join(tmpdir(), "weights-root-"));
+        const source = localModelSource({ model, context: LOCAL_MODEL_WINDOW_DEFAULT })!;
+        const destination = localModelWeightsPath(root, source);
+        const record = join(dirname(dirname(destination)), "model-digests", `${source.file}.sha256`);
+        const files = [destination, `${destination}.part`, record];
+        for (const file of files) {
+            await mkdir(dirname(file), { recursive: true });
+            await writeFile(file, "bytes");
+        }
+        return { root, files };
+    };
+
+    test("takes the file, its part and its digest record out of the cache", async () => {
+        const { root, files } = await seeded();
+        expect(await deleteLocalModelWeights(root, model, [])).toBeUndefined();
+        for (const file of files) {
+            expect(await exists(file)).toBe(false);
+        }
+    });
+
+    test("refuses while a connection runs on those weights, and leaves them", async () => {
+        const { root, files } = await seeded();
+        const running = { id: "local", kind: "localmodel" as const, config: { model, context: "32768" as const } };
+        expect(await deleteLocalModelWeights(root, model, [running])).toBe("in-use");
+        expect(await exists(files[0]!)).toBe(true);
+    });
+
+    test("a connection on other weights does not hold these back", async () => {
+        const { root } = await seeded();
+        const other = LOCAL_MODELS.find((choice) => choice.id !== model)!.id;
+        expect(await deleteLocalModelWeights(root, model, [{ id: "other", kind: "localmodel", config: { model: other, context: "32768" as const } }])).toBeUndefined();
+    });
+
+    test("names only a curated model: a typed path is not this route's to delete", async () => {
+        const root = await mkdtemp(join(tmpdir(), "weights-root-"));
+        expect(await deleteLocalModelWeights(root, "someone/repo/../../escape.gguf", [])).toBe("unknown-model");
+    });
 });

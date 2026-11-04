@@ -154,4 +154,16 @@ export const endpointsContract = {
         })
         .input(z.object({ action: z.enum(["start", "stop"]) }))
         .output(LocalModelPrefetchSchema),
+    // The way back from a download: a model's weights take gigabytes, and neither removing its card nor stopping a
+    // prefetch frees them (both keep the file so the next start costs nothing).
+    localModelDelete: procedure
+        .route({
+            method: "POST",
+            path: "/endpoints/local-model/delete",
+            summary: "Delete a local model's downloaded weights",
+            description:
+                "Deletes one curated model's weights from the workspace cache, a half-finished download included, and stops a transfer still running on them. Refused while a local model connection still runs on those weights: remove it first. Answers with the machine's fit as it now stands, so the lane redraws without asking again.",
+        })
+        .input(z.object({ model: z.string().min(1) }))
+        .output(LocalModelFitSchema),
 };

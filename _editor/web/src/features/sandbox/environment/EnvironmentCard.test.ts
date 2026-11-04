@@ -246,6 +246,29 @@ it(`says why there is no rebuild here for a container nobody here started`, () =
     expect(el.querySelector(`#sandbox-rebuild`)?.textContent).toContain(`can't be rebuilt from here`);
 });
 
+// The privacy shield's readers arrive with no proposal, so the card had nothing to reject and offered only the build: a
+// rebuild nobody wanted read as the one way on. It names what arrives, and where a capability's block is turned off.
+it(`names what a waiting rebuild brings, and sends a capability's block to where it is turned off`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    slug.value = undefined;
+    contentsGroups.value = [
+        {
+            origin: `capability`,
+            label: `From your capabilities`,
+            items: [
+                { id: `capability:privacy`, name: `privacy`, origin: `capability`, source: `privacy`, originLabel: `the privacy shield`, state: `after-rebuild`, tools: [] },
+                { id: `capability:docker`, name: `docker`, origin: `capability`, source: `capability`, state: `active`, tools: [] },
+            ],
+        },
+    ];
+    const arriving = mount().querySelector(`[data-environment-arriving]`);
+    expect(arriving?.textContent).toContain(`Arrives with the rebuild:`);
+    expect(arriving?.textContent).toContain(`privacy`);
+    // Only what the rebuild brings: a block already built is not news.
+    expect(arriving?.textContent).not.toContain(`docker`);
+    expect(arriving?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/privacy-shield`);
+});
+
 // A Komodo-run sandbox was handed the `ic` one-liner, which had nowhere to run and would have taken the container from
 // Compose: under Compose the step is the compose file's edit, and no host command at all.
 it(`gives a sandbox Docker Compose runs the edit to its compose file instead of a host command`, () => {

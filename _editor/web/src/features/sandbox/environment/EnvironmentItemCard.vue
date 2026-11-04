@@ -4,7 +4,7 @@ import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environ
 import { BrandMark, Button, Code, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { attribution, stateOf } from "./environmentItem";
+import { attribution, stateOf, turnedOffAt } from "./environmentItem";
 import { environmentVisual } from "./environmentVisual";
 
 const t = useT();
@@ -41,8 +41,8 @@ const all = ref(false);
 const shown = computed(() => (all.value ? paragraphs.value.join(`\n\n`) : (paragraphs.value[0] ?? ``)));
 const more = computed(() => full && paragraphs.value.length > 1);
 
-// The capability's own card is where its cost is turned off: its blocks have no Remove of their own.
-const viaCapability = computed(() => full && operable && !removable && item.origin === `capability`);
+// Whatever pulled a capability's block in is where it is turned off: its blocks have no Remove of their own.
+const offAt = computed(() => (full && operable && !removable ? turnedOffAt(item) : undefined));
 </script>
 
 <template>
@@ -95,11 +95,9 @@ const viaCapability = computed(() => full && operable && !removable && item.orig
                 :label="t(`sandbox.environmentContents.whatInstalls`)"
                 :clamp-lines="10"
             />
-            <p v-if="viaCapability" class="text-2xs text-subtle">
-                {{ t(`sandbox.environmentContents.goesWithCapability`) }}
-                <RouterLink to="/capabilities" class="font-medium text-link hover:underline">{{
-                    t(`sandbox.environmentContents.capabilitiesLink`)
-                }}</RouterLink>
+            <p v-if="offAt" class="text-2xs text-subtle">
+                {{ t(`sandbox.environmentContents.${offAt.words}`) }}
+                <RouterLink :to="offAt.to" class="font-medium text-link hover:underline">{{ t(`sandbox.environmentContents.${offAt.link}`) }}</RouterLink>
             </p>
             <!-- Under what it installs: taking a tool out is read about before it is pressed. -->
             <Button

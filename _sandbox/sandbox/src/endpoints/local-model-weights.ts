@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { downloadFile } from "@huggingface/hub";
 import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing, errorMessage } from "@intentic/base/errors";
-import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LocalModelConfigSchema, localModelChoice } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { LocalModelPrefetch } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { opt } from "../opt.js";
 import { type LocalModelSource, localModelSource, localModelWeightsPath } from "./local-model.js";
@@ -289,4 +289,46 @@ export const localModelPrefetch = async (
         });
     }
     return localModelPrefetchStatus(root);
+};
+
+/** Why a delete was refused: a model the cache has no file for, or weights a connection still runs on. */
+export type WeightsDeleteRefusal = "unknown-model" | "in-use";
+
+// Takes one curated model's weights out of the cache: the file, the part a stopped transfer left, and the digest record
+// beside them. A transfer still running on them is stopped first and waited out, so its last chunk cannot write the part
+// file back after it was deleted. Refused while an entry runs on those weights, keyed on the resolved file as removing
+// an entry is: the server would lose its file from under it.
+export const deleteLocalModelWeights = async (
+    root: string,
+    model: string,
+    capabilities: readonly Capability[],
+): Promise<WeightsDeleteRefusal | undefined> => {
+    // Curated picks only: their file names are this codebase's, never a path somebody typed.
+    const source = localModelChoice(model) === undefined ? undefined : localModelSource({ model, context: LOCAL_MODEL_WINDOW_DEFAULT });
+    if (source === undefined) {
+        return "unknown-model";
+    }
+    const destination = localModelWeightsPath(root, source);
+    const inUse = capabilities.some((capability) => {
+        if (capability.kind !== "localmodel") {
+            return false;
+        }
+        const config = LocalModelConfigSchema.safeParse(capability.config);
+        const used = config.success ? localModelSource(config.data) : undefined;
+        return used !== undefined && localModelWeightsPath(root, used) === destination;
+    });
+    if (inUse) {
+        return "in-use";
+    }
+    const running = fetches.get(destination);
+    if (running !== undefined) {
+        running.abort.abort();
+        // allow(silent-catch): An aborted transfer rejects by design; what matters is that it has stopped writing.
+        await running.promise.catch(() => undefined);
+    }
+    await Promise.all([destination, stagedPath(destination), digestRecordPath(destination)].map((path) => rm(path, { force: true })));
+    if (model === LOCAL_MODEL_INSTANT.id) {
+        prefetchFailure = undefined;
+    }
+    return undefined;
 };

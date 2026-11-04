@@ -158,6 +158,8 @@ test("a capability's fragment is attributed to the capability that pulled it in"
     const fromCapability = items.filter((item) => item.origin === "capability");
     expect(fromCapability.length).toBeGreaterThan(0);
     expect(fromCapability.every((item) => item.originLabel === "postgres capability")).toBe(true);
+    // And which kind of thing it was, so the editor sends the reader to the place that turns it off.
+    expect(fromCapability.every((item) => item.source === "capability")).toBe(true);
     // A capability's cost goes with the capability, never through Remove.
     expect(fromCapability.some((item) => "block" in item)).toBe(false);
 });

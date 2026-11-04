@@ -33,6 +33,12 @@ const post = async (action: "start" | "stop"): Promise<void> => {
     setPrefetch(await sandboxRpc.endpoints.localModelPrefetch({ action }));
 };
 
+// Deletes a curated model's downloaded weights; the answer is the machine's fit as it now stands, so the lane redraws
+// on the press. Refused by the daemon while a connection still runs on those weights.
+export const deleteLocalModelWeights = async (model: string): Promise<void> => {
+    queryClient.setQueryData(rpcKey(`endpoints.localModelFit`), await sandboxRpc.endpoints.localModelDelete({ model }));
+};
+
 export const useLocalModelFit = (): LocalModelFitView => {
     const { query } = useSandboxQuery({
         ...rpcQuery(`endpoints.localModelFit`),

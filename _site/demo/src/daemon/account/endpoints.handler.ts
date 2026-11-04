@@ -19,6 +19,12 @@ export const endpointsDoors = {
     // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say
     // about — a transfer under way, with the Stop that declines it.
     localModelPrefetch: ({ action }) => demoStartPrefetch(action === `start`),
+    // Nothing is on disk here to delete: the press answers with the lane as it already was, the instant model's
+    // transfer stopped.
+    localModelDelete: () => {
+        demoStartPrefetch(false);
+        return demoLocalModelFit();
+    },
     // Ollama on the laptop, serving two models and not yet pointed at: the row the panel has the most to say about.
     hostServers: () => ({
         servers: [{ kind: `ollama`, label: `Ollama`, baseUrl: `http://host.docker.internal:11434/v1`, models: [`qwen3:32b`, `llama3.2:latest`] }],

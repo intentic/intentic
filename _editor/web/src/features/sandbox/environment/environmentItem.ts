@@ -25,3 +25,25 @@ export const leadVersion = (item: EnvironmentItem): string | undefined => item.t
 // Who pulled it in, only when that does not just repeat its own name ('workspace extension', not '<name> capability').
 export const attribution = (item: EnvironmentItem): string | undefined =>
     item.originLabel?.toLowerCase().startsWith(item.name.toLowerCase()) === false ? item.originLabel : undefined;
+
+/** Where a capability's row is turned off: the words before the link, the link's own, and where it goes. */
+export interface TurnedOffAt {
+    /** A `sandbox.environmentContents.*` key: the sentence the link ends. */
+    readonly words: `goesWithCapability` | `goesWithPrivacyShield` | `goesWithAccount`;
+    /** A `sandbox.environmentContents.*` key: the link itself. */
+    readonly link: `capabilitiesLink` | `privacyShieldLink` | `modelsLink`;
+    readonly to: string;
+}
+
+// A capability's row has no Remove of its own: it goes with whatever pulled it in, so the card sends the reader THERE.
+// Every row once said "Capabilities", where the privacy shield's readers have no card at all, so the owner who wanted
+// them gone was sent to a page that could not do it.
+const TURNED_OFF_AT = {
+    capability: { words: `goesWithCapability`, link: `capabilitiesLink`, to: `/capabilities` },
+    extension: { words: `goesWithCapability`, link: `capabilitiesLink`, to: `/capabilities` },
+    provider: { words: `goesWithAccount`, link: `modelsLink`, to: `/sandbox/models` },
+    privacy: { words: `goesWithPrivacyShield`, link: `privacyShieldLink`, to: `/sandbox/privacy-shield` },
+} as const satisfies Record<NonNullable<EnvironmentItem[`source`]>, TurnedOffAt>;
+
+export const turnedOffAt = (item: EnvironmentItem): TurnedOffAt | undefined =>
+    item.origin === `capability` ? TURNED_OFF_AT[item.source ?? `capability`] : undefined;

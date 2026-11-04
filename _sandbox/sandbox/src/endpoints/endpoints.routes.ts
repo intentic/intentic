@@ -4,7 +4,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { findHostServers } from "./host-servers.js";
 import { localModelFit } from "./local-model-fit.js";
-import { localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
+import { deleteLocalModelWeights, localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
 import { endpointConfigOf } from "./local-model.js";
 import { opt } from "../opt.js";
 
@@ -57,6 +57,17 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
         localModelPrefetch: i.localModelPrefetch.handler(async ({ input }) =>
             localModelPrefetch(services.workspace.root, input.action, await services.capabilities.list()),
         ),
+        // The capability list rides along for the same reason: weights a connection runs on are not this route's to take.
+        localModelDelete: i.localModelDelete.handler(async ({ input }) => {
+            const refused = await deleteLocalModelWeights(services.workspace.root, input.model, await services.capabilities.list());
+            if (refused === "unknown-model") {
+                throw new ORPCError("NOT_FOUND", { message: `${input.model} is not a model this sandbox downloads` });
+            }
+            if (refused === "in-use") {
+                throw new ORPCError("CONFLICT", { message: "A local model connection still runs on these weights: remove it first." });
+            }
+            return localModelFit(services.workspace.root, await localModelPrefetchStatus(services.workspace.root));
+        }),
         // Asked per call: a server started or stopped on the host is news nothing here is told.
         hostServers: i.hostServers.handler(async () => ({ servers: await findHostServers(await services.capabilities.list()) })),
     };

@@ -200,6 +200,10 @@ export const EnvironmentItemSchema = z.object({
     origin: z.enum(["custom", "capability", "base"]),
     // Which capability/extension/pack pulled it in, for an origin the reader did not choose item by item.
     originLabel: z.string().optional(),
+    // What kind of thing pulled a capability row in, so the reader is sent to the place that turns it off: a connected
+    // capability, a workspace extension, a connected AI account's runtime, or the privacy shield's readers (which no
+    // capability card holds). Absent on custom and base rows, and from a sandbox older than the distinction.
+    source: z.enum(["capability", "extension", "provider", "privacy"]).optional(),
     // Observed, not inferred:
     // active: the probe found it.
     // after-rebuild: the recipe has it, the container does not yet.

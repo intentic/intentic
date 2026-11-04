@@ -7,6 +7,7 @@ import { proposalPath } from "./environment.js";
 import { carriedBy, composeEnvironment, customPath, runningBuild } from "./overlay.js";
 import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import { listPacks } from "../image/packs.js";
+import { opt } from "../opt.js";
 import { privacyPackFragments } from "./privacy-pack.js";
 import { probeAll, probeModules, probePackages } from "./version-probe.js";
 
@@ -72,6 +73,7 @@ interface Candidate {
     readonly block: OverlayBlock;
     readonly origin: EnvironmentItem["origin"];
     readonly originLabel?: string;
+    readonly source?: EnvironmentItem["source"];
     readonly state?: EnvironmentItem["state"];
     // Only an agent-asked block is the owner's to take out; a capability's goes with its capability.
     readonly removable?: Pick<EnvironmentItem, "block">;
@@ -85,17 +87,17 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
     const candidates: Candidate[] = [];
     for (const capability of await services.capabilities.list()) {
         for (const fragment of await services.environmentSources.capabilityFragments(capability)) {
-            candidates.push({ block: named(fragment, capability.id), origin: "capability", originLabel: `${capability.id} capability` });
+            candidates.push({ block: named(fragment, capability.id), origin: "capability", originLabel: `${capability.id} capability`, source: "capability" });
         }
     }
     for (const fragment of await services.environmentSources.workspaceExtensionFragments()) {
-        candidates.push({ block: named(fragment, "extension"), origin: "capability", originLabel: "workspace extension" });
+        candidates.push({ block: named(fragment, "extension"), origin: "capability", originLabel: "workspace extension", source: "extension" });
     }
     for (const fragment of await services.environmentSources.providerPackFragments()) {
-        candidates.push({ block: named(fragment, "provider"), origin: "capability", originLabel: "a connected AI account" });
+        candidates.push({ block: named(fragment, "provider"), origin: "capability", originLabel: "a connected AI account", source: "provider" });
     }
     for (const fragment of await privacyPackFragments(services)) {
-        candidates.push({ block: named(fragment, "privacy"), origin: "capability", originLabel: "the privacy shield" });
+        candidates.push({ block: named(fragment, "privacy"), origin: "capability", originLabel: "the privacy shield", source: "privacy" });
     }
     return candidates;
 };
@@ -178,7 +180,8 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
             id: `${candidate.origin}:${candidate.block.name}`,
             name: displayName(candidate.block.name, tools),
             origin: candidate.origin,
-            ...(candidate.originLabel !== undefined ? { originLabel: candidate.originLabel } : {}),
+            ...opt("originLabel", candidate.originLabel),
+            ...opt("source", candidate.source),
             state,
             tools,
             ...(plumbing > 0 ? { extras: plumbing } : {}),

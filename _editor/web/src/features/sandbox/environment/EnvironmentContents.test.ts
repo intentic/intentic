@@ -205,6 +205,39 @@ it(`offers Remove on an agent-added block only, and points a capability's at Cap
     expect(card()).toBeNull();
 });
 
+// The privacy shield's readers are a capability's row that no capability card holds: Capabilities could not take them
+// out, so the owner who wanted them gone had nowhere to go. Each row is sent to whatever pulled it in.
+it(`points a capability's row at whatever turns it off: the privacy shield's readers at the shield, an account's at Models`, async () => {
+    const row = (id: string, source: EnvironmentItem[`source`], originLabel: string): EnvironmentItem => ({
+        id: `capability:${id}`,
+        name: id,
+        origin: `capability`,
+        originLabel,
+        source,
+        state: `after-rebuild`,
+        tools: [],
+    });
+    const el = mount(
+        [
+            {
+                origin: `capability`,
+                label: `From your capabilities`,
+                items: [row(`privacy`, `privacy`, `the privacy shield`), row(`codex`, `provider`, `a connected AI account`)],
+            },
+        ],
+        true,
+    );
+    chip(el, `capability:privacy`).click();
+    await nextTick();
+    expect(buttonNamed(card()!, `Remove from environment`)).toBeUndefined();
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/privacy-shield`);
+    expect(card()?.textContent).toContain(`Privacy shield ›`);
+
+    chip(el, `capability:codex`).click();
+    await nextTick();
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+});
+
 it(`takes several out at once once asked to select, ticking only what can go`, async () => {
     expect(buttonNamed(mount(GROUPS, false), `Select`)).toBeUndefined();
     app?.unmount();

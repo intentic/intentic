@@ -14,11 +14,15 @@ const WORK = `unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf`;
 
 const capabilities = ref<CapabilitySummary[]>([]);
 const add = jest.fn(async () => undefined);
-jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add }) }));
+const remove = { mutateAsync: jest.fn(async (_id: string) => undefined) };
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add, remove }) }));
+const deleteLocalModelWeights = jest.fn(async (_model: string) => undefined);
+jest.mock(`./useLocalModelFit`, () => ({ deleteLocalModelWeights }));
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: LocalModelLane } = await import("./LocalModelLane.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
+const { localPrefetchStopped } = await import("./localPrefetch");
 
 // The add is kept in the operations ledger, which is module state: a run left there would follow one test into the next.
 afterEach(() => forgetOperations());
@@ -146,4 +150,75 @@ it(`lists what an offer costs as facts`, () => {
     expect(html).toContain(`${localModelGb(1_280_835_840)} download`);
     expect(html).toContain(`uses about ${localModelGb(6_000_000_000)} while running`);
     expect(html).toContain(`64k context`);
+});
+
+// THE WAY BACK. A model costs gigabytes, and the lane once had no press that gave them back: a taken rung only reported,
+// and the prefetch fetched the quick model on a first visit with nothing to undo it once it had landed.
+describe(`taking a model back`, () => {
+    const mounted = (fit: LocalModelFitResponse, installed: CapabilitySummary[]): HTMLElement => {
+        capabilities.value = installed;
+        const el = document.createElement(`div`);
+        document.body.append(el);
+        const app = createApp({ render: () => h(LocalModelLane, { fit }) });
+        app.use(PrimeVue);
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, {});
+        app.mount(el);
+        return el;
+    };
+    const discard = (el: HTMLElement, key: string): HTMLButtonElement | null =>
+        el.querySelector<HTMLButtonElement>(`[data-local-model-discard="${key}"]`);
+    // The dialog is teleported to <body>, off the lane's own element.
+    const confirmNamed = (name: string): HTMLButtonElement | undefined =>
+        [...document.body.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === name);
+    const settle = async (): Promise<void> => {
+        for (let i = 0; i < 5; i += 1) {
+            await nextTick();
+            await Promise.resolve();
+        }
+    };
+
+    afterEach(() => {
+        document.body.innerHTML = ``;
+        remove.mutateAsync.mockClear();
+        deleteLocalModelWeights.mockClear();
+        localPrefetchStopped.value = false;
+    });
+
+    it(`offers it only where there is something to give back: an entry, or weights on disk`, () => {
+        const nothingHeld = mounted({ ...FIT, options: FIT.options.map((entry) => ({ ...entry, held: false })) }, []);
+        expect(discard(nothingHeld, `instant`)).toBeNull();
+        expect(discard(nothingHeld, `best`)).toBeNull();
+        document.body.innerHTML = ``;
+
+        const el = mounted(FIT, [localModel(`localmodel`, WORK, { state: `active`, detail: `serving` })]);
+        expect(discard(el, `best`)?.getAttribute(`aria-label`)).toBe(`Remove Qwen3.8 27B`);
+        expect(discard(el, `instant`)?.getAttribute(`aria-label`)).toBe(`Delete the download`);
+    });
+
+    it(`removes a taken model and deletes its weights, once confirmed`, async () => {
+        const el = mounted(FIT, [localModel(`localmodel-27b`, WORK, { state: `active`, detail: `serving` })]);
+        discard(el, `best`)!.click();
+        await settle();
+        expect(document.body.textContent).toContain(`Remove Qwen3.8 27B?`);
+        expect(remove.mutateAsync).not.toHaveBeenCalled();
+        confirmNamed(`Remove`)!.click();
+        await settle();
+        expect(remove.mutateAsync).toHaveBeenCalledWith(`localmodel-27b`);
+        expect(deleteLocalModelWeights).toHaveBeenCalledWith(WORK);
+        // Not the quick model: the prefetch stays as it was.
+        expect(localPrefetchStopped.value).toBe(false);
+    });
+
+    it(`deletes a download nobody took, and remembers the quick model as declined so it is not fetched again`, async () => {
+        const el = mounted(FIT, []);
+        discard(el, `instant`)!.click();
+        await settle();
+        expect(document.body.textContent).toContain(`Delete the downloaded Qwen3.5 2B?`);
+        confirmNamed(`Delete`)!.click();
+        await settle();
+        expect(remove.mutateAsync).not.toHaveBeenCalled();
+        expect(deleteLocalModelWeights).toHaveBeenCalledWith(QUICK);
+        expect(localPrefetchStopped.value).toBe(true);
+    });
 });

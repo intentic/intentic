@@ -15,6 +15,7 @@ import HostedRebuild from "./rebuild/HostedRebuild.vue";
 import ComposeRebuild from "./rebuild/ComposeRebuild.vue";
 import { rebuildRouteOf } from "./rebuild/rebuildRoute";
 import { REBUILD_ANCHOR } from "./rebuildAnchor";
+import { turnedOffAt } from "./environmentItem";
 import HostRecreate from "../../capabilities/connect/hosts/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
 import RuntimeInstalls from "./RuntimeInstalls.vue";
@@ -103,6 +104,16 @@ const proposalSummary = computed(() =>
     proposedItems.value.length > 0
         ? t(`sandbox.environmentCard.proposalAdds`, { names: proposedItems.value.map((item) => item.name).join(`, `) })
         : t(`sandbox.environmentCard.proposalChanges`),
+);
+
+// What a rebuild with nothing left to approve would bring, named above its button with where each is turned off: a
+// capability's block (the privacy shield's readers above all) arrives with no proposal, so there is nothing to reject,
+// and the card once offered only the rebuild, as if building it were the one way on.
+const arriving = computed(() =>
+    groups.value
+        .flatMap((group) => group.items)
+        .filter((item) => item.state === `after-rebuild`)
+        .map((item) => ({ item, offAt: canOperate.value ? turnedOffAt(item) : undefined })),
 );
 
 // Each item's state (awaiting approval, arrives after rebuild) derives from the recipe, so a decision made here, or a
@@ -289,6 +300,19 @@ watch(
                 <!-- Both waiting: deciding first folds the proposal into the one rebuild, so the order is said, and the
                      rebuild below drops a tier. -->
                 <p v-if="proposal && pending" class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.decideFirst`) }}</p>
+                <!-- What the rebuild brings, and for a capability's block the place that takes it back out, so not building
+                     it is a choice the card offers too; an agent's block has its Remove on its chip below. -->
+                <p v-else-if="pending && arriving.length > 0" class="text-xs text-content" data-environment-arriving>
+                    {{ t(`sandbox.environmentCard.arrivesWithRebuild`) }}
+                    <template v-for="({ item, offAt }, index) in arriving" :key="item.id">
+                        <span class="font-medium">{{ item.name }}</span>
+                        <template v-if="offAt">
+                            ·
+                            <RouterLink :to="offAt.to" class="text-link hover:underline">{{ t(`sandbox.environmentContents.${offAt.link}`) }}</RouterLink>
+                        </template>
+                        <template v-if="index < arriving.length - 1">, </template>
+                    </template>
+                </p>
                 <!-- The platform builds it, for the sandbox's owner alone (sandbox.routes.ts `hostedRebuild`): a maintainer, who
                      may approve the change above, still sees the build with no button rather than one answered "sandbox not found". -->
                 <HostedRebuild
