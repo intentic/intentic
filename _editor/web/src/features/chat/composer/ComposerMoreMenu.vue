@@ -23,7 +23,10 @@ const emit = defineEmits<{ pick: [control: ComposerControl] }>();
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="flex min-w-0 items-baseline gap-2">
                     <span class="truncate text-sm text-content md:text-xs">{{ row.label }}</span>
-                    <span class="ml-auto shrink-0 text-2xs text-subtle">{{ row.value }}</span>
+                    <span class="ml-auto flex shrink-0 items-center gap-1 text-2xs text-subtle">
+                        <Icon v-if="row.locked" name="lock" class="text-[0.6rem]" aria-hidden="true" />
+                        {{ row.value }}
+                    </span>
                 </span>
                 <span class="text-2xs text-subtle">{{ row.description }}</span>
             </span>

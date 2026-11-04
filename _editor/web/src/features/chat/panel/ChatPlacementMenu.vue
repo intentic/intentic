@@ -5,7 +5,8 @@ import type { Conversation } from "../../../models/conversations/session/convers
 import { placeConversation } from "./pane/composerControls";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { useRunners } from "../../../models/sandbox/devices/useRunners";
-import { SectionHeader } from "@intentic/ui";
+import { Button, SectionHeader } from "@intentic/ui";
+import { startAgent } from "../../../models/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
 import { useFleetAdvice } from "./fleet/fleetAdvice";
 import { draftFleet } from "./fleet/fleetPlacement";
@@ -21,6 +22,10 @@ import { loadLine, unfitWords } from "./fleet/fleetWords";
 // spells out each omission); provider and model still cross. Offered only before the first turn, since placement
 // latches with the branch then (Conversation.registered) and that box is the only one that can continue it.
 // Offline runners and unreachable sandboxes are listed but not selectable.
+//
+// Once it has latched the menu stops being a list of choices: rows that cannot be picked drew people into pressing each
+// in turn before finding the one line that said why. It reads instead as where the chat runs, locked, the reason, and
+// the one way forward (a new agent, whose own menu is open again).
 
 const t = useT();
 
@@ -74,15 +79,29 @@ const boxDetail = (box: BoxFleet): string =>
           ? t(`chat.chatPlacementMenu.boxReading`)
           : t(`chat.chatPlacementMenu.boxAsleep`);
 
-// Named from the roster, not from anything stored on the conversation, so a later rename stays true.
-const placedAt = computed(() => {
+// Where a settled conversation runs, drawn as the one row it can be: named from the roster, not from anything stored on
+// the conversation, so a later rename stays true.
+const placedRow = computed(() => {
     if (picked.value !== undefined) {
-        return t(`chat.chatPlacementMenu.placedInBox`, { name: boxNameOf.value.get(picked.value) ?? t(`chat.chatPlacementMenu.anotherSandbox`) });
+        const box = otherBoxes.value.find((candidate) => candidate.sandbox.id === picked.value);
+        return {
+            icon: `boxes` as const,
+            name: boxNameOf.value.get(picked.value) ?? t(`chat.chatPlacementMenu.anotherSandbox`),
+            line: box === undefined ? undefined : boxDetail(box),
+        };
     }
-    return pickedRunner.value === undefined
-        ? t(`chat.chatPlacementMenu.placedHere`)
-        : t(`chat.chatPlacementMenu.placedOnRunner`, { name: pickedRunner.value });
+    if (pickedRunner.value !== undefined) {
+        const runner = runners.value.find((candidate) => candidate.id === pickedRunner.value);
+        return { icon: `desktop` as const, name: pickedRunner.value, line: runner === undefined ? undefined : detail(runner) };
+    }
+    return { icon: `box` as const, name: t(`shared.thisSandbox`), line: hereLine.value };
 });
+
+// The way to work somewhere else: a fresh draft, whose own menu offers every place again.
+const startElsewhere = (): void => {
+    startAgent();
+    emit(`selected`);
+};
 
 // A pick here is the person's, which no automatic placement moves again (fleetAdvice.ts autoPlacement).
 const place = (at: { box?: string; runner?: string }): void => {
@@ -94,12 +113,25 @@ const place = (at: { box?: string; runner?: string }): void => {
 </script>
 
 <template>
-    <div class="flex flex-col p-1">
+    <div v-if="settled" class="flex flex-col p-1">
+        <div class="ui-row-select-on flex items-start gap-2 rounded-lg px-2.5 py-1.5 max-md:py-3">
+            <Icon :name="placedRow.icon" class="text-xs text-accent" />
+            <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-sm text-content md:text-xs">{{ placedRow.name }}</span>
+                <span v-if="placedRow.line !== undefined" class="text-2xs text-subtle">{{ placedRow.line }}</span>
+            </span>
+            <Icon name="lock" class="shrink-0 text-2xs text-subtle" :aria-label="t(`chat.chatPlacementMenu.fixedAria`)" />
+        </div>
+        <p class="px-2.5 pb-2 pt-2 text-2xs text-subtle">{{ t(`chat.chatPlacementMenu.fixedNote`) }}</p>
+        <Button size="small" tier="accent" :label="t(`chat.words.newAgent`)" class="mx-2.5 mb-1.5 self-start" @click="startElsewhere">
+            <template #icon><Icon name="plus" /></template>
+        </Button>
+    </div>
+    <div v-else class="flex flex-col p-1">
         <button
             type="button"
             class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             :class="{ 'ui-row-select-on': picked === undefined && pickedRunner === undefined }"
-            :disabled="settled"
             @click="place({})"
         >
             <Icon
@@ -118,7 +150,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             type="button"
             class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             :class="{ 'ui-row-select-on': pickedRunner === runner.id }"
-            :disabled="settled || !runner.online"
+            :disabled="!runner.online"
             @click="place({ runner: runner.id })"
         >
             <Icon name="desktop" class="text-xs" :class="pickedRunner === runner.id ? 'text-accent' : 'text-subtle'" />
@@ -126,7 +158,7 @@ const place = (at: { box?: string; runner?: string }): void => {
                 <span class="flex items-center gap-1.5">
                     <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
                     <!-- The machine the fleet would start this chat on, said where the person is already choosing. -->
-                    <span v-if="suggested === runner.id && !settled" class="rounded-full bg-primary-500/15 px-1.5 text-2xs font-medium text-link">{{
+                    <span v-if="suggested === runner.id" class="rounded-full bg-primary-500/15 px-1.5 text-2xs font-medium text-link">{{
                         t(`chat.fleetAdvice.suggested`)
                     }}</span>
                 </span>
@@ -143,7 +175,7 @@ const place = (at: { box?: string; runner?: string }): void => {
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': picked === box.sandbox.id }"
-                :disabled="settled || !answering(box)"
+                :disabled="!answering(box)"
                 @click="place({ box: box.sandbox.id })"
             >
                 <Icon name="boxes" class="text-xs" :class="picked === box.sandbox.id ? 'text-accent' : 'text-subtle'" />
@@ -153,16 +185,13 @@ const place = (at: { box?: string; runner?: string }): void => {
                 </span>
             </button>
             <!-- Said once under the section, not per row: the whole difference from this sandbox and its runners is what a remote turn is served by. -->
-            <p v-if="!settled" class="px-2.5 py-1 text-2xs text-subtle">
+            <p class="px-2.5 py-1 text-2xs text-subtle">
                 {{ t(`chat.chatPlacementMenu.turnRunsStreamsBack`) }}
             </p>
         </template>
 
         <p v-if="runners.length === 0 && otherBoxes.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">
             {{ t(`chat.chatPlacementMenu.noRunnersYetAdd`) }}
-        </p>
-        <p v-else-if="settled" class="px-2.5 py-1.5 text-2xs text-subtle">
-            {{ t(`chat.chatPlacementMenu.conversationAlreadyRunsStart`, { placedAt }) }}
         </p>
     </div>
 </template>

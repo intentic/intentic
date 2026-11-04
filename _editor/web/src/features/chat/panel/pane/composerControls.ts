@@ -141,6 +141,7 @@ export const useComposerControls = (host: ControlsHost) => {
         startingMode: startingMode(conversation().isolated.value),
         placementOffered: placementShown.value,
         placed: placedElsewhere(conversation()),
+        placementFixed: conversation().registered.value,
         ...host.startFrom.situation.value,
         persona: conversation().selection.actsAs.value,
         runThrough: runThrough.state.value,

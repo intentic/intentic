@@ -32,6 +32,11 @@ export interface ComposerControlSituation {
     /** Running somewhere other than this sandbox: on one of its runners, or in another box. */
     readonly placed: boolean;
     /**
+     * Where it runs was fixed by its first message (Conversation.registered): the row still opens, to say so and offer a
+     * new agent, but it reads locked before it is pressed so nobody hunts for a pick that cannot take. Absent reads as open.
+     */
+    readonly placementFixed?: boolean;
+    /**
      * Where a new agent starts is still this chat's to choose: a draft nothing has been sent from, on a private copy in
      * this sandbox (composerStartFrom.ts). Absent reads as not offered.
      */
@@ -70,6 +75,8 @@ export interface ComposerMoreRow {
     readonly value: string;
     /** One line, and it has to stay one line: see {@link DESCRIPTION_LIMIT}. */
     readonly description: string;
+    /** The value can no longer be changed here: drawn with a lock, and its description says why. */
+    readonly locked?: true;
 }
 
 // Kept under the ~45 characters that fit a w-80 panel at text-2xs, so descriptions stay glanceable.
@@ -137,13 +144,16 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
             };
         }
         // Always this sandbox: a chat placed elsewhere has left the menu for a chip that names where it went.
+        // Fixed once the first message went: locked, and the line under it says so before anyone presses it.
         case `placement`:
             return {
                 key: control,
                 icon: `desktop`,
                 label: t(`chat.words.whereRuns`),
                 value: t(`shared.thisSandbox`),
-                description: t(`chat.composerMore.whereRunsNote`),
+                ...(situation.placementFixed === true
+                    ? { description: t(`chat.composerMore.whereRunsFixedNote`), locked: true as const }
+                    : { description: t(`chat.composerMore.whereRunsNote`) }),
             };
         // Always the main line here: a start from a branch or a copy has left the menu for a chip that names it.
         case `startFrom`:

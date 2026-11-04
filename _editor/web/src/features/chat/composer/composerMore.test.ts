@@ -166,3 +166,14 @@ it(`keeps the developer's menu exactly as it was`, () => {
     expect(keys(chat({ plain: false }))).toEqual(keys(PLAIN));
     expect(keys(PLAIN)).not.toContain(`model`);
 });
+
+// A chat whose first message has gone runs where it started: the row still opens (to say why and offer a new agent),
+// but it reads locked and says so before it is pressed, so nobody presses through every place hunting for one that takes.
+it(`reads placement as locked once the first message fixed it`, () => {
+    const open = overflowRows(PLAIN).find((row) => row.key === `placement`);
+    const fixed = overflowRows(chat({ placementFixed: true })).find((row) => row.key === `placement`);
+    expect(open?.locked).toBeUndefined();
+    expect(fixed?.locked).toBe(true);
+    expect(fixed?.description).not.toBe(open?.description);
+    expect(fixed?.description.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+});
