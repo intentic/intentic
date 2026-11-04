@@ -478,7 +478,7 @@ useGettingStarted();
             <!-- A first run's checklist, until it is done or put away, and what the sandbox needs or is worth knowing for as
                  long as any of that is left (gettingStarted/). -->
             <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's): Home holds their pages. -->
-            <RailProcesses v-if="!isGuest" />
+            <RailProcesses v-if="!isGuest" sandbox-rail />
             <GettingStartedRing v-if="!isGuest" />
             <button
                 v-if="!isGuest"

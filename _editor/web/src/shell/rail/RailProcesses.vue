@@ -14,20 +14,30 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { ADD_SANDBOX_HOME_PATH } from "../../models/sandbox/addSandbox";
 import { useFaceProcesses } from "../../models/processes/faceProcesses";
 import { processAskedBy, processOnHome } from "../../models/processes/processAddress";
-import { foldedOnSandbox, type ProcessTile, processTilesOf, settledSetups } from "../../models/processes/processTiles";
+import { doneElsewhere, foldedOnSandbox, type ProcessTile, processTilesOf, type RailSandbox, settledSetups } from "../../models/processes/processTiles";
+import { useServingSlug } from "../../models/sandbox/environment/servingSlug";
 import ProcessTiles from "../../parts/processes/ProcessTiles.vue";
 
-const { tiled = new Set<string>() } = defineProps<{ tiled?: ReadonlySet<string> }>();
+// `sandboxRail`: drawn on a sandbox's own rail rather than Home's, so another sandbox's finished run is not its news.
+const { tiled = new Set<string>(), sandboxRail = false } = defineProps<{ tiled?: ReadonlySet<string>; sandboxRail?: boolean }>();
 const route = useRoute();
 const router = useRouter();
 const sandbox = useSandbox();
 const { list, act } = useFaceProcesses();
 const making = computed(() => newSandbox.value?.here.add.created.value?.id);
+// Fixed for the rail's life (each shell mounts its own), so Home's rail never reads a sandbox's /environment.
+const servingSlug = sandboxRail ? useServingSlug() : undefined;
+const here = computed((): RailSandbox | undefined =>
+    servingSlug === undefined ? undefined : { id: sandbox.activeSandboxId.value, slug: servingSlug.value },
+);
 const tiles = computed(() =>
     processTilesOf(
         list.value,
         (report) =>
-            report.origin === `workspace` || (report.sandboxId !== undefined && report.sandboxId === making.value) || foldedOnSandbox(report, tiled),
+            report.origin === `workspace` ||
+            (report.sandboxId !== undefined && report.sandboxId === making.value) ||
+            foldedOnSandbox(report, tiled) ||
+            (here.value !== undefined && doneElsewhere(report, here.value)),
     ),
 );
 // Each finished setup put away once: the app's list answers the press a moment later, and is not pressed again meanwhile.

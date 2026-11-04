@@ -110,6 +110,29 @@ export const settledSetups = (reports: readonly ProcessReport[], tiled: Readonly
             (tiled.has(report.sandboxId) || report.sandboxId === active),
     );
 
+/** The sandbox whose own rail is drawn: its platform id, and the slug `ic` knows it by on its machine. */
+export interface RailSandbox {
+    readonly id: string | undefined;
+    readonly slug: string | undefined;
+}
+
+/**
+ * Whether a run that finished well is news about some other sandbox than the one whose rail this is (the owner's,
+ * 2026-11-04: an update that worked for one sandbox showed its check on every other sandbox's rail too). Home's rail
+ * keeps it, and so does that sandbox's own; another sandbox's rail has nothing to say about it. A run that failed or
+ * still works is not this: the rail is how it is reached from anywhere. A recreate (an update, a rollback, a reshape)
+ * names its sandbox only by its slug (desktop-app's device/sandboxes.ts), so an unknown slug is never a match.
+ */
+export const doneElsewhere = (report: ProcessReport, here: RailSandbox): boolean => {
+    if (report.state !== `done`) {
+        return false;
+    }
+    if (report.sandboxId !== undefined) {
+        return report.sandboxId !== here.id;
+    }
+    return report.kind === `recreate` && (here.slug === undefined || report.subject !== here.slug);
+};
+
 /** The tiles a face's rail wears for `reports`, leaving out what the face already draws a tile of its own for. */
 export const processTilesOf = (reports: readonly ProcessReport[], drawnElsewhere: (report: ProcessReport) => boolean = () => false): readonly ProcessTile[] =>
     reports.filter((report) => processShown(report) && !drawnElsewhere(report)).map(processTileOf);

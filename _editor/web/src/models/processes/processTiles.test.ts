@@ -1,5 +1,5 @@
 import type { ProcessReport } from "../../app/environments/processes/processReport";
-import { foldedOnSandbox, mergeProcesses, processBadgeOf, processTileOf, processTilesOf, sandboxRunOf, settledSetups } from "./processTiles";
+import { doneElsewhere, foldedOnSandbox, mergeProcesses, processBadgeOf, processTileOf, processTilesOf, sandboxRunOf, settledSetups } from "./processTiles";
 
 const run = (over: Partial<ProcessReport> = {}): ProcessReport => ({
     id: `sandbox-setup:sbx_7`,
@@ -81,5 +81,29 @@ describe(`one sandbox, one tile`, () => {
         expect(settledSetups([done, run({ id: `sandbox-setup:sbx_9`, sandboxId: `sbx_9`, state: `done` })], tiled, undefined)).toEqual([done]);
         expect(settledSetups([done], new Set(), `sbx_7`)).toEqual([done]);
         expect(settledSetups([run()], tiled, undefined)).toEqual([]);
+    });
+});
+
+describe(`a sandbox's own rail`, () => {
+    const here = { id: `sbx_7`, slug: `shop` };
+    const update = (over: Partial<ProcessReport> = {}): ProcessReport =>
+        run({ id: `recreate:shop`, kind: `recreate`, state: `done`, subject: `shop`, sandboxId: undefined, ...over });
+
+    it(`keeps the news of its own update, and drops another sandbox's`, () => {
+        expect(doneElsewhere(update(), here)).toBe(false);
+        expect(doneElsewhere(update({ id: `recreate:sandbox-82789f4106b4`, subject: `sandbox-82789f4106b4` }), here)).toBe(true);
+        // A hosted sandbox, or one whose slug is not known yet: no recreate on this computer is its own.
+        expect(doneElsewhere(update(), { id: `sbx_7`, slug: undefined })).toBe(true);
+    });
+
+    it(`drops another sandbox's finished run by its id, and keeps its own`, () => {
+        expect(doneElsewhere(run({ state: `done` }), here)).toBe(false);
+        expect(doneElsewhere(run({ state: `done`, sandboxId: `sbx_8` }), here)).toBe(true);
+    });
+
+    it(`keeps what still works or failed, and what is about no sandbox`, () => {
+        expect(doneElsewhere(update({ state: `running`, subject: `other` }), here)).toBe(false);
+        expect(doneElsewhere(update({ state: `failed`, subject: `other` }), here)).toBe(false);
+        expect(doneElsewhere(run({ id: `pc-setup:this`, kind: `pc-setup`, state: `done`, subject: undefined, sandboxId: undefined }), here)).toBe(false);
     });
 });
