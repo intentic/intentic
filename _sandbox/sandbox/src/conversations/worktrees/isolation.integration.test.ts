@@ -365,18 +365,44 @@ test("every name the shared set carries is discovered as a mirror, and nothing e
     );
 });
 
+// The main tree's nested repo `intent` and, when `linked`, the conversation's own checkout of it: a `.git` pointer to an
+// admin dir of that repository, as `worktree add` leaves one.
+const nestedRepo = async (root: string, worktree: string, linked: boolean): Promise<void> => {
+    await mkdir(join(root, "node_modules"), { recursive: true });
+    await mkdir(join(root, "intent", ".git", "worktrees", "c1"), { recursive: true });
+    await writeFile(join(root, "intent", ".git", "worktrees", "c1", "commondir"), "../..\n");
+    await mkdir(join(root, "intent", "node_modules"), { recursive: true });
+    if (linked) {
+        await mkdir(join(worktree, "intent"), { recursive: true });
+        await writeFile(join(worktree, "intent", ".git"), `gitdir: ${join(root, "intent", ".git", "worktrees", "c1")}\n`);
+    }
+};
+
 test("a nested repo's dirs belong to its own worktree, not the parent's", async () => {
     const root = await mkdtemp(join(tmpdir(), "isolation-"));
     tempDirs.push(root);
-    await mkdir(join(root, "node_modules"), { recursive: true });
-    await mkdir(join(root, "intent", ".git"), { recursive: true });
-    await mkdir(join(root, "intent", "node_modules"), { recursive: true });
-
     const worktree = await checkout();
+    await nestedRepo(root, worktree, true);
+
     // The plan spans the whole workspace; a nested worktree wants both its own dirs and the parent's.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["node_modules", "intent/node_modules"]);
     // The symlink mirror runs per repo; including nested dirs here would plant the link inside the parent's checkout.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: false })).toEqual(["node_modules"]);
+});
+
+// A repo the conversation does not carry is a hole in its root checkout. A mount there is a directory the turn can
+// neither remove nor clone over, and mounts main's installs into a clone the agent made for itself.
+test("a nested repo the conversation does not carry gets no mounts in the hole its checkout leaves", async () => {
+    const root = await mkdtemp(join(tmpdir(), "isolation-"));
+    tempDirs.push(root);
+    const hole = await checkout();
+    await nestedRepo(root, hole, false);
+    expect(await mirroredDirs(root, hole, { intoNestedRepos: true })).toEqual(["node_modules"]);
+
+    // The agent's own clone in that hole is another repository, whatever its name.
+    const cloned = await checkout();
+    await mkdir(join(cloned, "intent", ".git"), { recursive: true });
+    expect(await mirroredDirs(root, cloned, { intoNestedRepos: true })).toEqual(["node_modules"]);
 });
 
 // Verified against a real overlay: emptying a mirror root's lowerdir is safe, replacing it is fatal and unrecoverable

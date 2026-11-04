@@ -9,6 +9,7 @@ import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
+import { repositoryOf } from "../../store/git/git-dir.js";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
@@ -252,12 +253,22 @@ const mirrorable = async (path: string): Promise<boolean> => {
     return entry.isDirectory() && (await readdir(path)).length === 0;
 };
 
+// Whether the worktree holds its own checkout of the nested repo at `rel`. One it does not carry is a hole in its root
+// checkout, and a clone the agent made there is another repository: a mount in either is a directory the turn can
+// neither remove nor clone over, holding installs for source that is not there.
+const carriesNested = async (main: string, worktree: string, rel: string): Promise<boolean> => {
+    const own = await repositoryOf(join(worktree, rel));
+    return own !== undefined && own === (await repositoryOf(join(main, rel)));
+};
+
 // One discovery shared by overlays and symlinks, so a dir mirrored by one form and not the other never means different
-// files. `intoNestedRepos` differs: the plan wants every repo's dirs, the symlink mirror stops at a nested `.git`.
+// files. `intoNestedRepos` differs: the plan wants the dirs of every repo the worktree carries, the symlink mirror stops
+// at a nested `.git`.
 export const mirroredDirs = async (main: string, worktree: string, { intoNestedRepos }: { readonly intoNestedRepos: boolean }): Promise<string[]> => {
     const found: string[] = [];
     await walkDirs(main, { maxDepth: MAX_LINK_DEPTH }, async (dir, entries, subdirs) => {
-        if (!intoNestedRepos && dir.rel !== "" && entries.some((entry) => entry.name === ".git")) {
+        const nested = dir.rel !== "" && entries.some((entry) => entry.name === ".git");
+        if (nested && !(intoNestedRepos && (await carriesNested(main, worktree, dir.rel)))) {
             return [];
         }
         await Promise.all(

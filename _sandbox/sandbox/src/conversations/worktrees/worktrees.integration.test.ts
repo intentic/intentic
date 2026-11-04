@@ -1013,3 +1013,64 @@ test("a local daemon leaves a repo that joined after boot with its in-tree git d
 
     expect(lstatSync(join(later, ".git")).isDirectory()).toBe(true);
 });
+
+// A conversation that cloned a repository into its own checkout before the workspace had it: when the workspace clones
+// it too, the repo joins the conversation over that clone instead of failing every turn on `already exists`.
+test("a repo the conversation cloned for itself joins over that clone, its files carried and its history kept aside", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    // The turn's own clone, standing in the hole the root checkout leaves for a repo of that name.
+    const own = join(created.cwd, "later");
+    await mkdir(own, { recursive: true });
+    await sh(own, "init", "-q", "-b", "main");
+    await writeFile(join(own, "a.txt"), "the agent's edit\n");
+    await writeFile(join(own, "new.txt"), "the agent's new file\n");
+    await sh(own, "add", "-A");
+    await sh(own, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "agent's own commit");
+    const later = join(work, "later");
+    await gitInit(later, repoGitDir(historyRoot, "later"));
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
+
+    const again = await worktrees.ensure("c1", created.repos);
+
+    expect(again.repos.map(({ repo }) => repo)).toContain("later");
+    expect(await sh(own, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/c1");
+    expect(await sh(own, "status", "--porcelain")).toBe("M a.txt\n?? new.txt");
+    // The clone's own commits are not thrown away: its git dir waits in the trash.
+    const kept = (await readdir(join(historyRoot, "trash"))).filter((name) => name.startsWith("later-c1-git-"));
+    expect(kept).toHaveLength(1);
+    expect(await sh(join(historyRoot, "trash", kept[0] ?? ""), "log", "--format=%s", "-1")).toBe("agent's own commit");
+});
+
+test("a checkout git refuses over the conversation's own clone leaves that clone exactly as it was", async () => {
+    let refuse = true;
+    const git: GitRunner = async (dir, args) => {
+        if (refuse && args[0] === "worktree" && args[1] === "add" && dir.endsWith("/later")) {
+            throw Object.assign(new Error("refused"), { code: 128 });
+        }
+        return defaultGit(dir, args);
+    };
+    const { work, historyRoot, worktrees } = await setup(undefined, git);
+    const created = await worktrees.ensure("c1", []);
+    const own = join(created.cwd, "later");
+    await mkdir(own, { recursive: true });
+    await sh(own, "init", "-q", "-b", "main");
+    await writeFile(join(own, "a.txt"), "the agent's edit\n");
+    await sh(own, "add", "-A");
+    await sh(own, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "agent's own commit");
+    const later = join(work, "later");
+    await gitInit(later, repoGitDir(historyRoot, "later"));
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
+
+    await expect(worktrees.ensure("c1", created.repos)).rejects.toThrow("refused");
+
+    expect(await sh(own, "log", "--format=%s", "-1")).toBe("agent's own commit");
+    expect(await readFile(join(own, "a.txt"), "utf8")).toBe("the agent's edit\n");
+    refuse = false;
+    expect((await worktrees.ensure("c1", created.repos)).repos.map(({ repo }) => repo)).toContain("later");
+    expect(await sh(own, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/c1");
+});

@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -22,6 +22,13 @@ export const gitDirOf = async (checkout: string): Promise<string | undefined> =>
     const named = (await readFile(entry, "utf8").catch(() => "")).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
     const gitDir = named === undefined || named === "" ? undefined : resolve(checkout, named);
     return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
+};
+
+// The repository a checkout's `.git` reaches, as its common dir with symlinks resolved, so two checkouts of one
+// repository answer alike; undefined when it reaches none.
+export const repositoryOf = async (checkout: string): Promise<string | undefined> => {
+    const gitDir = await gitDirOf(checkout);
+    return gitDir === undefined ? undefined : realpath(await commonDirOf(gitDir)).catch(undefinedIfMissing);
 };
 
 // Which branch an admin dir's HEAD names, undefined for a detached HEAD, which is not a branch. Taking the admin dir
