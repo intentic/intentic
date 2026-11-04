@@ -193,8 +193,8 @@ defineExpose({ focus: (): void => box.value?.focus() });
                 <span class="sr-only">{{ spoken }}</span>
             </span>
         </div>
-        <!-- The bar, inside the frame: its line on the message's column (pl-2), its presses a step in from the edge. -->
-        <div class="pb-1 pl-2 pr-1" @mousedown.self.prevent="box?.focus()">
+        <!-- The bar, inside the frame: its line on the message's column (pl-2), its presses a step in from the edge, and the same 4px above it as below so it never touches the message. -->
+        <div class="pt-1 pb-1 pl-2 pr-1" @mousedown.self.prevent="box?.focus()">
             <slot name="bar" />
         </div>
     </div>
