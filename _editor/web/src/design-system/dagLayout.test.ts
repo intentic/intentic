@@ -1,4 +1,4 @@
-import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature } from "@intentic/ui/dag";
+import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature, smoothPath } from "@intentic/ui/dag";
 
 // DagGraph refits its viewport when this signature changes; lives here because @intentic/ui ships no test runner. Each
 // case below is a way two graphs can differ without differing in node count, since a count is not an identity.
@@ -82,6 +82,12 @@ describe(`layoutSignature`, () => {
         );
     });
 
+    it(`notices a card moved onto another line of its column`, () => {
+        const ordered = { ...node(`a`), order: 0 };
+        expect(sig([ordered])).not.toBe(sig([{ ...ordered, line: 1 }]));
+        expect(sig([ordered])).toBe(sig([{ ...ordered, line: 0 }]));
+    });
+
     it(`still changes when the count changes, which is what it replaced`, () => {
         expect(sig([node(`a`)])).not.toBe(sig([node(`a`), node(`b`)]));
     });
@@ -100,6 +106,8 @@ describe(`layoutSignature`, () => {
 describe(`layoutDag`, () => {
     const place = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]): DagPlacement =>
         layoutDag(nodes as readonly DagNode<never>[], edges, options);
+    const placeDown = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]): DagPlacement =>
+        layoutDag(nodes as readonly DagNode<never>[], edges, { ...options, direction: `TB` });
     const columnOf = (placed: DagPlacement, id: string): number => Math.round(placed.nodes.get(id)?.x ?? Number.NaN);
     const topOf = (placed: DagPlacement, id: string): number => Math.round(placed.nodes.get(id)?.y ?? Number.NaN);
 
@@ -153,7 +161,9 @@ describe(`layoutDag`, () => {
     // source and peel apart near their targets. Turning at the target's row instead would run the stroke across the
     // whole diagram.
     it(`keeps its source's row and turns once, in the gutter before its target`, () => {
-        const placed = place([node(`a`), node(`b`), node(`c`)], [edge(`a`, `b`), edge(`b`, `c`), edge(`a`, `c`)]);
+        // `z` leads to `b`, so it takes the top of the first column and `a` the row below, which nothing stands on.
+        const placed = place([node(`a`), node(`z`), node(`b`), node(`c`)], [edge(`z`, `b`), edge(`b`, `c`), edge(`a`, `c`)]);
+        expect(topOf(placed, `a`)).toBeGreaterThan(topOf(placed, `b`));
         const turns = placed.lanes.get(laneKey(`a`, `c`)) ?? [];
         expect(turns).toHaveLength(1);
         // On `a`'s row, not `c`'s, and in the last gutter, past `b`'s column.
@@ -201,10 +211,9 @@ describe(`layoutDag`, () => {
     // to its middle, and a narrow row sits centred under a wide one, as a downward flow reads.
     it(`starts a row's cards at one top edge and centres each row on the widest`, () => {
         const ordered = (id: string, order: number, height = options.nodeHeight): DagNode<undefined> => ({ ...node(id), order, height });
-        const placed = layoutDag(
-            [ordered(`root`, 0), ordered(`short`, 0), ordered(`tall`, 1, 200), ordered(`tail`, 0)] as readonly DagNode<never>[],
+        const placed = placeDown(
+            [ordered(`root`, 0), ordered(`short`, 0), ordered(`tall`, 1, 200), ordered(`tail`, 0)],
             [edge(`root`, `short`), edge(`root`, `tall`), edge(`short`, `tail`)],
-            { ...options, direction: `TB` },
         );
         expect(topOf(placed, `short`)).toBe(topOf(placed, `tall`));
         // The second row is two cards and a gap wide; the first and last are one card, centred under it.
@@ -220,14 +229,46 @@ describe(`layoutDag`, () => {
     it(`turns below the whole row, not just below its own card`, () => {
         const sized = (id: string, order: number, box: { height?: number; width?: number } = {}): DagNode<undefined> => ({ ...node(id), order, ...box });
         // `b1` is wide enough to stand under `a`, so the line from `a` to `d` has to step sideways before it drops.
-        const placed = layoutDag(
-            [sized(`a`, 0), sized(`tall`, 1, { height: 240 }), sized(`b1`, 0, { width: 400 }), sized(`b2`, 1), sized(`d`, 0)] as readonly DagNode<never>[],
+        const placed = placeDown(
+            [sized(`a`, 0), sized(`tall`, 1, { height: 240 }), sized(`b1`, 0, { width: 400 }), sized(`b2`, 1), sized(`d`, 0)],
             [edge(`a`, `b1`), edge(`tall`, `b2`), edge(`a`, `d`), edge(`b1`, `d`), edge(`b2`, `d`)],
-            { ...options, direction: `TB` },
         );
         const turns = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
         expect(turns).toHaveLength(2);
         expect(turns.every((point) => point.y > topOf(placed, `tall`) + 240)).toBe(true);
+    });
+
+    // A stage too wide for the frame wraps: the caller puts its cards on lines, and each line is drawn as a rank of its
+    // own, a gutter below the one before it and centred like any row, so the next stage starts below the last line.
+    it(`draws each line of a wrapped column as a row of its own`, () => {
+        const card = (id: string, order: number, line = 0): DagNode<undefined> => ({ ...node(id), order, line });
+        const placed = placeDown(
+            [card(`root`, 0), card(`a`, 0), card(`b`, 1), card(`c`, 2, 1), card(`tail`, 0)],
+            [edge(`root`, `a`), edge(`root`, `b`), edge(`root`, `c`), edge(`a`, `tail`)],
+        );
+        const rowGap = options.nodeHeight + 88;
+        expect(topOf(placed, `a`)).toBe(rowGap);
+        expect(topOf(placed, `b`)).toBe(rowGap);
+        expect(topOf(placed, `c`)).toBe(2 * rowGap);
+        expect(topOf(placed, `tail`)).toBe(3 * rowGap);
+        // The second line is one card, centred under the two of the first.
+        expect(columnOf(placed, `c`)).toBe(Math.round((2 * options.nodeWidth + 28 - options.nodeWidth) / 2));
+    });
+
+    // Under a wrapped row no lane lines up from one line's gaps to the next one's, and a line drawn through a card
+    // reads as going through it: it goes round the picture's nearer side instead.
+    it(`goes round the side of the picture when every lane inside it is blocked`, () => {
+        const card = (id: string, order: number, line = 0, width = options.nodeWidth): DagNode<undefined> => ({ ...node(id), order, line, width });
+        // `wide` spans the whole picture under `a`, so nothing between the two can carry a line from `a` to `d`.
+        const placed = placeDown(
+            [card(`a`, 0), card(`b1`, 0), card(`b2`, 1), card(`wide`, 2, 1, 2 * options.nodeWidth + 28), card(`d`, 0)],
+            [edge(`a`, `b1`), edge(`a`, `b2`), edge(`a`, `wide`), edge(`b1`, `d`), edge(`a`, `d`)],
+        );
+        const turns = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
+        expect(turns).toHaveLength(2);
+        const left = Math.min(...[`b1`, `b2`, `wide`].map((id) => columnOf(placed, id)));
+        const right = Math.max(...[`b1`, `b2`].map((id) => columnOf(placed, id) + options.nodeWidth));
+        expect(turns.every((point) => point.x < left || point.x > right)).toBe(true);
     });
 
     it(`ignores an order only some nodes carry, rather than half-applying it`, () => {
@@ -300,5 +341,47 @@ describe(`lanePath`, () => {
     it(`rounds every bend it does draw`, () => {
         const path = lanePath({ x: 0, y: 0 }, { x: 600, y: 100 }, []);
         expect((path.match(/Q/gu) ?? []).length).toBe(2);
+    });
+});
+
+// The same route as lanePath with no corner on it: where the line changes lane it sweeps across the gutter in one
+// S-curve, so it leaves its card and enters the next along the flow, and a fan-out opens from one point.
+describe(`smoothPath`, () => {
+    it(`sweeps across the gutter it turns in, from its source's edge to its target's`, () => {
+        // One turn, at the middle of an 80px gutter between x 100 and 180.
+        const path = smoothPath({ x: 0, y: 0 }, { x: 300, y: 100 }, [{ x: 140, y: 0 }], 80);
+        expect(path).toBe(`M 0 0 L 100 0 C 140 0 140 100 180 100 L 300 100`);
+    });
+
+    it(`leaves and arrives along the flow, which is what makes the curve read as one line`, () => {
+        const path = smoothPath({ x: 0, y: 0 }, { x: 300, y: 100 }, [{ x: 140, y: 0 }], 80);
+        const [, curve] = /C (.+?) L/u.exec(path) ?? [];
+        const [c1y, , c2y] = (curve ?? ``).split(` `).filter((_, index) => index % 2 === 1);
+        // Both control points share the along coordinate of the turn: the tangents at both ends run with the flow.
+        expect(c1y).toBe(`0`);
+        expect(c2y).toBe(`100`);
+    });
+
+    it(`takes a detour as two sweeps with a straight run between them`, () => {
+        const path = smoothPath({ x: 0, y: 0 }, { x: 600, y: 0 }, [
+            { x: 140, y: 200 },
+            { x: 460, y: 200 },
+        ], 80);
+        expect(path).toBe(`M 0 0 L 100 0 C 140 0 140 200 180 200 L 420 200 C 460 200 460 0 500 0 L 600 0`);
+    });
+
+    it(`draws a straight line straight`, () => {
+        expect(smoothPath({ x: 0, y: 50 }, { x: 600, y: 50 }, [])).toBe(`M 0 50 L 600 50`);
+    });
+
+    it(`never sweeps back past its own source when the gutter is wider than the room`, () => {
+        // The turn sits 20px past the source: the sweep is 40px long rather than the gutter's 80.
+        expect(smoothPath({ x: 0, y: 0 }, { x: 300, y: 100 }, [{ x: 20, y: 0 }], 80)).toBe(`M 0 0 C 20 0 20 100 40 100 L 300 100`);
+    });
+
+    // A top-to-bottom graph is read down its rows: the same path turned on its side.
+    it(`leaves and arrives vertically when the graph runs top to bottom`, () => {
+        const path = smoothPath({ x: 0, y: 0 }, { x: 100, y: 300 }, [{ x: 0, y: 140 }], 80, `TB`);
+        expect(path).toBe(`M 0 0 L 0 100 C 0 140 100 140 100 180 L 100 300`);
     });
 });

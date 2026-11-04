@@ -23,7 +23,7 @@ import {
     STATUS_LINE,
 } from "./cardSize";
 import { useGraphLayout } from "./graphLayout";
-import { READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows } from "./spread";
+import { READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows, wrapLines } from "./spread";
 import { STATUS_TONE, type StatusTone } from "../statusVisual";
 import { t } from "../i18n.js";
 
@@ -32,7 +32,12 @@ import { t } from "../i18n.js";
 // - columns: stages left to right, as the forge draws a run. A long run is short of width and has height to spare, so a
 //   job stacks its lines (see cardSize) and the frame's width goes to the gutters between columns (see spread).
 // - rows: stages top to bottom, each job one line, the run drawn whole and as tall as it is, so the page scrolls
-//   through it rather than the wheel zooming a band.
+//   through it rather than the wheel zooming a band. Width is what a row is short of, so a stage wider than the frame
+//   wraps onto another line (see wrapLines) rather than shrinking every name to fit.
+// Lines follow each layout's shape. Down the page they sweep from card to card in S-curves (DagGraph's `smooth`): a
+// row's fan-out spreads across the width, and the curves open from one point and close on one. Across, a column's
+// fan-out runs down a gutter a few dozen pixels wide, where a dozen curves from one card would tangle; there the lines
+// keep their right angles, rounded (`elbow`), so a fan-out shares one trunk and peels off it.
 // Hover traces one job's card through the run; a click pins it. The job name itself is a link out to that job's page on
 // the forge, so the pin stays on the plain click everywhere else in the row.
 
@@ -101,10 +106,17 @@ const PROBE_CLASS: Record<Parameters<MeasureText>[1], string> = {
     badge: `text-3xs font-semibold`,
 };
 const fontsLoaded = ref(0);
+const fontLoaded = (): void => {
+    fontsLoaded.value += 1;
+};
+// A graph mounted out of sight (a view kept alive behind another, a row opened while its tab was hidden) has no layout
+// to measure in, and every name would come back as nothing wide: it is estimated until its frame has a width, then
+// measured for real.
+const laidOut = computed(() => containerWidth.value > 0);
 const measure = computed<MeasureText>(() => {
     void fontsLoaded.value;
     const element = root.value;
-    if (element === undefined) {
+    if (element === undefined || !laidOut.value) {
         return estimateText;
     }
     const probe = document.createElement(`span`);
@@ -126,6 +138,10 @@ const measure = computed<MeasureText>(() => {
         element.append(probe);
         const width = probe.getBoundingClientRect().width / scaleOf();
         probe.remove();
+        // Hidden after all: estimated, and not remembered, so the next layout measures it.
+        if (width === 0 && text !== ``) {
+            return estimateText(text, size);
+        }
         known.set(key, width);
         return width;
     };
@@ -144,10 +160,6 @@ const heightOf = (node: DagNode<PipelineJobCluster>, job: PipelineJob): number =
 const cardHeight = (node: DagNode<PipelineJobCluster>): number =>
     rows.value ? CARD_PADDING_Y + rowCardRows(node.data) : node.data.jobs.reduce((sum, member) => sum + heightOf(node, member.job), CARD_PADDING_Y);
 
-const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
-    dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node) })),
-);
-
 // Each stage's cards, in the order the layout ranks them.
 const ranks = computed(() => {
     const byStage = new Map<number, DagNode<PipelineJobCluster>[]>();
@@ -155,21 +167,55 @@ const ranks = computed(() => {
         const stage = stageOfNode(node.id);
         byStage.set(stage, [...(byStage.get(stage) ?? []), node]);
     }
-    return [...byStage.values()];
+    return [...byStage.values()].map((members) => members.toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0)));
 });
 
+// Rows: each card's line within its stage, wrapped at the frame's width at full size. Only a run drawn in its own order
+// can wrap, since a layout left to choose places its own; every stage of one of those is a single card anyway.
+const lineOf = computed(() => {
+    const of = new Map<string, number>();
+    if (!rows.value || !dag.value.nodes.every((node) => node.order !== undefined)) {
+        return of;
+    }
+    const room = Math.max(100, (containerWidth.value || 1000) - 2 * PAD_PX);
+    for (const members of ranks.value) {
+        wrapLines(
+            members.map((node) => widthOf(node.id)),
+            room,
+            NODE_SEP,
+        ).forEach((line, index) => {
+            const node = members[index];
+            if (node !== undefined) {
+                of.set(node.id, line);
+            }
+        });
+    }
+    return of;
+});
+// Every line the layout draws, a stage that fits being one; what the picture's size is measured off.
+const lines = computed(() =>
+    ranks.value.flatMap((members) => {
+        const count = Math.max(0, ...members.map((node) => lineOf.value.get(node.id) ?? 0)) + 1;
+        return Array.from({ length: count }, (_, line) => members.filter((node) => (lineOf.value.get(node.id) ?? 0) === line));
+    }),
+);
+
+const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
+    dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node), line: lineOf.value.get(node.id) ?? 0 })),
+);
+
 // The picture's height at full size, what the band's height and the zoom are measured against: the tallest column,
-// cards and the gaps between them; or every row's tallest card and the gutters between rows.
+// cards and the gaps between them; or every line's tallest card and the gutters between lines.
 const contentHeight = computed(() => {
     if (rows.value) {
-        const tallest = ranks.value.map((members) => Math.max(...members.map(cardHeight)));
+        const tallest = lines.value.map((members) => Math.max(...members.map(cardHeight)));
         return tallest.reduce((sum, height) => sum + height, 0) + Math.max(0, tallest.length - 1) * ROW_GAP;
     }
     return Math.max(...ranks.value.map((members) => members.reduce((sum, node) => sum + cardHeight(node), 0) + (members.length - 1) * NODE_SEP), 0);
 });
-// The widest row, cards and the gaps between them: what a row layout's zoom is solved for.
+// The widest line, cards and the gaps between them: what a row layout's zoom is solved for.
 const contentWidth = computed(() =>
-    Math.max(...ranks.value.map((members) => members.reduce((sum, node) => sum + widthOf(node.id), 0) + (members.length - 1) * NODE_SEP), 0),
+    Math.max(...lines.value.map((members) => members.reduce((sum, node) => sum + widthOf(node.id), 0) + (members.length - 1) * NODE_SEP), 0),
 );
 
 // Zoom and gutter, solved for the frame: a column layout spreads its gutters across the width; a row layout keeps one
@@ -189,9 +235,9 @@ const spread = computed(() => {
 });
 
 onMounted(() => {
-    void document.fonts?.ready.then(() => {
-        fontsLoaded.value += 1;
-    });
+    // A face that lands after this graph was measured (a weight first used here) changes every width it was measured in.
+    void document.fonts?.ready.then(fontLoaded);
+    document.fonts?.addEventListener(`loadingdone`, fontLoaded);
     if (frame.value) {
         containerWidth.value = frame.value.clientWidth;
         containerHeight.value = frame.value.clientHeight;
@@ -209,6 +255,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     resizeObserver?.disconnect();
+    document.fonts?.removeEventListener(`loadingdone`, fontLoaded);
 });
 
 // Inline band height is the picture's height at its zoom plus the margins and the band's 1px borders; never excess
@@ -291,7 +338,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                 :node-height="CARD_PADDING_Y + NAME_LINE + STATUS_LINE"
                 :rank-sep="spread.rankSep"
                 :node-sep="NODE_SEP"
-                edge-shape="elbow"
+                :edge-shape="rows ? `smooth` : `elbow`"
                 :direction="rows ? `TB` : `LR`"
                 :magnify="false"
                 :readable-zoom="READABLE_ZOOM"

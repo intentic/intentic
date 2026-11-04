@@ -5,7 +5,7 @@ import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from "vue";
 import { useDevice } from "../../composables/useDevice.js";
-import { type DagEdge, type DagNode, laneKey, lanePath, layoutDag, layoutSignature } from "./dagLayout.js";
+import { type DagEdge, type DagNode, laneKey, lanePath, layoutDag, layoutSignature, smoothPath } from "./dagLayout.js";
 
 const {
     nodes,
@@ -36,8 +36,10 @@ const {
     readableZoom?: number;
     // Scales an undersized graph to fill the viewport; disable on a full page, since fitView scales both axes.
     magnify?: boolean;
-    // Use `elbow` for a layered pipeline with a reading order; `curve` for an undirected relation graph.
-    edgeShape?: `curve` | `elbow`;
+    // `curve` for an undirected relation graph, one bezier from handle to handle; a layered pipeline with a reading order
+    // routes its edges through the gutters, around the cards between, as right angles (`elbow`) or as S-curves that
+    // sweep across each gutter (`smooth`).
+    edgeShape?: `curve` | `elbow` | `smooth`;
     // Spacing between columns, and cards within one; unset for the roomy default, tighter for row-list cards.
     rankSep?: number;
     nodeSep?: number;
@@ -108,7 +110,7 @@ const flowEdges = computed<Edge[]>(() => {
             id: `${edge.from}>${edge.to}${edge.kind !== undefined ? `:${edge.kind}` : ``}`,
             source: edge.from,
             target: edge.to,
-            type: edgeShape === `elbow` ? `lane` : `default`,
+            type: edgeShape === `curve` ? `default` : `lane`,
             data: { lane: placement.value.lanes.get(laneKey(edge.from, edge.to)) ?? [] },
             class: [
                 edge.accent !== undefined ? `${edge.accent} dag-accent` : ``,
@@ -288,11 +290,15 @@ const toggle = (id: string): void => {
             @nodes-initialized="refit()"
             @move-start="hold()"
         >
-            <!-- Elbow routing from dagre's own path (see lanePath), not the two endpoints; only used when `edgeShape` is `elbow`. -->
+            <!-- Routed through the layout's own lanes (see lanePath), not straight between the two endpoints; `elbow` and `smooth` only. -->
             <template #edge-lane="edge">
                 <BaseEdge
                     :id="edge.id"
-                    :path="lanePath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane, undefined, direction)"
+                    :path="
+                        edgeShape === `smooth`
+                            ? smoothPath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane, rankSep, direction)
+                            : lanePath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane, undefined, direction)
+                    "
                 />
             </template>
             <template #node-card="{ data }">

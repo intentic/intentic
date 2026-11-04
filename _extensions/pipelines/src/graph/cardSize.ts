@@ -97,9 +97,11 @@ export const estimateText: MeasureText = (text, size) => text.length * (size ===
 //   ✓ linux-build  ×3      11m 18s   status, name, failing streak, and its duration (or status word) at the right edge
 // A job whose call its card's other jobs do not share keeps it on a line of its own, above its name. Every card is as
 // wide as its own longest line, up to ROW_CARD_MAX_WIDTH, past which a name ends in an ellipsis with the whole name on
-// its tooltip; cards in a row need not match, since no gutter runs between them.
+// its tooltip; cards in a row need not match, since no gutter runs between them. A row has the width a column lacks,
+// and a stage too wide for the frame wraps rather than narrowing its cards, so the bound is generous: thirty-odd
+// characters of name and the duration beside them.
 export const ROW_CARD_MIN_WIDTH = 112;
-export const ROW_CARD_MAX_WIDTH = 248;
+export const ROW_CARD_MAX_WIDTH = 280;
 // One job's line, and the card's call above its jobs.
 export const JOB_LINE = 26;
 export const HEADER_LINE = 18;

@@ -104,6 +104,23 @@ const ciRuns = (now: number): PipelineRun[] => [
         createdAt: now - minutes(392),
         durationSeconds: 231,
     },
+    // The long one: a release run that calls other workflows, so its jobs carry `caller / job` names, fans one stage out
+    // to a dozen jobs, and runs forty minutes. What a job graph has to stay readable for.
+    {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_814,
+        title: `Release 2.4`,
+        authorName: `Grace Hopper`,
+        trigger: `workflow_dispatch`,
+        branch: `main`,
+        sha: `5be0d13`,
+        status: `success`,
+        url: `https://github.com/acme/shop-web/actions/runs/4814`,
+        createdAt: now - minutes(400),
+        durationSeconds: RELEASE_SECONDS,
+    },
     {
         repo: `api`,
         host: `gitlab`,
@@ -301,6 +318,71 @@ const githubJobs = (base: number, failed: readonly string[], runId: number): Pip
     );
 };
 
+// A release run the size of a real monorepo's: two roots fan out to a dozen checks, a called `release` workflow builds,
+// smokes and publishes (its jobs named `release / …`, one of them two calls deep), and the images wait on all of it.
+// Its shape is this repository's own ci.yml and release.yml.
+const RELEASE_JOBS: readonly (JobSpec & { readonly needs: readonly string[] })[] = [
+    { name: `changes`, needs: [], at: 0, took: 53 },
+    { name: `preflight`, needs: [], at: 0, took: 55 },
+    { name: `ci-base`, needs: [`changes`], at: 54, took: 96 },
+    { name: `quick`, needs: [`changes`, `preflight`], at: 56, took: 82 },
+    { name: `migrations`, needs: [`changes`, `preflight`], at: 56, took: 43 },
+    { name: `local-face`, needs: [`changes`, `preflight`], at: 56, took: 37 },
+    { name: `e2e-billing`, needs: [`changes`, `preflight`], at: 56, took: 138 },
+    { name: `e2e-signin`, needs: [`changes`, `preflight`], at: 56, took: 202 },
+    { name: `e2e-compat`, needs: [`changes`, `preflight`], at: 56, took: 96 },
+    { name: `verify-platform / verify`, needs: [`preflight`], at: 56, took: 651 },
+    { name: `verify-providers`, needs: [`preflight`], at: 56, took: 188 },
+    { name: `e2e-hermetic`, needs: [`preflight`], at: 56, took: 171 },
+    { name: `platform-image-smoke`, needs: [`preflight`], at: 56, took: 233 },
+    { name: `ci-desktop`, needs: [`changes`, `ci-base`], at: 151, took: 64 },
+    { name: `verify-core / verify`, needs: [`preflight`, `ci-base`], at: 151, took: 61 },
+    { name: `verify-machine`, needs: [`preflight`, `ci-base`], at: 151, took: 244 },
+    { name: `desktop-check`, needs: [`changes`, `preflight`, `ci-base`, `ci-desktop`], at: 216, took: 207 },
+    { name: `ic-check`, needs: [`changes`, `preflight`, `ci-base`, `ci-desktop`], at: 216, took: 312 },
+    { name: `netd-check`, needs: [`changes`, `preflight`, `ci-base`, `ci-desktop`], at: 216, took: 148 },
+    { name: `desktop-verify`, needs: [`changes`, `preflight`, `ci-base`, `ci-desktop`], at: 216, took: 263 },
+    { name: `desktop-windows-build`, needs: [`changes`, `preflight`, `ci-base`, `ci-desktop`], at: 216, took: 702 },
+    {
+        name: `images-platform`,
+        needs: [`changes`, `preflight`, `migrations`, `verify-platform / verify`, `e2e-billing`, `e2e-signin`, `e2e-compat`, `netd-check`],
+        at: 708,
+        took: 286,
+    },
+    {
+        name: `release / plan`,
+        needs: [`preflight`, `verify-core / verify`, `verify-providers`, `verify-machine`, `netd-check`, `ci-base`, `ci-desktop`],
+        at: 400,
+        took: 22,
+    },
+    { name: `release / ic-build`, needs: [`release / plan`], at: 423, took: 318 },
+    { name: `release / sandbox-arm64`, needs: [`release / plan`], at: 423, took: 402 },
+    { name: `release / images-amd64`, needs: [`release / plan`], at: 423, took: 377 },
+    { name: `release / linux-build`, needs: [`release / plan`, `release / ic-build`], at: 742, took: 498 },
+    { name: `release / windows-build`, needs: [`release / plan`, `release / ic-build`], at: 742, took: 611 },
+    { name: `release / windows-verify / smoke`, needs: [`release / plan`, `release / windows-build`], at: 1354, took: 284 },
+    {
+        name: `release / publish`,
+        needs: [`release / plan`, `release / windows-verify / smoke`, `release / sandbox-arm64`, `release / images-amd64`, `release / linux-build`],
+        at: 1640,
+        took: 74,
+    },
+    { name: `release / device-android / build`, needs: [`release / plan`, `release / publish`], at: 1715, took: 356 },
+    { name: `release / device-android / release`, needs: [`release / device-android / build`], at: 2072, took: 41 },
+    { name: `desktop-verify-windows / smoke`, needs: [`desktop-windows-build`, `release / device-android / release`], at: 2114, took: 263 },
+    { name: `images`, needs: [`changes`, `preflight`, `verify-core / verify`, `verify-machine`, `netd-check`, `release / device-android / release`], at: 2114, took: 412 },
+    { name: `images-arm64`, needs: [`changes`, `preflight`, `verify-core / verify`, `verify-machine`, `netd-check`, `release / device-android / release`], at: 2114, took: 455 },
+    { name: `images-dry`, needs: [`changes`, `preflight`, `verify-core / verify`, `verify-machine`, `netd-check`, `release / device-android / release`], at: 2114, took: 301 },
+    { name: `images-merge`, needs: [`images`, `images-arm64`], at: 2570, took: 38 },
+];
+const RELEASE_SECONDS = Math.max(...RELEASE_JOBS.map((spec) => spec.at + spec.took));
+// A called workflow's job is `caller.job` in its workflow file, which is what GitHub orders its drawing by.
+const releaseJobs = (base: number, runId: number): PipelineJob[] =>
+    withJobPages(
+        (index) => githubJobPage(runId, index),
+        RELEASE_JOBS.map((spec) => ({ ...ran(base, spec, []), needs: [...spec.needs], declaredId: spec.name.split(` / `).join(`.`) })),
+    );
+
 // Jobs mid-flight for a running run; not-yet-started jobs have no timestamps to layer by, so the graph needs `needs`
 // here too. `deploy preview` is placed by what it waits on, not when it ran.
 const runningJobs = (base: number, runId: number): PipelineJob[] =>
@@ -341,6 +423,9 @@ export const ciJobs = (repo: string, runId: number, now: number, green = false):
     }
     if (run.status === `running`) {
         return runningJobs(run.createdAt, run.runId);
+    }
+    if (run.runId === 4_814) {
+        return releaseJobs(run.createdAt, run.runId);
     }
     const failed = run.failedJobs ?? [];
     return run.host === `gitlab` ? gitlabJobs(run.createdAt, failed) : githubJobs(run.createdAt, failed, run.runId);

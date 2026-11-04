@@ -51,10 +51,12 @@ export const spreadColumns = ({ cardsWidth, columns, contentHeight, frameWidth, 
 };
 
 // Top to bottom, a run is read down the page rather than fitted into a band: it is drawn at the largest zoom its widest
-// row allows, up to full size, and is as tall as that makes it, however tall, so the page scrolls through it. A row too
-// wide to read whole starts from its left edge at READABLE_ZOOM, to be panned or opened full screen.
-// The gutter between rows: room for a line's turn on its way down, and no more, since the run's length is height.
-export const ROW_GAP = 40;
+// line allows, up to full size, and is as tall as that makes it, however tall, so the page scrolls through it. Its
+// stages wrap at the frame's width (wrapLines), so only a card wider than the frame itself shrinks it; one too narrow to
+// read even then starts from its left edge at READABLE_ZOOM, to be panned or opened full screen.
+// The gutter between rows: room for a line's sweep from one lane to another on its way down, and no more, since the
+// run's length is height.
+export const ROW_GAP = 48;
 
 export interface RowSpreadInput {
     // The widest row's cards and the gaps between them.
@@ -68,4 +70,49 @@ export const spreadRows = ({ contentWidth, frameWidth }: RowSpreadInput): Spread
     }
     const zoom = Math.min(1, frameWidth / contentWidth);
     return zoom < LEGIBLE_FIT ? { zoom: READABLE_ZOOM, rankSep: ROW_GAP, cropped: true } : { zoom, rankSep: ROW_GAP, cropped: false };
+};
+
+// Top to bottom, the frame's width is the one thing a row of cards cannot grow past, and shrinking the run to fit it
+// shrinks every name with it. So a stage wider than the frame wraps instead: onto as few lines as fit, split where its
+// longest line comes out shortest (seven like cards are four and three, never six and one), in its own order, so it
+// reads left to right and down. Each card's line, 0 first; every card on line 0 when the stage fits.
+// One way to split a stage: how many cards each line takes, and how wide the longest line comes out.
+interface Wrap {
+    readonly longest: number;
+    readonly sizes: readonly number[];
+}
+
+export const wrapLines = (widths: readonly number[], maxSpan: number, gap: number): number[] => {
+    const count = widths.length;
+    const span = (from: number, to: number): number => widths.slice(from, to).reduce((sum, width) => sum + width, 0) + Math.max(0, to - from - 1) * gap;
+    // The cards from `from` on, split into `lines` lines so the longest is as short as it can be.
+    const known = new Map<string, Wrap>();
+    const split = (from: number, lines: number): Wrap => {
+        if (lines === 1) {
+            return { longest: span(from, count), sizes: [count - from] };
+        }
+        const key = `${from}/${lines}`;
+        const remembered = known.get(key);
+        if (remembered !== undefined) {
+            return remembered;
+        }
+        let best: Wrap = { longest: Number.POSITIVE_INFINITY, sizes: [] };
+        // The fullest first line is tried first, so of two splits as good, the shorter line is the later one.
+        for (let size = count - from - (lines - 1); size >= 1; size -= 1) {
+            const rest = split(from + size, lines - 1);
+            const longest = Math.max(span(from, from + size), rest.longest);
+            if (longest < best.longest) {
+                best = { longest, sizes: [size, ...rest.sizes] };
+            }
+        }
+        known.set(key, best);
+        return best;
+    };
+    for (let lines = 1; lines <= count; lines += 1) {
+        const { longest, sizes } = split(0, lines);
+        if (longest <= maxSpan || lines === count) {
+            return sizes.flatMap((size, line) => Array.from({ length: size }, () => line));
+        }
+    }
+    return [];
 };

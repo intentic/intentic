@@ -18,6 +18,10 @@ export interface DagNode<T = unknown> {
     // Place within its column, 0 first. Set on every node, it replaces the layout's own crossing pass, for a caller
     // that must reproduce one exact picture (a forge's own drawing of a run); set on some, it is ignored.
     readonly order?: number;
+    // Which line of its column, 0 first, for a column too long to draw as one: each line is drawn as a rank of its own, a
+    // gutter apart, so a stage of twelve jobs wraps onto a second row instead of shrinking the whole picture to fit.
+    // Read only with `order`.
+    readonly line?: number;
 }
 
 export interface DagEdge {
@@ -52,7 +56,9 @@ export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonl
     [
         options.direction,
         `${options.rankSep ?? RANK_SEP}/${options.nodeSep ?? NODE_SEP}`,
-        nodes.map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}#${node.order ?? ``}`).join(`,`),
+        nodes
+            .map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}#${node.order ?? ``}${node.line ? `/${node.line}` : ``}`)
+            .join(`,`),
         edges.map((edge) => `${edge.from}>${edge.to}`).join(`,`),
     ].join(`|`);
 
@@ -216,10 +222,17 @@ const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly Plac
         .flatMap((box) => [across(box, horizontal).start - gap / 2, across(box, horizontal).end + gap / 2])
         .filter((lane) => lane > first && lane < last);
     const candidates = [home, ...gaps];
-    return candidates.reduce((best, lane) => {
+    const inside = candidates.reduce((best, lane) => {
         const better = blocked(lane) - blocked(best);
         return better < 0 || (better === 0 && Math.abs(lane - home) < Math.abs(best - home)) ? lane : best;
     }, home);
+    if (blocked(inside) === 0) {
+        return inside;
+    }
+    // Every lane inside the picture runs through a card somewhere along the way (a row that wraps leaves no gap that
+    // lines up with the one above it): the line goes round the picture's nearer side instead, which nothing stands in.
+    const outside = [first - gap / 2, last + gap / 2];
+    return outside.reduce((best, lane) => (Math.abs(lane - home) < Math.abs(best - home) ? lane : best));
 };
 
 // Turn sits in the last gutter before the target, not the first after the source, so a fan-out leaves as one stroke. A
@@ -259,7 +272,8 @@ const turnPoints = (
 // Caller-ordered layout: each column is a dependency depth, stacked from the same top edge in the nodes' own `order`,
 // one gap between cards; columns as wide as their widest card, centred on it. Top to bottom, a rank is a row: its cards
 // share one top edge (a tall card hangs down rather than floating mid-row), and each row is centred on the widest, as a
-// downward flow reads. No dagre: nothing here is left to choose.
+// downward flow reads. A column the caller split into `line`s is drawn as that many ranks, one after another, so its
+// edges route through the gutter between them like any other. No dagre: nothing here is left to choose.
 const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<string, number>, options: DagLayoutOptions): PlacedNode[] => {
     const horizontal = options.direction === `LR`;
     const rankSep = options.rankSep ?? RANK_SEP;
@@ -277,7 +291,13 @@ const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<str
         Math.max(0, members.length - 1) * nodeSep;
     const ranks = [...byColumn.keys()]
         .toSorted((one, other) => one - other)
-        .map((column) => (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0)));
+        .flatMap((column) => {
+            const lines = new Map<number, DagNode<never>[]>();
+            for (const node of (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0))) {
+                lines.set(node.line ?? 0, [...(lines.get(node.line ?? 0) ?? []), node]);
+            }
+            return [...lines.keys()].toSorted((one, other) => one - other).map((line) => lines.get(line) ?? []);
+        });
     const widest = Math.max(...ranks.map(spanOf), 0);
     const placed: PlacedNode[] = [];
     let start = 0;
@@ -336,8 +356,9 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
 
 // Right-angled path through `via`'s turns, rounded at the corners, so parallel edges share runs along the flow instead
 // of splaying into curves. `from`/`to` are handle positions; no `via` takes one turn at the midpoint. Worked out left to
-// right; a top-to-bottom graph is the same path with its axes swapped, so it leaves and arrives vertically.
-export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 8, direction: `LR` | `TB` = `LR`): string => {
+// right; a top-to-bottom graph is the same path with its axes swapped, so it leaves and arrives vertically. The corners
+// are as round as the room allows up to `radius`: wide enough that a turn reads as a bend in one line, not a break in it.
+export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 16, direction: `LR` | `TB` = `LR`): string => {
     const flip = (point: DagPoint): DagPoint => (direction === `LR` ? point : { x: point.y, y: point.x });
     const start = flip(from);
     const end = flip(to);
@@ -396,4 +417,53 @@ export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] 
         return `L ${round(enter.x)} ${round(enter.y)} Q ${round(corner.x)} ${round(corner.y)} ${round(leave.x)} ${round(leave.y)}`;
     });
     return [`M ${round(head.x)} ${round(head.y)}`, ...bends, `L ${round(tail.x)} ${round(tail.y)}`].join(` `);
+};
+
+// The same route as lanePath, drawn without a corner: wherever the line changes lane it sweeps across the gutter in one
+// S-curve, leaving its card and entering the next along the flow, so a fan-out opens from one point and a fan-in closes
+// on one. Each sweep is centred on the turn lanePath would take there and spans the gutter it turns in (`gutter`, the
+// layout's rankSep), less where the route leaves it no room.
+export const smoothPath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], gutter = RANK_SEP, direction: `LR` | `TB` = `LR`): string => {
+    // Flow coordinates: x along the flow, y across it.
+    const flip = (point: DagPoint): DagPoint => (direction === `LR` ? point : { x: point.y, y: point.x });
+    const start = flip(from);
+    const end = flip(to);
+    const turns = via.length > 0 ? via.map(flip) : [{ x: (start.x + end.x) / 2, y: start.y }];
+    // Where the line changes lane, and to which: at each turn to the turn's own lane, and at the last one to the target's
+    // (lanePath's along-first turns, then its across-first arrival). Turns at one point are one change.
+    const steps: { at: number; to: number }[] = [];
+    for (const step of [...turns.map((turn) => ({ at: turn.x, to: turn.y })), { at: turns.at(-1)?.x ?? start.x, to: end.y }]) {
+        const last = steps.at(-1);
+        if (last !== undefined && Math.abs(last.at - step.at) < 0.5) {
+            last.to = step.to;
+            continue;
+        }
+        steps.push({ ...step });
+    }
+
+    const round = (value: number): number => Math.round(value * 100) / 100;
+    const point = (at: DagPoint): string => {
+        const screen = flip(at);
+        return `${round(screen.x)} ${round(screen.y)}`;
+    };
+    const parts = [`M ${point(start)}`];
+    let here = start;
+    steps.forEach((step, index) => {
+        if (Math.abs(step.to - here.y) < 0.5) {
+            return;
+        }
+        // Half the sweep: half the gutter, but never back past where the line already is, nor past halfway to the next
+        // change or beyond the target.
+        const next = steps[index + 1]?.at;
+        const half = Math.max(0, Math.min(gutter / 2, step.at - here.x, next === undefined ? end.x - step.at : (next - step.at) / 2));
+        const enter = { x: step.at - half, y: here.y };
+        const leave = { x: step.at + half, y: step.to };
+        if (enter.x - here.x > 0.5) {
+            parts.push(`L ${point(enter)}`);
+        }
+        parts.push(`C ${point({ x: step.at, y: here.y })} ${point({ x: step.at, y: step.to })} ${point(leave)}`);
+        here = leave;
+    });
+    parts.push(`L ${point(end)}`);
+    return parts.join(` `);
 };
