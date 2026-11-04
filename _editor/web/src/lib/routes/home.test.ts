@@ -1,4 +1,4 @@
-import { isAccountPath, isHomePath, masterRailAfter } from "./home";
+import { isAccountPath, isHomePath, isSandboxSettingsPath, masterRailAfter } from "./home";
 
 // The master view's rail: worn on /home, kept on the person's own pages opened from there, and given back to the sandbox's
 // rail by any page of a sandbox.
@@ -36,3 +36,12 @@ test.each([`/homework`, `/settingsx`, `/deleted-sandboxesx`, `/deleted-sandboxes
     `%s is not an account page`,
     (path) => expect(isAccountPath(path)).toBe(false),
 );
+
+test("a sandbox's settings are the hub at /sandbox and every page below it, nothing that only starts the same", () => {
+    for (const path of [`/sandbox`, `/sandbox/models`, `/sandbox/access?tab=people`, `/sandbox#top`]) {
+        expect(isSandboxSettingsPath(path)).toBe(true);
+    }
+    for (const path of [`/sandboxes`, `/settings`, `/home/sandbox`]) {
+        expect(isSandboxSettingsPath(path)).toBe(false);
+    }
+});

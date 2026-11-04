@@ -32,6 +32,7 @@ const router = createRouter({
         { path: `/agents/:id?`, name: `agents`, component: page },
         { path: `/workspace/:path(.*)*`, name: `workspace`, component: page },
         { path: `/settings`, name: `settings`, component: page },
+        { path: `/sandbox/:tab?`, name: `sandbox`, component: page },
     ],
 });
 jest.mock("vue-router", () => ({ ...actualVueRouter, useRouter: () => router }));
@@ -111,5 +112,27 @@ it(`keeps the rail on the person's own pages, around no section`, async () => {
     await router.push(`/settings`);
 
     expect(masterRail.value).toBe(true);
+    expect(homeFrame.value).toBeUndefined();
+});
+
+it(`keeps Home's frame on a sandbox's settings opened from Home, the chat docked beside, whatever section is chosen`, async () => {
+    await router.push(`/sandbox`);
+
+    expect(masterRail.value).toBe(true);
+    expect(homeFrame.value).toBe(`docked`);
+
+    homeSection.value = WORKSPACE;
+    await router.push(`/sandbox/models`);
+
+    expect(masterRail.value).toBe(true);
+    expect(homeFrame.value).toBe(`docked`);
+});
+
+it(`leaves a sandbox's settings reached from inside it to the sandbox's own rail`, async () => {
+    await router.push(`/agents`);
+
+    await router.push(`/sandbox`);
+
+    expect(masterRail.value).toBe(false);
     expect(homeFrame.value).toBeUndefined();
 });

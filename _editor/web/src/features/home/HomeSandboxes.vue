@@ -65,20 +65,39 @@ const moveBy = (step: number): void => {
     const ids = boxes.value.map((box) => box.id);
     sandboxOrder.value = movedOrder(ids, menuIndex.value, menuIndex.value + step);
 };
-// A sandbox's settings, straight from its tile: the one trip into a box Home is often left for, without entering it first
-// and finding the switcher's cog. Inside for real, as the switcher's cog goes (SandboxSwitcher.vue `openSettings`).
-const openSettings = (): void => {
-    const box = boxes.value[menuIndex.value];
+// A sandbox's settings, straight from its tile, without entering it and finding the switcher's cog. Shown in Home's frame
+// (lib/routes/home.ts isSandboxSettingsPath): the rail stays, the tile stays lit, and Back or a press on any tile returns
+// to a chat. A guest's door names the one section it may open (sandboxNav.ts sandboxHubPath).
+const openSettings = (id: string): void => {
+    const box = boxes.value.find((candidate) => candidate.id === id);
     if (box === undefined) {
         return;
     }
-    seenReady(box.id);
-    sandbox.select(box.id);
-    void goInside(() => router.push(sandboxHubPath(box.role === `guest`)));
+    seenReady(id);
+    sandbox.select(id);
+    void router.push(sandboxHubPath(box.role === `guest`));
+};
+// Into the sandbox, as a double-click goes: the menu's way for a keyboard, and the place a reader learns the double-click.
+const enter = (id: string): void => {
+    seenReady(id);
+    sandbox.select(id);
+    void goInside(() => router.push(sandboxEntryPath(id)));
+};
+const withMenuId = (act: (id: string) => void): void => {
+    const id = boxes.value[menuIndex.value]?.id;
+    if (id !== undefined) {
+        act(id);
+    }
 };
 const tileMenuItems = computed<MenuItem[]>(() => [
-    // A home-only guest has no sandbox to enter, so no settings to open in one.
-    ...(homeOnly.value ? [] : [{ label: t(`shared.settings`), icon: `cog`, command: openSettings }, { separator: true }]),
+    // A home-only guest has no sandbox to enter, so neither a way in nor settings to open in one.
+    ...(homeOnly.value
+        ? []
+        : [
+              { label: t(`ui.action.open`), command: () => withMenuId(enter) },
+              { label: t(`shared.settings`), command: () => withMenuId(openSettings) },
+              { separator: true },
+          ]),
     { label: t(`home.moveTileUp`), disabled: menuIndex.value <= 0, command: () => moveBy(-1) },
     { label: t(`home.moveTileDown`), disabled: menuIndex.value >= boxes.value.length - 1, command: () => moveBy(1) },
     { separator: true },
@@ -156,34 +175,49 @@ const choose = (id: string, input: `click` | `enter`): void => {
     <nav v-if="phone" v-bind="$attrs" :aria-label="t(`home.sandboxes`)" class="flex h-full flex-col gap-3 overflow-y-auto bg-card p-3">
         <div class="flex items-center justify-between gap-2 px-2 py-1">
             <h1 class="py-2 text-lg font-semibold">{{ t(`home.title`) }}</h1>
-            <!-- The phone's first screen has no rail, so the account's settings (sign-out included) are reached from here. -->
+            <!-- The phone's first screen has no rail, so the account's settings (sign-out included) are reached from here: the
+                 account's own figure, as the desktop rail's foot wears it, since a cog on each row below is that sandbox's. -->
             <RouterLink
                 v-if="user !== null"
                 to="/settings"
                 class="flex size-11 items-center justify-center rounded-xl text-muted hover:bg-content/5 hover:text-content"
                 :aria-label="t(`shared.settings`)"
             >
-                <Icon name="cog" aria-hidden="true" />
+                <Icon name="user" aria-hidden="true" />
             </RouterLink>
             <RouterLink v-else :to="signInAt(HOME_PATH)" class="rounded-lg px-3 py-2 text-sm text-link hover:bg-content/5">{{
                 t(`home.firstRun.signIn`)
             }}</RouterLink>
         </div>
-        <button
+        <!-- A phone has no right-click, so a sandbox's settings are the cog at the end of its row, as in the switcher. -->
+        <div
             v-for="box in boxes"
             :key="box.id"
-            type="button"
-            class="relative flex w-full shrink-0 items-center gap-3 rounded-xl p-2 text-left hover:bg-content/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-link"
+            class="flex w-full shrink-0 items-center gap-1 rounded-xl"
             :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ring-2 ring-link': selected(box.id) }"
-            :aria-label="labelOf(box.id, box.name)"
-            :aria-current="selected(box.id) ? 'true' : undefined"
-            @click="choose(box.id, 'click')"
-            @keydown.enter.prevent="choose(box.id, 'enter')"
         >
-            <SandboxLogo :size="36" :image="box.image ?? null" :name="box.name" />
-            <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
-            <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
-        </button>
+            <button
+                type="button"
+                class="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 text-left hover:bg-content/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-link"
+                :aria-label="labelOf(box.id, box.name)"
+                :aria-current="selected(box.id) ? 'true' : undefined"
+                @click="choose(box.id, 'click')"
+                @keydown.enter.prevent="choose(box.id, 'enter')"
+            >
+                <SandboxLogo :size="36" :image="box.image ?? null" :name="box.name" />
+                <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
+                <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
+            </button>
+            <button
+                v-if="!homeOnly"
+                type="button"
+                class="flex size-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-content/5 hover:text-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-link"
+                :aria-label="t(`sandbox.sandboxSwitcher.settingsOf`, { name: box.name })"
+                @click="openSettings(box.id)"
+            >
+                <Icon name="cog" aria-hidden="true" />
+            </button>
+        </div>
         <span class="relative flex shrink-0">
             <button
                 type="button"

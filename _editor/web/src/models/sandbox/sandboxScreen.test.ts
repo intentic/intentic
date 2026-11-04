@@ -203,6 +203,17 @@ describe(`a switch in Home's frame around a section`, () => {
         expect(replace).toHaveBeenLastCalledWith(`/workspace/src/b.ts`);
     });
 
+    it(`leaves a sandbox's settings opened from Home in view, for whoever switched to say where to go`, async () => {
+        navigate(shellRoute(`/sandbox/models`));
+        homeSection.value = workspace;
+        homeFrame.value = `docked`;
+        replace.mockClear();
+
+        await switchTo(`sb2`);
+
+        expect(replace).not.toHaveBeenCalled();
+    });
+
     it(`is the section's own address for a sandbox never shown, and the remembered screen only when the section owns it`, () => {
         session.set(`intentic.sandboxScreen.sb2`, `/workspace/src/b.ts?agent=cnv_1`);
         session.set(`intentic.sandboxScreen.sb3`, `/workspaces`);

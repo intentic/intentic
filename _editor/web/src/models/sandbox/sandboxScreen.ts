@@ -1,5 +1,5 @@
 import { watch } from "vue";
-import { isHomePath } from "../../lib/routes/home";
+import { isHomePath, isSandboxSettingsPath } from "../../lib/routes/home";
 import type { RouteRecordNormalized } from "vue-router";
 import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
@@ -76,6 +76,12 @@ onNavigation((router) => {
             // Its own first screen, not `/`, which is Home since 2026-10-25: a switch made inside a sandbox stays inside one.
             // One made in Home's frame around a section stays on that section, of the sandbox switched to.
             const section = homeFrame.value === undefined ? undefined : homeSection.value;
+            // In Home's frame around a sandbox's settings (lib/routes/home.ts isSandboxSettingsPath), whoever switched
+            // says where to go: a tile's press goes to its chat, and a switch that names nowhere leaves the settings
+            // in view, now of the sandbox switched to. Never out of Home's frame.
+            if (homeFrame.value !== undefined && isSandboxSettingsPath(router.currentRoute.value.fullPath)) {
+                return;
+            }
             void router.replace(section === undefined ? sandboxEntryPath(sandboxId) : sectionEntryPath(sandboxId, section));
         },
         { flush: `post` },

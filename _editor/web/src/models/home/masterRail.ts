@@ -1,7 +1,7 @@
 import { storedValue, storeValue } from "@intentic/ui/storage";
 import { onScopeDispose, ref } from "vue";
 import { isNavigationFailure, NavigationFailureType, type RouteLocationNormalized, useRouter } from "vue-router";
-import { isHomePath, masterRailAfter } from "../../lib/routes/home";
+import { isHomePath, isSandboxSettingsPath, masterRailAfter } from "../../lib/routes/home";
 import { isSteppingInside } from "../../lib/routes/homeDetour";
 import { homeFrame, homeSection, sectionOwns } from "../../lib/routes/homeSection";
 
@@ -18,7 +18,8 @@ const FRAME_KEY = `intentic.masterRail`;
 export const masterRail = ref(storedValue(FRAME_KEY, `session`) === `1`);
 
 const follow = (to: Pick<RouteLocationNormalized, "path" | "name">, inside: boolean): void => {
-    const owned = !isHomePath(to.path) && sectionOwns(homeSection.value, to.path);
+    // The section chosen for every sandbox, or a sandbox's settings opened from Home: either keeps Home's frame.
+    const owned = !isHomePath(to.path) && (sectionOwns(homeSection.value, to.path) || isSandboxSettingsPath(to.path));
     const master = inside ? isHomePath(to.path) : masterRailAfter(masterRail.value, to.path, owned);
     masterRail.value = master;
     homeFrame.value = master && owned ? (to.name === `chat` ? `chat` : `docked`) : undefined;

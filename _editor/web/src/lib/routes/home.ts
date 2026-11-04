@@ -11,6 +11,13 @@ export const DELETED_PATH = `/deleted-sandboxes`;
 // whichever sandbox happened to be active.
 const PERSONAL = /^\/(?:settings(?:[/?#]|$)|deleted-sandboxes\/?(?:[?#]|$))/;
 
+/**
+ * A sandbox's own settings (the hub at /sandbox, features/sandbox/SandboxHub.vue). Opened from Home, from a tile's menu
+ * (features/home/HomeSandboxes.vue), they keep Home's frame the way the section chosen there does: the rail of sandboxes
+ * stays, so a look at one box's settings is not a trip into it.
+ */
+export const isSandboxSettingsPath = (path: string): boolean => /^\/sandbox(?:[/?#]|$)/.test(path);
+
 /** Account pages stay available without a connected sandbox or a completed setup. */
 export const isAccountPath = (path: string): boolean => isHomePath(path) || PERSONAL.test(path);
 
