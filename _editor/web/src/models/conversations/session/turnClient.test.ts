@@ -115,7 +115,7 @@ const WAITING: ConversationQueue = {
 
 // Every client a test made. Words left waiting keep their outbox's retry timer, which would fire in a later test and send
 // them through that test's `run`; emptied after each test, a late flush finds nothing to send.
-const clients: TurnClient[] = [];
+const clients: InstanceType<typeof TurnClient>[] = [];
 
 // A TurnClient over a conversation that is only its refs: the transcript is a real one, since a run's rows are drawn
 // there; the selection and the failure policy answer only what a run asks of them.
