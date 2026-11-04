@@ -40,8 +40,11 @@ import { usePanePersona } from "./pane/panePersona";
 import { useComposerSend } from "./pane/composerSend";
 import { useLimitResend, useScheduledWays } from "./pane/scheduledSend";
 import { useComposerPopovers } from "./pane/composerPopovers";
+import { useComposerCommands } from "./pane/composerCommands";
+import { useSendCaret } from "./pane/sendCaret";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
-import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
+import ChatCommandPopover from "../composer/commands/ChatCommandPopover.vue";
+import ChatCommandResult from "../composer/commands/ChatCommandResult.vue";
 import ChatAgentStatus from "./ChatAgentStatus.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
@@ -73,7 +76,6 @@ import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
 import ComposerSendLater from "../composer/later/ComposerSendLater.vue";
 import { waitTargets } from "../composer/later/waitTargets";
-import type { SendLater } from "../../../models/conversations/drafts/sendLater";
 
 // One chat on screen: the transcript, its composer, and the pickers/banners for one conversation (ChatPanel owns
 // the surrounding frame — list, pop-out, resize, shell commands). Takes its conversation as a prop rather than
@@ -298,7 +300,9 @@ const { personas, pickedPersona, personaName, personaIcon, personaNotice, pickPe
 const history = useRecallRing(() => props.conversation);
 // This chat's answer to a spent allowance, which a scheduled press sets and a stopped turn's bare press may find set.
 const limitResend = useLimitResend(() => props.conversation);
-const composerSend = useComposerSend({
+// The composer's own `/` commands (`/usage`, `/model`, `/clear`…) answer here, ahead of the send, and never reach the agent.
+const commands = useComposerCommands({ view: paneView, modelOpen, voiceAgent, history, grow });
+const composerSend = commands.intercept(useComposerSend({
     view: paneView,
     voiceAgent,
     staging,
@@ -327,7 +331,7 @@ const composerSend = useComposerSend({
     limitArmed: limitResend.armed,
     laterOffered,
     titleOf,
-});
+}));
 const {
     intent,
     scheduledLabel,
@@ -401,26 +405,7 @@ const sendCaret = ref<HTMLElement>();
 // A booking replaces only a send that opens or joins a turn: never words placed as the agent's, an edit, or plan notes.
 const laterShown = computed(() => laterOffered.value && intent.value !== `place` && intent.value !== `edit` && intent.value !== `plan`);
 const caretShown = computed(() => connected.value && sendShown.value && (staged.value ? laterShown.value || hasWays.value : laterShown.value && continueLaterOffered.value));
-// A caret that leaves takes its menu with it, so nothing floats over a composer gone back to a plain Send.
-watch(caretShown, (shown) => {
-    if (!shown) {
-        laterOpen.value = false;
-    }
-});
-const sendAt = (later: SendLater): void => {
-    laterOpen.value = false;
-    if (!staged.value && continueLaterOffered.value) {
-        continueLater(later);
-        return;
-    }
-    props.conversation.sendLater.value = later;
-    submit();
-};
-const sendNow = (): void => {
-    props.conversation.sendLater.value = undefined;
-    laterOpen.value = false;
-    submit();
-};
+const { sendAt, sendNow } = useSendCaret({ conversation: () => props.conversation, open: laterOpen, shown: caretShown, staged, continueLaterOffered, continueLater, submit });
 const caretHint = computed((): TooltipValue => ({ title: t(`chat.sendLater.title`), note: t(`chat.sendLater.caretNote`) }));
 
 // Hands-free voice: the mic, and what the pause does; below the send, since the pause is the send.
@@ -458,6 +443,7 @@ watch([() => props.conversation, () => props.focused], voice.quit);
 
 const popovers = useComposerPopovers({
     view: paneView,
+    commands: commands.rows,
     input,
     grow,
     personas,
@@ -597,6 +583,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             <ChatQueue />
                             <!-- An armed edit, and the two ways out of it. -->
                             <ChatEditNotice />
+                            <!-- What a `/` command the composer answered itself says back (ChatCommandResult). -->
+                            <ChatCommandResult />
                             <!-- A fresh session not sent yet: whose work it opens on, what it is for, and the way back to a plain chat. -->
                             <ChatFreshDraft v-if="!strip" />
                             <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->

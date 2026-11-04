@@ -1,4 +1,3 @@
-import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed, nextTick, type Ref, ref, watch } from "vue";
@@ -13,13 +12,15 @@ import { ensureProviderCommands, loadAllProviderModels } from "../../../../model
 import { providerRunnable } from "../../../../models/providers/access";
 import { providerWithheld } from "../../../../models/providers/aiReach";
 import { isReviewCommand } from "../../../../models/providers/reviewCommands";
+import { type SlashRow, slashMatches, slashRunOf } from "../../../../models/conversations/commands/slashCommands";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { placeConversation } from "./composerControls";
 
 // The two lists that open over one pane's composer as it is typed into: an `@`-token at the caret opens the picker over
-// files and the four turn settings, and a leading `/` with the caret still in the first token opens the provider's
-// commands. Escape dismisses until the token changes; a pick rewrites the draft and lands the caret after it.
+// files and the four turn settings, and a leading `/` with the caret still in the first token opens the commands: the
+// composer's own and the provider's (slashCommands.ts). Escape dismisses until the token changes; a pick rewrites the
+// draft and lands the caret after it.
 
 // The pill whose value an `@` pick just changed, pulsed once: the token vanishes from the text, so the eye is sent to
 // where the setting now lives.
@@ -28,6 +29,8 @@ const FLASH_MS = 700;
 
 export interface PopoversHost {
     readonly view: ConversationView;
+    // The `/` list: the composer's own commands beside the provider's (composerCommands.ts rows).
+    readonly commands: Readonly<Ref<readonly SlashRow[]>>;
     readonly input: Readonly<Ref<HTMLTextAreaElement | null>>;
     readonly grow: () => void;
     readonly personas: Readonly<Ref<readonly Persona[]>>;
@@ -143,13 +146,12 @@ const applySend = (chat: Conversation, to: SendLater | `now` | `custom`, openPan
 
 // The commands a typed token could still become, the harness's own reviewer first (reviewCommands.ts): a list of forty
 // would otherwise bury it past the popover's eighth row.
-const commandsMatching = (commands: readonly AgentCommand[], needle: string | undefined): readonly AgentCommand[] =>
-    needle === undefined
-        ? []
-        : commands.filter((command) => command.name.toLowerCase().includes(needle)).toSorted((a, b) => Number(isReviewCommand(b)) - Number(isReviewCommand(a)));
+const commandsMatching = (commands: readonly SlashRow[], needle: string | undefined): readonly SlashRow[] =>
+    needle === undefined ? [] : slashMatches(commands, needle, isReviewCommand);
 
 export const useComposerPopovers = (host: PopoversHost) => {
-    const { draft, availableCommands } = host.view;
+    const { draft } = host.view;
+    const availableCommands = host.commands;
     const caret = ref(0);
     const popoverDismissed = ref(false);
     const activeMention = computed(() => mentionQueryAt(draft.value, caret.value));
@@ -164,7 +166,7 @@ export const useComposerPopovers = (host: PopoversHost) => {
         popoverDismissed.value = false;
     });
     // Commands the typed token could still become; nothing to show closes the popover rather than drawing an empty one.
-    const commandMatches = computed<readonly AgentCommand[]>(() => commandsMatching(availableCommands.value, slashQuery.value?.toLowerCase()));
+    const commandMatches = computed<readonly SlashRow[]>(() => commandsMatching(availableCommands.value, slashQuery.value?.toLowerCase()));
     // Files complete against this workspace's tree, so a conversation in another box is offered none.
     const filesOffered = computed(() => !host.placement.remote.value);
     const quickSources = computed(() => quickSourcesOf(host.view.conversation.value, host));
@@ -180,12 +182,13 @@ export const useComposerPopovers = (host: PopoversHost) => {
         }
     });
 
-    // Only when this composer has none (ensureProviderCommands is a no-op once known), on a provider switch or a typed
-    // `/`; never from inside `availableCommands`, where a getter's fetch would refire on every re-evaluation.
+    // Only when this composer has none of the provider's (ensureProviderCommands is a no-op once known), on a provider
+    // switch or a typed `/`; never from inside `availableCommands`, where a getter's fetch would refire on every
+    // re-evaluation.
     watch(
         [host.view.provider, () => draft.value.startsWith(`/`)],
         ([target]) => {
-            if (availableCommands.value.length === 0) {
+            if (host.view.availableCommands.value.length === 0) {
                 void ensureProviderCommands(target);
             }
         },
@@ -228,16 +231,9 @@ export const useComposerPopovers = (host: PopoversHost) => {
         flashed,
         // Lights one control for a moment, for a change made from outside the row (the fleet strip placing the draft).
         flash,
-        // Whether this draft sends as a command: the whole first word against the published names, the same rule the
-        // daemon applies on arrival (the popover matches only the typed token).
-        commandRun: computed<AgentCommand | undefined>(() => {
-            const text = draft.value.trimStart();
-            if (!text.startsWith(`/`)) {
-                return undefined;
-            }
-            const name = text.slice(1).split(/\s/, 1)[0] ?? ``;
-            return availableCommands.value.find((command) => command.name === name);
-        }),
+        // Whether this draft runs as a command: the whole first word against the names (and our aliases), the same rule
+        // the daemon applies on arrival (the popover matches only the typed token).
+        commandRun: computed<SlashRow | undefined>(() => slashRunOf(draft.value, availableCommands.value)),
         syncCaret: (): void => {
             caret.value = host.input.value?.selectionStart ?? draft.value.length;
         },

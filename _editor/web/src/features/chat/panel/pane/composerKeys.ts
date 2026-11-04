@@ -30,7 +30,13 @@ export interface PopoverList {
     readonly move: (delta: number) => void;
     // Whether a row was actually picked: with none active, the key belongs to the composer.
     readonly pickActive: () => boolean;
+    // The active row's name, where the list has one to say (the `/` list).
+    readonly active?: () => string | undefined;
 }
+
+// Enter on the `/` row the draft already names whole runs it, as Claude Code's menu does, rather than writing the same
+// name in again and waiting for a second Enter; Tab still completes.
+const typedWhole = (list: PopoverList, run: { readonly name: string } | undefined): boolean => run !== undefined && list.active?.() === run.name;
 
 export interface KeysHost {
     readonly view: ConversationView;
@@ -74,10 +80,13 @@ const composerHintOf = (host: KeysHost): ComputedRef<string> => {
         if (turnStoppable.value && view.ending.value === undefined && !awaitingDecision.value) {
             return t(`chat.chatPane.escToStop`);
         }
-        // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.
+        // A draft that runs as a command sends nothing to the model, so say so before Enter, not after; one of the composer's
+        // own sends nothing to the agent at all.
         const command = popovers.commandRun.value;
         if (command !== undefined) {
-            return t(`chat.chatPane.enterRunsCommand`, { name: command.name });
+            return command.local === undefined
+                ? t(`chat.chatPane.enterRunsCommand`, { name: command.name })
+                : t(`chat.chatPane.enterRunsHere`, { name: command.name });
         }
         // Ranked ahead of recall: rarer, more useful, and the one place anyone learns the key exists.
         const continuing = host.send.continueKeyHint.value;
@@ -142,7 +151,7 @@ export const useComposerKeys = (host: KeysHost) => {
             popovers.popoverDismissed.value = true;
             return true;
         },
-        Enter: (list, event) => !event.shiftKey && list.pickActive(),
+        Enter: (list, event) => !event.shiftKey && !typedWhole(list, popovers.commandRun.value) && list.pickActive(),
         Tab: (list) => list.pickActive(),
     };
     const popoverKeydown = (event: KeyboardEvent): boolean => {

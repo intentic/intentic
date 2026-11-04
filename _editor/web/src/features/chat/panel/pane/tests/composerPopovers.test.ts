@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { LocalCommandName } from "../../../../../models/conversations/commands/slashCommands";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -21,6 +22,7 @@ jest.mock("../../../../../models/conversations/accounts/useChat-catalog", () => 
 const { useComposerPopovers } = await import("../composerPopovers");
 const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 const { conversationView } = await import("../../../../../models/conversations/panel/useChat-view");
+const { slashRows } = await import("../../../../../models/conversations/commands/slashCommands");
 
 const COMMANDS: AgentCommand[] = [
     { name: `review`, description: `Review the diff.` },
@@ -29,12 +31,15 @@ const COMMANDS: AgentCommand[] = [
 const PERSONAS: Persona[] = [{ id: `backend`, label: `Backend`, capabilities: [] }];
 
 let unmount: (() => void) | undefined;
-const composerOf = () => {
+// `ours` names the composer's own commands this reader is offered beside the provider's; none by default, so a suite
+// about the provider's list reads it alone.
+const composerOf = (ours: readonly LocalCommandName[] = []) => {
     const chat = new Conversation(`c1`);
     const view = conversationView(computed(() => chat));
     const input = ref<HTMLTextAreaElement | null>(document.body.appendChild(document.createElement(`textarea`)));
     const host = {
         view,
+        commands: computed(() => slashRows(new Set(ours), view.availableCommands.value)),
         input,
         grow: jest.fn(),
         personas: ref(PERSONAS),
@@ -251,13 +256,28 @@ describe(`the / list`, () => {
         const { chat, type, lists } = composerOf();
         chat.availableCommands.value = [
             { name: `compact`, description: `Compact the context.` },
-            { name: `context`, description: `Show the context.` },
+            { name: `commit`, description: `Commit the changes.` },
             { name: `code-review`, description: `Review the diff.` },
         ];
         type(`/`);
-        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `context`]);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `commit`]);
         type(`/co`);
-        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `context`]);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `commit`]);
+    });
+
+    // A guest is not offered `/model`, and the CLI's own must not stand in for it: that one switches the model a guest was
+    // handed for the rest of its session.
+    it(`never lists an agent's built-in under one of the composer's names, offered or not`, () => {
+        const { chat, type, lists } = composerOf([`help`]);
+        chat.availableCommands.value = [
+            { name: `model`, description: `Set the AI model.`, builtin: true },
+            { name: `heapdump`, description: `Dump the JS heap.`, builtin: true },
+            { name: `simplify`, description: `Review the changed code.`, builtin: true },
+        ];
+        type(`/`);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`help`, `simplify`]);
+        type(`/model sonnet`);
+        expect(lists.commandRun.value).toBeUndefined();
     });
 
     it(`lists the commands the first token could still become, and writes the picked one in`, async () => {
@@ -288,6 +308,29 @@ describe(`the / list`, () => {
 
         type(`/rev this`);
         expect(lists.commandRun.value).toBeUndefined();
+    });
+
+    it(`offers the composer's own beside the provider's, a typed alias naming its command first`, () => {
+        const { chat, type, lists } = composerOf([`usage`, `context`]);
+        chat.availableCommands.value = [
+            { name: `compact`, description: `Compact the context.`, builtin: true },
+            { name: `context`, description: `The CLI's own context grid.`, builtin: true },
+        ];
+        type(`/c`);
+        expect(lists.commandMatches.value.map((command) => [command.name, command.local])).toEqual([
+            [`usage`, `usage`],
+            [`context`, `context`],
+            [`compact`, undefined],
+        ]);
+        type(`/cost`);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`usage`]);
+        expect(lists.commandRun.value?.local).toBe(`usage`);
+    });
+
+    it(`still asks for the provider's commands while only the composer's own are listed`, () => {
+        const { lists } = composerOf([`help`]);
+        expect(lists.commandRun.value).toBeUndefined();
+        expect(ensureProviderCommands.mock.calls).toEqual([[`claude`]]);
     });
 
     it(`asks for the provider's commands only while this composer has none`, async () => {

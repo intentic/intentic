@@ -18,6 +18,13 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
   `.intentic/records/artifacts/pages/<conversation>/`; its caption opens it full size or publishes it to the outbox. A
   connected MCP server's own app (an MCP Apps `ui://` resource) is drawn the same way after a call to its tool. The
   owner can switch all of it off (Sandbox ▸ Agent ▸ Tools ▸ **Pages in chat**).
+- **`/` commands**: a `/` at the start of the composer lists the chat's commands. The editor answers its own, on every
+  provider and without a turn or a new session: `/help`, `/usage` (`/cost`, `/stats`), `/context`, `/status`,
+  `/todos`, `/model [name]`, `/effort [level]`, `/plan [task]`, `/clear` (`/new`, `/reset`: a new chat), `/rename`,
+  `/copy`, `/stop`, `/config` (`/settings`). Their answer is a card over the composer or the control they name. Beside
+  them come the agent's own commands and skills (`/compact`, `/code-review`, a workspace skill as `/<its name>`), which
+  run as a message. A skill somebody wrote keeps its name over the editor's, as in Claude Code; anything else that
+  starts with `/` (`/ext/deployments looks off`) is an ordinary message.
 - **Code review in chat**: a harness's own reviewer draws its findings as one card in the chat: Claude Code's
   `/code-review [low|medium|high|xhigh|max]`, Codex's `/review [branch <name> | commit <sha> | what to look at]`. Each
   finding opens its file at the line, and **Fix** (one, or all) writes the ask into the composer. OpenCode's `/review`

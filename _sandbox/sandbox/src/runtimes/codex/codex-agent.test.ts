@@ -966,7 +966,7 @@ test("the thread's skills become the composer's command list", async () => {
         { type: "commands", skills: [{ name: "release", description: "Cut a release", path: "/work/.codex/skills/release" }] },
     ]);
     expect(await collect(createTestAgent(runner), request)).toEqual([
-        { kind: "commands", items: [{ name: "release", description: "Cut a release" }] },
+        { kind: "commands", items: [{ name: "release", description: "Cut a release", builtin: false }] },
         { kind: "done" },
     ]);
 });

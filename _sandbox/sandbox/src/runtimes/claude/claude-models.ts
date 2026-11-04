@@ -87,7 +87,15 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
         // known for one (agent-commands.ts); a failure costs that head start, never the models.
         // allow(silent-catch): an unread command list leaves the first turn to learn it, as before this probe asked
         const [models, commands] = await Promise.all([session.supportedModels(), session.supportedCommands().catch(() => [])]);
-        recordProbedCommands("claude", commands.map((command) => ({ name: command.name, description: command.description, ...opt("hint", command.argumentHint || undefined) })));
+        recordProbedCommands(
+            "claude",
+            commands.map((command) => ({
+                name: command.name,
+                description: command.description,
+                ...opt("hint", command.argumentHint || undefined),
+                builtin: command.builtin === true,
+            })),
+        );
         return models.map((model) => {
             const entry: Model = { id: model.value, label: model.displayName };
             if (model.supportedEffortLevels !== undefined) {

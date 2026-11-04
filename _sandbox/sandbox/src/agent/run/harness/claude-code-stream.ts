@@ -45,13 +45,14 @@ export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMe
 export const defaultQuery: QueryFn = (args) => sdk().query(args);
 
 // Maps the SDK's slash commands onto the composer's `/` popover shape. `argumentHint` is always a string on the SDK
-// side; empty means no hint.
+// side; empty means no hint. `builtin` is said either way: the SDK leaves it off exactly for a command somebody wrote.
 const commandFrame = (commands: readonly SlashCommand[]): AgentEvent => ({
     kind: "commands",
     items: commands.map((command) => ({
         name: command.name,
         description: command.description,
         ...(command.argumentHint !== "" ? { hint: command.argumentHint } : {}),
+        builtin: command.builtin === true,
     })),
 });
 

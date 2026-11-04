@@ -196,6 +196,14 @@ export const AgentCommandSchema = z.object({
     name: z.string().describe("What to type, without the leading slash."),
     description: z.string().describe("What it does."),
     hint: z.string().optional().describe("What its argument should look like, shown after the name."),
+    // Claude Code's own `builtin` marker, and false for a skill a runtime published as one: a command someone wrote takes
+    // its name from the editor's own `/usage` or `/model`, a runtime's built-in gives it up (slashCommands.ts).
+    builtin: z
+        .boolean()
+        .optional()
+        .describe(
+            "True for the agent's own built-in command, false for one somebody wrote (a skill, a project or plugin command). Absent when the runtime does not say.",
+        ),
 });
 export type AgentCommand = z.infer<typeof AgentCommandSchema>;
 

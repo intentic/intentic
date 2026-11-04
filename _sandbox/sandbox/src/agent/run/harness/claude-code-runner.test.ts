@@ -2585,7 +2585,7 @@ test("the session's slash commands are published at init, dropping empty argumen
         queryWithCommands(
             [
                 { name: "review", description: "Review a PR", argumentHint: "<pr>" },
-                { name: "compact", description: "Compact the context", argumentHint: "" },
+                { name: "compact", description: "Compact the context", argumentHint: "", builtin: true },
             ],
             { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
             { type: "result", subtype: "success" },
@@ -2594,8 +2594,8 @@ test("the session's slash commands are published at init, dropping empty argumen
     expect(events).toContainEqual({
         kind: "commands",
         items: [
-            { name: "review", description: "Review a PR", hint: "<pr>" },
-            { name: "compact", description: "Compact the context" },
+            { name: "review", description: "Review a PR", hint: "<pr>", builtin: false },
+            { name: "compact", description: "Compact the context", builtin: true },
         ],
     });
 });
@@ -2614,7 +2614,7 @@ test("a commands_changed push republishes the whole list mid-turn", async () => 
             { type: "result", subtype: "success" },
         ),
     );
-    expect(events).toContainEqual({ kind: "commands", items: [{ name: "deploy", description: "Ship it" }] });
+    expect(events).toContainEqual({ kind: "commands", items: [{ name: "deploy", description: "Ship it", builtin: false }] });
 });
 
 test("a stream with no command list publishes no commands frame", async () => {

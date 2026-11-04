@@ -790,8 +790,12 @@ async function* approvalFrames(
 // warning. turn.started has no UI mapping and is dropped, like the Claude path's unmapped SDK messages.
 function* reportFrames(event: CodexEvent): Generator<AgentEvent> {
     if (event.type === "commands") {
-        // Thread's skills for the `/` popover; republished every turn so an unused conversation still shows them.
-        yield { kind: "commands", items: event.skills.map((skill) => ({ name: skill.name, description: skill.description })) };
+        // Thread's skills for the `/` popover; republished every turn so an unused conversation still shows them. A skill
+        // is somebody's own; the one with no file is Codex's reviewer (codex-commands.ts publishedCommands).
+        yield {
+            kind: "commands",
+            items: event.skills.map((skill) => ({ name: skill.name, description: skill.description, builtin: skill.path === "" })),
+        };
     } else if (event.type === "context") {
         yield { kind: "context_usage", tokens: event.tokens, contextWindow: event.window };
     } else if (event.type === "model.rerouted") {
