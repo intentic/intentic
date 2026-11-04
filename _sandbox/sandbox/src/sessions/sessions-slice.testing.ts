@@ -2,9 +2,9 @@ import { IN_MEMORY } from "@intentic/base/sqlite";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { toolCardOf, toolChildrenOf, transcriptPageOf } from "./agent-transcript.js";
-import { openSearchIndex } from "./search-index.js";
+import { openSearchIndex } from "./search/search-index.js";
 import type { SessionsSlice } from "./sessions-slice.js";
-import { spokenLinesOf } from "./transcript-search.js";
+import { spokenLinesOf } from "./search/transcript-search.js";
 
 // The sessions slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 

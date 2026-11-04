@@ -3,7 +3,7 @@
 // when app.intentic.dev cannot (public/sw.js, README "Offline copy"). It used to be registered only when push was
 // switched on, so the copy never existed for the readers who need it most: the ones who never asked for notifications.
 
-export const APP_WORKER_URL = `/sw.js`;
+const APP_WORKER_URL = `/sw.js`;
 
 /** Where this page was loaded, and what kind of build and window it is. */
 export interface WorkerPlace {

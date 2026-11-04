@@ -104,7 +104,7 @@ const leftText = (available: number, total: number): string =>
 const ageText = (ms: number): string => (ms < 2 * 60 * 60_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : `${Math.round(ms / (60 * 60_000))} h`);
 
 // The biggest few, each with its size. Pure.
-export const consumersText = (consumers: readonly { readonly what: string; readonly bytes: number }[]): string =>
+const consumersText = (consumers: readonly { readonly what: string; readonly bytes: number }[]): string =>
     consumers
         .slice(0, NAMED)
         .map((consumer) => `${consumer.what} ${sizeLabel(consumer.bytes)}`)
@@ -124,7 +124,7 @@ const reliefText = (after: DiskAnswer): string => {
 
 // The one line a level crossed is told in. `read` is the minute's reading, `after` what the relief and the kept
 // measurement answered (undefined when that run failed). Pure.
-export const tellLine = ({
+const tellLine = ({
     read,
     after,
     relieving,
@@ -149,12 +149,12 @@ export const tellLine = ({
 };
 
 // A clearing while the level stands, said only when it did something. Pure.
-export const stillLine = (level: DiskLevel, after: DiskAnswer | undefined): string | undefined => {
+const stillLine = (level: DiskLevel, after: DiskAnswer | undefined): string | undefined => {
     const relief = after === undefined ? "" : reliefText(after);
     return relief === "" ? undefined : `engine disk: still ${level} —${relief}`;
 };
 
-export const backLine = (read: Space): string => `engine disk: back to ok — ${leftText(read.availableBytes, read.totalBytes)}.`;
+const backLine = (read: Space): string => `engine disk: back to ok — ${leftText(read.availableBytes, read.totalBytes)}.`;
 
 // What the watch remembers between rounds. In memory: an agent restart during a stretch says its level once more.
 export interface DiskWatchState {

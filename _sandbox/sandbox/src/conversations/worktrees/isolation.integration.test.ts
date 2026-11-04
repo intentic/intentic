@@ -18,18 +18,14 @@ import {
     hiddenIn,
     inWorktree,
     type IsolationPlan,
-    fstabOf,
     isolationScript,
     MAIN_MOUNT,
-    type MountEntry,
-    type MountFacts,
-    mountPointsOf,
-    mountTable,
     prepareMountView,
     mirroredDirs,
     nsenterArgv,
     nsenterPrefix,
 } from "./isolation.js";
+import { fstabOf, type MountEntry, type MountFacts, mountPointsOf, mountTable } from "./mount-table.js";
 import { sessionsDir } from "../../sessions/session-store.js";
 
 // Pins the mount plan and path translation, not the real namespace (CAP_SYS_ADMIN is not guaranteed here); a wrong

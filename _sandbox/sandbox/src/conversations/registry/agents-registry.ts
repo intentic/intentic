@@ -279,7 +279,7 @@ export interface AgentsRegistry {
     // `parent`, once, on the opening compose of a spawned child cut from its parent's checkout (placement.parent).
     // `branches`, once too, on the opening compose of a conversation started from a branch (placement.branches).
     readonly recordWorktree: (id: string, repos: readonly RepoRecord[], composition?: Composition, parent?: string, branches?: readonly RepoBranch[]) => Promise<void>;
-    // Strips a deleted repo out of every checkout, live and archived. Only the registry's half; conversations/vanished-repos.ts
+    // Strips a deleted repo out of every checkout, live and archived. Only the registry's half; conversations/registry/vanished/vanished-repos.ts
     // decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
     // Sets the title per the source ranking (AgentTitleSource): a rename always lands, an automatic source only moves

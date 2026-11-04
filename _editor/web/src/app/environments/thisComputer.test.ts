@@ -33,7 +33,7 @@ test("offered only where the app says it can open this computer's sandboxes", as
 });
 
 test("pressed, it hands the app the one link that opens them", async () => {
-    const { openThisComputersSandboxes, DESKTOP_MACHINE_FACE_LINK } = await load({ ...APP, machineFace: true });
+    const { openThisComputersSandboxes } = await load({ ...APP, machineFace: true });
     const sent: string[] = [];
     Reflect.set(globalThis, `location`, {
         get href(): string {
@@ -47,6 +47,5 @@ test("pressed, it hands the app the one link that opens them", async () => {
 
     openThisComputersSandboxes();
 
-    expect(DESKTOP_MACHINE_FACE_LINK).toBe(`intentic://machine-face`);
     expect(sent).toEqual([`intentic://machine-face`]);
 });

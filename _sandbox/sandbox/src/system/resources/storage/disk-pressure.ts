@@ -15,7 +15,7 @@ import type { HistorySpace } from "./checkout-space.js";
 // Fractions of the volume rather than bytes: the same 50 GB is a crisis on a 200 GB disk and a margin on 4 TB.
 // (2026-11-03) REAP_BELOW is the default of the settings' `diskReapBelowPercent`: on a disk the sandbox shares with other
 // sandboxes and the owner's own containers (a local engine), the owner may want room kept sooner.
-export const REAP_BELOW = 0.15;
+const REAP_BELOW = 0.15;
 const LOW_BELOW = 0.1;
 const CRITICAL_BELOW = 0.05;
 

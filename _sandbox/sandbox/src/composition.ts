@@ -68,7 +68,7 @@ import { createPushSender, type PushSender } from "./push/push.js";
 import { createPortForwards } from "./ports/port-forwards.js";
 import { cachedScan, listenerFingerprint } from "./ports/port-scan.js";
 import { scanPortsWith } from "./ports/owned-ports.js";
-import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
+import { transcriptSearchMetrics } from "./sessions/search/transcript-search.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { createSpeech, type Speech } from "@intentic/speech/transcribe";
 import { composeSpokenReply } from "./agent/models/spoken-reply.js";

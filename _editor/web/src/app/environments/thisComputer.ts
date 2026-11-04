@@ -9,7 +9,7 @@ import { desktopApp, openDesktopLink } from "./desktop";
 // Pressed, the link turns this window into that editor (the app's `intentic://machine-face`), the same place its own
 // offline page leads. Read apart from desktop.ts's other fields, which that module types.
 
-export const DESKTOP_MACHINE_FACE_LINK = `intentic://machine-face`;
+const DESKTOP_MACHINE_FACE_LINK = `intentic://machine-face`;
 
 const Offered = z.object({ machineFace: z.literal(true) });
 

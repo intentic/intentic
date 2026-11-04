@@ -14,7 +14,7 @@ import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Steer, TurnInput, TurnStarter, Unqueued, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
 import { conversationIdentity, unpairedRunner } from "../placement/turn-placement.js";
-import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
+import { recordConversationPrompt, recordPrompt } from "../../../sessions/search/transcript-search.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
 import { keepReceipt, receiptOf } from "./message-receipts.js";
 import { steerComposed } from "./turn-interactions.js";

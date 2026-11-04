@@ -294,7 +294,7 @@
     "_sandbox/sandbox/src/scaffold/autostart.ts": 1,
     "_sandbox/sandbox/src/scaffold/starter-site.ts": 1,
     "_sandbox/sandbox/src/sessions/conversation-purge.ts": 1,
-    "_sandbox/sandbox/src/sessions/search-store.ts": 1,
+    "_sandbox/sandbox/src/sessions/search/search-store.ts": 1,
     "_sandbox/sandbox/src/sessions/session-store.ts": 1,
     "_sandbox/sandbox/src/sessions/turn-transcript.ts": 1,
     "_sandbox/sandbox/src/settings/field-notes-status.ts": 1,

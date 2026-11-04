@@ -1,8 +1,8 @@
-import { sdk } from "../engines/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { oneLine } from "@intentic/base/one-line";
-import { parsePromptEnvelope } from "./vocabulary/prompt-envelope.js";
+import { parsePromptEnvelope } from "../vocabulary/prompt-envelope.js";
 
 // Spoken text, a side's own words, never tool output or protocol wrapping (preambles, attachment notes), is what the
 // fleet filter and history search match on. Beside it a conversation's record also yields what it DID, marked by `via`:

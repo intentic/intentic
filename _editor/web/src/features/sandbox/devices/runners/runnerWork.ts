@@ -1,7 +1,7 @@
 import type { OffloadKind, OffloadRecord } from "@intentic/sandbox-contract/schemas/offload";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { t } from "@intentic/ui/i18n";
-import { kindTitle } from "../../agent-settings/behaviour/offloadRows";
+import { kindTitle } from "../../agent-settings/behaviour/offload/offloadRows";
 
 // What a runner's row says about the work this sandbox sends it (settings `offload`): which kinds go there, and how the
 // last offloaded run there ended. Empty for a runner nothing is sent to, which then reads as it always did.

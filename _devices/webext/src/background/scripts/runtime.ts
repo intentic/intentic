@@ -381,6 +381,7 @@ const text = (value) => {
 };
 try {
     const value = await Promise.race([tried.run, new Promise((resolve) => setTimeout(() => resolve(pending), ${waitMs}))]);
+    // allow(primitive-tiers): this runs in the page, where no import reaches; the settle is a fixed pause.
     await new Promise((resolve) => setTimeout(resolve, ${settleMs}));
     if (value === pending) return { parsed: true, ok: true, pending: true, logs: tried.logs };
     const shown = text(value);

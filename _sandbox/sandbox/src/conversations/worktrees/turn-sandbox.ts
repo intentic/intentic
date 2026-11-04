@@ -287,7 +287,7 @@ const jailHomeArgs = (host: HostView, sources: SandboxSources): string[] => [
 ];
 
 // The whole workspace at its root, read-write, with nothing covered and no pointer masked. An isolated turn's checkout
-// gets the shared state back from the main checkout as its mount namespace would (isolation.ts mountTable), the shelf
+// gets the shared state back from the main checkout as its mount namespace would (mount-table.ts mountTable), the shelf
 // read-only and the package store and the mirrors behind its own layers, as a fenced turn's; a main-tree turn's checkout
 // is the main checkout, which holds all of them already. Then the workspace's secrets and identity files are covered,
 // the conversation's own session store stands over the shared one, and the git directories every pointer leads into.

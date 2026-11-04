@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { isolatedAgent } from "../agents-store.testing.js";
@@ -184,7 +185,7 @@ describe("a shared Cargo target's layers (cargo-warm.ts)", () => {
         mkdirSync(join(layer, "upper", "debug", "incremental", "app-1x2y"), { recursive: true });
         mkdirSync(join(layer, "upper", "debug", "deps"), { recursive: true });
         mkdirSync(join(layer, "work"), { recursive: true });
-        writeFileSync(join(layer, "warm-lower"), "/history/cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb\n");
+        writeFileSync(join(layer, "warm-lower"), `${HISTORY_ROOT}/cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb\n`);
         return { dir, layer, overlaysOf: (one) => join(overlays, one) };
     };
 

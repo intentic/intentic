@@ -15,9 +15,8 @@ import { extname, join, normalize, sep } from "node:path";
 import { listen } from "./hermetic.js";
 import { asList } from "./parse.js";
 
-/** The offline page and the sandbox face as WebView2 serves the app's bundle on Windows (offline.rs `PAGE`). */
+/** The offline page as WebView2 serves the app's bundle on Windows (offline.rs `PAGE`). */
 export const OFFLINE_PAGE = `http://tauri.localhost/offline.html`;
-export const FACE_PAGE = `http://tauri.localhost/files/sandbox`;
 
 /** Hosts on RFC 2606's reserved TLD: they resolve for no one, so a scenario that leaks reaches nothing real. */
 export const OUTAGE_APP_URL = `https://app.e2e.test`;

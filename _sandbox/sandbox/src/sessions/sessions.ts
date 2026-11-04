@@ -14,8 +14,8 @@ import { resultText } from "./vocabulary/tool-calls.js";
 import { SdkCallFrames } from "./vocabulary/sdk-call-frames.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
 import { rootRelative } from "./turn-transcript.js";
-import type { SearchIndex } from "./search-index.js";
-import { matchLines, sessionOverlay } from "./transcript-search.js";
+import type { SearchIndex } from "./search/search-index.js";
+import { matchLines, sessionOverlay } from "./search/transcript-search.js";
 import { flatSpokenWords, parsePromptEnvelope, storedPromptTitle } from "./vocabulary/prompt-envelope.js";
 
 // The index's own search, passed in rather than imported, since this module knows how to ask what a session said, not

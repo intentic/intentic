@@ -7,6 +7,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { requires } from "@intentic/testing/requires";
 import { z } from "zod";
 import type { Logger } from "pino";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import {
     cargoWorkspaces,
@@ -20,7 +21,8 @@ import {
     warmKey,
     warmLayersOf,
 } from "./cargo-warm.js";
-import { createTurnIsolation, fstabOf, type IsolationPlan, MAIN_MOUNT, mountPointsOf, mountTable, warmMountsOf } from "./isolation.js";
+import { createTurnIsolation, type IsolationPlan, MAIN_MOUNT, warmMountsOf } from "./isolation.js";
+import { fstabOf, mountPointsOf, mountTable } from "./mount-table.js";
 
 // The warm Cargo layer (cargo-warm.ts): how a snapshot is made, pinned, retired and released on disk, and, where this
 // machine has cargo and can mount an overlay in a user namespace, a second checkout's build reading the first's
@@ -209,7 +211,7 @@ test("releasing a checkout's layers takes the incremental caches alone or the wh
         await mkdir(join(layer, "upper", "debug", "deps"), { recursive: true });
         await mkdir(join(layer, "work", "work"), { recursive: true });
         await chmod(join(layer, "work", "work"), 0o000);
-        await writeFile(join(layer, "warm-lower"), "/history/cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb\n");
+        await writeFile(join(layer, "warm-lower"), `${HISTORY_ROOT}/cargo-warm/%2F/1700000000000-aaaaaaaaaaaa-bbbbbbbb\n`);
     }
     const mounted = (): Promise<ReadonlySet<string>> => Promise.resolve(new Set([join(live, "upper")]));
 
@@ -225,8 +227,8 @@ test("releasing a checkout's layers takes the incremental caches alone or the wh
 });
 
 test("a warm target is mounted last, over the checkout's own folder, reading through its snapshot into the checkout's layer", () => {
-    const plan: IsolationPlan = { worktree: "/history/worktrees/c1", root: "/work", mirrors: ["node_modules"], overlays: "/history/overlays/c1", fence: undefined };
-    const lower = "/history/cargo-warm/%2Fcrates%2Fapp/1700000000000-aaaaaaaaaaaa-bbbbbbbb/target";
+    const plan: IsolationPlan = { worktree: `${HISTORY_ROOT}/worktrees/c1`, root: WORKSPACE_ROOT, mirrors: ["node_modules"], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
+    const lower = `${HISTORY_ROOT}/cargo-warm/%2Fcrates%2Fapp/1700000000000-aaaaaaaaaaaa-bbbbbbbb/target`;
     const facts = { shelf: false, store: false, volatile: true, warm: [{ rel: "crates/app/target", lower }] };
     expect(mountTable(plan, facts).at(-1)).toEqual({
         source: "intentic-modules",

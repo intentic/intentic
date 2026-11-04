@@ -5,7 +5,7 @@ import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript
 import { readableProviderText } from "../../engines/provider-error-text.js";
 import type { Services } from "../../composition.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
-import type { FoundLine } from "../../sessions/search-index.js";
+import type { FoundLine } from "../../sessions/search/search-index.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { type FleetNow, fleetNow } from "./fleet-now.js";
 import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CheckoutPress, CheckoutUsage } from "@intentic/sandbox-contract/schemas/metrics";
-import { Button, ConfirmDialog } from "@intentic/ui";
+import { Button, ConfirmDialog, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatBytes, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -31,6 +31,13 @@ const total = computed(() => props.rows.reduce((sum, row) => sum + checkoutTotal
 const showAll = ref(false);
 const shown = computed(() => (showAll.value || props.rows.length <= LEADING_CHECKOUTS + 1 ? props.rows : props.rows.slice(0, LEADING_CHECKOUTS)));
 const landed = computed(() => landedReleasable(props.rows));
+
+// What a press does to the checkout, and what brings back what it removes.
+const releaseTip = computed((): Tip => ({ title: t(`sandbox.storageCheckouts.releaseTip`), note: t(`sandbox.storageCheckouts.releaseNote`) }));
+const cleanBuildOutputTip = computed((): Tip => ({
+    title: t(`sandbox.storageCheckouts.cleanBuildOutputTip`),
+    note: t(`sandbox.storageCheckouts.cleanBuildOutputNote`),
+}));
 
 const nameOf = (row: CheckoutUsage): string => row.title ?? (row.state === `leftover` ? t(`sandbox.storageCheckouts.leftoverName`) : row.id);
 
@@ -72,7 +79,7 @@ const freeLanded = (): void => {
                 :label="t(`sandbox.storageCheckouts.freeLanded`, { count: landed.length }, landed.length)"
                 :loading="pressing === PRESSING_MANY"
                 :disabled="disabled || pressing !== undefined"
-                v-tooltip.top="t(`sandbox.storageCheckouts.releaseNote`)"
+                v-tooltip.top="releaseTip"
                 @click="freeLanded"
             >
                 <template #icon><Icon name="box" /></template>
@@ -108,7 +115,7 @@ const freeLanded = (): void => {
                         :label="t(`sandbox.storageCheckouts.cleanBuildOutput`, { bytes: formatBytes(row.buildOutputBytes) })"
                         :loading="pressing === row.id"
                         :disabled="disabled || (pressing !== undefined && pressing !== row.id)"
-                        v-tooltip.top="t(`sandbox.storageCheckouts.cleanBuildOutputNote`)"
+                        v-tooltip.top="cleanBuildOutputTip"
                         data-press="cleanBuildOutput"
                         @click="emit(`press`, [row], `cleanBuildOutput`, nameOf(row))"
                     >
@@ -120,7 +127,7 @@ const freeLanded = (): void => {
                         tier="boring"
                         :label="t(`sandbox.storageCheckouts.release`)"
                         :disabled="disabled || pressing !== undefined"
-                        v-tooltip.top="t(`sandbox.storageCheckouts.releaseNote`)"
+                        v-tooltip.top="releaseTip"
                         data-press="release"
                         @click="emit(`press`, [row], `release`, nameOf(row))"
                     >

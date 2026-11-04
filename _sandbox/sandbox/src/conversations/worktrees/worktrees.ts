@@ -96,7 +96,7 @@ export interface AgentWorktrees {
     // land).
     // The branch then leaves refs/heads/ for the parked shelf (conversations/agent-refs.ts); ensure() restores from it later.
     readonly retire: (id: string, recorded: readonly { repo: string; base: string }[], title: string | undefined) => Promise<void>;
-    // Gets a deleted repo's checkout out of a conversation (disk half of dropping it, conversations/vanished-repos.ts); not a
+    // Gets a deleted repo's checkout out of a conversation (disk half of dropping it, conversations/registry/vanished/vanished-repos.ts); not a
     // worktree remove since no repo remains to run one in.
     // Left alone, its untracked-by-exclude tree would be swept onto the agent's branch by the next `add -A`; moved to
     // trash rather than deleted, like the git dir that went with it.

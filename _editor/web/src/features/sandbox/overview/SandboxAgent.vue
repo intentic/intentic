@@ -26,7 +26,7 @@ import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
 import AgentVoice from "../agent-settings/behaviour/AgentVoice.vue";
-import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
+import AgentOffload from "../agent-settings/behaviour/offload/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 import SectionLink from "../SectionLink.vue";
 

@@ -3,14 +3,14 @@ import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
-import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRunners } from "../../../../models/sandbox/devices/useRunners";
-import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { rpcQuery } from "../../../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../../../client/sandbox/useSandboxQuery";
+import { useRunners } from "../../../../../models/sandbox/devices/useRunners";
+import { useSandboxSettings } from "../../../../../models/sandbox/useSandboxSettings";
 import type { SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
-import DetailSwitch from "./DetailSwitch.vue";
-import { useDetailLevel } from "./detailLevel";
-import OffloadExplainer from "./explainers/OffloadExplainer.vue";
+import DetailSwitch from "../DetailSwitch.vue";
+import { useDetailLevel } from "../detailLevel";
+import OffloadExplainer from "../explainers/OffloadExplainer.vue";
 import { HERE, kindDetail, kindTitle, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 // "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on

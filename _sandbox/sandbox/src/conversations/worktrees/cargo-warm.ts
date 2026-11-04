@@ -277,7 +277,7 @@ export const overlayLayersIn = (mountinfo: string): string[] =>
 
 // Every directory a live overlay uses as a layer, in any mount namespace on the machine, one mount table read per
 // namespace: what says a snapshot or a layer is in use, whoever mounted it and whatever this daemon remembers.
-export const mountedOverlayDirs = async (): Promise<ReadonlySet<string>> => {
+const mountedOverlayDirs = async (): Promise<ReadonlySet<string>> => {
     const namespaces = new Set<string>();
     const dirs = new Set<string>();
     for (const pid of await listPids()) {

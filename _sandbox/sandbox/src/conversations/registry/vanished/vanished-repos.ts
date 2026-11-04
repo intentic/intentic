@@ -1,9 +1,9 @@
 import { serialLock } from "@intentic/base/async";
 import { pathPresence } from "@intentic/base/fs";
 import type { Logger } from "pino";
-import type { AgentsRegistry } from "./agents-registry.js";
-import { reposOf } from "./agents-store.js";
-import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import type { AgentsRegistry } from "../agents-registry.js";
+import { reposOf } from "../agents-store.js";
+import type { AgentWorktrees } from "../../worktrees/worktrees.js";
 import { massAbsence } from "./mass-absence.js";
 
 // Drops a repo from every conversation once its directory is gone; composition is frozen at first turn, so deletion is

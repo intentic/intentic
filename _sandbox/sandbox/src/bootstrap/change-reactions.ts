@@ -1,5 +1,5 @@
 import { join, relative } from "node:path";
-import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos.js";
+import { startVanishedRepoSweep } from "../conversations/registry/vanished/vanished-repos.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";

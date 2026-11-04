@@ -13,8 +13,8 @@ import {
     searchWorkspaceSessions,
     sessionNaming,
 } from "./sessions.js";
-import { openSearchIndex } from "./search-index.js";
-import { readSessionLines } from "./transcript-search.js";
+import { openSearchIndex } from "./search/search-index.js";
+import { readSessionLines } from "./search/transcript-search.js";
 import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "./vocabulary/prompt-envelope.js";
 
 // Fakes the SDK store: `listSessions` is newest-first, `getSessionMessages` returns Anthropic-shaped turns.

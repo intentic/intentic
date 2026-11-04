@@ -15,8 +15,8 @@ import {
 } from "./agent-transcript.js";
 import { purgeConversationState } from "./conversation-purge.js";
 import { migrateOnThreads } from "./record/record-migration.js";
-import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
-import { openSearchIndex, type SearchIndex } from "./search-index.js";
+import { backfillSearchIndex, type BackfillSource } from "./search/search-backfill.js";
+import { openSearchIndex, type SearchIndex } from "./search/search-index.js";
 import {
     createRecentSessions,
     listWorkspaceSessions,
@@ -28,7 +28,7 @@ import {
     workspaceSessionExists,
 } from "./sessions.js";
 import { BLOB_GRACE_MS, fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./transcript-record.js";
-import { readSessionLines, spokenLinesOf } from "./transcript-search.js";
+import { readSessionLines, spokenLinesOf } from "./search/transcript-search.js";
 
 // Transcripts and sessions: the durable record, the session files, phrase search, and a conversation's purge.
 export interface SessionsSlice {

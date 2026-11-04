@@ -2,9 +2,15 @@
 // Fetches each vanity install URL and one sample of each one-liner verb route live, and asserts 200, `text/plain`, a non-empty non-HTML body; not a byte-comparison
 // against the working tree, since the site (`_site/site/worker.ts`) deploys separately from this pipeline. Reads no
 // credential, writes nothing.
+import { setTimeout as delay } from "node:timers/promises";
 import { INSTALL_SCRIPTS, installScriptUrl, oneLinerUrl } from "@intentic/constants";
 
 const TIMEOUT_MS = 15_000;
+// A handful at a time, and a request that fails before any answer (no HTTP status: a reset, a refused or timed-out
+// connection) is asked again: 43 sockets opened at once from the runner once came back 35 × "fetch failed" with the
+// site serving every one of them. An answer the site gave, right or wrong, is never retried.
+const CONCURRENCY = 6;
+const ATTEMPTS = 3;
 
 // The one-liner routes (`/<verb>/<arg>`), one sample per verb with well-formed made-up arguments: the Worker injects
 // them into the same scripts without checking that the sandbox or code exists, so a 200 here means the route works.
@@ -37,7 +43,7 @@ const flatTargets = Object.keys(INSTALL_SCRIPTS).map((key) => ({ key, url: insta
 
 // GET, not HEAD (unreliable here); the body is half the check, since a 200 wrapping the 404 page is exactly the failure
 // this looks for.
-async function probe({ key, url, file, expect }) {
+async function probeOnce({ key, url, file, expect }) {
     try {
         const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
         const body = await response.text();
@@ -57,11 +63,41 @@ async function probe({ key, url, file, expect }) {
         }
         return { key, url, file, ok: true, why: `${body.split("\n").length} lines` };
     } catch (error) {
-        return { key, url, file, ok: false, why: `request failed: ${error instanceof Error ? error.message : String(error)}` };
+        return { key, url, file, ok: false, unanswered: true, why: `request failed: ${describe(error)}` };
     }
 }
 
-const results = await Promise.all([...flatTargets, ...verbTargets].map(probe));
+// undici says only "fetch failed"; what went wrong (ECONNRESET, ENOTFOUND, a TLS error) is on its cause.
+function describe(error) {
+    if (!(error instanceof Error)) {return String(error);}
+    const cause = error.cause instanceof Error ? (error.cause.code ?? error.cause.message) : undefined;
+    return cause === undefined ? error.message : `${error.message} (${cause})`;
+}
+
+async function probe(target) {
+    let result = await probeOnce(target);
+    for (let attempt = 2; attempt <= ATTEMPTS && result.unanswered; attempt++) {
+        await delay(1_000 * attempt);
+        result = await probeOnce(target);
+        if (result.ok) {result.why += ` (attempt ${attempt})`;}
+    }
+    return result;
+}
+
+async function probeAll(targets) {
+    const results = [];
+    let next = 0;
+    const worker = async () => {
+        while (next < targets.length) {
+            const target = targets[next++];
+            results.push(await probe(target));
+        }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    return results;
+}
+
+const results = await probeAll([...flatTargets, ...verbTargets]);
 results.sort((a, b) => a.url.localeCompare(b.url));
 
 for (const result of results) {

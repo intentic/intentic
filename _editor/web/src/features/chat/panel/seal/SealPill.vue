@@ -42,7 +42,7 @@ const pill = ref<HTMLElement>();
         :class="
             composer
                 ? 'composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11'
-                : ui.textButton({ tone: `quiet`, size: `xs` }, `min-w-0 gap-1.5 font-medium`)
+                : ui.textButton({ tone: `quiet`, size: `xs` }, `min-w-0 font-medium`)
         "
         v-tooltip.top="composer ? label : undefined"
         :aria-expanded="open"

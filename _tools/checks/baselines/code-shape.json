@@ -2629,7 +2629,7 @@
         "count": 27,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/sessions/search-store.ts#search#cognitive": {
+    "_sandbox/sandbox/src/sessions/search/search-store.ts#search#cognitive": {
         "count": 21,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },

@@ -1,7 +1,7 @@
 import { startPeriodic } from "@intentic/base/async";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { archiveVanishedWorktrees } from "../conversations/registry/vanished-worktrees.js";
+import { archiveVanishedWorktrees } from "../conversations/registry/vanished/vanished-worktrees.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";

@@ -30,7 +30,7 @@ export function useRunTargets() {
 }
 
 // Where the operations ledger keeps the presses that start a run: the workspace's, not the dialog's.
-export const RUN_STARTS = `workspace/runs`;
+const RUN_STARTS = `workspace/runs`;
 const runKey = (repo: string, target: string, device: string): string => `${repo}/${target}@${device}`;
 
 // The Run buttons' presses, kept in the operations ledger rather than the dialog that made them: closing the dialog
