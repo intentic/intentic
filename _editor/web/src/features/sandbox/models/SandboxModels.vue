@@ -26,7 +26,6 @@ import { useChat } from "../../../models/conversations/run/useChat";
 import { accessKnown, providerReady } from "../../../models/providers/access";
 import BringAccounts from "./BringAccounts.vue";
 import LocalModelsPanel from "./LocalModelsPanel.vue";
-import { localPrefetchStopped } from "./localPrefetch";
 import type { ModelSource, ModelSourceStanding } from "./modelSources";
 import ProviderPanel from "./ProviderPanel.vue";
 import {
@@ -83,40 +82,11 @@ const { can } = useAccess();
 // What each tile holds, judged the way the Models row in the sandbox's menu judges it.
 const sources = useModelSources();
 
-const { fit, startPrefetch, stopPrefetch } = useLocalModelFit();
-
-// A local model is a capability, not an account.
-const localModel = computed(() => endpointProviders.value.find((endpoint) => endpoint.kind === `localmodel`));
-
-// The weights that make the local offer instant, fetched while the reader is still reading the page — but only where
-// they could be used at all, and only if nobody has already declined them. A gigabyte started on a machine that cannot
-// serve it, or one whose owner pressed Stop last time, is bandwidth spent on nothing.
-// Asked at most once per visit: the start's own answer lands back in `fit`, so a daemon that answers anything but
-// "downloading" would otherwise have this watcher ask it again forever.
-let prefetchAsked = false;
-watch(
-    fit,
-    (measured) => {
-        if (
-            !prefetchAsked &&
-            (canShip.value || can(`endpoints.localModelPrefetch`)) &&
-            measured !== undefined &&
-            measured.serverReady &&
-            measured.instant !== undefined &&
-            measured.prefetch.state === `idle` &&
-            !localPrefetchStopped.value &&
-            localModel.value === undefined
-        ) {
-            prefetchAsked = true;
-            void startPrefetch();
-        }
-    },
-    { immediate: true },
-);
-
-// A stop is a decision, not a pause: remembered, so re-opening this view does not begin it again.
+// No model's weights are fetched by visiting this page: a download of a gigabyte or more is the reader's own press on
+// a rung (LocalModelLane). Opening the page used to start the quick model's (2026-11-04: taken out, since nobody asked
+// for it). A transfer still running from that, or started by an older editor, keeps its progress line and its stop.
+const { fit, stopPrefetch } = useLocalModelFit();
 const stopFetching = (): void => {
-    localPrefetchStopped.value = true;
     void stopPrefetch();
 };
 

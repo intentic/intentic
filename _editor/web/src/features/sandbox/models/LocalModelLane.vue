@@ -3,14 +3,13 @@ import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
 import { useLoaded } from "@intentic/extension-api";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
-import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { Await, Button, ConfirmDialog, Icon, type IconName, type NoticeModel, Row, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { suggestName } from "../../../models/capabilities/tiles";
-import { localPrefetchStopped } from "./localPrefetch";
 import { deleteLocalModelWeights } from "./useLocalModelFit";
 import { useT } from "@intentic/ui/i18n";
 
@@ -158,8 +157,8 @@ const addModel = async (model: string, context: string): Promise<void> => {
 
 // TAKING ONE BACK. A model costs gigabytes of disk, and nothing used to give them back: a taken rung only reported, and
 // removing its connection elsewhere kept the weights for the next start. Each rung with weights on disk has one way back
-// beside its state or its button: a taken one is removed and its download deleted, one only downloaded (the prefetch
-// fetches the quick model on a first visit, unasked) has its download deleted. Confirmed first, naming what is lost.
+// beside its state or its button: a taken one is removed and its download deleted, one only downloaded (by an earlier
+// editor's prefetch, or an entry removed elsewhere) has its download deleted. Confirmed first, naming what is lost.
 // Kept in the ledger like the add, so a refusal is still there to read when the reader comes back.
 const discarding = useOperation<void>(`models/local/discard`);
 const discardFailure = computed(() => discarding.failure.value?.detail ?? discarding.failure.value?.title);
@@ -219,10 +218,6 @@ const discard = async (): Promise<void> => {
         task: async () => {
             if (target.entry !== undefined) {
                 await remove.mutateAsync(target.entry.id);
-            }
-            // A deleted quick model is a declined one: the page's prefetch must not fetch it again on the next visit.
-            if (target.model === LOCAL_MODEL_INSTANT.id) {
-                localPrefetchStopped.value = true;
             }
             await deleteLocalModelWeights(target.model);
         },
@@ -423,8 +418,8 @@ const rungs = computed(() => {
                                     {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />
                                 </RouterLink>
 
-                                <!-- The prefetch is why a rung can be instant; said as a fact, with its own stop, never as a silent
-                                     transfer. Gone once the rung is taken: the entry's own status reports the same bytes from then on. -->
+                                <!-- A prefetch still running (an older editor started it on a first visit) is said as a fact, with its
+                                     own stop, never as a silent transfer. Gone once the rung is taken: the entry's own status reports the same bytes from then on. -->
                                 <p
                                     v-if="!rung.installed && fit.prefetch.state === `downloading` && fit.prefetch.model === rung.model"
                                     class="flex items-center gap-1.5 text-2xs text-subtle"

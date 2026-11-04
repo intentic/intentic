@@ -285,7 +285,7 @@ export const LOCAL_MODEL_WINDOW_MAX = 1_048_576;
 // rather than down: over-reserving costs a rung, under-reserving costs an allocation failure a card had promised
 // against.
 export const LOCAL_MODEL_KV_BYTES_PER_TOKEN = 65_536;
-// What a rung honestly serves. `instant` is the one the connect view prefetches — it downloads in under a minute and
+// What a rung honestly serves. `instant` is the small one the connect view offers first — it downloads in under a minute and
 // cannot drive a full agent turn, so its catalog row is helper-only (Model.helperOnly): the chat picker does not offer
 // it and the daemon refuses a turn on it. `work` is what that view recommends for real use.
 export type LocalModelTier = "instant" | "work";

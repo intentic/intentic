@@ -292,7 +292,11 @@ export const DEFAULT_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySc
 // The policy a sandbox that never wrote one runs on: the shield masking (2026-11-04, new sandboxes start shielded). The
 // schema's own default stays off, so a stored policy that leaves `mode` out reads as it always did; a sandbox from
 // before the change gets an off policy written down at its next boot (the daemon's settings/earlier-defaults-step.ts).
-export const FRESH_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySchema.parse({ mode: "on" });
+// Images go as they are and names come from the dictionary: both other answers need the privacy pack's local models
+// (OCR and the name model, about 255 MB) that no image bakes, so a shield masking images from the start asked every new
+// sandbox for a rebuild within minutes and held its images until then. Downloading local models is the owner's decision,
+// made where they switch image masking or the name model on.
+export const FRESH_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySchema.parse({ mode: "on", images: "allow", names: "dictionary" });
 
 // How a provider stands against the gateway, for the trusted list: whether its traffic can be shielded at all, and
 // whether it never leaves this machine.

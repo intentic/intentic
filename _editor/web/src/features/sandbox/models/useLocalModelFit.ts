@@ -17,7 +17,6 @@ const DOWNLOAD_POLL_MS = 1_500;
 export interface LocalModelFitView {
     readonly fit: ComputedRef<LocalModelFitResponse | undefined>;
     readonly prefetch: ComputedRef<LocalModelPrefetch | undefined>;
-    readonly startPrefetch: () => Promise<void>;
     readonly stopPrefetch: () => Promise<void>;
     readonly refetch: () => Promise<unknown>;
 }
@@ -29,7 +28,9 @@ const setPrefetch = (answer: LocalModelPrefetch): void => {
     );
 };
 
-const post = async (action: "start" | "stop"): Promise<void> => {
+// Only ever a stop: nothing in the editor starts one (SandboxModels.vue says why), but a transfer an older editor
+// began still answers to it.
+const post = async (action: "stop"): Promise<void> => {
     setPrefetch(await sandboxRpc.endpoints.localModelPrefetch({ action }));
 };
 
@@ -47,7 +48,6 @@ export const useLocalModelFit = (): LocalModelFitView => {
     return {
         fit: computed(() => query.data.value),
         prefetch: computed(() => query.data.value?.prefetch),
-        startPrefetch: () => post(`start`),
         stopPrefetch: () => post(`stop`),
         refetch: () => query.refetch(),
     };

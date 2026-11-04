@@ -171,7 +171,7 @@ describe("the local model tile", () => {
         expect(localModelChoice(String(field("model")?.default))?.tier).toBe("work");
     });
 
-    // The instant rung is the one the connect view prefetches; it cannot hold a full turn, and its own label has to say
+    // The instant rung is the small one the connect view offers first; it cannot hold a full turn, and its own label has to say
     // so wherever it is offered.
     it("marks the instant rung as quick jobs only", () => {
         const instant = field("model")?.options?.find((option) => option.value === LOCAL_MODEL_INSTANT.id);

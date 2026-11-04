@@ -22,7 +22,6 @@ jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }))
 
 const { default: LocalModelLane } = await import("./LocalModelLane.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
-const { localPrefetchStopped } = await import("./localPrefetch");
 
 // The add is kept in the operations ledger, which is module state: a run left there would follow one test into the next.
 afterEach(() => forgetOperations());
@@ -182,7 +181,6 @@ describe(`taking a model back`, () => {
         document.body.innerHTML = ``;
         remove.mutateAsync.mockClear();
         deleteLocalModelWeights.mockClear();
-        localPrefetchStopped.value = false;
     });
 
     it(`offers it only where there is something to give back: an entry, or weights on disk`, () => {
@@ -206,11 +204,9 @@ describe(`taking a model back`, () => {
         await settle();
         expect(remove.mutateAsync).toHaveBeenCalledWith(`localmodel-27b`);
         expect(deleteLocalModelWeights).toHaveBeenCalledWith(WORK);
-        // Not the quick model: the prefetch stays as it was.
-        expect(localPrefetchStopped.value).toBe(false);
     });
 
-    it(`deletes a download nobody took, and remembers the quick model as declined so it is not fetched again`, async () => {
+    it(`deletes a download nobody took`, async () => {
         const el = mounted(FIT, []);
         discard(el, `instant`)!.click();
         await settle();
@@ -219,6 +215,5 @@ describe(`taking a model back`, () => {
         await settle();
         expect(remove.mutateAsync).not.toHaveBeenCalled();
         expect(deleteLocalModelWeights).toHaveBeenCalledWith(QUICK);
-        expect(localPrefetchStopped.value).toBe(true);
     });
 });

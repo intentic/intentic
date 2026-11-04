@@ -47,9 +47,10 @@ test("on or watching, masking images or finding names by model each want the pac
     }
 });
 
-// A sandbox that never wrote a policy is a new one, which starts shielded (2026-11-04), images masked: so its readers ride.
-test("no policy written: a new sandbox's shield brings the privacy pack", async () => {
-    expect(await privacyPackFragments(services(mkdtempSync(join(tmpdir(), "privacy-pack-"))))).toEqual(await privacyPack());
+// A sandbox that never wrote a policy is a new one, which starts shielded (2026-11-04) but sends images as they are and
+// finds names by dictionary: nothing in it needs the pack's models, so a new sandbox is not asked for a rebuild.
+test("no policy written: a new sandbox's shield wants no pack", async () => {
+    expect(await privacyPackFragments(services(mkdtempSync(join(tmpdir(), "privacy-pack-"))))).toEqual([]);
 });
 
 test("a shield written off brings nothing", async () => {

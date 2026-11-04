@@ -45,9 +45,10 @@ describe(`PrivacyShieldPolicySchema`, () => {
         expect(DEFAULT_PRIVACY_SHIELD.rules).toEqual([]);
     });
 
-    // New sandboxes start shielded (2026-11-04), while a stored policy that leaves `mode` out still reads off.
-    it(`starts a sandbox that never wrote a policy masking, every other field at its default`, () => {
-        expect(FRESH_PRIVACY_SHIELD).toEqual({ ...DEFAULT_PRIVACY_SHIELD, mode: `on` });
+    // New sandboxes start shielded (2026-11-04), while a stored policy that leaves `mode` out still reads off. Shielded
+    // without the readers that need local models, so a new sandbox is not asked for a rebuild it never chose.
+    it(`starts a sandbox that never wrote a policy masking, images as they are, every other field at its default`, () => {
+        expect(FRESH_PRIVACY_SHIELD).toEqual({ ...DEFAULT_PRIVACY_SHIELD, mode: `on`, images: `allow` });
         expect(DEFAULT_PRIVACY_SHIELD.mode).toBe(`off`);
     });
 
