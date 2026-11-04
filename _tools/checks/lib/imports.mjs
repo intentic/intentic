@@ -8,8 +8,9 @@
 const STATIC =
     /(?<![\w$.])(?:import|export)\s+(type\s+)?(?:(\*(?:\s+as\s+[\w$]+)?|[\w$]+|\{[^}]*\})\s*(?:,\s*(?:\{[^}]*\}|\*\s+as\s+[\w$]+))?\s*from\s*)?["']([^"']+)["']/dg;
 // A call's specifier may be a template, and may follow a comment (`import(/* @vite-ignore */ "x")`) or come before
-// import attributes (`import("x", { with: … })`).
-const CALL = /(?<![\w$.])(?:import|require)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/[^\n]*\n\s*)*(["'`])([^"'`]+)\1\s*[,)]/dg;
+// import attributes (`import("x", { with: … })`). A block comment ends at its first `*/` (the C-comment pattern): a lazy
+// `[\s\S]*?` there could also run past it, and a run of comments then splits every way, which backtracks without end.
+const CALL = /(?<![\w$.])(?:import|require)\s*\(\s*(?:\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/\s*|\/\/[^\n]*\n\s*)*(["'`])([^"'`]+)\1\s*[,)]/dg;
 
 // `{ type A, type B }` erases at compile time; `{ type A, B }` and `{ A }` do not. A default or namespace binding is a
 // value whatever follows it.

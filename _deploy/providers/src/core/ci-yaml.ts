@@ -22,6 +22,6 @@ export const starterDockerfile = (): string =>
 export const normalize = (yaml: string): string =>
     yaml
         .split("\n")
-        .map((line) => line.replace(/\s+$/, ""))
+        .map((line) => line.trimEnd())
         .join("\n")
         .trim();

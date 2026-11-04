@@ -162,11 +162,20 @@ const LANG_NAMES = new Set(Object.values(EXT_LANG));
 // langOf() produces.
 export const canonicalLang = (token: string): string | undefined => EXT_LANG[token] ?? (LANG_NAMES.has(token) ? token : undefined);
 
+// A loop rather than `/\/+$/`, which rescans a long run of slashes from every one of them.
+const withoutTrailingSlashes = (path: string): string => {
+    let end = path.length;
+    while (end > 0 && path[end - 1] === "/") {
+        end -= 1;
+    }
+    return path.slice(0, end);
+};
+
 // Narrows swept entries to the request's scope; pure path logic, the security floor already ran in the sweep.
 export const filterScope = (entries: readonly FileEntry[], scope: Scope): FileEntry[] => {
     const globs = scope.globs?.map(globToRegExp);
     const notGlobs = scope.notGlobs?.map(globToRegExp);
-    const prefixes = scope.paths?.map((p) => p.replace(/^\.\//, "").replace(/\/+$/, ""));
+    const prefixes = scope.paths?.map((p) => withoutTrailingSlashes(p.replace(/^\.\//, "")));
     const langs = scope.langs?.map((token) => canonicalLang(token) ?? token);
     return entries.filter((entry) => {
         if (prefixes !== undefined && !prefixes.some((p) => entry.path === p || entry.path.startsWith(`${p}/`))) {

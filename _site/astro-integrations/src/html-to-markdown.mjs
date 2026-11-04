@@ -381,7 +381,8 @@ function renderNodes(nodes, ctx) {
  */
 export function htmlToMarkdown(html, ctx) {
     return renderNodes(parseHtml(html), ctx)
-        .replace(/[ \t]+\n/g, "\n")
+        // Every blank run is matched and the next character checked: `/[ \t]+\n/` rescans a run that ends mid-line.
+        .replace(/[ \t]+/g, (run, at, text) => (text[at + run.length] === "\n" ? "" : run))
         .replace(/\n{3,}/g, "\n\n")
         .replace(/[ \t]{2,}/g, " ")
         .trim();

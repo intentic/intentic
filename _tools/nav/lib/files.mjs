@@ -97,7 +97,7 @@ export const readAt = (root, path, ref) => {
 // Extracts a Vue SFC's `<script>` block; a TS parser run over the template produces noise, not an error. Includes
 // `lineOffset` so line numbers still refer to the whole file.
 export const vueScript = (text) => {
-    const match = /<script\b[^>]*>([\s\S]*?)<\/script>/u.exec(text);
+    const match = /<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/iu.exec(text);
     if (!match) {
         return { code: "", lineOffset: 0 };
     }

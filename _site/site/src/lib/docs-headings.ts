@@ -17,17 +17,28 @@ export interface DocsContent {
     headings: DocsHeading[];
 }
 
+// One pass over the entities, so an escaped `&amp;lt;` reads as the text `&lt;` and is not decoded a second time.
+const NAMED_ENTITIES = new Map([
+    ["amp", "&"],
+    ["lt", "<"],
+    ["gt", ">"],
+    ["quot", '"'],
+    ["nbsp", " "],
+]);
+
 /** `<code>api.views</code>: the surfaces` → `api.views: the surfaces` */
 function plainText(html: string): string {
     return html
         .replace(/<[^>]+>/g, "")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
-        .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
-        .replace(/&nbsp;/g, " ")
+        .replace(/&(?:#(\d+)|#x([0-9a-f]+)|(amp|lt|gt|quot|nbsp));/gi, (whole, decimal?: string, hex?: string, name?: string) => {
+            if (decimal !== undefined) {
+                return String.fromCodePoint(Number(decimal));
+            }
+            if (hex !== undefined) {
+                return String.fromCodePoint(Number.parseInt(hex, 16));
+            }
+            return NAMED_ENTITIES.get(name ?? ``) ?? whole;
+        })
         .replace(/\s+/g, " ")
         .trim();
 }

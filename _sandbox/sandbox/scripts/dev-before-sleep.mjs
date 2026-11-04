@@ -147,7 +147,9 @@ spawn(
     "sh",
     [
         "-c",
-        `echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox ${slug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"`,
+        `echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox "$1"; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"`,
+        "dev-rebuild",
+        slug,
     ],
     {
         cwd: REPO_ROOT,

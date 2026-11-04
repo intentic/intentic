@@ -60,7 +60,7 @@ describe("tokenFailure", () => {
 
     it("points a rejected company grant at domain-wide delegation instead", () => {
         expect(tokenFailure(connection, "domain", "invalid_grant", undefined)).toMatch(/domain-wide delegation/);
-        expect(tokenFailure(connection, "domain", "unauthorized_client", undefined)).toMatch(/admin\.google\.com/);
+        expect(tokenFailure(connection, "domain", "unauthorized_client", undefined)).toContain("admin.google.com");
     });
 
     it("blames the client pair when Google rejects the client", () => {

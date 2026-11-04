@@ -41,3 +41,10 @@ test("a component is read through its script and style blocks, and a stylesheet 
         { specifier: "../../_shared/css/house.css", typeOnly: false, line: 1 },
     ]);
 });
+
+test("a long run of comments before a call's specifier is read in linear time", () => {
+    const text = `import(${"/* a *//* b */".repeat(5000)} "x");\nimport(${"*//*".repeat(5000)}`;
+    const started = performance.now();
+    expect(importsOf("a.ts", text).map((site) => site.specifier)).toEqual(["x"]);
+    expect(performance.now() - started).toBeLessThan(1000);
+});

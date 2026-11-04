@@ -37,6 +37,9 @@ it(`refuses anything that could leave this origin`, () => {
     expect(returnPath(`/\\evil.example`)).toBe(`/`);
     expect(returnPath(`https://evil.example`)).toBe(`/`);
     expect(returnPath(`javascript:alert(1)`)).toBe(`/`);
+    expect(returnPath(`/\t/evil.example`)).toBe(`/`);
+    expect(returnPath(`/\n/evil.example`)).toBe(`/`);
+    expect(returnPath(`/\r\n/evil.example`)).toBe(`/`);
 });
 
 // A query param can arrive absent, repeated (array), or empty; all are malformed.

@@ -1,5 +1,5 @@
 import { bodyOf, parseHtml } from "./dom.js";
-import { markdownTable, renderMarkdown } from "./markdown.js";
+import { markdownCell, markdownTable, renderMarkdown } from "./markdown.js";
 
 const md = (html: string, baseUrl?: string): string => {
     const body = bodyOf(parseHtml(`<html><body>${html}</body></html>`));
@@ -92,5 +92,15 @@ describe("markdownTable", () => {
     it("marks right-aligned columns, and writes nothing for no rows", () => {
         expect(markdownTable([["n", "name"], ["1", "x"]], { align: ["right"] })).toBe("| n | name |\n| ---: | --- |\n| 1 | x |");
         expect(markdownTable([])).toBe("");
+    });
+});
+
+describe("markdownCell", () => {
+    test("folds each break and the blanks around it into one space, and a long blank run without one stays as it is", () => {
+        expect(markdownCell("a \t\r\n \n b|c")).toBe("a b\\|c");
+        const blanks = "\t".repeat(100_000);
+        const started = performance.now();
+        expect(markdownCell(`a${blanks}b`)).toBe(`a${blanks}b`);
+        expect(performance.now() - started).toBeLessThan(1000);
     });
 });

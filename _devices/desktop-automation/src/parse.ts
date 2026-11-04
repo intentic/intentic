@@ -24,7 +24,7 @@ export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
         .filter((line) => line !== "")
         .flatMap((line) => {
             // One regex instead of split-and-rejoin: padded columns cannot be rejoined and titles often contain spaces.
-            const fields = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/.exec(line);
+            const fields = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(\S.*))?$/.exec(line);
             if (fields === null) {
                 return [];
             }

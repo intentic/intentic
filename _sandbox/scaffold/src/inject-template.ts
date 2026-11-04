@@ -120,7 +120,12 @@ export const templateArchiveUrl = (source: string, ref: string): string | undefi
     if (!/^https?:\/\//.test(source)) {
         return undefined;
     }
-    return `${source.replace(/\/+$/, "").replace(/\.git$/, "")}/archive/${ref}.tar.gz`;
+    let end = source.length;
+    // A loop rather than `/\/+$/`, which rescans a long run of slashes from every one of them.
+    while (end > 0 && source[end - 1] === "/") {
+        end -= 1;
+    }
+    return `${source.slice(0, end).replace(/\.git$/, "")}/archive/${ref}.tar.gz`;
 };
 
 // Unpacks a source archive into `dir`; false means the host won't serve one (private repo, non-GitHub), so the caller
@@ -153,7 +158,12 @@ const materializeTemplateSource = async (source: string, ref: string, dir: strin
     if (archive !== undefined && (await extractTemplateArchive(archive, dir))) {
         return;
     }
-    await exec("git", ["clone", "-q", "--depth", "1", "--branch", ref, source, dir], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    // A ref or source spelled as an option (`--upload-pack=…`) would run a command; `--` ends git's options before the
+    // source, and a ref is never one.
+    if (ref.startsWith("-")) {
+        throw new Error(`Template ref ${ref} is not a branch or tag name.`);
+    }
+    await exec("git", ["clone", "-q", "--depth", "1", "--branch", ref, "--", source, dir], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
 };
 
 // Fetches the source into a temp dir, hands it to `fn`, and always removes it; a fresh fetch per call, no cache.

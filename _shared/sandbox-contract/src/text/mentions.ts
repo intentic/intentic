@@ -4,10 +4,19 @@
 
 // Broad on purpose, including invalid mentions: old turns persisted these candidates in the attachment field, and the
 // fold needs the same broad set to hide them.
+// A loop rather than `/[.,;:!?)]+$/`, which rescans a long run of punctuation from every one of them.
+const withoutTrailingPunctuation = (token: string): string => {
+    let end = token.length;
+    while (end > 0 && `.,;:!?)`.includes(token.charAt(end - 1))) {
+        end -= 1;
+    }
+    return token.slice(0, end);
+};
+
 export const mentionedPathTokens = (text: string): string[] => {
     const paths = new Set<string>();
     for (const match of text.matchAll(/(?:^|\s)@([^\s@]+)/g)) {
-        const token = (match[1] as string).replace(/[.,;:!?)]+$/, ``);
+        const token = withoutTrailingPunctuation(match[1] as string);
         if (token.includes(`/`) || token.includes(`.`)) {
             paths.add(token);
         }

@@ -271,7 +271,7 @@ it(`blames the shortcut only when the tunnel answers and the shortcut does not: 
     // Each lane answers or hangs up on its own base, so the four combinations are one fetch fake apiece.
     const lanes = (shortcut: boolean, tunnel: boolean) =>
         jest.fn(async (input: RequestInfo | URL) => {
-            const up = String(input).startsWith(TUNNEL) ? tunnel : shortcut;
+            const up = new URL(String(input)).origin === new URL(TUNNEL).origin ? tunnel : shortcut;
             if (!up) {
                 throw new TypeError(`Failed to fetch`);
             }

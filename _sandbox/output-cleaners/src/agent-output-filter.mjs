@@ -39,7 +39,8 @@ export const maskedFailure = (exitCode, pipeline) => {
 };
 
 // ripgrep's -r is --replace, not grep's recursive flag: in a cluster like `-rn` it rewrites every match to "n".
-const RG_REPLACE_CLUSTER = /(?<![\w.\-/])rg\s(?:[^;&|\n]*?\s)?(-[a-zA-Z]*r[a-zA-Z]*)(?=[\s;&|]|$)/;
+// The letters before the cluster's first `r` exclude `r`, so a run of them splits one way only.
+const RG_REPLACE_CLUSTER = /(?<![\w.\-/])rg\s(?:[^;&|\n]*?\s)?(-[a-qs-zA-Z]*r[a-zA-Z]*)(?=[\s;&|]|$)/;
 
 const commandNotes = (command, raw) => {
     const cluster = RG_REPLACE_CLUSTER.exec(command)?.[1];

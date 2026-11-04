@@ -54,7 +54,7 @@ describe(`the pre-paint profile script`, () => {
 // its rules, which is the only way a pre-paint script can be covered at all: it is a string in an HTML file, it runs
 // before any module the app could test through, and its whole job is to be right on the first frame.
 
-const SCRIPT = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((match) => match[1] ?? ``).find((body) => body.includes(`PROFILES`)) ?? ``;
+const SCRIPT = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/giu)].map((match) => match[1] ?? ``).find((body) => body.includes(`PROFILES`)) ?? ``;
 
 /** The attributes the served markup starts with; the script corrects these, it does not write them from nothing. */
 const tagAttributes = (): Map<string, string> =>

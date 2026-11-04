@@ -51,11 +51,15 @@ export interface MarkdownCell {
 // trailing space visible in an editable element. marked trims it off a list's or a heading's end (`trimEnd` counts it
 // as white space) but does not read it as a blank line either, so for one keystroke it would be a block of its own and
 // the block being typed in would split, render and re-form under the caret. Lexed as the plain space it stands for;
-// one character for one, so every `raw` still measures the source.
-const TRAILING_NBSP = /\u00a0+(?=\r?\n|$)/gu;
+// one character for one, so every `raw` still measures the source. Every run is matched and the line end checked after
+// it, since `/\u00a0+(?=\r?\n|$)/` would rescan a long run that ends mid-line from each of its characters.
+const NBSP_RUN = /\u00a0+/gu;
+const endsLine = (source: string, at: number): boolean =>
+    at === source.length || source[at] === "\n" || (source[at] === "\r" && source[at + 1] === "\n");
 
-/** The source as the block lexer reads it (see TRAILING_NBSP): what the tokens' `raw`s reassemble into. */
-export const lexedSource = (source: string): string => source.replace(TRAILING_NBSP, (run) => " ".repeat(run.length));
+/** The source as the block lexer reads it (see NBSP_RUN): what the tokens' `raw`s reassemble into. */
+export const lexedSource = (source: string): string =>
+    source.replace(NBSP_RUN, (run: string, at: number) => (endsLine(source, at + run.length) ? " ".repeat(run.length) : run));
 
 export const lexBlocks = (source: string): readonly MarkdownToken[] | undefined => {
     try {

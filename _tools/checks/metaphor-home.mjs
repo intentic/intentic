@@ -40,7 +40,7 @@ const expandExport = (pattern, target, subpath) => {
     if (!subpath.startsWith(head) || !subpath.endsWith(tail)) {
         return undefined;
     }
-    return target.replace("*", subpath.slice(head.length, subpath.length - tail.length));
+    return target.replaceAll("*", () => subpath.slice(head.length, subpath.length - tail.length));
 };
 
 /** Resolves a workspace specifier through the owner's own `exports`, so a package that moves its src still resolves. */

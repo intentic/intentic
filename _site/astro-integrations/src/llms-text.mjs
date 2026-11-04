@@ -14,7 +14,12 @@ import { extractContent, htmlToMarkdown } from "./html-to-markdown.mjs";
 
 /** `/docs/quickstart/` → `/docs/quickstart.md`; the site root → `/index.md`. */
 export function markdownPathFor(pathname) {
-    const trimmed = pathname.replace(/\/+$/, "");
+    // A loop rather than `/\/+$/`, which rescans a long run of slashes from every one of them.
+    let end = pathname.length;
+    while (end > 0 && pathname[end - 1] === "/") {
+        end -= 1;
+    }
+    const trimmed = pathname.slice(0, end);
     return trimmed === "" ? "/index.md" : `${trimmed}.md`;
 }
 

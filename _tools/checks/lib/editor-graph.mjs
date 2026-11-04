@@ -15,7 +15,7 @@ export const scriptOf = (path, text) => {
     const blank = (part) => part.replace(/[^\n]/g, " ");
     let code = "";
     let at = 0;
-    for (const match of text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/dg)) {
+    for (const match of text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/dgi)) {
         const [start, end] = match.indices[1];
         code += blank(text.slice(at, start)) + text.slice(start, end);
         at = end;

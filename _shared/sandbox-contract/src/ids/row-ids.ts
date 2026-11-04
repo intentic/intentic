@@ -7,10 +7,18 @@ const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 // row of every record carries one.
 const LENGTH = 12;
 
+// A byte at or above the last whole multiple of the alphabet is drawn again rather than folded back with `%`, which
+// would make the first few characters likelier than the rest.
+const BYTE_LIMIT = 256 - (256 % ALPHABET.length);
+
 export const newRowId = (): string => {
     let id = "";
-    for (const byte of globalThis.crypto.getRandomValues(new Uint8Array(LENGTH))) {
-        id += ALPHABET[byte % ALPHABET.length];
+    while (id.length < LENGTH) {
+        for (const byte of globalThis.crypto.getRandomValues(new Uint8Array(LENGTH - id.length))) {
+            if (byte < BYTE_LIMIT) {
+                id += ALPHABET[byte % ALPHABET.length];
+            }
+        }
     }
     return id;
 };

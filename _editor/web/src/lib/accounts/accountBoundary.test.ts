@@ -71,7 +71,7 @@ const ADA = { id: `acc-a`, email: `ada@example.com` };
 const BEA = { id: `acc-b`, email: `bea@example.com` };
 
 // Where the page is and whether it reloaded, in place of jsdom's location, which cannot navigate.
-const address = { href: `http://localhost:3000/sandbox/sbx-1`, reload: jest.fn() };
+const address = { href: `http://localhost:3000/sandbox/sbx-1`, protocol: `http:`, host: `localhost:3000`, reload: jest.fn() };
 
 // Another tab of the same browser, listening on the channel the boundary announces on.
 let otherTab: FakeChannel;
@@ -151,7 +151,7 @@ describe(`entering an account`, () => {
         expect(address.reload).not.toHaveBeenCalled();
 
         expect(enterShell(`/x`)).toBe(false);
-        expect(address.href).toBe(`/x`);
+        expect(address.href).toBe(`http://localhost:3000/x`);
         expect(address.reload).not.toHaveBeenCalled();
     });
 
@@ -184,10 +184,22 @@ describe(`leaving for another account`, () => {
 
         expect(localStorage.getItem(ACCOUNT_POINTER_KEY)).toBe(BEA.id);
         expect(heardElsewhere).toEqual([{ kind: `account-changed`, account: BEA.id }]);
-        expect(address.href).toBe(`/`);
+        expect(address.href).toBe(`http://localhost:3000/`);
         expect(sessionStorage.getItem(`intentic.reloadReason`)).toStartWith(`account-switch|`);
         expect(pageAccount()).toBeUndefined();
         expect(() => assertAccountCurrent()).toThrow(AccountChangedError);
+    });
+
+    it(`goes Home rather than to another host a destination resolves to`, () => {
+        enterAccount(ADA);
+
+        // The URL parser drops the tab, so this rooted path is `//evil.example` by the time it navigates.
+        leaveFor(BEA, `/\t/evil.example/phish`);
+        expect(address.href).toBe(`http://localhost:3000/`);
+
+        // A path that opens `//` once its dot segment goes stays a path on this host.
+        leaveFor(BEA, `/.//evil.example`);
+        expect(address.href).toBe(`http://localhost:3000//evil.example`);
     });
 
     it(`says nobody is signed in when it leaves for nobody`, async () => {
@@ -198,7 +210,7 @@ describe(`leaving for another account`, () => {
 
         expect(localStorage.getItem(ACCOUNT_POINTER_KEY)).toBeNull();
         expect(heardElsewhere).toEqual([{ kind: `account-changed`, account: null }]);
-        expect(address.href).toBe(`/login`);
+        expect(address.href).toBe(`http://localhost:3000/login`);
     });
 
     it(`stops writing and sending once every account here signed out, without navigating itself`, () => {
@@ -279,7 +291,7 @@ describe(`another tab moving the browser`, () => {
         otherTab.send({ kind: `account-changed`, account: BEA.id });
         await delivered();
 
-        expect(address.href).toBe(`/`);
+        expect(address.href).toBe(`http://localhost:3000/`);
         expect(() => assertAccountCurrent()).toThrow(AccountChangedError);
     });
 
@@ -289,7 +301,7 @@ describe(`another tab moving the browser`, () => {
         otherTab.send({ kind: `account-changed`, account: null });
         await delivered();
 
-        expect(address.href).toBe(`/`);
+        expect(address.href).toBe(`http://localhost:3000/`);
     });
 
     it(`stays where it is when it is already drawn for that account`, async () => {

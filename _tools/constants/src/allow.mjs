@@ -54,7 +54,17 @@ export const allowingLine = (lines, line, check) => {
 /** Whether the site on 1-based `line` of `lines` carries a pragma for `check` (`allowingLine`). */
 export const allowedAt = (lines, line, check) => allowingLine(lines, line, check) !== undefined;
 
-const TRAILER = /^Allow:[ \t]*([\w./-]+?)[ \t]*(?:—|–|:|-{1,2})[ \t]*(\S.*?)[ \t]*$/gm;
+// The reason runs to the line's end and its trailing blanks are trimmed after: a lazy `(\S.*?)[ \t]*$` rescans every blank
+// run inside the reason.
+const TRAILER = /^Allow:[ \t]*([\w./-]+?)[ \t]*(?:—|–|:|-{1,2})[ \t]*(\S.*)$/gm;
+
+const withoutTrailingBlanks = (text) => {
+    let end = text.length;
+    while (end > 0 && (text[end - 1] === " " || text[end - 1] === "\t")) {
+        end -= 1;
+    }
+    return text.slice(0, end);
+};
 
 /** Every `Allow: <check> — <reason>` line in a commit message or a trailer listing, in order. */
-export const allowTrailers = (text) => [...text.matchAll(TRAILER)].map(([, check, reason]) => ({ check, reason }));
+export const allowTrailers = (text) => [...text.matchAll(TRAILER)].map(([, check, reason]) => ({ check, reason: withoutTrailingBlanks(reason) }));

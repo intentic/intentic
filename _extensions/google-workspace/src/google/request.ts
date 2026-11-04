@@ -48,7 +48,7 @@ const API_ENABLE_HINT: Record<string, string> = {
 };
 
 const serviceOf = (url: string): string | undefined => {
-    const host = /^https:\/\/([a-z]+)\.googleapis\.com/.exec(url)?.[1];
+    const host = /^https:\/\/([a-z]+)\.googleapis\.com(?:\/|$)/.exec(url)?.[1];
     return host === undefined ? undefined : Object.keys(API_ENABLE_HINT).find((service) => host.startsWith(service));
 };
 

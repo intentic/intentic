@@ -162,7 +162,7 @@ test("a floor is resolved to the lowest published version that clears it", async
     stubGlobal(
         "fetch",
         jest.fn(async (url: string) =>
-            url.includes("registry.npmjs.org")
+            new URL(url).host === "registry.npmjs.org"
                 ? jsonResponse({ versions: { "2.0.0": {}, "2.2.0": {}, "2.5.0": {} } })
                 : jsonResponse({ engines: { "opencode-v2": { blessed: "2.0.0" } } }),
         ),

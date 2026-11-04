@@ -35,7 +35,8 @@ export const fakeKeyring = async (answers: Answers, dir?: string): Promise<FakeK
             // SAFETY: the client under test sends what its own types say; the test reads it back as that.
             const request = JSON.parse(buffered.slice(0, end)) as KeyringRequest;
             requests.push(request);
-            const answer = answers[request.op];
+            // Only the table's own entries: an op named like something every object inherits (`toString`) is no answer either.
+            const answer = Object.hasOwn(answers, request.op) ? answers[request.op] : undefined;
             if (answer === undefined) {
                 socket.destroy();
                 return;

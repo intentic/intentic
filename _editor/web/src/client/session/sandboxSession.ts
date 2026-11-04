@@ -2,7 +2,7 @@ import { parseJsonOr } from "@intentic/base/json";
 import { ORPCError } from "@orpc/client";
 import { type EmailRefusal, emailRefusalText, NOT_A_MEMBER } from "./emailRefusal";
 import { anySignal, SingleFlight } from "@intentic/base/async";
-import { computed, ref, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import type { SandboxSummary } from "@intentic/api-contract";
 import {
@@ -74,9 +74,11 @@ const { getIdToken, signedInEmail, clearCredential, cancelSignIn } = useGoogleId
 const { prompt: signInPrompt } = useSignInPrompt();
 const { activeSandboxId } = useSandbox();
 
-// In-memory mirror of persisted sessions, hydrated lazily, so presentedEmail reacts without re-reading storage.
+// In-memory mirror of persisted sessions, hydrated lazily, so presentedEmail reacts without re-reading storage. A map,
+// not an object, as each per-sandbox table here is: the id can come off the address (`?sandbox=`), and one named like
+// an inherited property (`constructor`) must read as no session. Replaced whole on every change, which the shallow ref tracks.
 // allow(module-state): daemon sessions keyed by sandbox id
-const sessions = ref<Record<string, StoredSession>>({});
+const sessions = shallowRef<ReadonlyMap<string, StoredSession>>(new Map());
 // One in-flight establish per sandbox and kind: a press's answers a poll too, but a poll's never answers a press, which
 // may need to prompt. Two flights rather than one entry a press overwrites, so neither's end can drop the other's.
 const pressing = new SingleFlight<string, SandboxBearer | undefined>();
@@ -151,7 +153,7 @@ const readStored = (sandboxId: string): StoredSession | undefined => {
 };
 
 const write = (sandboxId: string, session: StoredSession, broadcast = true): void => {
-    sessions.value = { ...sessions.value, [sandboxId]: session };
+    sessions.value = new Map(sessions.value).set(sandboxId, session);
     forgetEmailRefusal(sandboxId);
     storeValue(storageKey(sandboxId), JSON.stringify(session));
     if (broadcast) {
@@ -397,20 +399,20 @@ const spendAssertion = async (target: ScopedTarget, signal: AbortSignal): Promis
 // and each retry would otherwise be a mint and an exchange. A session for the sandbox clears it.
 const EMAIL_REFUSAL_HOLD_MS = 30_000;
 // allow(module-state): per sandbox, the last refusal an email sign-in met
-const emailRefusals = ref<Record<string, { readonly refusal: EmailRefusal; readonly at: number }>>({});
+const emailRefusals = shallowRef<ReadonlyMap<string, { readonly refusal: EmailRefusal; readonly at: number }>>(new Map());
 const noteEmailRefusal = (sandboxId: string, refusal: EmailRefusal): void => {
-    emailRefusals.value = { ...emailRefusals.value, [sandboxId]: { refusal, at: Date.now() } };
+    emailRefusals.value = new Map(emailRefusals.value).set(sandboxId, { refusal, at: Date.now() });
 };
 const forgetEmailRefusal = (sandboxId: string): void => {
-    if (emailRefusals.value[sandboxId] === undefined) {
+    if (!emailRefusals.value.has(sandboxId)) {
         return;
     }
-    const rest = { ...emailRefusals.value };
-    delete rest[sandboxId];
+    const rest = new Map(emailRefusals.value);
+    rest.delete(sandboxId);
     emailRefusals.value = rest;
 };
 const ownerRefusalHolds = (sandboxId: string): boolean => {
-    const last = emailRefusals.value[sandboxId];
+    const last = emailRefusals.value.get(sandboxId);
     return last?.refusal === EMAIL_SIGN_IN_OFF && Date.now() - last.at < EMAIL_REFUSAL_HOLD_MS;
 };
 // What the no-access gate says for a person this sandbox has not opted in to email sign-in.
@@ -591,12 +593,12 @@ const googleBearer = async (background: boolean): Promise<SandboxBearer | undefi
 // slid forward in the background once close enough to expiry.
 const servedSession = (target: SandboxTarget & { readonly sandboxId: string }): SandboxBearer | undefined => {
     const sandboxId = target.sandboxId;
-    const stored = sessions.value[sandboxId] ?? readStored(sandboxId);
+    const stored = sessions.value.get(sandboxId) ?? readStored(sandboxId);
     if (stored === undefined || Date.now() >= stored.expiresAt - EXPIRY_MARGIN_MS) {
         return undefined;
     }
-    if (sessions.value[sandboxId] === undefined) {
-        sessions.value = { ...sessions.value, [sandboxId]: stored };
+    if (!sessions.value.has(sandboxId)) {
+        sessions.value = new Map(sessions.value).set(sandboxId, stored);
     }
     if (Date.now() >= stored.expiresAt - RENEW_UNDER_MS) {
         void renew(target, stored.token).catch(() => undefined);
@@ -659,8 +661,8 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
         return;
     }
     retire(sandboxId);
-    const rest = { ...sessions.value };
-    delete rest[sandboxId];
+    const rest = new Map(sessions.value);
+    rest.delete(sandboxId);
     sessions.value = rest;
     removeStoredValue(storageKey(sandboxId));
     if (broadcast) {
@@ -677,7 +679,7 @@ const rejectSessionToken = (target: SandboxTarget, rejected: SandboxBearer): voi
         return;
     }
     const sandboxId = target.sandboxId;
-    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
+    const stored = sandboxId === undefined ? undefined : (sessions.value.get(sandboxId) ?? readStored(sandboxId));
     if (sandboxId !== undefined && stored?.token === rejected.token) {
         invalidateSession(sandboxId);
     }
@@ -689,7 +691,7 @@ const clearSessions = (broadcast = true): void => {
         controller.abort();
     }
     retirements.clear();
-    sessions.value = {};
+    sessions.value = new Map();
     for (const key of storedKeys(SESSION_KEY_PREFIX)) {
         removeStoredValue(key);
     }
@@ -754,7 +756,7 @@ const retireSandboxAccess = async (sandbox: SandboxSummary): Promise<void> => {
     if (base === null) {
         return;
     }
-    const stored = sessions.value[sandbox.id] ?? readStored(sandbox.id);
+    const stored = sessions.value.get(sandbox.id) ?? readStored(sandbox.id);
     let bearer = stored !== undefined && Date.now() < stored.expiresAt - EXPIRY_MARGIN_MS ? stored.token : await removalProof(sandbox, base);
     let response = await removalRequest(sandbox, base, bearer);
     if (response.status === 401 && stored?.token === bearer) {
@@ -783,7 +785,7 @@ const retireAccountAccess = async (sandboxes: readonly SandboxSummary[]): Promis
 // Google credential's. Named by the gates (the mismatch bar, the no-access screen).
 const presentedEmail = computed<string | undefined>(() => {
     const sandboxId = activeSandboxId.value;
-    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
+    const stored = sandboxId === undefined ? undefined : (sessions.value.get(sandboxId) ?? readStored(sandboxId));
     return stored !== undefined && Date.now() < stored.expiresAt ? stored.email : signedInEmail.value;
 });
 
@@ -791,7 +793,7 @@ const presentedEmail = computed<string | undefined>(() => {
 // signed claim rather than looking one up. Undefined for loopback or a pre-exchange daemon.
 const sessionExpiresAt = computed<number | undefined>(() => {
     const sandboxId = activeSandboxId.value;
-    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
+    const stored = sandboxId === undefined ? undefined : (sessions.value.get(sandboxId) ?? readStored(sandboxId));
     return stored !== undefined && Date.now() < stored.expiresAt ? stored.expiresAt : undefined;
 });
 
@@ -799,7 +801,7 @@ const sessionExpiresAt = computed<number | undefined>(() => {
 // (SandboxUnauthorized.vue), and its retry clears it so the next try asks the platform again at once.
 const emailRefusal = computed<EmailRefusal | undefined>(() => {
     const sandboxId = activeSandboxId.value;
-    return sandboxId === undefined ? undefined : emailRefusals.value[sandboxId]?.refusal;
+    return sandboxId === undefined ? undefined : emailRefusals.value.get(sandboxId)?.refusal;
 });
 const retryEmailSignIn = (sandboxId = activeSandboxId.value): void => {
     if (sandboxId !== undefined) {
@@ -810,7 +812,7 @@ const retryEmailSignIn = (sandboxId = activeSandboxId.value): void => {
 // Who this browser's stored session on a sandbox names, while it is good: recovery's way to know the account when the
 // platform cannot say (features/sandbox/recovery/directMode.ts).
 const heldSessionEmail = (sandboxId: string): string | undefined => {
-    const stored = sessions.value[sandboxId] ?? readStored(sandboxId);
+    const stored = sessions.value.get(sandboxId) ?? readStored(sandboxId);
     return stored !== undefined && Date.now() < stored.expiresAt - EXPIRY_MARGIN_MS ? stored.email : undefined;
 };
 

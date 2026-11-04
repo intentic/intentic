@@ -55,11 +55,11 @@ export const stripHtml = (html: string): string =>
         .replaceAll(BLOCK, "\n")
         .replaceAll(/<[^>]+>/g, "")
         .replaceAll("&nbsp;", " ")
-        .replaceAll("&amp;", "&")
         .replaceAll("&lt;", "<")
         .replaceAll("&gt;", ">")
         .replaceAll("&quot;", '"')
         .replaceAll("&#39;", "'")
+        .replaceAll("&amp;", "&")
         .replaceAll(/[ \t]+\n/g, "\n")
         .replaceAll(/\n{3,}/g, "\n\n")
         .trim();

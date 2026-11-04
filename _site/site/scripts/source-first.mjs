@@ -72,7 +72,7 @@ const patternTarget = (exports, subpath) => {
         .toSorted((a, b) => b.head.length - a.head.length);
     const [hit] = hits;
     const target = hit === undefined ? undefined : sourceTarget(exports[hit.key]);
-    return target?.replace(`*`, subpath.slice(hit.head.length, subpath.length - hit.tail.length));
+    return target?.replaceAll(`*`, () => subpath.slice(hit.head.length, subpath.length - hit.tail.length));
 };
 
 export const sourceFirstWorkspace = () => ({

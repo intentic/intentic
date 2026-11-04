@@ -362,7 +362,7 @@ for (const subject of SUBJECTS) {
     // `pipefail`; without it every failure silently reports success. Checks that every caller sourcing the script also
     // sets it.
     const basename = subject.script.slice(subject.script.lastIndexOf("/") + 1);
-    const sourcesIt = new RegExp(String.raw`^\s*\.\s+.*${basename.replace(/\./g, "\\.")}"`, "m");
+    const sourcesIt = new RegExp(String.raw`^\s*\.\s+.*${basename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "m");
     const setsPipefail = /^\s*set\b[^\n]*\bpipefail\b/m;
     for (const path of trackedFiles()) {
         if (!path.endsWith(".sh") || path === subject.script) {

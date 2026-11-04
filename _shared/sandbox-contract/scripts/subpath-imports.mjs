@@ -335,7 +335,7 @@ export const rewriteFile = (file, text, modules) => {
         humans: [],
         stats: emptyStats(),
     };
-    const blocks = [...text.matchAll(/(<script\b[^>]*>)([\s\S]*?)(<\/script>)/g)].toReversed();
+    const blocks = [...text.matchAll(/(<script\b[^>]*>)([\s\S]*?)(<\/script[^>]*>)/gi)].toReversed();
     for (const block of blocks) {
         const start = block.index + block[1].length;
         const body = block[2];

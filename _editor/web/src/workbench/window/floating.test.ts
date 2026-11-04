@@ -720,7 +720,7 @@ describe(`where the window comes back`, () => {
 // module the way the channel would.
 describe(`the first script of a window booting at a panel's address`, () => {
     const html = readFileSync(join(packageRoot(import.meta.url), `index.html`), `utf8`);
-    const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((found) => found[1] ?? ``).find((body) => body.includes(`booting`));
+    const script = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/giu)].map((found) => found[1] ?? ``).find((body) => body.includes(`booting`));
 
     // What the script posts, and on which channel, run by a window at `pathname`.
     const boot = (pathname: string) => {

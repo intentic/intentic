@@ -662,7 +662,9 @@
                         !destination.username &&
                         !destination.password
                     ) {
-                        target = destination.href;
+                        // Rebuilt on the origin the window named rather than taken whole: the same address, held as
+                        // that origin plus a path, so nothing read off this page's own address can pick the host.
+                        target = window.__INTENTIC_EDITOR_ORIGIN__ + destination.pathname + destination.search + destination.hash;
                     }
                 } catch (e) {}
                 var status = query.get("status") || "";
@@ -687,7 +689,8 @@
                 document.getElementById("detail").textContent = http ? "HTTP " + http[1] : status;
 
                 // This computer's own sandboxes, when the app built the page that opens them: only ever a page of this
-                // page's own bundle, so nothing a link put in the address can send the window anywhere else.
+                // page's own bundle, so nothing a link put in the address can send the window anywhere else. Opened as
+                // the bundle's own prefix plus the rest, so the scheme and host are never the address's.
                 var face = query.get("face") || "";
                 var bundle = location.protocol + "//" + location.host + "/";
                 var offered = face.indexOf(bundle) === 0;
@@ -696,7 +699,7 @@
                     offer.textContent = t.face;
                     offer.hidden = false;
                     offer.addEventListener("click", function () {
-                        location.replace(face);
+                        location.replace(bundle + face.slice(bundle.length));
                     });
                 }
 

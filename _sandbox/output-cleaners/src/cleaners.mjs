@@ -662,7 +662,7 @@ const CACHE_MIN_BYTES = 512;
 // The back-reference carries the earlier command; a long one balloons the marker meant to be small.
 const CACHE_COMMAND_MAX = 120;
 
-const hashText = (text) => createHash("sha1").update(text).digest("hex");
+const hashText = (text) => createHash("sha256").update(text).digest("hex");
 
 // Every command in a session runs in a new tmux window (new pane id), so this strips the trailing `-<pane>.log` to
 // recover the shared `agent-<id>` name. Undefined means no stable key, so the cache just never hits.

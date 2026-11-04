@@ -115,7 +115,7 @@ export const scan = (text) => {
 
 // The code of a file: a Vue component's script blocks, whose template attributes are markup rather than literals.
 export const codeOf = (path, text) =>
-    path.endsWith(".vue") ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]).join("\n") : text;
+    path.endsWith(".vue") ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/gi)].map((match) => match[1]).join("\n") : text;
 
 /* Matching a literal to a route, segment by segment; the query is dropped. */
 

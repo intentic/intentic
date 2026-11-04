@@ -170,7 +170,16 @@ export const langFromShebang = (content: string): ShikiLang | undefined => {
         return undefined;
     }
     // Trim a trailing version (python3.11 → python) so the base interpreter still resolves.
-    return SHEBANG_LANG[interpreter] ?? SHEBANG_LANG[interpreter.replace(/[0-9.]+$/, "")];
+    return SHEBANG_LANG[interpreter] ?? SHEBANG_LANG[withoutTrailingVersion(interpreter)];
+};
+
+// A loop rather than `/[0-9.]+$/`, which rescans a long run of digits and dots from every one of them.
+const withoutTrailingVersion = (name: string): string => {
+    let end = name.length;
+    while (end > 0 && "0123456789.".includes(name[end - 1] ?? "")) {
+        end -= 1;
+    }
+    return name.slice(0, end);
 };
 
 // Final lang once the file's bytes and real size are known (table, then shebang, none above cap); resolveFile's lang

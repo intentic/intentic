@@ -328,7 +328,7 @@ const withoutAttributes = (tag: string, names: readonly string[]): string =>
     names.reduce((out, name) => out.replace(new RegExp(`\\s${name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'=<>\`]+))?`, "gi"), ""), tag);
 
 // `<script src>` becomes the script's own text.
-const SCRIPT_SRC = /<script\b[^>]*\ssrc\s*=[^>]*>\s*<\/script\s*>/gi;
+const SCRIPT_SRC = /<script\b[^>]*\ssrc\s*=[^>]*>\s*<\/script[^>]*>/gi;
 const carryScripts = (html: string, base: string, carrier: Carrier): Promise<string> =>
     replaceAsync(html, SCRIPT_SRC, async (match) => {
         const open = /^<script\b[^>]*>/i.exec(match[0])?.[0] ?? "<script>";

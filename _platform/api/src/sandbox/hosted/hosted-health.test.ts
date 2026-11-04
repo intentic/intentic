@@ -202,7 +202,7 @@ describe(`hosted health`, () => {
         const sent: string[] = [];
         stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const target = String(url);
-            if (target.startsWith(`https://api.resend.com`)) {
+            if (new URL(target).host === `api.resend.com`) {
                 sent.push(String(init?.body ?? ``));
                 return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
             }
@@ -240,7 +240,7 @@ describe(`hosted health`, () => {
             stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
                 const target = String(url);
                 calls.push(`${init?.method ?? `GET`} ${target}`);
-                if (target.startsWith(`https://api.resend.com`)) {
+                if (new URL(target).host === `api.resend.com`) {
                     mails.push(String(init?.body ?? ``));
                     return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
                 }
@@ -342,7 +342,7 @@ describe(`hosted health`, () => {
         const sent: string[] = [];
         stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const target = String(url);
-            if (target.startsWith(`https://api.resend.com`)) {
+            if (new URL(target).host === `api.resend.com`) {
                 sent.push(String(init?.body ?? ``));
                 return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
             }
@@ -416,7 +416,7 @@ describe(`hosted health`, () => {
         let edgeUp = false;
         stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const target = String(url);
-            if (target.startsWith(`https://api.resend.com`)) {
+            if (new URL(target).host === `api.resend.com`) {
                 sent.push(String(init?.body ?? ``));
                 return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
             }

@@ -53,7 +53,7 @@ export const appSlug = (appId: string): string =>
     appId
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+        .replace(/^-|-$/g, "");
 export const bucketName = (appId: string): string => appSlug(appId);
 
 // Deterministic port for a backing instance, disjoint from deploymentPort's 20000-29999 band.
@@ -73,6 +73,12 @@ export const gitlabRegistry = (url: string, override?: string): string => {
     if (override !== undefined) {
         return override;
     }
-    const host = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    const scheme = /^https?:\/\//.exec(url)?.[0].length ?? 0;
+    let end = url.length;
+    // A loop rather than `/\/+$/`, which rescans a long run of slashes from every one of them.
+    while (end > scheme && url[end - 1] === "/") {
+        end -= 1;
+    }
+    const host = url.slice(scheme, end);
     return host === "gitlab.com" ? "registry.gitlab.com" : `registry.${host}`;
 };

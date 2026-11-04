@@ -5,16 +5,32 @@
 // mid-write must never truncate the user's whole config).
 
 // `Include a b`, `include=a`, any case, any indentation; the trailing `\r` of a CRLF file is whitespace too.
-const INCLUDE_LINE = /^[ \t]*include(?:[ \t]*=[ \t]*|[ \t]+)(.*?)[ \t\r]*$/i;
+// The keyword and its separator by pattern, the trailing blanks by a scan: `(.*?)[ \t\r]*$` would rescan every blank run
+// inside the value.
+const INCLUDE_HEAD = /^[ \t]*include(?:[ \t]*=|[ \t])[ \t]*/i;
+
+// The value after a live Include's separator, or undefined. Like `.`, it never holds a line break.
+const includeValue = (line: string): string | undefined => {
+    const head = INCLUDE_HEAD.exec(line);
+    if (head === null) {
+        return undefined;
+    }
+    let end = line.length;
+    while (end > head[0].length && " \t\r".includes(line.charAt(end - 1))) {
+        end -= 1;
+    }
+    const value = line.slice(head[0].length, end);
+    return /[\n\r\u2028\u2029]/.test(value) ? undefined : value;
+};
 
 // The paths a line includes, quotes dropped; undefined for a line that is not a live Include (a comment, a blank, any
 // other keyword).
 export const includedPaths = (line: string): string[] | undefined => {
-    const match = INCLUDE_LINE.exec(line);
-    if (match === null) {
+    const value = includeValue(line);
+    if (value === undefined) {
         return undefined;
     }
-    return [...(match[1] ?? "").matchAll(/"([^"]*)"|(\S+)/g)].map((part) => part[1] ?? part[2] ?? "");
+    return [...value.matchAll(/"([^"]*)"|(\S+)/g)].map((part) => part[1] ?? part[2] ?? "");
 };
 
 // A line this tool owns: a live Include of exactly one path that `ours` claims. A user's line that includes several

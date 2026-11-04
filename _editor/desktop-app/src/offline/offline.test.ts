@@ -10,7 +10,8 @@ if (script === undefined) {
 }
 
 // Run the shipped page's script, with reduced motion and no real timers or network, and record its navigations.
-const recovery = async (to: string, origin: string | null = `https://app.intentic.dev`, extra = ``) => {
+// `press` is the button pressed once the page is up: Retry, or the offer of this computer's own sandboxes.
+const recovery = async (to: string, origin: string | null = `https://app.intentic.dev`, extra = ``, press: `retry` | `face` = `retry`) => {
     const makeElement = () => ({
         style: {},
         classList: { add: jest.fn(), remove: jest.fn() },
@@ -65,11 +66,11 @@ const recovery = async (to: string, origin: string | null = `https://app.intenti
         },
         { timeout: 1000 },
     );
-    const retry = element(`retry`).listeners.get(`click`);
-    if (retry === undefined) {
+    const button = element(press).listeners.get(`click`);
+    if (press === `retry` && button === undefined) {
         throw new Error(`the recovery page must offer a retry`);
     }
-    retry();
+    button?.();
     await Promise.resolve();
     return { navigations, probes: online.mock.calls.length, requests: fetch.mock.calls.length };
 };
@@ -112,5 +113,20 @@ describe(`offline recovery destinations`, () => {
         expect(await recovery(`https://app.intentic.dev/`, null)).toEqual({ navigations: [], probes: 0, requests: 0 });
         expect(await recovery(`https://evil.example/`, null, `&origin=https://evil.example`)).toEqual({ navigations: [], probes: 0, requests: 0 });
         expect(await recovery(`https://app.intentic.dev/`, ``)).toEqual({ navigations: [], probes: 0, requests: 0 });
+    });
+});
+
+describe(`this computer's own sandboxes`, () => {
+    const face = (address: string) => recovery(``, `https://app.intentic.dev`, `&${new URLSearchParams({ face: address })}`, `face`);
+
+    it(`opens a page of the app's own bundle, as it was named`, async () => {
+        const bundled = `http://tauri.localhost/sandbox.html?machine=1#top`;
+        expect((await face(bundled)).navigations).toEqual([bundled]);
+    });
+
+    it(`is not offered for anywhere else`, async () => {
+        for (const address of [`https://evil.example/`, `http://tauri.localhost.evil.example/`, `//tauri.localhost/`, `javascript:alert(1)`, `/sandbox.html`]) {
+            expect((await face(address)).navigations).toEqual([]);
+        }
     });
 });

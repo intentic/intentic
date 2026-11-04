@@ -33,12 +33,36 @@ const phrasesFor = (language: string): Phrases =>
 const PATH = /(?:[\w@.-]+\/)+([\w@.-]+)(?::\d+(?::\d+)?)?/gu;
 const URL = /\bhttps?:\/\/([^/\s)]+)[^\s)]*/gu;
 
+// `![text](url)` (the `![` opener) or `[text](url)` to its text, as `/!\[([^\]]*)\]\([^)]*\)/gu` and
+// `/\[([^\]]+)\]\([^)]*\)/gu` would replace them, by a scan: those regexes rescan to the end of the line from every
+// opener that has no `]` or `)` after it. An opener whose first `]` fails takes every opener before that `]` with it,
+// and with no `]` or `)` left nothing later can match either.
+const linkTexts = (line: string, opener: "![" | "[", minText: number): string => {
+    let out = "";
+    let cursor = 0;
+    let from = 0;
+    for (;;) {
+        const open = line.indexOf(opener, from);
+        const textStart = open + opener.length;
+        const close = open === -1 ? -1 : line.indexOf("]", textStart);
+        if (close !== -1 && (close - textStart < minText || line[close + 1] !== "(")) {
+            from = close + 1;
+            continue;
+        }
+        const end = close === -1 ? -1 : line.indexOf(")", close + 2);
+        if (end === -1) {
+            return out + line.slice(cursor);
+        }
+        out += line.slice(cursor, open) + line.slice(textStart, close);
+        cursor = end + 1;
+        from = cursor;
+    }
+};
+
 // Inline markdown to its words: links and images to their text, emphasis and code ticks dropped, paths and URLs said
 // short, and glyphs a voice would read as noise (arrows, bullets) made into pauses.
 export const speakableInline = (line: string): string =>
-    line
-        .replaceAll(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
-        .replaceAll(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+    linkTexts(linkTexts(line, "![", 0), "[", 1)
         .replaceAll(/<[^>]+>/gu, "")
         .replaceAll(URL, "$1")
         .replaceAll(/`([^`]*)`/gu, "$1")

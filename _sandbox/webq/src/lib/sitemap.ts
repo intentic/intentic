@@ -71,4 +71,4 @@ const maybeGunzip = (url: string, fetched: { body: string; bytes?: Uint8Array })
 };
 
 const decodeXmlEntities = (text: string): string =>
-    text.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
+    text.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&amp;", "&");

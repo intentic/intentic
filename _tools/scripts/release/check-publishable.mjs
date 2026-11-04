@@ -17,7 +17,7 @@ const WORKFLOW = "npm-publish.yml";
 // The abbreviated packument (`Accept:` below) is the smallest answer that still tells existence from absence, and the
 // registry serves it from the same cache the installer hits. The status is all this reads; the body is dropped.
 const known = async ({ name, registry }) => {
-    const url = `${registry.replace(/\/?$/, "/")}${name.replace("/", "%2f")}`;
+    const url = `${registry.replace(/\/?$/, "/")}${name.replaceAll("/", "%2f")}`;
     try {
         const response = await fetch(url, {
             headers: { accept: "application/vnd.npm.install-v1+json" },

@@ -307,7 +307,8 @@ const assertStatements = (code, text) => {
 const assertMethods = (code, text) => {
     const totals = { exact: 0, loose: 0, chars: 0 };
     for (const match of code.matchAll(PY_METHOD)) {
-        const name = match[0].slice(0, match[0].search(/\s*\(/));
+        // The match ends at its `(`; the blanks before it are trimmed rather than searched for, which rescans each run.
+        const name = match[0].slice(0, -1).trimEnd();
         // A name in neither set (assertRaises, a project helper) counts as neither, and its text is not counted.
         if (!pyExact.has(name) && !pyLoose.has(name)) {
             continue;

@@ -49,13 +49,24 @@ let reconciling: Promise<void> | undefined;
 /** The account this page is drawn for; undefined before the platform said, in a local window, or once it has gone. */
 export const pageAccount = (): PageAccount | undefined => held;
 
+// Where a navigation lands, held to this app's own scheme and host: a destination read off an address (`?returnTo=`,
+// lib/routes/signIn.ts) that resolves anywhere else goes Home instead. The URL parser drops a tab or a newline, so
+// `/\t/evil.example` is `//evil.example` to it, and a rooted-path check alone lets that through. The result is rebuilt on
+// the page's own prefix rather than handed back as a path, since a path can still open `//` once its dot segments go.
+const withinApp = (destination: string): string => {
+    const here = globalThis.location;
+    const own = `${here.protocol}//${here.host}`;
+    const url = new URL(destination, `${own}/`);
+    return url.protocol === here.protocol && url.host === here.host ? `${own}${url.pathname}${url.search}${url.hash}` : `${own}/`;
+};
+
 // The full navigation every road takes: nothing drawn, cached or in flight for one account survives into the next.
 const go = (destination: string | undefined): void => {
     if (destination === undefined) {
         globalThis.location.reload();
         return;
     }
-    globalThis.location.href = destination;
+    globalThis.location.href = withinApp(destination);
 };
 
 // Stops this page acting for the account it was drawn for: no more writes into a drawer that is not the browser's now,

@@ -73,6 +73,24 @@ const phantomKey = (text: string): string =>
         .replaceAll(/\s+/gu, " ")
         .trim();
 
+// `text.replaceAll(/[[(][^\])]*[\])]/gu, "")` as a scan: each opener runs to the first closer after it, and with no closer
+// left nothing later can close either. The regex rescans to the end from every opener when no closer follows.
+const withoutBracketed = (text: string): string => {
+    let out = "";
+    let open = -1;
+    for (let at = 0; at < text.length; at += 1) {
+        const char = text.charAt(at);
+        if (open === -1 && (char === "[" || char === "(")) {
+            open = at;
+        } else if (open === -1) {
+            out += char;
+        } else if (char === "]" || char === ")") {
+            open = -1;
+        }
+    }
+    return open === -1 ? out : out + text.slice(open);
+};
+
 // The words as a message would carry them: Whisper's bracketed narration of non-speech (`[BLANK_AUDIO]`, `(music)`) and
 // its phantom sign-offs are not something the person said.
 export const spokenText = (engine: SpeechEngine, raw: string): string => {
@@ -80,7 +98,7 @@ export const spokenText = (engine: SpeechEngine, raw: string): string => {
     if (engine !== "whisper") {
         return text;
     }
-    const words = text.replaceAll(/[[(][^\])]*[\])]/gu, "").trim();
+    const words = withoutBracketed(text).trim();
     return words === "" || WHISPER_PHANTOMS.has(phantomKey(words)) ? "" : words;
 };
 

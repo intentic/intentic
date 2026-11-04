@@ -272,7 +272,7 @@ test("refuses a Google sign-in whose credential landed with no Antigravity proje
 
     // Names the account and the one thing that fixes it, since only Google can hand that account a project.
     await expect(failure).rejects.toThrow(/fresh@example\.com.*no Antigravity project/s);
-    await expect(failure).rejects.toThrow(/antigravity\.google\.com/);
+    await expect(failure).rejects.toThrow("antigravity.google.com");
     // Benched in the proxy, which reads such a credential as healthy and would otherwise keep routing turns to it.
     expect(calls.find((call) => call.url.endsWith("/auth-files/status"))).toEqual({
         url: "http://127.0.0.1:8789/v0/management/auth-files/status",

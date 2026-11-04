@@ -90,3 +90,10 @@ describe("spokenFallback", () => {
         expect(spokenFallback(long, "en").split(/\s+/u).length).toBeLessThanOrEqual(50);
     });
 });
+
+test("unclosed link and image openers are read in linear time, and a closed link before them still reads as its text", () => {
+    const line = `[docs](https://example.com) ${"![\\".repeat(20_000)} ${"![](".repeat(20_000)}`;
+    const started = performance.now();
+    expect(speakableInline(line).startsWith("docs ![")).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+});

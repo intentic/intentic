@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
 import { couldBeOnThisMachine, type Endpoint, probeEndpoint, shortcutFailedAlone, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { measuredProtocol, setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../../lib/streamBudget";
@@ -10,9 +10,11 @@ import { rememberRoute } from "./onThisComputer";
 // identity used elsewhere. Resolution stays off the critical path: the tunnel serves first paint, and a background
 // probe swaps callers' base once a local address qualifies.
 
-// Resolved endpoint per sandbox id, kept in memory only; a reload re-probes cheaply (LNA grant persists).
+// Resolved endpoint per sandbox id, kept in memory only; a reload re-probes cheaply (LNA grant persists). A map, not an
+// object: the id can come off the address (`?sandbox=`), and one named like an inherited property (`constructor`) must
+// read as nothing resolved. Replaced whole on every change, which is what the shallow ref tracks.
 // allow(module-state): the resolved endpoint per sandbox id, one entry per sandbox
-const endpoints = ref<Record<string, Endpoint>>({});
+const endpoints = shallowRef<ReadonlyMap<string, Endpoint>>(new Map());
 // A demotion expires on a backoff that doubles per consecutive failure and caps at `DEMOTION_MAX_MS`; expiry
 // permits the next reconnect's probe, it does not trigger one itself.
 const DEMOTION_BASE_MS = 60_000;
@@ -44,7 +46,7 @@ const { ask } = useLocalShortcut();
 // rather than blocking is what keeps resolution off the critical path.
 const daemonBase = computed<string | undefined>(() => {
     const id = activeSandboxId.value;
-    const resolved = id === undefined ? undefined : endpoints.value[id];
+    const resolved = id === undefined ? undefined : endpoints.value.get(id);
     return resolved?.base ?? daemonUrl.value;
 });
 
@@ -52,7 +54,7 @@ const daemonBase = computed<string | undefined>(() => {
 // demotion) and the shell's connection detail.
 const usingLocal = computed(() => {
     const id = activeSandboxId.value;
-    const kind = id === undefined ? undefined : endpoints.value[id]?.kind;
+    const kind = id === undefined ? undefined : endpoints.value.get(id)?.kind;
     // Either loopback variant counts: what matters for demotion is that a known-good address remains.
     return kind === `local` || kind === `local-insecure`;
 });
@@ -61,7 +63,7 @@ const usingLocal = computed(() => {
 // ceiling then silently starves agents, so this is surfaced to the user rather than left as a diagnostic.
 const degradedTransport = computed(() => {
     const id = activeSandboxId.value;
-    return id !== undefined && endpoints.value[id]?.kind === `local-insecure`;
+    return id !== undefined && endpoints.value.get(id)?.kind === `local-insecure`;
 });
 
 // The sandbox whose plain-HTTP pool actually made a stream wait (the overflow below). The plain address alone costs
@@ -76,7 +78,7 @@ const transportStarved = computed(() => degradedTransport.value && starvedOn.val
 // transport.
 const activeKind = (): Endpoint[`kind`] => {
     const id = activeSandboxId.value;
-    return (id === undefined ? undefined : endpoints.value[id]?.kind) ?? `public`;
+    return (id === undefined ? undefined : endpoints.value.get(id)?.kind) ?? `public`;
 };
 setStreamCapacity((stream) => streamPermits(activeKind(), measuredProtocol(daemonBase.value), stream));
 setStreamScope(() => daemonBase.value ?? `unaddressed`);
@@ -115,7 +117,7 @@ const resolve = async (): Promise<void> => {
         sandbox === undefined ||
         url === undefined ||
         url === `` ||
-        settledEndpoint(endpoints.value[id], resolvedAt.get(id), now) ||
+        settledEndpoint(endpoints.value.get(id), resolvedAt.get(id), now) ||
         demotionHolds(id, now)
     ) {
         return;
@@ -152,7 +154,7 @@ const resolve = async (): Promise<void> => {
         if (!demotionHolds(id, Date.now())) {
             // Stamped even when the answer is unchanged, so a still-missing certificate still buys another interval.
             resolvedAt.set(id, Date.now());
-            endpoints.value = { ...endpoints.value, [id]: endpoint };
+            endpoints.value = new Map(endpoints.value).set(id, endpoint);
             // Kept past this visit, so the switcher's other rows can still say which sandboxes run here.
             rememberRoute(id, endpoint);
             // A better route is a fresh start: plain HTTP again later has to make a stream wait again to be said.
@@ -169,8 +171,8 @@ const resolve = async (): Promise<void> => {
 // temporary repair: the backoff above re-admits the shortcut once it heals.
 const demote = (sandboxId: string): void => {
     demoted.set(sandboxId, { at: Date.now(), streak: (demoted.get(sandboxId)?.streak ?? 0) + 1 });
-    const rest = { ...endpoints.value };
-    delete rest[sandboxId];
+    const rest = new Map(endpoints.value);
+    rest.delete(sandboxId);
     resolvedAt.delete(sandboxId);
     endpoints.value = rest;
 };
@@ -190,7 +192,7 @@ const onRouteLost = (listener: (base: string) => void): (() => void) => {
 // busy daemon, which is no faster over the tunnel, and demoting then pins the window to the slow path for the whole
 // backoff. Returns whether it demoted, since the caller's retry differs either way.
 const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
-    const endpoint = endpoints.value[sandboxId];
+    const endpoint = endpoints.value.get(sandboxId);
     const token = active.value?.token ?? undefined;
     const tunnel = daemonUrl.value;
     if (endpoint === undefined || token === undefined || token === `` || tunnel === undefined || tunnel === ``) {
@@ -217,7 +219,7 @@ const rechecking = new Map<string, Promise<void>>();
 // silent one goes on to ask the tunnel too, which decides whether to leave it.
 const recheckAfterWake = (): void => {
     const id = activeSandboxId.value;
-    const endpoint = id === undefined ? undefined : endpoints.value[id];
+    const endpoint = id === undefined ? undefined : endpoints.value.get(id);
     const token = active.value?.token ?? undefined;
     if (id === undefined || endpoint === undefined || endpoint.kind === `public` || rechecking.has(id)) {
         return;

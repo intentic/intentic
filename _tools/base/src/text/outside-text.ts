@@ -87,13 +87,13 @@ const fold = (input: string): Folded => {
 export const NEUTRALIZED = "[marker removed]";
 
 // A complete envelope marker, either end; `[^>]*` is unbounded so a longer forged id cannot slip past it.
-const MARKER = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*>/gi;
+const MARKER = /<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*>/gi;
 // Same shape cut off at the body's end; no marker prefix may sit immediately before a real close tag.
-const MARKER_TAIL = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*$/i;
+const MARKER_TAIL = /<\s*(?:\/\s*)?untrusted[\s_-]+content\b[^>]*$/i;
 
 // The harness's own tags; a page with one is quoting or impersonating it, and an inert token serves either.
 const CONTROL_TAGS = ["system-reminder", "task-notification", "command-name", "command-message", "command-args", "local-command-stdout"];
-const CONTROL = new RegExp(String.raw`<\s*/?\s*(?:${CONTROL_TAGS.join("|")})\b[^>]*>`, "gi");
+const CONTROL = new RegExp(String.raw`<\s*(?:/\s*)?(?:${CONTROL_TAGS.join("|")})\b[^>]*>`, "gi");
 
 // Reserved tokens a local server could read as turn structure; an API provider treats them as data, at no cost.
 const SPECIAL_TOKENS = [

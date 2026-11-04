@@ -190,9 +190,9 @@ export const estimate = (totalWeight: number, consumed: number, elapsedSeconds: 
     return left < ESTIMATE_FLOOR_SECONDS ? undefined : humanDuration(left * 1000);
 };
 
-/** Sentence-cases a step's own prose, for phases the plan doesn't label. */
+/** Sentence-cases a step's own prose, for phases the plan doesn't label; its trailing dots are scanned off, not regexed. */
 export const asLabel = (message: string): string => {
-    const trimmed = message.replace(/[…. ]+$/u, "");
+    const trimmed = message.slice(0, message.split("").findLastIndex((char) => !"…. ".includes(char)) + 1);
     return trimmed === "" ? "" : trimmed[0]!.toUpperCase() + trimmed.slice(1);
 };
 

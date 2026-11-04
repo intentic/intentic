@@ -192,7 +192,12 @@ export async function* sseEvents(body: ReadableStream<Uint8Array>, idleMs: numbe
 // it with `sseData`. The same idle window as `sseEvents`.
 export async function* sseFrames(body: ReadableStream<Uint8Array>, idleMs: number = SSE_IDLE_MS): AsyncGenerator<string> {
     for await (const event of sseEvents(body, idleMs)) {
-        yield event.raw.replace(/(?:\r\n|\r|\n)+$/u, ``);
+        // A loop rather than `/(?:\r\n|\r|\n)+$/u`, which backtracks without end on a long run of line breaks.
+        let end = event.raw.length;
+        while (end > 0 && (event.raw[end - 1] === `\n` || event.raw[end - 1] === `\r`)) {
+            end -= 1;
+        }
+        yield event.raw.slice(0, end);
     }
 }
 

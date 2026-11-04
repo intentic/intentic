@@ -7,9 +7,9 @@
 const blanked = (m) => m.replace(/[^\n]/gu, ` `);
 export const blank = (source) =>
     source
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gu, blanked)
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gu, blanked)
-        .replace(/<!--[\s\S]*?-->/gu, blanked);
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script[^>]*>/giu, blanked)
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style[^>]*>/giu, blanked)
+        .replace(/<!--[\s\S]*?--!?>/gu, blanked);
 
 // A tag walk, not a parser: attribute values are consumed as units so a `>` inside `:class="{…}"` can't end a tag
 // early. A generator, not a shared regex, since `/g` carries `lastIndex` and callers would fight over one cursor.

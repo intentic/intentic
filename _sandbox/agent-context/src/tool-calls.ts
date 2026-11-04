@@ -32,10 +32,19 @@ const DISPLAY_NAMES: Record<string, string> = {
 // Browser tool names spelled out for a reader (`Browser navigate`, `Browser click`); which server handled it is
 // dropped, since the call's own `account` argument already names that. `take_screenshot` loses its verb; other names
 // keep their own.
-const BROWSER_TOOL = /^mcp__.+__browser_(.+)$/;
+// `/^mcp__.+__browser_(.+)$/` as a scan, since its two `.+` split a name with many `__browser_` in it every way: the
+// verb follows the last `__browser_` that has a server name before it and a verb after it.
+const BROWSER_MARK = "__browser_";
+const browserVerbOf = (name: string): string | undefined => {
+    if (!name.startsWith("mcp__") || /[\n\r\u2028\u2029]/.test(name)) {
+        return undefined;
+    }
+    const at = name.lastIndexOf(BROWSER_MARK, name.length - BROWSER_MARK.length - 1);
+    return at > "mcp__".length ? name.slice(at + BROWSER_MARK.length) : undefined;
+};
 const BROWSER_VERB_NAMES: Record<string, string> = { take_screenshot: "screenshot" };
 const browserDisplayName = (raw: string): string | undefined => {
-    const verb = BROWSER_TOOL.exec(raw)?.[1];
+    const verb = browserVerbOf(raw);
     return verb === undefined ? undefined : `Browser ${(BROWSER_VERB_NAMES[verb] ?? verb).replaceAll("_", " ")}`;
 };
 
@@ -101,7 +110,7 @@ export const toolCategoryOf = (name: string): ToolKind => {
     if (exact !== undefined) {
         return exact;
     }
-    const browserVerb = BROWSER_TOOL.exec(name)?.[1];
+    const browserVerb = browserVerbOf(name);
     if (browserVerb !== undefined) {
         return BROWSER_VERB_KINDS[browserVerb] ?? "execute";
     }

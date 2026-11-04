@@ -134,3 +134,15 @@ test("mcpServerOf names the server of an MCP tool, and nothing for a tool of the
     expect(mcpServerOf("mcp__radarsu-omen__run_command")).toBe("radarsu-omen");
     expect(mcpServerOf("Bash")).toBeUndefined();
 });
+
+test("a browser verb is the text after the last `__browser_`, read without backtracking", () => {
+    expect(displayNameOf("mcp__web__browser_take_screenshot")).toBe("Browser screenshot");
+    expect(displayNameOf("mcp__a__browser_x__browser_click")).toBe("Browser click");
+    // A trailing `__browser_` names no verb, so the one before it does.
+    expect(displayNameOf("mcp__a__browser_x__browser_")).toBe("Browser x  browser ");
+    expect(displayNameOf("mcp__browser_click")).toBe("mcp__browser_click");
+    const hostile = `mcp__a__browser_${"a__browser_a".repeat(20_000)}\n`;
+    const started = performance.now();
+    toolCategoryOf(hostile);
+    expect(performance.now() - started).toBeLessThan(1000);
+});

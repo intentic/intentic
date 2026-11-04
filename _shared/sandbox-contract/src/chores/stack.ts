@@ -159,7 +159,19 @@ export const normalizePath = (path: string): string => path.replace(/^\.\//, ``)
 const MIN_STEM = 3;
 
 const QUALIFIER_PREFIX = /^(base|the)/;
-const QUALIFIER_SUFFIX = /(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/;
+// `/(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/` as a scan: that regex rescans a long digit run from each digit.
+const QUALIFIER_WORDS = [`new`, `old`, `legacy`, `copy`, `component`];
+const withoutQualifierSuffix = (base: string): string => {
+    let digits = base.length;
+    while (digits > 0 && /[0-9]/.test(base.charAt(digits - 1))) {
+        digits -= 1;
+    }
+    if (digits < base.length) {
+        return base.slice(0, base.charAt(digits - 1) === `v` ? digits - 1 : digits);
+    }
+    const word = QUALIFIER_WORDS.find((suffix) => base.endsWith(suffix));
+    return word === undefined ? base : base.slice(0, -word.length);
+};
 
 // Names the framework mandates per app or route; sharing one is never evidence of duplication.
 const FRAMEWORK_NAMES = new Set([`index`, `app`, `main`, `root`, `page`, `layout`, `loading`, `error`, `template`, `default`, `notfound`]);
@@ -174,7 +186,7 @@ export const componentStem = (path: string): string | undefined => {
     if (base === `` || FRAMEWORK_NAMES.has(base)) {
         return undefined;
     }
-    const withoutSuffix = base.replace(QUALIFIER_SUFFIX, ``);
+    const withoutSuffix = withoutQualifierSuffix(base);
     const stem = (withoutSuffix.length >= MIN_STEM ? withoutSuffix : base).replace(QUALIFIER_PREFIX, ``);
     return stem.length >= MIN_STEM ? stem : base;
 };

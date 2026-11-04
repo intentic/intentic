@@ -87,7 +87,19 @@ const QUOTED = /"([^"]+)"|“([^”]+)”|`([^`]+)`|(?:^|\s)'([^']+)'(?=[\s.,!?;
 export const quotedSpans = (query: string): string[] =>
     [...query.matchAll(QUOTED)].map((match) => (match.slice(1).find((group) => group !== undefined) ?? "").trim()).filter((span) => span !== "");
 
-const stripQuotes = (text: string): string => text.trim().replace(/^["'“‘`]+|["'”’`]+$/g, "");
+// Scanned off both ends: `/["'”’`]+$/` would rescan a long run of quotes from each of them when the run ends mid-text.
+const stripQuotes = (text: string): string => {
+    const trimmed = text.trim();
+    let start = 0;
+    while (start < trimmed.length && `"'“‘\``.includes(trimmed.charAt(start))) {
+        start += 1;
+    }
+    let end = trimmed.length;
+    while (end > start && `"'”’\``.includes(trimmed.charAt(end - 1))) {
+        end -= 1;
+    }
+    return trimmed.slice(start, end);
+};
 
 // Words as written, split on whitespace only: `echo_via_pager` is one name, not three words.
 const wordsOf = (text: string): number => text.trim().split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;

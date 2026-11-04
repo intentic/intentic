@@ -23,11 +23,16 @@ export interface MarkdownOptions {
     readonly baseUrl?: string | undefined;
 }
 
+// Blanks at a line's end are found as runs and the next character checked, since `/[ \t]+$/gm` would rescan a long run
+// that ends mid-line from each of its characters. An empty next character is the text's end.
+const BLANK_RUN = /[ \t]+/g;
+const LINE_END = /^[\n\r\u2028\u2029]?$/;
+
 export const renderMarkdown = (root: Element, options: MarkdownOptions = {}): string => {
     const blocks = renderFlow(root.childNodes, options);
     return `${blocks
         .join("\n\n")
-        .replaceAll(/[ \t]+$/gm, "")
+        .replaceAll(BLANK_RUN, (run: string, at: number, text: string) => (LINE_END.test(text.charAt(at + run.length)) ? "" : run))
         .replaceAll(/\n{3,}/g, "\n\n")
         .trim()}\n`;
 };
@@ -163,7 +168,8 @@ const renderInline = (el: Element, options: MarkdownOptions): string => {
 const renderLink = (el: Element, options: MarkdownOptions): string => {
     const text = collapse(renderInlineChildren(el, options));
     const href = resolveUrl(attr(el, "href"), options.baseUrl);
-    if (href === undefined || href.startsWith("javascript:")) {
+    // resolveUrl passes these schemes through as written, so the check ignores case.
+    if (href === undefined || /^(?:javascript|vbscript|data):/i.test(href)) {
         return text;
     }
     if (href.startsWith("mailto:") || href.startsWith("tel:")) {
@@ -278,9 +284,28 @@ const renderTable = (el: Element, options: MarkdownOptions): string =>
         ),
     );
 
+// `text.replaceAll(/[ \t]*\r?\n\s*/g, " ")` as a scan: that regex rescans a long run of blanks from each of them when
+// no line break follows it.
+const foldLineBreaks = (text: string): string => {
+    let out = "";
+    let cursor = 0;
+    for (let lineBreak = text.indexOf("\n"); lineBreak !== -1; lineBreak = text.indexOf("\n", cursor)) {
+        let start = lineBreak > cursor && text[lineBreak - 1] === "\r" ? lineBreak - 1 : lineBreak;
+        while (start > cursor && (text[start - 1] === " " || text[start - 1] === "\t")) {
+            start -= 1;
+        }
+        out += `${text.slice(cursor, start)} `;
+        cursor = lineBreak + 1;
+        while (cursor < text.length && /\s/.test(text.charAt(cursor))) {
+            cursor += 1;
+        }
+    }
+    return out + text.slice(cursor);
+};
+
 // One cell's text made safe inside a table row: a raw `|` would end the cell and a line break the row, so pipes are
 // escaped and each break (with the blanks around it) folds into one space.
-export const markdownCell = (text: string): string => text.replaceAll(/[ \t]*\r?\n\s*/g, " ").replaceAll("|", "\\|");
+export const markdownCell = (text: string): string => foldLineBreaks(text).replaceAll("|", "\\|");
 
 export interface MarkdownTableOptions {
     // Per column; a `right` column gets the `---:` marker, anything else plain `---`.

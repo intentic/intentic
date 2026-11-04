@@ -137,7 +137,7 @@ test.skipIf(!sandbox.runs)(sandbox.title("a fenced turn sees its own checkout at
         expect(existsSync(join(w.plan.root, "node_modules", "dep", "out.txt"))).toBe(false);
         // What it writes in its checkout is in the conversation's worktree, where the daemon commits it from.
         expect(inside(anchor, "echo edited > support/notes.md").code).toBe(0);
-        expect(spawnSync("cat", [join(w.plan.worktree, "support", "notes.md")], { encoding: "utf8" }).stdout).toBe("edited\n");
+        expect(readFileSync(join(w.plan.worktree, "support", "notes.md"), "utf8")).toBe("edited\n");
     } finally {
         anchor.dispose();
     }
@@ -170,7 +170,7 @@ test.skipIf(!sandbox.runs)(sandbox.title("the repository pointer reads empty, so
         expect(inside(anchor, "wc -c < .git").out).toBe("0");
         expect(inside(anchor, "git rev-parse HEAD").code).not.toBe(0);
         // The pointer itself is untouched outside: the daemon's own git still works on the worktree.
-        expect(spawnSync("cat", [join(w.plan.worktree, ".git")], { encoding: "utf8" }).stdout).toContain("gitdir:");
+        expect(readFileSync(join(w.plan.worktree, ".git"), "utf8")).toContain("gitdir:");
     } finally {
         anchor.dispose();
     }

@@ -18,7 +18,7 @@ const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "queue-slots-"))
 // the fork. A bound that expires throws rather than quietly testing an empty pool.
 const holdSlot = async (queue: string, pool: string, seconds: number): Promise<ChildProcess> => {
     const marker = join(queue, `held-${pool}`);
-    const child = spawn("bash", [QUEUE_RUN, "--pool", pool, "--limit", "2", "--", "bash", "-c", `echo held > ${marker}; sleep ${seconds}`], {
+    const child = spawn("bash", [QUEUE_RUN, "--pool", pool, "--limit", "2", "--", "bash", "-c", 'echo held > "$1"; sleep "$2"', "hold-slot", marker, String(seconds)], {
         env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
     });
     const deadline = Date.now() + RENDEZVOUS_MS;
@@ -86,7 +86,7 @@ test("a queue directory that was never used is not an error", async () => {
 test("a held pool names its holder's conversation and rule, and counts the command waiting behind it", async () => {
     const queue = await dir();
     const marker = join(queue, "held-p");
-    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${marker}; sleep 30`], {
+    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", 'echo held > "$1"; sleep 30', "hold-slot", marker], {
         env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
     });
     const waiter = (): ChildProcess =>

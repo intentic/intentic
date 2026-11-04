@@ -14,7 +14,7 @@ const html = readFileSync(resolve(import.meta.dirname, `../index.html`), `utf8`)
 /** The whole inline pre-paint script, run against this jsdom document. Found by what it declares, not by place: the
  * floating-window `booting` note has to be the page's first script (floating.test.ts). */
 const bootScript = (): string => {
-    const source = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((found) => found[1]).find((body) => body?.includes(`var UI_LOCALES = `));
+    const source = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script[^>]*>/giu)].map((found) => found[1]).find((body) => body?.includes(`var UI_LOCALES = `));
     expect(source, `index.html has no inline pre-paint script`).toEqual(expect.any(String));
     return source as string;
 };

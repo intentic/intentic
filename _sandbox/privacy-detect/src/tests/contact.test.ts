@@ -184,9 +184,9 @@ describe("spellings a detector used to miss", () => {
     const mail = `${["jan", "kowalski"].join(".")  }@` + `gmail.com`;
 
     test("an address with its @ written as %40 or \\u0040 is an address", () => {
-        const encoded = mail.replace("@", "%40");
+        const encoded = mail.replaceAll("@", "%40");
         expect(found(`GET /api?email=${encoded}&page=1`, "email")).toEqual([encoded]);
-        const escaped = mail.replace("@", "\\u0040");
+        const escaped = mail.replaceAll("@", "\\u0040");
         expect(found(`{"e":"${escaped}"}`, "email")).toEqual([escaped]);
         expect(found("progress 100%40 done", "email")).toEqual([]);
     });

@@ -113,7 +113,7 @@ export const indexLookup = (db: SqliteDb, root: string, entries: readonly FileEn
             if (lines === undefined) {
                 return [];
             }
-            const escaped = name.replace(/[$]/g, "\\$");
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const word = new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`);
             const found: number[] = [];
             lines.forEach((text, index) => {
@@ -151,7 +151,7 @@ export const indexLookup = (db: SqliteDb, root: string, entries: readonly FileEn
             if (!/^[\w$]+$/.test(name)) {
                 return false;
             }
-            const word = new RegExp(`(?<![\\w$])${name.replace(/[$]/g, "\\$")}(?![\\w$])`);
+            const word = new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w$])`);
             const indexed = db
                 .all(
                     `SELECT c.text AS text, f.path AS path FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid

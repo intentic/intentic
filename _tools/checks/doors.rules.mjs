@@ -257,7 +257,7 @@ const SUPERVISORS = new Map([
 const STARTERS = new Set([`spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`]);
 
 const CHILD_PROCESS_IMPORT = /import\s+(type\s+)?([^;]*?)\s+from\s+["'](?:node:)?child_process["']/g;
-const escaped = (name) => name.replace(/[$]/g, `\\$&`);
+const escaped = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`);
 
 // The locals one file binds to child_process's starters, and the namespaces it binds the module to.
 const bindingsOf = (text) => {

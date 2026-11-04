@@ -90,7 +90,7 @@ const parseFileLine = (raw: string): ToolFileEntry | undefined => {
     if (line === `` || line.startsWith(`-`)) {
         return undefined;
     }
-    const match = /^([^\s:]+(?:\/[^\s:]*)*?)(?::(\d+))?(?::.*)?$/.exec(line);
+    const match = /^([^\s:]+)(?::(\d+))?(?::.*)?$/.exec(line);
     const path = match?.[1];
     if (path === undefined || (!path.includes(`/`) && !/\.[A-Za-z0-9]+$/.test(path))) {
         return undefined;

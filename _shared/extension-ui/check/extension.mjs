@@ -33,12 +33,12 @@ const importsOf = (text) =>
                   .split(`,`)
                   .map((entry) => entry.trim())
                   .filter((entry) => entry !== `` && !entry.startsWith(`type `))
-                  .map((entry) => ({ name: entry.split(/\s+as\s+/u)[0].trim(), from: match[3], index: match.index })),
+                  .map((entry) => ({ name: entry.split(/\sas\s/u)[0].trim(), from: match[3], index: match.index })),
     );
 
 // `^2.34.0` or `2.34.0`, the two forms the host's matcher (extension-api engines.ts) accepts; its floor, or undefined.
 const floorOf = (range) => {
-    const match = /^\s*\^?\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?\s*$/u.exec(range ?? ``);
+    const match = /^\s*(?:\^\s*)?(\d+)(?:\.(\d+))?(?:\.(\d+))?\s*$/u.exec(range ?? ``);
     return match === null ? undefined : `${match[1]}.${match[2] ?? 0}.${match[3] ?? 0}`;
 };
 const parts = (version) => version.split(`.`).map(Number);

@@ -7,7 +7,16 @@ import { restClient } from "../core/rest-client.js";
 
 const headers = (token: string): Record<string, string> => ({ "PRIVATE-TOKEN": token });
 
-const base = (url: string): string => `${url.replace(/\/+$/, "")}/api/v4`;
+// A loop rather than `/\/+$/`, which rescans a long run of slashes from every one of them.
+const withoutTrailingSlashes = (url: string): string => {
+    let end = url.length;
+    while (end > 0 && url[end - 1] === "/") {
+        end -= 1;
+    }
+    return url.slice(0, end);
+};
+
+const base = (url: string): string => `${withoutTrailingSlashes(url)}/api/v4`;
 
 // A project is addressed by its URL-encoded "owner/name" path everywhere the API takes an :id.
 const projectPath = (owner: string, name: string): string => encodeURIComponent(`${owner}/${name}`);

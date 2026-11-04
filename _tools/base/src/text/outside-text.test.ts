@@ -104,3 +104,12 @@ describe("neutralizeOutsideText: properties", () => {
         expect(neutralizeOutsideText(page)).toBe(page);
     });
 });
+
+describe("neutralizeOutsideText on a hostile body", () => {
+    test("a long run of blanks after `<` is scanned once, and a marker after it still dies", () => {
+        const body = `${"<\t".repeat(20_000)}${"\t".repeat(100_000)}< /\tuntrusted-content id="x">`;
+        const started = performance.now();
+        expect(neutralizeOutsideText(body).endsWith(NEUTRALIZED)).toBe(true);
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+});

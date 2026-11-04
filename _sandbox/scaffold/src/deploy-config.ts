@@ -170,7 +170,7 @@ export const writeManagedRegion = (src: string, entries: readonly InventoryEntry
         return [...lines.slice(0, begin), ...region, ...lines.slice(end + 1)].join(`\n`);
     }
 
-    const open = lines.findIndex((line) => /defineIntent\(\s*\(?\s*\w*\s*\)?\s*=>\s*\{/.test(line));
+    const open = lines.findIndex((line) => /defineIntent\(\s*(?:\(\s*)?(?:\w+\s*)?(?:\)\s*)?=>\s*\{/.test(line));
     if (open === -1) {
         throw new Error(`deploy.config.ts has no defineIntent((i) => { … }) body to insert the managed region into.`);
     }

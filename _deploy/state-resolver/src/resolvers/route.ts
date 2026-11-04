@@ -7,7 +7,7 @@ const slug = (hostname: string): string =>
     hostname
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+        .replace(/^-|-$/g, "");
 
 // The stable cf-route id for a hostname, so callers can both build the route and depend on it.
 export const routeId = (cloudflareId: string, hostname: string): string => `${cloudflareId}-${slug(hostname)}`;

@@ -100,7 +100,8 @@ export const chunkMessage = (text: string, max: number): string[] => {
 };
 
 // A Markdown table's separator row: cells of dashes, each optionally colon-aligned.
-const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+// Each optional pipe carries the blanks after it, so no two `\s*` meet: adjacent ones split a long blank run every way.
+const TABLE_SEPARATOR = /^\s*(?:\|\s*)?:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*(?:\|\s*)?$/;
 
 const cellsOf = (row: string): string[] => {
     const trimmed = row.trim().replace(/^\|/, "").replace(/\|$/, "");
