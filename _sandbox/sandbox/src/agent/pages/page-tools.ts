@@ -30,7 +30,8 @@ const PAGE_RULES =
     "Write one self-contained HTML document with inline <style> and <script> as `html`, or pass `path` to show an HTML file " +
     "you built in the workspace. Pictures, stylesheets and scripts it names on disk (relative to the file, or absolute paths, " +
     `screenshots included) and libraries it names on ${CDN_LIST} are carried into the page when it is shown; the page itself ` +
-    "reaches no network, so nothing else loads. Its scripts run, sealed off from the chat. " +
+    "reaches no network, so nothing else loads (its scripts may still fetch() a data: or blob: URL it holds). Its scripts " +
+    "run, sealed off from the chat. " +
     `${PAGE_LAYOUT_GUIDE} ${PAGE_THEME_GUIDE}`;
 
 const CHECK_RULE =

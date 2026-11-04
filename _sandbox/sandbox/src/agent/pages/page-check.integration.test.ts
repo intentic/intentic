@@ -43,6 +43,18 @@ describe("checkPage", () => {
         expect(result.check.errors.some((error) => error.includes("nope"))).toBe(true);
     }, 60_000);
 
+    it("lets a page fetch the data it holds, and names the policy when a fetch to the network is refused", async () => {
+        const result = await checkPage(
+            `<script>fetch("data:audio/wav;base64,UklGRg==").then((r) => r.arrayBuffer()).then((b) => console.log("read " + b.byteLength)); fetch("https://example.com/clip.ogg")</script>`,
+        );
+        if (!result.ok) {
+            expect(result.reason).toContain("browser");
+            return;
+        }
+        expect(result.check.messages.some((message) => message.text === "read 4")).toBe(true);
+        expect(result.check.errors.some((error) => error.includes("Failed to fetch") && error.includes("connect-src refused https://example.com/clip.ogg"))).toBe(true);
+    }, 60_000);
+
     // The check waits for the reported height to hold still rather than a fixed 600ms (2026-10-20): a page still
     // growing is measured once it stops, and one that is done does not wait out the old fixed beats.
     // Each step inside the quiet window of the last; a page that sits still longer than that and then grows is measured

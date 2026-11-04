@@ -15,7 +15,9 @@ export const SEALED_PAGE_POLICY = [
     `img-src data: blob:`,
     `font-src data:`,
     `media-src data: blob:`,
-    `connect-src 'none'`,
+    // Reading back what the page already holds: `fetch()` on a data: or blob: URL (audio to decode, a file it built),
+    // which reaches no network. Every other address stays refused.
+    `connect-src data: blob:`,
     `frame-src 'none'`,
     `worker-src 'none'`,
     `object-src 'none'`,
@@ -48,6 +50,10 @@ export const PAGE_BRIDGE = {
 // How many distinct errors a page tells, and how long each may be: enough to fix it by, never a flood.
 export const PAGE_ERRORS_MAX = 10;
 export const PAGE_ERROR_CHARS = 600;
+
+// A request the page's policy refused is told after the error it causes (a fetch rejects first), so an error waits this
+// long and names any refusal this close to it: "Failed to fetch" alone does not say the policy stopped it.
+const REFUSAL_NEAR_MS = 100;
 
 // The width the chat's reply column usually is, which the check lays a page out at and measures it by.
 export const PAGE_COLUMN_WIDTH = 720;
@@ -198,7 +204,9 @@ var names=${JSON.stringify(PAGE_THEME_VARIABLES)};
 function apply(t){if(!t||typeof t!=="object"||!t.variables)return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var i=0;i<names.length;i++){var v=t.variables[names[i]];if(typeof v==="string")c+=names[i]+":"+v.replace(/[;{}<>]/g,"")+";";}c+="}";if(style)style.textContent=c+${JSON.stringify(baseCss(false))}.replace("background:transparent;",canvas?"background:var(--background);":"background:transparent;");theme={appearance:t.appearance==="light"?"light":"dark",variables:t.variables};document.dispatchEvent(new CustomEvent("intentic:theme",{detail:theme}));}
 var framed=window.parent!==window;
 function post(m){if(framed)window.parent.postMessage(m,"*");}
-var told={},faults=0;function fault(t){t=String(t).slice(0,${PAGE_ERROR_CHARS});if(told[t]||faults>=${PAGE_ERRORS_MAX})return;told[t]=1;faults++;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.error)},params:{message:t}});}
+var told={},faults=0,refused=[];
+document.addEventListener("securitypolicyviolation",function(e){refused.push({at:Date.now(),what:e.effectiveDirective+" refused "+String(e.blockedURI||"inline").slice(0,80)});if(refused.length>20)refused.shift();});
+function fault(t){var at=Date.now();setTimeout(function(){var seen=[];for(var i=0;i<refused.length;i++){var r=refused[i];if(Math.abs(r.at-at)<=${REFUSAL_NEAR_MS}&&seen.indexOf(r.what)<0)seen.push(r.what);}t=String(t);if(seen.length)t+=" (the page's policy refused: "+seen.join("; ")+")";t=t.slice(0,${PAGE_ERROR_CHARS});if(told[t]||faults>=${PAGE_ERRORS_MAX})return;told[t]=1;faults++;post({jsonrpc:"2.0",method:${JSON.stringify(PAGE_BRIDGE.error)},params:{message:t}});},${REFUSAL_NEAR_MS});}
 function said(x,fallback){return x&&typeof x.stack==="string"?x.stack.split("\\n").slice(0,2).map(function(l){return l.trim();}).join(" "):fallback;}
 window.addEventListener("error",function(e){if(e instanceof ErrorEvent)fault(said(e.error,(e.message||"Script error")+(e.lineno?" (line "+e.lineno+")":"")));});
 window.addEventListener("unhandledrejection",function(e){fault("Unhandled rejection: "+said(e.reason,String(e.reason)));});
