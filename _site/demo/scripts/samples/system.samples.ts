@@ -27,6 +27,8 @@ export const systemSamples: GroupSamples<`system`> = ({ host }) => ({
     scanStorage: undefined,
     cancelStorageScan: undefined,
     cleanStorage: { category: `logs` },
+    // A conversation the demo does not list: nothing is removed.
+    pressCheckout: { id: `demo-checkout`, press: `cleanBuildOutput` },
     // Leaves the switch on and nothing skipped, as it was.
     autoUpdate: { enabled: true },
     skipUpdate: { version: null },

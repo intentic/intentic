@@ -33,6 +33,8 @@ export const systemDoors = {
     scanStorage: () => demoStorageScan(),
     cancelStorageScan: () => demoStorageCancel(),
     cleanStorage: ({ category }) => demoStorageClean(category),
+    // The demo's report lists no conversation checkouts, so no row offers a press; one that comes anyway frees nothing.
+    pressCheckout: ({ id }) => ({ id, removed: [] }),
     // The sessions the sandbox holds, with whatever other stores' work started (daemon/terminals.ts).
     terminals: terminalsList,
     killTerminal,
