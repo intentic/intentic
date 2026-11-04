@@ -683,12 +683,25 @@ export const streakFixerFor = async (services: Services, run: Pick<PipelineRun, 
     return streak === undefined ? undefined : ciFixConversationId(run.repo, streak.firstRunId);
 };
 
-/** Starts a manual attempt under the handover's lock, then records exactly which failures reached it. A busy or refused
- *  start consumes nothing; later jobs remain parked for the run's automatic handover. */
-export const fixPressed = (
+/** The branch's other failing workflows, each by its newest failed run: what a press on one run of a failing main also
+ *  hands the fix agent. The banner names every workflow failing, so a press that read only the run it sat on fixed the
+ *  Nightly while CI went on failing. Empty when the branch has no failure, or the run is its only workflow's. */
+export const streakRunsBeside = async (
     services: Services,
     run: Pick<PipelineRun, "repo" | "branch" | "runId">,
-    failedJobIds: readonly number[],
+): Promise<readonly { readonly workflow: string; readonly runId: number }[]> => {
+    const streak = (await services.ciStore.failures())[keyOf(run.repo, run.branch)];
+    return Object.entries(streak?.workflows ?? {})
+        .filter(([, runId]) => runId !== run.runId)
+        .map(([workflow, runId]) => ({ workflow, runId }));
+};
+
+/** Starts a manual attempt under the handover's lock, then records exactly which failures reached it: every job of every
+ *  run its prompt carried. A busy or refused start consumes nothing; later jobs remain parked for the automatic handover. */
+export const fixPressed = (
+    services: Services,
+    run: Pick<PipelineRun, "repo" | "branch">,
+    jobs: readonly { readonly runId: number; readonly jobId: number }[],
     start: () => Promise<FixAttemptOutcome>,
 ): Promise<FixAttemptOutcome> =>
     serially(keyOf(run.repo, run.branch), async () => {
@@ -696,11 +709,11 @@ export const fixPressed = (
         if (outcome.kind === "busy") {
             return outcome;
         }
-        const press = { runId: run.runId, failedJobIds, conversationId: outcome.conversationId, at: Date.now() };
+        const press = { jobs, conversationId: outcome.conversationId, at: Date.now() };
         await services.ciStore.failure(run.repo, run.branch, (current) =>
             current === undefined ? current : withFixPressed(current, press),
         );
-        unpark(run.repo, ({ job }) => job.runId === run.runId && failedJobIds.includes(job.jobId));
+        unpark(run.repo, ({ job }) => jobs.some((handed) => handed.runId === job.runId && handed.jobId === job.jobId));
         publishRuntimeChange("ci");
         return outcome;
     });

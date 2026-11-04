@@ -65,9 +65,11 @@ interface Setup {
     readonly ready?: readonly string[];
     readonly pinned?: readonly ModelPin[];
     readonly previous?: AgentSummary["status"];
+    // What the forge answers, where a test needs more than one run's jobs.
+    readonly forge?: FetchFn;
 }
 
-const harness = async ({ ready = ["claude"], pinned = [], previous }: Setup = {}) => {
+const harness = async ({ ready = ["claude"], pinned = [], previous, forge }: Setup = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-fix-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -132,10 +134,12 @@ const harness = async ({ ready = ["claude"], pinned = [], previous }: Setup = {}
         started.push(input);
         yield { kind: "done" } as never;
     };
-    const fetchFn: FetchFn = (async (url: string) =>
-        String(url).includes("/logs")
-            ? new Response("Error: P1001: Can't reach database server at `postgres:5432`")
-            : new Response(JSON.stringify(JOBS))) as unknown as FetchFn;
+    const fetchFn: FetchFn =
+        forge ??
+        ((async (url: string) =>
+            String(url).includes("/logs")
+                ? new Response("Error: P1001: Can't reach database server at `postgres:5432`")
+                : new Response(JSON.stringify(JOBS))) as unknown as FetchFn);
     return { routes: createCiRoutes(drivenBy(services, wake), fetchFn), started, services };
 };
 
@@ -224,6 +228,38 @@ test.each(["landed", "stopped"] as const)("Fix now after a %s attempt delivers t
     expect(started[0]?.prompt).toContain("Failed jobs: onboarding.");
     expect(started[0]?.prompt).toContain("P1001");
     expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7"]);
+});
+
+// The banner names every workflow failing on main, and its press is the fix for main: a press that read only the run it
+// sat on sent the agent at the Nightly's jobs while CI went on failing beside it.
+test("a pressed Fix on a failing main hands the agent every failing workflow's jobs, and acknowledges each by its own run", async () => {
+    const NIGHTLY_RUN = 39;
+    const forge: FetchFn = async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.includes("/logs")) {
+            return new Response(url.includes("/jobs/5/") ? "Error: tidy found a retired word" : "Error: P1001: Can't reach database server");
+        }
+        return new Response(
+            JSON.stringify(
+                url.includes(`/runs/${NIGHTLY_RUN}/`)
+                    ? { jobs: [{ id: 5, name: "tidy", conclusion: "failure", steps: [{ name: "Run tidy", conclusion: "failure" }] }] }
+                    : JOBS,
+            ),
+        );
+    };
+    const { routes, started, services } = await harness({ forge });
+    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"], workflows: { Nightly: NIGHTLY_RUN, CI: RUN_ID } }));
+    services.ciRuns.replace(services.ciRuns.sweep()!.map((run) => ({ ...run, workflow: "CI" })));
+
+    await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
+
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    const prompt = started[0]?.prompt ?? "";
+    expect(prompt).toContain("Failed jobs: onboarding in CI, tidy in Nightly.");
+    expect(prompt).toContain("P1001");
+    expect(prompt).toContain("retired word");
+    expect(prompt).toContain(`=== Nightly (run ${NIGHTLY_RUN}) ===`);
+    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7", `${NIGHTLY_RUN}/5`]);
 });
 
 // The Pipelines rail reads each failing main-line branch off the runs list, under the name the contract gives it.

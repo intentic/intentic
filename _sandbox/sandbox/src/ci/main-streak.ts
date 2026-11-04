@@ -109,9 +109,9 @@ export const withHeard = (current: CiFailure, jobs: readonly Pick<FailedJob, "ru
 // A successful manual start gives the streak its turns back and acknowledges only the evidence its prompt received.
 export const withFixPressed = (
     current: CiFailure,
-    press: { readonly runId: number; readonly failedJobIds: readonly number[]; readonly conversationId: string; readonly at: number },
+    press: { readonly jobs: readonly Pick<FailedJob, "runId" | "jobId">[]; readonly conversationId: string; readonly at: number },
 ): CiFailure => ({
-    ...withHeard(current, press.failedJobIds.map((jobId) => ({ runId: press.runId, jobId }))),
+    ...withHeard(current, press.jobs),
     turns: 0,
     decisions: [
         ...current.decisions,

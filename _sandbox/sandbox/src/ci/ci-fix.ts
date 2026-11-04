@@ -123,6 +123,35 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
     };
 };
 
+// One failing workflow's evidence, read off its newest failed run.
+export interface WorkflowEvidence {
+    readonly workflow: string;
+    readonly runId: number;
+    readonly url: string | undefined;
+    readonly evidence: CiFailureEvidence;
+}
+
+// What a failing main hands its fix agent when several workflows fail on it at once: every one's jobs and logs, each
+// under its workflow's name and run, since a fix for the pressed run's workflow alone leaves the branch failing. The
+// fleet's only when every run is: one code failure among them is still the agent's to fix. One workflow is its own.
+export const jointEvidence = (parts: readonly WorkflowEvidence[]): CiFailureEvidence => {
+    const [only] = parts;
+    if (parts.length === 1 && only !== undefined) {
+        return only.evidence;
+    }
+    const named = (part: WorkflowEvidence): string => `${part.workflow} (run ${part.runId}${part.url === undefined ? "" : `, ${part.url}`})`;
+    return {
+        failedJobs: parts.flatMap((part) => part.evidence.failedJobs.map((job) => `${job} in ${part.workflow}`)),
+        failedJobIds: parts.flatMap((part) => part.evidence.failedJobIds),
+        logs: parts
+            .filter((part) => part.evidence.logs !== "")
+            .map((part) => `=== ${named(part)} ===\n${part.evidence.logs}`)
+            .join("\n\n"),
+        infra: parts.length > 0 && parts.every((part) => part.evidence.infra),
+        infraReasons: parts.flatMap((part) => (part.evidence.infra ? part.evidence.infraReasons.map((reason) => `${part.workflow}: ${reason}`) : [])),
+    };
+};
+
 export interface CiFixRequest {
     readonly project: CiProject;
     readonly runId: number;

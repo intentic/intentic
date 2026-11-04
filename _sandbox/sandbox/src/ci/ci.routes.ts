@@ -9,8 +9,9 @@ import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
-import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
-import { fixPressed, forgetFailure, mainFailures, streakFixerFor } from "./main-fixer.js";
+import { ciFailureEvidence, jointEvidence, runOf, startCiFix, type WorkflowEvidence } from "./ci-fix.js";
+import { fixPressed, forgetFailure, mainFailures, streakFixerFor, streakRunsBeside } from "./main-fixer.js";
+import { workflowOf } from "./main-streak.js";
 import { createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -29,6 +30,31 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     } catch (error) {
         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
+};
+
+// What a Fix press hands its agent: the pressed run's failed jobs and, when the run is one of a failing main's, every other
+// failing workflow's newest failed run too, as the banner it was pressed from names them, so the agent fixes the branch
+// rather than one workflow of it. `handed` is each job the prompt carried, by its own run, for the press to acknowledge.
+const pressEvidence = async (services: Services, project: CiProject, runId: number, fetchFn: FetchFn) => {
+    // Together, since the press waits on both before any agent exists: the run is usually cached, but a cold daemon lists
+    // the project's runs for it.
+    const [pressed, run] = await Promise.all([ciFailureEvidence(project, runId, services.logger, fetchFn), runOf(services, project, runId, fetchFn)]);
+    const beside = run === undefined ? [] : await streakRunsBeside(services, run);
+    const parts: WorkflowEvidence[] = [
+        { workflow: workflowOf(run?.workflow), runId, url: run?.url, evidence: pressed },
+        ...(await Promise.all(
+            beside.map(async (other) => ({
+                ...other,
+                url: (await runOf(services, project, other.runId, fetchFn))?.url,
+                evidence: await ciFailureEvidence(project, other.runId, services.logger, fetchFn),
+            })),
+        )),
+    ];
+    return {
+        run,
+        evidence: jointEvidence(parts),
+        handed: parts.flatMap((part) => part.evidence.failedJobIds.map((jobId) => ({ runId: part.runId, jobId }))),
+    };
 };
 
 // One list call per project in flight, shared by every board that finds the picture stale while it runs, where each
@@ -135,12 +161,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
         }),
         fix: i.fix.handler(async ({ input, context }) => {
             const project = await resolve(input.repo);
-            // Together, since the press waits on both before any agent exists: the run is usually cached, but a cold
-            // daemon lists the project's runs for it.
-            const [evidence, run] = await Promise.all([
-                ciFailureEvidence(project, input.runId, services.logger, fetchFn),
-                runOf(services, project, input.runId, fetchFn),
-            ]);
+            const { run, evidence, handed } = await pressEvidence(services, project, input.runId, fetchFn);
             // A run that died in its runner's own setup, or whose log names the fleet, never ran a line of this repository:
             // an agent opened on it would fix code that is fine, so it is refused with the reason unless forced.
             if (evidence.infra && input.force !== true) {
@@ -179,7 +200,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             ).catch((error: unknown) => {
                 throw error instanceof AttemptRefused ? new ORPCError("CONFLICT", { message: error.message }) : error;
             });
-            const outcome = run !== undefined && streak !== undefined ? await fixPressed(services, run, evidence.failedJobIds, start) : await start();
+            const outcome = run !== undefined && streak !== undefined ? await fixPressed(services, run, handed, start) : await start();
             if (outcome.kind === "busy") {
                 // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
                 throw new ORPCError("CONFLICT", { message: outcome.reason });
