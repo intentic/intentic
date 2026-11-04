@@ -84,6 +84,8 @@ const pureNavigators = (file: string, source: string): Offence[] =>
         what: `\`${match[1]}\` only navigates — whatever calls it should be a link instead`,
     }));
 
+// Compiles every template in the app, the kit and the extensions: about 2s alone, but it ran past the 20s default on
+// two loaded CI runners in a row (55s and 30s), so it gets the minutes a whole-repo scan can take there.
 it(`draws every control that goes somewhere as a link`, () => {
     const offences = ROOTS.flatMap(vueFiles).flatMap((file) => {
         const source = readFileSync(file, `utf8`);
@@ -91,4 +93,4 @@ it(`draws every control that goes somewhere as a link`, () => {
     });
 
     expect(offences.map((offence) => `${offence.file.slice(ROOT.length + 1)}:${offence.line} — ${offence.what}`)).toEqual([]);
-});
+}, 120_000);

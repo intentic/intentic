@@ -27,7 +27,7 @@ const summary = (extra: Partial<AgentSummary> = {}): AgentSummary => ({
     harness: "native",
     updatedAt: NOW,
     title: "Draft feedback for Q4 reviews",
-    activity: "Reading reviews.md",
+    activity: { tool: "Read", target: "reviews.md" },
     failure: "the provider stopped",
     diff: { files: 2, insertions: 120, deletions: 34 },
     attention: { plan: true, question: true, permission: false, capability: false, credential: false, conflict: true, need: false },

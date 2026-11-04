@@ -113,6 +113,10 @@ const WAITING: ConversationQueue = {
     revision: 1,
 };
 
+// Every client a test made. Words left waiting keep their outbox's retry timer, which would fire in a later test and send
+// them through that test's `run`; emptied after each test, a late flush finds nothing to send.
+const clients: TurnClient[] = [];
+
 // A TurnClient over a conversation that is only its refs: the transcript is a real one, since a run's rows are drawn
 // there; the selection and the failure policy answer only what a run asks of them.
 const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<ComposerSelection> = {}) => {
@@ -161,6 +165,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         privateDraft: ref<boolean | undefined>(),
     };
     const client = new TurnClient(host);
+    clients.push(client);
     const transcript = new TranscriptView(() => undefined, {
         selection: { servingState: computed(() => undefined) },
         conversationId: `c1`,
@@ -213,6 +218,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    for (const client of clients.splice(0)) {
+        client.outbox.entries.value = [];
+    }
     unstubAllGlobals();
     hydrateOnce.mockReset();
     openChats.value = [];

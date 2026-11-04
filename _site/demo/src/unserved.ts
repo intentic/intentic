@@ -152,7 +152,6 @@ export const UNSERVED = {
     // A connector's own CLI or listener stores a delegated sign-in's refresh token; no page sends it.
     "capabilities.oauthToken": NOT_THE_EDITORS,
     "capabilities.otp": NOT_THE_EDITORS,
-    "capabilities.status": NOT_THE_EDITORS,
     "exit.check": NOT_THE_EDITORS,
     "exit.countries": NOT_THE_EDITORS,
     "exit.list": NOT_THE_EDITORS,

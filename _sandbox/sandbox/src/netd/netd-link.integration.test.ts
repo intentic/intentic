@@ -3,6 +3,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FRAME_MAX_BYTES, type FromNode, type ToNode } from "@intentic/sandbox-contract/netd-wire";
+import { waitFor } from "@intentic/testing/bun";
 import { connectNetd, FrameTooLarge, takeFrames } from "./netd-link.js";
 
 // A real Unix socket standing in for netd: Node dials it, answers a question by id, and hears the tunnel.
@@ -201,7 +202,7 @@ test("a length past the frame cap drops the link instead of buffering toward it"
     const header = Buffer.alloc(4);
     header.writeUInt32BE(FRAME_MAX_BYTES + 1, 0);
     socket.write(header);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(closed).toBe(true);
+    // The header reaches the link on its own clock; a fixed sleep lost that race on a loaded runner.
+    await waitFor(() => expect(closed).toBe(true));
     expect(faults[0]).toBeInstanceOf(FrameTooLarge);
 });

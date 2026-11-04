@@ -16,6 +16,9 @@ export const settingsSamples: GroupSamples<`settings`> = () => ({
     adoptTimezone: { timezone: `Europe/Warsaw` },
     audience: undefined,
     setAudience: { audience: `developer`, offer: true },
+    commitIdentity: undefined,
+    // Forgets an identity nobody set, so the read above and every later one find the fixture's suggestion unchanged.
+    setCommitIdentity: { identity: null },
     aiLiteracy: { locale: `en` },
     aiLiteracyConfirmations: undefined,
     confirmAiLiteracy: { version: createHash(`sha256`).update(AI_LITERACY_TEXT.en).digest(`hex`), locale: `en` },

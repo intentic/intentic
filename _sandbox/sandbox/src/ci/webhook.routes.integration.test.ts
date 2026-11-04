@@ -271,7 +271,8 @@ test("a run delivered while the one before it is still being read waits for it",
     expect((await deliver(app, secret, { ...pass, workflow_run: { ...pass.workflow_run, id: 8 } })).status).toBe(200);
     list();
     await waitFor(() => expect(recorded.mock.calls.map(([, , status]) => status)).toEqual(["failed", "success"]), SETTLES);
-    expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
+    // The spy counts a call as it starts; the write it makes lands a moment later.
+    await waitFor(async () => expect(await services.ciStore.lastConclusion("web", "main")).toBe("success"), SETTLES);
 });
 
 // A workspace where every agent pushes its own branch is exactly where an unnarrowed CI trigger is useless.
