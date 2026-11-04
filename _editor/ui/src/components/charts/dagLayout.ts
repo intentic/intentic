@@ -1,5 +1,6 @@
 import { graphlib, layout } from "@dagrejs/dagre";
 import type { TooltipValue } from "../../lib/tooltip.js";
+import { type DagExtent, layered } from "./dagLayered.js";
 
 // DagGraph's data model and dagre layout step. Nodes carry an opaque `data` payload for the #node slot; edges reference
 // node ids. Layout uses dagre's layered algorithm (LR by default), which also breaks cycles.
@@ -15,13 +16,10 @@ export interface DagNode<T = unknown> {
     // Per-node size override for dagre, not the default nodeWidth/nodeHeight; e.g. a card sized by its rows.
     readonly width?: number;
     readonly height?: number;
-    // Place within its column, 0 first. Set on every node, it replaces the layout's own crossing pass, for a caller
-    // that must reproduce one exact picture (a forge's own drawing of a run); set on some, it is ignored.
+    // Place within its column, 0 first. Set on every node, the graph is drawn by the layered layout (dagLayered.ts)
+    // starting from this order, for a caller with a picture to start from (a forge's own drawing of a run), which it
+    // keeps wherever reordering would not cross fewer lines; set on some, it is ignored.
     readonly order?: number;
-    // Which line of its column, 0 first, for a column too long to draw as one: each line is drawn as a rank of its own, a
-    // gutter apart, so a stage of twelve jobs wraps onto a second row instead of shrinking the whole picture to fit.
-    // Read only with `order`.
-    readonly line?: number;
 }
 
 export interface DagEdge {
@@ -44,6 +42,9 @@ export interface DagLayoutOptions {
     // Air between columns and cards in one; defaults suit few large cards, tighter needed for list-row cards.
     readonly rankSep?: number;
     readonly nodeSep?: number;
+    // Across the flow, the widest a rank may be before its cards wrap onto another line, each line a rank of its own: a
+    // stage of twelve jobs goes onto two rows rather than shrinking the picture to fit. Caller-ordered graphs only.
+    readonly wrapAt?: number;
 }
 
 // Default column/card spacing when unset; an edge's outbound turn sits halfway across the rank gap.
@@ -55,10 +56,8 @@ const NODE_SEP = 28;
 export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): string =>
     [
         options.direction,
-        `${options.rankSep ?? RANK_SEP}/${options.nodeSep ?? NODE_SEP}`,
-        nodes
-            .map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}#${node.order ?? ``}${node.line ? `/${node.line}` : ``}`)
-            .join(`,`),
+        `${options.rankSep ?? RANK_SEP}/${options.nodeSep ?? NODE_SEP}/${options.wrapAt ?? ``}`,
+        nodes.map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}#${node.order ?? ``}`).join(`,`),
         edges.map((edge) => `${edge.from}>${edge.to}`).join(`,`),
     ].join(`|`);
 
@@ -72,7 +71,11 @@ export interface DagPlacement {
     readonly nodes: ReadonlyMap<string, DagPoint>;
     // Where each edge turns, keyed by `laneKey`, in node coords: the last gap before its target.
     readonly lanes: ReadonlyMap<string, readonly DagPoint[]>;
+    // The picture's box: every card, and every line that runs beside them.
+    readonly extent: DagExtent;
 }
+
+export { type DagExtent, wrapLines } from "./dagLayered.js";
 
 // Keyed by endpoints alone: dagre gets one edge per pair, so two DagEdges differing only by `kind` share a lane.
 export const laneKey = (from: string, to: string): string => `${from}>${to}`;
@@ -168,7 +171,7 @@ const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagE
 };
 
 // Discards dagre's cross-axis coordinate; packs each column from the same top edge, one gap between cards, in
-// orderColumns' order. Top to bottom, each row is centred on the widest instead, as placeInOrder draws one.
+// orderColumns' order. Top to bottom, each row is centred on the widest instead.
 const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number, order: ReadonlyMap<string, number>): Map<string, DagPoint> => {
     const columns = new Map<number, PlacedNode[]>();
     for (const entry of placed) {
@@ -269,50 +272,15 @@ const turnPoints = (
     return turns;
 };
 
-// Caller-ordered layout: each column is a dependency depth, stacked from the same top edge in the nodes' own `order`,
-// one gap between cards; columns as wide as their widest card, centred on it. Top to bottom, a rank is a row: its cards
-// share one top edge (a tall card hangs down rather than floating mid-row), and each row is centred on the widest, as a
-// downward flow reads. A column the caller split into `line`s is drawn as that many ranks, one after another, so its
-// edges route through the gutter between them like any other. No dagre: nothing here is left to choose.
-const placeInOrder = (nodes: readonly DagNode<never>[], columns: ReadonlyMap<string, number>, options: DagLayoutOptions): PlacedNode[] => {
-    const horizontal = options.direction === `LR`;
-    const rankSep = options.rankSep ?? RANK_SEP;
-    const nodeSep = options.nodeSep ?? NODE_SEP;
-    const byColumn = new Map<number, DagNode<never>[]>();
-    for (const node of nodes) {
-        const column = columns.get(node.id) ?? 0;
-        byColumn.set(column, [...(byColumn.get(column) ?? []), node]);
-    }
-    // Along the flow: a card's width in LR, its height in TB.
-    const thicknessOf = (node: DagNode<never>): number => (horizontal ? boxOf(node, options).width : boxOf(node, options).height);
-    // Across the flow: how far a rank's cards reach side by side, gaps included.
-    const spanOf = (members: readonly DagNode<never>[]): number =>
-        members.reduce((sum, node) => sum + (horizontal ? boxOf(node, options).height : boxOf(node, options).width), 0) +
-        Math.max(0, members.length - 1) * nodeSep;
-    const ranks = [...byColumn.keys()]
-        .toSorted((one, other) => one - other)
-        .flatMap((column) => {
-            const lines = new Map<number, DagNode<never>[]>();
-            for (const node of (byColumn.get(column) ?? []).toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0))) {
-                lines.set(node.line ?? 0, [...(lines.get(node.line ?? 0) ?? []), node]);
-            }
-            return [...lines.keys()].toSorted((one, other) => one - other).map((line) => lines.get(line) ?? []);
-        });
-    const widest = Math.max(...ranks.map(spanOf), 0);
-    const placed: PlacedNode[] = [];
-    let start = 0;
-    for (const members of ranks) {
-        const thickness = Math.max(...members.map(thicknessOf));
-        let next = horizontal ? 0 : (widest - spanOf(members)) / 2;
-        for (const node of members) {
-            const box = boxOf(node, options);
-            const offset = horizontal ? start + (thickness - thicknessOf(node)) / 2 : start;
-            placed.push({ id: node.id, at: horizontal ? { x: offset, y: next } : { x: next, y: offset }, ...box });
-            next += (horizontal ? box.height : box.width) + nodeSep;
-        }
-        start += thickness + rankSep;
-    }
-    return placed;
+const extentOf = (boxes: readonly PlacedNode[]): DagExtent => {
+    const left = Math.min(...boxes.map((box) => box.at.x), 0);
+    const top = Math.min(...boxes.map((box) => box.at.y), 0);
+    return {
+        x: left,
+        y: top,
+        width: Math.max(...boxes.map((box) => box.at.x + box.width), 0) - left,
+        height: Math.max(...boxes.map((box) => box.at.y + box.height), 0) - top,
+    };
 };
 
 export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): DagPlacement => {
@@ -323,11 +291,7 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
     const drawn = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
     const columns = columnsOf(nodes, drawn);
     if (nodes.length > 0 && nodes.every((node) => node.order !== undefined)) {
-        const placed = placeInOrder(nodes, columns, options);
-        return {
-            nodes: new Map(placed.map((entry): [string, DagPoint] => [entry.id, entry.at])),
-            lanes: turnPoints(edges, new Map(placed.map((entry): [string, PlacedNode] => [entry.id, entry])), horizontal, rankSep, nodeSep),
-        };
+        return layered(nodes, drawn, columns, { ...options, rankSep, nodeSep });
     }
 
     const graph = new graphlib.Graph();
@@ -351,7 +315,7 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
     const packed = packColumns(placed, horizontal, nodeSep, orderColumns(columns, drawn, seeded));
     // Turns are measured off the packed boxes, not dagre's, since a line must leave the card where it now sits.
     const boxes = new Map(placed.map((entry): [string, PlacedNode] => [entry.id, { ...entry, at: packed.get(entry.id) ?? entry.at }]));
-    return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep, nodeSep) };
+    return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep, nodeSep), extent: extentOf([...boxes.values()]) };
 };
 
 // Right-angled path through `via`'s turns, rounded at the corners, so parallel edges share runs along the flow instead

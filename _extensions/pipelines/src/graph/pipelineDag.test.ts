@@ -162,7 +162,7 @@ describe(`pipelineDag draws a declared run as GitHub does`, () => {
         ]);
     });
 
-    it(`gives every card a place in its column, so the layout draws that order rather than its own`, () => {
+    it(`gives every card a place in its column, so the layout starts from that order rather than its own`, () => {
         expect(pipelineDag(pipelineStages(intenticRun)).nodes.every((node) => node.order !== undefined)).toBe(true);
         // Stages and waves carry no picture to reproduce: those keep the layout's own ordering.
         expect(pipelineDag(stageRun).nodes.every((node) => node.order === undefined)).toBe(true);
@@ -277,6 +277,15 @@ describe(`pipelineDag with declared dependencies`, () => {
         // Every job has a unique edge signature, so each stays its own cluster node; edges match the unclustered graph.
         const edges = pipelineDag(declaredRun).edges.map((edge) => `${edge.from}>${edge.to}`);
         expect(edges.toSorted()).toEqual([`0:0>1:0`, `0:0>1:1`, `0:1>3:0`, `1:0>2:0`, `2:0>3:0`]);
+    });
+
+    // `a → c` says nothing when `a → b → c` is drawn: on a long run these are most of the lines, the long ones down the
+    // sides. The trace still reaches everything it did.
+    it(`leaves out an arrow another path already draws, and traces as far as before`, () => {
+        const run = pipelineStages([declared(`a`, [], 0), declared(`b`, [`a`], 10_000), declared(`c`, [`a`, `b`], 20_000)]);
+        const dag = pipelineDag(run, `0:0`);
+        expect(dag.edges.map((edge) => `${edge.from}>${edge.to}`).toSorted()).toEqual([`0:0>1:0`, `1:0>2:0`]);
+        expect(dag.trace).toMatchObject({ before: 0, after: 2 });
     });
 
     it(`traces one leg of a fan-out without lighting its sibling's parents`, () => {

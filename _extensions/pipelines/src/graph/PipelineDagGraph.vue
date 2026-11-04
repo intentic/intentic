@@ -23,7 +23,7 @@ import {
     STATUS_LINE,
 } from "./cardSize";
 import { useGraphLayout } from "./graphLayout";
-import { READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows, wrapLines } from "./spread";
+import { READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows } from "./spread";
 import { STATUS_TONE, type StatusTone } from "../statusVisual";
 import { t } from "../i18n.js";
 
@@ -33,11 +33,10 @@ import { t } from "../i18n.js";
 //   job stacks its lines (see cardSize) and the frame's width goes to the gutters between columns (see spread).
 // - rows: stages top to bottom, each job one line, the run drawn whole and as tall as it is, so the page scrolls
 //   through it rather than the wheel zooming a band. Width is what a row is short of, so a stage wider than the frame
-//   wraps onto another line (see wrapLines) rather than shrinking every name to fit.
-// Lines follow each layout's shape. Down the page they sweep from card to card in S-curves (DagGraph's `smooth`): a
-// row's fan-out spreads across the width, and the curves open from one point and close on one. Across, a column's
-// fan-out runs down a gutter a few dozen pixels wide, where a dozen curves from one card would tangle; there the lines
-// keep their right angles, rounded (`elbow`), so a fan-out shares one trunk and peels off it.
+//   wraps onto another line (DagGraph's `wrapAt`) rather than shrinking every name to fit.
+// Lines sweep from card to card in S-curves (DagGraph's `smooth`), changing lane only mid-gutter. The layout keeps them
+// off the cards: an edge another path already implies is not drawn (pipelineDag), a long one gets a lane reserved in
+// every stage it passes, and each stage is ordered to cross as few lines as it can (dagLayered).
 // Hover traces one job's card through the run; a click pins it. The job name itself is a link out to that job's page on
 // the forge, so the pin stays on the plain click everywhere else in the row.
 
@@ -170,52 +169,36 @@ const ranks = computed(() => {
     return [...byStage.values()].map((members) => members.toSorted((one, other) => (one.order ?? 0) - (other.order ?? 0)));
 });
 
-// Rows: each card's line within its stage, wrapped at the frame's width at full size. Only a run drawn in its own order
-// can wrap, since a layout left to choose places its own; every stage of one of those is a single card anyway.
-const lineOf = computed(() => {
-    const of = new Map<string, number>();
-    if (!rows.value || !dag.value.nodes.every((node) => node.order !== undefined)) {
-        return of;
-    }
-    const room = Math.max(100, (containerWidth.value || 1000) - 2 * PAD_PX);
-    for (const members of ranks.value) {
-        wrapLines(
-            members.map((node) => widthOf(node.id)),
-            room,
-            NODE_SEP,
-        ).forEach((line, index) => {
-            const node = members[index];
-            if (node !== undefined) {
-                of.set(node.id, line);
-            }
-        });
-    }
-    return of;
-});
-// Every line the layout draws, a stage that fits being one; what the picture's size is measured off.
-const lines = computed(() =>
-    ranks.value.flatMap((members) => {
-        const count = Math.max(0, ...members.map((node) => lineOf.value.get(node.id) ?? 0)) + 1;
-        return Array.from({ length: count }, (_, line) => members.filter((node) => (lineOf.value.get(node.id) ?? 0) === line));
-    }),
-);
+const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() => dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node) })));
 
-const sizedNodes = computed<DagNode<PipelineJobCluster>[]>(() =>
-    dag.value.nodes.map((node) => ({ ...node, width: widthOf(node.id), height: cardHeight(node), line: lineOf.value.get(node.id) ?? 0 })),
-);
+// Rows: the frame's width at full size, where a stage's cards wrap onto another line. In steps, so a pane dragged a
+// pixel at a time does not lay the graph out again at every pixel.
+const WRAP_STEP = 16;
+const wrapAt = computed(() => (rows.value ? Math.max(100, Math.floor(((containerWidth.value || 1000) - 2 * PAD_PX) / WRAP_STEP) * WRAP_STEP) : undefined));
 
-// The picture's height at full size, what the band's height and the zoom are measured against: the tallest column,
-// cards and the gaps between them; or every line's tallest card and the gutters between lines.
+// The picture's box as the layout placed it (the lines it reserves room for beside the cards included), which is
+// what the band and the zoom are measured against. Until the graph has laid out once, an estimate: the tallest column,
+// or every stage's tallest card and the gutters between, and the widest stage.
+// Kept with the layout it was placed in, so a switch reads the estimate until the new layout reports.
+const reported = ref<{ readonly rows: boolean; readonly width: number; readonly height: number } | undefined>();
+const placed = computed(() => (reported.value?.rows === rows.value ? reported.value : undefined));
 const contentHeight = computed(() => {
+    if (placed.value !== undefined) {
+        return placed.value.height;
+    }
     if (rows.value) {
-        const tallest = lines.value.map((members) => Math.max(...members.map(cardHeight)));
+        const tallest = ranks.value.map((members) => Math.max(...members.map(cardHeight)));
         return tallest.reduce((sum, height) => sum + height, 0) + Math.max(0, tallest.length - 1) * ROW_GAP;
     }
     return Math.max(...ranks.value.map((members) => members.reduce((sum, node) => sum + cardHeight(node), 0) + (members.length - 1) * NODE_SEP), 0);
 });
-// The widest line, cards and the gaps between them: what a row layout's zoom is solved for.
-const contentWidth = computed(() =>
-    Math.max(...lines.value.map((members) => members.reduce((sum, node) => sum + widthOf(node.id), 0) + (members.length - 1) * NODE_SEP), 0),
+const contentWidth = computed(
+    () =>
+        placed.value?.width ??
+        Math.min(
+            wrapAt.value ?? Number.POSITIVE_INFINITY,
+            Math.max(...ranks.value.map((members) => members.reduce((sum, node) => sum + widthOf(node.id), 0) + (members.length - 1) * NODE_SEP), 0),
+        ),
 );
 
 // Zoom and gutter, solved for the frame: a column layout spreads its gutters across the width; a row layout keeps one
@@ -338,7 +321,9 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                 :node-height="CARD_PADDING_Y + NAME_LINE + STATUS_LINE"
                 :rank-sep="spread.rankSep"
                 :node-sep="NODE_SEP"
-                :edge-shape="rows ? `smooth` : `elbow`"
+                edge-shape="smooth"
+                :wrap-at="wrapAt"
+                @placed="(extent) => (reported = { rows, width: extent.width, height: extent.height })"
                 :direction="rows ? `TB` : `LR`"
                 :magnify="false"
                 :readable-zoom="READABLE_ZOOM"

@@ -289,6 +289,48 @@ const cardLinks = (links: readonly JobLink[], cardOf: ReadonlyMap<string, string
     });
 };
 
+// An arrow another path already draws: `a → c` when `a → b → c` is drawn too. It says nothing a reader cannot see by
+// following `b`, and on a long run these are most of the lines, the long ones down the sides. Reachability is kept
+// exactly, so a trace lights the same cards. A graph with a cycle in it keeps every arrow: there two arrows can each be
+// the other's other path, and dropping both would cut the line.
+const withoutImplied = (links: readonly JobLink[]): JobLink[] => {
+    const targets = new Map<string, string[]>();
+    for (const link of links) {
+        targets.set(link.from, [...(targets.get(link.from) ?? []), link.to]);
+    }
+    const reached = new Map<string, ReadonlySet<string>>();
+    const walking = new Set<string>();
+    let cyclic = false;
+    const reach = (id: string): ReadonlySet<string> => {
+        const known = reached.get(id);
+        if (known !== undefined) {
+            return known;
+        }
+        if (walking.has(id)) {
+            cyclic = true;
+            return new Set();
+        }
+        walking.add(id);
+        const out = new Set<string>();
+        for (const to of targets.get(id) ?? []) {
+            out.add(to);
+            for (const further of reach(to)) {
+                out.add(further);
+            }
+        }
+        walking.delete(id);
+        reached.set(id, out);
+        return out;
+    };
+    for (const id of targets.keys()) {
+        reach(id);
+    }
+    if (cyclic) {
+        return [...links];
+    }
+    return links.filter((link) => !(targets.get(link.from) ?? []).some((other) => other !== link.to && reach(other).has(link.to)));
+};
+
 // GitHub's own drawing of a declared run, reproduced card for card: the rule below was read off GitHub's run pages, and
 // sorts every column of twenty repositories' runs the way GitHub did. Within a column, cards sort by
 // 1. their parents in the column just before, by place there, nearest the bottom compared first, fewer parents first
@@ -393,9 +435,11 @@ export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): P
     const declared = declaredLinks(stages);
     const jobLinks = declared ?? stageJoinLinks(stages);
     const { cards, cardOf } = jobCards(jobs, jobLinks);
-    const links = cardLinks(jobLinks, cardOf);
-    // A declared run is drawn exactly as GitHub draws it; stages and waves have no such picture to match.
-    const order = declared === undefined ? undefined : githubOrder(cards, links);
+    const allLinks = cardLinks(jobLinks, cardOf);
+    // A declared run starts from GitHub's own order, read off every arrow it declares, which the layout then reorders
+    // only where that crosses fewer lines; stages and waves have no such picture to start from.
+    const order = declared === undefined ? undefined : githubOrder(cards, allLinks);
+    const links = withoutImplied(allLinks);
 
     // Trace walks over cards, so a job-level focus first resolves to the card holding it.
     const focusCard = focus === undefined ? undefined : cardOf.get(focus);

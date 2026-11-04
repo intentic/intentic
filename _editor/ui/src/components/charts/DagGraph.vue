@@ -5,7 +5,7 @@ import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from "vue";
 import { useDevice } from "../../composables/useDevice.js";
-import { type DagEdge, type DagNode, laneKey, lanePath, layoutDag, layoutSignature, smoothPath } from "./dagLayout.js";
+import { type DagEdge, type DagExtent, type DagNode, laneKey, lanePath, layoutDag, layoutSignature, smoothPath } from "./dagLayout.js";
 
 const {
     nodes,
@@ -23,6 +23,7 @@ const {
     fitPadding,
     touchPan = false,
     wheelZoom = true,
+    wrapAt,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -53,7 +54,13 @@ const {
     // Whether the wheel zooms the graph. Off for a graph drawn whole inside a page that scrolls, where the wheel must go
     // on scrolling the page rather than stop dead on the picture; a pinch, or the wheel with Ctrl held, still zooms.
     wheelZoom?: boolean;
+    // Top to bottom, the widest a row may be before its cards wrap onto another line (see DagLayoutOptions.wrapAt).
+    wrapAt?: number;
 }>();
+
+// The picture's box in graph units, lines beside the cards included, whenever the layout places it anew: a host sizing
+// its frame to the graph reads it here rather than working the layout out a second time.
+const emit = defineEmits<{ placed: [extent: DagExtent] }>();
 
 // Which node is selected; re-clicking the selected node clears it.
 const selectedId = defineModel<string | undefined>();
@@ -74,13 +81,14 @@ const { coarse } = useDevice();
 const gestures = computed(() => touchPan || !coarse.value);
 
 // Single source for layout inputs; positions, lanes, and the refit signature must all read the same spacing.
-const layoutOptions = computed(() => ({
+const spacing = computed(() => ({
     direction,
     nodeWidth,
     nodeHeight,
     ...(rankSep !== undefined ? { rankSep } : {}),
     ...(nodeSep !== undefined ? { nodeSep } : {}),
 }));
+const layoutOptions = computed(() => (wrapAt === undefined ? spacing.value : { ...spacing.value, wrapAt }));
 
 // Everything that places a node; a change to anything else, like a selection dimming half the graph, keeps the layout.
 const signature = computed(() => layoutSignature(nodes as readonly DagNode<never>[], edges, layoutOptions.value));
@@ -91,6 +99,7 @@ const placement = shallowRef(layoutDag(nodes as readonly DagNode<never>[], edges
 watch(signature, () => {
     placement.value = layoutDag(nodes as readonly DagNode<never>[], edges, layoutOptions.value);
 });
+watch(placement, (placed) => emit(`placed`, placed.extent), { immediate: true });
 
 const flowNodes = computed<Node<DagNode<T>>[]>(() =>
     nodes.map((node) => ({
@@ -125,24 +134,9 @@ const flowEdges = computed<Edge[]>(() => {
 const sourcePosition = computed(() => (direction === `LR` ? Position.Right : Position.Bottom));
 const targetPosition = computed(() => (direction === `LR` ? Position.Left : Position.Top));
 
-// Picture's bounding box in graph units, from each node's actual position and its own size, since that (not node count)
+// Picture's bounding box in graph units, cards and the lines run beside them, as the layout placed them, since that (not node count)
 // decides whether a fit stays legible.
-const extent = computed(() => {
-    // `data` is optional on Vue Flow's node type; every node here always has one.
-    const boxes = flowNodes.value.map((node) => ({
-        ...node.position,
-        width: node.data?.width ?? nodeWidth,
-        height: node.data?.height ?? nodeHeight,
-    }));
-    const left = Math.min(...boxes.map((box) => box.x));
-    const top = Math.min(...boxes.map((box) => box.y));
-    return {
-        x: left,
-        y: top,
-        width: Math.max(...boxes.map((box) => box.x + box.width)) - left,
-        height: Math.max(...boxes.map((box) => box.y + box.height)) - top,
-    };
-});
+const extent = computed(() => placement.value.extent);
 
 // Refits on a graph swap (patch, not remount), keyed on the layout signature, not node count, after nextTick.
 // Undefined fit is Vue Flow's own default; the capped fit's padding matches DagEditor's, for consistent sizing.

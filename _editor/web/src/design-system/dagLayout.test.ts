@@ -1,4 +1,4 @@
-import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature, smoothPath } from "@intentic/ui/dag";
+import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature, smoothPath, wrapLines } from "@intentic/ui/dag";
 
 // DagGraph refits its viewport when this signature changes; lives here because @intentic/ui ships no test runner. Each
 // case below is a way two graphs can differ without differing in node count, since a count is not an identity.
@@ -82,10 +82,8 @@ describe(`layoutSignature`, () => {
         );
     });
 
-    it(`notices a card moved onto another line of its column`, () => {
-        const ordered = { ...node(`a`), order: 0 };
-        expect(sig([ordered])).not.toBe(sig([{ ...ordered, line: 1 }]));
-        expect(sig([ordered])).toBe(sig([{ ...ordered, line: 0 }]));
+    it(`notices the width a row wraps at`, () => {
+        expect(sig([node(`a`)])).not.toBe(sig([node(`a`)], [], { wrapAt: 600 }));
     });
 
     it(`still changes when the count changes, which is what it replaced`, () => {
@@ -208,7 +206,7 @@ describe(`layoutDag`, () => {
     });
 
     // Top to bottom a rank is a row: a tall card hangs down from the row's top edge rather than pushing its neighbours
-    // to its middle, and a narrow row sits centred under a wide one, as a downward flow reads.
+    // to its middle, and each card sits as near the cards it joins as its neighbours allow.
     it(`starts a row's cards at one top edge and centres each row on the widest`, () => {
         const ordered = (id: string, order: number, height = options.nodeHeight): DagNode<undefined> => ({ ...node(id), order, height });
         const placed = placeDown(
@@ -216,11 +214,10 @@ describe(`layoutDag`, () => {
             [edge(`root`, `short`), edge(`root`, `tall`), edge(`short`, `tail`)],
         );
         expect(topOf(placed, `short`)).toBe(topOf(placed, `tall`));
-        // The second row is two cards and a gap wide; the first and last are one card, centred under it.
-        const wide = 2 * options.nodeWidth + 28;
-        expect(columnOf(placed, `short`)).toBe(0);
-        expect(columnOf(placed, `root`)).toBe(Math.round((wide - options.nodeWidth) / 2));
-        expect(columnOf(placed, `tail`)).toBe(columnOf(placed, `root`));
+        // A card sits between the cards it joins: `root` over its two, `tail` under the one it waits on.
+        expect(columnOf(placed, `root`)).toBeGreaterThan(columnOf(placed, `short`));
+        expect(columnOf(placed, `root`)).toBeLessThan(columnOf(placed, `tall`));
+        expect(Math.abs(columnOf(placed, `tail`) - columnOf(placed, `short`))).toBeLessThanOrEqual(28);
         // The next row starts below the tallest card of the one above it, not the first.
         expect(topOf(placed, `tail`)).toBe(topOf(placed, `tall`) + 200 + 88);
     });
@@ -238,37 +235,53 @@ describe(`layoutDag`, () => {
         expect(turns.every((point) => point.y > topOf(placed, `tall`) + 240)).toBe(true);
     });
 
-    // A stage too wide for the frame wraps: the caller puts its cards on lines, and each line is drawn as a rank of its
-    // own, a gutter below the one before it and centred like any row, so the next stage starts below the last line.
-    it(`draws each line of a wrapped column as a row of its own`, () => {
-        const card = (id: string, order: number, line = 0): DagNode<undefined> => ({ ...node(id), order, line });
-        const placed = placeDown(
-            [card(`root`, 0), card(`a`, 0), card(`b`, 1), card(`c`, 2, 1), card(`tail`, 0)],
+    // A stage too wide for the frame wraps, each line drawn as a rank of its own a gutter below the one before. The cards
+    // nothing waits on go first, so the one the next stage waits on sits on the last line, right above it.
+    it(`wraps a row too wide for the frame, putting what the next row waits on last`, () => {
+        const card = (id: string, order: number): DagNode<undefined> => ({ ...node(id), order });
+        const cards: readonly DagNode<undefined>[] = [card(`root`, 0), card(`a`, 0), card(`b`, 1), card(`c`, 2), card(`tail`, 0)];
+        const placed = layoutDag(
+            // SAFETY: the layout never reads a node's payload, so an undefined one stands in for any.
+            cards as readonly DagNode<never>[],
             [edge(`root`, `a`), edge(`root`, `b`), edge(`root`, `c`), edge(`a`, `tail`)],
+            { ...options, direction: `TB`, wrapAt: 2 * options.nodeWidth + 28 },
         );
         const rowGap = options.nodeHeight + 88;
-        expect(topOf(placed, `a`)).toBe(rowGap);
         expect(topOf(placed, `b`)).toBe(rowGap);
-        expect(topOf(placed, `c`)).toBe(2 * rowGap);
+        expect(topOf(placed, `c`)).toBe(rowGap);
+        expect(topOf(placed, `a`)).toBe(2 * rowGap);
         expect(topOf(placed, `tail`)).toBe(3 * rowGap);
-        // The second line is one card, centred under the two of the first.
-        expect(columnOf(placed, `c`)).toBe(Math.round((2 * options.nodeWidth + 28 - options.nodeWidth) / 2));
     });
 
-    // Under a wrapped row no lane lines up from one line's gaps to the next one's, and a line drawn through a card
-    // reads as going through it: it goes round the picture's nearer side instead.
-    it(`goes round the side of the picture when every lane inside it is blocked`, () => {
-        const card = (id: string, order: number, line = 0, width = options.nodeWidth): DagNode<undefined> => ({ ...node(id), order, line, width });
-        // `wide` spans the whole picture under `a`, so nothing between the two can carry a line from `a` to `d`.
+    // A line drawn across a card reads as going through it. An edge that skips rows gets a lane kept free in every row
+    // it passes, so the cards there move aside for it rather than it squeezing between them.
+    it(`keeps a lane free through every row a long edge passes`, () => {
+        const card = (id: string, order: number): DagNode<undefined> => ({ ...node(id), order });
         const placed = placeDown(
-            [card(`a`, 0), card(`b1`, 0), card(`b2`, 1), card(`wide`, 2, 1, 2 * options.nodeWidth + 28), card(`d`, 0)],
-            [edge(`a`, `b1`), edge(`a`, `b2`), edge(`a`, `wide`), edge(`b1`, `d`), edge(`a`, `d`)],
+            [card(`a`, 0), card(`b1`, 0), card(`b2`, 1), card(`d`, 0)],
+            [edge(`a`, `b1`), edge(`a`, `b2`), edge(`b1`, `d`), edge(`a`, `d`)],
         );
-        const turns = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
-        expect(turns).toHaveLength(2);
-        const left = Math.min(...[`b1`, `b2`, `wide`].map((id) => columnOf(placed, id)));
-        const right = Math.max(...[`b1`, `b2`].map((id) => columnOf(placed, id) + options.nodeWidth));
-        expect(turns.every((point) => point.x < left || point.x > right)).toBe(true);
+        const [passing] = placed.lanes.get(laneKey(`a`, `d`)) ?? [];
+        const lane = passing?.x ?? Number.NaN;
+        for (const id of [`b1`, `b2`]) {
+            const left = columnOf(placed, id);
+            expect(lane < left - 6 || lane > left + options.nodeWidth + 6).toBe(true);
+        }
+    });
+
+    // The caller's order is where the layout starts, not where it must end: two chains drawn crossed come out side by
+    // side.
+    it(`reorders a row whose caller order crosses lines it need not`, () => {
+        const card = (id: string, order: number): DagNode<undefined> => ({ ...node(id), order });
+        const placed = place([card(`a1`, 0), card(`b1`, 1), card(`b2`, 0), card(`a2`, 1)], [edge(`a1`, `a2`), edge(`b1`, `b2`)]);
+        expect(topOf(placed, `a2`) < topOf(placed, `b2`)).toBe(topOf(placed, `a1`) < topOf(placed, `b1`));
+    });
+
+    it(`keeps the caller's order where reordering crosses nothing fewer`, () => {
+        const card = (id: string, order: number): DagNode<undefined> => ({ ...node(id), order });
+        const placed = place([card(`root`, 0), card(`x`, 0), card(`y`, 1), card(`z`, 2)], [edge(`root`, `x`), edge(`root`, `y`), edge(`root`, `z`)]);
+        expect(topOf(placed, `x`)).toBeLessThan(topOf(placed, `y`));
+        expect(topOf(placed, `y`)).toBeLessThan(topOf(placed, `z`));
     });
 
     it(`ignores an order only some nodes carry, rather than half-applying it`, () => {
@@ -383,5 +396,30 @@ describe(`smoothPath`, () => {
     it(`leaves and arrives vertically when the graph runs top to bottom`, () => {
         const path = smoothPath({ x: 0, y: 0 }, { x: 100, y: 300 }, [{ x: 0, y: 140 }], 80, `TB`);
         expect(path).toBe(`M 0 0 L 0 100 C 0 140 100 140 100 180 L 100 300`);
+    });
+});
+
+// A stage wider than the frame wraps rather than shrinking every name: onto as few lines as fit, split where the
+// longest line comes out shortest, in its own order.
+describe(`wrapLines`, () => {
+    it(`keeps a stage that fits on one line`, () => {
+        expect(wrapLines([100, 100, 100], 400, 24)).toEqual([0, 0, 0]);
+    });
+
+    it(`wraps onto as few lines as fit, the longer line first`, () => {
+        // Seven 100px cards in a 500px frame: four a line is 472px, so two lines, four then three.
+        expect(wrapLines(Array.from({ length: 7 }, () => 100), 500, 24)).toEqual([0, 0, 0, 0, 1, 1, 1]);
+    });
+
+    it(`splits evenly rather than filling the first line and leaving one card on the last`, () => {
+        expect(wrapLines(Array.from({ length: 6 }, () => 96), 600, 24)).toEqual([0, 0, 0, 1, 1, 1]);
+    });
+
+    it(`splits by width, not by count, so two wide cards never share a line that cannot hold them`, () => {
+        expect(wrapLines([300, 300, 100, 100], 450, 24)).toEqual([0, 1, 2, 2]);
+    });
+
+    it(`puts a card wider than the frame on a line of its own`, () => {
+        expect(wrapLines([900, 100], 500, 24)).toEqual([0, 1]);
     });
 });

@@ -1,4 +1,4 @@
-import { GUTTER_PX, RANK_SEP_MAX, RANK_SEP_MIN, READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows, wrapLines } from "./spread";
+import { GUTTER_PX, RANK_SEP_MAX, RANK_SEP_MIN, READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows } from "./spread";
 
 // Pins that the frame's width goes to gutters rather than margins: a long run keeps its gutters readable on screen and
 // is otherwise as large as fits, a short one spreads out up to a bound, and a run too long to read whole is cropped.
@@ -52,29 +52,3 @@ describe(`spreadRows`, () => {
     });
 });
 
-// A stage wider than the frame wraps rather than shrinking every name: onto as few lines as fit, as evenly as its cards
-// divide, in its own order.
-describe(`wrapLines`, () => {
-    test(`keeps a stage that fits on one line`, () => {
-        expect(wrapLines([100, 100, 100], 400, 24)).toEqual([0, 0, 0]);
-    });
-
-    test(`wraps onto as few lines as fit, the longer line first`, () => {
-        // Seven 100px cards in a 500px frame: four a line is 472px, so two lines, four then three.
-        expect(wrapLines(Array.from({ length: 7 }, () => 100), 500, 24)).toEqual([0, 0, 0, 0, 1, 1, 1]);
-    });
-
-    test(`splits evenly rather than filling the first line and leaving one card on the last`, () => {
-        // Five fit on a 600px line; six do not. Six cards are three and three, not five and one.
-        expect(wrapLines(Array.from({ length: 6 }, () => 96), 600, 24)).toEqual([0, 0, 0, 1, 1, 1]);
-    });
-
-    test(`splits by width, not by count, so two wide cards never share the line that cannot hold them`, () => {
-        // Two lines cannot fit 450px either way; three can: each wide card alone, the two narrow ones together.
-        expect(wrapLines([300, 300, 100, 100], 450, 24)).toEqual([0, 1, 2, 2]);
-    });
-
-    test(`puts a card wider than the frame on a line of its own`, () => {
-        expect(wrapLines([900, 100], 500, 24)).toEqual([0, 1]);
-    });
-});
