@@ -131,6 +131,17 @@ overrides:
   # own; this holds it at the catalog pin instead.
   # ponytail: bump together with oxlint.
   "@oxlint/plugins": 1.90.0
+  # Exact pins and closed major lines that a lockfile refresh cannot move past an advisory.
+  # typed-rest-client (behind @actions/*) pins qs to exactly 6.15.1, which crashes on comma-format arrays
+  # (GHSA-q8mj-m7cp-5q26, GHSA-6pq8-jhm2-2vcw); held on the copy express resolves, so the tree keeps one qs.
+  "typed-rest-client>qs": 6.17.1
+  # satori pins fflate to exactly 0.7.3, whose unzipSync loops forever on a malformed ZIP64 archive
+  # (GHSA-px8p-9vwx-vf98, fixed in 0.7.5). Same minor; @shuding/opentype.js's ^0.7.3 dedupes onto it.
+  "satori>fflate": 0.7.5
+  # archiver-utils (testcontainers > archiver) asks for glob ^10, and the AbortSignal bypass covers every
+  # release from 9.0.0 to 14.0.1 (GHSA-3g3m-2fjr-6pw4) with no 10.x backport. Its only call is `glob.sync`,
+  # which glob 14 still exports from its CommonJS entry.
+  "archiver-utils>glob": 14.0.3
 
 # 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
 # only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
@@ -159,7 +170,6 @@ minimumReleaseAgeExclude:
   - "@opencode/client@2.2.5"
   - "@opencode/protocol@2.2.5"
   - "@opencode/schema@2.2.5"
-  - undici@6.29.0
   - monaco-editor-core@0.57.0
   - "@posthog/core@1.56.0"
   - "@muse-code/sdk@1.4.14"
