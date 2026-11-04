@@ -206,10 +206,12 @@ const endingReasons = (): Partial<Record<AgentStatus | ClientAgentStatus, string
     stopped: t(`agents.agentStatus.stopped`),
 });
 
-// The card's drill-in label (desktop): names the destination rather than a generic "Open". A draft has no
-// worktree yet, so no review detail. Order: a pending park first, then a special ending, then the diff, falling
-// back to "Details". Nothing that opens the diff says "review": that word belongs to the fresh Code review session
-// (freshSession.ts), and the two sat side by side in one menu reading as the same press (2026-11-04).
+// The card's drill-in label (desktop): the verb for what the reader does next, where the card spells one out (the
+// Attention card's summary row, the chat's land strip). A draft has no worktree yet, so none. Order: a pending park
+// first, then a special ending, then the diff. Undefined for a card with nothing to act on and nothing written: there
+// used to be a "Details" here, and it led to a diff page that said only that nothing had changed (2026-11-04). Nothing
+// that opens the diff says "review": that word belongs to the fresh Code review session (freshSession.ts), and the two
+// sat side by side in one menu reading as the same press.
 export const reviewAction = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): string | undefined => {
     if (unregistered(agent.status) || agent.branch === undefined) {
         return undefined;
@@ -233,39 +235,39 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (kind !== undefined && landFailure(agent) === undefined) {
         return failureOpensChat(kind) ? t(`agents.agentStatus.openChat`) : t(`agents.agentStatus.seeWhereStopped`);
     }
-    return (
-        endingActions()[agent.status] ??
-        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.viewChanges`) : t(`agents.words.details`))
-    );
+    return endingActions()[agent.status] ?? ((agent.diff?.files ?? 0) > 0 ? t(`agents.agentStatus.viewChanges`) : undefined);
 };
 
-// Where the card's drill-in leads. An ask answered on its own card (a plan, a question, a permission, a setup, a
-// release, a need, a hand-off) and a spent allowance lead to the chat, where that card and the way on are drawn: the
-// review page draws none of them, and an "Approve" that led there was a round trip to a page with nothing to approve.
-// A refused land's report, an unclassified error, and a diff to read are the review page's; a classified failure goes
-// where its way on is (failureOpensChat).
+// Where the card's drill-in leads. The review page (/agents/:id on a desktop) draws the diff and the reports about
+// landing it (a conflict, a refused land) and nothing else, so only those lead there. An ask answered on its own card (a
+// plan, a question, a permission, a setup, a release, a need, a hand-off), a spent allowance, an error and a stop all
+// lead to the chat, where that card, the error and the cut-off tool call are drawn: "View error" and "See where it
+// stopped" used to open the diff, which shows neither (2026-11-04).
 export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
     const park = leadingPark(agent);
     if (park !== undefined) {
         return park === `conflict` ? `review` : `chat`;
     }
-    const kind = failureKind(agent);
-    if (kind !== undefined && landFailure(agent) === undefined) {
-        return failureOpensChat(kind) ? `chat` : `review`;
+    if (landFailure(agent) !== undefined) {
+        return `review`;
     }
-    return limited(agent) || memoryHeld(agent) || agent.status === `awaiting` ? `chat` : `review`;
+    const ended = failureKind(agent) !== undefined || agent.status === `error` || agent.status === `stopped` || agent.status === `interrupted`;
+    return ended || limited(agent) || memoryHeld(agent) || agent.status === `awaiting` ? `chat` : `review`;
 };
 
-// Whether a card whose drill-in leads to the chat (a spent allowance, an ask, a classified failure) still has written
-// work worth reading on its own: then it offers "View changes" beside that drill-in, so partial work can be inspected
-// without first answering or resuming. A draft has no branch to read, and a card that drills into the review already
-// leads there.
-export const reviewBesideDrill = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): boolean =>
-    !unregistered(agent.status) && agent.branch !== undefined && (agent.diff?.files ?? 0) > 0 && drillTarget(agent) === `chat`;
+// Whether the agent's review page has anything on it: written work, or a report about landing it (drillTarget). Every
+// surface offers that page as "View changes" with the diff icon exactly when this holds, whatever else the card's state
+// says, so the same press always looks the same and never opens a page that only says nothing changed. A draft has no
+// branch to read.
+export const changesToRead = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): boolean =>
+    !unregistered(agent.status) &&
+    agent.branch !== undefined &&
+    ((agent.diff?.files ?? 0) > 0 || leadingPark(agent) === `conflict` || landFailure(agent) !== undefined);
 
 // Endings whose destination is named by the ending itself rather than by the diff; tabled for the same reason as
 // `endingReasons`. Anything absent falls to the diff reading below.
 const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string>> => ({
+    // Destination is the transcript (drillTarget), where the turn's last words say what went wrong.
     error: t(`agents.agentStatus.viewError`),
     // Destination is the transcript, where the cut-off tool call is itself the report. One label for both endings:
     // whether the daemon died or the user stopped it, the question is the same, how far did it get?

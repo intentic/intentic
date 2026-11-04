@@ -40,7 +40,7 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, changesToRead, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { archiveTip, barFiling as barFilingOf, closeTip, type ReactionsStrip, restoreTip, toolPresses } from "./cardPresses";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
@@ -435,11 +435,10 @@ const reviewCard = (): void => {
     emit(`review`);
 };
 
-// A desktop double-click opens the agent's page (/agents/<id>) on every card alike, whatever the drill-in's label says:
-// a chat-bound drill-in (an ask, a spent allowance) is where a single click already went, so the double-click there
-// would have been a no-op. A phone has no drill-in, so a double-tap stays two taps.
+// A desktop double-click is the bar's View changes (/agents/<id>), wherever that page has something on it, whatever the
+// drill-in says: a chat-bound one is where a single click already went. A phone's double-tap stays two taps.
 const openPage = (): void => {
-    if (edit.editing || review.value === undefined) {
+    if (edit.editing || mobile.value || !changesToRead(props.agent)) {
         return;
     }
     emit(`changes`);
@@ -457,7 +456,7 @@ const actionClass = `${HOVER_ACTION} opacity-60`;
 // What the card leads somewhere with (cardPresses.toolPresses).
 const { can } = useAccess();
 const toolActions = computed(() =>
-    toolPresses(props.agent, { review: review.value, rowDrill: rowDrill.value, mayRun: can(`agent.run`), drillIn: reviewCard, openChanges: () => emit(`changes`) }),
+    toolPresses(props.agent, { desktop: !mobile.value, mayRun: can(`agent.run`), openChanges: () => emit(`changes`) }),
 );
 
 // Every press the card offers on its own, in the order a phone's sheet lists them; the tools close the list. Keep open

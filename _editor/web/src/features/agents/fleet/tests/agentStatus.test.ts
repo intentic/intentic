@@ -1,7 +1,7 @@
 import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
-import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, changesToRead, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, cardLine, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
 import { cardServingAccount } from "../../board/cards/cardServingAccount";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
@@ -834,10 +834,28 @@ describe("drillTarget", () => {
         expect(drillTarget({ status: `error`, attention: none, failureCode: `rate_limit` })).toBe(`chat`);
     });
 
-    it("keeps a refused land, an error and a finished diff on the review page", () => {
+    // The review page draws the diff and the land's reports, never an error or where a turn stopped (2026-11-04).
+    it("sends an error and a stop to the chat, whose transcript is the report", () => {
+        expect(drillTarget({ status: `error`, attention: none })).toBe(`chat`);
+        expect(drillTarget({ status: `stopped`, attention: none })).toBe(`chat`);
+        expect(drillTarget({ status: `interrupted`, attention: none })).toBe(`chat`);
+    });
+
+    it("keeps a refused land and a finished diff on the review page", () => {
         expect(drillTarget({ status: `conflict`, attention: { ...none, conflict: true } })).toBe(`review`);
-        expect(drillTarget({ status: `error`, attention: none })).toBe(`review`);
+        expect(drillTarget({ status: `error`, attention: none, failure: `Command failed: git apply\nerror: patch failed` })).toBe(`review`);
         expect(drillTarget({ status: `landed`, attention: none })).toBe(`review`);
+    });
+
+    it("offers the review page only with something on it, under one name", () => {
+        const branch = { branch: `agent/x` };
+        expect(changesToRead({ status: `ready`, attention: none, ...branch, diff: { files: 2 } })).toBe(true);
+        expect(changesToRead({ status: `conflict`, attention: { ...none, conflict: true }, ...branch })).toBe(true);
+        // Finished having written nothing: no "Details" to a page that only says so.
+        expect(reviewAction({ status: `landed`, attention: none, ...branch, diff: { files: 0 } })).toBeUndefined();
+        expect(changesToRead({ status: `landed`, attention: none, ...branch, diff: { files: 0 } })).toBe(false);
+        expect(changesToRead({ status: `error`, attention: none, ...branch })).toBe(false);
+        expect(changesToRead({ status: `landed`, attention: none, diff: { files: 2 } })).toBe(false);
     });
 
     it("agrees with the label: an Approve leads to the chat", () => {
@@ -1027,16 +1045,17 @@ describe("a failure the daemon classified", () => {
     });
 
     // The way on for a refusal is a choice the conversation offers (another account or model, sending again): the chat,
-    // as for a spent allowance. A turn cut short is a report of how far it got. An unclassified error stays the review's.
+    // as for a spent allowance. A turn cut short is a report of how far it got, and an unclassified error the transcript's:
+    // both read in the chat too.
     it("leads to where the way on is", () => {
         const branch = { branch: `agent/x` };
         expect(reviewAction({ ...failed(`claude-not-entitled`), ...branch })).toBe(`Open chat`);
         expect(drillTarget(failed(`claude-not-entitled`))).toBe(`chat`);
         expect(drillTarget(failed(`provider-outage`))).toBe(`chat`);
         expect(reviewAction({ ...failed(`turn-cap`), ...branch })).toBe(`See where it stopped`);
-        expect(drillTarget(failed(`turn-cap`))).toBe(`review`);
+        expect(drillTarget(failed(`turn-cap`))).toBe(`chat`);
         expect(reviewAction({ ...failed(undefined), ...branch })).toBe(`View error`);
-        expect(drillTarget(failed(undefined))).toBe(`review`);
+        expect(drillTarget(failed(undefined))).toBe(`chat`);
     });
 
     // One line at rest, the words whole in the hover, which the corner's chip opens too. The line is the chat's for the

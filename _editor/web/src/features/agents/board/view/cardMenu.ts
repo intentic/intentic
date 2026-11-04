@@ -2,7 +2,7 @@ import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
-import { drillTarget, reviewAction, reviewBesideDrill } from "../../../../models/agent-status/agentStatus-attention";
+import { changesToRead, drillTarget, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
 import { unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import {
     type AgentMenuActions,
@@ -74,18 +74,23 @@ const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
     ...(react === undefined ? [] : [{ label: t(`agents.agentReactions.addReaction`), icon: `face-smile`, command: () => react() }]),
 ];
 
-// The card's drill-in. A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the
-// chat dock. An ask answered in the chat is no link: the page it would name draws nothing to answer (drillTarget). Such a
-// card with written work (a spent allowance stopping it halfway) keeps its diff one row away (reviewBesideDrill).
+// The card's drill-in, beside the Open chat row above it, with one icon per destination: `comments` for the chat, `diff`
+// for the agent's page. The page is always "View changes" (a link too, hoverable and Ctrl/Cmd-clickable into its own tab)
+// and offered only when it has something on it (changesToRead). A verb answered in the chat ("Approve", "View error")
+// gets its own row when it says more than Open chat does; one that leads to the page ("Review & land") is that page's
+// row, not a second row to the same place under another name (2026-11-04).
 const drillRows = (agent: FleetAgent, review: string | undefined, facts: MenuFacts, act: MenuActions): MenuItem[] => {
-    if (review === undefined) {
+    if (facts.mobile) {
         return [];
     }
-    const diffRow = { label: t(`agents.agentStatus.viewChanges`), icon: `diff`, url: facts.href(), command: () => act.reviewAgent(agent) };
-    if (drillTarget(agent) === `chat` && facts.here) {
-        return [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }, ...(reviewBesideDrill(agent) ? [diffRow] : [])];
-    }
-    return [{ ...diffRow, label: review }];
+    const verb =
+        review !== undefined && facts.here && drillTarget(agent) === `chat` && review !== t(`agents.agentStatus.openChat`)
+            ? [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }]
+            : [];
+    const page = changesToRead(agent)
+        ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, url: facts.href(), command: () => act.reviewAgent(agent) }]
+        : [];
+    return [...verb, ...page];
 };
 
 export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActions): MenuItem[] => {
@@ -93,7 +98,10 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
     const { sandboxId } = agent;
     return joinGroups([
         [
-            { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
+            // The chat, here; another box's card opens its page, which is where the crossing lives (useCardFocus.focusAgent).
+            facts.here
+                ? { label: t(`agents.agentStatus.openChat`), icon: `comments`, command: () => act.focusAgent(agent) }
+                : { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
             // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
             ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
             ...drillRows(agent, review, facts, act),

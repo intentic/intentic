@@ -56,20 +56,47 @@ const press = (items: readonly MenuItem[], label: string): void => {
 };
 
 const landed = card(`a1`, { branch: `agent/sleek-arrow-uzgj` });
+const wrote = { ...landed, diff: { files: 1, insertions: 3, deletions: 0 } };
+const OPEN_CHAT = t(`agents.agentStatus.openChat`);
+const VIEW_CHANGES = t(`agents.agentStatus.viewChanges`);
 const WATCH = { id: `w`, note: `CI on main passes`, intervalSeconds: 60, deadlineAt: 9_999 };
 
 describe(`what a card's menu offers`, () => {
-    it(`opens, reviews at its own address, copies the session name and files a finished card away`, () => {
-        const items = menuItemsFor(landed, facts(), actions());
+    // One icon per destination: the chat's, the diff's. The page is always View changes, and only with something on it:
+    // a card that wrote nothing offers no "Details" to a page saying so (2026-11-04).
+    it(`opens its chat, views its changes at their own address, copies the session name and files a finished card away`, () => {
+        const items = menuItemsFor(wrote, facts(), actions());
         expect(rows(items)).toEqual([
-            t(`ui.action.open`),
-            reviewAction(landed)!,
+            OPEN_CHAT,
+            VIEW_CHANGES,
+            `—`,
+            t(`agents.freshSession.menuFresh`),
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,
             t(`agents.agentsView.archive`),
         ]);
+        expect(items[0]).toMatchObject({ icon: `comments` });
         expect(items[1]).toMatchObject({ icon: `diff`, url: `/agents/a1` });
+        expect(rows(menuItemsFor(landed, facts(), actions()))).toEqual([
+            OPEN_CHAT,
+            `—`,
+            t(`agents.agentsView.copySessionName`),
+            `—`,
+            t(`agents.agentsView.archive`),
+        ]);
+    });
+
+    // An error is read in the chat, not on a diff page that cannot show it.
+    it(`names an error's way in and leads it to the chat`, () => {
+        const crashed = card(`e`, { status: `error`, branch: `agent/e` });
+        const act = actions();
+        const items = menuItemsFor(crashed, facts(), act);
+        expect(rows(items).slice(0, 2)).toEqual([OPEN_CHAT, reviewAction(crashed)!]);
+        expect(items[1]).toMatchObject({ icon: `comments` });
+        expect(rows(items)).not.toContain(VIEW_CHANGES);
+        press(items, reviewAction(crashed)!);
+        expect(act.drillIn.mock.calls).toEqual([[crashed]]);
     });
 
     // A spent allowance's drill-in is its chat; the partial work it wrote stays one row away, at the review's address.
@@ -77,8 +104,8 @@ describe(`what a card's menu offers`, () => {
         const stranded = card(`limit`, { status: `error`, failureCode: `rate_limit`, branch: `agent/limit`, diff: { files: 1, insertions: 20, deletions: 2 } });
         const act = actions();
         const items = menuItemsFor(stranded, facts(), act);
-        expect(rows(items).slice(0, 3)).toEqual([t(`ui.action.open`), t(`agents.agentStatus.openChat`), t(`agents.agentStatus.viewChanges`)]);
-        expect(items[2]).toMatchObject({ icon: `diff`, url: `/agents/a1` });
+        expect(rows(items).slice(0, 3)).toEqual([OPEN_CHAT, VIEW_CHANGES, `—`]);
+        expect(items[1]).toMatchObject({ icon: `diff`, url: `/agents/a1` });
         press(items, t(`agents.agentStatus.viewChanges`));
         expect([act.reviewAgent.mock.calls, act.drillIn.mock.calls]).toEqual([[[stranded]], []]);
         // Nothing written, nothing to review: the chat alone.
@@ -98,7 +125,7 @@ describe(`what a card's menu offers`, () => {
 
     it(`keeps a look, and leaves the review to the card's own tap on a phone`, () => {
         expect(rows(menuItemsFor(landed, facts({ peeked: true, mobile: true }), actions()))).toEqual([
-            t(`ui.action.open`),
+            OPEN_CHAT,
             t(`ui.action.keepOpen`),
             `—`,
             t(`agents.agentsView.copySessionName`),
@@ -114,7 +141,7 @@ describe(`what a card's menu offers`, () => {
         const ready = card(`r`, { status: `ready`, branch: `agent/r`, diff: { files: 1, insertions: 1, deletions: 0 } });
         const act = actions();
         const items = menuItemsFor(ready, facts(), act);
-        expect(rows(items).slice(0, 3)).toEqual([t(`ui.action.open`), reviewAction(ready)!, words.land]);
+        expect(rows(items).slice(0, 3)).toEqual([OPEN_CHAT, VIEW_CHANGES, words.land]);
         press(items, words.land);
         const away = card(`a`, { branch: `agent/a`, landedPresence: { landed: 2, present: 0 } });
         press(menuItemsFor(away, facts(), act), words.landAgain);
@@ -130,15 +157,15 @@ describe(`what a card's menu offers`, () => {
     });
 
     it(`restores an archived card, and closes a draft that has nothing to file`, () => {
-        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`ui.action.restore`)]);
-        expect(rows(menuItemsFor(card(`new`, { status: `draft` }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`ui.action.close`)]);
+        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([OPEN_CHAT, `—`, t(`ui.action.restore`)]);
+        expect(rows(menuItemsFor(card(`new`, { status: `draft` }), facts(), actions()))).toEqual([OPEN_CHAT, `—`, t(`ui.action.close`)]);
     });
 
     it(`ends every armed watch in one row, counting them past one`, () => {
         const one = card(`w1`, { status: `running`, watches: [WATCH], awaitingWake: true });
         const three = card(`w3`, { status: `running`, watches: [WATCH, WATCH, WATCH], awaitingWake: true });
-        expect(rows(menuItemsFor(one, facts(), actions()))).toEqual([t(`ui.action.open`), `—`, `Stop watching`]);
-        expect(rows(menuItemsFor(three, facts(), actions()))).toEqual([t(`ui.action.open`), `—`, `Stop watching (3)`]);
+        expect(rows(menuItemsFor(one, facts(), actions()))).toEqual([OPEN_CHAT, `—`, `Stop watching`]);
+        expect(rows(menuItemsFor(three, facts(), actions()))).toEqual([OPEN_CHAT, `—`, `Stop watching (3)`]);
     });
 
     it(`offers another box's card the crossing to it by name, and nothing that writes through this box`, () => {
@@ -154,8 +181,7 @@ describe(`what a card's menu offers`, () => {
         const react = jest.fn();
         const items = menuItemsFor(landed, facts({ presses: { rename, react } }), actions());
         expect(rows(items)).toEqual([
-            t(`ui.action.open`),
-            reviewAction(landed)!,
+            OPEN_CHAT,
             `—`,
             t(`ui.action.rename`),
             t(`agents.agentReactions.addReaction`),
@@ -193,11 +219,11 @@ describe(`what a card's menu offers`, () => {
 
     it(`runs each row's own press on the card it was opened for`, () => {
         const act = actions();
-        const items = menuItemsFor(landed, facts({ peeked: true }), act);
+        const items = menuItemsFor(wrote, facts({ peeked: true }), act);
         for (const label of [
-            t(`ui.action.open`),
+            OPEN_CHAT,
             t(`ui.action.keepOpen`),
-            reviewAction(landed)!,
+            VIEW_CHANGES,
             t(`agents.agentsView.copySessionName`),
             t(`agents.agentsView.archive`),
         ]) {
@@ -211,7 +237,7 @@ describe(`what a card's menu offers`, () => {
             act.copySessionName.mock.calls,
             act.archive.mock.calls,
             act.openInSandbox.mock.calls,
-        ]).toEqual([[[landed]], [[landed]], [[landed]], [[`agent/sleek-arrow-uzgj`]], [[[`a1`]]], [[`laptop`, `far`]]]);
+        ]).toEqual([[[wrote]], [[wrote]], [[wrote]], [[`agent/sleek-arrow-uzgj`]], [[[`a1`]]], [[`laptop`, `far`]]]);
     });
 });
 
@@ -252,15 +278,14 @@ describe(`the one menu`, () => {
         menu.openCardMenu(landed, event);
         expect(show.mock.calls).toEqual([[event]]);
         expect(rows(menu.cardMenuItems.value)).toEqual([
-            t(`ui.action.open`),
+            OPEN_CHAT,
             t(`ui.action.keepOpen`),
-            reviewAction(landed)!,
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,
             t(`agents.agentsView.archive`),
         ]);
-        press(menu.cardMenuItems.value, t(`ui.action.open`));
+        press(menu.cardMenuItems.value, OPEN_CHAT);
         expect(focus.focusAgent.mock.calls).toEqual([[landed]]);
     });
 

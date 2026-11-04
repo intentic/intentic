@@ -852,16 +852,31 @@ it(`marks words left unsent in a running conversation with a pencil among its co
     expect(el.querySelector(`[data-unsent-mark]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
 });
 
-// On desktop a double-click opens the agent's page, after its two clicks opened the chat.
+// On desktop a double-click opens the agent's page, after its two clicks opened the chat; only where that page has
+// something on it (changesToRead), never onto one saying nothing changed.
 it(`opens the agent's page on a double-click`, () => {
     const onOpen = jest.fn();
     const onChanges = jest.fn();
-    const el = mount(ready(`error`), undefined, { onOpen, onChanges });
+    const el = mount({ ...ready(`error`), diff: { files: 2, insertions: 4, deletions: 1 } }, undefined, { onOpen, onChanges });
     const face = el.querySelector<HTMLElement>(`.session-card`)!;
     face.click();
     face.click();
     face.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
     expect([onOpen.mock.calls.length, onChanges.mock.calls.length]).toEqual([2, 1]);
+    const blank = jest.fn();
+    mount(ready(`error`), undefined, { onChanges: blank }).querySelector<HTMLElement>(`.session-card`)!.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+    expect(blank).not.toHaveBeenCalled();
+});
+
+// The hover bar's tools are fixed: the diff's icon under one name, only with changes to read, and never a drill-in whose
+// icon and words change with the card's state ("Details", "Open chat", "View error") (2026-11-04).
+it(`leads its hover bar with View changes only, and only with changes to read`, () => {
+    const tools = (agent: FleetAgent): (string | null)[] =>
+        [...mount(agent).querySelectorAll(`[data-card-bar] button`)].map((button) => button.getAttribute(`aria-label`)).slice(0, 1);
+    expect(tools({ ...ready(`error`), diff: { files: 2, insertions: 4, deletions: 1 } })).toEqual([`View changes`]);
+    expect(tools(ready(`error`))).not.toContain(`View error`);
+    expect(tools({ ...ready(`landed`) })).not.toContain(`Details`);
+    expect(tools({ ...ready(`landed`) })).not.toContain(`View changes`);
 });
 
 // A chat-bound card (a spent allowance) goes to the same page on a double-click, not to the chat its click already showed.

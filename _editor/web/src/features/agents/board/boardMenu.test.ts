@@ -9,7 +9,6 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../../../models/conversations/run/useChat";
-import { reviewAction } from "../../../models/agent-status/agentStatus-attention";
 import { queryClient } from "../../../lib/queryPersistence";
 import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
@@ -74,22 +73,22 @@ const pressRow = async (label: string): Promise<void> => {
     row.click();
 };
 
-it(`opens on the card right-clicked, with that card's rows, and points the chat at it from Open`, async () => {
+it(`opens on the card right-clicked, with that card's rows, and points the chat at it from Open chat`, async () => {
     setAgents([landed(`a1`), landed(`a2`)], 100);
     const board = await mountBoard();
 
     board.querySelector(`[aria-label="Focus agent: agent a2"]`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await settle();
 
+    // A card that wrote nothing offers no page to view it on, under any name.
     expect(menuRows()).toEqual([
-        t(`ui.action.open`),
-        reviewAction(landed(`a2`))!,
+        t(`agents.agentStatus.openChat`),
         t(`ui.action.rename`),
         t(`agents.agentReactions.addReaction`),
         t(`agents.agentsView.copySessionName`),
         t(`agents.agentsView.archive`),
     ]);
-    await pressRow(t(`ui.action.open`));
+    await pressRow(t(`agents.agentStatus.openChat`));
     await settle();
     expect(useChat().activeId.value).toBe(`a2`);
 });
@@ -103,7 +102,6 @@ it(`opens from the card's ⋯ as well, and renames the card in place from it`, a
     const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!.closest<HTMLElement>(`.session-card`)!;
     const bar = card.querySelector<HTMLElement>(`[data-card-bar]`)!;
     expect([...bar.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
-        reviewAction(landed(`a1`))!,
         ...BAR_EMOJI.map((emoji) => t(`agents.agentReactions.markWith`, { emoji })),
         t(`agents.agentReactions.addReaction`),
         t(`agents.agentCard.archiveAgent`),

@@ -1,6 +1,6 @@
 import type { ActionItem, Tip, TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { reviewBesideDrill } from "../../../../models/agent-status/agentStatus-attention";
+import { changesToRead } from "../../../../models/agent-status/agentStatus-attention";
 import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
 import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
@@ -47,31 +47,28 @@ export const archiveTip = (agent: Pick<FleetAgent, "queue">, family: number): Ti
 export const restoreTip = (family: number): TooltipValue =>
     family > 0 ? { title: t(`ui.action.restore`), rows: familyRows(family) } : t(`ui.action.restore`);
 
-// What the card leads somewhere with, in the order the hover bar draws them: its changes (or the drill-in, where that goes
-// elsewhere), then a code review and a test pass of its work. An icon each, so they cost no width at rest; the words are their hovers
-// (and the phone's sheet). The diff is named "View changes" wherever it is offered and never "review": "Code review" is
-// the fresh session beside it, and the two read as one press when both said review (2026-11-04).
+// What the card leads somewhere with, in the order the hover bar draws them: its changes, then a code review and a test
+// pass of its work. An icon each, so they cost no width at rest; the words are their hovers (and the phone's sheet).
+// Every one is a fixed tool, the same icon and the same destination on every card, since a bar is pressed from memory.
+// The card's state-dependent drill-in ("Approve", "View error", "Open chat") is not here: it needs its words, and its
+// icon could only ever be a generic arrow meaning a different place per card. It lives where it is spelled out (the
+// Attention card's summary row, the menu), and a click on the card already opens the chat (2026-11-04).
+// The diff is named "View changes" wherever it is offered and never "review": "Code review" is the fresh session
+// beside it, and the two read as one press when both said review.
 export const toolPresses = (
     agent: FleetAgent,
     card: {
-        // The drill-in's words, absent where there is none (a draft, a phone).
-        readonly review: string | undefined;
-        // The Attention card spells its drill-in out in the summary row, so the bar does not draw it twice.
-        readonly rowDrill: boolean;
+        // Whether the agent's page is offered at all: a phone walks there on a tap, with its changes a swipe away.
+        readonly desktop: boolean;
         // Whether the reader may start a turn (useAccess `agent.run`).
         readonly mayRun: boolean;
-        readonly drillIn: () => void;
         readonly openChanges: () => void;
     },
 ): ActionItem[] => {
     const actions: ActionItem[] = [];
-    const viewChanges = t(`agents.agentStatus.viewChanges`);
-    if (card.review !== undefined && !card.rowDrill) {
-        actions.push({ id: `review`, label: card.review, icon: card.review === viewChanges ? `diff` : `arrow-right`, run: card.drillIn });
-    }
-    // A card whose drill-in goes to the chat (an ask, a spent allowance) still has its written work one press away.
-    if (card.review !== undefined && reviewBesideDrill(agent)) {
-        actions.push({ id: `changes`, label: viewChanges, icon: `diff`, run: card.openChanges });
+    // Only when the page has something on it (changesToRead): a card that wrote nothing offers no press to a page saying so.
+    if (card.desktop && changesToRead(agent)) {
+        actions.push({ id: `changes`, label: t(`agents.agentStatus.viewChanges`), icon: `diff`, run: card.openChanges });
     }
     if (canStartFresh(agent) && card.mayRun) {
         const note = t(`agents.freshSession.howItWorksNote`);
@@ -86,6 +83,6 @@ export const toolPresses = (
 
 // The bar's filing run: everything the card offers that is neither a tool nor the reaction press (the bar draws those
 // apart), less rename where the board's menu already holds it.
-const TOOL_IDS: ReadonlySet<string> = new Set([`review`, `changes`, `codeReview`, `test`, `react`]);
+const TOOL_IDS: ReadonlySet<string> = new Set([`changes`, `codeReview`, `test`, `react`]);
 export const barFiling = (actions: readonly ActionItem[], menus: boolean): ActionItem[] =>
     actions.filter((action) => !TOOL_IDS.has(action.id) && (!menus || action.id !== `rename`));

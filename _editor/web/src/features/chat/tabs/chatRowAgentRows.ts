@@ -3,7 +3,7 @@ import type { MenuItem } from "primevue/menuitem";
 import type { Ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRole } from "../../../client/sandbox/useRole";
-import { drillTarget, reviewAction, reviewBesideDrill } from "../../../models/agent-status/agentStatus-attention";
+import { changesToRead } from "../../../models/agent-status/agentStatus-attention";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { draftFreshSession } from "../../../models/fleet/freshSession";
 import {
@@ -52,17 +52,12 @@ export const useChatRowAgentRows = (anchor: Ref<Element | undefined>) => {
         restore,
         archive: (ids) => archive(ids),
     };
-    // The agent's review page, under the words the card's own drill-in wears when that is where it goes (reviewAction),
-    // and as View changes beside one that goes to the chat (reviewBesideDrill): this row IS the chat, so a drill-in into
-    // it would go nowhere.
-    const reviewRows = (agent: FleetAgent): MenuItem[] => {
-        const open = (): void => navigateInApp(router, `/agents/${encodeURIComponent(agent.id)}`);
-        if (drillTarget(agent) === `review`) {
-            const label = reviewAction(agent);
-            return label === undefined ? [] : [{ label, icon: `copy`, command: open }];
-        }
-        return reviewBesideDrill(agent) ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, command: open }] : [];
-    };
+    // The agent's review page, as "View changes" with the diff icon wherever it is offered (changesToRead), and only when
+    // it has something on it. No drill-in into the chat: this row IS the chat.
+    const reviewRows = (agent: FleetAgent): MenuItem[] =>
+        changesToRead(agent)
+            ? [{ label: t(`agents.agentStatus.viewChanges`), icon: `diff`, command: () => navigateInApp(router, `/agents/${encodeURIComponent(agent.id)}`) }]
+            : [];
     return (conversation: Conversation): ChatRowAgentRows => {
         // Only this sandbox's roster answers here: another box's chat offers none of its agent's rows.
         const agent = conversation.box.value === undefined ? agentById(conversation.conversationId) : undefined;
