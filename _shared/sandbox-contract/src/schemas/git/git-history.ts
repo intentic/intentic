@@ -22,6 +22,16 @@ export const GitCommitSchema = z.object({
     at: z.number().describe("When they wrote it, in milliseconds."),
     refs: z.array(z.string()).describe("Branches and tags sitting on it."),
     head: z.boolean().describe("Whether this is where the repository currently stands."),
+    // Resolved by the sandbox from the commit's Conversation-Id trailer, so history says who asked for agent work even
+    // where the commit itself names nobody (settings.commitAttribution).
+    requestedBy: z
+        .object({
+            conversation: z.string().describe("The conversation the commit came from, by its Conversation-Id trailer."),
+            name: z.string().optional().describe("What to call the person who answers for that conversation."),
+            email: z.string().optional().describe("Their sign-in address. Absent when nobody answers for it, such as one an automation opened."),
+        })
+        .optional()
+        .describe("Who the work in this commit was done for, read from its Conversation-Id trailer. Absent on a commit that names no conversation."),
 });
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 // One repo's log: commits newest-first across all refs, not just the checked-out branch, since branch topology is the

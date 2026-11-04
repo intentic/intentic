@@ -11,8 +11,8 @@ import { gitFailureReason } from "../git.js";
 // run's signal, which kills the git it is waiting on (cancellableGit). Memory only: a run exists while it runs and as
 // the repo's last verdict until the next start or a restart.
 
-// What the routes hand a run: the request less its repo.
-type IndexRunRequest = Omit<IndexRunStart, "repo">;
+// What the routes hand a run: the request less its repo, and whose commit it is (commit-attribution.ts memberOfCaller).
+type IndexRunRequest = Omit<IndexRunStart, "repo"> & { readonly member?: string | undefined };
 
 // The git work, injected so the registry's lifecycle is testable over fakes; the routes wire it to index-targets.ts.
 export interface IndexRunSteps {
@@ -21,7 +21,7 @@ export interface IndexRunSteps {
     // What to hold a stage of `paths` for, undefined to go ahead (index-preflight.ts).
     readonly hold: (dir: string, paths: readonly string[]) => Promise<IndexRunHold | undefined>;
     readonly stage: (repo: string, dir: string, target: GitTarget, git: GitRunner) => Promise<void>;
-    readonly commit: (dir: string, message: string, git: GitRunner) => Promise<boolean>;
+    readonly commit: (dir: string, message: string, git: GitRunner, by: { readonly repo: string; readonly member: string | undefined }) => Promise<boolean>;
     // The commit route's own answer, read inside the same lock.
     readonly answer: (repo: string, dir: string, committed: boolean) => Promise<CommitResult>;
 }
@@ -130,7 +130,7 @@ const runSteps = async (
     }
     signal.throwIfAborted();
     at({ phase: "committing" });
-    const committed = await steps.commit(dir, request.message ?? "", git);
+    const committed = await steps.commit(dir, request.message ?? "", git, { repo, member: request.member });
     invalidate();
     at({ phase: "reading" });
     return { kind: "passed", result: await steps.answer(repo, dir, committed) };

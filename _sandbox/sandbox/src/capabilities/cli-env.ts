@@ -3,6 +3,7 @@ import type { ExtensionHost } from "./extension-inventory/installed-extensions.j
 import { brokeredEnvOf, type GitRewrite, gitRewriteEnv, rawRouteEnv, type TurnGateway } from "./broker/broker-env.js";
 import type { CredentialDelivery } from "./broker/broker-policy.js";
 import { contributionEnv, contributionFor, contributionRegistry } from "./contributions.js";
+import { AGENT_COMMIT_EMAIL, AGENT_COMMIT_NAME } from "../git-identity.js";
 
 // The env vars the agent's shell needs for its connected CLI tools, derived from cli-kind capabilities each turn, the
 // parallel to mcpToolsOf for the CLI path. Merged into the agent SDK's `env` (see agent.ts). Each connector's env
@@ -64,7 +65,8 @@ export const gatewayHeld = (env: Readonly<Record<string, string>>, capability: s
 
 /**
  * The environment a turn's shell actually gets from its filtered cli env: every surviving card's git rewrite folded into
- * git's own `GIT_CONFIG_*`. Run after the persona and approver filters, so a card they removed rewrites nothing.
+ * git's own `GIT_CONFIG_*`, and the identity its commits sign with (turn-env.ts) after them. Run after the persona and
+ * approver filters, so a card they removed rewrites nothing.
  */
 export const shellEnvOf = (cliEnv: Readonly<Record<string, string>>): Record<string, string> => {
     const rewrites: GitRewrite[] = Object.entries(cliEnv)
@@ -74,5 +76,8 @@ export const shellEnvOf = (cliEnv: Readonly<Record<string, string>>): Record<str
             const [upstream, gateway, ...rest] = value.split(" ");
             return upstream === undefined || gateway === undefined || rest.length > 0 ? [] : [{ upstream, gateway }];
         });
-    return { ...cliEnv, ...gitRewriteEnv(rewrites) };
+    const name = cliEnv[AGENT_COMMIT_NAME];
+    const email = cliEnv[AGENT_COMMIT_EMAIL];
+    const signs = name === undefined || email === undefined ? [] : [{ key: "user.name", value: name }, { key: "user.email", value: email }];
+    return { ...cliEnv, ...gitRewriteEnv(rewrites, signs) };
 };

@@ -261,6 +261,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         ],
     },
     {
+        id: `agent-commit-author`,
+        slug: `agent`,
+        part: `finishing`,
+        partLabel: () => t(`sandbox.sandboxAgent.finishing`),
+        title: () => t(`sandbox.agentCommitAuthor.group`),
+        terms: () => [t(`sandbox.agentCommitAuthor.attribution`), t(`sandbox.agentCommitAuthor.yours`), t(`sandbox.search.agentCommitAuthor`)],
+    },
+    {
         id: `agent-disk-space`,
         slug: `agent`,
         part: `finishing`,

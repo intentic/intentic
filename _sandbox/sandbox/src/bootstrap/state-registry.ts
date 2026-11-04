@@ -56,6 +56,7 @@ import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
 import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
 import { extensionUsageDocument } from "../extensions/extension-usage.js";
+import { memberCommitIdentityDocument } from "../git/attribution/commit-attribution.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
@@ -192,6 +193,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
     extensionUsageDocument,
+    memberCommitIdentityDocument,
     hookApprovalsDocument,
     hookRequestsDocument,
     hostSetupSeededDocument,
@@ -229,10 +231,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
-    credentialReleasesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,

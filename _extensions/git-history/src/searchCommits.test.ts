@@ -52,6 +52,18 @@ describe(`matchesSearch`, () => {
         expect(find(`release`, commit({ refs: [`origin/release-2`] }))).toBe(true);
     });
 
+    // An agent's commit names intentic, so the person it was for is found by the name the sandbox read off its trailer.
+    it(`finds an agent's commit by the person it was for`, () => {
+        const agentWork = commit({
+            author: `intentic`,
+            email: `agent@intentic.dev`,
+            requestedBy: { conversation: `c1`, name: `Ada Lovelace`, email: `ada@example.com` },
+        });
+        expect(find(`ada lovelace`, agentWork)).toBe(true);
+        expect(find(`ada@example`, agentWork)).toBe(true);
+        expect(find(`grace`, agentWork)).toBe(false);
+    });
+
     it(`is case-insensitive`, () => {
         expect(find(`LANE COLOURS`)).toBe(true);
     });

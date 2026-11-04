@@ -20,6 +20,7 @@ import { createChipStaging } from "./changes/chip-staging.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { createIndexTargets, ownWork } from "./changes/index-targets.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { callerSigner, withRequester } from "./attribution/commit-attribution.js";
 import { gitFailureReason } from "./git.js";
 import { createPushRuns } from "./ops/push-run.js";
 import { arrivalLanding } from "./remote/project-arrival.js";
@@ -373,7 +374,7 @@ export const routesInView = (services: Services, view?: GitView) => {
         log: i.log.handler(async ({ input }) => {
             // Default page size when none is given: a small repo arrives whole, a large one isn't fully paid for.
             const { branch, commits, hasMore } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300, input.skip ?? 0);
-            return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits, hasMore };
+            return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits: commits.map((commit) => withRequester(services, commit)), hasMore };
         }),
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
         commitFileDiff: i.commitFileDiff.handler(async ({ input }) => {
@@ -487,14 +488,16 @@ export const routesInView = (services: Services, view?: GitView) => {
         cherryPick: i.cherryPick.handler(({ input }) =>
             guarded(input.repo, `before cherry-pick ${input.sha.slice(0, 8)}`, (dir) => services.git.cherryPick(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
-        revert: i.revert.handler(({ input }) =>
-            guarded(input.repo, `before revert ${input.sha.slice(0, 8)}`, (dir) => services.git.revertCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
+        // A revert and a merge make a commit of their own, signed for the person who pressed it (commit-attribution.ts);
+        // a cherry-pick, a drop and a rebase keep each commit's own author.
+        revert: i.revert.handler(({ input, context }) =>
+            guarded(input.repo, `before revert ${input.sha.slice(0, 8)}`, async (dir) => services.git.revertCommit(dir, input.sha, await callerSigner(services, context.identity))),
         ),
         drop: i.drop.handler(({ input }) =>
             guarded(input.repo, `before drop ${input.sha.slice(0, 8)}`, (dir) => services.git.dropCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
-        merge: i.merge.handler(({ input }) =>
-            guarded(input.repo, `before merge ${input.sha.slice(0, 8)}`, (dir) => services.git.mergeCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
+        merge: i.merge.handler(({ input, context }) =>
+            guarded(input.repo, `before merge ${input.sha.slice(0, 8)}`, async (dir) => services.git.mergeCommit(dir, input.sha, await callerSigner(services, context.identity))),
         ),
         rebase: i.rebase.handler(({ input }) =>
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),

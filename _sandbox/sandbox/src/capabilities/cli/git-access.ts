@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Capability, CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createHash } from "node:crypto";
 import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,8 +10,9 @@ import { adoptLegacySshKey, hostConfPath, hostPublicKeyPath, removeSshHost, writ
 import type { ConnectorHook } from "./connector-hooks.js";
 import { homeDir } from "../../system/home-dir.js";
 import { textFile, type TextFile } from "../../store/plain-files/text-file.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 
-// With git access on, the account also names who commits here when the sandbox has no identity (ensureGitIdentity).
+// With git access on, the account's own identity is offered to the owner as theirs to commit under (connectedAccountIdentity).
 // Git access on gets real git credentials beyond the curl-API skill: HTTPS always, set up first, and SSH best-effort.
 // SSH: a generated key registered via the token, alias written once confirmed; unregisterable keys route over https.
 // The key's private half is made in memory and goes straight into the daemon's key store: the alias names only the
@@ -337,25 +338,38 @@ const globalGit = async (key: string): Promise<string | undefined> =>
         () => undefined,
     );
 
-// Who commits here when nobody said: the connected account, so an agent's own `git commit` works instead of failing
-// "Author identity unknown" and the agent making a name up. Only a key the sandbox leaves unset is written, never one
-// the owner set, and a failed lookup leaves both as they are.
-export const ensureGitIdentity = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<void> => {
+// Who commits here when nobody said: the agent, so a `git commit` works instead of failing "Author identity unknown"
+// and the agent making a name up. Never the connected account: this config is the fallback for every process here, a
+// member's terminal included, and an account's name on another person's commit is a false record. People are named
+// by the commit identity each sets for themselves (git/attribution/commit-attribution.ts), which offers the owner this
+// account's. Only a key the sandbox leaves unset is written, never one the owner set.
+export const ensureGitIdentity = async (exec: ExecInTerminal): Promise<void> => {
     const [name, email] = await Promise.all([globalGit("user.name"), globalGit("user.email")]);
-    if ((name !== undefined && email !== undefined) || deps.accountIdentity === undefined) {
-        return;
-    }
-    // allow(silent-catch): a failed lookup leaves the identity unset, as the comment above promises; git then says so itself.
-    const account = await deps.accountIdentity(host).catch(() => undefined);
-    if (account === undefined) {
-        return;
-    }
     if (name === undefined) {
-        await exec("git", ["config", "--global", "user.name", account.name]);
+        await exec("git", ["config", "--global", "user.name", AGENT_GIT_AUTHOR.name]);
     }
     if (email === undefined) {
-        await exec("git", ["config", "--global", "user.email", account.email]);
+        await exec("git", ["config", "--global", "user.email", AGENT_GIT_AUTHOR.email]);
     }
+};
+
+// The connected git account's own name and commit address, offered to the sandbox's owner as their commit identity:
+// the first github or gitlab connection with git access on that answers. Undefined when none does.
+export const connectedAccountIdentity = async (
+    capabilities: readonly Capability[],
+    deps: Pick<GitAccessDeps, "accountIdentity"> = realDeps,
+): Promise<GitIdentity | undefined> => {
+    for (const capability of capabilities) {
+        if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab") || capability.config["git"] !== "on") {
+            continue;
+        }
+        // allow(silent-catch): an account that cannot be asked suggests nothing; the next connection may.
+        const identity = await deps.accountIdentity?.(gitHostOf(capability.config)).catch(() => undefined);
+        if (identity !== undefined) {
+            return identity;
+        }
+    }
+    return undefined;
 };
 
 // https base every ssh-form remote for this host rewrites onto, keyed so github.com and a self-hosted gitlab don't
@@ -402,7 +416,7 @@ export const setupGitAccess = async (
 ): Promise<string | undefined> => {
     const log = deps.log ?? quiet;
     await ensureHttpsCredential(host, exec, log);
-    await ensureGitIdentity(host, exec, deps);
+    await ensureGitIdentity(exec);
     const { publicLine: publicKey } = await ensureKeyPair(host, keys, log);
     const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
         () => undefined,
@@ -474,7 +488,7 @@ export const restoreGitAccess = async (
     }
     await ensureHttpsCredential(host, exec, log);
     // A recreated container lost its global git config, the identity with it.
-    await ensureGitIdentity(host, exec, deps);
+    await ensureGitIdentity(exec);
     // Alias next to the key means the key is on the account: written only after a successful upload.
     if (await fileExists(hostConfPath(host.host))) {
         if ((await ensureKeyPair(host, keys, log)).rewritten) {

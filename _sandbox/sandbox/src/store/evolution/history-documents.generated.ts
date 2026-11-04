@@ -43,6 +43,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "links/linked-children.json", portability: "carry" },
     { path: "member-ai-literacy.json", portability: "carry" },
     { path: "member-audience.json", portability: "carry" },
+    { path: "member-commit-identity.json", portability: "carry" },
     { path: "member-getting-started.json", portability: "carry" },
     { path: "model-refusals.json", portability: "carry" },
     { path: "panels.json", portability: "derived" },

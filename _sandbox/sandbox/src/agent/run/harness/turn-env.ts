@@ -3,6 +3,7 @@ import { documentSearchEnv } from "../../../derived/search-env.js";
 import { extensionEnvOf } from "../../../extensions/extension-env.js";
 import { extensionBinDirsOf } from "../../../capabilities/extension-inventory/installed-extensions.js";
 import { cliEnvOf } from "../../../capabilities/cli-env.js";
+import { agentCommitEnv } from "../../../git/attribution/commit-attribution.js";
 
 // Where this conversation's ssh asks for signatures (broker/ssh-agent.ts): set over whatever the daemon's own environment
 // says, so a turn never reaches the owner's socket. Absent while the sandbox holds no key, so a sandbox without ssh
@@ -23,11 +24,11 @@ export const leanRustEnv = (on: boolean): Record<string, string> =>
 
 // The environment a turn's shell runs with: connected cli capabilities' variables (credential-gateway addresses for every
 // brokered card, the credential itself only for one delivered raw), extension settings env, extension bin dirs on PATH,
-// the conversation's own ssh agent socket, the ripgrep config that makes `rg` search documents, and lean Rust debug info
-// when the settings ask for it. Shared by streamAgent and the watch restore in agent/watchers.ts so both
-// derive the same environment. Read live, never stored, so a rotated or revoked credential is always current.
-// `conversationId` is whose requests the gateway addresses and the ssh agent answer to: its gates, its cards, its
-// ledger rows.
+// the conversation's own ssh agent socket, the ripgrep config that makes `rg` search documents, lean Rust debug info
+// when the settings ask for it, and the identity its own commits sign with. Shared by streamAgent and the watch restore
+// in agent/watchers.ts so both derive the same environment. Read live, never stored, so a rotated or revoked credential
+// is always current. `conversationId` is whose requests the gateway addresses and the ssh agent answer to: its gates,
+// its cards, its ledger rows, and whose commit identity its commits carry.
 export const turnCliEnv = async (services: Services, conversationId: string | undefined): Promise<Record<string, string>> => {
     const gateway = { sessions: services.brokerSessions, origin: services.gatewayOrigin, conversationId };
     const delivery = async (capability: string) => (await services.credentialPolicy.of(capability)).delivery ?? "gateway";
@@ -40,6 +41,8 @@ export const turnCliEnv = async (services: Services, conversationId: string | un
         // `rg` reading documents through fileq, while the keeper keeps their shadows (derived/search-env.ts).
         ...(await documentSearchEnv(settings.documentSearch)),
         ...leanRustEnv(settings.leanRustBuilds),
+        // Who its own `git commit` signs as: the person it works for, when the owner's policy names people, else the agent.
+        ...(await agentCommitEnv(services, settings.commitAttribution, conversationId)),
     };
     // Extensions shipping `contributes.bin` get their bin dir prepended so the tool resolves by name.
     const binDirs = await extensionBinDirsOf(services);

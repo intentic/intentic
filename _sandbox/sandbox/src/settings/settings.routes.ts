@@ -17,6 +17,7 @@ import { createAiLiteracyRoutes } from "./ai-literacy.routes.js";
 import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
 import { fileMemberGettingStarted, memberGettingStartedDocument, type MemberGettingStarted } from "./member-getting-started.js";
 import { settingsDocument } from "./settings-store.js";
+import { createCommitIdentityRoutes } from "./commit-identity.routes.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
@@ -103,6 +104,7 @@ export const createSettingsRoutes = (services: Services) => {
             return audience === undefined ? {} : { audience };
         }),
         setAudience: i.setAudience.handler(({ input, context }) => memberAudiences().answer(memberOf(context), input.audience, input.offer === true)),
+        ...createCommitIdentityRoutes(services),
         // The caller's own choices about the getting-started checklist, by the address they signed in with.
         gettingStarted: i.gettingStarted.handler(({ context }) => memberGettingStarted().get(memberOf(context))),
         setGettingStarted: i.setGettingStarted.handler(({ input, context }) => memberGettingStarted().set(memberOf(context), input)),

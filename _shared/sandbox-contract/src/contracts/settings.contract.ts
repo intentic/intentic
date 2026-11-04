@@ -6,6 +6,8 @@ import {
     AudienceAnswerSchema,
     AudienceStateSchema,
     BuiltinPromptSchema,
+    CommitIdentityAnswerSchema,
+    CommitIdentityStateSchema,
     MemberAudienceSchema,
     BuiltinPromptTextSchema,
     FieldNotesStatusSchema,
@@ -150,6 +152,28 @@ export const settingsContract = {
         .meta({ guest: true, floor: "viewer" })
         .input(AudienceAnswerSchema)
         .output(AudienceStateSchema),
+    // A person's own, like the audience: the name and address commits made for them carry (settings.commitAttribution
+    // says whether they appear at all). Never another member's, and never their sign-in address unless they type it.
+    commitIdentity: procedure
+        .route({
+            method: "GET",
+            path: "/settings/commit-identity",
+            summary: "The name and address your commits here carry",
+            description:
+                "The commit name and address you set on this sandbox, a suggestion when you have none (the connected git account's, for the owner), and how this sandbox's commits use it. Until you set one, commits made for you name nobody.",
+        })
+        .output(CommitIdentityStateSchema),
+    setCommitIdentity: procedure
+        .route({
+            method: "POST",
+            path: "/settings/commit-identity",
+            summary: "Set the name and address your commits here carry",
+            description:
+                "Sets the commit name and address used for the work you do and ask for on this sandbox, when its settings name people in commits. Pushed commits publish the address; a provider's noreply address keeps yours private. Null forgets it. Other members keep their own.",
+        })
+        .meta({ floor: "viewer" })
+        .input(CommitIdentityAnswerSchema)
+        .output(CommitIdentityStateSchema),
     // Like the audience, a person's own and not a sandbox setting: nobody's choice to put the checklist away or pass a
     // step over changes another member's screen.
     gettingStarted: procedure

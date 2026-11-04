@@ -12,6 +12,7 @@ import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
+import AgentCommitAuthor from "../agent-settings/commits/AgentCommitAuthor.vue";
 import AgentToolLoading from "../agent-settings/behaviour/AgentToolLoading.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentDiskSpace from "../agent-settings/behaviour/AgentDiskSpace.vue";
@@ -177,6 +178,8 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentFinishedWork />
                 <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
                 <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
+                <!-- After the work that is committed, whose name those commits carry; below the link, which belongs to the archive row. -->
+                <AgentCommitAuthor />
                 <!-- What finished builds keep on disk, after what finished conversations keep. -->
                 <AgentDiskSpace />
                 <AgentChangelog />

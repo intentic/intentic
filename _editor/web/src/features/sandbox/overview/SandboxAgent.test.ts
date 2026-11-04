@@ -40,6 +40,7 @@ jest.mock(`../agent-settings/behaviour/AgentOffload.vue`, () => stub(`Where heav
 jest.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
 jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
+jest.mock(`../agent-settings/commits/AgentCommitAuthor.vue`, () => stub(`Commit author`));
 jest.mock(`../agent-settings/behaviour/AgentDiskSpace.vue`, () => stub(`Disk space`));
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
@@ -65,6 +66,7 @@ const EVERY_GROUP = [
     `When a turn breaks`,
     `After work lands`,
     `Finished work`,
+    `Commit author`,
     `Disk space`,
     `Changelog`,
     `Clock`,
@@ -194,7 +196,16 @@ it(`writes the picked category to the address, and the default writes no param`,
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
-    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Disk space`, `Changelog`, `When a turn breaks`, `Clock`, `Night hours`]);
+    expect(shown(el)).toEqual([
+        `After work lands`,
+        `Finished work`,
+        `Commit author`,
+        `Disk space`,
+        `Changelog`,
+        `When a turn breaks`,
+        `Clock`,
+        `Night hours`,
+    ]);
 
     pill(el, `Jobs`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());

@@ -89,15 +89,16 @@ export const rawRouteEnv = (spec: CapabilityContribution, config: Readonly<Recor
     return env;
 };
 
-/** Git's environment-borne config for a set of rewrites; empty when there are none. */
-export const gitRewriteEnv = (rewrites: readonly GitRewrite[]): Record<string, string> => {
-    if (rewrites.length === 0) {
+/** Git's environment-borne config for a set of rewrites and any further pairs after them; empty when there are none. */
+export const gitRewriteEnv = (rewrites: readonly GitRewrite[], pairs: readonly { readonly key: string; readonly value: string }[] = []): Record<string, string> => {
+    const all = [...rewrites.map((rewrite) => ({ key: `url.${rewrite.gateway}.insteadOf`, value: rewrite.upstream })), ...pairs];
+    if (all.length === 0) {
         return {};
     }
-    const env: Record<string, string> = { GIT_CONFIG_COUNT: String(rewrites.length) };
-    rewrites.forEach((rewrite, index) => {
-        env[`GIT_CONFIG_KEY_${String(index)}`] = `url.${rewrite.gateway}.insteadOf`;
-        env[`GIT_CONFIG_VALUE_${String(index)}`] = rewrite.upstream;
+    const env: Record<string, string> = { GIT_CONFIG_COUNT: String(all.length) };
+    all.forEach((pair, index) => {
+        env[`GIT_CONFIG_KEY_${String(index)}`] = pair.key;
+        env[`GIT_CONFIG_VALUE_${String(index)}`] = pair.value;
     });
     return env;
 };

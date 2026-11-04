@@ -15,6 +15,7 @@ import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { cliEnvOf, type CliEnvOptions, gatewayHeld, shellEnvOf } from "../cli-env.js";
+import { AGENT_COMMIT_EMAIL, AGENT_COMMIT_NAME } from "../../git-identity.js";
 import { GATEWAY_PLACEHOLDER } from "../broker/broker-routes.js";
 import type { CredentialDelivery } from "../broker/broker-policy.js";
 import { brokerSessionsFrom } from "../broker/broker-session.js";
@@ -226,6 +227,22 @@ test("shellEnvOf rewrites git for no card a filter removed", async () => {
     const env = await cliEnvOf(hostFor([github]), delivered("gateway"));
     const filtered = Object.fromEntries(Object.entries(env).filter(([key]) => !key.endsWith("_GITHUB")));
     expect(shellEnvOf(filtered)["GIT_CONFIG_COUNT"]).toBeUndefined();
+});
+
+// The identity an agent's commits sign with (turn-env.ts) rides git's environment-borne config after the rewrites, so it
+// outranks a repository's own config and the global one, and needs no rewrite to be there at all.
+test("shellEnvOf folds the turn's commit identity in after the git rewrites", async () => {
+    const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "t" } };
+    const signs = { [AGENT_COMMIT_NAME]: "Ada", [AGENT_COMMIT_EMAIL]: "ada@example.com" };
+    const shell = shellEnvOf({ ...(await cliEnvOf(hostFor([github]), delivered("gateway"))), ...signs });
+    expect(shell["GIT_CONFIG_COUNT"]).toBe("5");
+    expect([shell["GIT_CONFIG_KEY_3"], shell["GIT_CONFIG_VALUE_3"], shell["GIT_CONFIG_KEY_4"], shell["GIT_CONFIG_VALUE_4"]]).toEqual([
+        "user.name",
+        "Ada",
+        "user.email",
+        "ada@example.com",
+    ]);
+    expect(shellEnvOf(signs)).toMatchObject({ GIT_CONFIG_COUNT: "2", GIT_CONFIG_KEY_0: "user.name", GIT_CONFIG_VALUE_1: "ada@example.com" });
 });
 
 test("cliEnvOf expands each connector's env template; two instances of one provider don't collide", async () => {
@@ -488,20 +505,26 @@ test("git setup (gitlab over http): the credential line and ssh rewrite keep the
 });
 
 // An agent's own `git commit` failed "Author identity unknown" and it then committed under a made-up name: a sandbox
-// with no identity takes the connected account's, and one the owner set is never written over.
-test("git setup gives a sandbox with no git identity the account's own, and keeps one the owner set", async () => {
+// with no identity takes the agent's, and one the owner set is never written over. Never the connected account's: this
+// config is every process's fallback, a member's terminal included (git/attribution/commit-attribution.ts).
+test("git setup gives a sandbox with no git identity the agent's own, and keeps one the owner set", async () => {
     gitHome();
     const host = gitHostOf({ provider: "github", token: "ghp_x" });
+    let asked = 0;
     const deps: GitAccessDeps = {
         uploadKey: async () => {},
         deleteKey: async () => {},
         keyAuthenticates: async () => false,
-        accountIdentity: async () => ({ name: "Ada Lovelace", email: "42+ada@users.noreply.github.com" }),
+        accountIdentity: async () => {
+            asked += 1;
+            return { name: "Ada Lovelace", email: "42+ada@users.noreply.github.com" };
+        },
     };
     const identity = async (key: string): Promise<string> => (await exec("git", ["config", "--global", "--get", key])).stdout.trim();
     const keys = keyStore();
     await setupGitAccess(host, directExec, keys, deps);
-    expect([await identity("user.name"), await identity("user.email")]).toEqual(["Ada Lovelace", "42+ada@users.noreply.github.com"]);
+    expect([await identity("user.name"), await identity("user.email")]).toEqual(["intentic", "agent@intentic.dev"]);
+    expect(asked).toBe(0);
 
     gitHome();
     await exec("git", ["config", "--global", "user.name", "Owner"]);

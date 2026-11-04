@@ -8,6 +8,7 @@ import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { changedFiles, headSha } from "./changes.js";
 import { withScratchExcluded } from "./scratch.js";
 import { identity } from "../git.js";
+import type { CommitSigner } from "../../git-identity.js";
 
 // Index moves of the Changes panel: stage, unstage, commit staged, discard; these write to the repo, unlike changes.ts.
 // Each takes an injectable GitRunner (defaultGit shells out), unit-testable without a real repo.
@@ -159,7 +160,7 @@ export const unstagePaths = async (dir: string, paths: readonly string[], git: G
 export const commitIndex = async (
     dir: string,
     message: string,
-    author: { readonly name: string; readonly email: string },
+    author: CommitSigner,
     git: GitRunner = defaultGit,
     hooks: "run" | "skip" = "run",
 ): Promise<boolean> => {
@@ -184,7 +185,7 @@ export const commitOnly = async (
     dir: string,
     paths: readonly string[],
     message: string,
-    author: { readonly name: string; readonly email: string },
+    author: CommitSigner,
     git: GitRunner = defaultGit,
 ): Promise<boolean> => {
     if (paths.length === 0) {

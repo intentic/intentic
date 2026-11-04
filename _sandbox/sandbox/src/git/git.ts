@@ -3,6 +3,7 @@ import type { PushRefusal } from "@intentic/sandbox-contract/schemas/git/git";
 import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/base/git";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import type { CommitSigner } from "../git-identity.js";
 
 // A GitRunner that runs visibly through a terminal session; output is the pane's combined stream (stderr merged), and a
 // non-zero exit throws like defaultGit's. Generic git verbs live in @intentic/base/git.
@@ -17,9 +18,16 @@ export const terminalGit =
         stderr: "",
     });
 
-// The `-c user.*` prefix that makes `author` the committer of the commit a command creates (panel commits,
-// publish-file.ts, sequence ops).
-export const identity = (author: { readonly name: string; readonly email: string }): string[] => ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`];
+// The `-c user.*` prefix that makes `signer` the committer of the commit a command creates (panel commits,
+// publish-file.ts, sequence ops), and its author too unless `signer.author` names the person behind it (`author.*`).
+// A cherry-pick or rebase keeps each commit's own author whatever this says.
+export const identity = (signer: CommitSigner): string[] => [
+    "-c",
+    `user.name=${signer.name}`,
+    "-c",
+    `user.email=${signer.email}`,
+    ...(signer.author === undefined ? [] : ["-c", `author.name=${signer.author.name}`, "-c", `author.email=${signer.author.email}`]),
+];
 
 // Matches git's verdict prefixes (fatal/error/ERROR/warning/remote:); advice and hint lines carry none.
 const VERDICT = /^(?:fatal|error|warning|remote):/i;

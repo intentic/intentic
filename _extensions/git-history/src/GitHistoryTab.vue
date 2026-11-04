@@ -32,6 +32,7 @@ import { useStashes } from "./useStashes.js";
 import { useWorking } from "./useWorking.js";
 import { buildFileTree, flattenFileTree } from "./commitFileTree.js";
 import { computeGraphLayout, type GraphRow } from "./graphLayout.js";
+import { commitPeople, rowAuthor } from "./commitPeople.js";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 import { t } from "./i18n.js";
 
@@ -720,7 +721,7 @@ const runPending = async (): Promise<void> => {
                                 >
                             </template>
                             <template v-else>
-                                <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ commit.author }}</span>
+                                <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ rowAuthor(commit) }}</span>
                                 <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
                                 <span class="shrink-0 font-mono text-3xs text-subtle">{{ commit.short }}</span>
                             </template>
@@ -747,10 +748,10 @@ const runPending = async (): Promise<void> => {
                                     <dt class="text-subtle">{{ t(`gitHistoryTab.parents`) }}</dt>
                                     <dd class="font-mono text-muted">{{ commit.parents.map((parent) => parent.slice(0, 8)).join(", ") }}</dd>
                                 </template>
-                                <dt class="text-subtle">{{ t(`gitHistoryTab.author`) }}</dt>
-                                <dd class="text-muted">
-                                    {{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span>
-                                </dd>
+                                <template v-for="who in commitPeople(commit)" :key="who.label">
+                                    <dt class="text-subtle">{{ who.label }}</dt>
+                                    <dd class="text-muted">{{ who.name }}<span v-if="who.email" class="text-subtle"> &lt;{{ who.email }}&gt;</span></dd>
+                                </template>
                                 <dt class="text-subtle">{{ t(`gitHistoryTab.date`) }}</dt>
                                 <dd class="text-muted">{{ timeAgo(commit.at) }}</dd>
                             </dl>

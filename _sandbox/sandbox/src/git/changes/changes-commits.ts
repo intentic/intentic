@@ -3,6 +3,7 @@ import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-histo
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { parseNameStatusZ, parseNumstatZ } from "./changes-porcelain.js";
 import { identity } from "../git.js";
+import type { CommitSigner } from "../../git-identity.js";
 
 // Commit graph: the paged log, one commit's file delta, and context-menu actions on a commit.
 // Unlike the working-tree verbs (changes.ts, changes-index.ts), most of these move HEAD or rewrite history.
@@ -11,7 +12,7 @@ import { identity } from "../git.js";
 // Commit context-menu actions (VSCode "Git Graph" parity); ok/conflict is what sequence and HEAD-moving ops return.
 // Non-destructive ref ops (branch/tag/checkout/reset) let git's own errors propagate, wrapped to Ok by the route.
 export type ActionResult = { ok: true } | { ok: false; reason: string };
-type Author = { readonly name: string; readonly email: string };
+type Author = CommitSigner;
 
 // Runs a sequence op that may conflict; on any failure, aborts cleanly so the worktree is never left mid-operation.
 // `abort` is the op's own `--abort`, a no-op when nothing actually started.

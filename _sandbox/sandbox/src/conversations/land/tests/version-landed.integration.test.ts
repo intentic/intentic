@@ -1,18 +1,29 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { HomeCommit, LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
-import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
+import type { HomeCommit, LandedMessage,SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
+import type { Rule,CommitAttribution } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { committableSubject, subjectFromPaths } from "../../../git/ops/commit-message.js";
 import { settleLanding, settleLandingInBackground, versionCommitsSettled, versionRuleOf } from "../version-landed.js";
 import { isolatedAgent } from "../../registry/agents-store.testing.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { AGENT_GIT_AUTHOR, type CommitSigner } from "../../../git-identity.js";
+import { memberCommitIdentities } from "../../../git/attribution/commit-attribution.js";
+import { opt } from "../../../opt.js";
 import * as changesOriginal from "../../../git/changes/changes.js";
 
 const describeLanding = jest.fn<() => Promise<void>>();
 jest.mock("../landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
 const commitOnly = jest.fn<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
+// Who signed each commit, kept apart so the assertions on what a commit says stay about its words.
+const signers: CommitSigner[] = [];
 jest.mock("../../../git/changes/changes-index.js", () => ({
-    commitOnly: (dir: string, paths: readonly string[], subject: string) => commitOnly(dir, paths, subject),
+    commitOnly: (dir: string, paths: readonly string[], subject: string, signer: CommitSigner) => {
+        signers.push(signer);
+        return commitOnly(dir, paths, subject);
+    },
 }));
 jest.mock("../../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
 // The commit a home files is read off HEAD right after it is made; only that read is stood in for.
@@ -47,15 +58,29 @@ const servicesWith = (
         origins?: Record<string, string[]>;
         home?: boolean;
         filed?: HomeCommit[];
+        attribution?: CommitAttribution;
+        owner?: SessionOwner;
+        historyRoot?: string;
     } = {},
 ): Services =>
     unstubbed<Services>("services", {
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
+        // A sandbox people sign in to, whose per-person commit identities live in a history root of the test's own.
+        config: unstubbed<Services["config"]>("config", { historyRoot: landed.historyRoot ?? mkdtempSync(join(tmpdir(), "version-landed-")) }),
+        // SAFETY: attribution asks only whether `auth` is there, never what it holds.
+        auth: {} as Services["auth"],
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            // SAFETY: a land reads only `rules` and `commitAttribution` from the settings.
+            get: async () => ({ rules, commitAttribution: landed.attribution ?? "trailer" }) as never,
+        }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () =>
                 isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
                     identity: landed.home === true ? { home: true } : {},
-                    social: { title: { text: landed.title ?? "Recent commits", source: "derived" }, reactions: [] },
+                    social: {
+                        title: { text: landed.title ?? "Recent commits", source: "derived" },
+                        reactions: [],
+                        ...opt("owner", landed.owner),
+                    },
                     landing: landedSubject === undefined ? {} : { message: landedMessage(landedSubject, landed) },
                 }),
             recordHomeCommit: async (_id, commit) => void landed.filed?.push(commit),
@@ -76,6 +101,7 @@ beforeEach(() => {
     describeLanding.mockReset();
     describeLanding.mockResolvedValue(undefined);
     commitOnly.mockClear();
+    signers.length = 0;
 });
 
 describe(`the version rule`, () => {
@@ -97,6 +123,32 @@ describe(`settling a landing`, () => {
     test(`commits the claim under the subject drafted for it`, async () => {
         await settleLanding(servicesWith([version(`auto-version`)], `fix: cascading markers`), `c1`);
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: cascading markers\n\nConversation-Id: c1`);
+    });
+
+    // The person who answers for the conversation, by the commit identity they set, as the owner's policy names people.
+    test(`names the conversation's owner as its author, in a co-author line, or not at all`, async () => {
+        const ada = { name: `Ada Lovelace`, email: `42+ada@users.noreply.github.com` };
+        const owner = { email: `ada@example.com`, name: `Ada`, since: 1 };
+        const settled = async (attribution: CommitAttribution) => {
+            const historyRoot = mkdtempSync(join(tmpdir(), `version-landed-`));
+            const services = servicesWith([version(`auto-version`)], `fix: cascading markers`, { attribution, owner, historyRoot });
+            await memberCommitIdentities(services).set(`ada@example.com`, ada);
+            commitOnly.mockClear();
+            signers.length = 0;
+            await settleLanding(services, `c1`);
+            return { message: commitOnly.mock.calls[0]?.[2], signer: signers[0] };
+        };
+        expect(await settled(`person`)).toEqual({ message: `fix: cascading markers\n\nConversation-Id: c1`, signer: { ...AGENT_GIT_AUTHOR, author: ada } });
+        expect(await settled(`trailer`)).toEqual({
+            message: `fix: cascading markers\n\nConversation-Id: c1\nCo-authored-by: Ada Lovelace <42+ada@users.noreply.github.com>`,
+            signer: AGENT_GIT_AUTHOR,
+        });
+        expect(await settled(`intentic`)).toEqual({ message: `fix: cascading markers\n\nConversation-Id: c1`, signer: AGENT_GIT_AUTHOR });
+    });
+
+    test(`names nobody for an owner who set no commit identity`, async () => {
+        await settleLanding(servicesWith([version(`auto-version`)], `fix: cascading markers`, { attribution: `person`, owner: { email: `ada@example.com`, since: 1 } }), `c1`);
+        expect(signers).toEqual([AGENT_GIT_AUTHOR]);
     });
 
     test(`includes generated paths that became attributable while the commit waited for its lock`, async () => {

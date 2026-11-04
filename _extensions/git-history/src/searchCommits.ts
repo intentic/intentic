@@ -1,8 +1,8 @@
 import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 
-// Every typed word must match somewhere in a commit (subject, body, author, email, refs, or sha), each field a
-// candidate on its own, so more words always narrow. Accents and punctuation are folded before comparing (`feat(graph)`
-// becomes `feat graph`); the sha is compared raw as a hex prefix.
+// Every typed word must match somewhere in a commit (subject, body, author, email, who it was for, refs, or sha), each
+// field a candidate on its own, so more words always narrow. Accents and punctuation are folded before comparing
+// (`feat(graph)` becomes `feat graph`); the sha is compared raw as a hex prefix.
 
 // Folds text so two people typing the same word agree: decomposed accents dropped, punctuation flattened to spaces (not
 // removed, so `feat(graph)` yields two words).
@@ -28,6 +28,10 @@ export const matchesSearch = (commit: GitCommit, words: readonly string[]): bool
         fold(commit.body),
         fold(commit.author),
         fold(commit.email),
+        // Who an agent's work was for, so a person's name finds the commits made for them even where the commit itself
+        // names only intentic (settings.commitAttribution).
+        fold(commit.requestedBy?.name ?? ``),
+        fold(commit.requestedBy?.email ?? ``),
         // Raw: a sha is hex with no accents, and a prefix is exactly how people paste one.
         commit.sha.toLowerCase(),
         ...commit.refs.map((ref) => fold(ref)),

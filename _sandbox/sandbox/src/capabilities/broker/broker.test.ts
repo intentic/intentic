@@ -129,6 +129,7 @@ describe("a brokered card's environment", () => {
             GIT_CONFIG_VALUE_0: "https://git.example.com/",
         });
         expect(gitRewriteEnv([])).toEqual({});
+        expect(gitRewriteEnv([], [{ key: "user.name", value: "Ada" }])).toEqual({ GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.name", GIT_CONFIG_VALUE_0: "Ada" });
     });
 });
 

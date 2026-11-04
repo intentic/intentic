@@ -1,7 +1,7 @@
 import type { SafetyLogEntry, SafetyPolicy } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { AI_LITERACY_TEXT } from "@intentic/sandbox-contract/schemas/ai-literacy";
-import type { RepoChecksList } from "@intentic/sandbox-contract/schemas/settings";
+import type { GitPerson, RepoChecksList } from "@intentic/sandbox-contract/schemas/settings";
 import { refuse } from "@intentic/contract-serve";
 import { demoQuiet } from "../../mode";
 import { DEMO_USER } from "../../platform";
@@ -39,6 +39,19 @@ export const answerAudience = (answer: SandboxHandlerInput<`settings`, `setAudie
     }
     audience = answer.audience;
     return { audience, adopted: true };
+};
+
+// The demo's one reader is the sandbox's owner, so the daemon offers them the connected GitHub account's identity
+// (its noreply address) until they set their own; a press keeps what they chose until a reload.
+let commitIdentity: GitPerson | undefined;
+const SUGGESTED_COMMIT_IDENTITY: GitPerson = { name: `Ada Lovelace`, email: `81234+ada@users.noreply.github.com` };
+export const readCommitIdentity = (): SandboxHandlerOutput<`settings`, `commitIdentity`> => {
+    const attribution = settingsNow.commitAttribution ?? `trailer`;
+    return commitIdentity === undefined ? { suggested: SUGGESTED_COMMIT_IDENTITY, attribution } : { identity: commitIdentity, attribution };
+};
+export const answerCommitIdentity = (answer: SandboxHandlerInput<`settings`, `setCommitIdentity`>): SandboxHandlerOutput<`settings`, `setCommitIdentity`> => {
+    commitIdentity = answer.identity ?? undefined;
+    return readCommitIdentity();
 };
 
 // The AI notice as the daemon words it (ai-literacy.routes.ts): the owner's own text or the built-in one in the reader's

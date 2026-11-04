@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { INDEX_RUN_FILE_LIMIT, type IndexRun } from "@intentic/sandbox-contract/schemas/git/index-run";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
@@ -12,6 +13,7 @@ import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { gitSlice } from "./git-slice.js";
+import { testConfig } from "../env.config.testing.js";
 
 // The stage and commit runs over real git, driven over the daemon's HTTP surface as the Changes panel drives them: the
 // guardrail on a tree past its line, dependency dirs left out, a commit's answer, and a cancel that kills a hung commit.
@@ -126,4 +128,36 @@ test("while a commit hangs in its hook, the same start joins it, a stage is refu
         await client.git.indexRunCancel({ repo: "app" });
         await writeFile(releaseHook, "release\n");
     }
+});
+
+// Who pressed Commit is who the commit names, by the identity they set, under the owner's policy; until 2026-11-04 every
+// panel commit was `intentic` whoever pressed it. The one person of a sandbox nobody signs in to is this test's caller.
+test("a panel commit is authored by the person who pressed it under `person`, and committed by intentic", async () => {
+    const { root, app } = await workspace();
+    const historyRoot = await mkdtemp(join(tmpdir(), "intentic-index-run-history-"));
+    tempDirs.push(historyRoot);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: workspacePaths(root),
+                git: realGit,
+                config: { ...testConfig, historyRoot },
+                sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ commitAttribution: "person" }) },
+            }),
+        ),
+    );
+    expect(await client.settings.setCommitIdentity({ identity: { name: "Ada Lovelace", email: "ada@example.com" } })).toMatchObject({
+        identity: { name: "Ada Lovelace", email: "ada@example.com" },
+        attribution: "person",
+    });
+    await writeFile(join(app, "main.py"), "print('hi')\n");
+    await client.git.commit({ repo: "app", stage: {}, message: "feat: greet" });
+    expect(await sh(app, "log", "-1", "--format=%an <%ae> | %cn <%ce>")).toBe("Ada Lovelace <ada@example.com> | intentic <agent@intentic.dev>");
+
+    // Forgotten, the next commit names nobody again.
+    await client.settings.setCommitIdentity({ identity: null });
+    await writeFile(join(app, "main.py"), "print('bye')\n");
+    await client.git.indexRunStart({ repo: "app", op: "commit", target: {}, message: "feat: part" });
+    expect((await settled(client, "app")).status).toBe("passed");
+    expect(await sh(app, "log", "-1", "--format=%an <%ae>")).toBe("intentic <agent@intentic.dev>");
 });

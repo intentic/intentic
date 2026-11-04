@@ -48,6 +48,7 @@ import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./ops
 import { type UndoableAction, undoableAction, undoLastAction } from "./ops/undo.js";
 import { fetchRemote, pullRemote, remoteState } from "./remote/remote.js";
 import { remoteProjectOf } from "./remote/remote-urls.js";
+import type { CommitSigner } from "../git-identity.js";
 
 // Git as the daemon runs it on the workspace's repositories: status, history, changes, branches and remotes.
 export interface GitSlice {
@@ -55,7 +56,7 @@ export interface GitSlice {
         readonly init: (dir: string, separateGitDir?: string) => Promise<void>;
         readonly status: (dir: string) => Promise<GitStatus>;
         readonly listFiles: (dir: string) => Promise<string[]>;
-        readonly commitAll: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
+        readonly commitAll: (dir: string, message: string, author: CommitSigner) => Promise<boolean>;
         readonly clone: (parentDir: string, name: string, cloneUrl: string, options?: GitCloneOptions) => Promise<void>;
         readonly checkout: (dir: string, ref: string) => Promise<void>;
         readonly head: (dir: string) => Promise<string>;
@@ -82,13 +83,13 @@ export interface GitSlice {
         // Index entries read and written exactly, so an origin chip can put back the staging it replaced (chip-staging.ts).
         readonly indexEntries: (dir: string, paths: readonly string[]) => Promise<IndexEntries>;
         readonly writeIndexEntries: (dir: string, entries: ReadonlyMap<string, string | undefined>) => Promise<void>;
-        readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }, git?: GitRunner) => Promise<boolean>;
+        readonly commitIndex: (dir: string, message: string, author: CommitSigner, git?: GitRunner) => Promise<boolean>;
         // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/settings-versions.ts).
         readonly commitOnly: (
             dir: string,
             paths: readonly string[],
             message: string,
-            author: { readonly name: string; readonly email: string },
+            author: CommitSigner,
             git?: GitRunner,
         ) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
@@ -101,7 +102,7 @@ export interface GitSlice {
         // known.branch lets a caller that already holds the checked-out branch skip re-deriving it.
         readonly remoteState: (dir: string, known?: { readonly branch?: string | undefined }) => Promise<GitRemoteState>;
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
-        readonly pullRemote: (dir: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly pullRemote: (dir: string, author: CommitSigner) => Promise<ActionResult>;
         // Where the repo is online (host + owner/name), so it can be matched against a project id from elsewhere.
         readonly remoteProjectOf: (dir: string) => Promise<{ host: string; project: string } | undefined>;
         // One file onto the default branch and out to the remote in one step; write is passed in by the router.
@@ -149,11 +150,11 @@ export interface GitSlice {
         readonly pushTag: (dir: string, name: string, remote: string) => Promise<ActionResult>;
         readonly checkoutRef: (dir: string, ref: string) => Promise<void>;
         readonly resetTo: (dir: string, sha: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
-        readonly revertCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
-        readonly cherryPick: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
-        readonly mergeCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
-        readonly rebaseOnto: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
-        readonly dropCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly revertCommit: (dir: string, sha: string, author: CommitSigner) => Promise<ActionResult>;
+        readonly cherryPick: (dir: string, sha: string, author: CommitSigner) => Promise<ActionResult>;
+        readonly mergeCommit: (dir: string, sha: string, author: CommitSigner) => Promise<ActionResult>;
+        readonly rebaseOnto: (dir: string, sha: string, author: CommitSigner) => Promise<ActionResult>;
+        readonly dropCommit: (dir: string, sha: string, author: CommitSigner) => Promise<ActionResult>;
     };
 }
 

@@ -4,7 +4,8 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { withRederivedRepo } from "../conversations/land/rederive.js";
-import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { memberOfCaller } from "./attribution/commit-attribution.js";
+import { commitAsPanel } from "./attribution/panel-commit.js";
 import { syncProjectExcludes } from "../workspace/layout/git-layout.js";
 import { stageHold } from "./changes/index-preflight.js";
 import type { IndexTargets } from "./changes/index-targets.js";
@@ -71,7 +72,7 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
             },
             hold: stageHold,
             stage: targets.stageTarget,
-            commit: (dir, message, git) => services.git.commitIndex(dir, parsableMessage(message), AGENT_GIT_AUTHOR, git),
+            commit: (dir, message, git, by) => commitAsPanel(services, { ...by, dir, message: parsableMessage(message) }, git),
             answer,
         },
     });
@@ -79,7 +80,7 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
         // One commit shape: `stage` (whole repo, scope, or paths) decides what enters the index; there is no
         // path-scoped `commit --only`. `stage` runs inside the repo lock so a land can't slip in between.
         // Marked committing before the lock: queued behind a land still counts as running to the user.
-        commit: i.commit.handler(({ input }) =>
+        commit: i.commit.handler(({ input, context }) =>
             deps.whileCommitting(input.repo, () =>
                 onReadyRepo(deps, input.repo, (dir) =>
                     services.perf.track("git.commit", { repo: input.repo }, async () => {
@@ -92,7 +93,9 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
                             }
                             // Repairs only spellings a conventional parser can't find a header in at all (`!` before the
                             // scope, no space after `:`); every other rule's verdict reaches the panel unchanged.
-                            const committed = await services.git.commitIndex(dir, parsableMessage(input.message), AGENT_GIT_AUTHOR);
+                            // Signed for the person who pressed it, and trailed with the conversations whose work it takes.
+                            const member = memberOfCaller(services, context.identity);
+                            const committed = await commitAsPanel(services, { repo: input.repo, dir, message: parsableMessage(input.message), member });
                             deps.invalidateScan();
                             return await answer(input.repo, dir, committed);
                         } catch (error) {
@@ -117,10 +120,10 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
             ),
         ),
         // Resolved before the run exists, so an unknown repo is a NOT_FOUND rather than a run that fails at once.
-        indexRunStart: i.indexRunStart.handler(async ({ input: { repo, ...request } }) => {
+        indexRunStart: i.indexRunStart.handler(async ({ input: { repo, ...request }, context }) => {
             await deps.repoDir(repo);
             try {
-                return runs.start(repo, request);
+                return runs.start(repo, { ...request, member: memberOfCaller(services, context.identity) });
             } catch (error) {
                 if (error instanceof IndexRunBusy) {
                     throw new ORPCError("CONFLICT", { message: error.message });
