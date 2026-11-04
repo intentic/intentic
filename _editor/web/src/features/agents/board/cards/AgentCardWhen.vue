@@ -12,7 +12,8 @@ import type { CardClock } from "./cardClock";
 // last answered (since it was filed, on an archived card). A running card says it runs by the ticking elapsed and its
 // blade (AgentCard), so the corner spends no spinner on it, and what it is doing right now is the glyph's hover: the
 // words named a step the reader rarely needs, and spent a row of every running card on it.
-// Its hovers open BELOW: the card's hover bar (CardHoverBar) floats over the top edge right above this corner.
+// It leads the corner, left of the badges, which keep together. Its hovers open BELOW: the card's hover bar
+// (CardHoverBar) floats over the top edge right above this corner.
 
 const { agent, clock, activityText } = defineProps<{
     agent: FleetAgent;

@@ -608,7 +608,7 @@ const grab = (event: PointerEvent): void => {
             <!-- The session's kind as a glyph, an empty disc for the everyday single agent; tinted amber as its context fills (sessionKind.ts contextPressure). -->
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
-            <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full">
+            <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center self-start rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
                 <IdentityTile :session="agent" class="h-4.5 w-4.5 text-xs" />
@@ -646,7 +646,7 @@ const grab = (event: PointerEvent): void => {
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </button>
             </template>
-            <span class="ml-auto flex shrink-0 items-center gap-2.5">
+            <span class="ml-auto flex min-h-5.5 shrink-0 items-center gap-2.5 self-start">
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
                      phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->
                 <span
@@ -671,9 +671,9 @@ const grab = (event: PointerEvent): void => {
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
                 <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent. A card that never
                      started draws no standing (cornerStandingShown), so there the pencil is the corner's only mark. -->
+                <AgentCardWhen :agent="agent" :clock="clock" :activity-text="activityText" />
                 <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" below class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" below class="text-base" />
-                <AgentCardWhen :agent="agent" :clock="clock" :activity-text="activityText" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span
                     v-if="chip !== undefined"
