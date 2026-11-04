@@ -269,10 +269,13 @@
         },
         // The desktop app's local face (_tools/e2e/local-face): its built bundle in Chromium over the real
         // intentic-files sidecar, granted a temp folder, with no Tauri. Hermetic like e2e:mobile, and for the same
-        // reason no dependsOn: the harness builds the face itself (its global setup), since the face is built from
-        // source and a CI workspace keeps an older `dist`. It runs in CI (`local-face` in ci.yml), which is why the
-        // browser's location passes through: the job installs it under /ci-cache, not $HOME.
+        // reason no dependsOn on the face: the harness builds it itself (its global setup), since the face is built from
+        // source and a CI workspace keeps an older `dist`. The spec itself imports `@intentic/sandbox-contract/app-routes`
+        // (the route the window lands on), which Playwright resolves to that package's `dist`, so its build is the one
+        // dependency. It runs in CI (`local-face` in ci.yml), which is why the browser's location passes through: the job
+        // installs it under /ci-cache, not $HOME.
         "e2e:local": {
+            "dependsOn": ["@intentic/sandbox-contract#build"],
             "cache": false,
             "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "LOCAL_FACE_REUSE_BUILD"]
         },
