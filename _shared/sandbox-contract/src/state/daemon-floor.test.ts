@@ -53,6 +53,7 @@ const REQUIRED_SINCE_FLOOR = {
     derivedChanged: [`kind`, `paths`],
     reposChanged: [`kind`, `repos`],
     refsChanged: [`kind`, `repos`],
+    checkoutChanged: [`agent`, `kind`, `paths`],
     runtimeChanged: [`domains`, `kind`],
     presence: [`kind`, `users`],
     agents: [`agents`, `kind`, `rev`],

@@ -53,9 +53,11 @@ const capabilities: Capability[] = [
 ];
 
 test("a start that outruns the budget refuses the browser instead of stalling the turn", async () => {
-    const began = Date.now();
+    // The process's own monotonic clock: a fake clock another file in the same worker leaves behind moves Date.now (CI
+    // once read 5343 ms off a test that took 255).
+    const began = process.hrtime.bigint();
     const bound = await resolveProfileExit(capabilities, "work", 250);
-    const waited = Date.now() - began;
+    const waited = Number((process.hrtime.bigint() - began) / 1_000_000n);
 
     // Released by the budget, not by the start: the driver is still parked at this point.
     expect(waited).toBeLessThan(3_000);

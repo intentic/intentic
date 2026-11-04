@@ -48,4 +48,5 @@ test("pressed, it hands the app the one link that opens them", async () => {
     openThisComputersSandboxes();
 
     expect(sent).toEqual([`intentic://machine-face`]);
+    expect(sent.at(-1)).toBe(`intentic://machine-face`);
 });
