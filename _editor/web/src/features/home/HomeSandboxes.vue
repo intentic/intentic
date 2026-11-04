@@ -15,6 +15,7 @@ import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSa
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { processAskedBy } from "../../models/processes/processAddress";
 import { sandboxEntryPath, sectionEntryPath } from "../../models/sandbox/sandboxScreen";
+import { sandboxHubPath } from "../../models/sandbox/sandboxNav";
 import { homeFrame, homeSection } from "../../lib/routes/homeSection";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
@@ -64,7 +65,20 @@ const moveBy = (step: number): void => {
     const ids = boxes.value.map((box) => box.id);
     sandboxOrder.value = movedOrder(ids, menuIndex.value, menuIndex.value + step);
 };
+// A sandbox's settings, straight from its tile: the one trip into a box Home is often left for, without entering it first
+// and finding the switcher's cog. Inside for real, as the switcher's cog goes (SandboxSwitcher.vue `openSettings`).
+const openSettings = (): void => {
+    const box = boxes.value[menuIndex.value];
+    if (box === undefined) {
+        return;
+    }
+    seenReady(box.id);
+    sandbox.select(box.id);
+    void goInside(() => router.push(sandboxHubPath(box.role === `guest`)));
+};
 const tileMenuItems = computed<MenuItem[]>(() => [
+    // A home-only guest has no sandbox to enter, so no settings to open in one.
+    ...(homeOnly.value ? [] : [{ label: t(`shared.settings`), icon: `cog`, command: openSettings }, { separator: true }]),
     { label: t(`home.moveTileUp`), disabled: menuIndex.value <= 0, command: () => moveBy(-1) },
     { label: t(`home.moveTileDown`), disabled: menuIndex.value >= boxes.value.length - 1, command: () => moveBy(1) },
     { separator: true },
