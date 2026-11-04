@@ -3700,8 +3700,10 @@
         },
         "chatSubagentBar": {
             "backTo": "Zurück zu {title}",
+            "continue": "Fortsetzen",
             "inProcessNote": "Läuft im Zug seines übergeordneten Agenten und nimmt keine eigenen Nachrichten an.",
             "spawnedNote": "Sein übergeordneter Agent lenkt ihn und liest seinen Bericht.",
+            "stoppedNote": "Vor dem Ende angehalten. Setze ihn fort oder überlasse ihn seinem übergeordneten Agenten.",
             "write": "Ihm schreiben",
             "writeParent": "Dem Übergeordneten schreiben"
         },

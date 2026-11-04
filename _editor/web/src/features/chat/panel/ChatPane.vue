@@ -141,9 +141,7 @@ const filePicker = ref<HTMLInputElement | null>(null);
 
 usePaneAttach({ conversation: () => props.conversation, focused: () => props.focused, streaming });
 
-// A SPAWNED SUBAGENT'S CHAT: its parent directs it, so the composer gives way to the subagent bar, which says whose it is
-// and leads back there (ChatSubagentBar); the reader can still choose to write to it. A child whose parent has left the
-// fleet is a conversation in its own right again (parentCardOf), and keeps its composer.
+// A SPAWNED SUBAGENT'S CHAT: its parent directs it, so the subagent bar takes the composer's place, until the parent leaves the fleet (parentCardOf).
 const { agentById, fleet } = useAgents();
 const card = computed(() => agentById(props.conversation.conversationId));
 const subagentOf = computed(() => {
@@ -560,7 +558,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     <template v-if="!blocked">
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip): a word to it, so a subagent's is its parent's. -->
+                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip); a subagent's bar carries its own Continue instead. -->
                         <ChatContinueStrip
                             v-if="!subagentOf && !strip && !readOnly"
                             :visible="continueStrip"
@@ -575,15 +573,17 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatLeftRunning v-if="!strip" />
                         <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
                         <ChatWaitingBar v-if="!strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
-                        <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's or a stop. -->
+                        <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's, a stop, or the continue that undoes one. -->
                         <ChatSubagentBar
                             v-if="subagentOf"
                             :child="subagentOf.child"
                             :parent-title="agentDisplayTitle(subagentOf.parent)"
                             :provider="subagentOf.parent.provider"
                             :stoppable="turnStoppable && !ending && !readOnly"
+                            :continuable="continueOffer && !readOnly"
                             @back="backToParent()"
                             @stop="paneView.stop()"
+                            @continue="continueTurn()"
                             @write="writeTo(conversation)"
                         />
                         <template v-else-if="readOnly">

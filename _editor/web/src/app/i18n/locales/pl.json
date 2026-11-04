@@ -3700,8 +3700,10 @@
         },
         "chatSubagentBar": {
             "backTo": "Wróć do {title}",
+            "continue": "Kontynuuj",
             "inProcessNote": "Działa w turze agenta nadrzędnego i nie przyjmuje własnych wiadomości.",
             "spawnedNote": "Kieruje nim agent nadrzędny, który czyta jego raport.",
+            "stoppedNote": "Zatrzymany przed końcem. Kontynuuj go albo zostaw to agentowi nadrzędnemu.",
             "write": "Napisz do niego",
             "writeParent": "Napisz do nadrzędnego"
         },

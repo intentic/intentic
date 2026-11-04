@@ -21,7 +21,10 @@ import { useDriveRefusal } from "../../session/driveRefusal";
 //   what the reader can do: one short line on why there is no box, and the presses there are instead.
 //
 // A spawned subagent is a conversation of its own, so the reader may still speak to it directly ("Write to it") and stop
-// it while it works. One its parent's runtime ran in-process has no conversation to send to: its press is the parent's.
+// it while it works. Once stopped short (the reader's Stop, most often) it offers Continue in Stop's place, since the
+// strip a chat shows for that is the composer's and gives way here with it: without it, the one way back was "Write to
+// it" and the strip behind it. One its parent's runtime ran in-process has no conversation to send to: its press is the
+// parent's.
 
 const props = defineProps<{
     // The subagent: a conversation the parent spawned, or the roster's record of one its runtime ran in-process.
@@ -33,8 +36,10 @@ const props = defineProps<{
     account?: string;
     // Offer the press that stops it: a spawned one whose turn is running.
     stoppable?: boolean;
+    // Offer the press that carries on a turn that stopped short: a spawned one whose pick-up a press would get through.
+    continuable?: boolean;
 }>();
-const emit = defineEmits<{ back: []; stop: []; write: [] }>();
+const emit = defineEmits<{ back: []; stop: []; write: []; continue: [] }>();
 
 const t = useT();
 // A reader who cannot run agents follows along: the press that writes to it is not theirs to make.
@@ -104,13 +109,22 @@ const clock = computed(() =>
         <!-- What the reader can do instead of typing: why there is no box, and the presses there are. -->
         <div class="flex min-w-0 items-center gap-2 border-t border-line py-1.5 pr-1.5 pl-3">
             <p class="min-w-0 flex-1 text-2xs text-subtle">
-                {{ spawned ? t(`chat.chatSubagentBar.spawnedNote`) : t(`chat.chatSubagentBar.inProcessNote`) }}
+                {{
+                    !spawned
+                        ? t(`chat.chatSubagentBar.inProcessNote`)
+                        : continuable
+                          ? t(`chat.chatSubagentBar.stoppedNote`)
+                          : t(`chat.chatSubagentBar.spawnedNote`)
+                }}
             </p>
             <Button v-if="!spawned" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`back`)">
                 <Icon name="arrow-left" class="text-2xs" />{{ t(`chat.chatSubagentBar.writeParent`) }}
             </Button>
             <Button v-if="spawned && !readOnly" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`write`)">
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatSubagentBar.write`) }}
+            </Button>
+            <Button v-if="continuable && !stoppable" size="small" thumb tier="boring" class="shrink-0" @click="emit(`continue`)">
+                <Icon name="play" class="text-2xs" />{{ t(`chat.chatSubagentBar.continue`) }}
             </Button>
             <Button v-if="stoppable" size="small" thumb tier="boring" class="shrink-0" @click="emit(`stop`)">
                 <Icon name="stop" class="text-2xs" />{{ t(`ui.action.stop`) }}

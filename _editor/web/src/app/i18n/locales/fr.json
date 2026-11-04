@@ -3700,8 +3700,10 @@
         },
         "chatSubagentBar": {
             "backTo": "Revenir à {title}",
+            "continue": "Continuer",
             "inProcessNote": "S'exécute dans le tour de son parent et ne reçoit pas de messages.",
             "spawnedNote": "Son parent le dirige et lit son rapport.",
+            "stoppedNote": "Arrêté avant la fin. Continuez-le ou laissez-le à son parent.",
             "write": "Lui écrire",
             "writeParent": "Écrire au parent"
         },

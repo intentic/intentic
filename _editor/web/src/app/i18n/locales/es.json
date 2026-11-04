@@ -3700,8 +3700,10 @@
         },
         "chatSubagentBar": {
             "backTo": "Volver a {title}",
+            "continue": "Continuar",
             "inProcessNote": "Se ejecuta dentro del turno de su agente principal y no recibe mensajes propios.",
             "spawnedNote": "Su agente principal lo dirige y lee su informe.",
+            "stoppedNote": "Se detuvo antes de terminar. Continúalo o déjalo en manos de su agente principal.",
             "write": "Escribirle",
             "writeParent": "Escribir al principal"
         },
