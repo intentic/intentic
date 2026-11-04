@@ -10819,6 +10819,8 @@
                 "textSize": "Rozmiar tekstu",
                 "textSizeComfortableHint": "110% — rozmiar, w jakim narysowano interfejs",
                 "textSizeLarge": "Duży",
+                "textSizeNow": "Teraz {percent}%.",
+                "textSizeZoomKeys": "{mod} + i {mod} − powiększają go lub zmniejszają, {mod} 0 przywraca domyślny.",
                 "theme": "Motyw",
                 "wallpaper": "Tapeta",
                 "wallpaperHint": "Obraz za tablicą agentów, w jasnej lub ciemnej wersji Twojego motywu."

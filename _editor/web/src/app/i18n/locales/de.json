@@ -11417,6 +11417,8 @@
                 "textSize": "Textgröße",
                 "textSizeComfortableHint": "110 % — die Größe, in der die Oberfläche gezeichnet wurde",
                 "textSizeLarge": "Groß",
+                "textSizeNow": "Jetzt {percent} %.",
+                "textSizeZoomKeys": "{mod} + und {mod} − machen sie größer oder kleiner, {mod} 0 setzt sie zurück.",
                 "theme": "Design",
                 "wallpaper": "Hintergrundbild",
                 "wallpaperHint": "Ein Bild hinter der Agenten-Übersicht, in der hellen oder dunklen Fassung deines Designs."

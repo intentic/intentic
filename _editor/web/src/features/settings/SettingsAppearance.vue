@@ -29,13 +29,16 @@ import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../../skins/themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { embedded, tellNative } from "../../app/environments/nativeApp";
+import { isApplePlatform } from "@intentic/ui/keys";
+import { NAMED_TEXT_SIZES } from "@intentic/ui/text-size";
+import { inDesktopWindow } from "../../workbench/window/textZoom";
 
 // How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
 // Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
 // since its tree isn't on this page.
 
 const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme, accent, setAccent } = useTheme();
-const { textSize, setTextSize } = useTextSize();
+const { textSize, setTextSize, percent: textPercent } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { mobile } = useDevice();
@@ -167,6 +170,18 @@ const textSizeOptions = computed(() => [
     },
     { label: t(`settings.appearance.look.textSizeLarge`), value: `large` as const },
 ]);
+// The zoom keys reach rungs between and past those three (textZoom.ts), so the row says a size none of them names, and,
+// where the keys work, what they are.
+const textSizeHint = computed(() => {
+    const parts: string[] = [];
+    if (!NAMED_TEXT_SIZES.includes(textSize.value)) {
+        parts.push(t(`settings.appearance.look.textSizeNow`, { percent: textPercent.value }));
+    }
+    if (inDesktopWindow()) {
+        parts.push(t(`settings.appearance.look.textSizeZoomKeys`, { mod: isApplePlatform() ? `⌘` : `Ctrl` }));
+    }
+    return parts.length === 0 ? undefined : parts.join(` `);
+});
 
 // The one list on this page that is NOT translated: a reader hunting for their own language finds it faster written
 // in itself than in a language they cannot read. `activeLocale` rather than the choice, so the control shows what is
@@ -266,7 +281,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion" /></template>
             </Row>
             <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
-            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)">
+            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)" :description="textSizeHint">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>

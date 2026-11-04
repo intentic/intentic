@@ -60,4 +60,39 @@ describe(`useTextSize`, () => {
         expect(document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
         expect(localStorage.getItem(`ui-text-size`)).toBe(`compact`);
     });
+
+    it(`steps a rung at a time from the zoom keys, held at both ends, and resets to Compact`, async () => {
+        const { useTextSize, TEXT_SIZES } = await load();
+        const { stepTextSize, textSize, percent } = useTextSize();
+
+        stepTextSize(1);
+        expect(textSize.value).toBe(`default`);
+        stepTextSize(1);
+        stepTextSize(1);
+        expect(textSize.value).toBe(`135`);
+        expect(percent.value).toBe(135);
+        expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`135`);
+
+        for (const _ of TEXT_SIZES) {
+            stepTextSize(1);
+        }
+        expect(textSize.value).toBe(`200`);
+        for (const _ of TEXT_SIZES) {
+            stepTextSize(-1);
+        }
+        expect(textSize.value).toBe(`90`);
+        expect(percent.value).toBe(90);
+
+        stepTextSize(0);
+        expect(textSize.value).toBe(`compact`);
+        expect(document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
+    });
+
+    it(`restores a rung only the zoom keys reach`, async () => {
+        localStorage.setItem(`ui-text-size`, `150`);
+        const { useTextSize } = await load();
+
+        expect(useTextSize().scale.value).toBeCloseTo(1.5);
+        expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`150`);
+    });
 });

@@ -124,6 +124,16 @@ flowchart LR
   _(2026-10-26) The keymap was Windows' drawn in Mac glyphs: 7 of 59 default chords reached ⌘. Translating the Windows
   chords one for one was the alternative; it lands on chords a Mac browser keeps (⌘W) or a laptop lacks (PageDown).
   `/work/docs/macos-keyboard-strategy.md` has the audit._
+- **Zoom keys in the desktop app** (2026-11-04, `workbench/window/textZoom.ts`). In the app's windows, Ctrl+Plus and
+  Ctrl+Minus (⌘ on a Mac, the numpad's too) step the reader's text size one rung along its ladder (`@intentic/ui/text-size`:
+  90, 100, 110, 120, 135, 150, 175 and 200%), Ctrl+0 puts it back to Compact, and Ctrl+wheel does the same per notch.
+  It is the Appearance setting itself, which names three of the rungs and says the others as a percentage, so the
+  size is kept, follows the account and reaches every window. The chat and documents grow, and the window's chrome stays
+  put (`railFrame.ts`). The webview's own zoom stays off (Tauri's `zoomHotkeysEnabled`, off by default): a page zoom
+  would scale that chrome, change the CSS pixels the app sizes windows by and the live views map pointers with, and be
+  remembered per webview. The wheel listener can cancel, so the compositor waits on it before a scroll starts. It is
+  attached only while the modifier is held. A surface that zooms its own content on Ctrl+wheel (`ImageView`) keeps it.
+  A browser tab gets none of this, because its own zoom answers these keys.
 - **Keyboard access.** The first Tab reveals “Skip to main content” in the workspace and local shells. It focuses the visible main surface, including a side panel filling the centre. Agent and workflow titles are native buttons beside their independent actions. The jump palette is a named dialog with an input combobox, named result groups and active-descendant navigation. The backend-free accessibility checks live in `_tools/e2e/accessibility/demo.spec.ts`.
 - **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
   chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on

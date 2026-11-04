@@ -11417,6 +11417,8 @@
                 "textSize": "Text size",
                 "textSizeComfortableHint": "110% — the size the interface was drawn at",
                 "textSizeLarge": "Large",
+                "textSizeNow": "Now {percent}%.",
+                "textSizeZoomKeys": "{mod} + and {mod} − make it bigger or smaller, {mod} 0 puts it back.",
                 "theme": "Theme",
                 "wallpaper": "Wallpaper",
                 "wallpaperHint": "A picture behind the agents board, drawn in the light or dark version of your theme."

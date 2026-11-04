@@ -38,6 +38,7 @@ import { loadContract } from "./client/sandbox/daemon/contract";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { watchPageLeaving } from "@intentic/ui/reload-reason";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
+import { installTextZoom } from "./workbench/window/textZoom";
 import "./features/sandbox/switching/sandboxScope";
 import "./models/sandbox/sandboxScreen";
 import "./extension-host/hostModules";
@@ -98,6 +99,8 @@ if (returning) {
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
+// Ctrl+Plus, Ctrl+Minus, Ctrl+0 and Ctrl+wheel step the text size in the desktop app's windows; a tab keeps its browser's zoom.
+installTextZoom();
 
 // Spinners and the thinking mark turn on the compositor everywhere but a developer's build under a desktop pointer,
 // which keeps SMIL so an open DevTools Styles editor is not rebuilt with every request (useCompositedLoops).

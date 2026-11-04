@@ -148,9 +148,34 @@
     font-size: 100%;
     --ui-scale: 1;
 }
+/* The rest of the text size ladder (useTextSize.ts TEXT_SIZES): Settings names three rungs, the zoom keys reach them all. */
+[data-text-size="90"] {
+    font-size: 90%;
+    --ui-scale: 0.9;
+}
 [data-text-size="default"] {
     font-size: 110%;
     --ui-scale: 1.1;
+}
+[data-text-size="large"] {
+    font-size: 120%;
+    --ui-scale: 1.2;
+}
+[data-text-size="135"] {
+    font-size: 135%;
+    --ui-scale: 1.35;
+}
+[data-text-size="150"] {
+    font-size: 150%;
+    --ui-scale: 1.5;
+}
+[data-text-size="175"] {
+    font-size: 175%;
+    --ui-scale: 1.75;
+}
+[data-text-size="200"] {
+    font-size: 200%;
+    --ui-scale: 2;
 }
 
 /* WEIGHT, PER SCHEME Dark writes ~30 units lighter than light does, and the two then LOOK like the same weight. */
@@ -158,8 +183,4 @@ html[data-mode="dark"] {
     --font-weight-normal: 300;
     --font-weight-medium: 400;
     --font-weight-semibold: 500;
-}
-[data-text-size="large"] {
-    font-size: 120%;
-    --ui-scale: 1.2;
 }

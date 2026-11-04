@@ -11417,6 +11417,8 @@
                 "textSize": "Taille du texte",
                 "textSizeComfortableHint": "110 % — la taille à laquelle l'interface a été dessinée",
                 "textSizeLarge": "Grand",
+                "textSizeNow": "Actuellement {percent} %.",
+                "textSizeZoomKeys": "{mod} + et {mod} − l'agrandissent ou la réduisent, {mod} 0 la rétablit.",
                 "theme": "Thème",
                 "wallpaper": "Fond d’écran",
                 "wallpaperHint": "Une image derrière le tableau des agents, dans la version claire ou sombre de votre thème."

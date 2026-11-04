@@ -73,8 +73,9 @@
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");
-                if (uiTextSize === "default" || uiTextSize === "large")
-                    document.documentElement.setAttribute("data-text-size", uiTextSize);
+                // Every rung of the ladder but Compact, which is the stylesheet's own (useTextSize.ts TEXT_SIZES).
+                var UI_TEXT_SIZES = ["90", "default", "large", "135", "150", "175", "200"];
+                if (UI_TEXT_SIZES.indexOf(uiTextSize) !== -1) document.documentElement.setAttribute("data-text-size", uiTextSize);
                 // WHICH LANGUAGE THIS PAGE IS IN, decided before it paints. `lang` is what picks a fallback face,
                 // a language's quote marks and its hyphenation, so writing it from a module restyles text already
                 // on screen. A stored choice wins; with none, the browser's own preference order decides, matching
