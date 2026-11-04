@@ -142,6 +142,10 @@ overrides:
   # release from 9.0.0 to 14.0.1 (GHSA-3g3m-2fjr-6pw4) with no 10.x backport. Its only call is `glob.sync`,
   # which glob 14 still exports from its CommonJS entry.
   "archiver-utils>glob": 14.0.3
+  # @stryker-mutator/core pins minimatch ~10.2.4, and the globParts amplification in firstPhasePreProcess covers
+  # every release below 11.0.1 (GHSA-g3hv-75wg-m249) with no 10.x backport. Core imports only the named
+  # `minimatch` and `Minimatch` exports, which 11 keeps; 11.0.4 is the copy the tree already resolves elsewhere.
+  "@stryker-mutator/core>minimatch": 11.0.4
 
 # 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
 # only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
