@@ -47,6 +47,7 @@ env:
   # pnpm ignores PNPM_STORE_PATH/PNPM_STORE_DIR, so the store is selected by --store-dir in the composite
   # action; this variable is deliberately named so it cannot be mistaken for one pnpm reads on its own.
   PNPM_STORE: /ci-cache/pnpm-store
+  PNPM_METADATA: /ci-cache/pnpm-metadata
   TURBO_CACHE_DIR: /ci-cache/turbo
   # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
   # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
@@ -55,6 +56,10 @@ env:
   TURBO_API: ${{ vars.TURBO_API }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  # A remote is an optimization, never a runner-wide stall: every Turbo invocation in the job gives up on a remote request
+  # after 10 s and on an artifact upload after 30 s (turbo times uploads separately), then carries on without it.
+  TURBO_REMOTE_CACHE_TIMEOUT: "10"
+  TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT: "30"
   # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE site
   # for the key file (90s timeout) and then retries a 403 five times, ~2 min per build.
   INDEXNOW_ENABLED: "0"
@@ -68,6 +73,7 @@ env:
   # when it is not. 16 of the WSL VM's 26 GB; the rest is for typechecks, builds and Docker. verify.yml holds the same
   # pair, and docs/ops/ci-runner.md says when to change them.
   TEST_SLOTS_DIR: /ci-cache/test-slots
+  TEST_TIMINGS_DIR: /ci-cache/test-timings
   TEST_SLOTS: "16"
   # The first six slots are the gates' alone (verify.yml's groups set TEST_SLOTS_PRIORITY=gate): a job here that gates
   # nothing cannot leave the web suite one worker, which is how run 37694899281 spent 14.6 minutes on it instead of 4.3.

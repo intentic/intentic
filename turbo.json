@@ -92,6 +92,7 @@
                 "TEST_WORKERS_MAX",
                 "CI_HOST_JOBS",
                 "SUITES_JUNIT_DIR",
+                "TEST_TIMINGS_DIR",
                 "INTENTIC_TURN_OWNER",
                 "INTENTIC_AGENT_SESSION"
             ]

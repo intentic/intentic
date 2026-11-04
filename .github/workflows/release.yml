@@ -28,6 +28,8 @@ permissions:
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   PNPM_STORE: /ci-cache/pnpm-store
+  PNPM_METADATA: /ci-cache/pnpm-metadata
+  TEST_TIMINGS_DIR: /ci-cache/test-timings
   TURBO_CACHE_DIR: /ci-cache/turbo
   # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
   # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
@@ -36,6 +38,8 @@ env:
   TURBO_API: ${{ vars.TURBO_API }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_REMOTE_CACHE_TIMEOUT: "10"
+  TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT: "30"
   REGISTRIES: ghcr.io/intentic
 
 jobs:

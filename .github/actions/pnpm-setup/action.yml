@@ -6,7 +6,7 @@
 # at the top of this file — a half-written-cache sweep and a node-gyp exec-bit repair, both corepack-specific —
 # went with corepack.
 name: pnpm setup
-description: Install the workspace against the shared pnpm store and prune the turbo cache.
+description: Install the workspace against the shared pnpm store and prune shared cache metadata.
 
 inputs:
   # WHAT A STALE LOCKFILE DOES TO THIS JOB. `fail` (the default, and what every job that builds something to publish
@@ -80,6 +80,10 @@ runs:
         mkdir -p node_modules
         install_tmp="$(mktemp -d "$PWD/node_modules/.install-tmp.XXXXXX")"
         trap 'rm -rf -- "$install_tmp"' EXIT
+        # pnpm records a successful lockfile/policy verification in its metadata cache. Keep it beside the shared store;
+        # hosted runners and other callers without PNPM_METADATA get job-local metadata instead of a hidden $HOME cache.
+        export pnpm_config_cache_dir="${PNPM_METADATA:-$RUNNER_TEMP/pnpm-metadata}"
+        mkdir -p "$pnpm_config_cache_dir"
         export TMPDIR="$install_tmp" RUNNER_TEMP="$install_tmp"
         # Remove pnpm's state shortcut so injected workspace copies are refreshed after checkout replaces source inodes.
         # Source-consumed packages have no build script to resync them; unchanged manifests/lockfile otherwise leave stale code in the store.
@@ -124,8 +128,12 @@ runs:
           printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' > /etc/apt/apt.conf.d/80-intentic-downloads
         fi
 
-    # Bound the shared turbo cache: drop entries untouched for 14 days (rebuilt + re-cached if needed). The
-    # directory outlives the job, so nothing else evicts from it — this line is load-bearing, not hygiene.
-    - name: Prune the turbo cache
+    # Bound shared cache metadata: drop entries untouched for 14 days (rebuilt + re-cached if needed). These
+    # directories outlive the job, so nothing else evicts their small files by age — these lines are load-bearing.
+    - name: Prune shared cache metadata
       shell: bash
-      run: find "$TURBO_CACHE_DIR" -type f -mtime +14 -delete 2>/dev/null || true
+      run: |
+        find "$TURBO_CACHE_DIR" -type f -mtime +14 -delete 2>/dev/null || true
+        if [ -n "${PNPM_METADATA:-}" ]; then
+          find "$PNPM_METADATA" -type f -mtime +14 -delete 2>/dev/null || true
+        fi

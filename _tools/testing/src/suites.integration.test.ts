@@ -3,7 +3,7 @@
 // names. Every stale file throws when loaded, so a run that picks one up fails, and each file that runs records its
 // name, so the run is judged by exactly what it ran.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -53,7 +53,7 @@ const suites = (...args: string[]) => {
     const result = spawnSync("node", [SUITES, ...args], {
         cwd: root,
         encoding: "utf8",
-        env: { ...process.env, SUITES_TEST_TRACE: trace, TEST_WORKERS: "1", SUITES_JUNIT_DIR: reports },
+        env: { ...process.env, SUITES_TEST_TRACE: trace, TEST_WORKERS: "1", TEST_TIMINGS_DIR: join(traceDir, "timings"), SUITES_JUNIT_DIR: reports },
     });
     const ran = readFileSync(trace, "utf8")
         .split("\n")
@@ -77,6 +77,19 @@ test("a path filter chooses among the same files: one that names only stale outp
 test("a path filter that names source runs it, still past the stale copies beside it", () => {
     const { status, ran } = suites("kept");
     expect({ status, ran }).toEqual({ status: 0, ran: ["kept", "kept.integration"] });
+});
+
+test("filtered runs merge with earlier per-file timing history", () => {
+    writeFileSync(join(root, "src/other.test.ts"), KEPT("other"));
+    expect(suites("src/kept.test.ts").status).toBe(0);
+    expect(suites("src/other.test.ts").status).toBe(0);
+    const histories = readdirSync(join(traceDir, "timings")).filter((name) => name.includes(".unit."));
+    const latest = histories
+        .map((name) => ({ name, modified: Bun.file(join(traceDir, "timings", name)).lastModified }))
+        .toSorted((a, b) => b.modified - a.modified)[0]!;
+    const history = readFileSync(join(traceDir, "timings", latest.name), "utf8");
+    expect(history).toContain("kept.test.ts");
+    expect(history).toContain("other.test.ts");
 });
 
 test("reports both kinds in a new directory and keeps a failing test's exit status", () => {

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -33,7 +34,7 @@ const write = (path, text) => {
 // server answering it lives in this process, and a synchronous spawn would leave it deaf until turbo gave up.
 const turbo = async (args, extra = {}) => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("TURBO_")));
-    const { stdout } = await promisify(execFile)(TURBO, args, { cwd: fixture, env: { ...env, TURBO_TELEMETRY_DISABLED: "1", ...extra } });
+    const { stdout } = await promisify(execFile)(TURBO, args, { cwd: fixture, env: { ...env, TURBO_TELEMETRY_DISABLED: "1", ...extra }, timeout: 20_000 });
     return stdout;
 };
 const statusOf = (output, taskId) => new RegExp(`^${taskId}: cache (hit|miss)`, "m").exec(output)?.[1];
@@ -87,4 +88,36 @@ test("a sandbox's typecheck becomes CI's cache hit; its build never does", { ski
     const ciRun = await turbo(["run", "typecheck", "build", "--cache=local:rw,remote:"], { TURBO_CACHE_DIR: ciDir });
     assert.equal(statusOf(ciRun, "a:typecheck"), "hit");
     assert.equal(statusOf(ciRun, "a:build"), "miss");
+});
+
+// CI bounds the remote through the environment alone (ci.yml, verify.yml, release.yml), so that is all this sets. The stalled
+// remote accepts every request and never answers, so only the timeouts can end the run: without them it would sit until
+// execFile's 20 s kill.
+test("an unreachable or stalled remote falls back to executing within the configured bounds", { skip: TURBO === undefined && "turbo is not installed" }, async () => {
+    const probe = createServer();
+    await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+    const unreachable = `http://127.0.0.1:${probe.address().port}`;
+    await new Promise((resolve) => probe.close(resolve));
+    const options = (endpoint, name) => ({
+        TURBO_API: endpoint,
+        TURBO_TOKEN: TOKEN,
+        TURBO_TEAM: "fleet",
+        TURBO_CACHE_DIR: join(root, name),
+        TURBO_REMOTE_CACHE_TIMEOUT: "1",
+        TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT: "1",
+    });
+    const offline = await turbo(["run", "typecheck", "--cache=local:rw,remote:rw"], options(unreachable, "offline"));
+    assert.equal(statusOf(offline, "a:typecheck"), "miss");
+
+    const stalled = createServer(() => {});
+    await new Promise((resolve) => stalled.listen(0, "127.0.0.1", resolve));
+    try {
+        const started = Date.now();
+        const output = await turbo(["run", "typecheck", "--cache=local:rw,remote:rw"], options(`http://127.0.0.1:${stalled.address().port}`, "stalled"));
+        assert.equal(statusOf(output, "a:typecheck"), "miss");
+        assert.ok(Date.now() - started < 12_000, `a stalled remote held the run for ${Date.now() - started} ms`);
+    } finally {
+        stalled.closeAllConnections();
+        await new Promise((resolve) => stalled.close(resolve));
+    }
 });

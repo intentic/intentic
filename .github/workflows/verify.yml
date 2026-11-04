@@ -28,6 +28,7 @@ permissions:
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   PNPM_STORE: /ci-cache/pnpm-store
+  PNPM_METADATA: /ci-cache/pnpm-metadata
   TURBO_CACHE_DIR: /ci-cache/turbo
   # A turbo remote cache, when the repository names one: TURBO_API and TURBO_TEAM
   # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone. Never point
@@ -36,6 +37,8 @@ env:
   TURBO_API: ${{ vars.TURBO_API }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_REMOTE_CACHE_TIMEOUT: "10"
+  TURBO_REMOTE_CACHE_UPLOAD_TIMEOUT: "30"
   INDEXNOW_ENABLED: "0"
   # SIX RUNNER PROCESSES SHARE ONE BOX (docs/ops/ci-runner.md), and no cgroup says so: these containers are started
   # without `--memory`, so each job reads the whole machine's RAM and no ceiling at all. test-workers.mjs divides by
@@ -46,6 +49,7 @@ env:
   # when the box is quiet and runs on one when it is not. The same pair as ci.yml's, and sized with the fleet: 16 of the
   # WSL VM's 26 GB, leaving the rest to typechecks, builds and Docker.
   TEST_SLOTS_DIR: /ci-cache/test-slots
+  TEST_TIMINGS_DIR: /ci-cache/test-timings
   TEST_SLOTS: "16"
   # These groups are the gates production and the release wait on, so their suites may also draw from the six slots
   # ci.yml keeps back from every other job, and a big one short of half its workers waits up to 90 s for room.
@@ -104,11 +108,29 @@ jobs:
         env:
           FILTERS: ${{ inputs.filters }}
         run: node _tools/turbo-cache/import.mjs -- run typecheck build test $FILTERS
-      - run: pnpm turbo run typecheck build test $FILTERS --continue=dependencies-successful
+      - id: graph
+        run: |
+          echo "CACHE_RUN_STARTED=$(date +%s%3N)" >> "$GITHUB_ENV"
+          pnpm turbo run typecheck build test $FILTERS --continue=dependencies-successful --summarize --cache-workers=4
         if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}
           SUITES_JUNIT_DIR: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+      - name: Audit sampled Turbo cache hits
+        if: ${{ steps.graph.outcome == 'success' }}
+        run: node _tools/scripts/verify/cache-audit.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${{ inputs.report-name }}/audit.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Report cache measurements
+        if: ${{ !cancelled() && (steps.graph.outcome == 'success' || steps.graph.outcome == 'failure') }}
+        run: node _tools/scripts/verify/cache-report.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${{ inputs.report-name }}/turbo.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep cache measurements
+        continue-on-error: true
+        if: ${{ always() }}
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: cache-report-${{ inputs.report-name }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cache-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+          if-no-files-found: ignore
+          retention-days: '30'
       - name: Keep test results
         continue-on-error: true
         if: ${{ always() }}

@@ -12,9 +12,8 @@ export const junitFile = (dir, packageName, kind) => join(dir, `${packageName.re
 // The export condition every suite resolves workspace packages through, so a test reads source rather than a stale dist.
 export const SOURCE_CONDITION = "@intentic/src";
 
-// The summary of the turbo run that started at `since` (epoch ms) in `root`, deleted once read so the next run's is unambiguous.
-export const takeSummary = (root, since) => {
-    const dir = join(root, RUNS_DIR);
+// The newest turbo summary in `dir` written at or after `since` (epoch ms); undefined when there is none or no directory.
+export const newestSummary = (dir, since = 0) => {
     let newest;
     try {
         for (const name of readdirSync(dir)) {
@@ -27,15 +26,21 @@ export const takeSummary = (root, since) => {
     } catch {
         return undefined;
     }
-    if (newest === undefined) {
+    return newest?.path;
+};
+
+// The summary of the turbo run that started at `since` (epoch ms) in `root`, deleted once read so the next run's is unambiguous.
+export const takeSummary = (root, since) => {
+    const path = newestSummary(join(root, RUNS_DIR), since);
+    if (path === undefined) {
         return undefined;
     }
     try {
-        return JSON.parse(readFileSync(newest.path, "utf8"));
+        return JSON.parse(readFileSync(path, "utf8"));
     } catch {
         return undefined;
     } finally {
-        rmSync(newest.path, { force: true });
+        rmSync(path, { force: true });
     }
 };
 

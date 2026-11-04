@@ -6,6 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { timingArgs } from "../src/timings.ts";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
 import { staleDist } from "../../scripts/build/dist-staleness.mjs";
@@ -119,13 +120,14 @@ const chosen = (() => {
 
 // Set by a gate that reads failures back as units (failure-units.mjs); each run then also writes a JUnit report there.
 const junitDir = process.env.SUITES_JUNIT_DIR;
+const packageName = JSON.parse(readFileSync("package.json", "utf8")).name;
 if (junitDir !== undefined && junitDir !== "") {
     mkdirSync(junitDir, { recursive: true });
 }
 const report = (kind) =>
     junitDir === undefined || junitDir === ""
         ? []
-        : ["--reporter=junit", `--reporter-outfile=${junitFile(junitDir, JSON.parse(readFileSync("package.json", "utf8")).name, kind)}`];
+        : ["--reporter=junit", `--reporter-outfile=${junitFile(junitDir, packageName, kind)}`];
 
 // A throwaway home per run: Bun fixes os.homedir() at startup, so a suite's own `process.env.HOME = …` cannot redirect it,
 // and a test writing under ~ would otherwise write the real one (~/.ssh, ~/.git-credentials). Only ~/.cache is shared.
@@ -185,14 +187,15 @@ const readOutput = watchStalls || (!watch && !process.stdout.isTTY);
 // holding memory it never gives back, and the run is killed there rather than left to swap the machine to a halt.
 // `files` are the ones the run will see, whose count sizes its workers; a watch passes none and runs bun's default.
 // `timeoutMs` is the run's per-test timeout, which tells the stall watch how long a silent test may still be running.
-const run = async (extra, selection, files, timeoutMs) => {
+const run = async (extra, selection, files, timeoutMs, kind) => {
     const home = throwawayHome();
     const { workers, release } = files === undefined ? { workers: undefined, release: () => {} } : await sized(files.length);
     const parallel = workers === undefined ? [] : [`--parallel=${workers}`];
+    const timings = kind === "watch" ? [] : timingArgs(process.env.TEST_TIMINGS_DIR, packageName, kind);
     try {
         const child = spawn(
             "bun",
-            ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...parallel, ...extra, ...selection],
+            ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...timings, ...flags, ...parallel, ...extra, ...selection],
             {
                 stdio: readOutput ? ["inherit", "pipe", "pipe"] : "inherit",
                 env: { ...process.env, HOME: home, USERPROFILE: home, [STOOD_DOWN_FILE]: stoodDown },
@@ -277,7 +280,7 @@ if (process.env.CI !== "true") {
 
 if (watch) {
     // One run: a watch never exits, so the second run would never start; the larger budget keeps a slow suite alive.
-    const status = await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...ignoreArgs(IGNORES)], filters);
+    const status = await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...ignoreArgs(IGNORES)], filters, undefined, INTEGRATION_TIMEOUT_MS, "watch");
     reportStoodDown();
     process.exit(status);
 }
@@ -291,6 +294,7 @@ const unit =
               chosen?.unit ?? [],
               filesFor(false),
               UNIT_TIMEOUT_MS,
+              "unit",
           );
 const integration =
     chosen?.integration.length === 0
@@ -300,6 +304,7 @@ const integration =
               chosen?.integration ?? INTEGRATION_FILTERS,
               filesFor(true),
               INTEGRATION_TIMEOUT_MS,
+              "integration",
           );
 reportStoodDown();
 process.exit(unit === 0 && integration === 0 ? 0 : 1);
