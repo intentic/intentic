@@ -47,6 +47,26 @@ export const requireOwnedSandbox = async (context: OrpcContext, sandboxId: strin
     return sandbox;
 };
 
+/* Whether the caller runs this sandbox as its owner does, and in which role: its owner, or a person who accepted an invite
+ * with Full access (the maintainer tier). 404 otherwise, as `requireOwnedSandbox` does. The gate for the sandbox's
+ * presentation (its name and switcher logo), which Full access changes as the owner does. (2026-11-04) Came with letting
+ * Full access rename and re-logo a sandbox. */
+export const requireFullAccess = async (context: OrpcContext, sandboxId: string): Promise<`owner` | `maintainer`> => {
+    const user = requireUser(context);
+    const owned = await context.prisma.sandbox.findFirst({ where: { id: sandboxId, ownerId: user.id }, select: { id: true } });
+    if (owned) {
+        return `owner`;
+    }
+    const member = await context.prisma.sandboxMember.findFirst({
+        where: { sandboxId, email: user.email.toLowerCase(), acceptedAt: { not: null }, role: `maintainer` },
+        select: { sandboxId: true },
+    });
+    if (member) {
+        return `maintainer`;
+    }
+    throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
+};
+
 // Who is changing a sandbox's access roster, as sandbox-contract `peopleChangeRefusal` reads them.
 export interface RosterManager {
     readonly email: string;

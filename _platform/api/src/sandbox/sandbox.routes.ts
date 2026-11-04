@@ -10,7 +10,7 @@ import type { OrpcContext } from "../context.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { clientIp } from "../client-ip.js";
 import { decryptSecret } from "../crypto.js";
-import { requireOwnedSandbox, requireUser } from "../guards.js";
+import { requireFullAccess, requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone } from "./hosted/fly/fly.js";
@@ -192,15 +192,16 @@ export const sandboxRoutes = {
         return toSummary(sandbox, `owner`, context);
     }),
     // Renames and/or sets the switcher logo (`null` clears it); the `!== undefined` guards keep the two fields
-    // independent.
+    // independent. The owner or Full access, and the summary carries the caller's own role, since the editor files it
+    // over the caller's row.
     update: os.sandbox.update.handler(async ({ context, input }) => {
-        await requireOwnedSandbox(context, input.sandboxId);
+        const role = await requireFullAccess(context, input.sandboxId);
         const sandbox = await context.prisma.sandbox.update({
             where: { id: input.sandboxId },
             data: { ...(input.name !== undefined && { name: input.name }), ...(input.image !== undefined && { image: input.image }) },
             include: { hosted: true },
         });
-        return toSummary(sandbox, `owner`, context);
+        return toSummary(sandbox, role, context);
     }),
     // The identity goes now; the disk under it is held for the recovery window (sandbox-trash.ts), which is also
     // why no cleanup is kicked here — there is nothing yet to tear down.

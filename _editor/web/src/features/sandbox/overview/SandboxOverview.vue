@@ -56,6 +56,8 @@ const showAvailabilityBadge = computed(() => availability.value !== `live` && av
 const { info, installed, latest, updateAvailable } = useSandboxVersion();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
+// The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
+const canEditIdentity = computed(() => isOwner.value || sandbox.active.value?.role === `maintainer`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // Platform-hosted (starter) sandbox; the upgrade card below keys on this.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
@@ -78,7 +80,8 @@ const starterMachine = computed(() => {
 // reshape through, and a row saying so would be a row about somebody else's problem.
 const selfResources = useSelfResources();
 // Changing that share is a device op, maintainer and up at the daemon (`manageDeviceSandbox`), so it reads `canShip`;
-// the name, the logo and the hosted card read `isOwner`, since those go to the platform's owner-only routes.
+// the name and the logo read `canEditIdentity` (owner or Full access at the platform), and the hosted card `isOwner`,
+// since it goes to the platform's owner-only routes.
 const { canShip } = useRole();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
@@ -106,7 +109,7 @@ const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
     await selfResources.save(shape);
 };
 
-// The name renames itself in place (<InlineRename>, owner only). The logo is separate and live at all times;
+// The name renames itself in place (<InlineRename>, owner and Full access). The logo is separate and live at all times;
 // picking a file saves immediately (`pickFile`), no commit step needed.
 const fileInput = ref<HTMLInputElement | null>(null);
 const logoError = ref<string | undefined>(undefined);
@@ -232,12 +235,12 @@ const saveStyledLogo = async (image: string): Promise<void> => {
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <!-- Identity: name + logo (owner-editable), self-reported image/version/URL. -->
+        <!-- Identity: name + logo (owner and Full access edit them), self-reported image/version/URL. -->
         <Card data-setting="overview-name" class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <!-- The logo tile is the control itself for the owner, in every state; a member sees the logo alone. -->
-                    <SandboxLogo v-if="!isOwner" :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" class="shrink-0" />
+                    <!-- The logo tile is the control itself for the owner and Full access, in every state; anyone else sees the logo alone. -->
+                    <SandboxLogo v-if="!canEditIdentity" :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" class="shrink-0" />
                     <!-- allow(recipes): THE OVERVIEW HEADING'S 48px SANDBOX LOGO is the button: its box is the logo's
                          (SandboxLogo :size="48"), drawn nowhere else, not a glyph at any of the recipe's sizes, and
                          its width is the logo's too. -->
@@ -312,7 +315,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                                     :label="t(`sandbox.sandboxOverview.sandboxName`)"
                                     :action="t(`sandbox.sandboxOverview.renameSandbox`)"
                                     fallback="Sandbox"
-                                    :editable="isOwner"
+                                    :editable="canEditIdentity"
                                     :maxlength="SANDBOX_NAME_MAX"
                                     failure="Couldn't save the sandbox's name."
                                 />

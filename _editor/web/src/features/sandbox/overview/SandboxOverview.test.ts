@@ -222,6 +222,13 @@ it(`keeps a member out of the tile entirely`, () => {
     expect(logoTile(el)).toBeNull();
 });
 
+// Full access changes the name and the logo as the owner does: the platform's update admits it.
+it(`hands Full access the name and the logo, as the owner has them`, () => {
+    const el = mount(sandboxRow({ role: `maintainer` }));
+    expect(titleButton(el)).not.toBeNull();
+    expect(logoTile(el)).not.toBeNull();
+});
+
 it(`saves the picked file on its own, fitted rather than cropped`, async () => {
     const el = mount(sandboxRow());
     await pickFile(el);

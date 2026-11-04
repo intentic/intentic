@@ -119,7 +119,6 @@ describe(`sandbox routes`, () => {
     it(`404s owner-only routes for sandboxes the caller does not own`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
-        await expectOrpcCode(call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) }), `NOT_FOUND`);
         await expectOrpcCode(
             call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `https://sandbox.example.com` }, { context: context({ prisma }) }),
             `NOT_FOUND`,
@@ -180,6 +179,26 @@ describe(`sandbox routes`, () => {
         // `null` must reach the row as a write, or clearing a logo would be silently ignored like an absent field.
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: null }, { context: context({ prisma }) });
         expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: null }, include: { hosted: true } });
+    });
+
+    // The name and the logo are Full access's to change too; anyone below it, or not yet accepted, finds no sandbox.
+    it(`update admits Full access, answers with its own role, and 404s anyone else`, async () => {
+        const update = jest.fn().mockResolvedValue({ ...sandboxRow, name: `renamed` });
+        const member = jest.fn().mockResolvedValue({ sandboxId: `s1` });
+        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(null), update }, sandboxMember: { findFirst: member } });
+
+        const summary = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) });
+        expect(member).toHaveBeenCalledWith({
+            where: { sandboxId: `s1`, email: user.email.toLowerCase(), acceptedAt: { not: null }, role: `maintainer` },
+            select: { sandboxId: true },
+        });
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` }, include: { hosted: true } });
+        expect(summary).toMatchObject({ name: `renamed`, role: `maintainer` });
+
+        member.mockResolvedValue(null);
+        update.mockClear();
+        await expectOrpcCode(call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) }), `NOT_FOUND`);
+        expect(update).not.toHaveBeenCalled();
     });
 
     it(`maps a rejected Cloudflare token to BAD_REQUEST on zones`, async () => {

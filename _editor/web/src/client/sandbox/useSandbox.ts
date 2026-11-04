@@ -277,7 +277,7 @@ const activeWakeRefused = computed(() =>
     wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined,
 );
 
-// Renames and/or re-logos a sandbox (owner-only; `image: null` clears it). Named explicitly rather than taken
+// Renames and/or re-logos a sandbox (owner or Full access; `image: null` clears it). Named explicitly rather than taken
 // from the active selection, since the two can differ mid-reconcile.
 const update = async (sandboxId: string, input: { name?: string; image?: string | null }): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.update({ sandboxId, ...input });
