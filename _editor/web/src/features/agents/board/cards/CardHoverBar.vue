@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // A board card's presses, floated over its top edge while the pointer is on the card (Discord's message bar is the
-// model): a few reactions one press away, the picker for the rest, then the card's tools, its filing press and the ⋯.
+// model): the card's tools (changes, code review, test), a 👍 and the picker for
+// the rest, then its filing press and the ⋯.
 //
 // WHY IT FLOATS. The header used to reserve a seat per press beside the title, hidden or not, so on a 300px card the name
 // kept what four glyphs and their gaps left of it, and the press that leaves a reaction was a bare plus among them. Laid
@@ -14,7 +15,7 @@ const t = useT();
 const { reactions, tools = [], filing = [], menu = false } = defineProps<{
     // The quick reactions and whether the reader already wears each; absent where nobody can react (another box's card).
     reactions?: { readonly quick: readonly string[]; readonly worn: ReadonlySet<string>; readonly busy: boolean } | undefined;
-    // What the card leads somewhere with: its changes, its drill-in, a code review of its work.
+    // What the card leads somewhere with: its changes, its drill-in, a code review and a test pass of its work.
     tools?: readonly ActionItem[];
     // Rename where there is no menu to hold it, then archive, close or restore.
     filing?: readonly ActionItem[];
@@ -41,6 +42,21 @@ const PRESS = `flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center 
         @dblclick.stop
         @pointerdown.stop
     >
+        <!-- Work first (what a card is opened for: its changes, a review, a test), then the verdict marks, then filing and the
+             menu at the far edge, so the destructive presses sit apart from the ones pressed most. -->
+        <button
+            v-for="action in tools"
+            :key="action.id"
+            type="button"
+            :class="[PRESS, action.danger === true ? 'hover:text-danger' : '']"
+            :aria-label="action.label"
+            :disabled="action.disabled"
+            v-tooltip.top="action.hint ?? action.label"
+            @click="action.run($event.currentTarget as HTMLElement)"
+        >
+            <Icon :name="action.icon" class="text-sm" />
+        </button>
+        <span v-if="tools.length > 0 && reactions !== undefined" aria-hidden="true" class="mx-0.5 h-4 w-px bg-line" />
         <template v-if="reactions !== undefined">
             <button
                 v-for="emoji in reactions.quick"
@@ -66,9 +82,9 @@ const PRESS = `flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center 
                 <Icon name="face-smile" class="text-sm" />
             </button>
         </template>
-        <span v-if="reactions !== undefined && (tools.length > 0 || filing.length > 0 || menu)" aria-hidden="true" class="mx-0.5 h-4 w-px bg-line" />
+        <span v-if="(tools.length > 0 || reactions !== undefined) && (filing.length > 0 || menu)" aria-hidden="true" class="mx-0.5 h-4 w-px bg-line" />
         <button
-            v-for="action in [...tools, ...filing]"
+            v-for="action in filing"
             :key="action.id"
             type="button"
             :class="[PRESS, action.danger === true ? 'hover:text-danger' : '']"

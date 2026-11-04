@@ -7,9 +7,9 @@ import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 // one press further in, which is the right price for the difference in how often they are wanted.
 export const QUICK_EMOJI = [`👍`, `👎`] as const;
 
-// The board card's hover bar: those two, and the one a team leaves on work it has picked up to look at, so "I'm on it"
-// needs no picker either. Three, as a chat app's message bar keeps: a fourth crowds the tools beside them.
-export const BAR_EMOJI = [...QUICK_EMOJI, `👀`] as const;
+// The board card's hover bar: approval alone. Its other seats went to Code review and Test (cardPresses.ts), which act
+// on the work where 👎 and 👀 only marked it; every other mark is the picker beside it (2026-11-04).
+export const BAR_EMOJI = [`👍`] as const;
 
 // The picker's grid, in eights: this IS the vocabulary, since nothing here takes a typed emoji, so it has to hold both
 // the verdicts a board gets marked with and enough of the ordinary ones that a person is not made to settle.

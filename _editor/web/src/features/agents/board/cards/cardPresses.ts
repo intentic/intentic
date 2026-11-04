@@ -48,7 +48,7 @@ export const restoreTip = (family: number): TooltipValue =>
     family > 0 ? { title: t(`ui.action.restore`), rows: familyRows(family) } : t(`ui.action.restore`);
 
 // What the card leads somewhere with, in the order the hover bar draws them: its changes (or the drill-in, where that goes
-// elsewhere), then a code review of its work. An icon each, so they cost no width at rest; the words are their hovers
+// elsewhere), then a code review and a test pass of its work. An icon each, so they cost no width at rest; the words are their hovers
 // (and the phone's sheet). The diff is named "View changes" wherever it is offered and never "review": "Code review" is
 // the fresh session beside it, and the two read as one press when both said review (2026-11-04).
 export const toolPresses = (
@@ -75,20 +75,17 @@ export const toolPresses = (
     }
     if (canStartFresh(agent) && card.mayRun) {
         const note = t(`agents.freshSession.howItWorksNote`);
-        actions.push({
-            id: `codeReview`,
-            label: t(`agents.freshSession.kind.review`),
-            icon: FRESH_ICONS.review,
-            hint: { title: t(`agents.freshSession.kind.review`), note },
-            note,
-            run: () => void draftFreshSession(agent, `review`),
-        });
+        // Review before test: reading the work is the cheaper check, and the order the session's own menu offers them.
+        for (const [id, kind] of [[`codeReview`, `review`], [`test`, `test`]] as const) {
+            const label = t(`agents.freshSession.kind.${kind}`);
+            actions.push({ id, label, icon: FRESH_ICONS[kind], hint: { title: label, note }, note, run: () => void draftFreshSession(agent, kind) });
+        }
     }
     return actions;
 };
 
 // The bar's filing run: everything the card offers that is neither a tool nor the reaction press (the bar draws those
 // apart), less rename where the board's menu already holds it.
-const TOOL_IDS: ReadonlySet<string> = new Set([`review`, `changes`, `codeReview`, `react`]);
+const TOOL_IDS: ReadonlySet<string> = new Set([`review`, `changes`, `codeReview`, `test`, `react`]);
 export const barFiling = (actions: readonly ActionItem[], menus: boolean): ActionItem[] =>
     actions.filter((action) => !TOOL_IDS.has(action.id) && (!menus || action.id !== `rename`));

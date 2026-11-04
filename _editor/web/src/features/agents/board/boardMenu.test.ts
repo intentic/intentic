@@ -94,8 +94,8 @@ it(`opens on the card right-clicked, with that card's rows, and points the chat 
     expect(useChat().activeId.value).toBe(`a2`);
 });
 
-// The header reserves no seat for a press: the card's presses float in its hover bar (CardHoverBar), its quick
-// reactions, its tools, the filing press and one ⋯, never the title's focus press. The ⋯ opens this same menu, and what
+// The header reserves no seat for a press: the card's presses float in its hover bar (CardHoverBar), its tools, its
+// quick reactions, the filing press and one ⋯, never the title's focus press. The ⋯ opens this same menu, and what
 // only the card can do, renaming its title in place, is done from there.
 it(`opens from the card's ⋯ as well, and renames the card in place from it`, async () => {
     setAgents([landed(`a1`)], 100);
@@ -103,9 +103,9 @@ it(`opens from the card's ⋯ as well, and renames the card in place from it`, a
     const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!.closest<HTMLElement>(`.session-card`)!;
     const bar = card.querySelector<HTMLElement>(`[data-card-bar]`)!;
     expect([...bar.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
+        reviewAction(landed(`a1`))!,
         ...BAR_EMOJI.map((emoji) => t(`agents.agentReactions.markWith`, { emoji })),
         t(`agents.agentReactions.addReaction`),
-        reviewAction(landed(`a1`))!,
         t(`agents.agentCard.archiveAgent`),
         t(`ui.action.moreActions`),
     ]);

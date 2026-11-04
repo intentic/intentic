@@ -374,7 +374,7 @@ it(`reveals that press in the floating bar, by fading rather than by appearing`,
 // The bar's quick reactions sit beside the picker, so the common ones need no panel.
 it(`offers the quick reactions beside the picker`, () => {
     const card = mount(ready(`landed`));
-    expect([`👍`, `👎`, `👀`].map((emoji) => buttonLabelled(card, `React with ${emoji}`) !== undefined)).toEqual([true, true, true]);
+    expect([`👍`, `👎`, `👀`].map((emoji) => buttonLabelled(card, `React with ${emoji}`) !== undefined)).toEqual([true, false, false]);
 });
 
 // The diff is "View changes" and the fresh session is "Code review": never two presses both called review.
