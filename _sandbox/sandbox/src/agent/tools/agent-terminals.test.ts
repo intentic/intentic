@@ -10,6 +10,7 @@ import { memoryFleet } from "../../conversations/registry/agents-registry.testin
 import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { queueRunEnabled } from "../../workload/heavy-commands.js";
+import { turnProof } from "../../seams/workload-stamp.js";
 import { bashTmuxHooks, NO_PROMPTS, PIPESTATUS_TRAP, softTimeoutOf } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./jobs/background-jobs.js";
 
@@ -112,10 +113,11 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
 });
 
 test("stamps the pane command with the conversation owner, and refuses one outside the safe charset", async () => {
-    // INTENTIC_TURN_OWNER stamps the pane so its whole process tree is attributable to the conversation.
+    // INTENTIC_TURN_OWNER stamps the pane so its whole process tree is attributable to the conversation, and
+    // INTENTIC_TURN_PROOF is the daemon's signature on that stamp, so a process cannot claim another conversation.
     const owned = await handover({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv-1"));
     expect(owned.line).toBe(
-        `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted(join(owned.dir, "agent"))}\n`,
+        `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 INTENTIC_TURN_PROOF=${turnProof("conv-1")} ${demoted(join(owned.dir, "agent"))}\n`,
     );
     // Unquoted in the shell line, so an id with unsafe characters is dropped rather than substituted.
     const unsafe = await handover({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv;rm -rf /"));

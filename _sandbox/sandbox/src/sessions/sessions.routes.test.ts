@@ -5,11 +5,11 @@ import { routesClient } from "../harness/route-client.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { type SessionsRoutesDeps, createSessionsRoutes } from "./sessions.routes.js";
 
-// Drives the sessions routes over the two seams they read: the transcript store and the workspace root it is asked
-// about.
+// Drives the sessions routes over the seams they read: the transcript store, the workspace root it is asked about, and
+// the registry a session is read through (empty here, so every session is one no conversation owns).
 
 const sessionsClient = (sessions: Partial<SessionsRoutesDeps["sessions"]>) =>
-    routesClient(sessionsContract, createSessionsRoutes({ agents: unstubbed("agents", {}), sessions: unstubbed("sessions", sessions), workspace: workspacePaths(WORKSPACE_ROOT) }));
+    routesClient(sessionsContract, createSessionsRoutes({ agents: unstubbed("agents", { ids: () => [], entry: () => undefined }), sessions: unstubbed("sessions", sessions), workspace: workspacePaths(WORKSPACE_ROOT) }));
 
 test("sessions.list returns the full list, and routes to search when a query is given", async () => {
     const all = [{ id: "a", title: "Deploy pipeline", updatedAt: 2 }];

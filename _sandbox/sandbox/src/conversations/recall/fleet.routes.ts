@@ -217,7 +217,7 @@ const createFleetRoutes = (services: Services) => ({
         const wait = body.wait === true ? { timeoutMs: Math.round((body.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000), signal: c.req.raw.signal } : undefined;
         // Words in front of a conversation this turn may not read would read its reply back (`--wait`): as no conversation.
         if (readableHandle(await resolveFleetHandle(services, body.to), await turnReader(services, c)).kind === "unknown") {
-            return c.json(refusalBody(`No conversation answers to \`${body.to}\`.`, undefined), 404);
+            return c.json(refusalBody(`No conversation answers to \`${body.to}\`. Search for one with \`agents find "<text>"\`.`, undefined), 404);
         }
         const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message, undefined, wait);
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
