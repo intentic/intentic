@@ -8,6 +8,7 @@ import { createApp, h, nextTick } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import { endpointProviders, endpointsLoaded, trialStatus } from "../../../models/providers/providerCatalog";
 import { useChat } from "../../../models/conversations/run/useChat";
+import { rosterHeard } from "../../../models/fleet/useAgents-registry";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
 import { buildIdeas, buildPrompt } from "./buildIdeas";
@@ -37,8 +38,10 @@ afterEach(() => {
 });
 
 // Every test states the connection picture outright: the daemon has answered, and answered with nothing connected and
-// no free trial (off unless an operator sets keys).
+// no free trial (off unless an operator sets keys). The roster has been heard too, and is empty: until it is, the board
+// draws its lanes' skeletons rather than the empty board.
 beforeEach(() => {
+    rosterHeard.value = true;
     accountsLoaded.value = true;
     endpointsLoaded.value = true;
     providerAccounts.value = { ...providerAccounts.value, claude: [], grok: [] };

@@ -89,7 +89,7 @@ const grab = (event: PointerEvent): void => {
                 v-if="diff !== undefined"
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-sm hover:underline"
-                :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: diff.insertions, removed: diff.deletions })"
+                :aria-label="t(`agents.agentCard.viewChangesCount`, { added: diff.insertions, removed: diff.deletions })"
                 @click.stop="emit(`changes`)"
             >
                 <span class="font-mono tabular-nums"><span class="text-success">+{{ diff.insertions }}</span> <span class="text-danger">−{{ diff.deletions }}</span></span>

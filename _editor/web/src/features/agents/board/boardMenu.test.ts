@@ -14,6 +14,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
+import { BAR_EMOJI } from "./cards/reactions";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals boardSelection.test.ts installs: jsdom has no scrollIntoView.
@@ -93,20 +94,23 @@ it(`opens on the card right-clicked, with that card's rows, and points the chat 
     expect(useChat().activeId.value).toBe(`a2`);
 });
 
-// The header keeps the title's focus press, the filing press and one ⋯ (AgentCard's headerActions), not a seat per press:
-// the ⋯ opens this same menu, and what only the card can do, renaming its title in place, is done from there.
+// The header reserves no seat for a press: the card's presses float in its hover bar (CardHoverBar), its quick
+// reactions, its tools, the filing press and one ⋯, never the title's focus press. The ⋯ opens this same menu, and what
+// only the card can do, renaming its title in place, is done from there.
 it(`opens from the card's ⋯ as well, and renames the card in place from it`, async () => {
     setAgents([landed(`a1`)], 100);
     const board = await mountBoard();
     const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!.closest<HTMLElement>(`.session-card`)!;
-    const header = card.firstElementChild!;
-    expect([...header.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
-        t(`agents.agentCard.focusAgent`, { displayTitle: `agent a1` }),
+    const bar = card.querySelector<HTMLElement>(`[data-card-bar]`)!;
+    expect([...bar.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
+        ...BAR_EMOJI.map((emoji) => t(`agents.agentReactions.markWith`, { emoji })),
+        t(`agents.agentReactions.addReaction`),
+        reviewAction(landed(`a1`))!,
         t(`agents.agentCard.archiveAgent`),
         t(`ui.action.moreActions`),
     ]);
 
-    header.querySelector<HTMLElement>(`button[aria-label="${t(`ui.action.moreActions`)}"]`)!.click();
+    bar.querySelector<HTMLElement>(`button[aria-label="${t(`ui.action.moreActions`)}"]`)!.click();
     await settle();
     expect(menuRows()).toContain(t(`ui.action.rename`));
     await pressRow(t(`ui.action.rename`));

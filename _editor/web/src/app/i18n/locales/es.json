@@ -9693,6 +9693,10 @@
                     "label": "Política de seguridad",
                     "where": "el documento de políticas y sus decisiones"
                 },
+                "seal": {
+                    "label": "Conversaciones privadas",
+                    "where": "hacer privada una conversación y quién puede abrirla"
+                },
                 "secrets": {
                     "label": "Secretos",
                     "where": "credenciales guardadas y cuáles faltan"

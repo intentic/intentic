@@ -11,6 +11,7 @@ import {
     noteStop,
     openPreviewLog,
     overCap,
+    ownerOf,
     parseRecord,
     preferredPort,
     PREVIEW_PORTS,
@@ -230,6 +231,12 @@ describe("stopping a preview", () => {
         const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore", env: { ...process.env, INTENTIC_TURN_OWNER: "brave-maple-ilnz" } });
         const exited = new Promise((resolve) => child.once("exit", (_code, signal) => resolve(signal)));
         const pid = child.pid ?? 0;
+        // A record is live only while its pid carries the owner stamp, and until the child execs, its /proc environ is
+        // still the copy forked from this process, without the stamp. So wait for the exec before asking.
+        const deadline = Date.now() + 5_000;
+        while (ownerOf(pid) !== "brave-maple-ilnz" && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
         // The stat is readable as soon as spawn returns a pid; its start tick is what the record holds.
         const live = record({ pid, startTicks: startTicksOf(pid) ?? "", pidNamespace: pidNamespaceOf() });
         writeRecord(dir, live);

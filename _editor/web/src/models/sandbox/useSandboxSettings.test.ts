@@ -110,16 +110,16 @@ test("a refused save says why, in the daemon's words, until the next save is tri
     await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
     expect(refusal.value).toBeUndefined();
 
-    patch({ workspaceMap: true });
+    patch({ workspaceMap: !DEFAULTS.workspaceMap });
 
     await waitFor(() => expect(refusal.value?.detail).toBe(unreadable));
     expect(refusal.value?.title).toBe(`Couldn't save your change`);
     expect(refusal.value?.tone).toBe(`danger`);
-    expect(settings.value?.workspaceMap).toBe(false);
+    expect(settings.value?.workspaceMap).toBe(DEFAULTS.workspaceMap);
 
     // A second press is a new attempt: the old reason goes while it runs.
     set.mockImplementation(() => NEVER);
-    patch({ workspaceMap: true });
+    patch({ workspaceMap: !DEFAULTS.workspaceMap });
     await waitFor(() => expect(refusal.value).toBeUndefined());
 });
 

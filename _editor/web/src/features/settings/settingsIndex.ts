@@ -48,6 +48,13 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         title: () => t(`settings.settingsProfile.signIn`),
         terms: () => [t(`settings.settingsProfile.emailCode`), t(`settings.settingsProfile.google`), t(`settings.search.signIn`)],
     },
+    // Drawn only where the sandbox's house rule leaves privacy to each author (SettingsConversations.vue).
+    {
+        id: `start-private`,
+        slug: `profile`,
+        title: () => t(`settings.conversations.title`),
+        terms: () => [t(`settings.conversations.startPrivate`), t(`sandbox.sealHouse.mode.private`)],
+    },
 
     // Appearance: the page's first card, then its look one row at a time, since each row is a setting of its own that
     // people name outright ("theme", "language"), then the developer's cards a maker's page leaves out.

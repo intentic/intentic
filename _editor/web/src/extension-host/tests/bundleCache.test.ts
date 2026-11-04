@@ -276,8 +276,9 @@ describe(`a cached copy that does not load`, () => {
     });
 });
 
-// Sign-out deletes the cache by name, since the client layer may not import the extension host: the two must agree.
+// Signing every account out deletes the cache by name, since the client layer may not import the extension host: the two
+// must agree.
 test(`sign-out deletes the cache this module writes`, () => {
-    const useAuth = readFileSync(join(packageRoot(import.meta.url), `src/client/auth/useAuth.ts`), `utf8`);
-    expect(useAuth).toContain(`caches.delete(\`${EXTENSION_BUNDLE_CACHE}\`)`);
+    const teardown = readFileSync(join(packageRoot(import.meta.url), `src/client/auth/accountTeardown.ts`), `utf8`);
+    expect(teardown).toContain(`caches.delete(\`${EXTENSION_BUNDLE_CACHE}\`)`);
 });

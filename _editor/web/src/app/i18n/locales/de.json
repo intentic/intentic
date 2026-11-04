@@ -9693,6 +9693,10 @@
                     "label": "Sicherheitsrichtlinie",
                     "where": "das Richtliniendokument und was es entschieden hat"
                 },
+                "seal": {
+                    "label": "Private Unterhaltungen",
+                    "where": "eine Unterhaltung privat machen und wer sie öffnen darf"
+                },
                 "secrets": {
                     "label": "Secrets",
                     "where": "gespeicherte Zugangsdaten und welche fehlen"

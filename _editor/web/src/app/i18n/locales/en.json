@@ -9693,6 +9693,10 @@
                     "label": "Safety policy",
                     "where": "the policy document and what it decided"
                 },
+                "seal": {
+                    "label": "Private conversations",
+                    "where": "making a conversation private, and who may open it"
+                },
                 "secrets": {
                     "label": "Secrets",
                     "where": "stored credentials and which are missing"

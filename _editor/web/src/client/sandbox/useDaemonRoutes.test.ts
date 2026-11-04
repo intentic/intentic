@@ -1,6 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, type RoutePrints, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
 import {
     additiveRoutes,
     appBehind,
@@ -408,13 +408,13 @@ describe(`the second print`, () => {
 
     const PRINTS = { ...sandboxRoutePrints() };
     // The same prints with named routes changed: `wire` only (an optional field added), or the core too.
-    const reprinted = (wireOnly: readonly string[], core: readonly string[] = []): Record<string, readonly [string, string]> => ({
+    const reprinted = (wireOnly: readonly string[], core: readonly string[] = []): Record<string, RoutePrints> => ({
         ...PRINTS,
-        ...Object.fromEntries(wireOnly.map((name) => [name, [`other`, PRINTS[name]?.[1] ?? ``] as const])),
-        ...Object.fromEntries(core.map((name) => [name, [`other`, `other`] as const])),
+        ...Object.fromEntries(wireOnly.map((name): [string, RoutePrints] => [name, [`other`, PRINTS[name]?.[1] ?? ``]])),
+        ...Object.fromEntries(core.map((name): [string, RoutePrints] => [name, [`other`, `other`]])),
     });
     // A hello from a daemon whose FIRST print disagrees everywhere it names, as any page ahead of it would read one.
-    const hello = (prints: Record<string, readonly [string, string]>, firstDisagrees: readonly string[]): void =>
+    const hello = (prints: Record<string, RoutePrints>, firstDisagrees: readonly string[]): void =>
         setDaemonRoutes(LEVEL, reshaped(...firstDisagrees), undefined, { rawRoutes: [...RAW_ROUTE_NAMES], rawFingerprints: rawRouteFingerprints(), prints });
 
     it(`reads a different wire over the same core as an optional part, never as drift`, () => {

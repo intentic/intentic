@@ -56,6 +56,7 @@ const AREAS = {
     push: () => ({ label: t(`sandbox.driftReport.areas.push.label`), where: t(`sandbox.driftReport.areas.push.where`) }),
     runs: () => ({ label: t(`sandbox.driftReport.areas.runs.label`), where: t(`sandbox.driftReport.areas.runs.where`) }),
     safety: () => ({ label: t(`sandbox.driftReport.areas.safety.label`), where: t(`sandbox.driftReport.areas.safety.where`) }),
+    seal: () => ({ label: t(`sandbox.driftReport.areas.seal.label`), where: t(`sandbox.driftReport.areas.seal.where`) }),
     secrets: () => ({ label: t(`sandbox.driftReport.areas.secrets.label`), where: t(`sandbox.driftReport.areas.secrets.where`) }),
     sessions: () => ({ label: t(`sandbox.driftReport.areas.sessions.label`), where: t(`sandbox.driftReport.areas.sessions.where`) }),
     services: () => ({ label: t(`sandbox.driftReport.areas.services.label`), where: t(`sandbox.driftReport.areas.services.where`) }),

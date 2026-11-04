@@ -397,6 +397,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.sandboxAccess.people`),
         terms: () => [t(`sandbox.sandboxAccess.addPerson`), t(`sandbox.search.accessPeople`)],
     },
+    // Who reads whose conversations: every member reads the house rule, Full access and the owner change it.
+    {
+        id: `access-conversations`,
+        slug: `access`,
+        partLabel: () => t(`sandbox.sandboxAccess.partPeople`),
+        title: () => t(`sandbox.sealHouse.title`),
+        terms: () => [t(`sandbox.sealHouse.rule`), t(`sandbox.sealHouse.mode.private`), t(`sandbox.sealHouse.mode.chooses`)],
+    },
     {
         id: `access-areas`,
         slug: `access`,

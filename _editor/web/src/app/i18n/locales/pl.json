@@ -9095,6 +9095,10 @@
                     "label": "Polityka bezpieczeństwa",
                     "where": "dokument polityki i to, o czym zdecydowała"
                 },
+                "seal": {
+                    "label": "Prywatne rozmowy",
+                    "where": "ustawianie rozmowy jako prywatnej i kto może ją otworzyć"
+                },
                 "secrets": {
                     "label": "Sekrety",
                     "where": "zapisane dane logowania i to, których brakuje"
