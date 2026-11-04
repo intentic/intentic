@@ -6,6 +6,8 @@ import { useHostedBuild } from "../../secrets/useHostedBuild";
 import { hostedBuildPhase } from "./hostedBuildPhase";
 import { useHostedRebuildStart } from "./hostedRebuildStart";
 import { useT } from "@intentic/ui/i18n";
+import { environmentBuildFix } from "./buildFix";
+import FixWithAgent from "../../../../parts/fleet/FixWithAgent.vue";
 
 // Rebuilds a hosted sandbox's environment, the counterpart of HostRecreate for the lane with no host device: the
 // platform builds the approved overlay itself and switches the sandbox to the result. Only shows the build for this
@@ -32,6 +34,8 @@ const now = useNow(true, 60_000);
 const phase = computed(() => hostedBuildPhase(build.value, applied.value, props.hash, now.value));
 
 const start = (): Promise<void> => run(props.hash, props.content);
+const buildFix = (error: string | undefined, log: string | undefined) =>
+    environmentBuildFix({ title: t(`sandbox.hostedRebuild.buildFailed`, { error: `` }), reason: error, log: log ?? ``, where: `by intentic's build service` });
 </script>
 
 <template>
@@ -49,6 +53,8 @@ const start = (): Promise<void> => run(props.hash, props.content);
             <template v-if="phase.kind === `failed`">
                 <p class="text-xs text-danger">{{ t(`sandbox.hostedRebuild.buildFailed`, { error: phase.error }) }}</p>
                 <Code v-if="phase.log" :code="phase.log" :label="t(`sandbox.hostedRebuild.buildLogTail`)" />
+                <!-- A step that broke the build breaks it again on a retry; reading the log and mending the step is the fix. -->
+                <div><FixWithAgent :fix="buildFix(phase.error, phase.log)" /></div>
             </template>
             <!-- Built, and the sandbox never came back on it: said, so the button below reads as the way out. -->
             <p v-else-if="phase.kind === `stalled`" class="text-xs text-content">

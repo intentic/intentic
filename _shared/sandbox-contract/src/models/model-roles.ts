@@ -112,6 +112,16 @@ export const MODEL_ROLES = [
         setup: "high",
     },
     {
+        // Started by a person's press on a failure the app cannot settle by itself (agentFix.ts in the editor): a sync that
+        // conflicts, a push the remote refuses, a commit a hook refuses, a dev server that crashed, a build that failed.
+        id: "workflow-fix",
+        label: "Workflow fixes",
+        blurb: "The agent started by Fix with agent on a failed sync, push, commit, run or build.",
+        kind: "run",
+        icon: "wrench",
+        setup: "high",
+    },
+    {
         id: "maintenance-chore",
         label: "Maintenance chores",
         blurb: "A chore run started from the Maintenance board.",

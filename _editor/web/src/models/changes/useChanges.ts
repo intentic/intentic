@@ -29,6 +29,8 @@ import { truncatedTotal } from "../workspace/changes/truncation";
 import { dropEditBuffers } from "../workspace/files/useEditBuffers";
 import { usePushRun } from "../workspace/push/usePushRun";
 import { runIndexJob } from "./indexRuns";
+import { commitFix, pushFix, syncFix } from "./gitFixes";
+import type { AgentFix } from "../fixes/agentFix";
 import { agentReviewPrefixes, GIT_LOG, rpcKey, rpcPrefix, workingReviewKeys } from "../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
 import { accessWords } from "../../client/sandbox/access/accessWords";
@@ -71,7 +73,10 @@ export interface ActionFailure {
     // git's own account of why, verbatim.
     readonly detail: string;
     // The settled push run, when the verb was a push; absent for every other verb, which fails inside its own request.
-    readonly run?: PushRun;
+    readonly run?: PushRun | undefined;
+    // What a Fix with agent press asks (gitFixes.ts), for a failure only judgment settles: a sync that conflicts, a push
+    // or commit refused. Absent for the verbs a retry or a reread answers (stage, discard, fetch).
+    readonly fix?: AgentFix | undefined;
 }
 
 // Thrown when a push settles as refused, so the batch below files its run alongside the failure message.
@@ -88,6 +93,8 @@ interface ScopedTask {
     readonly scope: string;
     readonly action: string;
     readonly run: () => Promise<void>;
+    // The fix a failure of this task asks for, from git's own reason and the push run when there was one.
+    readonly fix?: (reason: string, run: PushRun | undefined) => AgentFix | undefined;
 }
 
 // A busy span and per-repo failures over one sandbox's repositories; a switch starts the panel clean.
@@ -170,11 +177,9 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
                     await task.run();
                 } catch (caught) {
                     if (current()) {
-                        state.failures = new Map(state.failures).set(task.scope, {
-                            action: task.action,
-                            detail: messageOr(caught, t(`workspace.useChanges.gitGaveNoReason`)),
-                            ...(caught instanceof PushRefused ? { run: caught.run } : {}),
-                        });
+                        const detail = messageOr(caught, t(`workspace.useChanges.gitGaveNoReason`));
+                        const run = caught instanceof PushRefused ? caught.run : undefined;
+                        state.failures = new Map(state.failures).set(task.scope, { action: task.action, detail, run, fix: task.fix?.(detail, run) });
                     }
                 }
             }),
@@ -284,6 +289,8 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
                         recorded ||= result.committed;
                         await applyCommitResult(group.repo, result, view);
                     },
+                    fix: (reason: string): AgentFix =>
+                        commitFix({ repo: group.repo, title: t(`workspace.reviewPanel.in`, { action: t(`workspace.useChanges.commitFailed`), repo: group.repo }), reason, message }),
                 })),
                 () => (actionState(view).failures.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
                 view,
@@ -426,18 +433,19 @@ export interface SyncTarget {
     readonly push: boolean; // True when ahead, or unpublished; sent (and published, if new) after any pull.
 }
 
+// Names the verb the repo actually needed ("Push failed", not "Sync"), so a push-only failure isn't misnamed.
+const syncAction = (target: SyncTarget): string =>
+    target.pull && target.push
+        ? t(`workspace.useChanges.syncFailed`)
+        : target.push
+          ? t(`workspace.useChanges.pushFailed`)
+          : t(`workspace.useChanges.pullFailed`);
+
 const syncAll = (targets: readonly SyncTarget[], view: ViewScope = SHARED_SCOPE): Promise<void> =>
     runBatch(
         targets.map((target) => ({
             scope: target.repo,
-            // Names the verb the repo actually needed ("Push failed", not "Sync"), so a push-only failure isn't
-            // misnamed.
-            action:
-                target.pull && target.push
-                    ? t(`workspace.useChanges.syncFailed`)
-                    : target.push
-                      ? t(`workspace.useChanges.pushFailed`)
-                      : t(`workspace.useChanges.pullFailed`),
+            action: syncAction(target),
             run: async (): Promise<void> => {
                 if (target.pull) {
                     const pulled = await sandboxRpc.git.pull({ repo: target.repo }, { context: { gitView: view } });
@@ -454,6 +462,11 @@ const syncAll = (targets: readonly SyncTarget[], view: ViewScope = SHARED_SCOPE)
                         throw new PushRefused(pushed);
                     }
                 }
+            },
+            // A refused push is about its run; a refused pull, about the conflict git reported before any push went.
+            fix: (reason: string, run: PushRun | undefined): AgentFix => {
+                const title = t(`workspace.reviewPanel.in`, { action: syncAction(target), repo: target.repo });
+                return run === undefined ? syncFix({ repo: target.repo, title, reason, push: target.push }) : pushFix(title, run);
             },
         })),
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),

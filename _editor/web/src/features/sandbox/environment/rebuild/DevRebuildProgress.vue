@@ -9,6 +9,8 @@ import { type DevRebuildStage, reweigh } from "./devRebuildStages";
 import type { TimedStep } from "./rebuildHistory";
 import { type DevRebuildRun, outOfContact, rebuildRunning } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
+import { environmentBuildFix } from "./buildFix";
+import FixWithAgent from "../../../../parts/fleet/FixWithAgent.vue";
 
 // A REBUILD DRAWN AS THE THREE THINGS IT DOES (<StagedProgress>, which a device's update shares), with what only a
 // rebuild has to say beside it. Laid out by the questions a reader brings to it, in the order they bring them: is it
@@ -248,6 +250,12 @@ const adrift = computed<NoticeModel | undefined>(() =>
         : undefined,
 );
 const notice = computed(() => failure.value ?? adrift.value);
+// A build that ran and failed has its cause in the lines it printed; one the machine never ran, or lost, is not a step to mend.
+const buildFix = computed(() =>
+    props.run.phase === `failed` && props.run.exitCode !== undefined && failure.value !== undefined
+        ? environmentBuildFix({ title: failure.value.title, reason: props.run.trouble, log: props.run.lines.join(`\n`), where: `on my computer (log: ${props.logPath})` })
+        : undefined,
+);
 
 // WHERE THE ENDING IS, once this page cannot read it: the build's own log, which `ic` finishes with its verdict on the
 // swap; the new container's log, which says why it would not come up; and `ic`'s diagnosis of both. All on the machine
@@ -347,7 +355,9 @@ const confirmCancel = (): void => {
         <p v-if="policyTrouble" class="text-2xs text-warning">{{ policyTrouble }}</p>
 
         <div v-if="notice" class="flex flex-col gap-1.5">
-            <Notice :of="notice" class="text-2xs" />
+            <Notice :of="notice" class="text-2xs">
+                <template v-if="buildFix" #actions><FixWithAgent :fix="buildFix" /></template>
+            </Notice>
             <!-- Under the notice, not inside it: the notice is the reason, these are the way to the answer. -->
             <Code
                 v-if="unheard"

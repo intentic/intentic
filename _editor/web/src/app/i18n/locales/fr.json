@@ -1092,6 +1092,12 @@
         "sealedCard": {
             "open": "Ouvrir la conversation privée de {name}",
             "reviewDiff": "Examiner les modifications"
+        },
+        "fixWithAgent": {
+            "label": "Corriger avec un agent",
+            "title": "Lancer un agent là-dessus",
+            "sharedNote": "Il travaille dans votre propre copie, là où se trouve le problème, et propose un plan avant de modifier quoi que ce soit.",
+            "ownNote": "Il travaille dans sa propre copie ; sa correction arrive sous forme de changements que vous relisez."
         }
     },
     "app": {
@@ -10174,6 +10180,10 @@
             "spokenReply": {
                 "label": "Réponses vocales",
                 "blurb": "Les quelques phrases que vous entendez quand vous parlez à l'agent en mains libres : ce qu'il a fait et ce qu'il attend de vous, pendant que la réponse complète reste à l'écran."
+            },
+            "workflowFix": {
+                "label": "Corrections du flux de travail",
+                "blurb": "L'agent lancé par « Corriger avec un agent » après une synchronisation, un push, un commit, une exécution ou une compilation en échec."
             }
         },
         "personaBounds": {
@@ -13176,7 +13186,8 @@
             "terminal": "Terminal",
             "terminalTip": "Le suit dans un terminal : ce qu'il affiche sur {device}. Ctrl+C dans ce terminal l'arrête, Ctrl+D le laisse tourner",
             "where": "Où",
-            "yourComputers": "Vos ordinateurs"
+            "yourComputers": "Vos ordinateurs",
+            "fileUnreadable": "Le fichier des cibles d'exécution n'a pas pu être lu"
         },
         "directoryPersonas": {
             "addAPersona": "Ajouter un persona",
@@ -13468,7 +13479,8 @@
             "stageFrom": "Indexer {count} fichier de {origin} | Indexer {count} fichiers de {origin}",
             "messageBeingWritten": "son message de commit est en cours de rédaction",
             "namesTheCommit": "nomme le commit",
-            "messageCommitKeys": "Message ({keys} pour committer)"
+            "messageCommitKeys": "Message ({keys} pour committer)",
+            "resolveWithAgent": "Résoudre avec un agent"
         },
         "rowActions": {
             "changedSinceOn": "Modifiés depuis l'activation",

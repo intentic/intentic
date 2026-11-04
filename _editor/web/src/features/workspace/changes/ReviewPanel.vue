@@ -59,7 +59,10 @@ import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
 import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
 import { repoOfPath, turnWrites } from "../../../models/workspace/files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../../models/workspace/push/outgoingWork";
-import { COMMIT_SCOPE, type PressFace, useChanges } from "../../../models/changes/useChanges";
+import { type ActionFailure, COMMIT_SCOPE, type PressFace, useChanges } from "../../../models/changes/useChanges";
+import { operationFix, unreadableFix } from "../../../models/changes/gitFixes";
+import FixWithAgent from "../../../parts/fleet/FixWithAgent.vue";
+import GitFailureNotice from "./GitFailureNotice.vue";
 import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -1021,10 +1024,16 @@ const moduleRow = (repo: RepoChanges, side: GitDiffSide): boolean =>
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit spanning repos.
 const failureIn = (scope: string) => changes.failures.value.get(scope);
 
+// What an agent is asked about a repo git left mid-operation, or could not read at all (gitFixes.ts).
+const operationFixOf = (group: RepoChanges, operation: string) =>
+    operationFix({ repo: group.repo, title: t(`workspace.reviewPanel.inProgress`, { operation }), operation, conflicted: group.conflicted.map((change) => change.path) });
+const unreadableFixOf = (group: RepoChanges) =>
+    unreadableFix({ repo: group.repo, title: `${t(`workspace.reviewPanel.couldntReadRepo`)}: ${group.repo}`, reason: group.error ?? `` });
+
 // Failures with no row to land on: a fetch or push that fails in a CLEAN repo, which no longer has a row of
 // its own now that ahead/behind moved to the outgoing block. Surface under the block that fired them, naming their
 // repo.
-const strayFailures = computed<readonly { repo: string; action: string; detail: string }[]>(() =>
+const strayFailures = computed<readonly ({ readonly repo: string } & ActionFailure)[]>(() =>
     [...changes.failures.value]
         .filter(([scope]) => scope !== COMMIT_SCOPE && !dirty.value.some((repo) => repo.repo === scope))
         .map(([repo, failure]) => ({ repo, ...failure })),
@@ -1219,34 +1228,25 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     </span>
                 </Notice>
                 <!-- A commit spans every staged repo, so its failure belongs to the box that fired it, message still in the input. -->
-                <Notice
+                <GitFailureNotice
                     v-if="failureIn(COMMIT_SCOPE)"
-                    tone="danger"
-                    size="sm"
+                    :failure="failureIn(COMMIT_SCOPE)!"
                     :dismiss-label="t(`workspace.reviewPanel.dismissCommitError`)"
                     @dismiss="changes.dismissFailure(COMMIT_SCOPE)"
-                >
-                    <span class="block font-medium">{{ failureIn(COMMIT_SCOPE)!.action }}</span>
-                    <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failureIn(COMMIT_SCOPE)!.detail">
-                        {{ failureIn(COMMIT_SCOPE)!.detail }}
-                    </span>
-                </Notice>
+                />
             </template>
         </div>
 
         <!-- A fetch or push that failed in a repo the list isn't showing; named by repo since it has no row to sit under. -->
-        <Notice
+        <GitFailureNotice
             v-for="failure in strayFailures"
             :key="failure.repo"
-            tone="danger"
-            size="sm"
+            :failure="failure"
+            :title="t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo })"
             class="mx-2 mt-2 shrink-0"
             :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
             @dismiss="changes.dismissFailure(failure.repo)"
-        >
-            <span class="block font-medium">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</span>
-            <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</span>
-        </Notice>
+        />
 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
@@ -1356,6 +1356,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <Notice tone="danger" size="sm" class="mx-1 mb-1.5">
                     <span class="block font-medium">{{ t(`workspace.reviewPanel.couldntReadRepo`) }}</span>
                     <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</span>
+                    <template #actions><FixWithAgent :fix="unreadableFixOf(group)" /></template>
                 </Notice>
             </div>
 
@@ -1426,27 +1427,23 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 </div>
 
                 <!-- A failed fetch/pull/push/discard/stage for this repo, under the row that caused it, in git's own words. -->
-                <Notice
+                <GitFailureNotice
                     v-if="failureIn(group.repo)"
-                    tone="danger"
-                    size="sm"
+                    :failure="failureIn(group.repo)!"
                     class="mx-1 mb-1.5 mt-0.5"
                     :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
                     @dismiss="changes.dismissFailure(group.repo)"
-                >
-                    <span class="block font-medium">{{ failureIn(group.repo)!.action }}</span>
-                    <span class="line-clamp-4 break-words text-muted" v-tooltip.top.overflow="failureIn(group.repo)!.detail">
-                        {{ failureIn(group.repo)!.detail }}
-                    </span>
-                </Notice>
+                />
 
                 <!-- Conflicts come from operations left by an external terminal. -->
                 <Notice v-if="group.operation" tone="warning" size="sm" class="mx-1 mb-1.5 mt-0.5">
                     <span class="block font-medium">{{ t(`workspace.reviewPanel.inProgress`, { operation: group.operation }) }}</span>
                     <span class="block text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</span>
                     <template #actions>
+                        <!-- Finishing it is the fix; aborting throws the half-done work away, so it is the quieter press. -->
+                        <FixWithAgent :label="t(`workspace.reviewPanel.resolveWithAgent`)" tier="accent" :fix="operationFixOf(group, group.operation)" />
                         <Button
-                            size="small" tier="accent"
+                            size="small" tier="boring"
                             tone="warning"
                             class="shrink-0"
                             :disabled="changes.actionBusy.value"

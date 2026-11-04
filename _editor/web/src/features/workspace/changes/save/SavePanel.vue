@@ -14,6 +14,7 @@ import { askingModel, draftRunning, landedMessage, originHue, originsOf, YOURS }
 import { diffRawUrls } from "../../../../models/workspace/changes/diffRaw";
 import { savedMessage, soleOrigin } from "./savedMessage";
 import { COMMIT_SCOPE, useChanges } from "../../../../models/changes/useChanges";
+import FixWithAgent from "../../../../parts/fleet/FixWithAgent.vue";
 import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
@@ -302,6 +303,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             <!-- What a press failed at, held under the presses rather than under the list: the list is what it's about. -->
             <Notice v-if="saveFailure" tone="danger" :dismissLabel="t(`ui.action.dismiss`)" @dismiss="changes.dismissFailure(COMMIT_SCOPE)">
                 {{ saveFailure.detail }}
+                <template v-if="saveFailure.fix" #actions><FixWithAgent :fix="saveFailure.fix" @started="changes.dismissFailure(COMMIT_SCOPE)" /></template>
             </Notice>
         </div>
 
@@ -315,6 +317,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 @dismiss="changes.dismissFailure(failure.repo)"
             >
                 {{ failure.repo }}: {{ failure.detail }}
+                <template v-if="failure.fix" #actions><FixWithAgent :fix="failure.fix" @started="changes.dismissFailure(failure.repo)" /></template>
             </Notice>
         </div>
 

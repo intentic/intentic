@@ -4,6 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
+import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -34,6 +35,11 @@ const connect = (): void => {
         void router.push({ name: `capabilities`, params: { entry: host } });
     }
 };
+
+/* A REFUSAL ONLY JUDGMENT SETTLES OFFERS AN AGENT (agentFix.ts): a conflict, a hook's findings, a branch that only takes pull
+   requests. It leads the row unless a deterministic answer is on offer (an account to connect, a pull that clears it). */
+const fixLeads = computed(() => pushFlow.fix.value !== undefined && connectLabel.value === undefined && !pushFlow.canSyncAndRetry.value);
+const retryQuiet = computed(() => connectLabel.value !== undefined || pushFlow.canSyncAndRetry.value || fixLeads.value);
 
 /* A CARD THAT IS NOT NEWS SAYS SO: raised once when the push is refused, and again on every reopen. */
 const clock = useNow(() => pushFlow.fromMemory.value);
@@ -89,11 +95,13 @@ const memoryLine = computed<string | undefined>(() => {
                 :label="t(`shell.pushQuestionBody.syncAndRetry`)"
                 @click="pushFlow.syncAndRetry"
             />
+            <!-- The agent that settles what a retry would only hear again; once it has it, the card is its. -->
+            <FixWithAgent v-if="pushFlow.fix.value" :fix="pushFlow.fix.value" :tier="fixLeads ? `accent` : `boring`" @started="pushFlow.dismiss" />
             <!-- The same push again, hook and all. -->
             <Button
                 size="small"
-                :tier="connectLabel || pushFlow.canSyncAndRetry.value ? `boring` : `accent`"
-                :tone="connectLabel || pushFlow.canSyncAndRetry.value ? undefined : `warning`"
+                :tier="retryQuiet ? `boring` : `accent`"
+                :tone="retryQuiet ? undefined : `warning`"
                 :label="t(`ui.action.tryAgain`)"
                 @click="pushFlow.retry"
             />

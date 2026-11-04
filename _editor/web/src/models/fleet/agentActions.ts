@@ -11,6 +11,8 @@ import { spentUntilOf } from "../conversations/accounts/runServing";
 import { reopenBooking, type TurnBooking } from "../conversations/drafts/sendLater";
 import { markDraft } from "../conversations/drafts/composerDrafts";
 import { useChat } from "../conversations/run/useChat";
+import { startingMode } from "../conversations/run/turnDefaults";
+import { type AgentFix, fixPrompt } from "../fixes/agentFix";
 import { transcriptShown } from "../conversations/run/useChat-sessions";
 import { composingConversation, draftConversation } from "../conversations/panel/useChat-reveal";
 import { queryClient } from "../../lib/queryPersistence";
@@ -57,16 +59,22 @@ const openingBooking = (conversation: Conversation): TurnBooking | undefined => 
 // nothing about the job the press starts.
 // `opening` answers what the opening message carries for the conversation as a whole: whether its finished work lands by
 // itself (a session opened by voice from across the room does not, unless the reader says so on its card), and the files
-// staged with it (a composer's Cmd/Ctrl+Enter carrying its chips into the new agent).
+// staged with it (a composer's Cmd/Ctrl+Enter carrying its chips into the new agent), and whether it works in the owner's
+// own tree rather than a worktree of its own (`shared`: a fix to that tree's git state, agentFix.ts), which then
+// proposes its plan first as every turn on the shared tree does (startingMode).
 export const startAgent = (
     prompt?: string,
     actsAs?: string,
     run?: AgentRunChoice,
-    opening?: { readonly autoLand?: boolean; readonly files?: readonly ChatAttachment[] },
+    opening?: { readonly autoLand?: boolean; readonly files?: readonly ChatAttachment[]; readonly shared?: boolean },
 ): string => {
     const conversation = draftConversation();
     if (run !== undefined) {
         wearRunChoice(conversation, run);
+    }
+    if (opening?.shared === true) {
+        conversation.isolated.value = false;
+        conversation.selection.apply({ kind: `set`, picks: { modePick: startingMode(false) } });
     }
     if (opening?.autoLand !== undefined) {
         conversation.autoLandDraft.value = opening.autoLand;
@@ -106,6 +114,9 @@ export const startAgent = (
         .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt, opening?.files, openingBooking(conversation))));
     return conversation.conversationId;
 };
+
+// A Fix with agent press (agentFix.ts): the brief, on the run the button stands at, in the tree the fix belongs to.
+export const startFix = (fix: AgentFix, run?: AgentRunChoice): string => startAgent(fixPrompt(fix), undefined, run, { shared: fix.tree === `shared` });
 
 // Same press as startAgent but without the send: a suggestion the user hasn't read isn't a task they asked for, so the
 // text stays in the composer, editable. Writes into the focused chat when nothing's been sent there, so a second

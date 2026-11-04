@@ -1092,6 +1092,12 @@
         "sealedCard": {
             "open": "Abrir la conversación privada de {name}",
             "reviewDiff": "Revisar cambios"
+        },
+        "fixWithAgent": {
+            "label": "Arreglar con agente",
+            "title": "Poner un agente en esto",
+            "sharedNote": "Trabaja en tu propia copia, donde está el problema, y propone un plan antes de cambiar nada.",
+            "ownNote": "Trabaja en una copia propia; su arreglo llega como cambios que revisas."
         }
     },
     "app": {
@@ -10174,6 +10180,10 @@
             "spokenReply": {
                 "label": "Respuestas habladas",
                 "blurb": "Las pocas frases que oyes al hablar con el agente en modo manos libres: qué ha hecho y qué necesita de ti, mientras la respuesta completa queda en pantalla."
+            },
+            "workflowFix": {
+                "label": "Arreglos del flujo de trabajo",
+                "blurb": "El agente que inicia «Arreglar con agente» ante una sincronización, push, commit, ejecución o compilación fallidos."
             }
         },
         "personaBounds": {
@@ -13176,7 +13186,8 @@
             "terminal": "Terminal",
             "terminalTip": "Lo sigue en una terminal: lo que imprime en {device}. Ctrl+C allí lo detiene, Ctrl+D lo deja en marcha",
             "where": "Dónde",
-            "yourComputers": "Tus ordenadores"
+            "yourComputers": "Tus ordenadores",
+            "fileUnreadable": "No se pudo leer el archivo de objetivos de ejecución"
         },
         "directoryPersonas": {
             "addAPersona": "Añadir una persona",
@@ -13468,7 +13479,8 @@
             "stageFrom": "Añadir al stage {count} archivo de {origin} | Añadir al stage {count} archivos de {origin}",
             "messageBeingWritten": "se está escribiendo su mensaje de commit",
             "namesTheCommit": "da nombre al commit",
-            "messageCommitKeys": "Mensaje ({keys} para hacer commit)"
+            "messageCommitKeys": "Mensaje ({keys} para hacer commit)",
+            "resolveWithAgent": "Resolver con agente"
         },
         "rowActions": {
             "changedSinceOn": "Cambiados desde que se activaron",

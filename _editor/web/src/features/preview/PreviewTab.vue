@@ -23,6 +23,8 @@ import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
 import { onScreen } from "../../workbench/window/onScreen";
 import { composeAgent } from "../../models/fleet/agentActions";
+import { devServerFix } from "../../models/runs/runFixes";
+import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useRunTargets } from "../../models/runs/useRunTargets";
 import { openRunDialog } from "../../models/runs/runDialog";
 import { useT } from "@intentic/ui/i18n";
@@ -540,6 +542,8 @@ watch(
             class="flex-1"
         >
             <template v-if="target.session || (target.startable && (waitingLong || target.launch === `exited`))" #actions>
+                <!-- A dev server that exited has a cause in its output that only reading it finds; Restart would only meet it again. -->
+                <FixWithAgent v-if="target.launch === `exited`" :fix="devServerFix({ ...target, title: `${t(`preview.previewPanel.devServerStopped`)}: ${target.label}` })" />
                 <Button
                     v-if="target.session"
                     :label="t(`preview.previewPanel.openTerminal`)"

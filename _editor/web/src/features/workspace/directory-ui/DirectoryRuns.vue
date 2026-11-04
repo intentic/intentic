@@ -9,6 +9,9 @@ import { formatDateTime } from "@intentic/ui/format";
 import { errorMessage } from "@intentic/base/errors";
 import { usePanels } from "../../../models/extensions/usePanels";
 import { composeAgent } from "../../../models/fleet/agentActions";
+import type { AgentFix } from "../../../models/fixes/agentFix";
+import { computerRunFix, runFileFix, startRefusedFix } from "../../../models/runs/runFixes";
+import FixWithAgent from "../../../parts/fleet/FixWithAgent.vue";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { openPreviewBeside } from "../../../workbench/browsers/browsersSurface";
 import { stateOf, tintOf } from "../../preview/targetWords";
@@ -136,8 +139,11 @@ const descriptionOf = (row: RunRow): string | undefined => (row.found === undefi
 
 const starting = ref<string | undefined>(undefined);
 const sandboxFailure = ref<string | undefined>(undefined);
+// What an agent is asked about that refusal (runFixes.ts), kept beside the sentence so the two go together.
+const sandboxFix = ref<AgentFix | undefined>(undefined);
 watch(dir, () => {
     sandboxFailure.value = undefined;
+    sandboxFix.value = undefined;
 });
 
 const show = (row: RunRow): void => {
@@ -154,11 +160,15 @@ const runInSandbox = async (row: RunRow): Promise<void> => {
     }
     starting.value = row.key;
     sandboxFailure.value = undefined;
+    sandboxFix.value = undefined;
     try {
         await startLive(row.sandbox);
         show(row);
     } catch (error) {
-        sandboxFailure.value = t(`workspace.directoryRuns.couldntStart`, { target: row.name, reason: errorMessage(error) });
+        const reason = errorMessage(error);
+        sandboxFailure.value = t(`workspace.directoryRuns.couldntStart`, { target: row.name, reason });
+        sandboxFix.value =
+            dir.value === undefined ? undefined : startRefusedFix({ repo: dir.value, target: row.name, reason, title: t(`workspace.directoryRuns.couldntStart`, { target: row.name, reason: `` }) });
     } finally {
         starting.value = undefined;
     }
@@ -292,6 +302,17 @@ const { lines: logLines, failure: logFailure } = useRunLog(
     computed(() => visible.value && logRun.value !== undefined),
 );
 
+// A run on the computer that ended with a failing code, and the log the dialog is following for it: what an agent reads first.
+const failedRunFix = (row: RunRow): AgentFix | undefined => {
+    const ended = deviceRun(row);
+    if (ended?.exitCode === undefined || ended.exitCode === 0 || ended.id !== logRun.value?.id || entry.value === undefined || chosen.value === undefined) {
+        return undefined;
+    }
+    const { repo } = entry.value;
+    const log = logLines.value.join(`\n`);
+    return computerRunFix({ repo, target: row.name, device: chosen.value.id, exitCode: ended.exitCode, command: commandHere(row), log, title: `${row.name}: ${ended.said}` });
+};
+
 /* ---- Nothing to run yet ------------------------------------------------------------------------------------------ */
 
 const editFile = (path: string): void => {
@@ -377,7 +398,10 @@ const placeClass = (id: string, online: boolean): string[] => [
         <div class="flex flex-col gap-3">
             <template v-if="rows.length > 0 || entry?.error !== undefined">
                 <!-- What went wrong, first: below a long list it would never be seen. -->
-                <Notice v-if="entry?.error !== undefined" tone="danger" size="sm">{{ entry.error }}</Notice>
+                <Notice v-if="entry?.error !== undefined" tone="danger" size="sm">
+                    {{ entry.error }}
+                    <template #actions><FixWithAgent :fix="runFileFix({ repo: entry.repo, reason: entry.error, title: t(`workspace.directoryRuns.fileUnreadable`) })" /></template>
+                </Notice>
                 <Notice v-if="chosen !== undefined && chosenBlocked !== undefined" :tone="chosen.online ? `warning` : `info`" size="sm">
                     {{ chosenBlocked }}
                     <template v-if="chosen.online" #actions>
@@ -389,7 +413,10 @@ const placeClass = (id: string, online: boolean): string[] => [
                 <Notice v-if="!inSandbox && chosen !== undefined && listError !== undefined" tone="warning" size="sm">
                     {{ t(`workspace.directoryRuns.listFailed`, { device: chosen.id, reason: listError }) }}
                 </Notice>
-                <Notice v-if="inSandbox && sandboxFailure !== undefined" tone="danger" size="sm">{{ sandboxFailure }}</Notice>
+                <Notice v-if="inSandbox && sandboxFailure !== undefined" tone="danger" size="sm">
+                    {{ sandboxFailure }}
+                    <template v-if="sandboxFix" #actions><FixWithAgent :fix="sandboxFix" /></template>
+                </Notice>
                 <Notice v-else-if="!inSandbox && failure !== undefined" tone="danger" size="sm">{{ failure }}</Notice>
 
                 <!-- What: only the targets that run where the dialog points, flat on the dialog's own surface, each its name, its
@@ -521,6 +548,8 @@ const placeClass = (id: string, online: boolean): string[] => [
                                             aria-live="polite"
                                             >{{ logLines.length === 0 ? t(`workspace.directoryRuns.logEmpty`) : logLines.join(`\n`) }}</pre>
                                         <p v-if="logFailure !== undefined" class="text-2xs text-danger">{{ logFailure }}</p>
+                                        <!-- A run that ended in failure: its log is the evidence, and reading it is the fix's first step. -->
+                                        <div v-if="failedRunFix(row)" class="flex justify-end"><FixWithAgent :fix="failedRunFix(row)!" /></div>
                                     </div>
                                 </div>
                             </template>

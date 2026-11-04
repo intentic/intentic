@@ -1092,6 +1092,12 @@
         "sealedCard": {
             "open": "Private Unterhaltung von {name} öffnen",
             "reviewDiff": "Änderungen prüfen"
+        },
+        "fixWithAgent": {
+            "label": "Mit Agent beheben",
+            "title": "Einen Agenten daransetzen",
+            "sharedNote": "Er arbeitet in deinem eigenen Checkout, wo das Problem liegt, und schlägt einen Plan vor, bevor er etwas ändert.",
+            "ownNote": "Er arbeitet in einer eigenen Kopie; seine Korrektur kommt als Änderungen an, die du prüfst."
         }
     },
     "app": {
@@ -10174,6 +10180,10 @@
             "spokenReply": {
                 "label": "Gesprochene Antworten",
                 "blurb": "Die wenigen Sätze, die Sie beim freihändigen Gespräch mit dem Agenten hören: was er getan hat und was er von Ihnen braucht. Die vollständige Antwort bleibt auf dem Bildschirm."
+            },
+            "workflowFix": {
+                "label": "Workflow-Korrekturen",
+                "blurb": "Der Agent, den „Mit Agent beheben“ bei fehlgeschlagenem Sync, Push, Commit, Lauf oder Build startet."
             }
         },
         "personaBounds": {
@@ -13176,7 +13186,8 @@
             "terminal": "Terminal",
             "terminalTip": "Verfolgt es in einem Terminal: was es auf {device} ausgibt. Strg+C dort stoppt es, Strg+D lässt es weiterlaufen",
             "where": "Wo",
-            "yourComputers": "Ihre Computer"
+            "yourComputers": "Ihre Computer",
+            "fileUnreadable": "Die Datei mit den Laufzielen konnte nicht gelesen werden"
         },
         "directoryPersonas": {
             "addAPersona": "Persona hinzufügen",
@@ -13468,7 +13479,8 @@
             "stageFrom": "{count} Datei von {origin} stagen | {count} Dateien von {origin} stagen",
             "messageBeingWritten": "seine Commit-Nachricht wird geschrieben",
             "namesTheCommit": "benennt den Commit",
-            "messageCommitKeys": "Nachricht ({keys} zum Committen)"
+            "messageCommitKeys": "Nachricht ({keys} zum Committen)",
+            "resolveWithAgent": "Mit Agent auflösen"
         },
         "rowActions": {
             "changedSinceOn": "Seit Aktivierung geändert",

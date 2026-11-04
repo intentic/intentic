@@ -8,6 +8,7 @@ import { workspaceChangedSince, workspaceChangeMark } from "../../../models/work
 import { usePushRun } from "../../../models/workspace/push/usePushRun";
 import { credentialHostOf, pushNeedsPull } from "../../../models/workspace/push/refusalSummary";
 import { t } from "@intentic/ui/i18n";
+import { type AgentFix, combinedFix } from "../../../models/fixes/agentFix";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
 // that started it: any view calling this gets the same instance. `askSync` is the one door every push goes
@@ -277,6 +278,21 @@ export function usePushFlow() {
                 asked.detail,
                 ...refusedRuns.value.map((run) => `${run.repo}\n${run.command}\n${run.reason ?? ``}\n${run.output}`),
             ].join(`\n\n`);
+        }),
+        // What Fix with agent asks about the refusal on the card: each refused repo's own fix (gitFixes.ts), as one. None
+        // where connecting an account is the fix, which no agent can do for the reader.
+        fix: computed((): AgentFix | undefined => {
+            const asked = question.value;
+            const push = pending.value;
+            if (asked === undefined || push === undefined) {
+                return undefined;
+            }
+            const refused = refusedRuns.value.length > 0 ? refusedRuns.value : (standing.value?.runs ?? []);
+            if (refused.some((run) => credentialHostOf(run) !== undefined)) {
+                return undefined;
+            }
+            const fixes = push.targets.map((target) => git!.failures.value.get(target.repo)?.fix).filter((fix) => fix !== undefined);
+            return combinedFix(asked.title, fixes);
         }),
         canSyncAndRetry,
         syncAndRetry,

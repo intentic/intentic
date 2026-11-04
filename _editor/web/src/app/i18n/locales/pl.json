@@ -1092,6 +1092,12 @@
         "sealedCard": {
             "open": "Otwórz prywatną rozmowę: {name}",
             "reviewDiff": "Przejrzyj zmiany"
+        },
+        "fixWithAgent": {
+            "label": "Napraw z agentem",
+            "title": "Uruchom agenta do tego",
+            "sharedNote": "Pracuje w Twojej własnej kopii, tam gdzie jest problem, i przed jakąkolwiek zmianą proponuje plan.",
+            "ownNote": "Pracuje we własnej kopii; poprawka trafia do Ciebie jako zmiany do przejrzenia."
         }
     },
     "app": {
@@ -9577,6 +9583,10 @@
             "spokenReply": {
                 "label": "Odpowiedzi głosowe",
                 "blurb": "Kilka zdań, które słyszysz, gdy rozmawiasz z agentem bez użycia rąk: co zrobił i czego od ciebie potrzebuje, a pełna odpowiedź zostaje na ekranie."
+            },
+            "workflowFix": {
+                "label": "Naprawy przepływu pracy",
+                "blurb": "Agent uruchamiany przez „Napraw z agentem” po nieudanej synchronizacji, pushu, commicie, uruchomieniu lub budowaniu."
             }
         },
         "personaBounds": {
@@ -12493,7 +12503,8 @@
             "terminal": "Terminal",
             "terminalTip": "Śledzi go w terminalu: to, co wypisuje na {device}. Ctrl+C w nim go zatrzymuje, Ctrl+D zostawia go uruchomionego",
             "where": "Gdzie",
-            "yourComputers": "Twoje komputery"
+            "yourComputers": "Twoje komputery",
+            "fileUnreadable": "Nie udało się odczytać pliku z celami uruchomienia"
         },
         "directoryPersonas": {
             "addAPersona": "Dodaj personę",
@@ -12853,7 +12864,8 @@
             "stageFrom": "Dodaj do indeksu {count} plik od „{origin}” | Dodaj do indeksu {count} pliki od „{origin}” | Dodaj do indeksu {count} plików od „{origin}”",
             "messageBeingWritten": "wiadomość commita jest w trakcie pisania",
             "namesTheCommit": "nadaje nazwę commitowi",
-            "messageCommitKeys": "Wiadomość ({keys}, żeby zacommitować)"
+            "messageCommitKeys": "Wiadomość ({keys}, żeby zacommitować)",
+            "resolveWithAgent": "Rozwiąż z agentem"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",

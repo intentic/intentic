@@ -1092,6 +1092,12 @@
         "sealedCard": {
             "open": "Open {name}'s private conversation",
             "reviewDiff": "Review diff"
+        },
+        "fixWithAgent": {
+            "label": "Fix with agent",
+            "title": "Start an agent on this",
+            "sharedNote": "It works in your own checkout, where the problem is, and proposes a plan before it changes anything.",
+            "ownNote": "It works in a copy of its own; its fix lands as changes you review."
         }
     },
     "app": {
@@ -10174,6 +10180,10 @@
             "spokenReply": {
                 "label": "Spoken replies",
                 "blurb": "The few sentences you hear when you talk to the agent hands-free: what it did and what it needs from you, while the full reply stays on screen."
+            },
+            "workflowFix": {
+                "label": "Workflow fixes",
+                "blurb": "The agent started by Fix with agent on a failed sync, push, commit, run or build."
             }
         },
         "personaBounds": {
@@ -13176,7 +13186,8 @@
             "terminal": "Terminal",
             "terminalTip": "Follows it in a terminal: what it prints on {device}. Ctrl+C there stops it, Ctrl+D leaves it running",
             "where": "Where",
-            "yourComputers": "Your computers"
+            "yourComputers": "Your computers",
+            "fileUnreadable": "The run targets file could not be read"
         },
         "directoryPersonas": {
             "addAPersona": "Add a persona",
@@ -13468,7 +13479,8 @@
             "stageFrom": "Stage {count} file from {origin} | Stage {count} files from {origin}",
             "messageBeingWritten": "its commit message is being written",
             "namesTheCommit": "names the commit",
-            "messageCommitKeys": "Message ({keys} to commit)"
+            "messageCommitKeys": "Message ({keys} to commit)",
+            "resolveWithAgent": "Resolve with agent"
         },
         "rowActions": {
             "changedSinceOn": "Changed since switched on",
