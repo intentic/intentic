@@ -286,8 +286,13 @@ export const withConversationTrust = (policy: PrivacyShieldPolicy, conversationI
     return { ...policy, conversations: on ? [...others, { conversationId, provider }].slice(-PRIVACY_CONVERSATIONS_MAX) : others };
 };
 
-// The policy a sandbox that never wrote one runs on.
+// Every field at its schema default, the shield off: what a policy that names nothing reads as.
 export const DEFAULT_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySchema.parse({});
+
+// The policy a sandbox that never wrote one runs on: the shield masking (2026-11-04, new sandboxes start shielded). The
+// schema's own default stays off, so a stored policy that leaves `mode` out reads as it always did; a sandbox from
+// before the change gets an off policy written down at its next boot (the daemon's settings/earlier-defaults-step.ts).
+export const FRESH_PRIVACY_SHIELD: PrivacyShieldPolicy = PrivacyShieldPolicySchema.parse({ mode: "on" });
 
 // How a provider stands against the gateway, for the trusted list: whether its traffic can be shielded at all, and
 // whether it never leaves this machine.

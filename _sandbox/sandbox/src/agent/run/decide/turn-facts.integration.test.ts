@@ -165,7 +165,7 @@ test.each([
         "the retrieval flag with iq search off",
         { agent: "claude" },
         context,
-        { config: { ...testConfig, iqTurnContext: true } },
+        { config: { ...testConfig, iqTurnContext: true }, sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ iqSearch: false })) },
         [
             "turn.plan.settings",
             "turn.plan.window",

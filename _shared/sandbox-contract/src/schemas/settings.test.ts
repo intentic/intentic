@@ -15,6 +15,13 @@ describe(`which built-in stands at which moment`, () => {
         expect(rule(`turn.ending`, { kind: `builtin`, name: `version-landed` }).success).toBe(false);
     });
 
+    // It pushes what the versioner committed, which only the landed moment has.
+    test(`the back-up stands at the landed moment and nowhere else`, () => {
+        expect(rule(`agent.landed`, { kind: `builtin`, name: `push-landed` }).success).toBe(true);
+        expect(rule(`agent.finished`, { kind: `builtin`, name: `push-landed` }).success).toBe(false);
+        expect(rule(`turn.ending`, { kind: `builtin`, name: `push-landed` }).success).toBe(false);
+    });
+
     test(`the look stands at the turn's end and not at the landing`, () => {
         expect(rule(`turn.ending`, { kind: `builtin`, name: `verify-ui-edits` }).success).toBe(true);
         expect(rule(`agent.landed`, { kind: `builtin`, name: `verify-ui-edits` }).success).toBe(false);

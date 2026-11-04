@@ -147,7 +147,7 @@ test("the map rides the opening message when the setting is on, and the user's w
 test("an opt-in that is off adds nothing at all", async () => {
     const root = await projectAt("wsmap-off-", "shared");
 
-    const prompt = await promptOf(servicesIn(root, {}), { prompt: "do the thing" } as AgentTurn, contextIn(root));
+    const prompt = await promptOf(servicesIn(root, { workspaceMap: false }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
     // The checks note is every opening message's, map or no map; nothing of the map's own rides beside it.
     expect(prompt).toBe(composeWirePrompt([OPENING_CHECKS_NOTE], "do the thing"));

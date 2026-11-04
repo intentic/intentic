@@ -252,7 +252,7 @@ test("the image's iq and webq plugins list their skills, iq only while its setti
     await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.");
     const fixed = { origin: "builtin", enabled: true, switchable: false, editable: false, removable: false } as const;
 
-    const off = await skillInventory(stubServices(root, [], settingsWith([]), [], baked));
+    const off = await skillInventory(stubServices(root, [], { ...settingsWith([]), iqSearch: false }, [], baked));
     expect(off.filter((row) => row.id.includes(":"))).toEqual([
         { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
     ]);

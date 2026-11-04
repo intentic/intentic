@@ -9,13 +9,15 @@ import { fileSandboxSettingsStore, settingsDocument } from "../../settings/setti
 import { stateRelPath } from "../../state-paths.js";
 import { workflowGateTokensStep, workflowsDocument } from "../../workflows/workflows-store.js";
 import type { DocumentSpec } from "./documents.js";
-import { clearNewestRun } from "../newest-run.js";
+import { clearNewestRun,newestRunDocument } from "../newest-run.js";
 import { commitState, convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
 import type { StructuralStep } from "./state-steps.js";
 import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "./steps/projects-host-leftovers.js";
 import { pushChecksLeftoversStep } from "./steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "./steps/state-regroup.js";
+import { earlierDefaultsStep } from "../../settings/earlier-defaults-step.js";
+import { filePrivacyPolicy, privacyShieldDocument } from "../../privacy/privacy-policy.js";
 
 // The conversions each document declares for the breaks its history holds, run over workspaces laid out the way the
 // releases that wrote them left them, and read back through today's stores.
@@ -108,6 +110,9 @@ test("settings a withdrawn rule once made unreadable read again, the rule gone a
     expect(outcome.plan?.steps).toEqual([]);
     expect(outcome.plan?.converts).toEqual([
         { document: settingsDocument.path, change: "drops rules at a withdrawn moment or with a withdrawn action (push.starting, instruct, three built-in checks)" },
+        // A file from before iq search and the project map turned on for new sandboxes (2026-11-04) keeps them off.
+        { document: settingsDocument.path, change: "keeps the earlier default for iqSearch" },
+        { document: settingsDocument.path, change: "keeps the earlier default for workspaceMap" },
         { document: settingsDocument.path, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
     ]);
     // The boot leaves the bytes to the store, whose next save writes today's shape.
@@ -243,4 +248,63 @@ test("the retired projects host's folder registry is deleted, and nothing else i
     await commitState(roots);
     clearNewestRun();
     expect((await converge(roots, [], [projectsHostLeftoversStep])).plan?.steps ?? []).toEqual([]);
+});
+
+// New sandboxes start shielded, taught iq and handed the project map (2026-11-04). A workspace a release from before ran
+// and that never saved either file has the old values written down once; a new one, or one that saved its own, is left be.
+describe("the defaults a sandbox from before 2026-11 ran on", () => {
+    const stamped = async (version: string | undefined): Promise<{ roots: StateRoots; settings: string; privacy: string }> => {
+        const roots = await volumes();
+        if (version !== undefined) {
+            await put(join(roots.workspace, newestRunDocument.path), { version, engine: 120 });
+        }
+        const settings = join(roots.workspace, settingsDocument.path);
+        await mkdir(dirname(settings), { recursive: true });
+        return { roots, settings, privacy: join(roots.auth, privacyShieldDocument.path) };
+    };
+
+    test("an older sandbox that never saved them keeps the shield, iq search and the project map off", async () => {
+        const { roots, settings, privacy } = await stamped("1.394.0");
+
+        const outcome = await converge(roots, [], [earlierDefaultsStep]);
+
+        expect(outcome.plan?.steps).toEqual([
+            { document: "earlier-defaults-2026-11", change: "keeps iq search and the project map off" },
+            { document: "earlier-defaults-2026-11", change: "keeps the privacy shield off" },
+        ]);
+        const read = await fileSandboxSettingsStore(settings).get();
+        expect([read.iqSearch, read.workspaceMap]).toEqual([false, false]);
+        expect((await filePrivacyPolicy(privacy).get()).mode).toBe("off");
+        // Written down, so the stamp moving to this release changes nothing at the next boot.
+        await commitState(roots);
+        clearNewestRun();
+        expect((await converge(roots, [], [earlierDefaultsStep])).plan?.steps ?? []).toEqual([]);
+    });
+
+    test("what an older sandbox saved is never written over", async () => {
+        const { roots, settings, privacy } = await stamped("1.300.0");
+        await put(settings, { iqSearch: true });
+        await put(privacy, { mode: "watch" });
+
+        const outcome = await converge(roots, [], [earlierDefaultsStep]);
+
+        expect(outcome.plan?.steps ?? []).toEqual([]);
+        expect(await json(settings)).toEqual({ iqSearch: true });
+        expect(await json(privacy)).toEqual({ mode: "watch" });
+    });
+
+    test.each([
+        ["a first boot", undefined],
+        ["a sandbox only a dev build ran", "0.0.0"],
+        ["a sandbox made by a release with the new defaults", "1.395.0"],
+    ])("%s starts shielded, with iq search and the project map", async (_name, version) => {
+        const { roots, settings, privacy } = await stamped(version);
+
+        const outcome = await converge(roots, [], [earlierDefaultsStep]);
+
+        expect(outcome.plan?.steps ?? []).toEqual([]);
+        const read = await fileSandboxSettingsStore(settings).get();
+        expect([read.iqSearch, read.workspaceMap]).toEqual([true, true]);
+        expect((await filePrivacyPolicy(privacy).get()).mode).toBe("on");
+    });
 });

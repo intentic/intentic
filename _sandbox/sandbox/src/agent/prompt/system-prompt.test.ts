@@ -374,7 +374,7 @@ test("the search-binary steer travels to every runtime, like the other image fac
     expect(claude).toContain("`rg` (ripgrep)");
 });
 
-// iqSearch defaults off and is measured under a holdout arm; naming it here unconditionally would jump that gate and
+// iqSearch is a switch (on for new sandboxes, off for older ones) with a holdout arm; naming it here unconditionally would jump that gate and
 // spoil the holdout.
 test("the always-on prompt never advertises iq: its plugin is gated and under measurement", async () => {
     const intentic = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;

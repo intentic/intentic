@@ -47,8 +47,13 @@ test("on or watching, masking images or finding names by model each want the pac
     }
 });
 
-test("no policy written: nothing rides the overlay", async () => {
-    expect(await privacyPackFragments(services(mkdtempSync(join(tmpdir(), "privacy-pack-"))))).toEqual([]);
+// A sandbox that never wrote a policy is a new one, which starts shielded (2026-11-04), images masked: so its readers ride.
+test("no policy written: a new sandbox's shield brings the privacy pack", async () => {
+    expect(await privacyPackFragments(services(mkdtempSync(join(tmpdir(), "privacy-pack-"))))).toEqual(await privacyPack());
+});
+
+test("a shield written off brings nothing", async () => {
+    expect(await privacyPackFragments(services(withPolicy({ mode: "off" })))).toEqual([]);
 });
 
 test("a policy masking images brings the privacy pack", async () => {

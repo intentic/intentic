@@ -11,6 +11,9 @@ import { pushPlan } from "../remote/remote.js";
 // Started and answered at once, executed in the `job-push` terminal, polled for its verdict; the repository's own
 // pre-push hook is the only gate a push passes. One per repo (a second start for a running repo joins it), and pushes
 // across repos take turns in that session's queue; nothing is persisted or polled at rest — a run exists only while it runs.
+// The main tree's set is the daemon's own (Services.pushRuns), shared by the Back up button and the back-up rule
+// (conversations/land/settle/push-landed.ts), so the panel shows a push the rule started and the two never push one repo twice
+// at once.
 
 // Generous ceiling since the hook may be a whole suite (usually cached, fast); past this it's a hang.
 const PUSH_TIMEOUT_MS = 15 * 60_000;
@@ -22,14 +25,24 @@ const PUSH_OUTPUT_BYTES = 24_000;
 // the tree the review reads (rule-command.ts).
 export type PushRunDeps = Pick<Services, "logger" | "terminalRun" | "pushSender" | "activity" | "workspace">;
 
+export interface PushStartOptions {
+    readonly branch?: string;
+    // While one is already running for the repo, push once more after it settles instead of joining it: the commit that
+    // asked for this push may have been made after the running one read the branch. Several asks fold into one.
+    readonly again?: boolean;
+}
+
 export interface PushRuns {
     // Resolves once the run is visible to `state`, not when it finishes: resolving early would hand the first poll an
-    // `idle` read as already settled. Idempotent while one is running for the repo.
-    readonly start: (repo: string, dir: string, options: { readonly branch?: string }) => Promise<void>;
+    // `idle` read as already settled. Idempotent while one is running for the repo, unless `again` asks for one more.
+    readonly start: (repo: string, dir: string, options: PushStartOptions) => Promise<void>;
     // The run as it stands: the terminal's name while going, the verdict once it settles.
     readonly state: (repo: string) => PushRun;
-    // Stop it. A push git had not finished sending does not reach the remote; the run settles as cancelled.
+    // Stop it. A push git had not finished sending does not reach the remote; the run settles as cancelled. A push asked
+    // for `again` is dropped with it: the Stop button was the owner's own hand.
     readonly cancel: (repo: string) => void;
+    // Hears every settled run, however it ended; answers the unsubscribe.
+    readonly onSettled: (listener: (run: PushRun) => void) => () => void;
 }
 
 const idle = (repo: string): PushRun => ({ status: "idle", repo, command: "", output: "" });
@@ -38,63 +51,82 @@ const idle = (repo: string): PushRun => ({ status: "idle", repo, command: "", ou
 // not readability here).
 const commandLine = (args: readonly string[]): string => ["git", ...args].map(shellQuote).join(" ");
 
+// Reason and refusedBy, only for an actual refusal: a killed push has no last word from git, and a passed one has
+// nothing to explain.
+const refusal = (run: RuleCommandRun): Pick<PushRun, "reason" | "refusedBy"> =>
+    run.status === "failed" && run.timedOut !== true
+        ? { reason: pushRefusalReason(run.output, "git refused the push"), refusedBy: pushRefusal(run.output, run.exitCode) }
+        : {};
+
+// Feed row answering "why isn't my work on the remote"; a pass says nothing.
+const feedLine = (settled: PushRun): string =>
+    settled.timedOut === true
+        ? `\`${settled.command}\` in ${settled.repo} hit its time limit and was killed, the push did not go.`
+        : `\`${settled.command}\` in ${settled.repo} was refused${settled.refusedBy === undefined ? "" : ` by the ${settled.refusedBy}`}: ${settled.reason ?? "it could not run"}.`;
+
+// A settled run as the log, the owner's devices and the feed hear it. A verdict reached while the owner is away travels
+// to their devices; a cancel sends nothing, since the Stop button was their own hand.
+const announceSettled = (services: PushRunDeps, settled: PushRun): void => {
+    services.logger.info(
+        {
+            repo: settled.repo,
+            command: settled.command,
+            status: settled.status,
+            exitCode: settled.exitCode,
+            refusedBy: settled.refusedBy,
+            durationMs: Date.now() - (settled.startedAt ?? Date.now()),
+        },
+        "push: settled",
+    );
+    if (settled.status === "failed" || settled.status === "error") {
+        void services.pushSender.notifyIfAway(pushRefused(settled));
+        void services.activity
+            .append({ direction: "system", type: "git.push_refused", content: feedLine(settled), outcome: "error" })
+            .catch((error: unknown) => services.logger.warn({ err: error, repo: settled.repo }, "push: activity append failed"));
+    }
+};
+
+// The daemon's own set (GitSlice.pushRuns), composed before the services it reads: each is fetched through `whole` per run.
+export const daemonPushRuns = (whole: () => PushRunDeps): PushRuns =>
+    createPushRuns({
+        get logger() { return whole().logger; },
+        get terminalRun() { return whole().terminalRun; },
+        get pushSender() { return whole().pushSender; },
+        get activity() { return whole().activity; },
+        get workspace() { return whole().workspace; },
+    });
+
 // `ceiling` is injectable only for the test proving a hung push times out rather than running forever; the daemon never
 // overrides it.
+// `services` is read per run, never at creation, so the daemon composes its set before the services it reads are done.
 export const createPushRuns = (
     services: PushRunDeps,
-    onPushed: (repo: string) => void,
+    onPushed: (repo: string) => void = () => undefined,
     git: GitRunner = defaultGit,
     ceiling: { readonly timeoutMs?: number } = {},
 ): PushRuns => {
-    const { logger, terminalRun } = services;
     const timeoutMs = ceiling.timeoutMs ?? PUSH_TIMEOUT_MS;
     const runs = new Map<string, PushRun>();
     const controllers = new Map<string, AbortController>();
     const inFlight = new Set<string>();
+    // Repos owed one more push once the running one settles, with where and how to run it.
+    const owed = new Map<string, { readonly dir: string; readonly options: PushStartOptions }>();
+    const listeners = new Set<(run: PushRun) => void>();
 
     const publish = (run: PushRun): void => {
         runs.set(run.repo, run);
     };
 
-    // Reason and refusedBy, only for an actual refusal: a killed push has no last word from git, and a passed one has
-    // nothing to explain.
-    const refusal = (run: RuleCommandRun): Pick<PushRun, "reason" | "refusedBy"> =>
-        run.status === "failed" && run.timedOut !== true
-            ? { reason: pushRefusalReason(run.output, "git refused the push"), refusedBy: pushRefusal(run.output, run.exitCode) }
-            : {};
-
-    // Feed row answering "why isn't my work on the remote"; a pass says nothing.
-    const feedLine = (settled: PushRun): string =>
-        settled.timedOut === true
-            ? `\`${settled.command}\` in ${settled.repo} hit its time limit and was killed, the push did not go.`
-            : `\`${settled.command}\` in ${settled.repo} was refused${settled.refusedBy === undefined ? "" : ` by the ${settled.refusedBy}`}: ${settled.reason ?? "it could not run"}.`;
-
-    // What a settled run means to everyone but the poller (scan, devices, feed); one path whether the push ran or never
-    // started.
+    // What a settled run means to everyone but the poller; one path whether the push ran or never started.
     const report = (settled: PushRun): PushRun => {
         publish(settled);
-        logger.info(
-            {
-                repo: settled.repo,
-                command: settled.command,
-                status: settled.status,
-                exitCode: settled.exitCode,
-                refusedBy: settled.refusedBy,
-                durationMs: Date.now() - (settled.startedAt ?? Date.now()),
-            },
-            "push: settled",
-        );
+        announceSettled(services, settled);
         if (settled.status === "passed") {
             // A push only moves ahead/behind locally; invalidating the scan is how the Changes response picks it up.
             onPushed(settled.repo);
         }
-        // A verdict reached while the owner is away travels to their devices; a cancel sends nothing, since the Stop
-        // button was their own hand.
-        if (settled.status === "failed" || settled.status === "error") {
-            void services.pushSender.notifyIfAway(pushRefused(settled));
-            void services.activity
-                .append({ direction: "system", type: "git.push_refused", content: feedLine(settled), outcome: "error" })
-                .catch((error: unknown) => logger.warn({ err: error, repo: settled.repo }, "push: activity append failed"));
+        for (const listener of listeners) {
+            listener(settled);
         }
         return settled;
     };
@@ -111,6 +143,7 @@ export const createPushRuns = (
         });
 
     const execute = async (running: PushRun, dir: string, abort: AbortController): Promise<void> => {
+        const { logger, terminalRun } = services;
         // No session without the tmux wrapper, or the browser would chase a tab nothing lists. Named only once the
         // command is actually in it, not while it waits for another repo's push ahead of it in the session.
         const session = terminalRun.visible ? PUSH_SESSION : undefined;
@@ -136,44 +169,69 @@ export const createPushRuns = (
         settle(runs.get(running.repo) ?? running, run);
     };
 
-    return {
-        start: async (repo, dir, options) => {
-            if (inFlight.has(repo)) {
+    const start = async (repo: string, dir: string, options: PushStartOptions): Promise<void> => {
+        if (inFlight.has(repo)) {
+            if (options.again === true) {
+                owed.set(repo, { dir, options });
+            }
+            return;
+        }
+        inFlight.add(repo);
+        // The owed push, started once this one is over; a failure to start it is the log's, never the settle's.
+        const settleOwed = (): void => {
+            const next = owed.get(repo);
+            owed.delete(repo);
+            if (next !== undefined) {
+                void start(repo, next.dir, { ...next.options, again: false }).catch((error: Error) =>
+                    services.logger.warn({ err: error, repo }, "push: the push owed after the last one could not start"),
+                );
+            }
+        };
+        try {
+            const plan = await pushPlan(dir, options, git);
+            if (!plan.ok) {
+                // `error`, not `failed`: nothing ran, so there's no command output to read, only git's situation
+                // (git was never invoked).
+                const now = Date.now();
+                report({ status: "error", repo, command: "git push", startedAt: now, finishedAt: now, output: "", reason: plan.reason });
+                inFlight.delete(repo);
+                settleOwed();
                 return;
             }
-            inFlight.add(repo);
-            try {
-                const plan = await pushPlan(dir, options, git);
-                if (!plan.ok) {
-                    // `error`, not `failed`: nothing ran, so there's no command output to read, only git's situation
-                    // (git was never invoked).
-                    const now = Date.now();
-                    report({ status: "error", repo, command: "git push", startedAt: now, finishedAt: now, output: "", reason: plan.reason });
+            const running: PushRun = { status: "running", repo, command: commandLine(plan.args), startedAt: Date.now(), output: "" };
+            const abort = new AbortController();
+            controllers.set(repo, abort);
+            publish(running);
+            // Not awaited: the caller polls the published state instead; in-flight clears on settle, whichever way it goes.
+            void execute(running, dir, abort)
+                .catch((error: unknown) => {
+                    services.logger.warn({ err: error, repo }, "push: run failed");
+                    publish({ ...running, status: "error", finishedAt: Date.now(), output: "" });
+                })
+                .finally(() => {
+                    controllers.delete(repo);
                     inFlight.delete(repo);
-                    return;
-                }
-                const running: PushRun = { status: "running", repo, command: commandLine(plan.args), startedAt: Date.now(), output: "" };
-                const abort = new AbortController();
-                controllers.set(repo, abort);
-                publish(running);
-                // Not awaited: the caller polls the published state instead; in-flight clears on settle, whichever way it goes.
-                void execute(running, dir, abort)
-                    .catch((error: unknown) => {
-                        logger.warn({ err: error, repo }, "push: run failed");
-                        publish({ ...running, status: "error", finishedAt: Date.now(), output: "" });
-                    })
-                    .finally(() => {
-                        controllers.delete(repo);
-                        inFlight.delete(repo);
-                    });
-            } catch (error) {
-                inFlight.delete(repo);
-                throw error;
-            }
-        },
+                    settleOwed();
+                });
+        } catch (error) {
+            inFlight.delete(repo);
+            owed.delete(repo);
+            throw error;
+        }
+    };
+
+    return {
+        start,
         state: (repo) => runs.get(repo) ?? idle(repo),
         cancel: (repo) => {
+            owed.delete(repo);
             controllers.get(repo)?.abort();
+        },
+        onSettled: (listener) => {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
         },
     };
 };

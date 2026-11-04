@@ -1,6 +1,7 @@
 import { SETTINGS_HISTORY } from "@intentic/sandbox-contract/schemas/settings-history";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Pin } from "../compliance/org-pins.js";
+import { pinDefault } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
@@ -8,11 +9,14 @@ import { stateRelPath } from "../state-paths.js";
 // The sandbox-owned agent-settings manifest (<workspace>/.intentic/config/settings.json). Mirrors the automations
 // store: a small JSON file the /settings routes edit and streamAgent reads. No secrets, so not on the denylist.
 
-// Its conversions are the contract's (SETTINGS_HISTORY), shared with a sandbox.toml's [settings] table.
+// Its conversions are the contract's (SETTINGS_HISTORY), shared with a sandbox.toml's [settings] table, then this file's
+// own: iq search and the project map turned on for new sandboxes on 2026-11-04, and a file from before that names
+// neither keeps them off. Here, not in the shared list, so a new sandbox's sandbox.toml that leaves them out gets the
+// new default. A file never written at all is earlier-defaults-step.ts's.
 export const settingsDocument = defineDocument({
     path: stateRelPath(".intentic/config/settings.json"),
     schema: SandboxSettingsSchema,
-    history: SETTINGS_HISTORY,
+    history: [...SETTINGS_HISTORY, pinDefault("iqSearch", false), pinDefault("workspaceMap", false)],
 });
 
 export interface SandboxSettingsStore {
@@ -33,8 +37,7 @@ export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings
         // Unknown keys reported rather than a bare parse: this is the manifest a person is most likely to open and
         // edit, and a misspelled flag would otherwise be stripped in silence and simply never take effect.
         unknownKeys: true,
-        // Applied when the file is absent or unreadable. The defaults live on the schema (every flag is opt-in,
-        // so all default off), so parsing an empty object is the schema's OWN answer for "nothing was written
+        // Applied when the file is absent or unreadable. The defaults live on the schema, so parsing an empty object is the schema's OWN answer for "nothing was written
         // yet" rather than a second copy of the shape that could drift from it. A manifest that predates a flag
         // keeps every pick it DOES carry, the missing key reads as that flag's default.
         fallback: () => SandboxSettingsSchema.parse({}),

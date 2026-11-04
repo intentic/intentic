@@ -14,6 +14,7 @@ import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf, type PersistedAgent } from "../registry/agents-store.js";
 import { landMarksOf } from "../registry/land-marks.js";
+import { pushLanded } from "./settle/push-landed.js";
 import { conversationTrailers, describeLanding } from "./landed-subject.js";
 import { rederiveSettled, withRederivedRepo } from "./rederive.js";
 import { opt } from "../../opt.js";
@@ -230,6 +231,7 @@ export const settleLanding = async (
             services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
         }
         services.logger.info({ agent: id, repos: committed }, "landed: versioned");
+        await pushLanded(services, rules, committed);
     } finally {
         await answerVersionMark(services, id, since);
         unhold();

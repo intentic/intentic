@@ -18,7 +18,8 @@ export function useRules() {
         patch({ rules: at === -1 ? [...rules.value, rule] : rules.value.map((existing, index) => (index === at ? rule : existing)) });
     };
 
-    const remove = (id: string): void => patch({ rules: rules.value.filter((rule) => rule.id !== id) });
+    // Several ids in one save, since two saves in a row would each write the list as it stood before either.
+    const remove = (...ids: string[]): void => patch({ rules: rules.value.filter((rule) => !ids.includes(rule.id)) });
 
     const setEnabled = (id: string, enabled: boolean): void => {
         const rule = byId(id);

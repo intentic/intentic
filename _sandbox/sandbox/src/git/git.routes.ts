@@ -159,8 +159,11 @@ export const routesInView = (services: Services, view?: GitView) => {
         scan = undefined;
         reusableUntil = 0;
     };
-    // One push-run set per router (one per daemon); nothing else reaches it, so it needs no shutdown hook.
-    const pushRuns = createPushRuns(services, invalidateScan);
+    // The main tree's pushes are the daemon's own set, shared with the back-up rule (land/settle/push-landed.ts); a view keeps its own.
+    const pushRuns = view === undefined ? services.pushRuns : createPushRuns(services, invalidateScan);
+    if (view === undefined) {
+        pushRuns.onSettled((run) => run.status === "passed" && invalidateScan());
+    }
     // A sequence/HEAD-moving op: checkpoints the tree first (so even a rewrite stays reversible), runs it, and records
     // the result on a clean apply.
     const guarded = (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> =>
@@ -559,8 +562,7 @@ export const routesInView = (services: Services, view?: GitView) => {
                 return { ok: true } as const;
             }),
         ),
-        // A push run (git/push-run.ts): started here, watched in its terminal, polled below. Not under the repo lock,
-        // since it writes nothing in the worktree.
+        // A push run (git/ops/push-run.ts), watched in its terminal and polled below; outside the repo lock, writing no file.
         push: i.push.handler(async ({ input }) => {
             await pushRuns.start(input.repo, await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
             return { ok: true as const };
@@ -605,6 +607,5 @@ export const routesInView = (services: Services, view?: GitView) => {
         }),
     };
 };
-
 
 export const createGitRoutes = (services: Services) => gitRoutesInViews(services, (view) => routesInView(services, view));

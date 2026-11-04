@@ -974,8 +974,9 @@ flowchart LR
   (`createConversationsSlice`, `createGitSlice`, …); `composition.ts` calls the builders in dependency order, so a new
   service in a slice is written in that slice's file. Members that would close an import cycle there are built in
   composition, named by the builder's `Omit`.
-- The privacy shield (`privacy/`, off unless the owner turns it on) keeps personal data from model providers the
-  owner does not trust. Every runtime whose model requests go to a base URL the daemon names (the Claude Code loop for
+- The privacy shield (`privacy/`, on for a sandbox that never wrote a policy, which since 2026-11-04 is a new one; a
+  sandbox from before has an off policy written down at boot, `settings/earlier-defaults-step.ts`) keeps
+  personal data from model providers the owner does not trust. Every runtime whose model requests go to a base URL the daemon names (the Claude Code loop for
   every provider, Codex, OpenCode's Grok and Gemini) is pointed at one gateway route, `ALL /privacy/gateway/<session>/*`,
   whose signed session names the provider and the only upstream it forwards to (`privacy/gateway/`). For an untrusted
   provider it replaces what the detectors ([`@intentic/privacy-detect`](../privacy-detect)), the vault of known values and, with the `privacy` image

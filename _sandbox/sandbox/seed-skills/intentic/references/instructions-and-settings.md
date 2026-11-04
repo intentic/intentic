@@ -59,7 +59,8 @@ isolated turn, and it arrives by itself. During an isolated turn the owner's liv
 `/mnt/intentic-main/`.
 
 Some things ride only a conversation's first message, so turning them on shows in new conversations: the project
-map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
+map (`workspaceMap`; on for a sandbox made from November 2026, off for an older one until its owner switches it on, as
+`iqSearch` is), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
 skills folder themselves). The map lists every area of the project with its size and purpose;
 `workspaceMapHoldout` is the share of conversations that open without it. The comparison shares
 (`workspaceMapHoldout`, `iqSearchHoldout`, `fieldNotesHoldout`, `toolSearchHoldout`, `stableSystemPromptHoldout`,

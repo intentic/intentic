@@ -279,7 +279,7 @@ test.each([
     ],
     [
         "a workspace with the map off",
-        SandboxSettingsSchema.parse({ workspaceMapHoldout: 0.5, ...TOOLS_UNMEASURED }),
+        SandboxSettingsSchema.parse({ workspaceMap: false, workspaceMapHoldout: 0.5, ...TOOLS_UNMEASURED }),
         { conversationId: MAP_TREATED },
         undefined,
         false,
@@ -349,7 +349,7 @@ test.each([
     ["OpenCode on an opening turn", SEARCH_ON, "grok", "c-iq", undefined, true, { turnIndex: 0 }],
     ["native Codex on a follow-up, which its session already carries", SEARCH_ON, "codex", "c-iq", conversationAfter(2), false, { turnIndex: 2 }],
     ["the Claude Code loop, which loads it as a plugin", SEARCH_ON, "claude", "c-iq", undefined, false, { turnIndex: 0 }],
-    ["a workspace with search off", SandboxSettingsSchema.parse({}), "codex", "c-iq", undefined, false, { turnIndex: 0 }],
+    ["a workspace with search off", SandboxSettingsSchema.parse({ iqSearch: false }), "codex", "c-iq", undefined, false, { turnIndex: 0 }],
     [
         "a treated conversation, stamped with its cohort",
         SEARCH_MEASURED,

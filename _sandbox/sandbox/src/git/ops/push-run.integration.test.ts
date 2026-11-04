@@ -319,3 +319,38 @@ test("a repo nothing has been started for is idle", () => {
     const runs = createPushRuns(services, () => {});
     expect(runs.state("app")).toEqual({ status: "idle", repo: "app", command: "", output: "" });
 });
+
+// The back-up rule's ask (conversations/land/settle/push-landed.ts): a commit made while a push runs may be one that push never
+// read, so `again` owes the repo one more push after it, and several asks fold into that one.
+test("a start asked again while one runs pushes once more after it, and every settle is heard", async () => {
+    const { clone, origin } = await ahead();
+    await hook(clone, "sleep 1");
+    const { services, runs: executed } = fakes();
+    const runs = createPushRuns(services);
+    const heard: string[] = [];
+    runs.onSettled((run) => heard.push(run.status));
+    await runs.start("app", clone, {});
+    await commit(clone, "c.txt", "three");
+    await runs.start("app", clone, { again: true });
+    await runs.start("app", clone, { again: true });
+    await waitFor(() => expect(heard).toEqual(["passed", "passed"]), SETTLES);
+    expect(executed()).toBe(2);
+    expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("three");
+});
+
+test("a cancel drops the push owed after the running one", async () => {
+    const { clone } = await ahead();
+    await hook(clone, "sleep 2");
+    const { services, runs: executed } = fakes();
+    const runs = createPushRuns(services);
+    const heard: string[] = [];
+    runs.onSettled((run) => heard.push(run.status));
+    await runs.start("app", clone, {});
+    await runs.start("app", clone, { again: true });
+    await waitFor(() => expect(runs.state("app").session).toBe(PUSH_SESSION), SETTLES);
+    runs.cancel("app");
+    await waitFor(() => expect(heard).toEqual(["cancelled"]), SETTLES);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(heard).toEqual(["cancelled"]);
+    expect(executed()).toBe(1);
+});

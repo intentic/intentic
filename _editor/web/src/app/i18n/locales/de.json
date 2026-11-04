@@ -6313,6 +6313,8 @@
             "finishedWork": "Fertige Arbeit",
             "followOrigin": "Mit dem Remote Schritt halten",
             "followOriginNote": "Alle paar Minuten abrufen und mergen, was andere gepusht haben; Repos mit Konflikten oder nicht committeten Dateien werden übersprungen, es wird nichts gepusht.",
+            "backUpSaved": "Jede gespeicherte Version sichern",
+            "backUpSavedNote": "Was jede gespeicherte Version committet hat, auf den verfolgten Remote-Branch pushen, mit dem pre-push-Hook des Repos. Erzwingt nie etwas und veröffentlicht keinen Branch, den der Remote noch nicht hat.",
             "n1Day": "1 Tag",
             "n1Week": "1 Woche",
             "n3Days": "3 Tage"

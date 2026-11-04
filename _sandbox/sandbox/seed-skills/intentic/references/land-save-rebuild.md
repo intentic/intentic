@@ -30,7 +30,9 @@ offers to switch on the two automatic rules in steps 2 and 3 below.
    the agent's card on `/agents` and on its review page; there is none in the chat. A **Collaborator** gets
    **Request land** / **Ask to accept** instead. With **Land finished work automatically** on (Sandbox ▸ Agent ▸
    Finishing; off by default, also per agent from its ⋯ menu: **Land automatically** / **Hold work on the
-   branch**), a clean turn lands by itself; a failed or stopped one never does. A refused land loses nothing: every
+   branch**), a clean turn lands by itself; a failed or stopped one never does. A land that conflicts with what the
+   main line committed meanwhile is handed back to the agent once, as a turn of its own, to rebase and resolve; that
+   turn lands by itself in turn, and a second conflict waits for the owner. A refused land loses nothing: every
    worktree keeps everything. Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of
    its own) never ride a land: they stay in the conversation's copy, listed on its review, until the owner includes or
    deletes them.
@@ -40,8 +42,15 @@ offers to switch on the two automatic rules in steps 2 and 3 below.
    version of accepted work** on, this happens by itself after each land, and the owner's own edits are committed
    before the next agent starts.
    **Save changes** in a file's own editor is different: it writes that file to disk.
-4. **Back up / Push** sends the commits to the remote. It is a separate press, never automatic, and the repository's
-   own pre-push hook runs. CI checks what was pushed.
+4. **Back up / Push** sends the commits to the remote. By default it is a separate press, and the repository's own
+   pre-push hook runs. CI checks what was pushed. With **Back up each saved version** on (Sandbox ▸ Agent ▸ Finishing,
+   under **Save a version of accepted work**, which it needs; off by default), each version a land commits is pushed by
+   itself, the same way the press pushes: the pre-push hook runs, the push shows in its terminal and on the Back up
+   panel, and a refusal reaches the feed and the owner's devices. It never forces, and it pushes only a repository whose
+   branch already tracks a remote branch, so publishing a new branch stays a press. A remote that moved ahead refuses
+   the push; with **Keep up with the remote** on, its commits are merged in within minutes and the next land's push goes
+   through. Land automatically, Save a version and Back up together take a clean turn all the way to the remote, with a
+   conflict handed back to the agent once on the way.
 
 **Land again / Accept again** is not the next step. It appears only when work that already landed was later taken
 out of the workspace (discarded by hand or by another agent tidying up), and it puts that work back. The card says who

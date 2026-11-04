@@ -78,7 +78,7 @@ const notesSchedule = computed<string>(() => {
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.iqSearch ?? false"
+                    :model-value="settings?.iqSearch ?? true"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ iqSearch: value })"
                 />
@@ -110,7 +110,7 @@ const notesSchedule = computed<string>(() => {
         >
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.workspaceMap ?? false"
+                    :model-value="settings?.workspaceMap ?? true"
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />

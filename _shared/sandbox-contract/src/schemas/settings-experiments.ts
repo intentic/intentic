@@ -68,10 +68,12 @@ export const claudeExperimentSettings = {
         ),
 };
 
+// On for new sandboxes from 2026-11-04; one from before keeps it off unless its owner switched it on (the daemon's
+// settings-store.ts pins the old default, settings/earlier-defaults-step.ts writes it down where never saved).
 export const iqSearchSettings = {
     iqSearch: z
         .boolean()
-        .default(false)
+        .default(true)
         .describe("Teach the agent how to use this workspace's own search tool, rather than leaving it to grep around."),
     iqSearchHoldout: z
         .number()

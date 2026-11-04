@@ -1,4 +1,4 @@
-import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySchema } from "@intentic/sandbox-contract/schemas/privacy";
+import { FRESH_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySchema } from "@intentic/sandbox-contract/schemas/privacy";
 import { mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
@@ -20,8 +20,8 @@ export const privacyShieldDocument = defineDocument({
 });
 
 export interface PrivacyPolicyStore {
-    // The policy in force. Throws when the file exists but cannot be read: reading it as the default (off) would turn
-    // the shield off without anybody deciding to.
+    // The policy in force. Throws when the file exists but cannot be read: reading it as a default would change the
+    // shield without anybody deciding to.
     readonly get: () => Promise<PrivacyShieldPolicy>;
     readonly set: (policy: PrivacyShieldPolicy) => Promise<void>;
 }
@@ -37,7 +37,8 @@ export class PrivacyPolicyUnreadableError extends Error {
 // a looser file is written back pinned, and a write is stored pinned.
 export const filePrivacyPolicy = (path: string, pin?: Pin<PrivacyShieldPolicy>, warn?: (message: string, error: Error) => void): PrivacyPolicyStore => {
     const file = openDocument(privacyShieldDocument, path, {
-        fallback: (): PrivacyShieldPolicy => ({ ...DEFAULT_PRIVACY_SHIELD }),
+        // A sandbox that never wrote a policy is a new one: an older one had its off policy written down at boot.
+        fallback: (): PrivacyShieldPolicy => ({ ...FRESH_PRIVACY_SHIELD }),
         mode: 0o600,
         // Set aside, a file the owner wrote would be replaced by an off switch.
         onUnreadable: "refuse",

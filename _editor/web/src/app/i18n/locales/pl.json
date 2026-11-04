@@ -5716,6 +5716,8 @@
             "finishedWork": "Skończona praca",
             "followOrigin": "Nadążaj za zdalnym repozytorium",
             "followOriginNote": "Co kilka minut pobieraj i scalaj to, co wypchnęli inni; pomijane są repozytoria z konfliktem lub niezacommitowanymi plikami. Nic nie jest wypychane.",
+            "backUpSaved": "Wysyłaj każdą zapisaną wersję",
+            "backUpSavedNote": "Wypychaj to, co zatwierdziła każda zapisana wersja, do śledzonej gałęzi zdalnej, z hookiem pre-push repozytorium. Nigdy nie wymusza i nie publikuje gałęzi, której zdalne repozytorium jeszcze nie ma.",
             "n1Day": "1 dzień",
             "n1Week": "1 tydzień",
             "n3Days": "3 dni"

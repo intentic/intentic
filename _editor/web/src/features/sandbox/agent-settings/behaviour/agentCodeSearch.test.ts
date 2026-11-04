@@ -25,6 +25,8 @@ const { queryClient } = await import(`../../../../lib/queryPersistence`);
 const { default: AgentCodeSearch } = await import(`./AgentCodeSearch.vue`);
 
 const DEFAULTS: SandboxSettings = SandboxSettingsSchema.parse({});
+// A sandbox from before both switches turned on for new ones (2026-11-04): each starts off, so a click turns it on.
+const OLDER = { ...DEFAULTS, iqSearch: false, workspaceMap: false };
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -61,7 +63,7 @@ const switchBeside = (el: HTMLElement, title: string): HTMLInputElement => {
 test(`a switch the daemon refuses comes back off and says why, under its own group`, async () => {
     // What a daemon answers over a settings.json its build cannot read: the read served defaults, and every write is refused.
     const unreadable = `settings.json could not be read by this build (the file does not match what this build expects); fix or remove the file before anything can be written to it`;
-    get.mockResolvedValue(DEFAULTS);
+    get.mockResolvedValue(OLDER);
     set.mockRejectedValue(new SandboxHttpError(409, unreadable));
     const el = mount();
     await waitFor(() => expect(switchBeside(el, `Project map`).disabled).toBe(false));
@@ -71,12 +73,12 @@ test(`a switch the daemon refuses comes back off and says why, under its own gro
 
     await waitFor(() => expect(el.textContent).toContain(unreadable));
     expect(el.textContent).toContain(`Couldn't save your change`);
-    expect(set).toHaveBeenCalledWith({ ...DEFAULTS, workspaceMap: true });
+    expect(set).toHaveBeenCalledWith({ ...OLDER, workspaceMap: true });
     expect(switchBeside(el, `Project map`).getAttribute(`aria-checked`)).toBe(`false`);
 });
 
 test(`a save that lands keeps the switch on and says nothing`, async () => {
-    let stored = DEFAULTS;
+    let stored = OLDER;
     get.mockImplementation(async () => stored);
     // Kept as the daemon keeps it: read through the schema.
     set.mockImplementation(async (written) => {

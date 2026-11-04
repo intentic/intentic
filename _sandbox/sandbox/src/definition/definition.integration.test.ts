@@ -153,7 +153,7 @@ test("derive reads the live stores: remotes become references, a remoteless repo
 
     const sourceServices = servicesFor(source, {
         capabilities: memoryCapabilitiesStore([{ id: "linear", kind: "mcp", config: { url: "https://mcp.linear.app/sse" } } as Capability]),
-        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ workspaceMap: true }) },
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ workspaceMap: false }) },
         secretRegistry: async () => [{ name: "OPENAI_API_KEY", value: "sk-test", source: "env" as const }],
     });
     const { definition, omitted } = await deriveDefinition(sourceServices);
@@ -163,7 +163,7 @@ test("derive reads the live stores: remotes become references, a remoteless repo
     expect(definition.capabilities.map((capability) => capability.id)).toEqual(["linear"]);
     expect(definition.secrets).toEqual(["OPENAI_API_KEY"]);
     // Definition settings include only non-default values.
-    expect(definition.settings).toEqual({ workspaceMap: true });
+    expect(definition.settings).toEqual({ workspaceMap: false });
     expect(definition.environment.dockerfile).toBe("RUN apt-get install -y ffmpeg\n");
     await cleanup();
 });

@@ -95,6 +95,7 @@ import { secretProgramGuardsDocument } from "../secrets/guards/program-guards.js
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
+import { earlierDefaultsStep } from "../settings/earlier-defaults-step.js";
 import { memberAiLiteracyDocument } from "../settings/member-ai-literacy.js";
 import { memberAudienceDocument } from "../settings/member-audience.js";
 import { memberGettingStartedDocument } from "../settings/member-getting-started.js";
@@ -297,6 +298,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         heldWakesOffWorkspaceStep,
         pre1308ImportStep,
         safetyCardLinesStep,
+        earlierDefaultsStep,
         conversationsSchemaStep,
         landCheckLeftoversStep,
         projectsHostLeftoversStep,

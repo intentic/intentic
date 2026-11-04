@@ -6313,6 +6313,8 @@
             "finishedWork": "Travail terminé",
             "followOrigin": "Suivre le dépôt distant",
             "followOriginNote": "Toutes les deux minutes environ, récupérer et fusionner ce que d'autres ont poussé; les dépôts en conflit ou avec des fichiers non commités sont ignorés. Rien n'est poussé.",
+            "backUpSaved": "Sauvegarder chaque version enregistrée",
+            "backUpSavedNote": "Pousser ce que chaque version enregistrée a commité vers la branche distante suivie, avec le hook pre-push du dépôt. Jamais de force, et jamais de branche que le distant n'a pas encore.",
             "n1Day": "1 jour",
             "n1Week": "1 semaine",
             "n3Days": "3 jours"

@@ -6313,6 +6313,8 @@
             "finishedWork": "Trabajo terminado",
             "followOrigin": "Mantenerse al día con el remoto",
             "followOriginNote": "Cada pocos minutos, traer e integrar lo que otros subieron; se omiten repos con conflictos o archivos sin commit. No se sube nada.",
+            "backUpSaved": "Respaldar cada versión guardada",
+            "backUpSavedNote": "Subir lo que cada versión guardada confirmó a la rama remota que sigue, con el hook pre-push del repositorio. Nunca fuerza ni publica una rama que el remoto aún no tiene.",
             "n1Day": "1 día",
             "n1Week": "1 semana",
             "n3Days": "3 días"

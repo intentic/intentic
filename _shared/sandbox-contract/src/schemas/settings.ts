@@ -63,7 +63,10 @@ export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 // version-landed: commits what a land brought, in the main tree, under the subject drafted for it, and the tree's own
 // remainder before the next isolated turn starts; the only way a person who never commits keeps every agent seeing
 // the latest tree, since worktrees are cut from HEAD.
-export const RuleBuiltinSchema = z.enum(["verify-ui-edits", "version-landed"]);
+// push-landed: sends what version-landed just committed to each repository's remote, the way Back up does (its pre-push
+// hook, its terminal, its refusal told to the owner), so a sandbox set to land and save on its own can also publish on
+// its own. Opt-in, and inert without version-landed: it pushes only a commit a land made (2026-11-04).
+export const RuleBuiltinSchema = z.enum(["verify-ui-edits", "version-landed", "push-landed"]);
 export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
 export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({
@@ -105,7 +108,7 @@ const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
 // A built-in reads a record only one moment keeps, so it stands at that moment alone.
 const MOMENT_BUILTINS: Partial<Record<RuleMoment, readonly RuleBuiltin[]>> = {
     "turn.ending": ["verify-ui-edits"],
-    "agent.landed": ["version-landed"],
+    "agent.landed": ["version-landed", "push-landed"],
 };
 export const RuleSchema = z
     .object({
@@ -330,12 +333,13 @@ export const SandboxSettingsSchema = z.object({
     ...iqSearchSettings,
     ...claudeExperimentSettings,
     // Rooted at the run's own starting folder (a persona's, an isolated conversation's worktree), not the workspace
-    // root — it maps the project containing that folder.
+    // root — it maps the project containing that folder. On for new sandboxes from 2026-11-04, kept off for older ones
+    // as iqSearch is (settings-experiments.ts).
     workspaceMap: z
         .boolean()
-        .default(false)
+        .default(true)
         .describe(
-            "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
+            "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. It spends tokens on the first message of every conversation. On for new sandboxes; one made before November 2026 keeps it off until you switch it on.",
         ),
     // Judged on the opening turn's own directory listings, not averaged across the conversation, or a twelve-turn
     // conversation would divide the effect by twelve. From 2026-10-06 to 10-12 the held-out share got the full map
@@ -543,7 +547,7 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(true)
         .describe(
-            "Whether each workspace repo keeps up with the remote branch it tracks. Every couple of minutes it is fetched, and what arrived is brought into the main tree: a fast-forward when you have no commits of your own, else a merge commit. Only while it is quiet (no turn working in the main tree, no merge or rebase of yours open), and never half-way: a conflict, or an uncommitted file in the way, leaves the repo exactly as it was until the next try. Nothing is ever pushed. Off, nothing is fetched.",
+            "Whether each workspace repo keeps up with the remote branch it tracks. Every couple of minutes it is fetched, and what arrived is brought into the main tree: a fast-forward when you have no commits of your own, else a merge commit. Only while it is quiet (no turn working in the main tree, no merge or rebase of yours open), and never half-way: a conflict, or an uncommitted file in the way, leaves the repo exactly as it was until the next try. Following never pushes; the back-up rule does that, when you switch it on. Off, nothing is fetched.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
     // the heavy-command rule an agent's command matched (workload/heavy-commands.ts), each naming a runner id. A
@@ -603,7 +607,7 @@ export const SandboxSettingsSchema = z.object({
             message: "a command belongs in the repository's own .intentic/checks.json, not in settings",
         })
         .describe(
-            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
+            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed, back that version up to the remote. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
         ),
     automationFailureLimit: z
         .number()

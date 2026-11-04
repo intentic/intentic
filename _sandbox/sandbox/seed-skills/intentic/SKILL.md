@@ -19,7 +19,8 @@ What the daemon does around you:
 - **Conversations are agents on worktrees.** Each conversation works on its own git branch
   (`agent/<conversation-id>`), checked out in a worktree that is mounted over `/work` for the turn and rebased
   onto the main tree's last commit before each turn. When a turn ends cleanly its delta waits as **Ready to
-  land** until the owner **lands** it (it lands by itself only with **Land finished work automatically** on):
+  land** until the owner **lands** it (it lands by itself only with **Land finished work automatically** on, and is
+  committed and pushed by itself only with **Save a version of accepted work** and **Back up each saved version** on):
   applied to the owner's main tree as UNCOMMITTED changes, so their own commit is the review boundary. That is
   why you commit only when asked. A patch that will not apply refuses the whole land and raises a conflict card
   naming the paths. Scratch-shaped untracked files never ride a land (`references/land-save-rebuild.md`).

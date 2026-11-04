@@ -6313,6 +6313,8 @@
             "finishedWork": "Finished work",
             "followOrigin": "Keep up with the remote",
             "followOriginNote": "Every few minutes, fetch and merge what others pushed, skipping repos with conflicts or uncommitted files; never pushes.",
+            "backUpSaved": "Back up each saved version",
+            "backUpSavedNote": "Push what each saved version committed to the remote branch it tracks, running the repository's pre-push hook. Never forces, and never publishes a branch the remote does not have yet.",
             "n1Day": "1 day",
             "n1Week": "1 week",
             "n3Days": "3 days"

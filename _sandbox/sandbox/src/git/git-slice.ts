@@ -49,9 +49,13 @@ import { type UndoableAction, undoableAction, undoLastAction } from "./ops/undo.
 import { fetchRemote, pullRemote, remoteState } from "./remote/remote.js";
 import { remoteProjectOf } from "./remote/remote-urls.js";
 import type { CommitSigner } from "../git-identity.js";
+import type { CompositionCore } from "../composition.js";
+import { daemonPushRuns, type PushRuns } from "./ops/push-run.js";
 
 // Git as the daemon runs it on the workspace's repositories: status, history, changes, branches and remotes.
 export interface GitSlice {
+    // The main tree's pushes, shared by the Back up button and the back-up rule (conversations/land/settle/push-landed.ts).
+    readonly pushRuns: PushRuns;
     readonly git: {
         readonly init: (dir: string, separateGitDir?: string) => Promise<void>;
         readonly status: (dir: string) => Promise<GitStatus>;
@@ -160,7 +164,8 @@ export interface GitSlice {
 
 // The slice as the daemon runs it: every verb is the real subprocess function, so a new one is a line here and its
 // declaration above, never a line in composition.ts.
-const createGitSlice = (): GitSlice => ({
+const createGitSlice = ({ whole }: CompositionCore): GitSlice => ({
+    pushRuns: daemonPushRuns(whole),
     git: {
         init: gitInit,
         status: gitStatus,

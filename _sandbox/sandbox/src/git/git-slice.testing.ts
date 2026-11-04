@@ -53,4 +53,9 @@ const cleanRepo = {
     fileDiff: async () => ({}),
 } satisfies Partial<GitSlice["git"]>;
 
-export const gitSliceFake = ({ git }: GitFakeOverrides) => ({ git: unstubbed<GitSlice["git"]>("git", { ...cleanRepo, ...git }) }) satisfies GitSlice;
+// No push runs unless a suite asks: the main router only listens for one settling.
+export const gitSliceFake = ({ git }: GitFakeOverrides) =>
+    ({
+        git: unstubbed<GitSlice["git"]>("git", { ...cleanRepo, ...git }),
+        pushRuns: unstubbed<GitSlice["pushRuns"]>("pushRuns", { onSettled: () => () => undefined }),
+    }) satisfies GitSlice;

@@ -21,9 +21,16 @@ test("get returns the defaults when the file is absent", async () => {
     expect(await store.get()).toEqual(DEFAULTS);
 });
 
+// A sandbox that never wrote the file is a new one (an older one had it written at boot, earlier-defaults-step.ts).
+test("a sandbox with no manifest runs with iq search and the project map on", async () => {
+    const { store } = tempStore();
+    const settings = await store.get();
+    expect([settings.iqSearch, settings.workspaceMap]).toEqual([true, true]);
+});
+
 test("set then get round-trips the full settings object", async () => {
     const { store } = tempStore();
-    const enabled: SandboxSettings = { ...DEFAULTS, iqSearch: true, hashlineEdits: true, agentRetentionDays: 0 };
+    const enabled: SandboxSettings = { ...DEFAULTS, iqSearch: false, hashlineEdits: true, agentRetentionDays: 0 };
     await store.set(enabled);
     expect(await store.get()).toEqual(enabled);
     await store.set(DEFAULTS);
@@ -60,12 +67,21 @@ test("load says when the defaults stand in for a file this build could not read"
 });
 
 // A manifest written before a flag existed is missing that key, which the schema fills with the flag's own
-// default, so the owner's OTHER picks survive the upgrade instead of the whole object being discarded.
+// default, so the owner's OTHER picks survive the upgrade instead of the whole object being discarded. The two flags
+// whose default turned on (2026-11-04) are the exception: a file that names one keeps it, one that names neither keeps
+// the old default.
 test("an older manifest missing a flag keeps its picks and defaults the new one", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify({ iqSearch: true }));
-    expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true });
+    await writeFile(path, JSON.stringify({ iqSearch: true, hashlineEdits: true }));
+    expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true, hashlineEdits: true, workspaceMap: false });
+});
+
+test("a manifest from before iq search and the project map turned on keeps both off", async () => {
+    const { store, path } = tempStore();
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ agentRetentionDays: 7 }));
+    expect(await store.get()).toEqual({ ...DEFAULTS, agentRetentionDays: 7, iqSearch: false, workspaceMap: false });
 });
 
 // What acts by a setting re-reads on its write rather than on its next beat (the resume pass's answers, 2026-10-20).
@@ -73,9 +89,9 @@ test("a write is heard once it is down, and not after the listener leaves", asyn
     const { store } = tempStore();
     const read: SandboxSettings[] = [];
     const unhear = store.onSet(() => void store.get().then((settings) => read.push(settings)));
-    await store.set({ ...DEFAULTS, iqSearch: true });
+    await store.set({ ...DEFAULTS, iqSearch: false });
     unhear();
     await store.set(DEFAULTS);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(read.map((settings) => settings.iqSearch)).toEqual([true]);
+    expect(read.map((settings) => settings.iqSearch)).toEqual([false]);
 });

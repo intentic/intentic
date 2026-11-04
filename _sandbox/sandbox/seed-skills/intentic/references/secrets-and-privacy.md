@@ -55,7 +55,8 @@ computer") when a computer's keyring answers; the card defaults to "Keep it in t
 ## The privacy shield
 
 Personal data (names, PESEL, ID numbers) kept from untrusted model providers, or tokens like `⟦PERSON_3⟧` in what you
-read, is the privacy shield, the owner's to switch on in Sandbox ▸ Privacy & safety ▸ Privacy shield. `privacy` says
+read, is the privacy shield, set in Sandbox ▸ Privacy & safety ▸ Privacy shield: on for a sandbox made from November
+2026, off for an older one until its owner switches it on. `privacy` says
 whether it is on and which providers are trusted. While it is on, an untrusted provider reads personal data as tokens
 that are turned back into the values on this machine: write a token exactly as given wherever its value belongs (a
 command, a query, an edit) and it resolves before anything runs. Before working through a dataset of people, teach it:

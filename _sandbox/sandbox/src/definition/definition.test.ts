@@ -23,7 +23,7 @@ const definition: SandboxDefinition = {
     ],
     capabilities: [{ id: "linear", kind: "mcp", config: { url: "https://mcp.linear.app/sse" } }],
     secrets: ["OPENAI_API_KEY", "SLACK_WEBHOOK_URL"],
-    settings: { workspaceMap: true, iqSearchHoldout: 0.25 },
+    settings: { workspaceMap: false, iqSearchHoldout: 0.25 },
 };
 
 test("emit → parse is the identity, dockerfile bytes included", () => {
@@ -94,7 +94,7 @@ test("diff answers empty for agreement and one line per real difference", () => 
         ],
         capabilities: [],
         secrets: ["OPENAI_API_KEY", "NEW_KEY"],
-        settings: { workspaceMap: false },
+        settings: { workspaceMap: true },
     };
     const subjects = definitionDiff(definition, drifted).map((difference) => difference.subject);
     expect(subjects).toContain("Repository intentic"); // ref changed
@@ -123,12 +123,12 @@ test("the workspace section drifts in three directions, and a definition without
 });
 
 test("a setting spelled at its default is no drift against one that omits it", () => {
-    const explicit: SandboxDefinition = { ...definition, settings: { ...definition.settings, iqSearch: false } };
+    const explicit: SandboxDefinition = { ...definition, settings: { ...definition.settings, iqSearch: true } };
     expect(definitionDiff(definition, explicit)).toEqual([]);
 });
 
 test("settingsDefinition is settings-only: non-defaults in, every other section empty", async () => {
-    const services = { sandboxSettings: { get: async () => ({ hashlineEdits: true, iqSearch: false }) } };
+    const services = { sandboxSettings: { get: async () => ({ hashlineEdits: true, iqSearch: true }) } };
     const scoped = await settingsDefinition(services as unknown as Parameters<typeof settingsDefinition>[0]);
     expect(scoped.settings).toEqual({ hashlineEdits: true });
     // A runner's tree arrives through the parent's git door, never by cloning a remote.
@@ -161,7 +161,7 @@ test("settingsDrift names each differing key once, with defaults meaning agreeme
     });
     // Agreement holds two ways: both omit the key, or one states the default the other omits.
     expect(settingsDrift(scoped({}), scoped({}))).toEqual([]);
-    expect(settingsDrift(scoped({ iqSearch: false }), scoped({}))).toEqual([]);
+    expect(settingsDrift(scoped({ iqSearch: true }), scoped({}))).toEqual([]);
     const lines = settingsDrift(scoped({ hashlineEdits: true }), scoped({}));
     expect(lines).toHaveLength(1);
     expect(lines[0]?.subject).toBe("Setting hashlineEdits");

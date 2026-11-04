@@ -8,6 +8,7 @@ import { t } from "@intentic/ui/i18n";
 export const NAMED_RULES = {
     land: `auto-land`,
     version: `auto-version`,
+    push: `auto-push`,
 } as const;
 
 // The two rows a maker's arrival can opt into together: finished work lands on its own, and what lands is committed.
@@ -24,6 +25,16 @@ export const autoVersionRule = (): Rule => ({
     label: t(`sandbox.words.saveVersionAcceptedWork`),
     moment: `agent.landed`,
     action: { kind: `builtin`, name: `version-landed` },
+    enabled: true,
+});
+
+// What each saved version committed, pushed to the remote branch it tracks (the daemon's conversations/land/settle/push-landed.ts).
+// Only ever after the version above: it pushes a commit a land made, so the Agent tab offers it beside that row alone.
+export const autoPushRule = (): Rule => ({
+    id: NAMED_RULES.push,
+    label: t(`sandbox.agentFinishedWork.backUpSaved`),
+    moment: `agent.landed`,
+    action: { kind: `builtin`, name: `push-landed` },
     enabled: true,
 });
 

@@ -2,7 +2,7 @@
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
-import { autoLandRule, autoVersionRule, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
+import { autoLandRule, autoPushRule, autoVersionRule, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
 import { useRules } from "../../../../models/sandbox/environment/useRules";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -32,12 +32,25 @@ const setLand = (on: boolean): void => {
 // The versioner built-in, a rule like the land verdict above: absent means the owner commits, as a developer does.
 const version = () => byId(NAMED_RULES.version);
 
+// Switching the version off takes the back-up with it: with nothing committed by a land, it would push nothing.
 const setVersion = (on: boolean): void => {
     if (!on) {
-        remove(NAMED_RULES.version);
+        remove(NAMED_RULES.version, NAMED_RULES.push);
         return;
     }
     upsert(autoVersionRule());
+};
+
+// The back-up built-in: what the version above committed is pushed, opt-in. Absent means the owner presses Back up.
+const versioned = computed(() => version()?.enabled === true);
+const backUp = () => byId(NAMED_RULES.push);
+
+const setBackUp = (on: boolean): void => {
+    if (!on) {
+        remove(NAMED_RULES.push);
+        return;
+    }
+    upsert(autoPushRule());
 };
 
 // Days; `0` disables the sweep. Values are string spellings since SegmentedControl works in strings.
@@ -71,6 +84,17 @@ const HELD_RETENTION_OPTIONS = computed(() => [
         <Row icon="history" :title="t(`sandbox.words.saveVersionAcceptedWork`)" :description="t(`sandbox.agentFinishedWork.commitWhatEachLanded`)">
             <template #control>
                 <ToggleSwitch :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
+            </template>
+        </Row>
+
+        <!-- Under the versioner, and only with it on: it pushes what a land's version committed, nothing else. -->
+        <Row icon="upload" :title="t(`sandbox.agentFinishedWork.backUpSaved`)" :description="t(`sandbox.agentFinishedWork.backUpSavedNote`)">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="versioned && (backUp()?.enabled ?? false)"
+                    :disabled="settings === undefined || !versioned"
+                    @update:model-value="setBackUp"
+                />
             </template>
         </Row>
 

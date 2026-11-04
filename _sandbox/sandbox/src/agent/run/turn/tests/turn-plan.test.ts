@@ -1197,6 +1197,7 @@ test("the flag alone is not enough: a workspace with iq search off still pays no
             }),
             config: { ...testConfig, iqTurnContext: true },
             agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ iqSearch: false }) }),
         }),
         turn({ prompt: "why does createWidget drop the name?" }),
         context,

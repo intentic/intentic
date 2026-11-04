@@ -1,4 +1,4 @@
-import { DEFAULT_PRIVACY_SHIELD, PRIVACY_PATTERN_MAX, PrivacyShieldPolicySchema, patternProblem } from "./privacy.js";
+import { DEFAULT_PRIVACY_SHIELD, FRESH_PRIVACY_SHIELD, PRIVACY_PATTERN_MAX, PrivacyShieldPolicySchema, patternProblem } from "./privacy.js";
 
 // The owner's own patterns run on every string bound for an untrusted provider, in the daemon's one thread: one that
 // cannot compile, matches empty text or nests a repeat inside a repeat is refused before it is saved.
@@ -43,6 +43,12 @@ describe(`PrivacyShieldPolicySchema`, () => {
     it(`reads a policy written before the owner's lists and rules as having none`, () => {
         expect(PrivacyShieldPolicySchema.parse({ mode: `on` })).toMatchObject({ dictionary: { off: [], lists: [] }, rules: [] });
         expect(DEFAULT_PRIVACY_SHIELD.rules).toEqual([]);
+    });
+
+    // New sandboxes start shielded (2026-11-04), while a stored policy that leaves `mode` out still reads off.
+    it(`starts a sandbox that never wrote a policy masking, every other field at its default`, () => {
+        expect(FRESH_PRIVACY_SHIELD).toEqual({ ...DEFAULT_PRIVACY_SHIELD, mode: `on` });
+        expect(DEFAULT_PRIVACY_SHIELD.mode).toBe(`off`);
     });
 
     it(`fills a rule's defaults and keeps a stored pattern whatever a later build judges of it`, () => {
