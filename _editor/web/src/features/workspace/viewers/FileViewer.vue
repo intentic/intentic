@@ -31,6 +31,10 @@ import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLiv
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { isShared, scopeKey, scopeQuery, useViewScope } from "../../../app/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
+import { useFollowCheckout } from "../../../models/workspace/files/useFollowCheckout";
+import { followEdits, useDraftSeed, useLiveFile, viewerRefresh } from "./liveFile";
+import LiveFileChip from "./LiveFileChip.vue";
+import FileReadingChips from "./FileReadingChips.vue";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import DerivedTextView from "./DerivedTextView.vue";
@@ -110,6 +114,14 @@ const { saveText, run, canWriteAt, entry: entryAt } = useWorkspaceTree();
 const memberWrites = computed(() => canWriteAt(path, viewScope.value));
 // Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel); keyed, undefined on the shared tree.
 const viewAgent = computed(() => (isShared(viewScope.value) ? undefined : scopeKey(viewScope.value)));
+// Whether the file is being written while it is open, and the read once those writes go quiet (liveFile.ts).
+const liveFile = useLiveFile(
+    () => viewScope.value,
+    () => changeEpochOf(path, viewScope.value),
+);
+const live = liveFile.live;
+// A conversation's copy is watched by the daemon only while someone is reading in it (checkoutChanged).
+useFollowCheckout(() => [path], () => viewScope.value);
 // Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
@@ -233,7 +245,9 @@ const reconcileOpenFile = (currentPath: string): void => {
             lossy.value = decodedLossily(window);
             text.value = content;
             edit.markSaved(currentPath, content);
-            reloadNonce.value++;
+            if (!followsSeed()) {
+                reloadNonce.value++;
+            }
         },
         (err) => {
             if (!isLatest() || superseded(err)) {
@@ -253,7 +267,13 @@ const reconcileOpenFile = (currentPath: string): void => {
     );
 };
 
-// A look's answer to the file changing on disk: the new text, remounted, and nothing written to any buffer.
+// Whether the surface showing the text takes a new text in place: one nobody types into follows its seed (CodeView,
+// MarkdownViewer), keeping the reader's place and marking what changed, where remounting it would put them back at the
+// top on every write an agent makes. A surface with a caret in it is remounted, since its text is its own after mount.
+const followsSeed = (): boolean =>
+    (open.value.kind === `code` && !editingThis.value) || (open.value.kind === `markdown` && !markdownEditable.value);
+
+// A look's answer to the file changing on disk: the new text, in place or remounted, and nothing written to any buffer.
 const refreshLook = (currentPath: string): void => {
     const isLatest = latest();
     readText(currentPath).then(
@@ -267,7 +287,9 @@ const refreshLook = (currentPath: string): void => {
             }
             lossy.value = decodedLossily(window);
             text.value = window.content;
-            reloadNonce.value++;
+            if (!followsSeed()) {
+                reloadNonce.value++;
+            }
         },
         (err) => {
             if (!isLatest() || superseded(err)) {
@@ -281,6 +303,29 @@ const refreshLook = (currentPath: string): void => {
         },
     );
 };
+
+// A drawn viewer redrawing over its last rendering as the file changes, then once more when the writes settle.
+const refreshViewer = viewerRefresh({
+    read: (target) =>
+        (open.value.kind === `viewer` ? viewerContentFor(open.value.viewer.fetch, target, viewScope.value.agent) : Promise.reject(new Error(`no viewer`))).then(
+            (content) => ({ kind: `read` as const, content }),
+            (err) => ({ kind: !superseded(err) && (gone(err) || (err instanceof SandboxHttpError && err.status === 404)) ? (`missing` as const) : (`failed` as const) }),
+        ),
+    held: () => viewerContent.value,
+    body: (content) => (`blob` in content ? content.blob : `text` in content ? content.text : undefined),
+    adopt: (loaded) => {
+        viewerContent.value = loaded;
+        text.value = `text` in loaded ? loaded.text : null;
+    },
+    latest,
+    gone: (target) => emit(`gone`, target),
+    stillOn: (target) => path === target && open.value.kind === `viewer`,
+    settle: liveFile.settle,
+});
+// The viewers that redraw in place: read as bytes or text, and already drawn. A streamed file (audio, video) starts
+// over as before, since its new address restarts playback anyway; a `path` viewer reads the file itself.
+const redrawsInPlace = (current: OpenFile): boolean =>
+    current.kind === `viewer` && (current.viewer.fetch === `blob` || current.viewer.fetch === `text`) && viewerComponent.value !== undefined && viewerContent.value !== undefined;
 
 // Which viewer claims this file, read where the watch below tracks it (claimOf, openFile.ts): a viewer registering after
 // the tab opened (an extension activating late, a restored tab, a local window's one document) re-resolves it.
@@ -312,6 +357,10 @@ const refiredInPlace = (previous: Trigger | undefined, currentPath: string): boo
         } else {
             reconcileOpenFile(currentPath);
         }
+        return true;
+    }
+    if (redrawsInPlace(open.value)) {
+        refreshViewer(currentPath);
         return true;
     }
     return keepsOwnSurface(open.value);
@@ -360,7 +409,7 @@ watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
     // race markSaved. Scope is a trigger too: the same path in another copy is a different file. So is the claiming
     // viewer: one registering (or going) re-resolves the tab. And so is whether the sandbox answers (above).
-    (): Trigger => [path, changeEpochOf(path), viewAgent.value, claimed.value, reachable.value] as const,
+    (): Trigger => [path, changeEpochOf(path, viewScope.value), viewAgent.value, claimed.value, reachable.value] as const,
     ([currentPath, , , , answering], previous, onCleanup) => {
         if (!answering) {
             if (!sameFileRefire(previous, currentPath) || !drawn()) {
@@ -603,6 +652,9 @@ const canHideComments = computed(() => open.value.kind === `code` && text.value 
 // Dirty state belongs to the file in this checkout.
 const dirtyThis = computed(() => !readOnly && !sharedFallback.value && edit.isDirty(path));
 const editorSeed = computed(() => (!readOnly && !sharedFallback.value ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
+// What a surface nobody types into shows: the agent's draft of the file while a call is writing it, else the file.
+const draft = useDraftSeed(() => path, () => viewScope.value, () => text.value, followsSeed);
+const shownSeed = computed(() => draft.text.value ?? editorSeed.value);
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
 // markSaved runs only after a successful write. Guarded by the baseline's hash: the daemon 409s on a
@@ -633,72 +685,16 @@ const onEditorSave = (value: string): void =>
     <div class="group/viewer relative flex h-full min-h-0 flex-col">
         <!-- Top bar actions teleported into tab row header -->
         <FileBreadcrumb :path="path">
-            <!-- The three reading toggles keep their words on a phone: this bar has the width to itself there, and an eye alone
-                 did not say whether it hid comments or showed a preview. -->
-            <!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
-            <button
-                v-if="canHideComments"
-                type="button"
-                :class="ui.chip({ on: hideFileComments, size: `sm` }, `shrink-0 font-medium`)"
-                :aria-pressed="hideFileComments"
-                @click="toggleHideFileComments()"
-                v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
-            >
-                <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-                <span>{{ t(`workspace.words.comments`) }}</span>
-            </button>
-            <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
-            <button
-                v-if="derivedOffered"
-                type="button"
-                :class="ui.chip({ on: textWanted, size: `sm` }, `shrink-0 font-medium`)"
-                :aria-pressed="textWanted"
-                @click="textWanted = !textWanted"
-                v-tooltip.bottom="
-                    textWanted
-                        ? t(`workspace.fileViewer.showFile`)
-                        : { title: t(`workspace.fileViewer.readAsText`), note: t(`workspace.words.whatAgentsRead`) }
-                "
-            >
-                <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-                <span>{{ t(`workspace.words.text`) }}</span>
-            </button>
-            <!-- A web page's rendered view and its source, one press apart, like the Text chip above. -->
-            <button
-                v-if="previewOffered"
-                type="button"
-                :class="ui.chip({ on: previewing, size: `sm` }, `shrink-0 font-medium`)"
-                :aria-pressed="previewing"
-                @click="setHtmlPreviewed(path, !previewing)"
-                v-tooltip.bottom="
-                    previewing
-                        ? t(`workspace.fileViewer.showSource`)
-                        : { title: t(`workspace.fileViewer.showPage`), note: t(`workspace.fileViewer.pageSandboxed`) }
-                "
-            >
-                <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
-                <span>{{ t(`workspace.fileViewer.preview`) }}</span>
-            </button>
-            <!-- What that preview left out or put back, in a few words beside the chip they qualify; the detail is on hover
-                 or focus. A bar too narrow for the words (the tab row of a narrow pane, a slim band) keeps the icon and the
-                 count, the words left for a screen reader; truncation is only the last resort below that. -->
-            <span
-                v-for="note in previewNotes"
-                :key="note.key"
-                tabindex="0"
-                class="inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs"
-                :class="note.warn ? `text-warning` : `text-muted`"
-                v-tooltip.bottom="note.tip"
-            >
-                <Icon :name="note.icon" class="shrink-0 text-[0.7rem]" />
-                <span class="truncate @max-4xl/tabbar:sr-only @max-sm/viewerbar:sr-only">{{ note.text }}</span>
-                <span
-                    v-if="note.count !== undefined"
-                    aria-hidden="true"
-                    class="hidden tabular-nums @max-4xl/tabbar:inline @max-sm/viewerbar:inline"
-                    >{{ note.count }}</span
-                >
-            </span>
+            <LiveFileChip v-if="live || draft.writing.value" :writing="draft.writing.value" />
+            <FileReadingChips
+                v-model:text-wanted="textWanted"
+                :path
+                :comments="canHideComments"
+                :derived="derivedOffered"
+                :preview="previewOffered"
+                :previewing
+                :notes="previewNotes"
+            />
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
                 v-if="viewAgent !== undefined && fromShared"
@@ -788,7 +784,8 @@ const onEditorSave = (value: string): void =>
             <span class="flex-1">{{ t(`workspace.fileViewer.notUtf8ReadOnly`) }}</span>
         </div>
 
-        <div ref="printHost" class="relative min-h-0 flex-1">
+        <!-- `data-follow-edits` is the one word every surface below reads to bring each landed edit into view (liveFile.ts). -->
+        <div ref="printHost" class="relative min-h-0 flex-1" :data-follow-edits="followEdits ? `true` : `false`">
             <!-- Floating copy button on the content's top-right corner on hover; inside the content, so it never covers a banner's action above.
                  Over a rendered page the window's hover stops at the frame, so the frame's own word stands in for it (pageHovered). -->
             <div
@@ -824,7 +821,7 @@ const onEditorSave = (value: string): void =>
                     :key="`${path}:${reloadNonce}`"
                     :editable="editingThis"
                     :path="path"
-                    :code="editorSeed"
+                    :code="shownSeed"
                     :lang="lang"
                     :scroll-to-line="line"
                     :hide-comments="hideFileComments"
@@ -836,7 +833,7 @@ const onEditorSave = (value: string): void =>
                     v-else-if="open.kind === 'markdown' && text !== null"
                     ref="markdownView"
                     :key="`${path}:${reloadNonce}`"
-                    :source="editorSeed"
+                    :source="shownSeed"
                     :path="path"
                     :line="line"
                     :editable="markdownEditable"

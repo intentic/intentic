@@ -66,6 +66,8 @@ export const workspaceDoors = {
     mediaTicket: ({ path }) => mintMediaTicket(path),
     downloadTicket: ({ paths }) => mintDownloadTicket(paths),
     previewTicket: ({ path, source }) => mintPreviewTicket(path, source),
+    // The recording's conversations write nothing while it plays, so there is nothing to watch: a lease, and no frames.
+    followCheckout: () => ({ leaseMs: 60_000 }),
     search: ({ query, ...options }) => searchWorkspace(query, searchOptions(options)),
     // Text search's first page, its files streamed ahead of it.
     searchStream: ({ query, ...options }) => streamSearch(searchWorkspace(query, searchOptions(options))),

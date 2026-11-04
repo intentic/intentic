@@ -8,6 +8,7 @@ import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { patchedTree } from "../tree/treeDelta";
 import { forgetFollowed, patchListing } from "../tree/lazyListings";
+import { isShared, SHARED_SCOPE, scopeKey, type ViewScope } from "../../../app/workspaceScope";
 
 // Live workspace-change state fed from the daemon's SSE stream; consumed by the tree, the review lists' module
 // grouping, the file viewer, and the tree's row flash. Module singleton so invalidation can't die with an unmounting
@@ -99,9 +100,11 @@ const mayChangeModules = (paths: readonly string[]): boolean =>
    arrived. An empty set is the daemon's own "too many paths to name" signal, and means any directory may have moved. */
 export const changedDirs = sandboxRef<{ readonly stamp: number; readonly dirs: ReadonlySet<string> }>(() => ({ stamp: 0, dirs: new Set() }));
 
-// Per-path change epoch: the file viewer's read trigger includes it, so a same-size external edit still re-reads.
+// Per-file change epoch, by the copy the file is in: the file viewer's read trigger includes it, so a same-size external
+// edit still re-reads. Keyed `${scopeKey}\n${path}`; the shared tree's key is the path behind an empty scope key.
 const epochs = sandboxRef(() => new Map<string, number>());
-// Paths changed within the last HIGHLIGHT_MS, for the tree's row flash; each clears on its own timer.
+// Files changed within the last HIGHLIGHT_MS, for the tree's row flash and a viewer's changed-file mark; each clears on
+// its own timer. Same keys as `epochs`.
 const recentlyChanged = sandboxRef(() => new Set<string>());
 const clearTimers = sandboxValue(
     () => new Map<string, ReturnType<typeof setTimeout>>(),
@@ -109,6 +112,8 @@ const clearTimers = sandboxValue(
 );
 // Monotonic across sandboxes: an epoch only has to differ from the last one read for its path.
 let epoch = 0;
+
+const fileKey = (path: string, scope: ViewScope): string => `${scopeKey(scope)}\n${path}`;
 
 // Evidence that a ref move also rewrote the tree (checkout/reset/rebase do both; a plain commit only moves
 // the ref). Window is generous: a stale editor after a checkout is worse than a needless buffer drop after a commit.
@@ -131,24 +136,31 @@ export const workspaceChangeMark = (): number => workspaceChanges.value;
    files are the ones the verdict was about. */
 export const workspaceChangedSince = (mark: number): boolean => workspaceChanges.value === 0 || workspaceChanges.value > mark;
 
-export const markWorkspaceChanged = (paths: readonly string[]): void => {
-    lastWorkspaceChangeAt.value = Date.now();
-    workspaceChanges.value += 1;
+// Bumps each file's epoch in one copy and lights its row for HIGHLIGHT_MS.
+const markFiles = (paths: readonly string[], scope: ViewScope): void => {
     for (const path of paths) {
-        epochs.value.set(path, ++epoch);
-        recentlyChanged.value.add(path);
-        const existing = clearTimers.value.get(path);
+        const key = fileKey(path, scope);
+        epochs.value.set(key, ++epoch);
+        recentlyChanged.value.add(key);
+        const existing = clearTimers.value.get(key);
         if (existing !== undefined) {
             clearTimeout(existing);
         }
         clearTimers.value.set(
-            path,
+            key,
             setTimeout(() => {
-                recentlyChanged.value.delete(path);
-                clearTimers.value.delete(path);
+                recentlyChanged.value.delete(key);
+                clearTimers.value.delete(key);
             }, HIGHLIGHT_MS),
         );
     }
+};
+
+/* FILES THAT CHANGED IN THE SHARED TREE, as the daemon's watcher heard them. */
+export const markWorkspaceChanged = (paths: readonly string[]): void => {
+    lastWorkspaceChangeAt.value = Date.now();
+    workspaceChanges.value += 1;
+    markFiles(paths, SHARED_SCOPE);
     changedDirs.value = { stamp: changedDirs.value.stamp + 1, dirs: new Set(paths.map((path) => parentDir(path))) };
     // Refetches even on an empty batch (the daemon's signal); throttled not debounced so a steady upload still
     // refreshes.
@@ -160,8 +172,30 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
     }
 };
 
-export const changeEpochOf = (path: string): number => epochs.value.get(path) ?? 0;
-export const isRecentlyChanged = (path: string): boolean => recentlyChanged.value.has(path);
+/* FILES THAT CHANGED IN ONE CONVERSATION'S OWN COPY (or a branch's), which the shared tree's watcher never sees: told
+   by the calls of the turn that wrote them (turnFacts.ts) and by the daemon's watch on a followed file's folder
+   (checkoutChanged). Moves none of the shared tree's marks, which say what /work holds; only the walked trees, one of
+   which is that copy's, are read again. */
+export const markCheckoutChanged = (paths: readonly string[], scope: ViewScope): void => {
+    if (isShared(scope)) {
+        markWorkspaceChanged(paths);
+        return;
+    }
+    if (paths.length === 0) {
+        return;
+    }
+    markFiles(paths, scope);
+    refreshTree();
+};
+
+/* A FILE'S CHANGE COUNT IN THE COPY IT IS READ FROM. A scoped read counts the shared tree's changes too: a file the
+   copy does not hold is read from the shared tree (WorkspaceFileWindow.shared), and outside its repository a branch's
+   view is the shared tree, so a change there must still re-read it; at worst that is one re-read too many. */
+export const changeEpochOf = (path: string, scope: ViewScope = SHARED_SCOPE): number => {
+    const shared = epochs.value.get(fileKey(path, SHARED_SCOPE)) ?? 0;
+    return isShared(scope) ? shared : Math.max(shared, epochs.value.get(fileKey(path, scope)) ?? 0);
+};
+export const isRecentlyChanged = (path: string, scope: ViewScope = SHARED_SCOPE): boolean => recentlyChanged.value.has(fileKey(path, scope));
 
 /* A FILE'S TEXT LANDING, which no workspace change can stand in for: renderings are written under the state directory
    the watcher ignores, so `derivedChanged` is the only signal that one landed. Separate epochs from the ones above,

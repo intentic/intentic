@@ -17,10 +17,14 @@ const { default: ChatTurnDeliverables } = await import(`./ChatTurnDeliverables.v
 let app: App | undefined;
 const opened = jest.fn<(path: string, line?: number) => void>();
 
-const mount = (deliverables: readonly ChatDeliverable[], surface: ChatSurface = { imageUrl: () => undefined, openFile: opened }): HTMLElement => {
+const mount = (
+    deliverables: readonly ChatDeliverable[],
+    surface: ChatSurface = { imageUrl: () => undefined, openFile: opened },
+    live = false,
+): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatTurnDeliverables, { deliverables }) });
+    app = createApp({ render: () => h(ChatTurnDeliverables, { deliverables, live }) });
     // The document over the chat is a dialog, which needs PrimeVue's config.
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
@@ -49,6 +53,15 @@ afterEach(() => {
 });
 
 describe(`ChatTurnDeliverables`, () => {
+    // A turn still writing its documents lists them from the first write, each saying it is being written, and one
+    // opened then follows the agent's copy as it changes (FileViewer).
+    it(`says a document is being written while its turn still writes it, and opens it all the same`, () => {
+        const element = mount(made(`board/Q3 deck.pptx`), undefined, true);
+        expect(element.textContent).toContain(`Slide deck · being written`);
+        buttons(element)[0]!.click();
+        expect(opened).toHaveBeenCalledWith(`board/Q3 deck.pptx`);
+    });
+
     it(`names each document by its file and says what kind it is`, () => {
         const element = mount(made(`board/Q3 deck.pptx`, `board/minutes.pdf`));
         expect(buttons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open Q3 deck.pptx, Slide deck`, `Open minutes.pdf, PDF`]);

@@ -3940,7 +3940,8 @@
             "odt": "Textdokument (ODT)",
             "ods": "Tabelle (ODS)",
             "odp": "Präsentation (ODP)",
-            "rtf": "Textdokument (RTF)"
+            "rtf": "Textdokument (RTF)",
+            "beingWritten": "{kind} · wird geschrieben"
         },
         "chatTurnShots": {
             "asideHidden": "{what} ausgeblendet",
@@ -13299,7 +13300,13 @@
             "loadFailed": "Die Datei ließ sich nicht laden.",
             "reloadFailed": "Die Datei ließ sich nicht neu laden.",
             "downloadFailed": "Die Datei ließ sich nicht herunterladen.",
-            "saveFailed": "Ihre Änderungen ließen sich nicht speichern."
+            "saveFailed": "Ihre Änderungen ließen sich nicht speichern.",
+            "live": "Live",
+            "followingEdits": "Folgt Änderungen",
+            "notFollowingEdits": "Änderungen folgen",
+            "liveNote": "Wird gerade geschrieben",
+            "writing": "Schreibt",
+            "draftNote": "Zeigt den Entwurf des Agenten"
         },
         "healthCodebaseHealth": {
             "all": "Alle",

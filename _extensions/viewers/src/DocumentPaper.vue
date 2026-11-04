@@ -6,7 +6,7 @@ import ViewerStatus from "./load/ViewerStatus.vue";
 /* The paper a document viewer draws on: the scroll surface, its states, and one set of document typography.
    Its pages are built imperatively by whichever viewer owns it, which is why every rule below is `:deep`. */
 
-const { loading, error, empty } = defineProps<{ loading: boolean; error?: string; empty?: boolean }>();
+const { loading, error, empty, stale } = defineProps<{ loading: boolean; error?: string; empty?: boolean; stale?: boolean }>();
 
 const host = ref<HTMLElement>();
 
@@ -17,7 +17,7 @@ defineExpose({ host });
 <template>
     <div class="relative h-full min-h-0">
         <div ref="host" class="odf-doc h-full overflow-auto bg-muted/20"></div>
-        <ViewerStatus overlay :loading="loading" :error="error">
+        <ViewerStatus overlay :loading="loading" :error="error" :stale="stale">
             <div v-if="empty === true" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
                 {{ t(`documentPaper.documentNoTextIn`) }}
             </div>

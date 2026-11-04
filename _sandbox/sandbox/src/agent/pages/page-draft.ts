@@ -11,7 +11,9 @@ const EMIT_EVERY_MS = 150;
 type State = "start" | "key" | "afterKey" | "value" | "string" | "other" | "afterValue" | "done";
 
 // The string values of a flat JSON object, decoded as the text arrives. Only the keys asked for are kept; a value of any
-// other shape is skipped over (nested objects and arrays included) without being held.
+// other shape is skipped over (nested objects and arrays included) without being held, except a wanted key's scalar
+// (a boolean, a number, null), whose literal is kept once it has ended (`scalar`). Shared with the file drafts
+// (file-draft.ts), which read a Write's or an Edit's arguments the same way.
 export class PartialJsonStrings {
     private state: State = "start";
     private key = "";
@@ -22,11 +24,19 @@ export class PartialJsonStrings {
     private skipEscape = false;
     private readonly values = new Map<string, string>();
     private readonly complete = new Set<string>();
+    // A wanted key's scalar as its literal is read (`true`, `12`), and those that have ended.
+    private scalarKey: string | undefined;
+    private readonly scalars = new Map<string, string>();
 
     constructor(private readonly wanted: ReadonlySet<string>) {}
 
     value(key: string): string | undefined {
         return this.values.get(key);
+    }
+
+    // A wanted key's scalar literal, once it has ended; undefined while it is still being read, or when it was a string.
+    scalar(key: string): string | undefined {
+        return this.scalarKey === key ? undefined : this.scalars.get(key);
     }
 
     // Whether the key's string has closed, so a title is not drawn half-written.
@@ -98,18 +108,7 @@ export class PartialJsonStrings {
                 }
                 return;
             case "value":
-                if (char === '"') {
-                    this.state = "string";
-                    if (this.wanted.has(this.key)) {
-                        this.values.set(this.key, "");
-                    }
-                } else if (char === "{" || char === "[") {
-                    this.state = "other";
-                    this.depth = 1;
-                } else if (!/\s/.test(char)) {
-                    this.state = "other";
-                    this.depth = 0;
-                }
+                this.startValue(char);
                 return;
             case "string":
                 if (this.escape !== undefined) {
@@ -134,6 +133,36 @@ export class PartialJsonStrings {
         }
     }
 
+    // The first character after a key's colon: a string, a nested value, or a scalar's first character.
+    private startValue(char: string): void {
+        if (char === '"') {
+            this.state = "string";
+            if (this.wanted.has(this.key)) {
+                this.values.set(this.key, "");
+            }
+        } else if (char === "{" || char === "[") {
+            this.state = "other";
+            this.depth = 1;
+        } else if (!/\s/.test(char)) {
+            this.state = "other";
+            this.depth = 0;
+            if (this.wanted.has(this.key)) {
+                this.scalarKey = this.key;
+                this.scalars.set(this.key, char);
+            }
+        }
+    }
+
+    // A scalar's next character: a comma or the closing brace ends it, anything else but space is more of its literal.
+    private readScalar(char: string): void {
+        if (char === "," || char === "}") {
+            this.state = char === "," ? "afterValue" : "done";
+            this.scalarKey = undefined;
+        } else if (this.scalarKey !== undefined && !/\s/.test(char)) {
+            this.scalars.set(this.scalarKey, (this.scalars.get(this.scalarKey) ?? "") + char);
+        }
+    }
+
     // A value that is not a string, passed over: a scalar ends at the next comma or brace, a nested one when it closes.
     private skip(char: string): void {
         if (this.skipString) {
@@ -147,11 +176,7 @@ export class PartialJsonStrings {
             return;
         }
         if (this.depth === 0) {
-            if (char === ",") {
-                this.state = "afterValue";
-            } else if (char === "}") {
-                this.state = "done";
-            }
+            this.readScalar(char);
             return;
         }
         if (char === '"') {
@@ -198,9 +223,39 @@ class PageDraft {
     }
 }
 
+// A stream event as the drafts read it: a message opening, a content block starting, more of a call's arguments, a
+// block closing.
+export interface DraftStreamEvent {
+    readonly type: string;
+    readonly index?: number;
+    readonly content_block?: { type?: string; id?: string; name?: string };
+    readonly delta?: { type: string; partial_json?: string };
+}
+
+// One thread's drafts of some kind (a page's, a file's), fed its stream events in order.
+export interface StreamedDrafts {
+    reset(): void;
+    start(index: number, block: { readonly type?: string; readonly id?: string; readonly name?: string }): void;
+    delta(index: number, partial: string): Generator<AgentEvent>;
+    stop(index: number): Generator<AgentEvent>;
+}
+
+// One stream event onto a thread's drafts, and the frames it makes them say.
+export function* streamedDraftFrames(drafts: StreamedDrafts, event: DraftStreamEvent): Generator<AgentEvent> {
+    if (event.type === "message_start") {
+        drafts.reset();
+    } else if (event.type === "content_block_start" && event.index !== undefined && event.content_block !== undefined) {
+        drafts.start(event.index, event.content_block);
+    } else if (event.type === "content_block_delta" && event.index !== undefined && event.delta?.type === "input_json_delta") {
+        yield* drafts.delta(event.index, event.delta.partial_json ?? "");
+    } else if (event.type === "content_block_stop" && event.index !== undefined) {
+        yield* drafts.stop(event.index);
+    }
+}
+
 // Every page call the main thread is writing in the current message, by its content block's index; and every call that
 // drew a draft, until its result says the page took over (or the call failed).
-export class PageDrafts {
+export class PageDrafts implements StreamedDrafts {
     private readonly byBlock = new Map<number, PageDraft>();
     private readonly open = new Set<string>();
 

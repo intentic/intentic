@@ -126,6 +126,12 @@ export type WorkspaceChanged = z.infer<typeof WorkspaceChangedSchema>;
 export const DerivedChangedSchema = z.object({ kind: z.literal("derivedChanged"), paths: z.array(z.string()) });
 export type DerivedChanged = z.infer<typeof DerivedChangedSchema>;
 
+// Files that changed in one conversation's own copy, workspace-relative forward-slash, from the watch a reader holds on
+// their folders (workspace.followCheckout). A checkout lives outside /work, so no `workspaceChanged` batch can carry
+// these; never an empty "refetch everything" batch, since the watch names what it saw or says nothing.
+export const CheckoutChangedSchema = z.object({ kind: z.literal("checkoutChanged"), agent: z.string(), paths: z.array(z.string()) });
+export type CheckoutChanged = z.infer<typeof CheckoutChangedSchema>;
+
 // Repos whose refs moved (commit, checkout, branch, rebase); a repo's git dir lives outside /work and the watcher
 // ignores `.git`, so no workspace path can say this. Diff, not snapshot: an absent repo didn't move, it didn't vanish.
 export const RefsChangedSchema = z.object({ kind: z.literal("refsChanged"), repos: z.array(z.string()) });
@@ -218,9 +224,9 @@ export const refusalsOf = (event: ProviderRefusalChanged): readonly ProviderRefu
 export const TreeChangedSchema = WorkspaceTreeDeltaSchema.extend({ kind: z.literal("treeChanged") });
 export type TreeChanged = z.infer<typeof TreeChangedSchema>;
 
-// The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime/shadow/tree changes, presence
-// and fleet rosters (whole, or the cards that moved), account headroom and refusal changes. oRPC validates every frame
-// against this.
+// The /events stream union: hello, heartbeats, boot progress, workspace/checkout/repo/ref/runtime/shadow/tree changes,
+// presence and fleet rosters (whole, or the cards that moved), account headroom and refusal changes. oRPC validates
+// every frame against this.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
@@ -228,6 +234,7 @@ export const SystemEventSchema = z.discriminatedUnion("kind", [
     WorkspaceChangedSchema,
     TreeChangedSchema,
     DerivedChangedSchema,
+    CheckoutChangedSchema,
     ReposChangedSchema,
     RefsChangedSchema,
     RuntimeChangedSchema,

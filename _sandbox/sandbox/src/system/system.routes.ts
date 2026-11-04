@@ -23,11 +23,9 @@ import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { serviceSession } from "../processes/service-processes.js";
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
-import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
-import { subscribeRefChanges } from "../git/remote/ref-watch.js";
-import { subscribeTreeChanges, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
-import { subscribeDerived } from "../derived/derived-text.js";
 import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.js";
+import { subscribeFileFrames } from "./file-frames.js";
+import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import {
@@ -162,31 +160,9 @@ async function* systemEvents(
             enqueue({ kind: "boot", ...progress });
             onWake();
         }),
-        subscribeWorkspaceChanges((paths) => {
-            enqueue({ kind: "workspaceChanged", paths });
-            onWake();
-        }),
-        // What each batch moved in the shared tree, so a tab patches the tree it holds instead of fetching it again.
-        subscribeTreeChanges((delta) => {
-            enqueue({ kind: "treeChanged", ...delta });
-            onWake();
-        }),
-        // The unnamed batch for a write the watcher could not see: a check's build rewrites tracked files under `dist/`,
-        // which is pruned, so without this a review read mid-build stands as the answer until something remounts the
-        // panel.
-        subscribeUnwatchedWrites(() => {
-            enqueue({ kind: "workspaceChanged", paths: [] });
-            onWake();
-        }),
-        // Renderings land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can
-        // ever carry them; without this frame a second reader of the same file waits for text that already arrived.
-        subscribeDerived((paths) => {
-            enqueue({ kind: "derivedChanged", paths });
-            onWake();
-        }),
-        // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.
-        subscribeRepoChanges((repos) => {
-            enqueue({ kind: "reposChanged", repos });
+        // Every frame that says files or repositories moved (file-frames.ts).
+        ...subscribeFileFrames((event) => {
+            enqueue(event);
             onWake();
         }),
         // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click.

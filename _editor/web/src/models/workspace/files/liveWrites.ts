@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { ToolCallLocation, ToolKind } from "@intentic/sandbox-contract/events/requests";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 
 // Live counterpart of changeOrigins: what a main-tree turn is writing right now (an isolated turn's worktree is
 // irrelevant here). Read from the live tool_call stream, not persisted; best-effort, since the daemon's per-repo lock
@@ -65,4 +66,21 @@ export const repoOfPath = (path: string, repos: ReadonlySet<string>): string => 
         }
     }
     return best;
+};
+
+// Strips a leading `./`: some adapters still emit it, and it would read as a repo literally named ".".
+const tidy = (path: string): string => (path.startsWith(`./`) ? path.slice(2) : path);
+
+// What a call wrote once it settled: an edit's locations and diffs, a delete's locations, and a command's locations,
+// which are only what the daemon found it wrote (agent/tools/produced-documents.ts), so a failed command still counts.
+// Empty for a call still running or one that wrote nothing; the same rule the turn's document chips follow
+// (deliverables.ts), here for every file rather than documents alone.
+export const settledWritesOf = (tool: Pick<TranscriptTool, `category` | `status` | `locations` | `content`>): readonly string[] => {
+    const settled = tool.status === `completed` || (tool.category === `execute` && tool.status === `failed`);
+    if (!settled || (tool.category !== `edit` && tool.category !== `execute` && tool.category !== `delete` && tool.category !== `move`)) {
+        return [];
+    }
+    const located = (tool.locations ?? []).map((location) => location.path);
+    const diffed = tool.category === `edit` ? (tool.content ?? []).flatMap((entry) => (entry.type === `diff` ? [entry.path] : [])) : [];
+    return [...new Set([...located, ...diffed].map(tidy))];
 };

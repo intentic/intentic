@@ -3940,7 +3940,8 @@
             "odt": "Dokument tekstowy (ODT)",
             "ods": "Arkusz kalkulacyjny (ODS)",
             "odp": "Prezentacja (ODP)",
-            "rtf": "Dokument tekstowy (RTF)"
+            "rtf": "Dokument tekstowy (RTF)",
+            "beingWritten": "{kind} · w trakcie pisania"
         },
         "chatTurnShots": {
             "asideHidden": "Ukryte: {what}",
@@ -12623,7 +12624,13 @@
             "loadFailed": "Nie udało się wczytać pliku.",
             "reloadFailed": "Nie udało się ponownie wczytać pliku.",
             "downloadFailed": "Nie udało się pobrać pliku.",
-            "saveFailed": "Nie udało się zapisać Twoich zmian."
+            "saveFailed": "Nie udało się zapisać Twoich zmian.",
+            "live": "Na żywo",
+            "followingEdits": "Śledzi zmiany",
+            "notFollowingEdits": "Śledź zmiany",
+            "liveNote": "Właśnie zapisywany",
+            "writing": "Pisze",
+            "draftNote": "Szkic agenta"
         },
         "healthCodebaseHealth": {
             "all": "Wszystko",

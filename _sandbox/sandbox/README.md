@@ -179,7 +179,10 @@ flowchart LR
   back nor deletes it. _(2026-10-09) Snapshots had no size limit: a 30 GB folder of films dropped into `/work` was
   hashed and stored a second time on `/history`._
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
-  `/events` pushes file, git and fleet changes to the browser.
+  `/events` pushes file, git and fleet changes to the browser. The shared tree's watcher covers `/work` alone; a
+  conversation's own checkout is watched one folder at a time, for as long as a reader with a file of it open renews a
+  60-second lease (`workspace.followCheckout`, `workspace/watch/checkout-follow.ts`, at most 64 folders), and its
+  changes go out as `checkoutChanged` to readers who may see that conversation.
 - It registers with the platform at boot (`system/boot/announce.ts`), then announces again about once an hour
   (jittered by a tenth) as its heartbeat, naming which copy it is: `instance` (netd's `INTENTIC_INSTANCE`, else an
   id minted once per process), `host` (`HOST_LABEL`) and `os` (`HOST_ENV`, else `HOST_PLATFORM`). (2026-10-05) It
@@ -366,7 +369,9 @@ flowchart LR
   otherwise the page's caption offers the reader an ask that fills the composer. It is filed under `.intentic/records/artifacts/pages/<conversation>/` and never
   rewritten (`page-store.ts`); a `replaces` redraw is a new file, and the earlier row folds. `page` frames draw it
   inline. `page_ask` parks the turn until the page's `intentic.submit` answers it. `page_draft` turn facts stream the
-  markup while the model writes it (`page-draft.ts` reads `input_json_delta`). The editor draws pages sealed: scripts
+  markup while the model writes it (`page-draft.ts` reads `input_json_delta`). `file_draft` facts do the same for a
+  Write's or Edit's text (`agent/pages/file-draft.ts`, Claude Code only, capped at 256 KiB), which a viewer open on the
+  file draws as a draft until the call lands. The editor draws pages sealed: scripts
   run, no network, no reach into the editor. A page speaks the MCP Apps bridge (`sandbox-contract` `text/pages.ts`),
   so a connected MCP server's own `ui://` app is drawn the same way after a call to its tool (`mcp-apps.ts`). What
   that app later asks of its server goes through `POST /pages/app-call`, which calls only tools the server lets its

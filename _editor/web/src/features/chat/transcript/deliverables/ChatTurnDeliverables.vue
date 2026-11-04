@@ -17,8 +17,9 @@ import { type ChatDeliverable, deliverableName } from "./deliverables";
 
 const t = useT();
 
-// `label` names the row where it is not one turn's (a conversation's whole results, PlainResultReview).
-const props = defineProps<{ deliverables: readonly ChatDeliverable[]; label?: string }>();
+// `label` names the row where it is not one turn's (a conversation's whole results, PlainResultReview). `live` is a turn
+// still writing them: each chip says so, and one opened then follows the agent's writes as they land.
+const props = defineProps<{ deliverables: readonly ChatDeliverable[]; label?: string; live?: boolean }>();
 
 // Absent where nothing can be opened (a card mounted outside a chat); the chips still say what the turn made.
 const surface = useChatSurface();
@@ -106,7 +107,10 @@ const ACTION = `flex shrink-0 items-center gap-1 px-2 text-2xs text-muted transi
                 <Icon :name="chip.icon" class="shrink-0 text-sm" :class="chip.tint" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-xs font-medium text-content">{{ chip.name }}</span>
-                    <span class="truncate text-2xs text-subtle">{{ chip.kind }}</span>
+                    <span class="flex min-w-0 items-center gap-1 truncate text-2xs text-subtle">
+                        <!-- On one line: a break between the dot and the words would open the words with a space. -->
+                        <span v-if="live" class="size-1.5 shrink-0 animate-pulse rounded-full bg-success" aria-hidden="true"></span>{{ live ? t(`chat.chatTurnDeliverables.beingWritten`, { kind: chip.kind }) : chip.kind }}
+                    </span>
                 </span>
             </button>
             <!-- What a person does with a result besides reading it, beside it in words, not behind a menu. -->

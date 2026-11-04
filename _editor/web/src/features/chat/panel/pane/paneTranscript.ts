@@ -101,12 +101,16 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
             const shots = turnShots.value.get(turn.id);
             return pane.showToolCalls.value || turn.id === writingTurn.value || shots === undefined || shots.length === 0 ? undefined : shots;
         },
-        // A turn's documents, once it has stopped writing them: a file still being written is not one to open yet. Drawn
-        // folded or unfolded, since a card names a file where it was written and this is the turn's whole list.
+        // A turn's documents, from the first one it writes: a document still being written opens in the conversation's
+        // copy and follows each write as it lands (FileViewer's live refresh), which is how a reader watches an agent
+        // write it. Drawn folded or unfolded, since a card names a file where it was written and this is the turn's
+        // whole list.
         deliverablesOf: (turn: ChatTurn): readonly ChatDeliverable[] | undefined => {
             const deliverables = turnDeliverables.value.get(turn.id);
-            return turn.id === writingTurn.value || deliverables === undefined || deliverables.length === 0 ? undefined : deliverables;
+            return deliverables === undefined || deliverables.length === 0 ? undefined : deliverables;
         },
+        // Whether the turn is still writing its documents, for their chips to say so.
+        writesNow: (turn: ChatTurn): boolean => turn.id === writingTurn.value,
         // How each surviving checklist snapshot draws: the list once per turn, then only what moved.
         checklistViews: computed<Map<number, ChecklistView>>((previous) => checklistViewsOf(turns.value, repeatedChecklists.value, previous)),
         // The date named above the first turn sent on a given day, so each prompt's own stamp shrinks to the clock.

@@ -6,6 +6,7 @@ import {
     applyTreeChanged,
     changeEpochOf,
     isRecentlyChanged,
+    markCheckoutChanged,
     markWorkspaceChanged,
     treeRead,
     workspaceChangedSince,
@@ -72,6 +73,34 @@ describe(`markWorkspaceChanged`, () => {
         expect(isRecentlyChanged(`b.txt`)).toBe(true);
         jest.advanceTimersByTime(2001);
         expect(isRecentlyChanged(`b.txt`)).toBe(false);
+    });
+
+    /* A conversation's own copy, which the shared tree's watcher never sees: its counts are its own. */
+    it(`counts a change in a conversation's copy for that copy alone`, () => {
+        const copy = { agent: `c-2` };
+        const shared = changeEpochOf(`doc.md`);
+        markCheckoutChanged([`doc.md`], copy);
+        expect(changeEpochOf(`doc.md`, copy)).toBeGreaterThan(shared);
+        expect(changeEpochOf(`doc.md`)).toBe(shared);
+        expect(changeEpochOf(`doc.md`, { agent: `c-3` })).toBe(shared);
+        expect(isRecentlyChanged(`doc.md`, copy)).toBe(true);
+        expect(isRecentlyChanged(`doc.md`)).toBe(false);
+    });
+
+    // A scoped read falls back to the shared tree for a file the copy lacks, so a shared change re-reads it too.
+    it(`still moves a copy's count when the shared tree's file changes`, () => {
+        const copy = { agent: `c-4` };
+        const before = changeEpochOf(`e.md`, copy);
+        markWorkspaceChanged([`e.md`]);
+        expect(changeEpochOf(`e.md`, copy)).toBeGreaterThan(before);
+    });
+
+    it(`leaves the shared tree's verdict marks alone for a copy's change, and reads that copy's tree again`, () => {
+        const mark = workspaceChangeMark();
+        markCheckoutChanged([`f.md`], { agent: `c-1` });
+        expect(workspaceChangeMark()).toBe(mark);
+        jest.advanceTimersByTime(1000);
+        expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     });
 
     // A verdict held about the tree (the push flow's refused push) is demoted by the next batch whatever the clock

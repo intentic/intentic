@@ -16,7 +16,7 @@ const { blob } = defineProps<{ blob: Blob }>();
 const book = ref<EpubBook>();
 const index = ref(0);
 const source = ref(``);
-const { loading, error, start } = useViewerLoad(() => t(`epubViewer.couldNotOpen`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`epubViewer.couldNotOpen`));
 const showContents = ref(false);
 
 const chapters = computed(() => book.value?.chapters ?? []);
@@ -33,18 +33,26 @@ const show = (next: number): void => {
     source.value = chapter === undefined ? `` : renderChapter(opened, chapter.path);
 };
 
-const load = (file: Blob): Promise<void> =>
-    start(async (isLatest) => {
-        source.value = ``;
-        book.value = undefined;
+// A refresh (the book rewritten while open) keeps the chapter on screen until the new book has opened, and stays on
+// the reader's chapter where the new book still has it.
+const load = (file: Blob): Promise<void> => {
+    const refresh = drawn();
+    return start(async (isLatest) => {
+        if (!refresh) {
+            source.value = ``;
+            book.value = undefined;
+        }
         const parts = await unzipParts(new Uint8Array(await file.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
-        book.value = openEpub(parts);
-        index.value = 0;
-        show(0);
+        const opened = openEpub(parts);
+        const at = refresh && index.value < opened.chapters.length ? index.value : 0;
+        book.value = opened;
+        index.value = at;
+        show(at);
     });
+};
 
 onMounted(() => void load(blob));
 watch(
@@ -78,7 +86,7 @@ watch(
         </div>
 
         <div class="relative min-h-0 flex-1">
-            <ViewerStatus :loading="loading" :error="error">
+            <ViewerStatus :loading="loading" :error="error" :stale="stale">
                 <div v-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">
                     {{ t(`epubViewer.bookNoChaptersIn`) }}
                 </div>

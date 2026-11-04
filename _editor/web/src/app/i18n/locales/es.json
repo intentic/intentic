@@ -3940,7 +3940,8 @@
             "odt": "Documento de texto (ODT)",
             "ods": "Hoja de cálculo (ODS)",
             "odp": "Presentación (ODP)",
-            "rtf": "Documento de texto (RTF)"
+            "rtf": "Documento de texto (RTF)",
+            "beingWritten": "{kind} · escribiéndose"
         },
         "chatTurnShots": {
             "asideHidden": "Ocultas: {what}",
@@ -13299,7 +13300,13 @@
             "loadFailed": "No se pudo cargar el archivo.",
             "reloadFailed": "No se pudo recargar el archivo.",
             "downloadFailed": "No se pudo descargar el archivo.",
-            "saveFailed": "No se pudieron guardar tus cambios."
+            "saveFailed": "No se pudieron guardar tus cambios.",
+            "live": "En directo",
+            "followingEdits": "Siguiendo cambios",
+            "notFollowingEdits": "Seguir cambios",
+            "liveNote": "Se está escribiendo ahora",
+            "writing": "Escribiendo",
+            "draftNote": "Borrador del agente"
         },
         "healthCodebaseHealth": {
             "all": "Todo",

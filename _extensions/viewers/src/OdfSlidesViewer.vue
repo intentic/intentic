@@ -7,13 +7,14 @@ import { readPresentation, type Slide } from "./odf/slides";
 import { t } from "./i18n.js";
 import ViewerStatus from "./load/ViewerStatus.vue";
 import { useViewerLoad } from "./load/useViewerLoad.js";
+import { swapChildren } from "./load/liveSwap.js";
 
 /* OpenDocument presentation and drawing (.odp, .odg) preview: every slide at its own size, scaled to fit. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
 const container = ref<HTMLElement>();
-const { loading, error, start } = useViewerLoad(() => t(`odfSlidesViewer.couldNotRender`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`odfSlidesViewer.couldNotRender`));
 const count = ref(0);
 let open: OdfPackage | undefined;
 // One observer for the whole strip: every slide is the same width, so the scale is a single number.
@@ -89,23 +90,37 @@ const shrinkToFit = (host: HTMLElement): void => {
     }
 };
 
+// A package whose document fails to read is let go at once: a file rewritten while open can fail many times over, and
+// each package holds its pictures' addresses.
+const readOrDispose = <T,>(pkg: OdfPackage, read: (pkg: OdfPackage) => T): T => {
+    try {
+        return read(pkg);
+    } catch (caught) {
+        pkg.dispose();
+        throw caught;
+    }
+};
+
 const render = async (source: Blob): Promise<void> => {
     const host = container.value;
     if (host === undefined) {
         return;
     }
+    // Read first and swapped in whole: a deck caught mid-write throws before the slides on screen go.
+    const refresh = drawn();
     await start(async (isLatest) => {
-        host.replaceChildren();
         const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
-        release();
-        open = openOdf(parts);
-        const deck = readPresentation(open);
-        count.value = deck.slides.length;
+        const next = openOdf(parts);
+        const deck = readOrDispose(next, readPresentation);
         const doc = host.ownerDocument;
-        deck.slides.forEach((slide, index) => host.append(slideNode(slide, index, deck.width, deck.height, doc)));
+        await swapChildren(host, (staging) => deck.slides.forEach((slide, index) => staging.append(slideNode(slide, index, deck.width, deck.height, doc))), refresh);
+        // The package holding the old slides' pictures goes once they are off screen.
+        release();
+        open = next;
+        count.value = deck.slides.length;
         shrinkToFit(host);
         // A slide is laid out at its true size and then scaled as one, so type, boxes and pictures keep their
         // proportions instead of each being recomputed against the pane.
@@ -131,7 +146,7 @@ onBeforeUnmount(release);
 <template>
     <div class="relative h-full min-h-0">
         <div ref="container" class="odf-deck h-full overflow-auto bg-muted/20"></div>
-        <ViewerStatus overlay :loading="loading" :error="error">
+        <ViewerStatus overlay :loading="loading" :error="error" :stale="stale">
             <div v-if="count === 0" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
                 {{ t(`odfSlidesViewer.presentationNoSlides`) }}
             </div>

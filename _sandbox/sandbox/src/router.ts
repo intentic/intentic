@@ -79,6 +79,7 @@ import { createAgentContinueRoutes } from "./agent/routes/agent-continue.routes.
 import { createAgentQueueRoutes } from "./agent/routes/agent-queue.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 import { createWorkspaceTicketRoutes } from "./workspace/workspace-tickets.routes.js";
+import { createWorkspaceFollowRoutes } from "./workspace/workspace-follow.routes.js";
 import { createWorkspaceMediaRoutes } from "./workspace/workspace-media.routes.js";
 import { createWorkspaceSearchRoutes } from "./workspace/workspace-search.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
@@ -183,6 +184,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
         ...createWorkspaceSearchRoutes(services),
         ...createWorkspaceTicketRoutes(services),
         ...createWorkspaceMediaRoutes(services),
+        ...createWorkspaceFollowRoutes(services),
     },
     inventory: createInventoryRoutes(services),
     issues: createIssuesRoutes(services),

@@ -361,6 +361,25 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         title: z.string().optional().describe("The page's title, once the call has written it."),
         done: z.boolean().optional().describe("The draft is over: the page is published, or the call failed."),
     }),
+    // A file as the model is still writing it into a call's arguments (a Write's whole content, an Edit's replacement),
+    // for a viewer open on that file to draw over it as a draft: `text` is what came at `at` in the streamed text, under
+    // the same append-or-replay rule as a page's draft. Speculative until the call settles (it may still be refused, fail
+    // or be rewritten), so live state, not transcript: `done` ends it, and every draft goes with the turn.
+    z.object({
+        kind: z.literal("file_draft"),
+        callId: z.string().describe("The tool call writing it."),
+        path: z.string().describe("The file being written, workspace-relative and forward-slash, as the call's card names it."),
+        op: z.enum(["write", "edit"]).describe("`write`: the text is the file's whole new content. `edit`: the text replaces `old` in the file."),
+        at: z.number().int().nonnegative().describe("Where in the streamed text this stretch starts."),
+        text: z.string().describe("The next stretch of the streamed text: a write's content, or an edit's replacement."),
+        old: z
+            .string()
+            .optional()
+            .describe("The text an edit replaces, sent once whole, on the first frame of an edit; absent on a write and on later frames."),
+        replaceAll: z.boolean().optional().describe("The edit replaces every occurrence of `old`, not only the first; sent once known."),
+        truncated: z.boolean().optional().describe("The draft outgrew what is streamed: nothing more of its text will come, and the file itself is the answer."),
+        done: z.boolean().optional().describe("The draft is over: the call settled (written, refused or failed)."),
+    }),
     // The named card is released and the turn resumes; emitted the moment its waiter settles, since nothing else on
     // this stream marks a park's end. `reply` is what a rebuilt transcript freezes the card with.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
@@ -470,6 +489,7 @@ export const TURN_FACT_KINDS = [
     "mode",
     "agent_status",
     "page_draft",
+    "file_draft",
     "error",
 ] as const;
 export type TurnFact = Extract<AgentEvent, { kind: (typeof TURN_FACT_KINDS)[number] }>;

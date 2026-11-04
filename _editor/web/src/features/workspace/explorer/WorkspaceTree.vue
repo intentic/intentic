@@ -27,6 +27,7 @@ import { viewersOfPath } from "../../../workbench/presence/usePresence";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../../../models/workspace/changes/useWorkspaceLive";
+import { workspaceScope } from "../../../app/workspaceScope";
 import { lensRefuses } from "../directory-ui/personaReach";
 import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
@@ -372,7 +373,7 @@ defineExpose({ focusTree });
                                     'ui-row-select-on': selection.has(row.entry.path),
                                     'ui-row-select-pointed': row.entry.path === pointedBarren,
                                     'ui-row-select-drop': dropLit(row.entry.path),
-                                    'ui-row-select-changed': isRecentlyChanged(row.entry.path),
+                                    'ui-row-select-changed': isRecentlyChanged(row.entry.path, workspaceScope()),
                                     'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
                                     'opacity-40': carried(row.entry.path),
                                     'ui-row-select-arriving': pending(row.entry.path),
@@ -515,7 +516,7 @@ defineExpose({ focusTree });
                                 <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
                                 <Icon
                                     name="circle-fill"
-                                    v-if="isRecentlyChanged(row.entry.path)"
+                                    v-if="isRecentlyChanged(row.entry.path, workspaceScope())"
                                     aria-hidden="true"
                                     class="shrink-0 text-[0.4rem] text-warning"
                                 />

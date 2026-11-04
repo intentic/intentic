@@ -13,7 +13,8 @@ import { useViewerLoad } from "./load/useViewerLoad.js";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const deck = ref<Deck>();
-const { loading, error, start } = useViewerLoad(() => t(`pptxViewer.couldNotRead`));
+// The deck is replaced only once the next one has parsed, so a file caught mid-write keeps the slides on screen.
+const { loading, error, stale, start } = useViewerLoad(() => t(`pptxViewer.couldNotRead`));
 const notesShown = ref(true);
 // One slide is drawn at its true pixel size and scaled as a whole, so every position inside it stays exact.
 const scale = ref(1);
@@ -160,7 +161,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             </button>
         </div>
         <div ref="surface" class="ui-softscroll relative min-h-0 flex-1 overflow-auto bg-muted/20 px-4 py-4">
-            <ViewerStatus overlay :loading="loading" :error="error">
+            <ViewerStatus overlay :loading="loading" :error="error" :stale="stale">
                 <p v-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">
                     {{ t(`pptxViewer.presentationNoSlides`) }}
                 </p>

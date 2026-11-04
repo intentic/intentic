@@ -15,6 +15,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { batchMatters, gitMatters, iqMatters } from "../workspace/watch/batch-relevance.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { closeCheckoutFollow } from "../workspace/watch/checkout-follow.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Three watchers, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs.
@@ -60,6 +61,8 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     // Built once, not per change batch.
     const extensionSource = extensionSourceOf(services.workspace.root);
     shutdown.push(startWorkspaceWatch(services.workspace.root, logger));
+    // The folders readers follow in conversations' own copies (workspace.followCheckout), let go with the shared watch.
+    shutdown.push(closeCheckoutFollow);
     shutdown.push(
         subscribeWorkspaceChanges((paths) => {
             if (batchMatters(paths, iqMatters)) {

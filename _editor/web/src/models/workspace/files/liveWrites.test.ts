@@ -1,4 +1,4 @@
-import { recordTurnWrite, repoOfPath, turnWrites } from "./liveWrites";
+import { recordTurnWrite, repoOfPath, settledWritesOf, turnWrites } from "./liveWrites";
 
 describe(`repoOfPath`, () => {
     const repos = new Set([`intentic`, `apps`, `apps/web`]);
@@ -55,5 +55,33 @@ describe(`turn writes`, () => {
     it(`normalizes an explicit ./ lead so it can't read as a repo dir`, () => {
         recordTurnWrite(`c5`, 100, edit(`./intentic/a.ts`));
         expect([...turnWrites(`c5`, 100)]).toEqual([`intentic/a.ts`]);
+    });
+});
+
+// What an isolated turn's call wrote once it settled, which is what tells a viewer open on that file in the
+// conversation's copy to read it again.
+describe(`settledWritesOf`, () => {
+    it(`names an edit's locations and diffs once it completed, each once and without a leading ./`, () => {
+        expect(
+            settledWritesOf({
+                category: `edit`,
+                status: `completed`,
+                locations: [{ path: `./docs/a.md` }],
+                content: [{ type: `diff`, path: `docs/a.md`, newText: `x` }],
+            }),
+        ).toEqual([`docs/a.md`]);
+    });
+
+    it(`names nothing for a call still running, or an edit that failed`, () => {
+        expect(settledWritesOf({ category: `edit`, status: `in_progress`, locations: [{ path: `a.md` }] })).toEqual([]);
+        expect(settledWritesOf({ category: `edit`, status: `failed`, locations: [{ path: `a.md` }] })).toEqual([]);
+    });
+
+    it(`counts a failed command, whose locations are what the daemon found it wrote`, () => {
+        expect(settledWritesOf({ category: `execute`, status: `failed`, locations: [{ path: `out/report.docx` }] })).toEqual([`out/report.docx`]);
+    });
+
+    it(`names nothing for a read`, () => {
+        expect(settledWritesOf({ category: `read`, status: `completed`, locations: [{ path: `a.md` }] })).toEqual([]);
     });
 });

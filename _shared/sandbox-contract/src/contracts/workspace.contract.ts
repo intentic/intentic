@@ -35,6 +35,8 @@ import {
     WorkspaceFileQuerySchema,
     WorkspaceFileReadQuerySchema,
     WorkspaceFileSchema,
+    WorkspaceFollowCheckoutSchema,
+    WorkspaceFollowLeaseSchema,
     WorkspaceMediaTicketQuerySchema,
     WorkspaceMediaTicketSchema,
     WorkspaceDownloadTicketQuerySchema,
@@ -127,6 +129,20 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true })
         .input(WorkspaceDimensionsQuerySchema)
         .output(WorkspaceDimensionsSchema),
+    // Keeps a conversation's own copy of a file watched while a reader has it open (WorkspaceFollowCheckoutSchema); the
+    // changes come as `checkoutChanged` on /events.
+    followCheckout: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/follow-checkout",
+            summary: "Follow files in a conversation's own copy",
+            description:
+                "Watches the folders a conversation's own copy keeps these files in, so that while you look at one of them its changes reach you on the event stream as the agent writes, rather than when the turn ends. The watch is a lease: ask again before it runs out to keep it, and it lapses by itself when you stop. Watching is only reading, and only files you could read anyway.",
+        })
+        // Following is reading a folder's names as they change, and the watch is bounded and lapses on its own.
+        .meta({ floor: "viewer", guest: true })
+        .input(WorkspaceFollowCheckoutSchema)
+        .output(WorkspaceFollowLeaseSchema),
     // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
     mediaTicket: procedure
         .route({

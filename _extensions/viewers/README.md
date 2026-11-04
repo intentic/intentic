@@ -22,6 +22,11 @@ flowchart LR
 - None of these write the file. An editing viewer claiming the same extension wins, which is how
   [../onlyoffice](../onlyoffice) takes over office formats.
 - The `./docx-compare` and `./testing` exports let the editor app's tests drive the Word compare in a DOM.
+- A document rewritten while it is open (an agent writing it) redraws in place: the new rendering is built aside and
+  swapped in whole, so a file read mid-write keeps its last good rendering, marked as an earlier version
+  (`src/load/useViewerLoad.ts`). The reader's scroll stays, changed blocks flash, and the first is scrolled into view
+  where an ancestor carries `data-follow-edits="true"`. The `./live-swap` export (`src/load/liveSwap.ts`) is how the
+  editor's own code and Markdown surfaces do the same.
 
 ## Key files
 

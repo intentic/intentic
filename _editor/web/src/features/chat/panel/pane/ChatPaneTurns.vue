@@ -72,6 +72,7 @@ const {
     statusBelow,
     stripOf,
     deliverablesOf,
+    writesNow,
     checklistViews,
     dayMarks,
     forkCuts,
@@ -239,7 +240,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                         />
                     </div>
                     <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
-                    <ChatTurnDeliverables v-if="deliverablesOf(turn)" :deliverables="deliverablesOf(turn)!" />
+                    <ChatTurnDeliverables v-if="deliverablesOf(turn)" :deliverables="deliverablesOf(turn)!" :live="writesNow(turn)" />
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
                     <ChatTurnShots
                         v-if="stripOf(turn)"

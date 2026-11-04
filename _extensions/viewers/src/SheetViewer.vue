@@ -16,7 +16,7 @@ const active = ref(``);
 const activeRows = ref<SheetRows>([]);
 // One sequence for the file and the sheet picked in it: a new file or a new pick each supersedes whatever was still
 // loading, so a sheet answered by a workbook since replaced, or a pick since changed, is dropped.
-const { loading, error, start } = useViewerLoad(() => t(`sheetViewer.couldNotRead`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`sheetViewer.couldNotRead`));
 let client: ReturnType<typeof createSheetWorkerClient> | undefined;
 
 const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, value: name })));
@@ -26,6 +26,20 @@ const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, val
 const columnCount = computed(() => activeRows.value.reduce((widest, row) => Math.max(widest, row.length), 0));
 const headerRow = computed(() => activeRows.value[0]);
 const bodyRows = computed(() => activeRows.value.slice(1));
+
+// Reading one sheet of the workbook already loaded. `keep` is a refresh's: the rows on screen stay until the new ones
+// arrive, rather than the grid emptying under the reader.
+const readSheet = async (name: string, target: NonNullable<typeof client>, isLatest: () => boolean, keep: boolean): Promise<void> => {
+    if (!keep) {
+        activeRows.value = [];
+    }
+    const rows = await target.render(name);
+    if (!isLatest()) {
+        return;
+    }
+    active.value = name;
+    activeRows.value = rows;
+};
 
 const renderSheet = (name: string, target: NonNullable<typeof client>): Promise<void> =>
     start(async (isLatest) => {
@@ -44,13 +58,18 @@ const select = (name: string): void => {
     }
 };
 
-const render = (source: Blob): Promise<void> =>
-    start(async (isLatest) => {
-        client?.close();
-        client = undefined;
-        sheets.value = [];
-        active.value = ``;
-        activeRows.value = [];
+// A refresh (the workbook rewritten while open) keeps the sheet the reader is on, and the grid on screen, until the new
+// workbook has loaded; one that fails to load leaves them as they were (useViewerLoad's `stale`).
+const render = (source: Blob): Promise<void> => {
+    const refresh = drawn();
+    return start(async (isLatest) => {
+        if (!refresh) {
+            client?.close();
+            client = undefined;
+            sheets.value = [];
+            active.value = ``;
+            activeRows.value = [];
+        }
         const buffer = await source.arrayBuffer();
         if (!isLatest()) {
             return;
@@ -60,17 +79,29 @@ const render = (source: Blob): Promise<void> =>
             return;
         }
         const next = createSheetWorkerClient(async () => new SheetWorker());
-        client = next;
-        const names = await next.load(buffer);
+        let names: readonly string[];
+        try {
+            names = await next.load(buffer);
+        } catch (caught) {
+            next.close();
+            throw caught;
+        }
         if (!isLatest()) {
+            next.close();
             return;
         }
+        client?.close();
+        client = next;
+        const shown = refresh && names.includes(active.value) ? active.value : names[0];
         sheets.value = names;
-        const first = names[0];
-        if (first !== undefined) {
-            await renderSheet(first, next);
+        if (shown !== undefined) {
+            await readSheet(shown, next, isLatest, refresh);
+        } else {
+            active.value = ``;
+            activeRows.value = [];
         }
     });
+};
 
 onMounted(() => void render(blob));
 watch(
@@ -93,7 +124,7 @@ onBeforeUnmount(() => client?.close());
             @update:model-value="select"
         />
         <div class="min-h-0 flex-1">
-            <ViewerStatus :loading="loading" :error="error">
+            <ViewerStatus :loading="loading" :error="error" :stale="stale">
                 <div v-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">
                     {{ t(`sheetViewer.sheetEmpty`) }}
                 </div>

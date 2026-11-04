@@ -136,7 +136,7 @@ const toggleFollow = async (): Promise<void> => {
 // File changed on disk: only a follower re-reads, since a windowed view is a snapshot the user asked for, not
 // something to refetch on every write. Fetches only the appended bytes from `end`; dropped if one is already running.
 watch(
-    () => changeEpochOf(path),
+    () => changeEpochOf(path, viewScope.value),
     async () => {
         if (!following.value || busy.value) {
             return;

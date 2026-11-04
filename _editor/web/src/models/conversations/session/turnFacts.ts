@@ -5,7 +5,9 @@ import { importOrReload } from "../../../lib/staleChunk";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/turnStream";
 import type { Conversation } from "./conversation";
-import { withAgentStatus, withPageDraft } from "./turnLiveState";
+import { withAgentStatus, withFileDraft, withPageDraft } from "./turnLiveState";
+import { agentScope, SHARED_SCOPE } from "../../../app/workspaceScope";
+import { followFileDrafts } from "../../workspace/files/fileDrafts";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it
@@ -26,7 +28,19 @@ const applyPatchConsequence = (conversation: Conversation, patch: TranscriptPatc
         }
         return;
     }
-    if (patch.op !== `tool` || !conversation.turn.firstSight(patch.tool.id)) {
+    if (patch.op !== `tool`) {
+        return;
+    }
+    // An isolated turn writes its own checkout, which the shared tree's watcher never sees: each call that settled
+    // having written files says so for that copy, so a viewer open on one of them reads it again (live viewing).
+    if (conversation.isolated.value && settlesNow(conversation, patch.tool)) {
+        const call = patch.tool;
+        importOrReload(
+            () => Promise.all([import(`../../workspace/files/liveWrites`), import(`../../workspace/changes/useWorkspaceLive`)]),
+            ([writes, live]) => live.markCheckoutChanged(writes.settledWritesOf(call), agentScope(conversation.conversationId)),
+        );
+    }
+    if (!conversation.turn.firstSight(patch.tool.id)) {
         return;
     }
     const startedAt = conversation.turn.turnStartedAt.value;
@@ -37,6 +51,24 @@ const applyPatchConsequence = (conversation: Conversation, patch: TranscriptPatc
             (m) => m.recordTurnWrite(conversation.conversationId, startedAt, call),
         );
     }
+};
+
+// The calls each conversation has seen settle, so a card patched again after it settled (its result's text, a nested
+// call) is not told twice; ids are the runtime's own and never repeat within a conversation.
+const settledCalls = new WeakMap<Conversation, Set<string>>();
+
+// Whether this patch is the first to show the call settled.
+const settlesNow = (conversation: Conversation, tool: { readonly id: string; readonly status?: string }): boolean => {
+    if (tool.status !== `completed` && tool.status !== `failed` && tool.status !== `interrupted`) {
+        return false;
+    }
+    const seen = settledCalls.get(conversation) ?? new Set<string>();
+    settledCalls.set(conversation, seen);
+    if (seen.has(tool.id)) {
+        return false;
+    }
+    seen.add(tool.id);
+    return true;
 };
 
 // The agent started a watchable resource (its tmux terminal, its browser): named after the chat, and surfaced.
@@ -126,6 +158,15 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
     // A page as the agent is writing it; the column's foot draws it until the page itself lands (ChatPageDrafts).
     page_draft: (conversation, fact) => {
         conversation.turn.pageDrafts.value = withPageDraft(conversation.turn.pageDrafts.value, fact);
+    },
+    // A file as the agent is writing it into a call; a viewer open on that file, in the copy the turn writes, draws it
+    // until the call settles (fileDrafts.ts).
+    file_draft: (conversation, fact) => {
+        conversation.turn.fileDrafts.value = withFileDraft(conversation.turn.fileDrafts.value, fact);
+        followFileDrafts(conversation.conversationId, {
+            scope: () => (conversation.isolated.value ? agentScope(conversation.conversationId) : SHARED_SCOPE),
+            drafts: conversation.turn.fileDrafts,
+        });
     },
     error: (conversation, fact) => conversation.failures.apply(fact),
     // The live gate, not a headroom reading: `account_usage` carries every pool for the readouts.

@@ -9,6 +9,7 @@ import { primaryHeld } from "@intentic/ui/keys";
 import { useDevice } from "@intentic/ui";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { modelLineOf } from "@intentic/code-read";
+import { changedLines, followsEdits } from "@intentic/ext-viewers/live-swap";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { takeCaret } from "../files/caretRequest";
 import { normalizationEdits } from "../files/normalizeOnSave";
@@ -269,13 +270,30 @@ watch(
     },
 );
 
-// Read-only mirrors the incoming prop (refetch, external change); editable is uncontrolled and remounted per
-// file via :key, so this never clobbers live text.
+// What an external change touched lights for a moment, and, where the reader follows the edits (an ancestor's
+// `data-follow-edits`, FileViewer's Live chip), is brought into view: how an agent's write to an open file reads.
+const markLanded = (before: string, after: string): void => {
+    const range = changedLines(before, after);
+    const view = editor.value;
+    if (range === undefined || monaco === undefined || view === undefined || host.value === undefined) {
+        return;
+    }
+    const first = sourceLines === undefined ? range.first : modelLineOf(sourceLines, range.first);
+    const last = sourceLines === undefined ? range.last : modelLineOf(sourceLines, range.last);
+    const marks = view.createDecorationsCollection([{ range: new monaco.Range(first, 1, last, 1), options: { isWholeLine: true, className: `ws-line-flash` } }]);
+    setTimeout(() => marks.clear(), 1500);
+    if (followsEdits(host.value)) {
+        view.revealLineInCenterIfOutsideViewport(first);
+    }
+};
+
+// Read-only mirrors the incoming prop (refetch, external change) in place, keeping the reader's line; editable is
+// uncontrolled and remounted per file via :key, so this never clobbers live text.
 watch(
     () => code,
-    (next) => {
+    (next, previous) => {
         if (!editable) {
-            void render(next);
+            void render(next).then(() => markLanded(previous, next));
         }
     },
 );

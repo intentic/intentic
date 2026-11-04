@@ -158,6 +158,29 @@ export const WorkspaceMediaTicketSchema = z.object({
 export const PICTURE_EDGES = [384, 512, 768, 1024, 1536, 2048] as const;
 export type PictureEdge = (typeof PICTURE_EDGES)[number];
 
+// A file someone is looking at in a conversation's own copy, followed while they look: the shared tree's watcher never
+// sees a checkout, so the daemon watches the folders these files sit in, one folder deep, for as long as the lease the
+// answer names, and says what changed there as `checkoutChanged` on /events. A reader renews before the lease runs
+// out; one that stops asking is let go when it does.
+export const WORKSPACE_FOLLOW_MAX = 32;
+export const WorkspaceFollowCheckoutSchema = z.object({
+    agent: ConversationIdSchema.describe("The conversation whose own copy holds the files."),
+    paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(WORKSPACE_FOLLOW_MAX)
+        .describe("The files being looked at, as workspace paths. Their folders are watched, so a file not written yet is followed too."),
+});
+export const WorkspaceFollowLeaseSchema = z.object({
+    leaseMs: z
+        .number()
+        .int()
+        .positive()
+        .describe(
+            "How long the watch holds without another ask, in milliseconds. Ask again well before it runs out to keep following; a conversation working on the shared tree answers it too, since the shared watcher already covers it.",
+        ),
+});
+
 // The box each picture or video is drawn in, asked of a folder's worth at once: a gallery lays its rows out from every
 // picture's shape before any of them has loaded, so a row never reflows under the reader as its pictures arrive.
 export const WORKSPACE_DIMENSIONS_MAX = 500;

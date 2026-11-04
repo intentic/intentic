@@ -112,6 +112,45 @@ describe(`useViewerLoad`, () => {
         expect(load.loading.value).toBe(false);
     });
 
+    /* A refresh: the file changed on disk while open, which is how an agent's live edits reach a reader. */
+    it(`draws a refresh over the last rendering, without a spinner`, async () => {
+        const { load } = mount();
+        await load.start(async () => {});
+        expect(load.drawn()).toBe(true);
+        const next = deferred<void>();
+        const running = load.start(() => next.promise);
+        expect(load.loading.value).toBe(false);
+        next.resolve();
+        await running;
+        expect(load.loading.value).toBe(false);
+        expect(load.stale.value).toBe(false);
+    });
+
+    it(`keeps the last rendering when a refresh fails, says it is stale, and clears that once one draws`, async () => {
+        const reported: string[] = [];
+        const { load } = mount((message) => reported.push(message));
+        await load.start(async () => {});
+        await load.start(async () => {
+            throw new Error(`end of central directory not found`);
+        });
+        expect(load.error.value).toBeUndefined();
+        expect(load.stale.value).toBe(true);
+        expect(reported).toEqual([]);
+
+        await load.start(async () => {});
+        expect(load.stale.value).toBe(false);
+    });
+
+    it(`still reports a failure before anything drew as an error, not as stale`, async () => {
+        const { load } = mount();
+        await load.start(async () => {
+            throw new Error(`broken`);
+        });
+        expect(load.drawn()).toBe(false);
+        expect(load.stale.value).toBe(false);
+        expect(load.error.value).toBe(`broken`);
+    });
+
     it(`drops a load still running when the viewer closes`, async () => {
         const { load, scope } = mount();
         const file = deferred<void>();

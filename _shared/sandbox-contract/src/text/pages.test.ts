@@ -115,6 +115,7 @@ describe("pages in the fold", () => {
 
     it("draws nothing for a draft: it is live state, never transcript", () => {
         expect(fold([{ kind: "page_draft", callId: "t1", at: 0, text: "<p>" }])).toEqual([]);
+        expect(fold([{ kind: "file_draft", callId: "t2", path: "a.md", op: "write", at: 0, text: "# A" }])).toEqual([]);
     });
 
     it("reads a dismissal, or a turn that died, as cancelled with no value", () => {

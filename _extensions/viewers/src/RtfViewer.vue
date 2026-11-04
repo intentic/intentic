@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { t } from "./i18n.js";
 import { useViewerLoad } from "./load/useViewerLoad.js";
+import { swapChildren } from "./load/liveSwap.js";
 import { renderBlocks } from "./odf/render";
 import { parseRtf } from "./rtf/parse";
 
@@ -11,7 +12,7 @@ import { parseRtf } from "./rtf/parse";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const paper = ref<InstanceType<typeof DocumentPaper>>();
-const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 const empty = ref(false);
 // Pictures decoded out of the file; they leak until revoked.
 let urls: string[] = [];
@@ -28,28 +29,38 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
+    // Parsed and drawn aside, then swapped in whole, so a file caught mid-write leaves the last rendering standing.
+    const refresh = drawn();
     await start(async (isLatest) => {
-        empty.value = false;
-        host.replaceChildren();
-        const bytes = new Uint8Array(await source.arrayBuffer());
-        if (!isLatest()) {
-            return;
-        }
-        release();
-        const doc = parseRtf(bytes, (data, type) => {
-            const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type }));
-            urls.push(url);
-            return url;
-        });
-        empty.value = doc.empty;
-        const page = host.ownerDocument.createElement(`div`);
-        page.className = `odf-page`;
-        page.style.width = doc.geometry.width;
-        for (const [property, value] of Object.entries(doc.geometry.padding)) {
-            page.style.setProperty(property, value);
-        }
-        renderBlocks(doc.blocks, page, host.ownerDocument);
-        host.append(page);
+        await swapChildren(
+            host,
+            async (staging) => {
+                const bytes = new Uint8Array(await source.arrayBuffer());
+                if (!isLatest()) {
+                    return false;
+                }
+                const minted: string[] = [];
+                const doc = parseRtf(bytes, (data, type) => {
+                    const url = URL.createObjectURL(new Blob([new Uint8Array(data)], { type }));
+                    minted.push(url);
+                    return url;
+                });
+                // The pictures on screen are let go only once the next ones have parsed.
+                release();
+                urls = minted;
+                empty.value = doc.empty;
+                const page = host.ownerDocument.createElement(`div`);
+                page.className = `odf-page`;
+                page.style.width = doc.geometry.width;
+                for (const [property, value] of Object.entries(doc.geometry.padding)) {
+                    page.style.setProperty(property, value);
+                }
+                renderBlocks(doc.blocks, page, host.ownerDocument);
+                staging.append(page);
+                return true;
+            },
+            refresh,
+        );
     });
 };
 
@@ -63,5 +74,5 @@ onBeforeUnmount(release);
 </script>
 
 <template>
-    <DocumentPaper ref="paper" :loading="loading" :error="error" :empty="empty" />
+    <DocumentPaper ref="paper" :loading="loading" :error="error" :empty="empty" :stale="stale" />
 </template>

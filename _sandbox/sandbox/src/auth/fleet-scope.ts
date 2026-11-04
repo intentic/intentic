@@ -225,6 +225,12 @@ export const framedEvent = (
         case "derivedChanged": {
             return framedPaths(fence, event);
         }
+        // A conversation's own copy is read only by those who may read the conversation (workspace-reads.ts), so what
+        // changed in it is said only to them, and only where their fence reaches.
+        case "checkoutChanged": {
+            const agent = agentOf(event.agent);
+            return agent !== undefined && visibleTo(caller, agent) ? framedPaths(fence, event) : undefined;
+        }
         case "reposChanged":
         case "refsChanged": {
             return framedRepos(fence, event);

@@ -16,6 +16,10 @@
             "types": "./src/docxCompare.ts",
             "default": "./src/docxCompare.ts"
         },
+        "./live-swap": {
+            "types": "./src/load/liveSwap.ts",
+            "default": "./src/load/liveSwap.ts"
+        },
         "./testing": {
             "types": "./src/testing.ts",
             "default": "./src/testing.ts"

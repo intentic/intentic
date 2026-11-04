@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { t } from "./i18n.js";
 import { useViewerLoad } from "./load/useViewerLoad.js";
+import { swapChildren } from "./load/liveSwap.js";
 import { readTextDocument } from "./odf/document";
 import { openOdf, type OdfPackage } from "./odf/pkg";
 import { renderBlocks } from "./odf/render";
@@ -13,7 +14,7 @@ import { renderBlocks } from "./odf/render";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const paper = ref<InstanceType<typeof DocumentPaper>>();
-const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 const empty = ref(false);
 // The package holds blob URLs for the document's pictures; they leak until it is disposed.
 let open: OdfPackage | undefined;
@@ -28,28 +29,44 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
+    // Read and drawn aside, then swapped in whole: a package caught mid-write throws before anything on screen goes.
+    const refresh = drawn();
     await start(async (isLatest) => {
-        empty.value = false;
-        host.replaceChildren();
-        const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
-        if (!isLatest()) {
-            return;
-        }
-        release();
-        open = openOdf(parts);
-        const doc = readTextDocument(open);
-        empty.value = doc.empty;
-        for (const blocks of doc.pages) {
-            const page = host.ownerDocument.createElement(`div`);
-            page.className = `odf-page`;
-            page.style.width = doc.geometry.width;
-            page.style.minHeight = doc.geometry.height;
-            for (const [property, value] of Object.entries(doc.geometry.margin)) {
-                page.style.setProperty(property, value);
-            }
-            renderBlocks(blocks, page, host.ownerDocument);
-            host.append(page);
-        }
+        await swapChildren(
+            host,
+            async (staging) => {
+                const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
+                if (!isLatest()) {
+                    return false;
+                }
+                const next = openOdf(parts);
+                let doc: ReturnType<typeof readTextDocument>;
+                try {
+                    doc = readTextDocument(next);
+                } catch (caught) {
+                    // A file rewritten while open can fail many times over, and each package holds its pictures' addresses.
+                    next.dispose();
+                    throw caught;
+                }
+                // The package holding the pictures on screen goes only once the next one has taken their place.
+                release();
+                open = next;
+                empty.value = doc.empty;
+                for (const blocks of doc.pages) {
+                    const page = host.ownerDocument.createElement(`div`);
+                    page.className = `odf-page`;
+                    page.style.width = doc.geometry.width;
+                    page.style.minHeight = doc.geometry.height;
+                    for (const [property, value] of Object.entries(doc.geometry.margin)) {
+                        page.style.setProperty(property, value);
+                    }
+                    renderBlocks(blocks, page, host.ownerDocument);
+                    staging.append(page);
+                }
+                return true;
+            },
+            refresh,
+        );
     });
 };
 
@@ -63,5 +80,5 @@ onBeforeUnmount(release);
 </script>
 
 <template>
-    <DocumentPaper ref="paper" :loading="loading" :error="error" :empty="empty" />
+    <DocumentPaper ref="paper" :loading="loading" :error="error" :empty="empty" :stale="stale" />
 </template>

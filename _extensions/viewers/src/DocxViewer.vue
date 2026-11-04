@@ -4,30 +4,38 @@ import { fitPages, keepFitted } from "./docxFit.js";
 import { t } from "./i18n.js";
 import ViewerStatus from "./load/ViewerStatus.vue";
 import { useViewerLoad } from "./load/useViewerLoad.js";
+import { swapChildren } from "./load/liveSwap.js";
 
 /* DOCX preview: renders a Word document into HTML via docx-preview (lazy-imported so its ~jszip payload stays out of the initial bundle). */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
 const container = ref<HTMLElement>();
-const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
+const { loading, error, stale, start, drawn } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 
 const render = async (source: Blob): Promise<void> => {
     const host = container.value;
     if (host === undefined) {
         return;
     }
+    // Drawn aside and swapped in whole: a file read mid-write throws here and leaves the last rendering (liveSwap.ts).
+    const refresh = drawn();
     await start(async (isLatest) => {
-        host.replaceChildren();
-        const { renderAsync } = await import("docx-preview");
-        if (!isLatest()) {
-            return;
+        const swapped = await swapChildren(
+            host,
+            async (staging) => {
+                const { renderAsync } = await import("docx-preview");
+                if (!isLatest()) {
+                    return false;
+                }
+                await renderAsync(source, staging);
+                return isLatest();
+            },
+            refresh,
+        );
+        if (swapped) {
+            fitPages(host);
         }
-        await renderAsync(source, host);
-        if (!isLatest()) {
-            return;
-        }
-        fitPages(host);
     });
 };
 
@@ -50,7 +58,7 @@ watch(
 <template>
     <div class="relative h-full min-h-0">
         <div ref="container" class="docx-host h-full overflow-auto bg-muted/20"></div>
-        <ViewerStatus overlay :loading="loading" :error="error" />
+        <ViewerStatus overlay :loading="loading" :error="error" :stale="stale" />
     </div>
 </template>
 

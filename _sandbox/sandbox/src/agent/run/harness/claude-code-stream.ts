@@ -26,7 +26,8 @@ import { promptFingerprint } from "../prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../../subagents/subagents.js";
 import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../../tools/jobs/background-jobs.js";
 import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../../sessions/vocabulary/task-checklist.js";
-import { PageDrafts } from "../../pages/page-draft.js";
+import { PageDrafts, streamedDraftFrames } from "../../pages/page-draft.js";
+import { FileDrafts } from "../../pages/file-draft.js";
 import { PAGE_TOOL_NAMES } from "../../pages/page-names.js";
 import type { ChecklistSeed } from "../task-store.js";
 import { SdkCallFrames, type ToolUseBlock } from "../../../sessions/vocabulary/sdk-call-frames.js";
@@ -456,11 +457,14 @@ class TurnFold {
     private readonly informational = new InformationalLines();
     // Pages the main thread is writing, drawn in the chat as their markup streams in.
     private readonly pageDrafts = new PageDrafts((name) => PAGE_TOOL_NAMES.has(name));
+    // Files the main thread and its subagents are writing, drawn over the file in an open viewer as their text streams in.
+    private readonly fileDrafts: FileDrafts;
     private flagged = false;
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
         this.args = args;
         this.calls = new SdkCallFrames(args.cwd, args.browserOutputDir);
+        this.fileDrafts = new FileDrafts(args.cwd);
         this.session = session;
         this.tally = new MessageTally(args.subagents?.conversationId, args.carriedCostUsd);
     }
@@ -536,8 +540,11 @@ class TurnFold {
         };
         // A page the main thread is writing streams to the chat as it is written (agent/pages/page-draft.ts).
         if (parent === undefined) {
-            yield* this.pageDraftFrames(event);
+            yield* streamedDraftFrames(this.pageDrafts, event);
         }
+        // A file any thread is writing streams to a viewer open on it (agent/pages/file-draft.ts), by thread, since a
+        // subagent's blocks count from zero beside the main thread's.
+        yield* streamedDraftFrames(this.fileDrafts.thread(parent), event);
         if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && typeof event.delta.text === "string") {
             yield* this.showInheritedChecklist();
             yield { kind: "delta", text: event.delta.text, ...opt("parentToolUseId", parent) };
@@ -560,23 +567,6 @@ class TurnFold {
                 this.opening = { read: usage.cache_read_input_tokens ?? 0, written: usage.cache_creation_input_tokens ?? 0 };
                 yield { kind: "prompt_cache", readTokens: this.opening.read, writtenTokens: this.opening.written };
             }
-        }
-    }
-
-    private *pageDraftFrames(event: {
-        readonly type: string;
-        readonly index?: number;
-        readonly content_block?: { type?: string; id?: string; name?: string };
-        readonly delta?: { type: string; partial_json?: string };
-    }): Generator<AgentEvent> {
-        if (event.type === "message_start") {
-            this.pageDrafts.reset();
-        } else if (event.type === "content_block_start" && event.index !== undefined && event.content_block !== undefined) {
-            this.pageDrafts.start(event.index, event.content_block);
-        } else if (event.type === "content_block_delta" && event.index !== undefined && event.delta?.type === "input_json_delta") {
-            yield* this.pageDrafts.delta(event.index, event.delta.partial_json ?? "");
-        } else if (event.type === "content_block_stop" && event.index !== undefined) {
-            yield* this.pageDrafts.stop(event.index);
         }
     }
 
@@ -759,6 +749,8 @@ class TurnFold {
         yield* this.informational.settled(toolUseId);
         // A page's own frame (or its failure) has landed; the draft that stood for it goes.
         yield* this.pageDrafts.settled(toolUseId);
+        // A file's draft goes once its call settled: the file on disk, or the failure, takes over.
+        yield* this.fileDrafts.settled(toolUseId);
         // Backstop: the first Bash result guarantees tmux-run created the session, in case tool_use raced ahead of it.
         if (!this.terminalResurfaced && this.agentSession !== undefined && this.bashToolIds.has(toolUseId)) {
             this.terminalResurfaced = true;

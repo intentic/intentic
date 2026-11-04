@@ -168,6 +168,22 @@ describe("framedEvent", () => {
         expect(framedEvent(viewer, undefined, changed, nowhere)).toBe(changed);
     });
 
+    // A conversation's own copy is read only by whoever may read the conversation, so what changes in it is said only
+    // to them, and only where their fence reaches; a conversation nobody can name is no one's to hear about.
+    test("checkout changes reach those who may see the conversation, cut to their fence", () => {
+        const changed = { kind: "checkoutChanged" as const, agent: "c-1", paths: ["support/a.md", "finance/b.csv"] };
+        // Born in the support area, so a member fenced to it is shown the conversation; a guest who neither owns nor
+        // started it is not.
+        const adas = (id: string): Provenance | undefined =>
+            id === "c-1" ? { owner: { email: "ada@example.com" }, startedBy: "ada@example.com", areas: ["support"] } : undefined;
+        expect(framedEvent(guest, ["support"], changed, adas)).toBeUndefined();
+        expect(framedEvent(viewer, undefined, changed, adas)).toBe(changed);
+        expect(framedEvent(fenced, ["support"], changed, adas)).toEqual({ ...changed, paths: ["support/a.md"] });
+        expect(framedEvent(fenced, ["support"], { ...changed, paths: ["finance/b.csv"] }, adas)).toBeUndefined();
+        expect(framedEvent(viewer, undefined, { ...changed, agent: "c-2" }, adas)).toBeUndefined();
+        expect(framedEvent(undefined, undefined, changed, nowhere)).toBe(changed);
+    });
+
     test("heartbeats ride through untouched", () => {
         const beat = { kind: "heartbeat" as const, rev: 1 };
         expect(framedEvent(guest, undefined, beat, nowhere)).toBe(beat);

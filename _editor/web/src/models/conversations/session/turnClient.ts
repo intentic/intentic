@@ -17,7 +17,7 @@ import type { OutboxEntry } from "./sendOutbox";
 import { TurnOutbox, unsentOf } from "./turnOutbox";
 import { SendingList } from "./sendingWords";
 import { messageRequestBody } from "../run/messageRequest";
-import type { AgentStatusEntry, PageDraftView } from "./turnLiveState";
+import type { AgentStatusEntry, FileDraftView, PageDraftView } from "./turnLiveState";
 import { bookContinue, chipOf, heldRouting, newerQueue, queueRefusal, repeatsNudge, takeBackInto, withBooked } from "./queueCalls";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../drafts/sendLater";
@@ -81,6 +81,10 @@ export class TurnClient {
     // Pages the agent is writing right now (page_draft facts), by the call writing each, for the column's foot to draw
     // as they stream in. Live state too: a draft goes when its page lands, and every one with the turn.
     readonly pageDrafts = shallowRef<ReadonlyMap<string, PageDraftView>>(new Map());
+    // Files the agent is writing right now (file_draft facts), by the call writing each, for a viewer open on one to
+    // draw as they stream in (models/workspace/files/fileDrafts.ts finds them by file). Live state too: a draft goes
+    // when its call settles, and every one with the turn.
+    readonly fileDrafts = shallowRef<ReadonlyMap<string, FileDraftView>>(new Map());
 
     // A person ended the live turn (Stop, or a card waved away) and it is unwinding: set in the press's own frame, long
     // before the stream closes, and published with the tab (TabFacts.ending) so the board's card and this chat say the
@@ -610,6 +614,7 @@ export class TurnClient {
         // An extension's status lines belong to the turn that set them, and so do the pages it was still writing.
         this.agentStatus.value = new Map();
         this.pageDrafts.value = new Map();
+        this.fileDrafts.value = new Map();
         host.failures.armRenewalProbe();
         host.failures.settled();
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.

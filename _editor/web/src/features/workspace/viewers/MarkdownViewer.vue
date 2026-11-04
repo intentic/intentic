@@ -2,7 +2,8 @@
 import { primaryHeld } from "@intentic/ui/keys";
 import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow, useTheme } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
-import { computed, inject, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
+import { blockTexts, markChanged, newBlocks } from "@intentic/ext-viewers/live-swap";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { openFileRefFromEvent, openWorkspaceRef } from "../../../models/workspace/files/openFileRef";
@@ -32,7 +33,8 @@ const layout = useLayout();
 // Which pane's breadcrumb these controls ride; with two panes open there are two of them.
 const scope = inject(CHROME_SCOPE, `main`);
 
-// Held, not watched, like the editable CodeView: `source` seeds it, and this surface owns the text after mount.
+// Held, not watched, like the editable CodeView: `source` seeds it, and this surface owns the text after mount. One
+// nobody types into follows it instead (below), the way a read-only CodeView does.
 const doc = ref(source);
 // Where to put the caret when the editing surface mounts: a content-search hit, or nothing.
 const landing = ref<number | undefined>(undefined);
@@ -75,6 +77,24 @@ const decorate = computed<MarkdownDecorator>(() => {
 
 const scroller = ref<HTMLElement>();
 const outline = useMarkdownOutline(scroller);
+
+// A document nobody is typing into takes an external change in place (an agent writing the file the reader has open):
+// the reader keeps their place, the blocks whose text is new light for a moment, and where they follow the edits
+// (FileViewer's Live chip) the first is brought into view. The diff is the viewers' own (liveSwap.ts).
+watch(
+    () => source,
+    async (next) => {
+        if (editable === true || next === doc.value) {
+            return;
+        }
+        const before = scroller.value === undefined ? undefined : blockTexts(scroller.value);
+        doc.value = next;
+        await nextTick();
+        if (before !== undefined && scroller.value !== undefined) {
+            markChanged(scroller.value, newBlocks(before, scroller.value));
+        }
+    },
+);
 const surface = ref<InstanceType<typeof MarkdownDocument>>();
 const sourceView = ref<InstanceType<typeof CodeView>>();
 

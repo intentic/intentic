@@ -83,7 +83,7 @@ watch([address, reloads], () => {
     pointerIn.value = false;
 });
 // The page's own file is left to its text, which mints a fresh address when it changes.
-const stale = computed(() => [...loaded.value].some(([path, epoch]) => path !== props.path && changeEpochOf(path) !== epoch));
+const stale = computed(() => [...loaded.value].some(([path, epoch]) => path !== props.path && changeEpochOf(path, viewScope.value) !== epoch));
 watch(stale, (now) => {
     if (now) {
         reloads.value += 1;
@@ -123,7 +123,7 @@ const build = (): void => {
     );
 };
 // Every file the last sealed build carried, by its change count: a stylesheet an agent rewrote draws the page again.
-const carriedEpochs = computed(() => (built.value?.carried ?? []).map((path) => changeEpochOf(path)).join(","));
+const carriedEpochs = computed(() => (built.value?.carried ?? []).map((path) => changeEpochOf(path, viewScope.value)).join(","));
 
 watch(
     [() => props.path, () => props.source, () => props.unsaved, viewScope, served, carriedEpochs],
@@ -177,7 +177,7 @@ const onMessage = (event: MessageEvent): void => {
             const next = new Map(loaded.value);
             for (const path of saying.loaded) {
                 const workspacePath = workspacePathIn(root, path);
-                next.set(workspacePath, changeEpochOf(workspacePath));
+                next.set(workspacePath, changeEpochOf(workspacePath, viewScope.value));
             }
             loaded.value = next;
         } else if (!missing.value.includes(workspacePathIn(root, saying.missing))) {

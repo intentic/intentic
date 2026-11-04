@@ -1,6 +1,8 @@
 {
     "common": {
-        "couldNotRenderDocument": "No se ha podido mostrar este documento."
+        "couldNotRenderDocument": "No se ha podido mostrar este documento.",
+        "staleRendering": "Se muestra la última versión que se pudo abrir: el archivo se está escribiendo.",
+        "staleRenderingShort": "Una versión anterior"
     },
     "deck": {
         "chart": "Gráfico",

@@ -1,6 +1,8 @@
 {
     "common": {
-        "couldNotRenderDocument": "Could not render this document."
+        "couldNotRenderDocument": "Could not render this document.",
+        "staleRendering": "Showing the last version that opened: the file is being written.",
+        "staleRenderingShort": "An earlier version"
     },
     "deck": {
         "chart": "Chart",

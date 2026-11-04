@@ -18,7 +18,8 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../workbench/presence/usePresence";
 import { landingNow } from "../../../models/changes/landing";
-import { applyTreeChanged, markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../../models/workspace/changes/useWorkspaceLive";
+import { applyTreeChanged, markCheckoutChanged, markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../../models/workspace/changes/useWorkspaceLive";
+import { agentScope } from "../../../app/workspaceScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
@@ -71,6 +72,9 @@ const reconnectChannels = {
     derivedChanged: () => markDerivedChanged([]),
     workspaceChanged: () => emitFilesChanged([]),
     treeChanged: () => markWorkspaceChanged([]),
+    // Names no file when missed, as the shared tree's batches don't; a viewer following one renews its watch and hears
+    // the next write (useFollowCheckout).
+    checkoutChanged: undefined,
 } satisfies Record<SystemEvent["kind"], (() => void) | undefined>;
 
 // A (re)connection, which is the one frame that reconciles rather than invalidates: everything pushed-only has to be
@@ -234,6 +238,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `treeChanged`:
             applyTreeChanged(event);
+            return;
+        case `checkoutChanged`:
+            // A conversation's own copy, which the shared tree's frames never name: what a reader follows there
+            // (useFollowCheckout) is read again in that copy.
+            markCheckoutChanged(event.paths, agentScope(event.agent));
             return;
     }
 };

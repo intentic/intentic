@@ -369,6 +369,7 @@ export class TranscriptFold {
             case "mode":
             case "agent_status":
             case "page_draft":
+            case "file_draft":
             case "done":
                 return [];
         }
