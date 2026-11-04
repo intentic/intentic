@@ -46,11 +46,13 @@ const layout = useLayout();
 
 // Ticks only while the draft runs, so its in-flight step's clock actually moves.
 const clock = useNow(() => draftRunning(props.draft));
-// The step list while a draft runs, and the post-mortem after it fails; a draft that succeeded clears from here, since
-// its message is report enough.
+// The step list while a draft runs, and the post-mortem after it fails; a draft that succeeded clears from here once
+// its message is in the box, since the message is report enough. Not before: the outcome (the roster) and the message
+// (the review) arrive on separate feeds, and dropping the mark first would take its room at the field's edge away and
+// re-wrap the placeholder for the frames between them.
 const rows = computed<readonly DraftReportRow[]>(() => {
     const draft = props.draft;
-    return draft === undefined || draft.outcome === `written` ? [] : draftReport(draft, clock.value);
+    return draft === undefined || (draft.outcome === `written` && message.value !== ``) ? [] : draftReport(draft, clock.value);
 });
 const line = computed<DraftReportRow | undefined>(() => rows.value.at(-1));
 // Undefined until a draft has been timed, or between a refusal and the next ask: the step's own glyph says it then.

@@ -218,6 +218,12 @@ export const askingModel = (draft: LandedMessageDraft | undefined): string | und
     return step?.status === `asking` ? modelLabelFor(step.provider, step.model) : undefined;
 };
 
+// The model whose answer became the message, once one has.
+const answeredModel = (draft: LandedMessageDraft | undefined): string | undefined => {
+    const step = draft?.steps.findLast((candidate) => candidate.status === `answered`);
+    return step === undefined ? undefined : modelLabelFor(step.provider, step.model);
+};
+
 // Notice explaining why the box didn't fill: ordered by what the user can act on (their own box, then a wait, then
 // absence). Undefined when no chip is lit or the chip's message is already in the box.
 export const chipMessageNotice = (state: ChipMessageState): string | undefined => {
@@ -233,13 +239,15 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
         return t(`workspace.changeOrigins.keepingYourMessage`, { origin: state.label });
     }
     // The wait, naming the model being asked when there is one: this placeholder is the only place the box says who is
-    // writing. Then it leaves the origin to the lit chip under the box, so the line stays one line in a sidebar. The
-    // step-by-step rides the box's progress mark.
-    if (running) {
-        const model = askingModel(state.draft);
-        return model === undefined
-            ? t(`workspace.changeOrigins.writingMessageFor`, { origin: state.label })
-            : t(`workspace.changeOrigins.modelWritingFor`, { model });
+    // writing. It never names the origin (the lit chip under the box does), so every wording stays about one line: the
+    // box sizes itself to its placeholder, and a long session title here would grow it for the instant between a
+    // refusal and the next ask, then shrink it back. A draft that is written but whose message the review has not
+    // picked up yet (the roster and the review are separate feeds) still reads as the wait, under the model that
+    // answered, rather than flashing "none written" for the frames between them.
+    const arriving = state.draft?.outcome === `written` && state.message === undefined;
+    if (running || arriving) {
+        const model = askingModel(state.draft) ?? (arriving ? answeredModel(state.draft) : undefined);
+        return model === undefined ? t(`workspace.changeOrigins.writingMessage`) : t(`workspace.changeOrigins.modelWritingFor`, { model });
     }
     // No message exists and none is coming; the draft's own report row, if any, explains why.
     return state.message === undefined ? t(`workspace.changeOrigins.noMessageFor`, { origin: state.label }) : undefined;

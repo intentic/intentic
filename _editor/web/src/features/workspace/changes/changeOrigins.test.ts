@@ -154,9 +154,17 @@ describe(`chipMessageNotice`, () => {
             ...state,
             draft: running([{ provider: `gemini`, model: `gemini-3-flash`, status: `refused`, at: 2_000, ms: 1_000, reason: `quota` }]),
         });
-        expect(reading).toContain(state.label);
+        // No origin either: a session title here would grow the box for the instant between a refusal and the next ask.
+        expect(reading).not.toContain(state.label);
         expect(reading).not.toMatch(/gemini/i);
         expect(refused).toBe(reading);
+    });
+
+    test(`a written draft whose message has not reached the review yet still reads as the wait, not as the absence`, () => {
+        const answered = { provider: `gemini`, model: `gemini-3-flash`, status: `answered` as const, at: 2_000, ms: 1_000 };
+        const arriving = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [answered], outcome: `written`, finishedAt: 3_000 } });
+        expect(arriving).toMatch(/gemini/i);
+        expect(arriving).toBe(chipMessageNotice({ ...state, draft: running() }));
     });
 
     test(`says a sentence is never coming when none was written`, () => {

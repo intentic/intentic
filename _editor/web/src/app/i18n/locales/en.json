@@ -12925,7 +12925,7 @@
             "noMessageWritten": "No message written: {reason}",
             "yourChangesNameIt": "Your changes -- name this commit yourself",
             "keepingYourMessage": "Keeping your message. Clear the box to use {origin}'s.",
-            "writingMessageFor": "Writing for {origin}…",
+            "writingMessage": "Writing the message…",
             "modelWritingFor": "{model} is writing…",
             "noMessageFor": "No message written for {origin}"
         },
