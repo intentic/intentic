@@ -46,6 +46,8 @@ export interface PhoneLanesHost {
     readonly filtering: Readonly<Ref<boolean>>;
     // Agents a press elsewhere is starting, drawn at the head of Active (boardLaunches.ts): rows of that lane.
     readonly launching?: Readonly<Ref<readonly unknown[]>>;
+    // The roster is not read yet (boardLanes' `waiting`): every lane draws its placeholder, since none is known empty.
+    readonly waiting?: Readonly<Ref<boolean>>;
 }
 
 // The board's lanes as a phone draws them (all of them elsewhere), and per lane: whether it is Finished drawn for its
@@ -62,7 +64,7 @@ export const usePhoneLanes = (host: PhoneLanesHost) => {
         }
         return key === `finished` && !filtering.value && lanes.archiveSize.value > 0 ? `header` : `empty`;
     };
-    const facts = computed(() => ({ first: lanes.first.value, dragging: dragging.value, filtering: filtering.value }));
+    const facts = computed(() => ({ first: lanes.first.value || host.waiting?.value === true, dragging: dragging.value, filtering: filtering.value }));
     const drawnLanes = computed(() => (mobile.value ? phoneLanes(host.heads.value, (head) => content(head.key), facts.value) : host.heads.value));
     const bareLane = (key: FleetLane): boolean => mobile.value && !lanes.first.value && !dragging.value && content(key) === `header`;
     const saysEmpty = (key: FleetLane): boolean =>

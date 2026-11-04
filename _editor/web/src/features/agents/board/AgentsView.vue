@@ -28,6 +28,7 @@ import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandboxSharedAccess } from "../../../models/sandbox/useSandboxSharedAccess";
 import { useAgents } from "../../../models/fleet/useAgents";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { listedViewMissing, WORKFLOWS } from "../../../workbench/views/listedViews";
@@ -45,6 +46,7 @@ import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
 import { cardSwipeAction, cardSwipeOf } from "./cards/cardSwipe";
 import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
+import LaneSkeleton from "./cards/LaneSkeleton.vue";
 import { markHinted } from "../../tour/tourMarks";
 import ChildRows from "../../../parts/fleet/ChildRows.vue";
 import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
@@ -122,7 +124,12 @@ const subagentShown = computed(() => {
 const ringed = (id: string): boolean => (id === highlightId.value || inPane(id)) && subagentShown.value?.parentId !== id;
 // The subagents each card's runtime ran in-process, which ride in its tray beside the conversations it spawned.
 const roster = useSubagentRoster();
-const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId });
+// Switched to a sandbox whose roster this browser neither heard nor remembers: the lanes would hold its drafts alone
+// until the stream answers, so they hold placeholders instead. Not while it refuses outright, which no wait answers,
+// nor in the archive, which is its own read.
+const { connection } = useSandbox();
+const waiting = computed(() => !agents.rosterKnown.value && connection.value.phase !== `blocked` && !view.value.archive);
+const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId, waiting });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
 const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, first } = lanes;
@@ -267,7 +274,7 @@ const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
 const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
-const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching });
+const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -465,9 +472,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @restore="restoreRun(run)"
                         />
                     </div>
+                    <!-- The roster not heard yet: the lane's cards are on their way, which its drafts alone would not say. -->
+                    <LaneSkeleton v-if="waiting" :lane="lane.key" :dense="narrow" />
                     <!-- A failed read is said in place of "nothing archived", which would claim the archive is empty. -->
                     <p
-                        v-if="lane.key === 'finished' && view.archive && archivedCards.length === 0 && runsFor('finished').length === 0"
+                        v-else-if="lane.key === 'finished' && view.archive && archivedCards.length === 0 && runsFor('finished').length === 0"
                         class="px-1 pb-3 text-2xs"
                         :class="archiveFailure === undefined ? 'text-subtle' : 'text-danger'"
                         :role="archiveFailure === undefined ? undefined : 'alert'"
@@ -570,7 +579,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </div>
                     <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
                     <button
-                        v-if="lane.key === 'finished' && !view.archive && !filtering && hiddenFinished > 0"
+                        v-if="lane.key === 'finished' && !view.archive && !filtering && !waiting && hiddenFinished > 0"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
                         @click="toggleFinished"

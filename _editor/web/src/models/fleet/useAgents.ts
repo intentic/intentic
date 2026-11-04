@@ -1,7 +1,7 @@
 import { open, rename, resumeHeldTurn, setAutoLand, setBreakPolicy, setKeepWarm, stopJob, stopWatching } from "./useAgents-actions";
 import { archive, archivedFlash, busyIds, dismissNotice, notice, purgeArchived, restore, undoable, undoArchive } from "./useAgents-archive";
 import { agentById, attention, blocking, fleet, forgetFleet, lanes, unread } from "./useAgents-fleet";
-import { archived, archiveFailure, archiveLoading, desyncRegistry, heldWakes, loadArchived, markAllSeen, markSeen, refresh, releaseHeld } from "./useAgents-registry";
+import { archived, archiveFailure, archiveLoading, desyncRegistry, heldWakes, loadArchived, markAllSeen, markSeen, refresh, releaseHeld, rosterKnown } from "./useAgents-registry";
 
 // Fleet store: the daemon's agent registry mirrored into the browser, merged with open Conversation tabs by
 // conversationId. Module-level singleton, like useChat.
@@ -29,6 +29,7 @@ export function useAgents() {
     return {
         fleet,
         lanes,
+        rosterKnown,
         attention,
         blocking,
         unread,

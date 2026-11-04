@@ -117,6 +117,9 @@ export interface LanesHost {
     readonly selected: Readonly<Ref<string | undefined>>;
     // Active's folded groups (laneGroups.ts); this browser's own when absent.
     readonly folds?: Readonly<Ref<ReadonlySet<ActivePhase>>>;
+    // This sandbox's roster is neither heard nor remembered yet, so the lanes hold only this browser's drafts, and the
+    // board is no first run either, lest a busy sandbox be greeted as new; a board that is never waiting when absent.
+    readonly waiting?: Readonly<Ref<boolean>>;
 }
 
 export const useBoardLanes = (host: LanesHost) => {
@@ -219,7 +222,7 @@ export const useBoardLanes = (host: LanesHost) => {
     );
     // Counted off the very ids Clear sends, so the button never offers a sweep that would move nothing.
     const clearable = computed(() => clearableOf(agents.lanes.value).length);
-    const first = computed(() => firstRun(started.value, view.value.archive));
+    const first = computed(() => host.waiting?.value !== true && firstRun(started.value, view.value.archive));
     const laneDropClass = (lane: FleetLane): string =>
         drag.dragging.value ? dropClass(lane, { accepts: drag.accepts(lane), archive: view.value.archive, over: drag.over.value }) : ``;
     return {

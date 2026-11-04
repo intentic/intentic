@@ -22,23 +22,32 @@ it(`reads back the roster this build stored for the sandbox`, () => {
     localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b1`, agents: [agent] }));
 
     expect(readStoredRoster(`sb1`, `b1`)).toEqual([agent]);
-    expect(readStoredRoster(`sb2`, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb2`, `b1`)).toBeUndefined();
+});
+
+// A sandbox remembered with no sessions is known to have none (the board draws its empty lanes at once), while one never
+// stored is not known at all (the board waits for its stream).
+it(`tells a roster stored empty from no roster stored`, () => {
+    localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b1`, agents: [] }));
+
+    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb2`, `b1`)).toBeUndefined();
 });
 
 it(`reads nothing from another build, a broken record, or no sandbox at all`, () => {
     localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b0`, agents: [agent] }));
-    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb1`, `b1`)).toBeUndefined();
 
     localStorage.setItem(`intentic.roster.sb1`, `{not json`);
-    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb1`, `b1`)).toBeUndefined();
 
     localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b1`, agents: `many` }));
-    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
-    expect(readStoredRoster(undefined, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb1`, `b1`)).toBeUndefined();
+    expect(readStoredRoster(undefined, `b1`)).toBeUndefined();
 });
 
 // The array alone was checked, so a list of anything was handed to the board as agents and broke the first card drawn.
 it(`reads nothing from a record whose agents are not agents`, () => {
     localStorage.setItem(`intentic.roster.sb1`, JSON.stringify({ build: `b1`, agents: [{ id: 7 }, `a2`] }));
-    expect(readStoredRoster(`sb1`, `b1`)).toEqual([]);
+    expect(readStoredRoster(`sb1`, `b1`)).toBeUndefined();
 });

@@ -7,7 +7,12 @@ import { resetSandboxScope, sandboxRef, sandboxValue } from "@intentic/extension
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
 
-jest.mock(`../../../models/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
+// What the roster store was asked to keep on the way out, and what the scope still held when it was asked.
+const kept: { readonly sandboxId: string; readonly held: readonly string[] }[] = [];
+jest.mock(`../../../models/fleet/useAgents-registry`, () => ({
+    loadArchived: record(`loadArchived`),
+    saveRoster: (sandboxId: string) => void kept.push({ sandboxId, held: roster.value }),
+}));
 jest.mock(`../../../models/conversations/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
 
 // Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
@@ -34,6 +39,7 @@ beforeEach(async () => {
     await nextTick();
     calls.length = 0;
     disposed.length = 0;
+    kept.length = 0;
 });
 
 test(`a switch returns every scoped value to its initial and disposes what the last sandbox held`, async () => {
@@ -49,6 +55,19 @@ test(`a switch returns every scoped value to its initial and disposes what the l
     expect(roster.value).toEqual([]);
     expect(stream.value).toBe(`idle`);
     expect(disposed).toEqual([`attached to agent-1`]);
+});
+
+// Coming back to a sandbox paints the sessions it was left with, so they are kept before the switch empties them: a
+// roster written only when the page hid left a sandbox revisited in the same tab drawing its drafts alone.
+test(`a switch keeps the roster of the sandbox it leaves, before the scope lets it go`, async () => {
+    activeSandboxId.value = `alpha`;
+    await nextTick();
+    roster.value = [`agent-1`];
+
+    activeSandboxId.value = `beta`;
+    await nextTick();
+
+    expect(kept).toEqual([{ sandboxId: `alpha`, held: [`agent-1`] }]);
 });
 
 // The same primitive the extensions declare their state with: one registry, one switch.

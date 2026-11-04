@@ -1,6 +1,6 @@
 import { resetSandboxScope, sandboxRef } from "@intentic/extension-api";
 import { watch } from "vue";
-import { loadArchived } from "../../../models/fleet/useAgents-registry";
+import { loadArchived, saveRoster } from "../../../models/fleet/useAgents-registry";
 import { loadAccountStatus } from "../../../models/conversations/accounts/useChat-accounts";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
@@ -12,6 +12,11 @@ const { activeSandboxId, reachable } = useSandbox();
 
 watch(activeSandboxId, (id, previous) => {
     if (id !== previous) {
+        // The roster of the sandbox being left, while the scope still holds it: coming back to it paints its sessions at
+        // once instead of its drafts alone until the stream answers (useAgents-registry ROSTER_PREFIX).
+        if (previous !== undefined) {
+            saveRoster(previous);
+        }
         resetSandboxScope();
     }
 });

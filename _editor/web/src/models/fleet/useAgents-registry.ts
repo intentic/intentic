@@ -39,27 +39,37 @@ const { activeSandboxId } = useSandbox();
 const StoredStamp = z.object({ build: z.string() });
 const StoredAgents = z.object({ agents: z.array(AgentSummarySchema) });
 
-export const readStoredRoster = (sandboxId: string | undefined, build: string): AgentSummary[] => {
+// Undefined when nothing usable is stored, which is not the same as a stored empty roster: a sandbox remembered with no
+// sessions in it is known to have none, while one never stored here is not known at all (rosterKnown).
+export const readStoredRoster = (sandboxId: string | undefined, build: string): AgentSummary[] | undefined => {
     if (sandboxId === undefined) {
-        return [];
+        return undefined;
     }
     try {
         // Only saveRoster writes this key, as `{ build, agents }` from the registry; a record from another build is refused
         // by its build stamp before its agents are read, and a record that is not this shape is no roster at all.
         const stored: unknown = JSON.parse(localStorage.getItem(`${ROSTER_PREFIX}${sandboxId}`) ?? `null`);
         if (StoredStamp.safeParse(stored).data?.build !== build) {
-            return [];
+            return undefined;
         }
-        return StoredAgents.safeParse(stored).data?.agents ?? [];
+        return StoredAgents.safeParse(stored).data?.agents;
         // allow(silent-catch): Unreadable storage discards only the cached roster; the live stream remains authoritative.
     } catch {
-        return [];
+        return undefined;
     }
 };
 
+// Whether `registry` opened on a stored roster. Declared before it, since a sandbox switch refills the scope's values in
+// the order they were declared: this one goes back to false, then the registry's own refill below says otherwise.
+const rosterRemembered = sandboxRef(() => false);
+
 // Shallow: writes replace the array wholesale; a deep ref would re-proxy every summary each frame. Opens on the stored
 // roster, if any (readStoredRoster above); the first snapshot the stream sends replaces it whole.
-export const registry = sandboxShallowRef<AgentSummary[]>(() => readStoredRoster(activeSandboxId.value, buildId()));
+export const registry = sandboxShallowRef<AgentSummary[]>(() => {
+    const stored = readStoredRoster(activeSandboxId.value, buildId());
+    rosterRemembered.value = stored !== undefined;
+    return stored ?? [];
+});
 
 // Archive half of the fleet; shallow like `registry`, and unbounded in size unlike the live roster.
 export const archived = sandboxShallowRef<FleetAgent[]>(() => []);
@@ -75,6 +85,10 @@ const heldRead = sandboxShallowRef<AutomationApproval[]>(() => []);
 // there (the browser tab's chime) needs the two apart, or every question waiting at load would ring as new.
 export const rosterHeard = sandboxRef(() => false);
 export const heldHeard = sandboxRef(() => false);
+
+// Whether the board can draw this sandbox's sessions: heard from the stream, or remembered from the last visit. Until
+// then the board holds only what this browser has by itself (its drafts), which reads as every other session gone.
+export const rosterKnown = computed(() => rosterHeard.value || rosterRemembered.value);
 
 // Holds a press here released that a read may still list; each retires on the first read without it (releaseHeld).
 const releasing = sandboxShallowRef<ReadonlySet<string>>(() => new Set());
@@ -546,9 +560,10 @@ export const loadArchived = async (): Promise<void> => {
 // One roster per window: a hot update re-executes this module while the stream keeps writing to the old instance,
 // freezing the board. The revision audit can't fix this since the heartbeat reaches that same stale object; only a
 // reload can.
-// The roster as last heard, written on the way out (see ROSTER_PREFIX).
-const saveRoster = (): void => {
-    const sandboxId = activeSandboxId.value;
+// The roster as last heard, written on the way out (see ROSTER_PREFIX): when the page hides, and when the reader
+// switches to another sandbox, which is the way out of this one. Called for a switch before the scope resets, while
+// `registry` still holds the sandbox being left, so the id is the one being left too, not the active one.
+export const saveRoster = (sandboxId = activeSandboxId.value): void => {
     if (sandboxId === undefined || !rosterHeard.value) {
         return;
     }
@@ -568,7 +583,7 @@ if (`document` in globalThis) {
             saveRoster();
         }
     });
-    globalThis.window?.addEventListener(`pagehide`, saveRoster);
+    globalThis.window?.addEventListener(`pagehide`, () => saveRoster());
 }
 
 reloadOnHotUpdate(import.meta);
