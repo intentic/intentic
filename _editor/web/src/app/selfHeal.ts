@@ -15,7 +15,7 @@
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
 import { noteReload, RELOAD_TAB_KEYS } from "@intentic/ui/reload-reason";
-import { accountPartition, storedValue, storeValue } from "@intentic/ui/storage";
+import { ACCOUNT_POINTER_KEY, accountPartition, storedValue, storeValue } from "@intentic/ui/storage";
 import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
 import { EMBED_TAB_KEYS } from "./environments/nativeApp";
 
@@ -38,7 +38,9 @@ const KNOWN_DATABASES = [`keyval-store`, ...MIRRORS, ...(account === undefined ?
 
 // What a new chat runs on outlives the wipe (turnDefaultKeys.ts says why): one heal on 2026-10-13 reset the model
 // map, and the next four new chats all opened on an older Claude model without anyone choosing it.
-const KEPT_KEYS: readonly string[] = Object.values(TURN_DEFAULT_KEYS);
+// They are kept in the account's drawer, so which drawer this browser opens is kept with them: without it the next boot
+// reads nobody's and finds them only after a reload.
+const KEPT_KEYS: readonly string[] = [ACCOUNT_POINTER_KEY, ...Object.values(TURN_DEFAULT_KEYS)];
 // And from this tab's session storage, that it is the Android app's WebView (environments/nativeApp.ts): a healed page
 // that forgot would open inside the app as a browser tab, rail, back arrow and all.
 // So do this tab's reload notes (reloadReason.ts): the reason the next load reads, and the count its budget is kept by, which

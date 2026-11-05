@@ -3,10 +3,9 @@
 // notification tap or a shortcut names its own destination and keeps it; a browser tab at "/" is a typed address.
 import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
-import { storedValue, storeValue } from "../app/storage/browserStorage";
+import { LAST_ROUTE_KEY, storedValue, storeValue } from "../app/storage/browserStorage";
 import { inAppPath } from "../app/environments/inAppPath";
 
-const LAST_ROUTE_KEY = `intentic.lastRoute`;
 const RECENT_VISIT_MS = 30 * 60_000;
 const SavedRoute = z.object({ path: z.string(), at: z.number() });
 

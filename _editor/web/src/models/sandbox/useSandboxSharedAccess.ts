@@ -2,6 +2,7 @@ import { computed, watch } from "vue";
 import { useMembers } from "../../client/sandbox/useMembers";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { sharedAccessKey, storedValue, storeValue } from "../../app/storage/browserStorage";
 
 // Whether /sandbox/access names more than one person; the agents board's Everyone/Mine row is meaningless alone. Only
 // the owner has to read the roster to know: anyone else is on it, beside the owner, which already makes two, whatever
@@ -35,22 +36,8 @@ export function useSandboxSharedAccess() {
     return { sharedAccess };
 }
 
-const rememberedKey = (sandboxId: string): string => `intentic.sharedAccess.${sandboxId}`;
+// The account's own answer (a member is always one of two, an owner reads its roster), so in its drawer.
+const recall = (sandboxId: string | undefined): boolean => sandboxId !== undefined && storedValue(sharedAccessKey(sandboxId)) === `1`;
 
-const recall = (sandboxId: string | undefined): boolean => {
-    try {
-        return sandboxId !== undefined && localStorage.getItem(rememberedKey(sandboxId)) === `1`;
-        // allow(silent-catch): Unavailable local storage supplies no cached shared-access row; the live response decides.
-    } catch {
-        return false;
-    }
-};
-
-const remember = (sandboxId: string, shared: boolean): void => {
-    try {
-        localStorage.setItem(rememberedKey(sandboxId), shared ? `1` : `0`);
-        // allow(silent-catch): Denied storage disables only the cached first frame, never the access decision.
-    } catch {
-        // Unavailable storage costs the next start its first-frame row, nothing else.
-    }
-};
+// Storage that refuses the write costs the next start its first-frame row, nothing else.
+const remember = (sandboxId: string, shared: boolean): void => storeValue(sharedAccessKey(sandboxId), shared ? `1` : `0`);

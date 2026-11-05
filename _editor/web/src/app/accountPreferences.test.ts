@@ -6,6 +6,7 @@ import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync, freshImport, realYield } from "@intentic/testing/bun";
 import { ACCOUNT_PREFERENCE_NAME, ACCOUNT_PREFERENCES_MAX, type AccountPreferences, type AccountPreferencesPatch } from "@intentic/api-contract";
 import { definePreference, receivePreferenceChange } from "@intentic/ui/preference";
+import { openAccountPartition, resetAccountPartitionForTests } from "@intentic/ui/storage";
 import { ORPCError } from "@orpc/client";
 import { type Ref, ref } from "vue";
 
@@ -21,6 +22,8 @@ const textSize = definePreference<string>({ key: `ui-text-size`, read: (raw) => 
 // `system` is stored as nothing, as @intentic/ui/motion stores it.
 const motion = definePreference<string>({ key: `ui-motion`, read: (raw) => raw ?? `system`, write: (value) => (value === `system` ? null : value) });
 const audience = definePreference<string>({ key: `ui-audience`, read: (raw) => raw ?? `developer`, write: (value) => value });
+// No stored language reads as the browser's own, as @intentic/ui/i18n reads it.
+const locale = definePreference<string>({ key: `ui-locale`, read: (raw) => raw ?? `en`, write: (value) => value });
 
 // The platform as it keeps an account's preferences: a read answers the whole set, a patch merges into it and answers
 // the set after. `refusal` fails every call; `holdReads` keeps a read unanswered until released.
@@ -82,6 +85,10 @@ const accounts: Ref<{ id: string } | null>[] = [];
 const start = async (kept: Kept, id: string | null = `account-1`): Promise<Ref<{ id: string } | null>> => {
     const account = ref(id === null ? null : { id });
     accounts.push(account);
+    // The page opens the account's own drawer first (lib/accounts/accountBoundary.ts), so what it keeps is its own.
+    if (id !== null) {
+        openAccountPartition(id);
+    }
     const { startAccountPreferences } = await freshImport<typeof import("./accountPreferences")>("./accountPreferences", import.meta.url);
     startAccountPreferences(account, kept);
     await realYield();
@@ -97,6 +104,7 @@ const comeBack = async (): Promise<void> => {
 
 beforeEach(() => {
     localStorage.clear();
+    resetAccountPartitionForTests();
     receivePreferenceChange({ key: null, raw: null });
 });
 
@@ -159,6 +167,67 @@ test(`only the first meeting offers, so what the account has forgotten since sta
     expect(kept.patches).toHaveLength(1);
     // This device's own stands, as the platform's contract says of a preference it no longer keeps.
     expect(localStorage.getItem(`ui-motion`)).toBe(`off`);
+});
+
+test(`another account's choices are not worn by the next one in, nor offered to it`, async () => {
+    jest.useFakeTimers();
+    const first = keeping();
+    const one = await start(first, `account-1`);
+    locale.value = `pl`;
+    textSize.value = `large`;
+    await advanceTimersByTimeAsync(500);
+    expect(Object.fromEntries(first.values)).toEqual({ "ui-locale": `pl`, "ui-text-size": `large` });
+
+    // The browser moves to another account, which chose a text size of its own and never a language.
+    one.value = null;
+    const second = keeping({ "ui-text-size": `compact` });
+    await start(second, `account-2`);
+
+    expect(locale.value).toBe(`en`);
+    expect(localStorage.getItem(`ui-locale`)).toBeNull();
+    expect(textSize.value).toBe(`compact`);
+    expect(second.writes).toBe(0);
+    expect(Object.fromEntries(second.values)).toEqual({ "ui-text-size": `compact` });
+});
+
+test(`an account coming back wears its own again, and a choice it made on the way stays its own`, async () => {
+    jest.useFakeTimers();
+    const first = keeping({ "ui-locale": `pl` });
+    const one = await start(first, `account-1`);
+    expect(locale.value).toBe(`pl`);
+    one.value = null;
+
+    const second = keeping();
+    const two = await start(second, `account-2`);
+    expect(locale.value).toBe(`en`);
+    locale.value = `de`;
+    await advanceTimersByTimeAsync(500);
+    two.value = null;
+
+    await start(first, `account-1`);
+    expect(locale.value).toBe(`pl`);
+    expect(Object.fromEntries(second.values)).toEqual({ "ui-locale": `de` });
+    expect(first.patches).toEqual([]);
+});
+
+test(`a choice made signed out is nobody's, and the next account in takes it`, async () => {
+    jest.useFakeTimers();
+    const first = keeping({ "ui-locale": `pl`, "ui-motion": `off` });
+    const one = await start(first, `account-1`);
+    one.value = null;
+    await realYield();
+
+    // On the sign-in page, before anyone is in.
+    textSize.value = `large`;
+    await advanceTimersByTimeAsync(500);
+
+    const second = keeping();
+    await start(second, `account-2`);
+
+    expect(textSize.value).toBe(`large`);
+    expect(locale.value).toBe(`en`);
+    expect(motion.value).toBe(`system`);
+    expect(second.patches).toEqual([{ "ui-text-size": `large` }]);
 });
 
 test(`a choice made here goes to the account with whatever was chosen beside it, a removal as null`, async () => {

@@ -11,7 +11,8 @@ import { TURN_DEFAULT_KEYS } from "../../../app/turnDefaultKeys";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or
 // a thin catalog read — those resolve at read time instead, so bad luck can't overwrite a real choice. Each field is a
-// definePreference, syncing the pick across every window immediately, since the app runs a full copy per window.
+// definePreference, syncing the pick across every window immediately, since the app runs a full copy per window, and
+// each is the signed-in account's own (turnDefaultKeys.ts): another account on this browser starts on its own picks.
 
 // Per-provider native model map, each entry degrading to that provider's default when absent or malformed; the one
 // place that parses the persisted record.
@@ -47,6 +48,7 @@ const writeHarnesses = (picks: HarnessPicks): string =>
 export const turnDefaults = {
     provider: definePreference<AgentProvider | undefined>({
         key: TURN_DEFAULT_KEYS.provider,
+        scope: `account`,
         // Undefined is a real value here: nobody has chosen yet, which is not the same as having chosen Claude. Every
         // surface that would otherwise name a provider reads this, so a sandbox whose owner never picked one is never
         // told that some particular vendor is missing. A native id and an endpoint id (the free trial among them) both
@@ -59,11 +61,13 @@ export const turnDefaults = {
     // sign-in of its own. A provider offered one loop never reads it (rememberedHarnessFor).
     harnesses: definePreference<HarnessPicks>({
         key: TURN_DEFAULT_KEYS.harnesses,
+        scope: `account`,
         read: readHarnesses,
         write: writeHarnesses,
     }),
     models: definePreference<Record<AgentProvider, string>>({
         key: TURN_DEFAULT_KEYS.models,
+        scope: `account`,
         read: readModels,
         write: (models) => JSON.stringify(models),
     }),
@@ -72,11 +76,13 @@ export const turnDefaults = {
     // question, and nothing would have caught them drifting apart.
     effort: definePreference<string>({
         key: TURN_DEFAULT_KEYS.effort,
+        scope: `account`,
         read: (raw) => raw ?? DEFAULT_EFFORT,
         write: (effort) => effort,
     }),
     thinking: definePreference<boolean>({
         key: TURN_DEFAULT_KEYS.thinking,
+        scope: `account`,
         read: (raw) => (raw === null ? DEFAULT_THINKING : raw !== `false`),
         write: String,
     }),
@@ -84,6 +90,7 @@ export const turnDefaults = {
     // `provider`, which only ever holds a provider a turn can really run on.
     auto: definePreference<boolean>({
         key: TURN_DEFAULT_KEYS.auto,
+        scope: `account`,
         read: (raw) => raw === `true`,
         write: String,
     }),

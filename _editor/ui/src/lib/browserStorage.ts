@@ -271,6 +271,40 @@ export const openAccountPartition = (account: string | undefined): OpenedPartiti
     return { stale: before !== undefined || heldAlready };
 };
 
+/**
+ * The name a key as stored (a `storage` event's) goes by in this page: an account key in the open drawer by its own name,
+ * anything outside every drawer as itself, and undefined for a key in another account's drawer, which is nothing here.
+ */
+export const storedName = (stored: string): string | undefined => {
+    if (!stored.startsWith(PARTITION_MARK)) {
+        return stored;
+    }
+    const open = accountPartition();
+    const drawer = open === undefined ? undefined : partitionPrefix(open);
+    return drawer !== undefined && stored.startsWith(drawer) ? stored.slice(drawer.length) : undefined;
+};
+
+/**
+ * Takes into the open drawer what an account key held while it was still the whole browser's (a key that became the
+ * account's in a later release): its value moves in unless the drawer already holds one, and the browser-wide copy goes
+ * either way, being nobody's now. Nothing to do with no drawer open, where an account key is stored under its own name.
+ */
+export const adoptBrowserValue = (key: string): void => {
+    const open = accountPartition();
+    if (open === undefined || sealed || !isAccountKey(key)) {
+        return;
+    }
+    const value = rawValue(key, `local`);
+    if (value === undefined) {
+        return;
+    }
+    const inDrawer = `${partitionPrefix(open)}${key}`;
+    if (rawValue(inDrawer, `local`) === undefined) {
+        rawStore(inDrawer, value, `local`);
+    }
+    rawRemove(key, `local`);
+};
+
 // Runs every clearer on its own: one that throws or rejects leaves the rest to run.
 const runClearers = async (account: string | undefined): Promise<void> => {
     await Promise.allSettled([...accountClearers].map(async (clear) => clear(account)));

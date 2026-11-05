@@ -1,4 +1,4 @@
-import { accountKey, accountKeys, onAccountCleared, sandboxKeys } from "@intentic/ui/storage";
+import { accountKey, accountKeys, deviceKey, onAccountCleared, sandboxKeys } from "@intentic/ui/storage";
 import { deleteAccountDatabases } from "./accountDatabases";
 
 // The kit's one door to browser storage (`@intentic/ui/storage`: safe reads and writes, JSON through a schema, the
@@ -60,6 +60,21 @@ export const commitMessageKey = sandboxKeys(`intentic.commitMessage.`);
 export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
 // Whether this device has offered the account the preferences it holds (app/accountPreferences.ts); sign-out forgets it.
 export const PREFERENCES_OFFERED_KEY = accountKey(`intentic.preferencesOffered`);
+// Whose choice each look and reading preference this browser holds is, by preference (app/accountPreferences.ts). The
+// device's, as the preferences themselves are: they outlive a sign-out, and the next account in must still be able to
+// tell the last one's choices from its own.
+export const PREFERENCES_WORN_FOR_KEY = deviceKey(`intentic.preferencesWornFor`);
+// The reader's own order of the account's sandboxes (models/home/sandboxOrder.ts) and the sandboxes they told the
+// hands-off offer "not now" (features/chat/panel/landing/handsOffOffer.ts): ids of the account's sandboxes, which another
+// account on this browser has no business arranging or answering for.
+export const SANDBOX_ORDER_KEY = accountKey(`ui-sandbox-order`);
+export const HANDS_OFF_DISMISSED_KEY = accountKey(`ui-hands-off-offer-dismissed`);
+// The page the installed app last showed (router/recentRoute.ts), which names the account's sandbox: the next account in
+// is not reopened on it.
+export const LAST_ROUTE_KEY = accountKey(`intentic.lastRoute`);
+// Whether a sandbox's access names more than one person, as this account last heard (models/sandbox/useSandboxSharedAccess.ts):
+// an owner reads its roster, a member is always one of two, so the answer is the account's.
+export const sharedAccessKey = sandboxKeys(`intentic.sharedAccess.`);
 // The size each markdown document's workspace picture last loaded at, per sandbox (lib/markdown/pictureSizes.ts).
 export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
 // When a setup last opened a sandbox it had just set up, per sandbox (models/sandbox/live/justSetUp.ts).

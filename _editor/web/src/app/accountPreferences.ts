@@ -1,7 +1,8 @@
 import type { AccountPreferences, AccountPreferencesPatch, User } from "@intentic/api-contract";
 import { adoptPreference, onPreferenceWrite, storedPreference } from "@intentic/ui/preference";
-import { storedValue, storeValue } from "@intentic/ui/storage";
-import { PREFERENCES_OFFERED_KEY } from "./storage/browserStorage";
+import { storedJson, storedValue, storeJson, storeValue } from "@intentic/ui/storage";
+import { z } from "zod";
+import { PREFERENCES_OFFERED_KEY, PREFERENCES_WORN_FOR_KEY } from "./storage/browserStorage";
 import { ACCOUNT_PREFERENCE_KEYS } from "./accountPreferenceKeys";
 import { ORPCError } from "@orpc/client";
 import { effectScope, type Ref, watch } from "vue";
@@ -14,6 +15,12 @@ import { embedded } from "./environments/nativeApp";
 // and again when the reader comes back to the window after a while. A choice made here goes to the account as it is
 // made. A device meeting an account for the first time offers it what it holds and the account lacks, so the device
 // a person used first sets the look the others take. Started once per window (main.ts).
+//
+// ONE BROWSER, SEVERAL ACCOUNTS: the device holds one copy of each preference, so it remembers whose choice each one is
+// (`PREFERENCES_WORN_FOR_KEY`). An account coming in wears its own; a preference it never chose that the device holds as
+// another account's goes back to the default rather than staying on screen, and is never offered to it: one account
+// picking Polski must not turn the next one Polish, here or, through the offer, on every device it signs in on. A
+// choice made signed out (the sign-in page's language) is nobody's, and the next account in takes it as before.
 //
 // Nothing happens without a platform account: signed out, in a desktop window on a folder, in the desktop app's own
 // copy of the editor for when the internet is out, or on a sandbox opened while the platform was down (main.ts hands in
@@ -37,6 +44,17 @@ const UNCHOSEN: ReadonlyMap<string, string> = new Map([
 
 // Whether this device has offered the account what it holds (`offer`). The account's, so signing out forgets it.
 const OFFERED_KEY = PREFERENCES_OFFERED_KEY;
+
+// Whose choice each preference this device holds is, by key; a key it does not name is nobody's (chosen signed out, or
+// from before this was kept). Unreadable reads as nobody's anywhere, which is how every browser began.
+const WornForSchema = z.record(z.string(), z.string());
+const wornFor = () => ({ ...storedJson(PREFERENCES_WORN_FOR_KEY, WornForSchema) });
+
+// `key` as `id`'s choice now, or nobody's.
+const claim = (key: string, id: string | undefined): void => {
+    const { [key]: _was, ...rest } = wornFor();
+    storeJson(PREFERENCES_WORN_FOR_KEY, id === undefined ? rest : { ...rest, [key]: id });
+};
 
 // Choices made together (the Theme row stores a skin and a scheme) leave as one patch.
 const SETTLE_MS = 500;
@@ -82,6 +100,33 @@ const wear = (values: Values): void => {
             adoptPreference(key, raw);
         }
     }
+};
+
+// Another account's choices this device still holds where this one has none of its own: back to the default.
+const shed = (id: string, values: Values): void => {
+    const whose = wornFor();
+    for (const key of ACCOUNT_PREFERENCE_KEYS) {
+        const owner = whose[key];
+        if (owner !== undefined && owner !== id && values[key] === undefined && synced(key) && !unsent.has(key) && storedPreference(key) !== null) {
+            adoptPreference(key, null);
+        }
+    }
+};
+
+// Everything this device now holds of what follows the account is `id`'s: worn from it, offered to it, or kept as its own.
+const settle = (id: string): void => {
+    const whose = wornFor();
+    for (const key of ACCOUNT_PREFERENCE_KEYS) {
+        if (!synced(key)) {
+            continue;
+        }
+        if (storedPreference(key) === null) {
+            delete whose[key];
+        } else {
+            whose[key] = id;
+        }
+    }
+    storeJson(PREFERENCES_WORN_FOR_KEY, whose);
 };
 
 // What this device holds and the account lacks.
@@ -155,14 +200,22 @@ const read = (id: string): Promise<void> => {
             return;
         }
         wear(values);
+        shed(id, values);
         await offer(id, values);
+        if (signedIn() === id) {
+            settle(id);
+        }
     });
 };
 
 // A choice made here: held for the account, and sent once whatever was chosen with it has settled.
 const heard = (key: string, raw: string | null): void => {
+    if (!synced(key)) {
+        return;
+    }
     const id = signedIn();
-    if (id === undefined || !kept || !synced(key)) {
+    claim(key, raw === null ? undefined : id);
+    if (id === undefined || !kept) {
         return;
     }
     unsent.set(key, raw);

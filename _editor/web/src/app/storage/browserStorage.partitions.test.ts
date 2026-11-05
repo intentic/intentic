@@ -7,13 +7,20 @@ import {
     daemonSessionKey,
     deviceKey,
     googleCredentialKey,
+    HANDS_OFF_DISMISSED_KEY,
+    isAccountKey,
+    LAST_ROUTE_KEY,
     onAccountCleared,
     openAccountPartition,
     resetAccountPartitionForTests,
+    SANDBOX_ORDER_KEY,
+    sharedAccessKey,
     storedKeys,
     storedValue,
     storeValue,
 } from "./browserStorage";
+import { definePreference } from "@intentic/ui/preference";
+import { TURN_DEFAULT_KEYS } from "../turnDefaultKeys";
 
 // Each account's drawer (@intentic/ui/storage): the same names read and written by every store, kept per account, so
 // two accounts on one browser never read each other's, and switching back finds the first as it was left.
@@ -51,7 +58,10 @@ describe("one drawer per account", () => {
         storeValue(daemonSessionKey(`sbx-shared`), `{"token":"b-token"}`);
 
         openAccountPartition(`acc-a`);
-        expect([storedValue(daemonSessionKey(`sbx-shared`)), storedValue(googleCredentialKey(`client`))]).toEqual([`{"token":"a-token"}`, `a-google`]);
+        expect([storedValue(daemonSessionKey(`sbx-shared`)), storedValue(googleCredentialKey(`client`))]).toEqual([
+            `{"token":"a-token"}`,
+            `a-google`,
+        ]);
     });
 
     it("lists only the open account's keys beside the device's, by the names they were stored under", () => {
@@ -127,7 +137,11 @@ describe("opening a drawer", () => {
 
         openAccountPartition(undefined);
 
-        expect([accountPartition(), localStorage.getItem(ACCOUNT_POINTER_KEY), storedValue(chatTabsKey(`sbx-1`))]).toEqual([undefined, null, undefined]);
+        expect([accountPartition(), localStorage.getItem(ACCOUNT_POINTER_KEY), storedValue(chatTabsKey(`sbx-1`))]).toEqual([
+            undefined,
+            null,
+            undefined,
+        ]);
         expect(localStorage.getItem(`intentic@acc-a/intentic.chatTabs.sbx-1`)).toBe(`a`);
     });
 });
@@ -184,4 +198,46 @@ describe("clearing", () => {
         }
         expect(told).toEqual([`acc-a`, `acc-b`, undefined]);
     });
+});
+
+describe("a preference that is the account's", () => {
+    const text = (key: string) => definePreference<string>({ key, read: (raw) => raw ?? ``, write: (value) => value, scope: `account` });
+
+    it("is kept in the open account's drawer, so another account on this browser starts without it", () => {
+        openAccountPartition(`acc-a`);
+        const picked = text(`ui-test-picked`);
+        picked.value = `opus`;
+
+        expect(localStorage.getItem(`intentic@acc-a/ui-test-picked`)).toBe(`opus`);
+        expect(localStorage.getItem(`ui-test-picked`)).toBeNull();
+        openAccountPartition(`acc-b`);
+        expect(storedValue(`ui-test-picked`)).toBeUndefined();
+    });
+
+    it("takes what the whole browser kept before it was the account's, unless the account holds its own", () => {
+        localStorage.setItem(`ui-test-legacy`, `kept`);
+        localStorage.setItem(`ui-test-held`, `browser`);
+        localStorage.setItem(`intentic@acc-a/ui-test-held`, `own`);
+        openAccountPartition(`acc-a`);
+
+        expect([text(`ui-test-legacy`).value, text(`ui-test-held`).value]).toEqual([`kept`, `own`]);
+        expect([localStorage.getItem(`ui-test-legacy`), localStorage.getItem(`ui-test-held`)]).toEqual([null, null]);
+    });
+
+    it("hears another window's change in its own drawer, and nothing from another account's", () => {
+        openAccountPartition(`acc-a`);
+        const picked = text(`ui-test-heard`);
+
+        window.dispatchEvent(new StorageEvent(`storage`, { key: `intentic@acc-b/ui-test-heard`, newValue: `theirs` }));
+        expect(picked.value).toBe(``);
+        window.dispatchEvent(new StorageEvent(`storage`, { key: `intentic@acc-a/ui-test-heard`, newValue: `mine` }));
+        expect(picked.value).toBe(`mine`);
+    });
+});
+
+// What one account chose or arranged here that another on this browser once inherited: the model a new chat opens on, the
+// order of its sandboxes, its "not now" answers, the page the app reopens on.
+it("keeps every choice that names the account's own things in its drawer", () => {
+    const keys = [...Object.values(TURN_DEFAULT_KEYS), SANDBOX_ORDER_KEY, HANDS_OFF_DISMISSED_KEY, LAST_ROUTE_KEY, sharedAccessKey(`sbx-1`)];
+    expect(keys.filter((key) => !isAccountKey(key))).toEqual([]);
 });

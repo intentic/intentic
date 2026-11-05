@@ -5,18 +5,20 @@ import type { Ref } from "vue";
 import { z } from "zod";
 import { switchableSandboxes } from "../sandbox/live/roster";
 import { orderedSandboxes } from "./homeFacts";
+import { SANDBOX_ORDER_KEY } from "../../app/storage/browserStorage";
 
 // THE READER'S OWN ORDER OF THEIR SANDBOXES, dragged into place on Home's rail (features/home/HomeSandboxes.vue) or in
 // the switcher (SandboxSwitcher.vue), and worn by every list of them: those two, Alt+1…9, the phone's menu and the door
 // up to Home (otherSandboxes.ts). The ids in that order; empty until the reader arranges them,
-// which leaves homeFacts.ts `orderedSandboxes` its own order. This device's, like the rail's pins (shell/rail/railPins.ts):
-// chrome, not data.
+// which leaves homeFacts.ts `orderedSandboxes` its own order. The account's own on this browser: the ids are its
+// sandboxes, and a second account arranging its own list here once wiped the first one's.
 
 const StoredOrderSchema = z.array(z.string());
 
-// allow(module-state): one order per device, shared by every window through the preference channel
+// allow(module-state): one order per account on this browser, shared by every window through the preference channel
 export const sandboxOrder: Ref<readonly string[]> = definePreference<readonly string[]>({
-    key: `ui-sandbox-order`,
+    key: SANDBOX_ORDER_KEY,
+    scope: `account`,
     // An unreadable payload is no arrangement: the default order rather than a half-parsed one.
     read: (raw) => (raw === null ? [] : (parseJsonWith(raw, StoredOrderSchema) ?? [])),
     write: (ids) => (ids.length === 0 ? null : JSON.stringify(ids)),

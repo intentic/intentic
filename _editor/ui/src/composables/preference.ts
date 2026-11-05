@@ -1,10 +1,12 @@
 import { ref, watch, type Ref } from "vue";
-import { deviceKey, removeStoredValue, storedValue, storeValue } from "../lib/browserStorage";
+import { accountKey, adoptBrowserValue, deviceKey, removeStoredValue, storedName, storedValue, storeValue } from "../lib/browserStorage";
 
-// A preference is per-account, not per-window: without this, a popped-out panel's own document never
+// A preference is shared by every window, not one window's: without this, a popped-out panel's own document never
 // learns of a change made elsewhere. Changes travel via BroadcastChannel and the browser's `storage`
 // event (which also catches non-preference writes, e.g. a self-heal clear); a preference is live only
-// in windows that import its module. A preference is this device's (`deviceKey`): signing out keeps it.
+// in windows that import its module. A preference is this device's (`deviceKey`) unless declared the account's: a
+// device one outlives sign-out and every account on this browser shares it; an account one is the signed-in account's
+// own (its drawer, browserStorage.ts) and goes with it.
 
 export interface PreferenceOptions<T> {
 /** The localStorage key; preferences live under `ui-`, namespaced away from a window's own view state (`intentic.*`). */
@@ -15,6 +17,12 @@ export interface PreferenceOptions<T> {
     readonly write: (value: T) => string | null;
 /** The DOM side, if any (an attribute on <html>, custom properties); run at load and on every change, in whichever window it happened. */
     readonly apply?: (value: T) => void;
+    /**
+     * `device` (the default): this browser's, whoever is signed in. `account`: the signed-in account's own, so another
+     * account on this browser never inherits it, and signing out forgets it. Account for a choice that names the
+     * account's own things (its sandboxes, its models), which another person here must neither see nor overwrite.
+     */
+    readonly scope?: `device` | `account`;
 }
 
 const stored = (key: string): string | null => storedValue(key) ?? null;
@@ -53,7 +61,13 @@ export const receivePreferenceChange = ({ key, raw }: PreferenceNote): void => {
 channel?.addEventListener(`message`, (event: MessageEvent<PreferenceNote>) => receivePreferenceChange(event.data));
 
 if (typeof window !== `undefined`) {
-    window.addEventListener(`storage`, (event: StorageEvent) => receivePreferenceChange({ key: event.key, raw: event.newValue }));
+    window.addEventListener(`storage`, (event: StorageEvent) => {
+        // Stored inside a drawer, an account preference goes by its own name here; another account's drawer is nothing to this page.
+        const key = event.key === null ? null : storedName(event.key);
+        if (key !== undefined) {
+            receivePreferenceChange({ key, raw: event.newValue });
+        }
+    });
 }
 
 /** Hears a choice made in this window: the storage key and the string stored for it, `null` when the key was removed. */
@@ -89,8 +103,12 @@ export const adoptPreference = (key: string, raw: string | null): void => {
 };
 
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
-export const definePreference = <T>({ key: name, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
-    const key = deviceKey(name);
+export const definePreference = <T>({ key: name, read, write, apply, scope = `device` }: PreferenceOptions<T>): Ref<T> => {
+    const key = scope === `account` ? accountKey(name) : deviceKey(name);
+    if (scope === `account`) {
+        // Kept for the whole browser before it was the account's: the account open now takes it.
+        adoptBrowserValue(key);
+    }
     const state = ref(read(stored(key))) as Ref<T>;
     apply?.(state.value);
 
