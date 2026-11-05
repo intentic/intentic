@@ -1,6 +1,7 @@
 import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
 import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { identifyPort, isDevToolsPort } from "./port-identity.js";
+import type { ListeningPort } from "./port-scan.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
 import { implement, ORPCError } from "@orpc/server";
@@ -26,6 +27,9 @@ export interface PortJob {
 export type PortsRoutesDeps = Pick<Services, "auth" | "config" | "deviceTunnels" | "portForwards" | "previewGuards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost & {
         readonly jobOn: (port: number) => PortJob | undefined;
+        // Names the port of a server left for the person before it listened, from this scan, so `jobOn` answers for it
+        // (agent/tools/jobs/handed-ports.ts); never throws.
+        readonly nameHandedPorts?: (listeners: readonly ListeningPort[]) => Promise<void>;
         // The conversation whose agent listens there, by its jobs or its shell's tmux session (agent/tools/jobs/port-owners.ts).
         readonly ownerOn?: (listener: { readonly port: number; readonly session?: string | undefined }) => PortOwner | undefined;
     };
@@ -45,6 +49,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     return {
         list: i.list.handler(async () => {
             const listeners = await services.scanPorts();
+            await services.nameHandedPorts?.(listeners);
             // A tunnel to one of the owner's computers is that computer's own port: mirrored back, it would loop.
             const tunnels = services.deviceTunnels.ports();
             // Read once for the whole list, not per row, to avoid re-reading the extensions directory per port. A

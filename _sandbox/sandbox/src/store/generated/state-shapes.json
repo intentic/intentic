@@ -114,7 +114,7 @@
   "auth:privacy-leaks.json": [
     {
       "type": "{ leaks?: ({ at: string; class: \"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\"; context?: string; conversationId?: string; id: string; origin: \"reported\" | \"scan\"; state: \"suspected\" | \"confirmed\" | \"dismissed\"; value: string; why?: string })[]; next?: { leak?: number; proposal?: number }; proposals?: ({ at: string; conversationId?: string; hardening: { lists?: ({ fromLeaks?: { leak: string; word: number }[]; kind: \"first-name\" | \"surname\" | \"ambiguous\" | \"title\" | \"never\"; matching?: \"inflected\" | \"as-written\"; title: string; words?: string[] })[]; rules?: ({ class: \"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\"; match: \"terms\" | \"pattern\"; matchCase?: boolean; pattern?: string; terms?: string[]; title: string })[] }; id: string; measured: { control: { added: number; chars: number; conversations: number; samples: ({ class: \"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\"; label?: string; outline: string; value?: string })[] }; leaks: { after: number; before: number; missed: string[]; total: number }; problems: string[] }; title: string; why?: string })[]; session?: { at: string; conversationId: string } }",
-      "since": "unreleased"
+      "since": "v1.398.0"
     }
   ],
   "auth:privacy-shield.json": [

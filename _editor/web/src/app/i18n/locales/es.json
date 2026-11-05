@@ -3413,6 +3413,7 @@
             "leftForYou": "El agente dejó esto en marcha para ti.",
             "openInPreview": "Abrir en la vista previa",
             "running": "En marcha · {elapsed}",
+            "servedNowhere": "Dejado en marcha para ti · {elapsed}",
             "servedOn": "Dejado en marcha para ti en {ports} · {elapsed}",
             "stopFailed": "No se detuvo.",
             "stoppedRow": "{label} detenido",

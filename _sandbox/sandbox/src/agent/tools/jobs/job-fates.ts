@@ -16,6 +16,7 @@ import {
     stopBackgroundJob,
     awaitedByRun,
 } from "./background-jobs.js";
+import { portlessHandedJobs, recheckHandedPorts } from "./handed-ports.js";
 
 // Classify leftover jobs from sandbox facts, never reply prose: keep explicitly kept jobs or listeners on already-handed-over ports.
 // Stop unkept listeners reached by this conversation and jobs waiting at an input prompt; neither should hold land or wake a finished turn.
@@ -182,6 +183,10 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string,
                 awaitedByRun(deps.conversations, judged.job);
             }
             await carryOut(deps, judged, verdict, ports, waiting, leftover);
+        }
+        // A server kept while still starting is handed over listening nowhere yet; it is looked at again (handed-ports.ts).
+        if (portlessHandedJobs(deps.conversations).some((job) => job.conversationId === conversationId)) {
+            recheckHandedPorts(deps);
         }
     } catch (error) {
         deps.logger.warn({ err: error, conversationId }, "background job: the turn's jobs could not be judged, each stays awaited");

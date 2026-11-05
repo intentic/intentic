@@ -17,7 +17,7 @@ import { outsideLogContext } from "../../../logger.js";
 import { followRun, inputWaitAt } from "./input-wait-follow.js";
 import { readRunFile, renameRunFile, writeRunFile } from "./run-files.js";
 import { forgetKeptJob, rememberKeptJob } from "./kept-job-records.js";
-import { COMMAND_FILE, JOB_FILE, NEVER_RAN, OUTPUT_FILE, STATUS_FILE } from "./job-files.js";
+import { COMMAND_FILE, JOB_FILE, NEVER_RAN, OUTPUT_FILE, settleRunnerlessJobs, STATUS_FILE } from "./job-files.js";
 import { jobRunnerPids } from "./job-processes.js";
 
 export { settleLostRuns } from "./job-files.js";
@@ -281,10 +281,12 @@ export const sweepJobEnds = (actors: Actors): void => sweepEnds(actors);
 
 // One timer for every running job, stopped once none is left; unref'd, since a job never holds the daemon up. It
 // sweeps the fleet that armed it, and is armed outside the arming turn's log context, since it serves every conversation.
+// Each sweep first writes the end of a job whose runner went with its pane, which nothing else would (job-files.ts).
 const followEnds = (actors: Actors): void => {
     const poll = actors.holdings(END_POLL);
     if (!poll.has(END_POLL_ID)) {
-        const timer = outsideLogContext(() => setInterval(() => sweepEnds(actors), END_POLL_MS));
+        const sweep = (): void => void settleRunnerlessJobs(actors.holdings(JOBS).entries().map(([, record]) => record.job)).then(() => sweepEnds(actors));
+        const timer = outsideLogContext(() => setInterval(sweep, END_POLL_MS));
         timer.unref();
         poll.hold(undefined, END_POLL_ID, timer);
     }

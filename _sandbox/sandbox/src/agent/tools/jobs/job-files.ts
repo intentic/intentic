@@ -42,16 +42,17 @@ export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"
     if (unfinished.length === 0) {
         return [];
     }
-    const alive = await jobRunnerPids(unfinished, procRoot);
-    const lost = unfinished.filter((dir) => !alive.has(dir));
+    return endRunnerless(unfinished, procRoot, "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n");
+};
+
+// Writes the end of every run in `dirs` whose runner is gone, which no runner is left to publish; answers those dirs.
+const endRunnerless = async (dirs: readonly string[], procRoot: string, why: string): Promise<readonly string[]> => {
+    const alive = await jobRunnerPids(dirs, procRoot);
+    const lost = dirs.filter((dir) => !alive.has(dir) && !existsSync(join(dir, STATUS_FILE)));
     for (const dir of lost) {
         const started = existsSync(join(dir, COMMAND_FILE)) || existsSync(join(dir, OUTPUT_FILE));
         try {
-            appendRunFile(
-                dir,
-                OUTPUT_FILE,
-                started ? "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n" : "--- intentic: this command never reached a terminal, so it never ran\n",
-            );
+            appendRunFile(dir, OUTPUT_FILE, started ? why : "--- intentic: this command never reached a terminal, so it never ran\n");
             writeRunFile(dir, `${STATUS_FILE}.part`, `${started ? LOST : NEVER_RAN}\n`);
             renameRunFile(dir, `${STATUS_FILE}.part`, STATUS_FILE);
         } catch {
@@ -59,4 +60,25 @@ export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"
         }
     }
     return lost;
+};
+
+// How long a job is given for its pane's runner to appear before a look that finds none reads it as gone.
+const RUNNER_GRACE_MS = 60_000;
+
+/* A RUNNER GONE WHILE THE DAEMON RAN (2026-11-05). A job's end is its status file, which its runner publishes; a runner
+   killed with its pane (a hangup, a kill of its whole process group, a tmux server gone) publishes none, and only boot
+   looked for runs left that way. marcin.milczarek's four servers, kept for him, read "running" for four hours with
+   nothing listening on any port; a job killed that way here read "running" with no process left. The end poll asks this
+   too: every unfinished job past its grace whose runner is gone has its end written, as boot writes it. Never throws. */
+export const settleRunnerlessJobs = async (jobs: readonly { readonly dir: string; readonly startedAt: number }[], now = Date.now(), procRoot = "/proc"): Promise<readonly string[]> => {
+    const due = jobs.filter((job) => now - job.startedAt >= RUNNER_GRACE_MS && !existsSync(join(job.dir, STATUS_FILE))).map((job) => job.dir);
+    if (due.length === 0) {
+        return [];
+    }
+    try {
+        return await endRunnerless(due, procRoot, "\n--- intentic: this command's terminal went away without it publishing an exit, so it is no longer running\n");
+    } catch {
+        // allow(silent-catch): /proc unreadable for one look leaves every job as it was; the next poll looks again.
+        return [];
+    }
 };

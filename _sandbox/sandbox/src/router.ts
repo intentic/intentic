@@ -10,6 +10,7 @@ import { createAttentionRoutes } from "./conversations/attention.routes.js";
 import { createHomeFreshRoutes } from "./conversations/home/home-fresh.routes.js";
 import { portJobOf, runningJobsOf } from "./agent/tools/jobs/background-jobs.js";
 import { portOwnerOf } from "./agent/tools/jobs/port-owners.js";
+import { reattributeHandedPorts } from "./agent/tools/jobs/handed-ports.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
@@ -199,6 +200,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     ports: createPortsRoutes({
         ...services,
         jobOn: (port) => portJobOf(services.conversations, port),
+        nameHandedPorts: (listeners) => reattributeHandedPorts({ conversations: services.conversations, logger: services.logger }, listeners),
         ownerOn: (listener) =>
             portOwnerOf(services.conversations, listener, (session) =>
                 services.agents.ids().find((id) => {

@@ -17,6 +17,7 @@ import {
     noteJobShell,
     noteJobWatch,
     openBackgroundJob,
+    portJobOf,
     settledBackgroundJobs,
     settleLostRuns,
     stopBackgroundJob,
@@ -27,6 +28,8 @@ import { onJobEnded } from "./job-ended.js";
 import { INPUT_WAIT_MS } from "./input-wait.js";
 import { lookAtRuns } from "./input-wait-follow.js";
 import { jobFate, resolveTurnJobs, stopJob } from "./job-fates.js";
+import { settleRunnerlessJobs } from "./job-files.js";
+import { portlessHandedJobs, reattributeHandedPorts } from "./handed-ports.js";
 
 // What a turn's ending does with what it left running, over real processes: each job here runs under a runner shaped
 // exactly like the one bin/tmux-run writes into its pane, leading a session of its own as a tmux pane's root does.
@@ -360,6 +363,46 @@ describe("a turn's ending, over a real job", () => {
         await ended(job);
         expect(card("conv-fate-hand", job.id)).toMatchObject({ stoppedBy: "person", exitCode: 143 });
         expect(card("conv-fate-hand", job.id)?.handed).toBeUndefined();
+    });
+
+    // 2026-11-05: four servers kept together were handed over before they listened, with `ports: []` for good, and the
+    // card's "Open in Preview" opened nothing.
+    it("names the port of a server kept before it listened, once a later scan sees its pane listen", async () => {
+        const { job, leader } = await running("conv-fate-late");
+        expect(keepBackgroundJob(actors, "conv-fate-late", job.id, "the app for the person")).toBe("kept");
+        turnWith("conv-fate-late", [said("Started the staff panel.")]);
+        await resolveTurnJobs({ conversations: actors, logger, scanPorts: () => Promise.resolve([]) }, "conv-fate-late");
+        expect(card("conv-fate-late", job.id)).toMatchObject({ handed: true, ports: [] });
+        expect(portlessHandedJobs(actors).map((entry) => entry.id)).toContain(job.id);
+
+        // Another pane's listener is not its port.
+        await reattributeHandedPorts({ conversations: actors, logger }, [{ port: 8080, host: "127.0.0.1", forwardable: true, pane: leader + 1 }]);
+        expect(card("conv-fate-late", job.id)?.ports).toEqual([]);
+        await reattributeHandedPorts({ conversations: actors, logger }, [{ port: 47_173, host: "127.0.0.1", forwardable: true, pane: leader }]);
+        expect(card("conv-fate-late", job.id)).toMatchObject({ handed: true, ports: [47_173] });
+        expect(portJobOf(actors, 47_173)?.jobId).toBe(job.id);
+        expect(portlessHandedJobs(actors).map((entry) => entry.id)).not.toContain(job.id);
+    });
+
+    // 2026-11-05: a job whose runner was killed with its pane published no status, and read "running" with no process left.
+    it("ends a job whose runner is gone without a status, once past its grace, and leaves a live one running", async () => {
+        const gone = await running("conv-fate-gone");
+        const live = await running("conv-fate-gone");
+        process.kill(-gone.leader, "SIGKILL");
+        const deadline = Date.now() + 2_000;
+        while (existsSync(`/proc/${String(gone.leader)}`) && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(existsSync(jobStatusPath(gone.job))).toBe(false);
+
+        // Inside its grace, a missing runner may be a pane still opening.
+        expect(await settleRunnerlessJobs([gone.job, live.job], gone.job.startedAt)).toEqual([]);
+        expect(await settleRunnerlessJobs([gone.job, live.job], gone.job.startedAt + 60_000)).toEqual([gone.job.dir]);
+        sweepJobEnds(actors);
+        expect(readFileSync(jobStatusPath(gone.job), "utf8").trim()).toBe("lost");
+        expect(card("conv-fate-gone", gone.job.id)).toMatchObject({ endedAt: expect.any(Number) });
+        expect(existsSync(jobStatusPath(live.job))).toBe(false);
+        expect(card("conv-fate-gone", live.job.id)?.endedAt).toBeUndefined();
     });
 
     // One judgement per run is the close's (turn-placement.test.ts); a later run's ending judges an awaited job again.

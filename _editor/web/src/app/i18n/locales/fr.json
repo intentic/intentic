@@ -3413,6 +3413,7 @@
             "leftForYou": "L'agent a laissé ceci en marche pour toi.",
             "openInPreview": "Ouvrir dans l'aperçu",
             "running": "En cours · {elapsed}",
+            "servedNowhere": "Laissé en marche pour toi · {elapsed}",
             "servedOn": "Laissé en marche pour toi sur {ports} · {elapsed}",
             "stopFailed": "L'arrêt n'a pas abouti.",
             "stoppedRow": "{label} arrêté",

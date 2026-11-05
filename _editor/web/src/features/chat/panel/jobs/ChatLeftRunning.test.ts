@@ -99,6 +99,18 @@ describe(`ChatLeftRunning`, () => {
         expect(stopJob).toHaveBeenCalledWith(`agent-1`, `web`);
     });
 
+    // 2026-11-05: a server handed over before it listened showed "Left running for you on  · …" and a button that opened
+    // nothing.
+    it(`offers no Preview for a server left with no port yet, and names no empty port`, () => {
+        roster.jobs = [job({ id: `web`, label: `Start staff panel (Vite)`, handed: true, ports: [] })];
+        const element = mount();
+        const text = element.querySelector(`.chat-left-running`)?.textContent ?? ``;
+        expect(text).toContain(`Left running for you · 1m 5s`);
+        expect(text).not.toContain(`Left running for you on`);
+        expect(labelled(element, `Open in Live app`)).toBeUndefined();
+        expect(labelled(element, `Stop`)).toMatchObject({ disabled: false });
+    });
+
     it(`lists a watch the agent armed with its pace and deadline, and disarms only it`, async () => {
         roster.watches = [watch({})];
         const element = mount();

@@ -55,6 +55,9 @@ interface Row {
     readonly watch?: AgentWatch;
 }
 
+// The port Preview opens a server left for the person on; none while the sandbox has not seen it listen.
+const portOf = (job: AgentJob): number | undefined => job.ports?.[0];
+
 const watchOf = (job: AgentJob): AgentWatch | undefined => agent.value?.watches?.find((watch) => watch.id === job.watch);
 
 const jobDetail = (job: AgentJob): string => {
@@ -66,7 +69,11 @@ const jobDetail = (job: AgentJob): string => {
         return t(`chat.chatLeftRunning.atPrompt`, { elapsed: formatElapsed((now.value - job.inputWait.since) / 1000), program: job.inputWait.program });
     }
     if (job.handed === true) {
-        return t(`chat.chatLeftRunning.servedOn`, { ports: portsLine(job.ports ?? []), elapsed });
+        // Handed over before the sandbox saw it listen (it was still starting, or it detached from its pane), so there is
+        // no port to name yet; the daemon names one once it sees it (job-fates.ts reattributeHandedPorts).
+        return portOf(job) === undefined
+            ? t(`chat.chatLeftRunning.servedNowhere`, { elapsed })
+            : t(`chat.chatLeftRunning.servedOn`, { ports: portsLine(job.ports ?? []), elapsed });
     }
     const watch = watchOf(job);
     return watch === undefined
@@ -128,8 +135,11 @@ const stop = (row: Row): void => {
 
 // A server left for the person opens where a person looks at one, beside the chat that started it, so what it serves
 // and the conversation changing it are on one screen; Preview offers publishing it from there.
+// Offered only with a port to open: on 2026-11-05 four servers handed over with `ports: []` each showed the button, and
+// a press did nothing at all.
+const previewable = (job: AgentJob | undefined): job is AgentJob => job?.handed === true && job.stoppedBy === undefined && portOf(job) !== undefined;
 const preview = (job: AgentJob): void => {
-    const port = job.ports?.[0];
+    const port = portOf(job);
     if (port !== undefined) {
         openPreviewBeside(router, portTargetId(port));
     }
@@ -156,7 +166,7 @@ const preview = (job: AgentJob): void => {
             </div>
             <div class="flex shrink-0 items-center gap-0.5">
                 <button
-                    v-if="row.job?.handed === true && row.job.ports !== undefined && row.job.stoppedBy === undefined"
+                    v-if="previewable(row.job)"
                     type="button"
                     :class="ui.textButton({ tone: `quiet`, size: `xs` })"
                     @click="preview(row.job)"

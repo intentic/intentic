@@ -3413,6 +3413,7 @@
             "leftForYou": "Der Agent hat diese für dich laufen lassen.",
             "openInPreview": "In der Vorschau öffnen",
             "running": "Läuft · {elapsed}",
+            "servedNowhere": "Für dich laufen gelassen · {elapsed}",
             "servedOn": "Für dich laufen gelassen auf {ports} · {elapsed}",
             "stopFailed": "Das ließ sich nicht stoppen.",
             "stoppedRow": "{label} gestoppt",

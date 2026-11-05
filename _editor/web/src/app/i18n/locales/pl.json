@@ -3413,6 +3413,7 @@
             "leftForYou": "Agent zostawił je uruchomione dla ciebie.",
             "openInPreview": "Otwórz w podglądzie",
             "running": "Działa · {elapsed}",
+            "servedNowhere": "Zostawione dla ciebie · {elapsed}",
             "servedOn": "Zostawione dla ciebie na {ports} · {elapsed}",
             "stopFailed": "Nie udało się zatrzymać.",
             "stoppedRow": "Zatrzymano: {label}",

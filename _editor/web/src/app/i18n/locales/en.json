@@ -3413,6 +3413,7 @@
             "leftForYou": "The agent left these running for you.",
             "openInPreview": "Open in Live app",
             "running": "Running · {elapsed}",
+            "servedNowhere": "Left running for you · {elapsed}",
             "servedOn": "Left running for you on {ports} · {elapsed}",
             "stopFailed": "That didn't stop.",
             "stoppedRow": "{label} stopped",
