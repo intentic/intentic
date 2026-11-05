@@ -177,6 +177,8 @@ export const UNSERVED = {
     // Only an MCP server's app calls it, and no fixture conversation shows one.
     // Only a fixture page that throws would send it, and none does; a page's own line offers the ask either way.
     "privacy.learn": NOT_THE_EDITORS,
+    "privacy.propose": NOT_THE_EDITORS,
+    "privacy.tryHardening": NOT_THE_EDITORS,
     // The words of a sent notification, for the native app whose push carried only its tag; the web editor gets the words in the push.
     "push.notification": NOT_THE_EDITORS,
     "secrets.request": NOT_THE_EDITORS,

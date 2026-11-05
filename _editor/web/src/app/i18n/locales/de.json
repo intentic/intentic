@@ -5057,6 +5057,10 @@
             "tryAgain": "Erneut versuchen",
             "tryTitle": "Dieselbe Unterhaltung",
             "tryNote": "Schlägt wohl erneut fehl"
+        },
+        "leakSelectionReport": {
+            "action": "Hätte maskiert werden sollen",
+            "note": "Genau dieser Wert wird ab jetzt in allen Unterhaltungen maskiert."
         }
     },
     "common": {
@@ -6852,7 +6856,84 @@
                 }
             },
             "othersChange": "Ändern können ihn nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
-            "othersForget": "Einen Datensatz vergessen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf."
+            "othersForget": "Einen Datensatz vergessen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+            "leaks": {
+                "title": "Datenlecks",
+                "intro": "Personenbezogene Daten, die unmaskiert bei einem nicht vertrauenswürdigen Anbieter angekommen sind. Ein gemeldeter Wert wird ab dann maskiert; Härten bringt dem Schild bei, ähnliche Werte zu erkennen.",
+                "report": {
+                    "title": "Datenleck melden",
+                    "description": "Ein Wert, den der Schild hätte maskieren sollen. Genau dieser Wert wird ab jetzt maskiert.",
+                    "field": "Durchgesickerter Wert",
+                    "placeholder": "Der Wert, wie er gesendet wurde",
+                    "kind": "Art",
+                    "submit": "Melden",
+                    "done": "Gemeldet: wird ab jetzt maskiert.",
+                    "notYours": "Ein Datenleck melden können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+                    "failed": "Das Datenleck konnte nicht gemeldet werden."
+                },
+                "scan": {
+                    "title": "Letzte Unterhaltungen durchsuchen",
+                    "description": "Sucht auf diesem Rechner nach Namen und beschrifteten Feldern, die unmaskiert hinausgingen. Nichts verlässt diesen Rechner, und nichts wird maskiert, bevor Sie es bestätigen.",
+                    "run": "Durchsuchen",
+                    "result": "{conversations} gelesen: {suspected}.",
+                    "conversations": "{count} Unterhaltung | {count} Unterhaltungen",
+                    "suspected": "{count} neues vermutetes Datenleck | {count} neue vermutete Datenlecks",
+                    "notYours": "Nach Datenlecks suchen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+                    "failed": "Die Unterhaltungen konnten nicht durchsucht werden."
+                },
+                "harden": {
+                    "title": "Schild härten",
+                    "description": "Ein Agent liest die bestätigten Datenlecks, misst Regeln und Wörter für die Namenslisten, die ähnliche Werte erkennen würden, und schlägt sie hier vor.",
+                    "run": "Aus Datenlecks härten ({count})",
+                    "hintTitle": "Härtungssitzung starten",
+                    "trusted": "Der Agent sieht die durchgesickerten Werte.",
+                    "untrusted": "Der Agent sieht von jedem Datenleck nur den Umriss und die Feldbeschriftung, nie den Wert.",
+                    "noneConfirmed": "Noch nichts zum Härten: Bestätigen oder melden Sie zuerst ein Datenleck.",
+                    "open": "Härtungssitzung öffnen",
+                    "notNoted": "Die Sitzung läuft, aber diese Seite konnte sie nicht vermerken und bietet daher nicht an, sie zu öffnen."
+                },
+                "empty": "Noch nichts gemeldet oder vermutet.",
+                "outlineOnly": "Als Umriss gezeigt: A ist ein Großbuchstabe, a ein Kleinbuchstabe, 9 eine Ziffer.",
+                "origin": {
+                    "reported": "Gemeldet",
+                    "suspected": "Vermutet",
+                    "label": "nach „{label}“"
+                },
+                "caught": {
+                    "no": "Nur genau dieser Wert wird maskiert; ähnliche Werte erkennt noch nichts.",
+                    "rule": "Jetzt auch von einer Regel erkannt.",
+                    "detector": "Jetzt auch von den Erkennern erkannt.",
+                    "model": "Jetzt auch vom Namensmodell erkannt."
+                },
+                "suspectedCaught": {
+                    "no": "Nicht maskiert: Bestätigen Sie es, um diesen Wert ab jetzt zu maskieren.",
+                    "rule": "Bereits von einer Regel erkannt.",
+                    "detector": "Bereits von den Erkennern erkannt.",
+                    "model": "Bereits vom Namensmodell erkannt."
+                },
+                "dismissedNote": "Keine personenbezogenen Daten: nicht maskiert, und eine Suche schlägt es nicht erneut vor.",
+                "confirm": "Bestätigen",
+                "dismiss": "Keine personenbezogenen Daten",
+                "showDismissed": "Verworfene zeigen ({count})",
+                "hideDismissed": "Verworfene ausblenden",
+                "judgeNotYours": "Ein Datenleck bestätigen oder verwerfen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+                "judgeFailed": "Das Datenleck konnte nicht geändert werden.",
+                "proposal": {
+                    "waiting": "Von einer Härtungssitzung vorgeschlagen, wartet auf Sie",
+                    "leaks": "Erkennt {after} von {total} bestätigten Datenleck (vorher {before}). | Erkennt {after} von {total} bestätigten Datenlecks (vorher {before}).",
+                    "added": "Würde in den letzten Unterhaltungen {count} weiteren Wert maskieren. | Würde in den letzten Unterhaltungen {count} weitere Werte maskieren.",
+                    "addedNone": "Maskiert in den letzten Unterhaltungen nichts weiter.",
+                    "missed": "Noch nicht erkannt: {ids}",
+                    "leakWord": "Wort {word} von {leak}",
+                    "problems": "So nicht anwendbar:",
+                    "apply": "Anwenden",
+                    "dismiss": "Verwerfen",
+                    "applyNotYours": "Einen Vorschlag anwenden können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+                    "applyFailed": "Der Vorschlag konnte nicht angewendet werden.",
+                    "dismissNotYours": "Einen Vorschlag verwerfen können nur der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf.",
+                    "dismissFailed": "Der Vorschlag konnte nicht verworfen werden."
+                }
+            }
         },
         "agentProjectInstalls": {
             "ask": "Erst fragen",

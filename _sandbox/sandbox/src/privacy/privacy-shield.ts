@@ -132,6 +132,8 @@ export interface PrivacyShield {
     readonly readers: LocalReaders;
     readonly readings: ReadingMemo;
     readonly tokens: SessionTokens;
+    // The local name model when installed, whatever the policy asks for: what a scan for leaks reads names with.
+    readonly recognizer: () => Promise<EntityRecognizer | undefined>;
 }
 
 export interface PrivacyShieldDeps {
@@ -430,6 +432,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         readers: deps.readers,
         readings,
         tokens: deps.tokens,
+        recognizer: deps.recognizer,
     };
 };
 

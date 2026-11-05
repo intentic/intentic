@@ -32,4 +32,12 @@ export const privacyDoors = {
     sources: () => [],
     // Nothing has been taught, so there is nothing to forget.
     forget: () => ({ forgotten: 0 }),
+    // No model traffic went through the shield here, so nothing leaked, a scan finds nothing, and no session proposed anything.
+    leaks: () => ({ leaks: [], proposals: [], words: {}, revealed: true }),
+    report: () => refuse(`This is the demo workspace: nothing it shows reached a model provider, so there is no leak to report.`),
+    judge: () => refuse(`This is the demo workspace: it has no leak to judge.`),
+    scan: () => ({ conversations: 0, chars: 0, suspected: 0 }),
+    applyProposal: () => refuse(`This is the demo workspace: no session has proposed anything to apply.`),
+    dismissProposal: () => refuse(`This is the demo workspace: no session has proposed anything to dismiss.`),
+    hardeningSession: () => okAfter(() => undefined),
 } satisfies Doors<`privacy`>;

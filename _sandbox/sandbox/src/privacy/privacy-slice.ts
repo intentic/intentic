@@ -10,6 +10,7 @@ import { filePrivacyPolicy, privacyShieldDocument } from "./privacy-policy.js";
 import { createPrivacyShield, type PrivacyShield } from "./privacy-shield.js";
 import { filePrivacyVault, privacyVaultDocument } from "./privacy-vault.js";
 import { createLocalReaders } from "./readers.js";
+import { filePrivacyLeaks, type PrivacyLeakStore, privacyLeaksDocument } from "./leaks/leak-store.js";
 import { sessionTokens } from "./gateway/session-token.js";
 import type { Pin } from "../compliance/org-pins.js";
 
@@ -17,6 +18,8 @@ import type { Pin } from "../compliance/org-pins.js";
 // and its optional name model loaded on first use.
 export interface PrivacySlice {
     readonly privacyShield: PrivacyShield;
+    // The leaks reported or suspected and the hardening proposals (leaks/leak-store.ts), beside the vault.
+    readonly privacyLeaks: PrivacyLeakStore;
 }
 
 export interface PrivacyDeps {
@@ -51,5 +54,6 @@ export const createPrivacySlice = ({ authRoot, workspaceRoot, capabilities, loop
             recognizerInstalled: async () => nerInstalled(),
             warn: (message) => warn(message, undefined),
         }),
+        privacyLeaks: filePrivacyLeaks(join(authRoot, privacyLeaksDocument.path)),
     };
 };

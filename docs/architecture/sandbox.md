@@ -340,6 +340,20 @@ The Changes panel stages everything and commits everything as runs, the push's s
   four of its ten names (Wilk, Baran, Król, Wrona: wolf, ram, king, crow) sent in the clear. An ambiguous first name
   ("Will Power"), a word no register lists after the first name ("Natalia Restaurant"), and a thing's noun after the pair
   ("Victoria Station") still make no name, and a cell separator between the two still needs a surname no word shares.
+- (2026-11-05) Leaks, and hardening against them ([`privacy/leaks/`](../../_sandbox/sandbox/src/privacy/leaks/),
+  [`privacy-leaks.ts`](../../_shared/sandbox-contract/src/schemas/privacy-leaks.ts)). A value the shield let through is
+  reported by a person, or suspected by a scan run here over recent conversations: what the name model reads as a
+  name, or what stands under a field labelled as personal data (`| Nr paszportu | … |`), that nothing masks. A
+  confirmed leak's exact value is taught to the vault at once, one source per leak (`leak:L3`), so dismissing it
+  forgets that value alone. Leaks sit beside the vault (`privacy-leaks.json`, mode 0600, encrypted at rest). The
+  hardening session reads a leak's value and the text around it only when its conversation's provider is trusted or
+  local; otherwise it reads the value's outline, the label before it (each word that could be a name or holds a digit
+  as its outline too) and what the name lists say of each word, since the text around a leak can hold values nobody
+  reported. It names a word for a list by `{leak, word}`, resolved when the owner applies. `privacy try` measures
+  additions against the confirmed leaks without their vault copies (else every leak reads as caught) and against the
+  newest conversations, counting what they would newly mask; proposals are measured with outlines only, since every
+  session reads them back. Applying goes through the owner's own policy write, so the organisation's pins and the
+  pattern checks hold.
 - A runtime it cannot read at all (an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), and a conversation or a child agent
   placed on a runner runs there only on a trusted provider, since a runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data; a share's

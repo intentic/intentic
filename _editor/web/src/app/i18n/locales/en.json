@@ -5057,6 +5057,10 @@
             "tryAgain": "Try again",
             "tryTitle": "Same conversation",
             "tryNote": "Most likely fails again"
+        },
+        "leakSelectionReport": {
+            "action": "Should have been masked",
+            "note": "Its exact value is masked from now on, in every conversation."
         }
     },
     "common": {
@@ -6852,7 +6856,84 @@
                 }
             },
             "othersChange": "Only the owner, Full access, or someone given the Privacy shield can change it.",
-            "othersForget": "Only the owner, Full access, or someone given the Privacy shield can forget a dataset."
+            "othersForget": "Only the owner, Full access, or someone given the Privacy shield can forget a dataset.",
+            "leaks": {
+                "title": "Leaks",
+                "intro": "Personal data that reached an untrusted provider unmasked. Reporting a value masks it from then on; hardening teaches the shield to catch values like it.",
+                "report": {
+                    "title": "Report a leak",
+                    "description": "A value the shield should have masked. Its exact value is masked from now on.",
+                    "field": "Value that leaked",
+                    "placeholder": "The value as it was sent",
+                    "kind": "Kind",
+                    "submit": "Report",
+                    "done": "Reported: masked from now on.",
+                    "notYours": "Only the owner, Full access, or someone given the Privacy shield can report a leak.",
+                    "failed": "Couldn't report the leak."
+                },
+                "scan": {
+                    "title": "Scan recent conversations",
+                    "description": "Looks on this machine for names and labelled fields that went out unmasked. Nothing leaves this machine, and nothing is masked until you confirm it.",
+                    "run": "Scan",
+                    "result": "Read {conversations}: {suspected}.",
+                    "conversations": "{count} conversation | {count} conversations",
+                    "suspected": "{count} new suspected leak | {count} new suspected leaks",
+                    "notYours": "Only the owner, Full access, or someone given the Privacy shield can scan for leaks.",
+                    "failed": "Couldn't scan the conversations."
+                },
+                "harden": {
+                    "title": "Harden the shield",
+                    "description": "An agent reads the confirmed leaks, measures rules and name-list words that would catch values like them, and proposes them here.",
+                    "run": "Harden from leaks ({count})",
+                    "hintTitle": "Start a hardening session",
+                    "trusted": "The agent sees the leaked values.",
+                    "untrusted": "The agent sees each leak's outline and field label, never its value.",
+                    "noneConfirmed": "Nothing to harden from yet: confirm or report a leak first.",
+                    "open": "Open hardening session",
+                    "notNoted": "The session started, but this page couldn't note it, so it won't offer to open it."
+                },
+                "empty": "Nothing reported or suspected yet.",
+                "outlineOnly": "Shown as its outline: A is a capital letter, a a small one, 9 a digit.",
+                "origin": {
+                    "reported": "Reported",
+                    "suspected": "Suspected",
+                    "label": "after “{label}”"
+                },
+                "caught": {
+                    "no": "Masked as this exact value only; nothing catches values like it yet.",
+                    "rule": "Now also caught by a rule.",
+                    "detector": "Now also caught by the detectors.",
+                    "model": "Now also caught by the name model."
+                },
+                "suspectedCaught": {
+                    "no": "Not masked: confirm it to mask this value from now on.",
+                    "rule": "Already caught by a rule.",
+                    "detector": "Already caught by the detectors.",
+                    "model": "Already caught by the name model."
+                },
+                "dismissedNote": "Not personal data: not masked, and a scan won't suggest it again.",
+                "confirm": "Confirm",
+                "dismiss": "Not personal data",
+                "showDismissed": "Show dismissed ({count})",
+                "hideDismissed": "Hide dismissed",
+                "judgeNotYours": "Only the owner, Full access, or someone given the Privacy shield can confirm or dismiss a leak.",
+                "judgeFailed": "Couldn't change the leak.",
+                "proposal": {
+                    "waiting": "Proposed by a hardening session, waiting for you",
+                    "leaks": "Catches {after} of {total} confirmed leak ({before} before). | Catches {after} of {total} confirmed leaks ({before} before).",
+                    "added": "Would mask {count} more value in recent conversations. | Would mask {count} more values in recent conversations.",
+                    "addedNone": "Masks nothing more in recent conversations.",
+                    "missed": "Still not caught: {ids}",
+                    "leakWord": "word {word} of {leak}",
+                    "problems": "Can't be applied as written:",
+                    "apply": "Apply",
+                    "dismiss": "Dismiss",
+                    "applyNotYours": "Only the owner, Full access, or someone given the Privacy shield can apply a proposal.",
+                    "applyFailed": "Couldn't apply the proposal.",
+                    "dismissNotYours": "Only the owner, Full access, or someone given the Privacy shield can dismiss a proposal.",
+                    "dismissFailed": "Couldn't dismiss the proposal."
+                }
+            }
         },
         "agentProjectInstalls": {
             "ask": "Ask first",

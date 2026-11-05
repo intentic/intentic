@@ -493,8 +493,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     class="chat-surface relative min-w-0"
                     :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
                 >
+                    <!-- `data-message-text`: the words of one message as drawn, the stretch a selection must stay inside to
+                         be reported as a leak (LeakSelectionReport.vue), here and on the reply below. -->
                     <div
                         ref="bubble"
+                        data-message-text
                         class="chat-prompt-text whitespace-pre-wrap px-4 py-2.5 text-xs leading-relaxed text-content"
                         :class="{ 'cursor-pointer': overflowing && !expanded }"
                         @scroll="onBubbleScroll"
@@ -611,7 +614,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  paint-contains (.chat-message), and opting every answer out of that is what long transcripts pay for.
                  Shown on hover, as the fork mark is (dimmed on a phone, and lit while it reads). -->
             <div v-if="message.text" class="group/reply relative w-full">
-                <div class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
+                <div data-message-text class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
                     <MarkdownParts :parts="body" />
                 </div>
                 <ChatReadAloud

@@ -75,6 +75,7 @@ import { safetyCardLinesStep } from "../personas/safety-card-lines.js";
 import { phonePairingsDocument } from "../phones/phone-pairings.js";
 import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
+import { privacyLeaksDocument } from "../privacy/leaks/leak-store.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
 import { privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { privacyVaultDocument } from "../privacy/privacy-vault.js";
@@ -222,6 +223,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     phonePairingsDocument,
     phoneWakeDocument,
     bundleManifestDocument,
+    privacyLeaksDocument,
     privacyLedgerDocument,
     privacyShieldDocument,
     privacyVaultDocument,
@@ -231,10 +233,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
-    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,

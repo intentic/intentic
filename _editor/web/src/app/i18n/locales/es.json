@@ -5057,6 +5057,10 @@
             "tryAgain": "Volver a intentarlo",
             "tryTitle": "Misma conversación",
             "tryNote": "Lo más probable es que vuelva a fallar"
+        },
+        "leakSelectionReport": {
+            "action": "Debería haberse enmascarado",
+            "note": "Este valor exacto se enmascara desde ahora en todas las conversaciones."
         }
     },
     "common": {
@@ -6852,7 +6856,84 @@
                 }
             },
             "othersChange": "Solo pueden cambiarlo el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
-            "othersForget": "Solo pueden olvidar un conjunto de datos el propietario, alguien con acceso total o quien gestione el Escudo de privacidad."
+            "othersForget": "Solo pueden olvidar un conjunto de datos el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+            "leaks": {
+                "title": "Filtraciones",
+                "intro": "Datos personales que llegaron sin enmascarar a un proveedor sin confianza. Un valor del que informas se enmascara desde entonces; el refuerzo enseña al escudo a detectar valores parecidos.",
+                "report": {
+                    "title": "Informar de una filtración",
+                    "description": "Un valor que el escudo debería haber enmascarado. Ese valor exacto se enmascara desde ahora.",
+                    "field": "Valor filtrado",
+                    "placeholder": "El valor tal como se envió",
+                    "kind": "Tipo",
+                    "submit": "Informar",
+                    "done": "Informado: enmascarado desde ahora.",
+                    "notYours": "Solo pueden informar de una filtración el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+                    "failed": "No se pudo informar de la filtración."
+                },
+                "scan": {
+                    "title": "Revisar conversaciones recientes",
+                    "description": "Busca en esta máquina nombres y campos etiquetados que salieron sin enmascarar. Nada sale de esta máquina y nada se enmascara hasta que lo confirmes.",
+                    "run": "Revisar",
+                    "result": "Se leyeron {conversations}: {suspected}.",
+                    "conversations": "{count} conversación | {count} conversaciones",
+                    "suspected": "{count} nueva filtración sospechosa | {count} nuevas filtraciones sospechosas",
+                    "notYours": "Solo pueden buscar filtraciones el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+                    "failed": "No se pudieron revisar las conversaciones."
+                },
+                "harden": {
+                    "title": "Reforzar el escudo",
+                    "description": "Un agente lee las filtraciones confirmadas, mide reglas y palabras para las listas de nombres que detectarían valores parecidos, y las propone aquí.",
+                    "run": "Reforzar a partir de filtraciones ({count})",
+                    "hintTitle": "Iniciar una sesión de refuerzo",
+                    "trusted": "El agente ve los valores filtrados.",
+                    "untrusted": "El agente ve el contorno y la etiqueta del campo de cada filtración, nunca su valor.",
+                    "noneConfirmed": "Aún no hay nada a partir de lo que reforzar: primero confirma o informa de una filtración.",
+                    "open": "Abrir la sesión de refuerzo",
+                    "notNoted": "La sesión empezó, pero esta página no pudo anotarla, así que no ofrecerá abrirla."
+                },
+                "empty": "Aún no hay nada informado ni sospechoso.",
+                "outlineOnly": "Se muestra su contorno: A es una mayúscula, a una minúscula, 9 un dígito.",
+                "origin": {
+                    "reported": "Informada",
+                    "suspected": "Sospechosa",
+                    "label": "después de «{label}»"
+                },
+                "caught": {
+                    "no": "Solo se enmascara este valor exacto; nada detecta aún valores parecidos.",
+                    "rule": "Ahora también la detecta una regla.",
+                    "detector": "Ahora también la detectan los detectores.",
+                    "model": "Ahora también la detecta el modelo de nombres."
+                },
+                "suspectedCaught": {
+                    "no": "Sin enmascarar: confírmala para enmascarar este valor desde ahora.",
+                    "rule": "Ya la detecta una regla.",
+                    "detector": "Ya la detectan los detectores.",
+                    "model": "Ya la detecta el modelo de nombres."
+                },
+                "dismissedNote": "No son datos personales: no se enmascara y una revisión no volverá a sugerirla.",
+                "confirm": "Confirmar",
+                "dismiss": "No son datos personales",
+                "showDismissed": "Mostrar descartadas ({count})",
+                "hideDismissed": "Ocultar descartadas",
+                "judgeNotYours": "Solo pueden confirmar o descartar una filtración el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+                "judgeFailed": "No se pudo cambiar la filtración.",
+                "proposal": {
+                    "waiting": "Propuesta de una sesión de refuerzo, pendiente de ti",
+                    "leaks": "Detecta {after} de {total} filtración confirmada (antes {before}). | Detecta {after} de {total} filtraciones confirmadas (antes {before}).",
+                    "added": "Enmascararía {count} valor más en las conversaciones recientes. | Enmascararía {count} valores más en las conversaciones recientes.",
+                    "addedNone": "No enmascara nada más en las conversaciones recientes.",
+                    "missed": "Aún sin detectar: {ids}",
+                    "leakWord": "palabra {word} de {leak}",
+                    "problems": "No se puede aplicar tal como está:",
+                    "apply": "Aplicar",
+                    "dismiss": "Descartar",
+                    "applyNotYours": "Solo pueden aplicar una propuesta el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+                    "applyFailed": "No se pudo aplicar la propuesta.",
+                    "dismissNotYours": "Solo pueden descartar una propuesta el propietario, alguien con acceso total o quien gestione el Escudo de privacidad.",
+                    "dismissFailed": "No se pudo descartar la propuesta."
+                }
+            }
         },
         "agentProjectInstalls": {
             "ask": "Preguntar antes",

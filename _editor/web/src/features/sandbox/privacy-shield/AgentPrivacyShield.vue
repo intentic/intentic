@@ -8,12 +8,14 @@ import {
     type PrivacyShieldMode,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
+import { PRIVACY_LEAK_SOURCE_PREFIX } from "@intentic/sandbox-contract/schemas/privacy-leaks";
 import { Await, Button, formatDate, formatDateTime, Notice, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
 import { ledgerTime, withClass } from "./privacyShield";
+import PrivacyLeaks from "./PrivacyLeaks.vue";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import PrivacyNeverMasked from "./PrivacyNeverMasked.vue";
 import PrivacyRules from "./PrivacyRules.vue";
@@ -30,7 +32,9 @@ import { shieldRefusal, usePrivacyShield, usePrivacySources } from "../../../mod
 const t = useT();
 
 const { status, setPolicy, saveError, loaded } = usePrivacyShield();
-const { sources, forget, forgetError, loaded: listed } = usePrivacySources();
+const { sources: taught, forget, forgetError, loaded: listed } = usePrivacySources();
+// A leak's own value is taught as a source of its own (`leak:<id>`), shown with its leak under Leaks, not as a dataset.
+const sources = computed(() => taught.value.filter((source) => !source.source.startsWith(PRIVACY_LEAK_SOURCE_PREFIX)));
 
 const policy = computed<PrivacyShieldPolicy | undefined>(() => status.value?.policy);
 const ready = computed(() => policy.value !== undefined);
@@ -270,6 +274,9 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
             :notice="writtenFrom === `trusted` ? saveNotice : undefined"
             @write="(change) => write(`trusted`, change)"
         />
+
+        <!-- What went out unmasked anyway, and the session that teaches the shield to catch more like it. -->
+        <PrivacyLeaks v-if="running && status !== undefined" :status="status" :kinds="KINDS" />
 
         <!-- The note on how a dataset arrives is drawn under the outline too, as it is under the list. -->
         <Await v-if="showSources" :of="listed" imprint="sandbox.agent.privacy-datasets">

@@ -63,3 +63,12 @@ command, a query, an edit) and it resolves before anything runs. Before working 
 `privacy learn <file> --column first_name+last_name --column pesel:national-id` (CSV, TSV, JSON lines, or SQLite with
 `--table` or `--query`); the values go to the daemon and are never printed. Turning it off, trusting a provider or
 forgetting a dataset is the owner's.
+
+A value that reached a provider unmasked is a leak. The owner reports one (Sandbox ▸ Privacy shield ▸ Leaks, or
+"Should have been masked" on text selected in a chat), or `privacy scan` suspects some in recent conversations, on
+this machine, for the owner to confirm. A confirmed leak is masked as its exact value from then on. Hardening the shield
+so it catches the next value like it is a session the owner starts from that page: `privacy leaks` lists each leak
+(on a provider nobody trusted, as its outline `AA9999999`, the field label before it and what the name lists say of
+each word, never its value), `privacy try <file.json>` measures candidate rules and name-list words against the leaks
+and recent text, and `privacy propose <file.json> --title "…"` hands them to the owner, who applies or dismisses them.
+`privacy --help` has the file's format; a word you were not shown goes on a list as `{"leak": "L3", "word": 1}`.

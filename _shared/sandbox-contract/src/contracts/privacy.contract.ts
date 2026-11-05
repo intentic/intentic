@@ -14,6 +14,15 @@ import {
     PrivacyShieldPolicySchema,
     PrivacyShieldStatusSchema,
 } from "../schemas/privacy.js";
+import {
+    PRIVACY_LEAK_ID,
+    PRIVACY_PROPOSAL_ID,
+    PRIVACY_SCAN_CONVERSATIONS_MAX,
+    PrivacyHardeningMeasureSchema,
+    PrivacyHardeningSchema,
+    PrivacyLeakReportSchema,
+    PrivacyLeaksSchema,
+} from "../schemas/privacy-leaks.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The privacy shield's policy, its log, and the datasets taught to it. The policy is stored off the workspace (an agent
@@ -120,6 +129,104 @@ export const privacyContract = {
             }),
         )
         .output(z.object({ added: z.number().int(), known: z.number().int() })),
+    // Leaks and hardening (schemas/privacy-leaks.ts). Reporting, scanning, measuring and proposing only ever lead to masking
+    // more, so the agent's CLI may do them; judging a leak, applying a proposal and dismissing one are the owner's.
+    leaks: procedure
+        .route({
+            method: "GET",
+            path: "/privacy/leaks",
+            summary: "Personal data that reached a provider unmasked, and the proposals to catch more like it",
+            description:
+                "Every reported or suspected leak with its outline, the field label before it, what the name lists say of its words and what finds it now without its exact copy in the vault; and the hardening proposals waiting for the owner. Values and the text around them only for a person who runs the shield, or an agent whose conversation runs on a trusted or local provider.",
+        })
+        // Values ride this read for a person, so it floors where the policy does rather than at a read's viewer.
+        .meta({ floor: "maintainer", agent: true, right: "privacy" })
+        .output(PrivacyLeaksSchema),
+    report: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/leaks",
+            summary: "Report a value the shield should have masked",
+            description:
+                "Kept as a confirmed leak, and its exact value taught to the vault: masked wherever it appears from now on. Reporting only ever masks more, so the agent may do it.",
+        })
+        .meta({ agent: true, right: "privacy" })
+        .input(PrivacyLeakReportSchema)
+        .output(z.object({ id: z.string() })),
+    judge: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/leaks/judge",
+            summary: "Confirm or dismiss a leak",
+            description:
+                "Confirming teaches its exact value to the vault, so it is masked from now on. Dismissing says it is no personal data: a value taught for it is forgotten, and a scan does not suggest it again.",
+        })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
+        .input(z.object({ id: z.string().regex(PRIVACY_LEAK_ID), state: z.enum(["confirmed", "dismissed"]) }))
+        .output(OkSchema),
+    scan: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/leaks/scan",
+            summary: "Look for leaks in recent conversations, on this machine",
+            description:
+                "Reads the most recent conversations here and suspects every value nothing masks that the local name model reads as a name, or that stands under a field labelled as personal data (PESEL, passport, e-mail…). Nothing leaves this machine and nothing is taught: the owner confirms or dismisses each.",
+        })
+        .meta({ agent: true, right: "privacy" })
+        .input(z.object({ conversations: z.number().int().min(1).max(PRIVACY_SCAN_CONVERSATIONS_MAX).optional() }))
+        .output(z.object({ conversations: z.number().int(), chars: z.number().int(), suspected: z.number().int() })),
+    tryHardening: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/leaks/try",
+            summary: "Measure rules and name-list words before proposing them",
+            description:
+                "Adds them to the policy as saved and measures, on this machine: how many confirmed leaks they catch that nothing catches now, and what they would mask in recent conversations that nothing masks today, as outlines (values only for a reader who may read them). Nothing is saved.",
+        })
+        .meta({ agent: true, right: "privacy" })
+        .input(PrivacyHardeningSchema)
+        .output(PrivacyHardeningMeasureSchema),
+    propose: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/proposals",
+            summary: "Propose rules and name-list words to the owner",
+            description:
+                "Measured as tryHardening measures them, and kept for the owner, who applies or dismisses it on the privacy page. A rule whose pattern cannot be saved is refused here.",
+        })
+        .meta({ agent: true, right: "privacy" })
+        .input(z.object({ title: z.string().min(1).max(80), why: z.string().max(2000).default(""), hardening: PrivacyHardeningSchema }))
+        .output(z.object({ id: z.string(), measured: PrivacyHardeningMeasureSchema })),
+    applyProposal: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/proposals/apply",
+            summary: "Apply a hardening proposal to the policy",
+            description:
+                "Its rules are added and switched on, and its words go onto the owner's own list of the same title and kind, or a new one; a word named by its leak is read from that leak here.",
+        })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
+        .input(z.object({ id: z.string().regex(PRIVACY_PROPOSAL_ID) }))
+        .output(OkSchema),
+    dismissProposal: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/proposals/dismiss",
+            summary: "Dismiss a hardening proposal",
+        })
+        .meta({ floor: "maintainer", right: "privacy", control: "never", panel: false })
+        .input(z.object({ id: z.string().regex(PRIVACY_PROPOSAL_ID) }))
+        .output(OkSchema),
+    hardeningSession: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/leaks/session",
+            summary: "Note the hardening session started from the page",
+            description: "So the page offers to open it rather than starting a second one while it is still on the board.",
+        })
+        .meta({ right: "privacy", panel: false })
+        .input(z.object({ conversationId: z.string().min(1).max(200) }))
+        .output(OkSchema),
     forget: procedure
         .route({
             method: "POST",

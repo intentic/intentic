@@ -1,3 +1,4 @@
+import { memoryPrivacyLeaks } from "../privacy/leaks/leak-store.js";
 import { opt } from "../opt.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,6 +176,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Off, as a fresh sandbox's is: every turn plans as it would with no shield, and a suite that wants it on
         // passes its own.
         privacyShield: privacySliceFake().privacyShield,
+        privacyLeaks: memoryPrivacyLeaks(),
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
         ...phonesSliceFake(),

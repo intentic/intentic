@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// The in-sandbox privacy command: whether the privacy shield is on, and the one thing an agent may do to it, which is
-// teach it a dataset's values. A taught value is masked wherever it appears from then on, in every form it is written,
+// The in-sandbox privacy command: whether the privacy shield is on, and what an agent may do to it, which only ever
+// masks more: teach it a dataset's values, and harden it against leaks (look for them, measure rules, propose them). A taught value is masked wherever it appears from then on, in every form it is written,
 // whether or not a detector would have found it: the way to be sure a customer table's names and PESELs never reach an
 // untrusted provider, even in a shape no pattern expects.
 //
@@ -28,7 +28,25 @@ const USAGE = `privacy — the privacy shield that keeps personal data from untr
                                 + ("first_name+last_name:person-name" teaches "Jan Kowalski"). Classes:
                                 ${CLASSES.join(", ")}; person-name when left out.
 
-The values are read here and sent to the daemon; none is printed. Values shorter than three characters are skipped.`;
+The values are read here and sent to the daemon; none is printed. Values shorter than three characters are skipped.
+
+Hardening the shield against leaks (what reached an untrusted provider unmasked):
+privacy leaks                 every reported or suspected leak: its id, kind, outline (AA9999999), the field label before
+                                it, what the name lists say of each word, and what finds it now without its exact copy;
+                                its value only when this conversation's provider is trusted or local
+privacy scan [--conversations N]
+                                look for unmasked personal data in the newest conversations, on this machine; each find is
+                                kept as suspected for the owner to confirm
+privacy try <file.json>       measure rules and name-list words before proposing them: how many confirmed leaks they
+                                catch, and what they would mask in recent conversations that nothing masks today
+privacy propose <file.json> --title "<title>" [--why "<why>"]
+                                keep them for the owner, who applies or dismisses them on the privacy page
+
+<file.json> holds {"rules": [...], "lists": [...]}. A rule: {"title", "class", "match": "pattern"|"terms",
+"pattern", "terms", "matchCase"}; a pattern runs with the u flag (i unless matchCase) and a group named value masks
+only that part. A list: {"title", "kind": "surname"|"first-name"|"ambiguous"|"title"|"never", "matching":
+"inflected"|"as-written", "words": [...], "fromLeaks": [{"leak": "L3", "word": 1}]}: fromLeaks names a leak's word by
+its position, which is how a word you were not shown goes on a list.`;
 
 const BATCH = 5_000;
 
@@ -196,6 +214,109 @@ const learn = async (file, flags) => {
     process.stdout.write(`Taught ${all.length} distinct values from ${records.length} records (${added} new) as "${source}". The shield now knows ${known} values.\n`);
 };
 
+const CAUGHT = { rule: "an owner's rule", detector: "a detector", model: "the name model", no: "nothing (only its exact copy in the vault)" };
+
+const wordLine = (word, index) => {
+    const facts = [
+        word.firstName ? "first name" : undefined,
+        word.surname ? "listed surname" : undefined,
+        word.surnameForm && !word.surname ? "surname-shaped" : undefined,
+        word.ambiguous ? "also an ordinary word" : undefined,
+        word.never ? "never a name" : undefined,
+    ].filter((fact) => fact !== undefined);
+    return `[${index}] ${word.outline}${facts.length > 0 ? ` (${facts.join(", ")})` : ""}`;
+};
+
+const leaks = async () => {
+    const { status: code, text } = await call(COMMAND, "GET", "/privacy/leaks");
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const view = JSON.parse(text);
+    process.stdout.write(
+        view.revealed
+            ? "Values are shown: this conversation's provider is trusted or local.\n"
+            : "Values are hidden: this conversation's provider is not trusted, so each leak is shown as its outline. Never ask for a value; name a word by its leak and position.\n",
+    );
+    const open = view.leaks.filter((leak) => leak.state !== "dismissed");
+    if (open.length === 0) {
+        process.stdout.write("No leaks reported or suspected. `privacy scan` looks for some in recent conversations.\n");
+    }
+    for (const leak of open) {
+        const label = leak.label === undefined ? "" : `  label "${leak.label}"`;
+        process.stdout.write(`\n${leak.id}  ${leak.state}  ${leak.class}  outline ${leak.outline} (${leak.length} chars)${label}\n`);
+        process.stdout.write(`    caught now by: ${CAUGHT[leak.caught] ?? leak.caught}${leak.why === undefined ? "" : `; suspected ${leak.why}`}\n`);
+        process.stdout.write(`    words: ${leak.words.map(wordLine).join("  ")}\n`);
+        if (leak.value !== undefined) {
+            process.stdout.write(`    value: ${leak.value}\n`);
+        }
+        if (leak.context !== undefined) {
+            process.stdout.write(`    context: ${leak.context.replace(/\s+/g, " ").slice(0, 400)}\n`);
+        }
+    }
+    for (const proposal of view.proposals) {
+        const { leaks: measured } = proposal.measured;
+        process.stdout.write(`\nProposal ${proposal.id} waiting for the owner: ${proposal.title} (catches ${measured.after} of ${measured.total} confirmed leaks)\n`);
+    }
+    return undefined;
+};
+
+const scan = async (flags) => {
+    const body = flags.conversations === undefined ? {} : { conversations: Number(flags.conversations) };
+    const { status: code, text } = await call(COMMAND, "POST", "/privacy/leaks/scan", JSON.stringify(body));
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const found = JSON.parse(text);
+    process.stdout.write(`Read ${found.conversations} conversation(s), ${found.chars} characters: ${found.suspected} new suspected leak(s), kept for the owner to judge.\n`);
+    return undefined;
+};
+
+const hardeningOf = (file) => {
+    if (file === undefined) {
+        return die(COMMAND, "name a JSON file holding {\"rules\": [...], \"lists\": [...]}");
+    }
+    try {
+        return JSON.parse(readFileSync(file, "utf8"));
+    } catch (error) {
+        return die(COMMAND, `${file} is not JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+};
+
+const measureLines = (measured) => {
+    const { leaks: caught, control } = measured;
+    const lines = [
+        `Confirmed leaks caught: ${caught.after} of ${caught.total} (before: ${caught.before})${caught.missed.length > 0 ? `; still missed: ${caught.missed.join(", ")}` : ""}`,
+        `Recent text (${control.conversations} conversation(s), ${control.chars} characters): ${control.added} more value(s) masked than today`,
+        ...control.samples.map((sample) => `    ${sample.class}  ${sample.outline}${sample.label === undefined ? "" : `  after "${sample.label}"`}${sample.value === undefined ? "" : `  = ${sample.value}`}`),
+        ...measured.problems.map((problem) => `Problem: ${problem}`),
+    ];
+    return `${lines.join("\n")}\n`;
+};
+
+const tryHardening = async (file) => {
+    const { status: code, text } = await call(COMMAND, "POST", "/privacy/leaks/try", JSON.stringify(hardeningOf(file)));
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    process.stdout.write(measureLines(JSON.parse(text)));
+    return undefined;
+};
+
+const propose = async (file, flags) => {
+    if (flags.title === undefined) {
+        return die(COMMAND, "say what the proposal does with --title");
+    }
+    const body = { title: flags.title, why: flags.why ?? "", hardening: hardeningOf(file) };
+    const { status: code, text } = await call(COMMAND, "POST", "/privacy/proposals", JSON.stringify(body));
+    if (code !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const answer = JSON.parse(text);
+    process.stdout.write(`Proposed as ${answer.id}; the owner applies or dismisses it in Sandbox ▸ Privacy shield.\n${measureLines(answer.measured)}`);
+    return undefined;
+};
+
 const main = async () => {
     const [verb, ...args] = process.argv.slice(2);
     if (verb === undefined || verb === "status") {
@@ -207,6 +328,21 @@ const main = async () => {
     }
     if (verb === "sources") {
         return sources();
+    }
+    if (verb === "leaks") {
+        return leaks();
+    }
+    if (verb === "scan") {
+        const { flags } = parseArgs(COMMAND, args, { values: ["conversations"] });
+        return scan(flags);
+    }
+    if (verb === "try") {
+        const { rest } = parseArgs(COMMAND, args, {});
+        return tryHardening(rest[0]);
+    }
+    if (verb === "propose") {
+        const { flags, rest } = parseArgs(COMMAND, args, { values: ["title", "why"] });
+        return propose(rest[0], flags);
     }
     if (verb === "learn") {
         const { flags, rest } = parseArgs(COMMAND, args, { values: ["table", "query", "source"], repeated: ["column"] });

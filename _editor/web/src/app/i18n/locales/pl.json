@@ -5057,6 +5057,10 @@
             "tryAgain": "Spróbuj ponownie",
             "tryTitle": "Ta sama rozmowa",
             "tryNote": "Najpewniej znów się nie uda"
+        },
+        "leakSelectionReport": {
+            "action": "Powinno być zamaskowane",
+            "note": "Od teraz ta dokładna wartość będzie maskowana we wszystkich rozmowach."
         }
     },
     "common": {
@@ -6254,7 +6258,84 @@
                 }
             },
             "othersChange": "Zmienić ją może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
-            "othersForget": "Zapomnieć zbiór danych może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności."
+            "othersForget": "Zapomnieć zbiór danych może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+            "leaks": {
+                "title": "Wycieki",
+                "intro": "Dane osobowe, które trafiły do niezaufanego dostawcy bez maskowania. Zgłoszona wartość jest od tej pory maskowana, a wzmacnianie uczy osłonę wyłapywać podobne wartości.",
+                "report": {
+                    "title": "Zgłoś wyciek",
+                    "description": "Wartość, którą osłona powinna była zamaskować. Od teraz ta dokładna wartość będzie maskowana.",
+                    "field": "Wartość, która wyciekła",
+                    "placeholder": "Wartość w takiej postaci, w jakiej została wysłana",
+                    "kind": "Rodzaj",
+                    "submit": "Zgłoś",
+                    "done": "Zgłoszono: od teraz maskowane.",
+                    "notYours": "Zgłosić wyciek może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+                    "failed": "Nie udało się zgłosić wycieku."
+                },
+                "scan": {
+                    "title": "Przeszukaj ostatnie rozmowy",
+                    "description": "Szuka na tym komputerze imion, nazwisk i opisanych pól, które wyszły bez maskowania. Nic nie opuszcza tego komputera i nic nie jest maskowane, dopóki tego nie potwierdzisz.",
+                    "run": "Przeszukaj",
+                    "result": "Przeczytano {conversations}: {suspected}.",
+                    "conversations": "{count} rozmowę | {count} rozmowy | {count} rozmów",
+                    "suspected": "{count} nowy podejrzany wyciek | {count} nowe podejrzane wycieki | {count} nowych podejrzanych wycieków",
+                    "notYours": "Szukać wycieków może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+                    "failed": "Nie udało się przeszukać rozmów."
+                },
+                "harden": {
+                    "title": "Wzmocnij osłonę",
+                    "description": "Agent czyta potwierdzone wycieki, sprawdza reguły i słowa do list imion i nazwisk, które wyłapałyby podobne wartości, i proponuje je tutaj.",
+                    "run": "Wzmocnij na podstawie wycieków ({count})",
+                    "hintTitle": "Rozpocznij sesję wzmacniania",
+                    "trusted": "Agent widzi wartości, które wyciekły.",
+                    "untrusted": "Agent widzi tylko zarys każdego wycieku i etykietę pola, nigdy samą wartość.",
+                    "noneConfirmed": "Na razie nie ma czego wzmacniać: najpierw potwierdź albo zgłoś wyciek.",
+                    "open": "Otwórz sesję wzmacniania",
+                    "notNoted": "Sesja ruszyła, ale ta strona nie zdołała jej odnotować, więc nie zaproponuje jej otwarcia."
+                },
+                "empty": "Nie ma jeszcze zgłoszonych ani podejrzanych wycieków.",
+                "outlineOnly": "Pokazana jako zarys: A to wielka litera, a to mała, 9 to cyfra.",
+                "origin": {
+                    "reported": "Zgłoszony",
+                    "suspected": "Podejrzany",
+                    "label": "po „{label}”"
+                },
+                "caught": {
+                    "no": "Maskowana jest tylko ta dokładna wartość; podobnych nic jeszcze nie wyłapuje.",
+                    "rule": "Teraz wyłapuje go również reguła.",
+                    "detector": "Teraz wyłapują go również detektory.",
+                    "model": "Teraz wyłapuje go również model imion i nazwisk."
+                },
+                "suspectedCaught": {
+                    "no": "Niezamaskowany: potwierdź, by od teraz maskować tę wartość.",
+                    "rule": "Już wyłapuje go reguła.",
+                    "detector": "Już wyłapują go detektory.",
+                    "model": "Już wyłapuje go model imion i nazwisk."
+                },
+                "dismissedNote": "To nie są dane osobowe: nie jest maskowany, a przeszukiwanie nie zaproponuje go ponownie.",
+                "confirm": "Potwierdź",
+                "dismiss": "To nie dane osobowe",
+                "showDismissed": "Pokaż odrzucone ({count})",
+                "hideDismissed": "Ukryj odrzucone",
+                "judgeNotYours": "Potwierdzić lub odrzucić wyciek może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+                "judgeFailed": "Nie udało się zmienić wycieku.",
+                "proposal": {
+                    "waiting": "Propozycja z sesji wzmacniania, czeka na Ciebie",
+                    "leaks": "Wyłapuje {after} z {total} potwierdzonego wycieku (wcześniej {before}). | Wyłapuje {after} z {total} potwierdzonych wycieków (wcześniej {before}). | Wyłapuje {after} z {total} potwierdzonych wycieków (wcześniej {before}).",
+                    "added": "Zamaskowałaby jeszcze {count} wartość w ostatnich rozmowach. | Zamaskowałaby jeszcze {count} wartości w ostatnich rozmowach. | Zamaskowałaby jeszcze {count} wartości w ostatnich rozmowach.",
+                    "addedNone": "W ostatnich rozmowach nie zamaskowałaby niczego więcej.",
+                    "missed": "Nadal niewyłapane: {ids}",
+                    "leakWord": "słowo {word} z {leak}",
+                    "problems": "Nie da się zastosować w tej postaci:",
+                    "apply": "Zastosuj",
+                    "dismiss": "Odrzuć",
+                    "applyNotYours": "Zastosować propozycję może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+                    "applyFailed": "Nie udało się zastosować propozycji.",
+                    "dismissNotYours": "Odrzucić propozycję może tylko właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności.",
+                    "dismissFailed": "Nie udało się odrzucić propozycji."
+                }
+            }
         },
         "agentProjectInstalls": {
             "ask": "Najpierw pytaj",

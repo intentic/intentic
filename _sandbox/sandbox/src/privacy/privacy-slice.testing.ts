@@ -10,6 +10,7 @@ import type { PrivacySlice } from "./privacy-slice.js";
 import { createPrivacyVault, type VaultValue } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import { sessionTokensFrom } from "./gateway/session-token.js";
+import { memoryPrivacyLeaks } from "./leaks/leak-store.js";
 
 // The privacy shield as route suites stand it up (harness/route-services.testing.ts): the real shield, off by default as
 // a fresh sandbox is, over an in-memory policy, log, vault and signing key, so a suite that stands it up touches no disk.
@@ -76,5 +77,6 @@ export const privacySliceFake = (
             recognizer: async () => undefined,
             recognizerInstalled: async () => false,
         }),
+        privacyLeaks: memoryPrivacyLeaks(),
     };
 };

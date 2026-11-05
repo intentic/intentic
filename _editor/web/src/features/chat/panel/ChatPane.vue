@@ -59,6 +59,7 @@ import ChatModeMenu from "../models/run-settings/ChatModeMenu.vue";
 import ChatPlacementMenu from "./ChatPlacementMenu.vue";
 import ChatFleetSuggestion from "./fleet/ChatFleetSuggestion.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
+import LeakSelectionReport from "./privacy/LeakSelectionReport.vue";
 import { provideAccountNudge } from "../accounts/accountNudge";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "../personas/ChatPersonaMenu.vue";
@@ -1006,6 +1007,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 </div>
             </div>
         </div>
+
+        <!-- "Should have been masked" beside a value selected in one message: the press floats over the transcript, mounted once per pane. -->
+        <LeakSelectionReport v-if="!strip" :root="scroller" :conversation-id="conversation.conversationId" />
 
         <!-- The pane's status bar, outside the scroller: about the pane (context, subscription, daemon liveness), not the message. Withheld
              from the strip; its hints and refusals say nothing where the subagent bar or the read-only line stands in the composer's place. -->

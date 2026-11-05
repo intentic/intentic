@@ -5057,6 +5057,10 @@
             "tryAgain": "Réessayer",
             "tryTitle": "Même conversation",
             "tryNote": "Échouera sans doute encore"
+        },
+        "leakSelectionReport": {
+            "action": "Aurait dû être masqué",
+            "note": "Cette valeur exacte est masquée dès maintenant, dans toutes les conversations."
         }
     },
     "common": {
@@ -6852,7 +6856,84 @@
                 }
             },
             "othersChange": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent le modifier.",
-            "othersForget": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent oublier un jeu de données."
+            "othersForget": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent oublier un jeu de données.",
+            "leaks": {
+                "title": "Fuites",
+                "intro": "Des données personnelles parvenues sans masque à un fournisseur non fiable. Signaler une valeur la masque dès lors ; le renforcement apprend au bouclier à repérer les valeurs semblables.",
+                "report": {
+                    "title": "Signaler une fuite",
+                    "description": "Une valeur que le bouclier aurait dû masquer. Cette valeur exacte est masquée dès maintenant.",
+                    "field": "Valeur qui a fuité",
+                    "placeholder": "La valeur telle qu’elle a été envoyée",
+                    "kind": "Type",
+                    "submit": "Signaler",
+                    "done": "Signalée : masquée dès maintenant.",
+                    "notYours": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent signaler une fuite.",
+                    "failed": "Impossible de signaler la fuite."
+                },
+                "scan": {
+                    "title": "Analyser les conversations récentes",
+                    "description": "Cherche sur cette machine les noms et les champs étiquetés partis sans masque. Rien ne quitte cette machine, et rien n’est masqué avant que vous ne le confirmiez.",
+                    "run": "Analyser",
+                    "result": "Lecture de {conversations} : {suspected}.",
+                    "conversations": "{count} conversation | {count} conversations",
+                    "suspected": "{count} nouvelle fuite suspectée | {count} nouvelles fuites suspectées",
+                    "notYours": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent rechercher des fuites.",
+                    "failed": "Impossible d’analyser les conversations."
+                },
+                "harden": {
+                    "title": "Renforcer le bouclier",
+                    "description": "Un agent lit les fuites confirmées, mesure des règles et des mots pour les listes de noms qui repéreraient des valeurs semblables, et les propose ici.",
+                    "run": "Renforcer à partir des fuites ({count})",
+                    "hintTitle": "Lancer une session de renforcement",
+                    "trusted": "L’agent voit les valeurs qui ont fuité.",
+                    "untrusted": "L’agent voit le contour et l’étiquette de champ de chaque fuite, jamais sa valeur.",
+                    "noneConfirmed": "Rien à renforcer pour l’instant : confirmez ou signalez d’abord une fuite.",
+                    "open": "Ouvrir la session de renforcement",
+                    "notNoted": "La session a démarré, mais cette page n’a pas pu la noter : elle ne proposera donc pas de l’ouvrir."
+                },
+                "empty": "Rien de signalé ni de suspecté pour l’instant.",
+                "outlineOnly": "Affichée par son contour : A est une majuscule, a une minuscule, 9 un chiffre.",
+                "origin": {
+                    "reported": "Signalée",
+                    "suspected": "Suspectée",
+                    "label": "après « {label} »"
+                },
+                "caught": {
+                    "no": "Seule cette valeur exacte est masquée ; rien ne repère encore les valeurs semblables.",
+                    "rule": "Désormais aussi repérée par une règle.",
+                    "detector": "Désormais aussi repérée par les détecteurs.",
+                    "model": "Désormais aussi repérée par le modèle de noms."
+                },
+                "suspectedCaught": {
+                    "no": "Non masquée : confirmez-la pour masquer cette valeur dès maintenant.",
+                    "rule": "Déjà repérée par une règle.",
+                    "detector": "Déjà repérée par les détecteurs.",
+                    "model": "Déjà repérée par le modèle de noms."
+                },
+                "dismissedNote": "Pas une donnée personnelle : non masquée, et une analyse ne la proposera plus.",
+                "confirm": "Confirmer",
+                "dismiss": "Pas une donnée personnelle",
+                "showDismissed": "Afficher les écartées ({count})",
+                "hideDismissed": "Masquer les écartées",
+                "judgeNotYours": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent confirmer ou écarter une fuite.",
+                "judgeFailed": "Impossible de modifier la fuite.",
+                "proposal": {
+                    "waiting": "Proposée par une session de renforcement, en attente de votre décision",
+                    "leaks": "Repère {after} sur {total} fuite confirmée ({before} avant). | Repère {after} sur {total} fuites confirmées ({before} avant).",
+                    "added": "Masquerait {count} valeur de plus dans les conversations récentes. | Masquerait {count} valeurs de plus dans les conversations récentes.",
+                    "addedNone": "Ne masque rien de plus dans les conversations récentes.",
+                    "missed": "Toujours pas repérées : {ids}",
+                    "leakWord": "mot {word} de {leak}",
+                    "problems": "Impossible à appliquer en l’état :",
+                    "apply": "Appliquer",
+                    "dismiss": "Écarter",
+                    "applyNotYours": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent appliquer une proposition.",
+                    "applyFailed": "Impossible d’appliquer la proposition.",
+                    "dismissNotYours": "Seuls le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent écarter une proposition.",
+                    "dismissFailed": "Impossible d’écarter la proposition."
+                }
+            }
         },
         "agentProjectInstalls": {
             "ask": "Demander d'abord",
