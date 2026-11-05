@@ -12,10 +12,17 @@ use tokio::net::TcpStream;
 // What the listener read the caller's address as, from a bare HTTP/1.1 request.
 async fn seen_from(address: &str) -> String {
     let mut stream = TcpStream::connect(address).await.unwrap();
-    stream.write_all(b"GET / HTTP/1.1\r\nHost: edge\r\nConnection: close\r\n\r\n").await.unwrap();
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: edge\r\nConnection: close\r\n\r\n")
+        .await
+        .unwrap();
     let mut answer = String::new();
     stream.read_to_string(&mut answer).await.unwrap();
-    answer.rsplit("\r\n\r\n").next().unwrap_or_default().to_owned()
+    answer
+        .rsplit("\r\n\r\n")
+        .next()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 #[tokio::test]

@@ -499,9 +499,14 @@ mod tests {
     /// Nothing listening is no answer, at once rather than at the deadline.
     #[test]
     fn an_address_nothing_answers_on_is_offline() {
-        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = free.local_addr().unwrap().port();
-        drop(free);
+        // Bound and never listening, so a connection is refused. _(2026-11-05) The port used to be freed by dropping a
+        // listener, and the test beside this one binds its own servers on port 0: handed the freed port, one of them
+        // took this probe into a backlog nobody accepted, and the probe waited out the whole limit._
+        let held =
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+        held.bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)).into())
+            .unwrap();
+        let port = held.local_addr().unwrap().as_socket().unwrap().port();
         let started = std::time::Instant::now();
         assert!(!tauri::async_runtime::block_on(answers(
             &format!("http://127.0.0.1:{port}/"),

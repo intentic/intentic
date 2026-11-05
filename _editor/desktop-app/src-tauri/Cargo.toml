@@ -114,6 +114,11 @@ gtk = "=0.18.2"
 # sway's IPC for Intentic OS's shell (src/shell/), the copy `ic`'s screen service uses too.
 intentic-sway-ipc = { path = "../../../_sandbox/ic/sway-ipc" }
 
+[dev-dependencies]
+# A port bound without listening (src/machine_face.rs's offline test): it refuses every connection and, held, no other
+# test's listener can be handed it. The version tokio already builds.
+socket2 = "0.6.5"
+
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # Exercise the same patched crate that GTK uses without requiring a display or starting the desktop app.
 glib = "=0.18.5"
