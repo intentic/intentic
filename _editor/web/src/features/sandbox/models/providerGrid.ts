@@ -26,9 +26,20 @@ export const MODEL_TILES: readonly TileKey[] = [...NATIVE_PROVIDERS, LOCAL_TILE]
 
 export const isProviderTile = (key: string): key is NativeProvider => NATIVE_PROVIDERS.some((provider) => provider === key);
 
-/** Which tile a provider lives under: its own, or Local models for a model this sandbox serves or is pointed at. */
-export const tileOf = (provider: AgentProvider): TileKey | undefined =>
-    isProviderTile(provider) ? provider : isEndpointProvider(provider) ? LOCAL_TILE : undefined;
+/**
+ * The sign-in a vendor's API key is filed under (providerCatalog.ts `keyedBeside`), handed in so this module reads no
+ * store; none by default.
+ */
+export type BesideOf = (provider: AgentProvider) => NativeProvider | undefined;
+const besideNone: BesideOf = () => undefined;
+
+/**
+ * Which tile a provider lives under: its own; a vendor's API key under the sign-in it is the alternative to, as one more
+ * row of that card (the owner, 2026-11-05: "under that provider, like an account"); Local models for any other model
+ * this sandbox serves or is pointed at.
+ */
+export const tileOf = (provider: AgentProvider, besideOf: BesideOf = besideNone): TileKey | undefined =>
+    isProviderTile(provider) ? provider : (besideOf(provider) ?? (isEndpointProvider(provider) ? LOCAL_TILE : undefined));
 
 /** Free to connect: a free sign-in, or the machine the reader already owns. A label on the tile, never its position. */
 export const isFreeTile = (key: TileKey): boolean => key === LOCAL_TILE || isFreeProvider(key);
@@ -71,29 +82,34 @@ export const tileCount = (facts: TileFacts): number | undefined => (facts.count 
  * first tile. Some tile is always open, as every master/detail view here arrives with one selected (personas does the
  * same): a grid with an empty detail pane reads as a page that has not finished loading.
  */
-export const arrivalTile = (facts: {
-    readonly asked?: AgentProvider;
-    readonly live?: AgentProvider;
-    readonly failed?: AgentProvider;
-    readonly needing?: AgentProvider;
-    readonly connected?: AgentProvider;
-}): TileKey =>
+export const arrivalTile = (
+    facts: {
+        readonly asked?: AgentProvider;
+        readonly live?: AgentProvider;
+        readonly failed?: AgentProvider;
+        readonly needing?: AgentProvider;
+        readonly connected?: AgentProvider;
+    },
+    besideOf: BesideOf = besideNone,
+): TileKey =>
     [facts.asked, facts.live, facts.failed, facts.needing, facts.connected]
-        .map((provider) => (provider === undefined ? undefined : tileOf(provider)))
+        .map((provider) => (provider === undefined ? undefined : tileOf(provider, besideOf)))
         .find((key) => key !== undefined) ?? MODEL_TILES[0]!;
 
 /**
  * What a link naming a provider (`?provider=`: the chat's Try again, a picker row, a job whose model is missing) does:
  * opens its tile, and starts its sign-in only while nothing of it is connected. One already connected, an account needing
  * a reconnect included, waits for the reader's press: a sign-in the page started by itself over a provider that is
- * already connected read as the page contradicting itself. Undefined for a provider no tile holds.
+ * already connected read as the page contradicting itself. A link naming a key opens the card it is a row of and starts
+ * nothing: there is no sign-in to a key. Undefined for a provider no tile holds.
  */
 export const linkArrival = (
     provider: AgentProvider,
     ready: (provider: AgentProvider) => boolean,
+    besideOf: BesideOf = besideNone,
 ): { readonly tile: TileKey; readonly signIn: boolean } | undefined => {
-    const tile = tileOf(provider);
-    return tile === undefined ? undefined : { tile, signIn: tile !== LOCAL_TILE && !ready(provider) };
+    const tile = tileOf(provider, besideOf);
+    return tile === undefined ? undefined : { tile, signIn: isProviderTile(provider) && !ready(provider) };
 };
 
 // The banner once a sign-in lands: what was connected, and to which sandbox. What a reader connects lives in that one

@@ -87,3 +87,11 @@ export const KEY_PROVIDERS: readonly KeyProvider[] = [
 
 // The key a provider's card offers as its alternative to signing in, if its vendor sells one.
 export const keyBeside = (provider: AgentProvider): KeyProvider | undefined => KEY_PROVIDERS.find((entry) => entry.beside === provider);
+
+// Its address without the slash a hand-typed one may end in, so the same API reads as the same API.
+const sameBase = (one: string, other: string): boolean => one.trim().replace(/\/+$/, ``).toLowerCase() === other.trim().replace(/\/+$/, ``).toLowerCase();
+
+// The vendor an endpoint is the API of, read off its address: what a key becomes is an endpoint at exactly that base,
+// whether pasted beside a sign-in or copied from the owner's computer. Any other address (a gateway, a server of the
+// owner's) is no vendor's here, even one that serves the same models.
+export const keyProviderFor = (baseUrl: string): KeyProvider | undefined => KEY_PROVIDERS.find((entry) => sameBase(entry.baseUrl, baseUrl));

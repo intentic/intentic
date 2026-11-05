@@ -1,9 +1,11 @@
 import { endpointProvider, isTrialProvider, loopsOf, TRIAL_LABEL } from "@intentic/sandbox-contract/models/agent-catalog";
+import { keyProviderFor } from "@intentic/sandbox-contract/models/key-providers";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { providersContract } from "@intentic/sandbox-contract/contracts/providers.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
+import { opt } from "../../opt.js";
 
 export type ProvidersRoutesDeps = Pick<Services, "providerCatalogs" | "capabilities" | "providerReadiness">;
 
@@ -31,8 +33,11 @@ export const createProvidersRoutes = (services: ProvidersRoutesDeps) => {
                     return [];
                 }
                 const id = endpointProvider(capability.id);
+                // A vendor's own API is filed under the sign-in it is the alternative to; the trial is the platform's,
+                // whatever surface it reads, and a local model is nobody's.
+                const beside = capability.kind === "endpoint" && !isTrialProvider(id) ? keyProviderFor(capability.config.baseUrl)?.beside : undefined;
                 // The trial is the one endpoint the user didn't name, so it is the one whose label isn't its id.
-                return [{ id, label: isTrialProvider(id) ? TRIAL_LABEL : capability.id, kind: capability.kind }];
+                return [{ id, label: isTrialProvider(id) ? TRIAL_LABEL : capability.id, kind: capability.kind, ...opt("beside", beside) }];
             });
             return {
                 // The same gate a turn itself passes through, so a chat is never offered a provider the run would

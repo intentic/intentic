@@ -6,6 +6,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { type App, computed, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import type { TurnPick } from "../../../models/conversations/run/turnDefaults";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The provider's connected accounts, in the provider's own order, as the daemon lists them.
@@ -19,6 +20,7 @@ jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
 // A sandbox new enough to judge its own accounts, which is every one this list is drawn for.
 jest.mock("../../../models/providers/accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
 const { default: PickerAccounts } = await import("./PickerAccounts.vue");
+const { endpointProviders, providerModels } = await import("../../../models/providers/providerCatalog");
 
 // An account as the daemon lists it: the facts the one rule judges (a seat mark, a reading), never a verdict.
 
@@ -30,12 +32,20 @@ const SPENT: Partial<OauthAccount> = { usage: { measuredAt: Date.now(), windows:
 
 let app: App | undefined;
 const picks: string[] = [];
-const mount = (props: { account?: string; named?: boolean } = {}): HTMLElement => {
+const credentials: [TurnPick, string | undefined][] = [];
+const mount = (props: { account?: string; named?: boolean; provider?: AgentProvider; model?: string; providerLocked?: boolean } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
         render: () =>
-            h(PickerAccounts, { provider: `claude`, harness: `native`, model: `a-model`, ...props, onSelectAccount: (id: string) => picks.push(id) }),
+            h(PickerAccounts, {
+                provider: `claude`,
+                harness: `native`,
+                model: `a-model`,
+                ...props,
+                onSelectAccount: (id: string) => picks.push(id),
+                onSelectCredential: (pick: TurnPick, named: string | undefined) => credentials.push([pick, named]),
+            }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -53,12 +63,14 @@ const ticked = (element: HTMLElement): string[] =>
 beforeEach(() => {
     listed = [account(`work`, SEATLESS), account(`personal`, room(40)), account(`spare`, room(70))];
     picks.length = 0;
+    credentials.length = 0;
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    endpointProviders.value = [];
 });
 
 it(`ticks the account a turn naming none runs on, says the runtime picked it, and never the first one listed`, () => {
@@ -116,4 +128,50 @@ it(`ticks nothing for an account gone from the list, whose turn the daemon refus
     const element = mount({ account: `disconnected`, named: false });
 
     expect(ticked(element)).toEqual([]);
+});
+
+// A vendor's API key filed under the provider is picked as an account is (the owner, 2026-11-05): a row after the
+// accounts, saying who bills it. To the daemon it is a provider of its own, so a pick between the two is a provider
+// switch onto the same model, under the id the other one lists it by.
+describe(`an API key beside the accounts`, () => {
+    const KEY = `endpoint/anthropic`;
+    beforeEach(() => {
+        endpointProviders.value = [{ id: KEY, label: `anthropic`, kind: `endpoint`, beside: `claude` }];
+        providerModels.value = {
+            ...providerModels.value,
+            claude: [{ value: `claude-opus-5`, label: `Claude Opus 5` }],
+            [KEY]: [
+                { value: `claude-opus-5-20260201`, label: `Claude Opus 5` },
+                { value: `claude-sonnet-5-20260201`, label: `Claude Sonnet 5` },
+            ],
+        };
+    });
+
+    it(`lists the key after the accounts with who bills it, and picks it as a switch onto the same model`, () => {
+        listed = [account(`personal`, room(40))];
+        const element = mount({ model: `claude-opus-5` });
+
+        expect(rows(element).map(labelOf)).toEqual([`personal@example.com`, `API key`]);
+        expect(rows(element)[1]?.textContent).toContain(`Billed per token by Anthropic`);
+        rows(element)[1]!.click();
+        expect(credentials).toEqual([[{ provider: KEY, value: `claude-opus-5-20260201` }, undefined]]);
+    });
+
+    it(`on the key, ticks the key and picks an account as the sign-in it belongs to, named`, () => {
+        listed = [account(`personal`, room(40)), account(`spare`, room(70))];
+        const element = mount({ provider: KEY, model: `claude-opus-5-20260201` });
+
+        expect(ticked(element)).toEqual([`API key`]);
+        rows(element).find((row) => labelOf(row) === `spare@example.com`)!.click();
+        expect(credentials).toEqual([[{ provider: `claude`, value: `claude-opus-5` }, `spare`]]);
+        expect(picks).toEqual([]);
+    });
+
+    it(`holds a switch between the key and an account while a turn runs, as any provider switch waits`, () => {
+        listed = [account(`personal`, room(40))];
+        const element = mount({ providerLocked: true });
+
+        expect(rows(element).find((row) => labelOf(row) === `API key`)?.hasAttribute(`disabled`)).toBe(true);
+        expect(rows(element).find((row) => labelOf(row) === `personal@example.com`)?.hasAttribute(`disabled`)).toBe(false);
+    });
 });

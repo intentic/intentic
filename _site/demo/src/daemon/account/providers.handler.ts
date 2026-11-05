@@ -2,6 +2,7 @@ import { loopsOf, TRIAL_LABEL, TRIAL_PROVIDER } from "@intentic/sandbox-contract
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { freshEdition, noModels } from "../../mode";
 import { DEMO_CATALOGS } from "./accounts";
+import { runnableEndpoints } from "./capabilities";
 import type { Doors } from "../doors";
 
 export const providersDoors = {
@@ -12,10 +13,16 @@ export const providersDoors = {
     // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
     // reader who cannot open /accounts learns that.
     // Every loop the catalog offers, as a daemon of this build would advertise them.
-    list: () => ({
-        ...(freshEdition || noModels
-            ? { native: [], agents: [], endpoints: noModels ? [] : [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
-            : { native: [`claude`], agents: [], endpoints: [] }),
-        loops: Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, [...loopsOf(provider)]])),
-    }),
+    // The endpoints connected on the Capabilities page or by a key pasted beside a sign-in follow, as the daemon lists them.
+    list: () => {
+        const endpoints = runnableEndpoints();
+        return {
+            ...(freshEdition || noModels
+                ? { native: [], agents: [], endpoints: [...(noModels ? [] : [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }]), ...endpoints] }
+                : { native: [`claude`], agents: [], endpoints }),
+            loops: Object.fromEntries(
+                [...NATIVE_PROVIDERS, ...endpoints.map((endpoint) => endpoint.id)].map((provider) => [provider, [...loopsOf(provider)]]),
+            ),
+        };
+    },
 } satisfies Doors<`providers`>;

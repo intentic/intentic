@@ -4205,7 +4205,9 @@
             "measuringPlanLimits": "Midiendo los límites del plan",
             "noAccountsMatch": "Ninguna cuenta coincide.",
             "outdatedMissing": "Hasta que se actualice, las cuentas de abajo no pueden indicar si pueden atender un turno (un inicio de sesión o puesto perdido, un cupo agotado o en pausa), y elegir una solo surte efecto en el siguiente mensaje.",
-            "subscription": "Suscripción"
+            "subscription": "Suscripción",
+            "apiKey": "Clave de API",
+            "billedPerToken": "{vendor} la factura por token"
         },
         "pickerStatus": {
             "nextMessage": "Se aplica desde tu próximo mensaje",
@@ -4499,7 +4501,8 @@
         },
         "providerCatalog": {
             "freeTrial": "Prueba gratuita",
-            "localModels": "Modelos locales"
+            "localModels": "Modelos locales",
+            "apiKey": "Clave de API de {vendor}"
         },
         "chatAccounts": {
             "disconnectFailed": "No se pudo desconectar esa cuenta.",
@@ -5355,6 +5358,12 @@
             "add": "Añadir clave",
             "notAccepted": "{vendor} no aceptó esta clave: no listó ningún modelo para ella. Revisa la clave y vuelve a intentarlo.",
             "couldntAdd": "No se pudo añadir la clave de {vendor}."
+        },
+        "providerKeys": {
+            "title": "Clave de API",
+            "titleHint": "Clave de API ··{hint}",
+            "billed": "{vendor} la factura por token",
+            "couldntRemove": "No se pudo desconectar esta clave de API."
         }
     },
     "desktop": {

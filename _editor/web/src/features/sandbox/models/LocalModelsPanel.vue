@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
 import { RouterLink } from "vue-router";
-import { endpointProviders } from "../../../models/providers/providerCatalog";
+import { endpointProviders, keyedBeside } from "../../../models/providers/providerCatalog";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import HostServerRows from "./HostServerRows.vue";
@@ -14,7 +14,7 @@ import LocalModelLane from "./LocalModelLane.vue";
 import { here, page } from "../../../lib/routes/links";
 
 // LOCAL MODELS, opened from its tile in Sandbox ▸ Models' grid: the models this sandbox runs itself and the servers it is
-// pointed at, in one card. What it already has first (a server, an API key, a model added from its capability card),
+// pointed at, in one card. What it already has first (a server, a gateway's API key, a model added from its capability card),
 // then the servers already running on the computer hosting the sandbox, one press from being used (HostServerRows, where
 // a GPU model comes from), then the two models sized for this machine's CPU (LocalModelLane), each an offer until taken
 // and a status once it is, then the way to point at any other server. Those live here and nowhere else on the page:
@@ -43,10 +43,11 @@ const entryOf = (provider: string) => {
 };
 
 // Everything else this sandbox runs a model on outside a provider's account: servers and keys, and local models the lane
-// does not offer. The trial is the platform's, not the reader's, and is not managed here.
+// does not offer. The trial is the platform's, not the reader's, and is not managed here; nor is a vendor's own key, which
+// is a row of the card of the sign-in it is the alternative to (keys/ProviderKeys.vue).
 const held = computed(() =>
     endpointProviders.value
-        .filter((endpoint) => !isTrialProvider(endpoint.id))
+        .filter((endpoint) => !isTrialProvider(endpoint.id) && keyedBeside(endpoint.id) === undefined)
         .filter((endpoint) => {
             const config = ModelConfigSchema.safeParse(entryOf(endpoint.id)?.config);
             return endpoint.kind !== `localmodel` || !config.success || !offered.value.has(config.data.model);

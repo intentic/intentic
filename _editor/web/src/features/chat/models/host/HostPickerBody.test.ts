@@ -80,6 +80,7 @@ jest.mock(`../../accounts/pickerAccounts`, () => ({
         hasContent: computed(() => true),
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
+        onKey: computed(() => false),
     }),
 }));
 

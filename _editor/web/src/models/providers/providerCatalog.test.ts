@@ -1,7 +1,7 @@
 // newerVersionOf: the one rule behind the composer pill's "older" word, the picker's older tag, and the newest version a
 // new chat opens on. Opus 5 and Opus 5.5 differ by two characters, so the rule has to say which one is behind.
 import "@intentic/testing/dom";
-import { endpointProviders, newerVersionOf, perProvider, providerModels } from "./providerCatalog";
+import { endpointProviders, keyedBeside, keysBeside, newerVersionOf, perProvider, providerDisplayLabel, providerModels } from "./providerCatalog";
 
 const listed = (provider: string, ids: readonly string[]): void => {
     providerModels.value = { ...providerModels.value, [provider]: ids.map((id) => ({ label: id, value: id })) };
@@ -40,4 +40,24 @@ it(`leaves endpoint models alone: a newer local model is another download, not a
     listed(`endpoint/ollama`, [`phi-3`, `phi-4`]);
 
     expect(newerVersionOf(`endpoint/ollama`, `phi-3`)).toBeUndefined();
+});
+
+// A vendor's API key is filed under the sign-in it is the alternative to, as the daemon names it, and is named as a key
+// rather than by the id its endpoint was stored under. A provider this build does not know files it nowhere.
+it(`files a vendor's key under its sign-in and names it as a key, unless two keys need their own names`, () => {
+    endpointProviders.value = [
+        { id: `endpoint/anthropic`, label: `anthropic`, kind: `endpoint`, beside: `claude` },
+        { id: `endpoint/openrouter`, label: `openrouter`, kind: `endpoint` },
+        { id: `endpoint/future`, label: `future`, kind: `endpoint`, beside: `a-provider-from-next-year` },
+    ];
+
+    expect(keyedBeside(`endpoint/anthropic`)).toBe(`claude`);
+    expect(keyedBeside(`endpoint/openrouter`)).toBeUndefined();
+    expect(keyedBeside(`endpoint/future`)).toBeUndefined();
+    expect(keysBeside(`claude`).map((key) => key.id)).toEqual([`endpoint/anthropic`]);
+    expect(providerDisplayLabel(`endpoint/anthropic`)).toBe(`Anthropic API key`);
+    expect(providerDisplayLabel(`endpoint/openrouter`)).toBe(`openrouter`);
+
+    endpointProviders.value = [...endpointProviders.value, { id: `endpoint/anthropic-2`, label: `anthropic-2`, kind: `endpoint`, beside: `claude` }];
+    expect(providerDisplayLabel(`endpoint/anthropic-2`)).toBe(`anthropic-2`);
 });

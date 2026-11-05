@@ -1,5 +1,7 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
+import { formatMoney, formatTokens } from "@intentic/ui";
 import { timeAgo } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset } from "../../../models/providers/usageStatus";
@@ -84,6 +86,25 @@ export const waitingLine = (state: AccountState): string | undefined => {
             : t(`sandbox.aiAccountSection.restingUntil`, { reason, when: formatReset(state.until) });
     }
     return undefined;
+};
+
+/** What an account has spent, for the meter's card on its row: a line even for one that has run no turn yet. */
+export const usageLine = (usage: Pick<UsageAccount, `turns` | `costUsd` | `cacheReadTokens` | `inputTokens` | `outputTokens`> | undefined): string => {
+    if (usage === undefined || usage.turns === 0) {
+        return t(`sandbox.aiAccountSection.noTurnsYet`);
+    }
+    const cost = usage.costUsd > 0 ? ` · ${formatMoney(usage.costUsd)}` : ``;
+    // Cache rate: cacheReadTokens / (cacheReadTokens + inputTokens), the share of prompt input served from cache.
+    const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
+    const cache =
+        usage.cacheReadTokens > 0 && cacheDenom > 0
+            ? ` · ${t(`sandbox.aiAccountSection.cachedShare`, { tokens: formatTokens(usage.cacheReadTokens), pct: Math.round((100 * usage.cacheReadTokens) / cacheDenom) })}`
+            : ``;
+    return `${t(
+        `sandbox.aiAccountSection.turnsInOut`,
+        { count: usage.turns, input: formatTokens(usage.inputTokens), output: formatTokens(usage.outputTokens) },
+        usage.turns,
+    )}${cache}${cost}`;
 };
 
 /** The quiet facts beside a row's name as one line, or nothing when there are none. */

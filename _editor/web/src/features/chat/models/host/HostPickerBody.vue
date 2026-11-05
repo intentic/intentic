@@ -138,6 +138,7 @@ const choose = (entry: PickerEntry): void => {
                     :model="request.model"
                     :account="request.account"
                     @select-account="stageModelPick({ account: $event })"
+                    @select-credential="(pick, account) => stageModelPick({ provider: pick.provider, model: pick.value, account, harness: undefined })"
                 />
                 <div
                     v-if="runShown"

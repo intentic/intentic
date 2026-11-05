@@ -4,19 +4,22 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 // The marks themselves live in @intentic/constants: the landing page's cost band draws the same five, and a
 // path pasted into both is a path that eventually differs in one of them.
 import { PROVIDER_BRAND_PATHS, providerFillRule, type ProviderBrand } from "@intentic/constants";
-import { providerGlyph } from "../../models/providers/providerCatalog";
+import { keyedBeside, providerGlyph } from "../../models/providers/providerCatalog";
 
 const props = defineProps<{ provider: AgentProvider }>();
-// A provider with a brand mark draws it; anything else has no vendor to draw, so it draws WHAT IT IS instead
-// (providerGlyph: the trial, a model running here, a server the user pointed us at, an installed agent).
+// A provider with a brand mark draws it, and so does a vendor's API key, as the sign-in it is filed under (an Anthropic
+// key wears Claude's mark: the same vendor, the same models); anything else has no vendor to draw, so it draws WHAT IT IS
+// instead (providerGlyph: the trial, a model running here, a server the user pointed us at, an installed agent).
 // Rendered as currentColor so the glyph tracks the surrounding text color (light/dark) like a font icon.
-const path = computed(() => PROVIDER_BRAND_PATHS[props.provider as ProviderBrand]);
+// SAFETY: a lookup key, not a claim: a provider the brand table does not hold misses it, and draws its glyph below.
+const brand = computed(() => (keyedBeside(props.provider) ?? props.provider) as ProviderBrand);
+const path = computed(() => PROVIDER_BRAND_PATHS[brand.value]);
 const glyph = computed(() => providerGlyph(props.provider));
 </script>
 
 <template>
     <svg v-if="path" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-        <path :d="path" :fill-rule="providerFillRule(provider as ProviderBrand)" />
+        <path :d="path" :fill-rule="providerFillRule(brand)" />
     </svg>
     <Icon v-else :name="glyph" aria-hidden="true" />
 </template>

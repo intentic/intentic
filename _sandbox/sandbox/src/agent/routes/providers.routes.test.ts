@@ -56,6 +56,28 @@ test("the trial is the one endpoint the user did not name, so it carries the sha
     expect((await providers.list()).endpoints).toEqual([{ id: `endpoint/${TRIAL_ENDPOINT_ID}`, label: TRIAL_LABEL, kind: "endpoint" }]);
 });
 
+// A key is an endpoint at its vendor's own address, and the picker files it under the sign-in it is the alternative to.
+// A gateway serving the same models, the trial reading a vendor's surface, and a local model are nobody's key.
+test("names the sign-in a vendor's API key stands beside, and only for a vendor's own address", async () => {
+    const { endpoints } = await client([
+        { id: "anthropic", kind: "endpoint", config: { baseUrl: "https://api.anthropic.com/", protocol: "anthropic", apiKey: "sk-ant-api03-abcdefghijklmnopqrstuvwxyz" } },
+        { id: "openai", kind: "endpoint", config: { baseUrl: "https://api.openai.com/v1", protocol: "openai", apiKey: "sk-proj-abcdefghijklmnopqrstuvwxyz" } },
+        { id: "openrouter", kind: "endpoint", config: { baseUrl: "https://openrouter.ai/api/v1", protocol: "openai", apiKey: "sk-or-v1-abcdefghijklmnopqrstuvwxyz" } },
+        { id: TRIAL_ENDPOINT_ID, kind: "endpoint", config: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", protocol: "openai" } },
+        { id: "qwen-local", kind: "localmodel", config: { model: "Qwen/Qwen3-8B", context: "65536" } },
+    ]).list();
+
+    expect(endpoints).toEqual([
+        { id: "endpoint/anthropic", label: "anthropic", kind: "endpoint", beside: "claude" },
+        { id: "endpoint/openai", label: "openai", kind: "endpoint", beside: "codex" },
+        { id: "endpoint/openrouter", label: "openrouter", kind: "endpoint" },
+        { id: `endpoint/${TRIAL_ENDPOINT_ID}`, label: TRIAL_LABEL, kind: "endpoint" },
+        { id: "endpoint/qwen-local", label: "qwen-local", kind: "localmodel" },
+    ]);
+    // Where it runs, never what holds it.
+    expect(JSON.stringify(endpoints)).not.toMatch(/sk-/);
+});
+
 test("a box that adds no provider of its own answers empty, which is an answer", async () => {
     expect(await client([]).list()).toMatchObject({ native: [], agents: [], endpoints: [] });
 });

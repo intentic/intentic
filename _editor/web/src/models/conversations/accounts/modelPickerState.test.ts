@@ -4,10 +4,12 @@ import {
     AUTO_KEY,
     autoEntry,
     customEntryFor,
+    drawnCredential,
     familyGroups,
     filterEntries,
     foldUnconnected,
     isAutoPick,
+    laneKeyOf,
     lanesOf,
     type PickerEntry,
     pickerBlocks,
@@ -448,4 +450,57 @@ test("sinks a version its family superseded below the equal hits, never below a 
     // Runnable still outranks it: an older row that can run leads a newer one that cannot.
     const mixed = [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`cursor`, `claude-opus-5-5`, `Claude Opus 5.5`)];
     expect(filterEntries(mixed, `opus`, undefined, readyOnly(`claude`), older).map((row) => row.provider)).toEqual([`claude`, `cursor`]);
+});
+
+// A vendor's API key is filed under the sign-in it is the alternative to (the owner, 2026-11-05): its lane is that
+// provider's, and the lane draws one credential's catalog, the others being picked in the footer as accounts are.
+describe("a vendor's API key under its sign-in", () => {
+    const KEY = `endpoint/anthropic`;
+    beforeEach(() => {
+        endpointProviders.value = [
+            { id: KEY, label: `anthropic`, kind: `endpoint`, beside: `claude` },
+            { id: `endpoint/openrouter`, label: `openrouter`, kind: `endpoint` },
+        ];
+    });
+    const KEYED: readonly PickerEntry[] = [
+        entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
+        entry(KEY, `claude-opus-5-20260201`, `Claude Opus 5`),
+        entry(`endpoint/openrouter`, `gpt-oss-120b`, `gpt-oss-120b`),
+    ];
+
+    test("draws in the sign-in's lane, named for it, never as a provider of its own", () => {
+        expect(laneKeyOf(KEY)).toBe(`claude`);
+        expect(laneKeyOf(`endpoint/openrouter`)).toBe(`endpoint/openrouter`);
+        expect(lanesOf([KEY, `codex`])).toEqual([
+            { key: `claude`, label: providerLabel(`claude`), providers: [KEY] },
+            { key: `codex`, label: providerLabel(`codex`), providers: [`codex`] },
+        ]);
+    });
+
+    test("draws the conversation's own credential, else the one that can run, the sign-in before the key", () => {
+        // On the key: its catalog, which is what the key serves.
+        expect(drawnCredential(`claude`, KEY, readyOnly(`claude`, KEY))).toBe(KEY);
+        // Elsewhere with both connected: the sign-in, the key one press away in the footer.
+        expect(drawnCredential(KEY, `codex`, readyOnly(`claude`, KEY))).toBe(`claude`);
+        // On a Claude with nothing signed in, beside a key that runs: the key, rather than a lane of locked rows.
+        expect(drawnCredential(`claude`, `claude`, readyOnly(KEY))).toBe(KEY);
+        // Nothing of either runs: the conversation's own, as any provider's lane would be.
+        expect(drawnCredential(KEY, KEY, readyOnly())).toBe(KEY);
+        expect(offeredProviders(`codex`, readyOnly(`claude`, KEY))).not.toContain(KEY);
+        expect(offeredProviders(KEY, readyOnly(`claude`, KEY))).not.toContain(`claude`);
+        // Seated where the sign-in sits, so the provider's chip keeps its place whichever of the two is picked.
+        expect(offeredProviders(KEY, readyOnly(`claude`, KEY))[0]).toBe(KEY);
+    });
+
+    test("one lane, one catalog: the list never shows a model twice, under the sign-in's id and the key's", () => {
+        const sections = pickerSections(KEYED, KEY, undefined, readyOnly(`claude`, KEY));
+        const claude = sections.find((section) => section.key === `claude`);
+
+        expect(claude?.providers).toEqual([KEY]);
+        expect(claude?.groups.map((group) => group.latest.value)).toEqual([`claude-opus-5-20260201`]);
+        // A gateway is nobody's key: it keeps a lane of its own.
+        expect(sections.some((section) => section.key === `endpoint/openrouter`)).toBe(true);
+        // The rail's Claude chip scopes search to the key's rows as well.
+        expect(filterEntries(KEYED, `opus`, `claude`, readyOnly(`claude`, KEY)).map((row) => row.provider)).toEqual([`claude`, KEY]);
+    });
 });

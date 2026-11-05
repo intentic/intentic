@@ -9,6 +9,8 @@ import type {
 } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
 import { Frames, refuse } from "@intentic/contract-serve";
+import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { keyProviderFor } from "@intentic/sandbox-contract/models/key-providers";
 import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { demoCapabilities } from "../../fixture/sandbox";
 import { demoMode } from "../../mode";
@@ -66,6 +68,11 @@ const summarize = (capability: Capability, status: CapabilityStatus) => {
         } else if (typeof value === `string` || typeof value === `number` || typeof value === `boolean`) {
             config[key] = value;
         }
+    }
+    // An endpoint's key is named by its last four characters where it is long enough to spare them, as the daemon's
+    // endpoint handler echoes it (endpoint.handler.ts `keyHintOf`).
+    if (capability.kind === `endpoint` && credential !== undefined && credential.trim().length >= 20) {
+        config[`keyHint`] = credential.trim().slice(-4);
     }
     const summary: CapabilitySummary = { id: capability.id, kind: capability.kind, status, config, secrets };
     return { summary, credential };
@@ -271,12 +278,36 @@ export const mintSshKey = (): SshKey => {
     return { publicKey: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI${body} intentic-acme-shop`, token: `sshkey-${shaOf(`token${keys}`).slice(0, 24)}` };
 };
 
+// A vendor's own API, reached with a key, lists its models under their dated API ids, which is not how a sign-in's
+// catalog names them: what the picker shows for a key is this list, not the sign-in's.
+const VENDOR_MODELS = new Map<string, readonly { id: string; label: string }[]>([
+    [
+        `anthropic`,
+        [
+            { id: `claude-opus-5-20260201`, label: `Claude Opus 5` },
+            { id: `claude-sonnet-5-20260201`, label: `Claude Sonnet 5` },
+            { id: `claude-haiku-4-5-20251001`, label: `Claude Haiku 4.5` },
+        ],
+    ],
+    [
+        `openai`,
+        [
+            { id: `gpt-5.2`, label: `GPT-5.2` },
+            { id: `gpt-5.2-mini`, label: `GPT-5.2 mini` },
+        ],
+    ],
+]);
+
 // What a connected model server lists when asked: a local model serves the one it runs, an Ollama the laptop's two, and
 // any other OpenAI-compatible server the open-weights pair a shop would point one at.
 export const endpointModels = (id: string): SandboxHandlerOutput<`endpoints`, `models`> => {
     const endpoint = existing(id);
     if (endpoint.kind !== `endpoint` && endpoint.kind !== `localmodel`) {
         refuse(`no endpoint with that id`, 404);
+    }
+    const vendor = VENDOR_MODELS.get(keyProviderFor(String(endpoint.config[`baseUrl`] ?? ``))?.id ?? ``);
+    if (endpoint.kind === `endpoint` && vendor !== undefined) {
+        return { models: [...vendor], default: vendor[0]?.id ?? `` };
     }
     const listed =
         endpoint.kind === `localmodel`
@@ -287,3 +318,15 @@ export const endpointModels = (id: string): SandboxHandlerOutput<`endpoints`, `m
     const models = listed.map((model) => ({ id: model, label: model }));
     return { models, default: listed[0] ?? `` };
 };
+
+/** The endpoints a chat may be addressed to, as the daemon's providers list names them: a vendor's key filed beside the
+ *  sign-in it is the alternative to. */
+export const runnableEndpoints = () =>
+    connections().flatMap((row) => {
+        if (row.kind !== `endpoint` && row.kind !== `localmodel`) {
+            return [];
+        }
+        const beside = row.kind === `endpoint` ? keyProviderFor(String(row.config[`baseUrl`] ?? ``))?.beside : undefined;
+        const listed = { id: endpointProvider(row.id), label: row.id, kind: row.kind };
+        return [beside === undefined ? listed : { ...listed, beside }];
+    });

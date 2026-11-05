@@ -11,6 +11,7 @@ import {
     providerLabel,
     TRIAL_LABEL,
 } from "@intentic/sandbox-contract/models/agent-catalog";
+import { keyBeside } from "@intentic/sandbox-contract/models/key-providers";
 import { compareModelIds, familyOf } from "@intentic/sandbox-contract/models/model-order";
 import type { HelperOnly, ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
@@ -125,8 +126,21 @@ export const trialStatus = sandboxRef<{
     health: "unknown",
 }));
 
-// Installed model endpoints; `kind` distinguishes local weights from a remote server, for display only.
-export const endpointProviders = sandboxRef<readonly { id: string; label: string; kind: "endpoint" | "localmodel" }[]>(() => []);
+// Installed model endpoints; `kind` distinguishes local weights from a remote server, for display only. `beside` is the
+// sign-in a vendor's API key is the per-token alternative to, as the daemon names it (providers.contract.ts).
+export const endpointProviders = sandboxRef<readonly { id: string; label: string; kind: "endpoint" | "localmodel"; beside?: string }[]>(() => []);
+
+// The provider a key endpoint is filed under (an Anthropic key under Claude): where Sandbox ▸ Models draws it as a row of
+// that provider's card and the picker offers it beside that provider's accounts. Undefined for anything else, and for a
+// provider this build does not know.
+export const keyedBeside = (provider: AgentProvider): NativeProvider | undefined => {
+    const beside = endpointProviders.value.find((endpoint) => endpoint.id === provider)?.beside;
+    return NATIVE_PROVIDERS.find((native) => native === beside);
+};
+
+// The key endpoints filed under one provider, in the daemon's order.
+export const keysBeside = (provider: AgentProvider): readonly { readonly id: AgentProvider; readonly label: string }[] =>
+    endpointProviders.value.filter((endpoint) => keyedBeside(endpoint.id) === provider);
 
 // Which glyph stands in for a provider with no brand mark; the one place that decision is made
 // (ProviderLogo draws it).
@@ -148,9 +162,16 @@ export const endpointsLoaded = sandboxRef(() => false);
 // 5xx) leaves both halves unknown, and a surface that waits on them would otherwise wait in silence.
 export const runnableReadFailure = sandboxRef<string | undefined>(() => undefined);
 
-// The daemon names the free trial's endpoint in English (TRIAL_LABEL); on screen it is said in the reader's language.
+// The daemon names the free trial's endpoint in English (TRIAL_LABEL); on screen it is said in the reader's language. A
+// vendor's key is named as one ("Anthropic API key"), not by the id its endpoint was filed under, unless a second key
+// under the same sign-in needs that id to be told apart.
 const endpointLabel = (provider: AgentProvider): string | undefined => {
     const label = endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label;
+    const beside = keyedBeside(provider);
+    const vendor = beside === undefined ? undefined : keyBeside(beside)?.label;
+    if (beside !== undefined && vendor !== undefined && keysBeside(beside).length === 1) {
+        return t(`chat.providerCatalog.apiKey`, { vendor });
+    }
     return label === TRIAL_LABEL && isTrialProvider(provider) ? t(`chat.providerCatalog.freeTrial`) : label;
 };
 

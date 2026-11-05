@@ -4205,7 +4205,9 @@
             "measuringPlanLimits": "Mesure des limites de l'offre",
             "noAccountsMatch": "Aucun compte ne correspond.",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, les comptes ci-dessous ne peuvent pas dire s'ils peuvent prendre un tour (connexion ou siège perdu, quota épuisé ou suspendu), et en choisir un ne prend effet qu'au message suivant.",
-            "subscription": "Abonnement"
+            "subscription": "Abonnement",
+            "apiKey": "Clé API",
+            "billedPerToken": "Facturée au token par {vendor}"
         },
         "pickerStatus": {
             "nextMessage": "S'applique à partir de votre prochain message",
@@ -4499,7 +4501,8 @@
         },
         "providerCatalog": {
             "freeTrial": "Essai gratuit",
-            "localModels": "Modèles locaux"
+            "localModels": "Modèles locaux",
+            "apiKey": "Clé API {vendor}"
         },
         "chatAccounts": {
             "disconnectFailed": "Impossible de déconnecter ce compte.",
@@ -5355,6 +5358,12 @@
             "add": "Ajouter la clé",
             "notAccepted": "{vendor} n'a pas accepté cette clé : aucun modèle n'est listé pour elle. Vérifiez la clé et réessayez.",
             "couldntAdd": "Impossible d'ajouter la clé {vendor}."
+        },
+        "providerKeys": {
+            "title": "Clé API",
+            "titleHint": "Clé API ··{hint}",
+            "billed": "Facturée au token par {vendor}",
+            "couldntRemove": "Impossible de déconnecter cette clé API."
         }
     },
     "desktop": {

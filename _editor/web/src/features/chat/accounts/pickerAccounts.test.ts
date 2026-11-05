@@ -1,6 +1,7 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { readingHeadroom } from "@intentic/sandbox-contract/models/plan-pools";
-import { capacityCounts, matchAccounts, pickerOrder } from "./pickerAccounts";
+import { capacityCounts, matchAccounts, pickerOrder, sameModelOn } from "./pickerAccounts";
+import { providerDefaultModel, providerModels } from "../../../models/providers/providerCatalog";
 import type { PlanHeadroom } from "../../../models/providers/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -88,4 +89,26 @@ test("draws what can take a turn first, then what waits on a clock, then what a 
         row(`unread`),
     ];
     expect(pickerOrder(`claude`, listed).map((entry) => entry.label)).toEqual([`room`, `tight`, `unread`, `spent`, `bench`, `seatless`]);
+});
+
+// A switch between a sign-in and its vendor's key keeps the model: the same id where both list it, else the same model
+// under the other's id (a key lists dated API ids), else its family's newest there, else that one's default.
+test("a credential switch lands on the same model under the id the other one lists", () => {
+    const KEY = `endpoint/anthropic`;
+    providerModels.value = {
+        ...providerModels.value,
+        [KEY]: [
+            { value: `claude-opus-5-20260201`, label: `Claude Opus 5` },
+            { value: `claude-opus-4-5-20251101`, label: `Claude Opus 4.5` },
+            { value: `claude-haiku-4-5-20251001`, label: `Claude Haiku 4.5` },
+        ],
+    };
+    providerDefaultModel.value = { ...providerDefaultModel.value, [KEY]: `claude-haiku-4-5-20251001` };
+
+    expect(sameModelOn(KEY, `claude-haiku-4-5-20251001`)).toBe(`claude-haiku-4-5-20251001`);
+    expect(sameModelOn(KEY, `claude-opus-5`)).toBe(`claude-opus-5-20260201`);
+    expect(sameModelOn(KEY, `claude-opus-4-5`)).toBe(`claude-opus-4-5-20251101`);
+    // A version the key does not list is its family's newest there, and a family it lacks its default.
+    expect(sameModelOn(KEY, `claude-opus-6`)).toBe(`claude-opus-5-20260201`);
+    expect(sameModelOn(KEY, `claude-sonnet-5`)).toBe(`claude-haiku-4-5-20251001`);
 });

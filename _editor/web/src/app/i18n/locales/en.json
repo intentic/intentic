@@ -4205,7 +4205,9 @@
             "measuringPlanLimits": "Measuring plan limits",
             "noAccountsMatch": "No accounts match.",
             "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",
-            "subscription": "Subscription"
+            "subscription": "Subscription",
+            "apiKey": "API key",
+            "billedPerToken": "Billed per token by {vendor}"
         },
         "pickerStatus": {
             "nextMessage": "Applies from your next message",
@@ -4499,7 +4501,8 @@
         },
         "providerCatalog": {
             "freeTrial": "Free trial",
-            "localModels": "Local models"
+            "localModels": "Local models",
+            "apiKey": "{vendor} API key"
         },
         "chatAccounts": {
             "disconnectFailed": "Couldn't disconnect that account.",
@@ -5355,6 +5358,12 @@
             "add": "Add key",
             "notAccepted": "{vendor} didn't accept this key: it listed no models for it. Check the key and try again.",
             "couldntAdd": "Couldn't add the {vendor} key."
+        },
+        "providerKeys": {
+            "title": "API key",
+            "titleHint": "API key ··{hint}",
+            "billed": "Billed per token by {vendor}",
+            "couldntRemove": "Couldn't disconnect this API key."
         }
     },
     "desktop": {

@@ -197,7 +197,9 @@ const footerVisible = computed(() =>
                     :account="account"
                     :named="accountNamed"
                     :accounts-locked="generating"
+                    :provider-locked="streaming"
                     @select-account="conversation.selection.apply({ kind: `selectAccount`, account: $event })"
+                    @select-credential="(pick, named) => conversation.selection.apply({ kind: `selectModel`, pick, account: named })"
                 />
 
                 <!-- THE TOOLBAR: how it runs, under one rule spanning the panel whenever anything stands above it. The harness locks

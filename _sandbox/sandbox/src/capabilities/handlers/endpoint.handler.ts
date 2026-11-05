@@ -1,5 +1,17 @@
+import { isVaulted } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { opt } from "../../opt.js";
 import type { CapabilityHandler } from "../capability.js";
+
+// A key long enough that its last four characters say which key it is without saying much of it: every vendor's key is
+// several times this. A short one (a local server's password) is not hinted at all.
+const HINTED_KEY_LENGTH = 20;
+
+// The last four characters, which is how a vendor's own console names a key and all a reader needs to tell two apart (a
+// key found on the owner's computer is offered the same way, migrations/provider-keys.ts). Never the vault's marker, which
+// a read that bypassed the vault would hand in.
+const keyHintOf = (apiKey: string | undefined): string | undefined =>
+    apiKey === undefined || isVaulted(apiKey) || apiKey.trim().length < HINTED_KEY_LENGTH ? undefined : apiKey.trim().slice(-4);
 
 // A model API the user pointed us at (Ollama, vLLM, a gateway); this holds only where it is and how to reach it. apply
 // and status are the same probe, deliberately not fatal: the server being down yet is ordinary, so the config is stored
@@ -8,7 +20,8 @@ export const endpointHandler: CapabilityHandler = {
     // The one rotatable credential; the header beside it is routing metadata the owner must read, not a secret.
     secret: (config) => ((config as EndpointConfig).apiKey !== undefined ? "apiKey" : undefined),
     // URL and protocol travel as-is (what the entry renders, what a user checks on failure); headers travel too; the key
-    // becomes hasSecret.
+    // becomes hasSecret, and its last four characters where it is long enough to spare them (the row a provider's card
+    // draws for it reads "API key ··a3f9").
     echo: (config) => {
         const endpoint = config as EndpointConfig;
         return {
@@ -16,6 +29,7 @@ export const endpointHandler: CapabilityHandler = {
             protocol: endpoint.protocol,
             ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {}),
             hasSecret: endpoint.apiKey !== undefined && endpoint.apiKey !== "",
+            ...opt("keyHint", keyHintOf(endpoint.apiKey)),
         };
     },
     // Drops the old name's catalog: left behind, it would be inherited by the next endpoint given that name. The

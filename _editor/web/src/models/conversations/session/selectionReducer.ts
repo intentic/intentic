@@ -128,8 +128,9 @@ export type PickAction =
     | { readonly kind: `repointProvider`; readonly provider: AgentProvider }
     // Gives that pick back, now the provider it was moved off can serve it again.
     | { readonly kind: `restoreProvider` }
-    // One picker row is provider + model; the harness is its own axis, so a model pick keeps it.
-    | { readonly kind: `selectModel`; readonly pick: TurnPick }
+    // One picker row is provider + model; the harness is its own axis, so a model pick keeps it. `account` is a credential
+    // row picked across providers (an account of the sign-in a key is filed under, PickerAccounts): picked with it.
+    | { readonly kind: `selectModel`; readonly pick: TurnPick; readonly account?: string }
     // A persona's model as the CARD's choice, not the user's: nothing is remembered, and nothing owed back later.
     | { readonly kind: `wearModel`; readonly pin: ModelPin }
     // The app's own swap off a model the provider no longer lists, owing it back (restoreModel).
@@ -307,7 +308,7 @@ const REDUCERS: Reducers = {
         // The model it was displaced FROM, not the provider's remembered one: each displaced chat is owed its own back.
         return { selection: { ...back.selection, model: from.value, movedFrom: undefined }, effects: back.effects };
     },
-    selectModel: (selection, { pick }, world) => {
+    selectModel: (selection, { pick, account }, world) => {
         if (isAutoPick(pick)) {
             return setAuto(selection, true, world);
         }
@@ -315,12 +316,20 @@ const REDUCERS: Reducers = {
             return unchanged(selection);
         }
         const moved = pointed(selection, pick.provider, world);
+        // Naming a model answers the question Auto was armed to ask. A choice, so nothing is owed back either: both
+        // debts go, since a same-provider pick skips the provider switch's own clearing.
+        const picked: Selection = { ...moved.selection, auto: false, model: pick.value, movedFrom: undefined, displacedModel: undefined };
+        // A same-provider swap earns a divider too: it re-reads the whole conversation on a model never seen.
+        const effects: PickEffects = { ...moved.effects, kept: true, remember: pick, divider: `refresh`, follow: true };
+        if (account === undefined || world.generating) {
+            return { selection: picked, effects };
+        }
+        // An account named with the row is the person's pick of it, as selectAccount's is, and waits like one on a
+        // generating turn. Across providers the daemon holds the conversation on the provider being left, so nothing is
+        // asked of it now: the next turn names the account (accountIntent), onto the provider it belongs to.
         return {
-            // Naming a model answers the question Auto was armed to ask. A choice, so nothing is owed back either: both
-            // debts go, since a same-provider pick skips the provider switch's own clearing.
-            selection: { ...moved.selection, auto: false, model: pick.value, movedFrom: undefined, displacedModel: undefined },
-            // A same-provider swap earns a divider too: it re-reads the whole conversation on a model never seen.
-            effects: { ...moved.effects, kept: true, remember: pick, divider: `refresh`, follow: true },
+            selection: { ...picked, account, accountPicked: true },
+            effects: pick.provider === selection.provider ? { ...effects, switchAccount: account } : effects,
         };
     },
     wearModel: (selection, { pin }, world) => {

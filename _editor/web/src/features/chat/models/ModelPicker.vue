@@ -3,7 +3,7 @@ import { browserOwnsClick, SearchBar, SectionHeader, useDevice, useListNavigatio
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { isTrialProvider, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     accessBadge,
     accessKnown,
@@ -186,8 +186,9 @@ const sections = computed<
     if (searching.value) {
         // Lead rows search alongside the catalog rather than being pinned through a query: somebody typing a model
         // name is asking for that model, not for the mode sitting above it.
-        // A retired trial is not found by name either; every other row keeps search's whole-catalogue reach.
-        const catalog = pickerEntries.value.filter((entry) => !isTrialProvider(entry.provider) || offered.value.includes(entry.provider));
+        // A retired trial is not found by name either, nor the catalog of a sign-in or key its lane does not draw (one
+        // model listed twice, under two ids); every other row keeps search's whole-catalogue reach.
+        const catalog = pickerEntries.value.filter((entry) => offered.value.includes(entry.provider));
         const matched = filterEntries([...(leadRows ?? []), ...catalog], query.value, rail.value, leadAwareReady, isOlderEntry);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);

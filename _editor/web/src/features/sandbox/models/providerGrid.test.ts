@@ -31,6 +31,10 @@ test("every provider has a tile, in the spec table's order, with this machine la
     expect(tileOf(`claude`)).toBe(`claude`);
     expect(tileOf(`endpoint/qwen`)).toBe(LOCAL_TILE);
     expect(tileOf(`no-such-provider`)).toBeUndefined();
+    // A vendor's API key is a row of the sign-in it is the alternative to; a gateway's stays under Local models.
+    const besideOf = (provider: string) => (provider === `endpoint/anthropic` ? (`claude` as const) : undefined);
+    expect(tileOf(`endpoint/anthropic`, besideOf)).toBe(`claude`);
+    expect(tileOf(`endpoint/openrouter`, besideOf)).toBe(LOCAL_TILE);
 });
 
 const facts = (overrides: Partial<TileFacts> = {}): TileFacts => ({
@@ -81,6 +85,10 @@ test("a link naming a connected provider opens its tile and leaves the sign-in t
     expect(linkArrival(`claude`, only())).toEqual({ tile: `claude`, signIn: true });
     expect(linkArrival(`endpoint/qwen`, only())).toEqual({ tile: LOCAL_TILE, signIn: false });
     expect(linkArrival(`no-such-provider`, only())).toBeUndefined();
+    // A key opens the card it is a row of, and starts no sign-in there: nothing of the key is signed in to.
+    const besideOf = (provider: string) => (provider === `endpoint/anthropic` ? (`claude` as const) : undefined);
+    expect(linkArrival(`endpoint/anthropic`, only(), besideOf)).toEqual({ tile: `claude`, signIn: false });
+    expect(arrivalTile({ connected: `endpoint/anthropic` }, besideOf)).toBe(`claude`);
 });
 
 // What a reader connects lives in one sandbox, so the banner names it: one connected ChatGPT in a second sandbox,

@@ -16,8 +16,8 @@ const add = jest.fn(async (input: { id: string }) => void held.value.push({ id: 
 const remove = { mutateAsync: jest.fn(async (id: string) => void (held.value = held.value.filter((entry) => entry.id !== id))) };
 const refetch = jest.fn(async () => ({ data: { capabilities: held.value } }));
 
-jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: held, add, remove, refetch }) }));
-jest.mock(`../../../models/conversations/accounts/useChat-accounts`, () => ({ refreshConnections: jest.fn(async () => undefined) }));
+jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: held, add, remove, refetch }) }));
+jest.mock(`../../../../models/conversations/accounts/useChat-accounts`, () => ({ refreshConnections: jest.fn(async () => undefined) }));
 jest.mock(`@intentic/ui`, () => ({
     ui: recipes,
     Icon: defineComponent({ render: () => h(`i`) }),

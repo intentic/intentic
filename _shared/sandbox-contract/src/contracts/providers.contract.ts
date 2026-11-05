@@ -23,6 +23,11 @@ export const RunnableProvidersSchema = z.object({
                 // Kept apart because only this tells weights the sandbox runs itself from a server it was pointed at;
                 // both mint an `endpoint/<id>` provider.
                 kind: z.enum(["endpoint", "localmodel"]),
+                // The sign-in this endpoint is the per-token alternative to, where it is a vendor's own API reached with a
+                // key (models/key-providers.ts `beside`: an Anthropic key beside Claude): pickers file it under that
+                // provider, as one more way to pay for the same models. Where it runs, never what holds the key. A string,
+                // so a provider a newer daemon names reaches an older editor as one it does not file, not a listing it refuses.
+                beside: z.string().optional(),
             }),
         )
         .describe("Model endpoints, already prefixed `endpoint/`, including the daemon-provisioned free trial."),

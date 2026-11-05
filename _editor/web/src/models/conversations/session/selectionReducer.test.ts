@@ -136,6 +136,26 @@ describe(`the model`, () => {
         expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, LIVE).selection.model).toBe(`haiku`);
     });
 
+    // The picker's footer lists a sign-in's accounts beside the vendor's API key filed under it (PickerAccounts): picking
+    // an account from the key is a provider switch that names the account, which the next turn carries.
+    it(`takes an account picked with another provider's model as the person's pick, asking the daemon nothing yet`, () => {
+        const onKey = { ...SENT, provider: `endpoint/anthropic`, model: `claude-opus-5-20260201` };
+        const pick = { provider: `claude`, value: `claude-opus-5` };
+
+        expect(reduceSelection(onKey, { kind: `selectModel`, pick, account: `work` }, WORLD)).toEqual({
+            selection: { ...onKey, provider: `claude`, model: `claude-opus-5`, harness: `native`, account: `work`, accountPicked: true, sentModel: undefined },
+            effects: { kept: true, remember: pick, segmentCut: true, divider: `refresh`, follow: true },
+        });
+        // On its own provider it is an account pick as well: the daemon is asked to move there.
+        expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` }, account: `work` }, WORLD).effects.switchAccount).toBe(`work`);
+        // A generating turn holds its credential: the model is picked, the account is not.
+        expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` }, account: `work` }, LIVE).selection).toMatchObject({
+            model: `haiku`,
+            account: undefined,
+            accountPicked: false,
+        });
+    });
+
     it(`arms Auto for the Auto row, leaving provider and model to run on if the reading never lands`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } }, WORLD)).toEqual({
             selection: { ...SEEDED, auto: true },

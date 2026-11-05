@@ -25,14 +25,15 @@ const {
     accounts?: boolean;
 }>();
 
-const { routedRows, unplacedRefusal } = usePickerAccounts(
+const { onKey, routedRows, unplacedRefusal } = usePickerAccounts(
     toRef(() => provider),
     toRef(() => harness),
     toRef(() => model),
 );
 
-// Rows nobody picks between read as a broken list unless something says so; a choosable list needs no caption.
-const spread = computed(() => (accounts && routedRows.value.length > 1 ? routedRows.value.length : undefined));
+// Rows nobody picks between read as a broken list unless something says so; a choosable list needs no caption. On a key
+// they are the way back to the subscription, not where the turn spreads.
+const spread = computed(() => (accounts && !onKey.value && routedRows.value.length > 1 ? routedRows.value.length : undefined));
 const refusal = computed(() => (accounts ? unplacedRefusal.value : undefined));
 
 const left = computed(() => note !== undefined || spread.value !== undefined);

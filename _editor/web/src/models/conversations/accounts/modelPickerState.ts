@@ -9,6 +9,8 @@ import {
     acpProviders,
     endpointProviders,
     isLocalModelProvider,
+    keyedBeside,
+    keysBeside,
     modelOptionsFor,
     newerVersionOf,
     providerGroup,
@@ -107,8 +109,11 @@ const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {
     return 2;
 };
 
-// One lane per provider, except every local-model provider shares one folded lane; a row still routes via its own
-// provider. Grouping is `providerGroup` (providerCatalog.ts), shared with the Usage tab.
+// One lane per provider, except every local-model provider shares one folded lane, and a vendor's API key draws in the
+// lane of the sign-in it is the alternative to (an Anthropic key under Claude): a row still routes via its own provider.
+// Grouping is otherwise `providerGroup` (providerCatalog.ts), shared with the Usage tab, which keeps a key's spend apart.
+export const laneKeyOf = (provider: AgentProvider): string => keyedBeside(provider) ?? providerGroup(provider);
+
 export interface PickerLane {
     // The rail filter's value and section key: a provider id, or LOCAL_MODELS_GROUP for the folded lane.
     readonly key: string;
@@ -121,7 +126,7 @@ export interface PickerLane {
 export const lanesOf = (providers: readonly AgentProvider[]): readonly PickerLane[] => {
     const lanes: { key: string; label: string; providers: AgentProvider[] }[] = [];
     for (const provider of providers) {
-        const key = providerGroup(provider);
+        const key = laneKeyOf(provider);
         const seated = lanes.find((lane) => lane.key === key);
         if (seated !== undefined) {
             seated.providers.push(provider);
@@ -143,7 +148,7 @@ export const filterEntries = (
     isReady: (provider: AgentProvider) => boolean,
     older: (entry: PickerEntry) => boolean = () => false,
 ): readonly PickerEntry[] => {
-    const scoped = rail === undefined ? entries : entries.filter((entry) => providerGroup(entry.provider) === rail);
+    const scoped = rail === undefined ? entries : entries.filter((entry) => laneKeyOf(entry.provider) === rail);
     const tokens = query
         .split(/\s+/)
         .map(normalize)
@@ -259,15 +264,43 @@ export const promotesFreeAccess = (providers: readonly AgentProvider[], isReady:
 export const retiresTrial = (providers: readonly AgentProvider[], isReady: (provider: AgentProvider) => boolean): boolean =>
     providers.some((provider) => !isTrialProvider(provider) && !isLocalModelProvider(provider) && isReady(provider));
 
+// A sign-in and the vendor's API keys filed under it (providerCatalog.ts keysBeside), the sign-in first; any other
+// provider stands alone.
+const credentialsOf = (provider: AgentProvider): readonly AgentProvider[] => {
+    const head = keyedBeside(provider) ?? provider;
+    const keys = keysBeside(head).map((key) => key.id);
+    return keys.length === 0 ? [provider] : [head, ...keys];
+};
+
+// Which of those the lane draws the catalog of: one, since a key lists the same models under its own ids and a lane of
+// both read every model twice. The conversation's own where it can run (or where nothing of them can), else the first
+// that can, the sign-in before a key. The others are picked in the footer, as accounts are (PickerAccounts).
+export const drawnCredential = (
+    provider: AgentProvider,
+    activeProvider: AgentProvider,
+    isReady: (provider: AgentProvider) => boolean,
+): AgentProvider => {
+    const credentials = credentialsOf(provider);
+    const ready = credentials.filter(isReady);
+    if (credentials.includes(activeProvider) && (isReady(activeProvider) || ready.length === 0)) {
+        return activeProvider;
+    }
+    return ready[0] ?? credentials[0]!;
+};
+
 // Every provider the picker offers, in PROVIDERS order then endpoints then ACP agents: the one list the rail and the
-// sections both read. A retired trial stays only while it is the conversation's own pick, which the list must show.
+// sections both read. A retired trial stays only while it is the conversation's own pick, which the list must show; of a
+// sign-in and its keys, only the credential its lane draws (drawnCredential), seated where the sign-in sits, so picking
+// the key never moves the provider's chip.
 export const offeredProviders = (activeProvider: AgentProvider, isReady: (provider: AgentProvider) => boolean): readonly AgentProvider[] => {
     const providers: AgentProvider[] = [
         ...PROVIDERS.map((option) => option.value),
         ...endpointProviders.value.map((endpoint) => endpoint.id),
         ...acpProviders.value.map((agent) => agent.id),
     ];
-    return retiresTrial(providers, isReady) ? providers.filter((provider) => !isTrialProvider(provider) || provider === activeProvider) : providers;
+    const live = retiresTrial(providers, isReady) ? providers.filter((provider) => !isTrialProvider(provider) || provider === activeProvider) : providers;
+    const drawn = live.map((provider) => drawnCredential(provider, activeProvider, isReady));
+    return drawn.filter((provider, at) => drawn.indexOf(provider) === at);
 };
 
 export interface PickerSection extends PickerLane {

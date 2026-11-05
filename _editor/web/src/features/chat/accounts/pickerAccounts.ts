@@ -4,9 +4,12 @@ import { accountServesLoop, reportsPlanLimits } from "@intentic/sandbox-contract
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
+import { compareModelIds, familyOf, releaseOf } from "@intentic/sandbox-contract/models/model-order";
+import { keyBeside } from "@intentic/sandbox-contract/models/key-providers";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { computed, type Ref } from "vue";
 import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
+import { defaultModelFor, keyedBeside, keysBeside, modelOptionsFor } from "../../../models/providers/providerCatalog";
 import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     accountFacts,
@@ -25,7 +28,7 @@ import {
 } from "../../../models/providers/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
 import { useOperation } from "../../../workbench/operations/operations";
-import { mayRunOn } from "../../../models/providers/aiReach";
+import { mayRunOn, providerWithheld } from "../../../models/providers/aiReach";
 import { t } from "@intentic/ui/i18n";
 import { timeAgo } from "@intentic/ui/format";
 
@@ -119,21 +122,59 @@ export const useRemeasure = () => {
 const servingAccounts = (provider: AgentProvider, harness: AgentHarness): readonly OauthAccount[] =>
     accountsOf(provider).filter((entry) => accountServesLoop(provider, selectedLoop(offeredLoops(provider), harness), entry) && mayRunOn(provider, entry.id));
 
+// The model a switch between a sign-in and its vendor's key lands on: the same id where the other lists it, else the same
+// model under that one's own id (a key's dated `claude-opus-5-20260201` for a sign-in's `claude-opus-5`), else the newest
+// of its family there, else that one's default. The list that row then draws is the target's own catalog (ModelPicker).
+export const sameModelOn = (target: AgentProvider, model: string | undefined): string => {
+    const options = modelOptionsFor(target).filter((option) => option.helperOnly === undefined);
+    if (model === undefined || model === ``) {
+        return defaultModelFor(target);
+    }
+    if (options.some((option) => option.value === model)) {
+        return model;
+    }
+    const version = releaseOf(model).version.join(`.`);
+    const kin = options.filter((option) => familyOf(option.value) === familyOf(model)).toSorted((left, right) => compareModelIds(left.value, right.value));
+    return (kin.find((option) => releaseOf(option.value).version.join(`.`) === version) ?? kin[0])?.value ?? defaultModelFor(target);
+};
+
+// A vendor's API key filed under a sign-in (an Anthropic key under Claude), as a row beside its accounts: one more way to
+// pay for the same models, picked as an account is. Keys the reader may not run on are not offered.
+const keyRowsOf = (family: AgentProvider): readonly { readonly provider: AgentProvider; readonly label: string; readonly subtitle: string | undefined }[] => {
+    const keys = keysBeside(family).filter((key) => !providerWithheld(key.id));
+    const vendor = keyBeside(family)?.label;
+    return keys.map((key) => ({
+        provider: key.id,
+        label: t(`chat.pickerAccounts.apiKey`),
+        // Who bills it, and its own name only where two keys would otherwise read alike.
+        subtitle: [vendor === undefined ? undefined : t(`chat.pickerAccounts.billedPerToken`, { vendor }), keys.length > 1 ? key.label : undefined]
+            .filter((part) => part !== undefined)
+            .join(` · `) || undefined,
+    }));
+};
+
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
-    const accounts = computed(() => servingAccounts(provider.value, harness.value));
+    // The sign-in whose accounts and keys these rows are: the provider itself, or the one the picked key is filed under.
+    // On a key, the accounts are read against their own default loop, the one a pick of one lands on.
+    const family = computed(() => keyedBeside(provider.value) ?? provider.value);
+    const onKey = computed(() => family.value !== provider.value);
+    const accounts = computed(() => servingAccounts(family.value, onKey.value ? `native` : harness.value));
+    const keyRows = computed(() => keyRowsOf(family.value));
     // The model the rings measure against; with none given, the ring falls back to the account's tightest pool.
     const modelRef = computed<ModelRef | undefined>(() => (model?.value === undefined || model.value === `` ? undefined : { id: model.value }));
 
     // The read-only subscriptions this selection runs on instead, for providers with no account of their own.
     const routedProvider = computed<KeyedProvider | undefined>(() => {
-        const target = provider.value;
+        const target = family.value;
         if (subscriptionOnly(target)) {
             return target;
         }
-        // Grok and Kimi are served both ways; which one shows follows the loop chip below.
+        // Grok and Kimi are served both ways; which one shows follows the loop chip below. On a key the chip is the key's,
+        // and the provider's own sign-ins stand for it.
         const keyed = KeyedProviderSchema.safeParse(target);
         return keyed.success &&
             providerSpec(target)?.auth.kind === `translator` &&
+            !onKey.value &&
             selectedLoop(offeredLoops(target), harness.value) === `claude-code`
             ? keyed.data
             : undefined;
@@ -142,12 +183,12 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     const routedRows = computed(() =>
         routedProvider.value === undefined
             ? []
-            : translatorAccounts.value[routedProvider.value].filter((entry) => mayRunOn(provider.value, entry.name)).map((entry) => ({
+            : translatorAccounts.value[routedProvider.value].filter((entry) => mayRunOn(family.value, entry.name)).map((entry) => ({
                   name: entry.name,
                   label: entry.label,
-                  headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage, modelRef.value), modelRef.value),
+                  headroom: planHeadroom(liveUsage(family.value, entry.name, entry.usage, modelRef.value), modelRef.value),
                   // Whether it can take this model's turn: a bench the proxy holds it on outranks any reading of its pools.
-                  state: accountState(provider.value, routedAccountFacts(entry), modelRef.value),
+                  state: accountState(family.value, routedAccountFacts(entry), modelRef.value),
               })),
     );
 
@@ -177,9 +218,9 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // Rows decorated with a subtitle (identity or connect date), ring headroom, and any refusal on that account. In the
     // provider's own order, which is what a turn's placement breaks ties by; the list draws them in pickerOrder.
     const accountRows = computed(() => {
-        const refusal = lastRefusalOf(provider.value);
-        const note = providerRefusalNote.value;
-        const readable = reportsPlanLimits(provider.value);
+        const refusal = lastRefusalOf(family.value);
+        const note = refusalFor(family.value);
+        const readable = reportsPlanLimits(family.value);
         return accounts.value.map((entry) => {
             const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
             const subtitle =
@@ -188,12 +229,12 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                     : ambiguousLabels.value.has(entry.label)
                       ? t(`chat.pickerAccounts.connectedAgo`, { age: timeAgo(entry.connectedAt, { days: true }) })
                       : undefined;
-            const state = accountState(provider.value, accountFacts(entry), modelRef.value);
+            const state = accountState(family.value, accountFacts(entry), modelRef.value);
             const band = planLimitBand({ state, readable });
             return Object.assign({}, entry, {
                 subtitle,
                 // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
-                headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage, modelRef.value), modelRef.value),
+                headroom: planHeadroom(liveUsage(family.value, entry.id, entry.usage, modelRef.value), modelRef.value),
                 state,
                 // Why no turn runs on it (a lost seat outlives the turn it refused), unless the reconnect button already says
                 // so; any other refusal shows only while it stands, on the account it names.
@@ -212,17 +253,23 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     });
 
     // Banded summary a folded list wears, derived from the same rows so summary and rows can't disagree.
-    const accountCapacity = computed(() => capacityCounts(provider.value, accountRows.value));
-    const routedCapacity = computed(() => capacityCounts(routedProvider.value ?? provider.value, routedRows.value));
+    const accountCapacity = computed(() => capacityCounts(family.value, accountRows.value));
+    const routedCapacity = computed(() => capacityCounts(routedProvider.value ?? family.value, routedRows.value));
 
-    // Whether the account rows draw at all: a single account isn't a list. What the footer says (a refusal, a live turn)
-    // is PickerStatus's line, and the harness is the toolbar's (PickerRunBar).
-    const hasContent = computed(() => accounts.value.length > 1 || routedRows.value.length > 0);
+    // Whether the choosable rows draw: a single credential isn't a list, and a key beside a subscription is a choice of two.
+    const choosable = computed(() => accountRows.value.length + keyRows.value.length > 1 || (keyRows.value.length > 0 && routedRows.value.length > 0));
+    // Whether the account rows draw at all. What the footer says (a refusal, a live turn) is PickerStatus's line, and the
+    // harness is the toolbar's (PickerRunBar).
+    const hasContent = computed(() => choosable.value || routedRows.value.length > 0);
 
     return {
+        family,
+        onKey,
         accounts,
         accountRows,
         accountCapacity,
+        keyRows,
+        choosable,
         routedRows,
         routedCapacity,
         unplacedRefusal,

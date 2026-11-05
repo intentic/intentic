@@ -2,8 +2,9 @@
 import { SearchBar, useDevice, vAction } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { TurnPick } from "../../../models/conversations/run/turnDefaults";
 import UsageMeter from "../session/UsageMeter.vue";
-import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, usePickerAccounts } from "./pickerAccounts";
+import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, sameModelOn, usePickerAccounts } from "./pickerAccounts";
 import { servingAccount } from "../../../models/conversations/accounts/servingAccount";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
@@ -13,10 +14,18 @@ import { useT } from "@intentic/ui/i18n";
 // toolbar PickerRunBar, both the host's to compose around it. Used by both the composer's and shell's pickers; it picks
 // (selection is prop in, event out), never applies. Past
 // ACCOUNT_LIST_LIMIT each list folds to the active row plus a count, so the account list can't swallow the panel.
+//
+// A vendor's API key filed under the provider (an Anthropic key under Claude) is a row here too, picked as an account is
+// (the owner, 2026-11-05). It is a provider of its own to the daemon, so a pick between it and an account is a provider
+// switch onto the same model (`selectCredential`, sameModelOn), and the list above then draws what that credential serves.
 
 const t = useT();
 
-const emit = defineEmits<{ selectAccount: [string] }>();
+const emit = defineEmits<{
+    selectAccount: [string];
+    // A credential of another provider than the selection's: a key, or from a key, an account (or the subscriptions).
+    selectCredential: [pick: TurnPick, account: string | undefined];
+}>();
 const {
     provider,
     harness,
@@ -24,6 +33,7 @@ const {
     account,
     named = true,
     accountsLocked,
+    providerLocked = false,
 } = defineProps<{
     provider: AgentProvider;
     // The loop the turn runs on: which accounts can serve it (a CLI loop has sign-ins of its own).
@@ -39,9 +49,11 @@ const {
     // The account may switch mid-turn (an allowance refusal is answered by switching), so this locks only while the
     // turn is generating. Disabled styling follows it via `.ui-off`.
     accountsLocked?: boolean;
+    // A switch between a key and an account is a provider switch, which waits for a live turn to end.
+    providerLocked?: boolean;
 }>();
 
-const { accountRows, accountCapacity, routedRows, routedCapacity } = usePickerAccounts(
+const { family, onKey, accountRows, accountCapacity, keyRows, choosable, routedRows, routedCapacity } = usePickerAccounts(
     toRef(() => provider),
     toRef(() => harness),
     toRef(() => model),
@@ -51,7 +63,7 @@ const { mobile } = useDevice();
 
 // The row ticked is the one the next turn runs on, by the rule the daemon places it with, read off the provider's own
 // order. None where it runs on none (an account gone from the list, whose turn is refused), rather than a guess.
-const serving = computed(() => servingAccount(provider, accountRows.value, { account, named }));
+const serving = computed(() => (onKey.value ? undefined : servingAccount(family.value, accountRows.value, { account, named })));
 const activeAccountId = computed(() => serving.value?.id);
 const autoPickedId = computed(() => (serving.value?.byAllowance === true ? serving.value.id : undefined));
 
@@ -61,7 +73,7 @@ const autoPickedId = computed(() => (serving.value?.byAllowance === true ? servi
 const accountsOpen = ref(false);
 const accountsQuery = ref(``);
 const accountsLong = computed(() => accountRows.value.length > ACCOUNT_LIST_LIMIT);
-const accountsOrdered = computed(() => pickerOrder(provider, accountRows.value));
+const accountsOrdered = computed(() => pickerOrder(family.value, accountRows.value));
 const accountsShown = computed(() => {
     if (!accountsLong.value) {
         return accountsOrdered.value;
@@ -137,10 +149,21 @@ const escapeAccounts = (event: KeyboardEvent): void => escapeFold(event, account
 const escapeRouted = (event: KeyboardEvent): void => escapeFold(event, routedOpen, routedQuery);
 
 // A pick closes the fold behind it, so the chosen row is what's left on screen and the model list
-// regains its height.
+// regains its height. From a key, an account is the provider it belongs to as well.
 const pickAccount = (id: string): void => {
-    emit(`selectAccount`, id);
+    if (onKey.value) {
+        emit(`selectCredential`, { provider: family.value, value: sameModelOn(family.value, model) }, id);
+    } else {
+        emit(`selectAccount`, id);
+    }
     closeFold(accountsOpen, accountsQuery);
+};
+
+// A key, or from a key the provider's own sign-ins (a subscription the translator balances, named by none of its rows).
+const pickProvider = (target: AgentProvider): void => {
+    if (target !== provider) {
+        emit(`selectCredential`, { provider: target, value: sameModelOn(target, model) }, undefined);
+    }
 };
 </script>
 
@@ -151,7 +174,7 @@ const pickAccount = (id: string): void => {
     <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
 
     <!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
-    <template v-if="accountRows.length > 1">
+    <template v-if="choosable">
         <!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
         <SearchBar
             v-if="accountsLong && accountsOpen"
@@ -180,7 +203,7 @@ const pickAccount = (id: string): void => {
                 :data-current="activeAccountId === a.id"
                 class="ui-row-select ui-off flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
                 :class="{ 'ui-row-select-on': activeAccountId === a.id }"
-                :disabled="accountsLocked"
+                :disabled="accountsLocked || (onKey && providerLocked)"
                 @click="pickAccount(a.id)"
             >
                 <!-- Row grows a line only when there's a refusal, a spent pool or a subtitle to show; the condition takes that second line over the subtitle. -->
@@ -220,6 +243,22 @@ const pickAccount = (id: string): void => {
             <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
                 {{ t(`chat.pickerAccounts.noAccountsMatch`) }}
             </p>
+            <!-- The vendor's keys after the accounts, never folded: there is one, rarely two, and who bills it is the point. -->
+            <button
+                v-for="k in keyRows"
+                :key="k.provider"
+                type="button"
+                :data-current="provider === k.provider"
+                class="ui-row-select ui-off flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs max-md:min-h-11"
+                :class="{ 'ui-row-select-on': provider === k.provider }"
+                :disabled="provider !== k.provider && providerLocked"
+                @click="pickProvider(k.provider)"
+            >
+                <span class="flex min-w-0 flex-col items-start leading-tight">
+                    <span class="truncate text-content">{{ k.label }}</span>
+                    <span v-if="k.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ k.subtitle }}</span>
+                </span>
+            </button>
         </div>
 
         <!-- The collapsed group preserves the count and shape of hidden accounts. -->
@@ -255,7 +294,7 @@ const pickAccount = (id: string): void => {
             @keydown.esc="escapeRouted"
         />
 
-        <!-- Unframed since these aren't clickable controls. -->
+        <!-- Unframed since these aren't clickable controls; on a key they are the way back to the subscription, so they press. -->
         <div
             id="picker-routed-list"
             class="-mx-3 flex flex-col"
@@ -263,10 +302,19 @@ const pickAccount = (id: string): void => {
             role="group"
             :aria-label="t(`chat.pickerAccounts.subscription`)"
         >
-            <div v-for="a in routedShown" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs">
+            <component
+                :is="onKey ? `button` : `div`"
+                v-for="a in routedShown"
+                :key="a.name"
+                :type="onKey ? `button` : undefined"
+                :disabled="onKey ? providerLocked : undefined"
+                class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs"
+                :class="{ 'ui-row-select ui-off max-md:min-h-11': onKey }"
+                @click="onKey && pickProvider(family)"
+            >
                 <span class="min-w-0 truncate text-content">{{ a.label }}</span>
                 <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
-            </div>
+            </component>
             <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
                 {{ t(`chat.pickerAccounts.noAccountsMatch`) }}
             </p>

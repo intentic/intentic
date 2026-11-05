@@ -4205,7 +4205,9 @@
             "measuringPlanLimits": "Planlimits werden gemessen",
             "noAccountsMatch": "Keine Konten passen.",
             "outdatedMissing": "Bis zur Aktualisierung können die Konten unten nicht anzeigen, ob sie einen Zug übernehmen können (verlorene Anmeldung oder Lizenz, aufgebrauchtes oder gesperrtes Kontingent), und eine Auswahl wirkt erst ab der nächsten Nachricht.",
-            "subscription": "Abo"
+            "subscription": "Abo",
+            "apiKey": "API-Schlüssel",
+            "billedPerToken": "Abrechnung pro Token durch {vendor}"
         },
         "pickerStatus": {
             "nextMessage": "Gilt ab deiner nächsten Nachricht",
@@ -4499,7 +4501,8 @@
         },
         "providerCatalog": {
             "freeTrial": "Kostenlose Testversion",
-            "localModels": "Lokale Modelle"
+            "localModels": "Lokale Modelle",
+            "apiKey": "{vendor}-API-Schlüssel"
         },
         "chatAccounts": {
             "disconnectFailed": "Dieses Konto konnte nicht getrennt werden.",
@@ -5355,6 +5358,12 @@
             "add": "Schlüssel hinzufügen",
             "notAccepted": "{vendor} hat diesen Schlüssel nicht akzeptiert: Für ihn wurden keine Modelle aufgelistet. Prüfen Sie den Schlüssel und versuchen Sie es erneut.",
             "couldntAdd": "Der {vendor}-Schlüssel konnte nicht hinzugefügt werden."
+        },
+        "providerKeys": {
+            "title": "API-Schlüssel",
+            "titleHint": "API-Schlüssel ··{hint}",
+            "billed": "Abrechnung pro Token durch {vendor}",
+            "couldntRemove": "Der API-Schlüssel konnte nicht getrennt werden."
         }
     },
     "desktop": {

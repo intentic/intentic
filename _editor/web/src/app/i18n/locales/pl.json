@@ -4205,7 +4205,9 @@
             "measuringPlanLimits": "Mierzenie limitów planu",
             "noAccountsMatch": "Żadne konto nie pasuje.",
             "outdatedMissing": "Do czasu aktualizacji konta poniżej nie pokażą, czy mogą przyjąć turę (utracone logowanie lub miejsce, wyczerpana lub wstrzymana pula), a wybór konta zadziała dopiero od następnej wiadomości.",
-            "subscription": "Subskrypcja"
+            "subscription": "Subskrypcja",
+            "apiKey": "Klucz API",
+            "billedPerToken": "Rozliczany za token przez {vendor}"
         },
         "pickerStatus": {
             "nextMessage": "Obowiązuje od następnej wiadomości",
@@ -4499,7 +4501,8 @@
         },
         "providerCatalog": {
             "freeTrial": "Darmowa wersja próbna",
-            "localModels": "Modele lokalne"
+            "localModels": "Modele lokalne",
+            "apiKey": "Klucz API {vendor}"
         },
         "chatAccounts": {
             "disconnectFailed": "Nie udało się odłączyć tego konta.",
@@ -5355,6 +5358,12 @@
             "add": "Dodaj klucz",
             "notAccepted": "{vendor} nie przyjął tego klucza: nie zwrócił dla niego żadnych modeli. Sprawdź klucz i spróbuj ponownie.",
             "couldntAdd": "Nie udało się dodać klucza {vendor}."
+        },
+        "providerKeys": {
+            "title": "Klucz API",
+            "titleHint": "Klucz API ··{hint}",
+            "billed": "Rozliczany za token przez {vendor}",
+            "couldntRemove": "Nie udało się odłączyć tego klucza API."
         }
     },
     "desktop": {

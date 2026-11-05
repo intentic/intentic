@@ -18,7 +18,7 @@ import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { useOperation } from "../../../workbench/operations/operations";
-import { defaultModelFor, endpointProviders,runnableReadFailure } from "../../../models/providers/providerCatalog";
+import { defaultModelFor, endpointProviders, keyedBeside, runnableReadFailure } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { holdSignInTab } from "../../../models/conversations/run/signInTab";
@@ -123,11 +123,11 @@ const select = (tile: TileKey): void => {
     selected.value = selected.value === tile ? undefined : tile;
 };
 
-// What each tile says, from the sources that live under it: a provider's own, or every model this sandbox serves or is
-// pointed at for Local models. The worst standing among them colours its dot.
+// What each tile says, from the sources that live under it: a provider's own accounts and its vendor's API keys, or
+// every other model this sandbox serves or is pointed at for Local models. The worst standing among them colours its dot.
 const STANDING_RANK = { attention: 0, blocked: 1, ready: 2, waiting: 3 } as const satisfies Record<ModelSourceStanding, number>;
 const sourcesOf = (tile: TileKey): readonly ModelSource[] =>
-    sources.value.filter((source) => source.kind !== `trial` && tileOf(source.provider) === tile);
+    sources.value.filter((source) => source.kind !== `trial` && tileOf(source.provider, keyedBeside) === tile);
 // What the owner's other sandboxes hold that this one does not: a tile with nothing here names where its account is.
 const { rows: otherRows } = useOtherAccounts();
 const tileFacts = computed(() =>
@@ -170,7 +170,7 @@ const settleArrival = (): void => {
         return;
     }
     const asked = String(route.query[`provider`] ?? ``);
-    const arrival = asked === `` ? undefined : linkArrival(asked, providerReady);
+    const arrival = asked === `` ? undefined : linkArrival(asked, providerReady, keyedBeside);
     if (arrival !== undefined) {
         selected.value = arrival.tile;
         if (arrival.signIn && live.value?.provider !== asked && isProviderTile(asked)) {
@@ -189,12 +189,15 @@ const settleArrival = (): void => {
     if (remembered !== undefined) {
         return;
     }
-    const tile = arrivalTile({
-        live: live.value?.provider,
-        failed: signInFailure.value?.provider,
-        needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
-        connected: sources.value.find((source) => source.kind !== `trial` && source.standing === `ready`)?.provider,
-    });
+    const tile = arrivalTile(
+        {
+            live: live.value?.provider,
+            failed: signInFailure.value?.provider,
+            needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
+            connected: sources.value.find((source) => source.kind !== `trial` && source.standing === `ready`)?.provider,
+        },
+        keyedBeside,
+    );
     selected.value = tiles.value.includes(tile) ? tile : tiles.value[0];
 };
 
@@ -293,7 +296,7 @@ const dismissAccountsNotice = (): void => {
 // LANDING: a state, not a redirect. The panel of what connected says so, naming the sandbox it went to (landedLine), with
 // the one next move.
 const landed = ref<AgentProvider | undefined>(undefined);
-// An endpoint made from a found key is named for its provider ("OpenRouter"); any other as the picker names it.
+// An endpoint made from a key is named as one ("Anthropic API key"); any other as the picker names it.
 const keyEndpointLabels = new Map<AgentProvider, string>();
 const landedLabel = (provider: AgentProvider): string =>
     providerSpec(provider)?.accountLabel ??
@@ -301,7 +304,7 @@ const landedLabel = (provider: AgentProvider): string =>
     endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
     provider;
 const landedFor = (tile: TileKey): string | undefined =>
-    landed.value === undefined || tileOf(landed.value) !== tile ? undefined : landedLine(landedLabel(landed.value), activeSandbox.value?.name);
+    landed.value === undefined || tileOf(landed.value, keyedBeside) !== tile ? undefined : landedLine(landedLabel(landed.value), activeSandbox.value?.name);
 
 // A sign-in that connected an account while this view was open, as the store saw it land: said whether or not the
 // provider was connected before, since a second account lands without its readiness changing at all. An account a person
@@ -385,23 +388,23 @@ const addKey = async (key: ProviderKey): Promise<void> => {
     if (ended?.state !== `done`) {
         return;
     }
-    // The page's own answer to the copy: the row turns to Added, and the endpoint it became is opened and offered.
+    // The page's own answer to the copy: the row turns to Added, and the endpoint it became is opened and offered, in the
+    // card of the sign-in a vendor's key is the alternative to, else under Local models with the servers.
     addedHere.value = new Set([...addedHere.value, key.id]);
     keys.value = keys.value.map((entry) => (entry.id === key.id ? { ...entry, added: true } : entry));
     keyCopy.dismiss();
     if (ended.value !== undefined) {
-        keyEndpointLabels.set(ended.value, key.label);
+        keyEndpointLabels.set(ended.value, t(`connect.connect.foundKeyTitle`, { provider: key.label }));
         landed.value = ended.value;
-        selected.value = LOCAL_TILE;
+        selected.value = tileOf(ended.value, keyedBeside) ?? LOCAL_TILE;
     }
 };
 
-// A key pasted beside a provider's sign-in (ApiKeyOption.vue) lands as a found key does: named for its vendor, and shown
-// where the page lists servers and keys.
-const keyAdded = (endpoint: AgentProvider, label: string): void => {
-    keyEndpointLabels.set(endpoint, label);
+// A key pasted beside a provider's sign-in (keys/ApiKeyOption.vue) lands as a row of the card it was pasted in, said there
+// once the connection list names it (landedFor).
+const keyAdded = (endpoint: AgentProvider, vendor: string): void => {
+    keyEndpointLabels.set(endpoint, t(`connect.apiKey.title`, { vendor }));
     landed.value = endpoint;
-    selected.value = LOCAL_TILE;
 };
 
 const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {

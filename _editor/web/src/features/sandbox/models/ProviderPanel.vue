@@ -5,7 +5,7 @@ import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contr
 import { loopDoors, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
@@ -17,6 +17,7 @@ import { accountsOf, subscriptionOnly } from "../../../models/conversations/acco
 import { offeredLoops } from "../../../models/providers/offeredLoops";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { hasSignIn } from "../../../models/providers/access";
+import { keysBeside } from "../../../models/providers/providerCatalog";
 import {
     type AccountFacts,
     accountFacts,
@@ -29,7 +30,7 @@ import {
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
-import ApiKeyOption from "./ApiKeyOption.vue";
+import ProviderKeys from "./keys/ProviderKeys.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
 import { accountOffLine } from "./accountOff";
 import {
@@ -40,6 +41,7 @@ import {
     identityNote,
     mayChangeAccount,
     rowNote,
+    usageLine,
     waitingLine,
 } from "./accountRows";
 import { offerFor } from "./otherAccounts";
@@ -173,27 +175,6 @@ const loopNote = (account: OauthAccount): string | undefined => {
 };
 
 const ambiguous = computed(() => ambiguousLabels(nativeAccounts.value));
-
-// Per-account spend, shown in the meter's card rather than on the row. Always a line once usage has loaded (even a
-// zero-turn account); withheld entirely until then.
-const usageLine = (id: string): string => {
-    const usage = accountUsage.value[id];
-    if (usage === undefined || usage.turns === 0) {
-        return t(`sandbox.aiAccountSection.noTurnsYet`);
-    }
-    const cost = usage.costUsd > 0 ? ` · ${formatMoney(usage.costUsd)}` : ``;
-    // Cache rate: cacheReadTokens / (cacheReadTokens + inputTokens), the share of prompt input served from cache.
-    const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
-    const cache =
-        usage.cacheReadTokens > 0 && cacheDenom > 0
-            ? ` · ${t(`sandbox.aiAccountSection.cachedShare`, { tokens: formatTokens(usage.cacheReadTokens), pct: Math.round((100 * usage.cacheReadTokens) / cacheDenom) })}`
-            : ``;
-    return `${t(
-        `sandbox.aiAccountSection.turnsInOut`,
-        { count: usage.turns, input: formatTokens(usage.inputTokens), output: formatTokens(usage.outputTokens) },
-        usage.turns,
-    )}${cache}${cost}`;
-};
 
 interface AccountRow<T> {
     account: T;
@@ -329,7 +310,8 @@ const nativeView = ({ account, headroom, exhausted, state }: AccountRow<OauthAcc
         state,
         headroom,
         exhausted,
-        activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(account.id),
+        // Per-account spend, in the meter's card rather than on the row; withheld entirely until usage has loaded.
+        activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(accountUsage.value[account.id]),
         ...nativePresses(account, from, state),
         variant: doorOf(account)?.door,
         busy: account.id,
@@ -376,6 +358,8 @@ const rows = computed(() => [
     ...nativeViews.value.map((row) => ({ ...row, via: `native` as const })),
     ...routedViews.value.map((row) => ({ ...row, via: `routed` as const })),
 ]);
+// A vendor's API key is a connection here too (ProviderKeys), so a card holding only a key is not an empty one.
+const holdsAny = computed(() => rows.value.length > 0 || keysBeside(provider).length > 0);
 const shouldCollapse = computed(() => rows.value.length > COLLAPSE_THRESHOLD);
 const shownRows = computed(() => (shouldCollapse.value && !expanded.value ? rows.value.slice(0, VISIBLE_WHEN_COLLAPSED) : rows.value));
 
@@ -433,7 +417,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
 <template>
     <RowGroup :label="providerName">
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
-        <template v-if="rows.length > 0 && !signingInHere && ways.length > 0" #actions>
+        <template v-if="holdsAny && !signingInHere && ways.length > 0" #actions>
             <Button v-for="way in ways" :key="way.key" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
@@ -553,7 +537,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         />
 
         <!-- Nothing here yet: what connecting needs, and the button that does it. -->
-        <RowNote v-if="rows.length === 0 && attempt === undefined" variant="block">
+        <RowNote v-if="!holdsAny && attempt === undefined" variant="block">
             <div class="flex flex-col items-start gap-3">
                 <p class="text-xs text-muted">{{ emptyLine }}</p>
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
@@ -593,7 +577,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             </div>
         </RowNote>
 
-        <!-- The deliberate alternative to signing in, for Full access, who alone writes connections: one quiet line last. -->
-        <ApiKeyOption v-if="canShip && !signingInHere" :provider="provider" @added="(endpoint, label) => emit(`keyAdded`, endpoint, label)" />
+        <!-- The vendor's keys after the accounts, else the deliberate alternative to signing in, offered to Full access alone. -->
+        <ProviderKeys :provider="provider" :offer="canShip && !signingInHere" @added="(endpoint, label) => emit(`keyAdded`, endpoint, label)" />
     </RowGroup>
 </template>

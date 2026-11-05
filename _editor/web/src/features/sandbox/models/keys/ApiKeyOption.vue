@@ -6,14 +6,14 @@ import { messageOr } from "@intentic/ui/async";
 import { Button, Icon, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, useId, useTemplateRef } from "vue";
-import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
-import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { refreshConnections } from "../../../../models/conversations/accounts/useChat-accounts";
+import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 
 // AN API KEY, FOR WHOEVER DECIDES ON ONE. The same models a provider's sign-in reaches, paid per token to its vendor instead
 // of through a plan. Never the default (owner, 2026-11-05): a key spends money a plan would not, so it stays one quiet line
 // at the foot of the provider's card, and opening it says what it costs before it asks for anything. What it adds is a
-// model endpoint, the same connection a key found on the owner's computer becomes (migrations/provider-keys.ts), listed
-// with the other servers and keys once it lands.
+// model endpoint, the same connection a key found on the owner's computer becomes (migrations/provider-keys.ts), which
+// lands as a row of this same card (ProviderKeyRows), beside the accounts.
 
 const t = useT();
 
@@ -71,9 +71,11 @@ const submit = async (): Promise<void> => {
             problem.value = t(`connect.apiKey.notAccepted`, { vendor: entry.label });
             return;
         }
-        await refreshConnections();
+        // Said before the connections are read again: that read lists the key as a row of this card, which takes this
+        // line's place, and an unmounted component's word reaches nobody.
         emit(`added`, endpointProvider(id), entry.label);
         close();
+        await refreshConnections();
     } catch (caught) {
         problem.value = messageOr(caught, t(`connect.apiKey.couldntAdd`, { vendor: entry.label }));
     } finally {

@@ -29,6 +29,7 @@ jest.mock(`../accounts/pickerAccounts`, () => ({
         hasContent: computed(() => false),
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
+        onKey: computed(() => false),
     }),
 }));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
