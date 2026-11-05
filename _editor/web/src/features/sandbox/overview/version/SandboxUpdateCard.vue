@@ -135,8 +135,6 @@ const restartHosted = async (): Promise<void> => {
 // Offered on every OS: recreate.ps1 takes -Rollback exactly as recreate.sh takes --rollback, and HostRecreate prints
 // whichever the reader's OS spells.
 const rollbackTo = computed(() => info.value?.previousImage);
-// Full image id is noise at this distance; only the digest tail is shown, inside the expanded section.
-const rollbackDigest = computed(() => rollbackTo.value?.split(`:`).pop());
 const channel = computed(() => info.value?.channel);
 // The machine said the version before its last swap is still parked and ready: a way back of its own, and the one
 // thing on this card that stops being true with time. The clock runs only while it holds, read by the minute.
@@ -180,10 +178,6 @@ const openRollback = (): void => {
     }
     rollbackOpen.value = true;
 };
-// The sentence the way back opens with, when the owner went looking for it rather than a withdrawn release sending them.
-const rollbackLead = computed(() =>
-    plan.value.rollbackWhy ? undefined : [t(`sandbox.sandboxUpdateCard.troubleLead`), plan.value.news?.ready].filter(Boolean).join(` `),
-);
 
 // The owner's "not this one", and taking it back. A setting written in a moment, whose end shows in the card itself;
 // in the ledger so a refusal is still there when the card is opened again, and a second press waits for the first.
@@ -317,7 +311,8 @@ const troubleBesideRebuild = computed(
 const troubleAtFoot = computed(() => canRollBack.value && !plan.value.rollbackWhy && !troubleBesideRebuild.value);
 // The way back, open: only while there is one, however it was opened.
 const rollbackShown = computed(() => canRollBack.value && rollbackOpen.value);
-// Whether the quiet group has anything to say under its heading. A sandbox that only shows its switch draws no empty block.
+// Whether the quiet group has anything to say under its heading. A sandbox that only shows its switch draws no empty block,
+// and "Having trouble?" sits in the heading's row beside the badge, so it never earns a block of its own either.
 const quietBody = computed(
     () =>
         autoPaused.value ||
@@ -327,7 +322,6 @@ const quietBody = computed(
         skipNotice.value !== undefined ||
         (slug.value !== undefined && !serverManaged.value && (localImage.value !== undefined || planRefused.value)) ||
         planRefused.value ||
-        troubleAtFoot.value ||
         rollbackShown.value,
 );
 // The developer notes, the stored-file conversions, the switch for updates that take themselves and the way back: the
@@ -541,9 +535,8 @@ const finePrint = computed(
                 </div>
                 <UpdateRollbackPanel
                     v-if="rollbackShown"
-                    :lead="rollbackLead"
+                    :ready="plan.news?.ready"
                     :mid-turn="midTurn"
-                    :digest="rollbackDigest"
                     :hosted="hosted !== undefined"
                     :slug="slug"
                     @hosted-rollback="hostedRollingBack = true"
@@ -554,7 +547,17 @@ const finePrint = computed(
         <!-- NO OFFER: the version that runs, and what there is to know or do about it, as a quiet group like the rest of the page. -->
         <RowGroup v-else :label="quietHeading">
             <template #actions>
-                <div class="flex flex-wrap items-center justify-end gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                    <!-- The way back, tucked away in the heading's row: there for whoever comes looking, never a row of its own. -->
+                    <button
+                        v-if="troubleAtFoot"
+                        type="button"
+                        :class="ui.textButton({ tone: `subtle`, size: `xs` })"
+                        :aria-expanded="rollbackOpen"
+                        @click="toggleRollback"
+                    >
+                        {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                    </button>
                     <StatusBadge v-if="plan.withdrawn" variant="warning" :label="t(`sandbox.sandboxUpdateCard.withdrawnBadge`)" dot />
                     <!-- Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an
                          amber "take this" on a card telling you not to would be the card arguing with itself. -->
@@ -647,29 +650,15 @@ const finePrint = computed(
                         </ul>
                     </Notice>
 
-                    <!-- The way back, tucked away behind a quiet "Having trouble?" at the foot; a withdrawn release opens the
-                         same panel from its notice instead. When "Having trouble?" already sits beside the checkout rebuild,
-                         skip this shell while closed — an empty flex child still earns a gap-4 above the block's foot. -->
-                    <div v-if="troubleAtFoot || rollbackShown" class="flex flex-col gap-2">
-                        <button
-                            v-if="troubleAtFoot"
-                            type="button"
-                            :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)"
-                            :aria-expanded="rollbackOpen"
-                            @click="toggleRollback"
-                        >
-                            {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
-                        </button>
-                        <UpdateRollbackPanel
-                            v-if="rollbackShown"
-                            :lead="rollbackLead"
-                            :mid-turn="midTurn"
-                            :digest="rollbackDigest"
-                            :hosted="hosted !== undefined"
-                            :slug="slug"
-                            @hosted-rollback="hostedRollingBack = true"
-                        />
-                    </div>
+                    <!-- The way back, opened from "Having trouble?" in the heading's row or, for a withdrawn release, from its notice. -->
+                    <UpdateRollbackPanel
+                        v-if="rollbackShown"
+                        :ready="plan.news?.ready"
+                        :mid-turn="midTurn"
+                        :hosted="hosted !== undefined"
+                        :slug="slug"
+                        @hosted-rollback="hostedRollingBack = true"
+                    />
                 </div>
             </RowNote>
             <UpdateAutoSwitch row />

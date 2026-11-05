@@ -467,7 +467,7 @@ it(`offers a hosted sandbox the platform's way back once it kept an image, throu
     expect(el.textContent).not.toContain(`24 hours`);
     await press(el, `Having trouble?`);
     expect(el.querySelector(`[data-hosted-rollback]`)).toBeNull();
-    await press(el, `Roll back to the previous version`);
+    await press(el, `Roll back`);
     expect(el.querySelector(`[data-hosted-rollback]`)?.getAttribute(`data-hosted-rollback`)).toBe(`sb1`);
     expect(recreates(el)).toEqual([]);
 });

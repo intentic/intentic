@@ -552,7 +552,7 @@ const command = (os: CommandOs): string => {
                 :class="gilded ? `flex flex-col gap-2.5 rounded-lg border border-line-subtle bg-canvas/50 p-3.5` : `flex flex-col gap-2`"
             >
                 <RunCommand :command="command" :explanation="t(`capabilities.hostRecreate.runInTerminal`)" />
-                <p v-if="!gilded" class="text-2xs text-subtle">{{ cost }}</p>
+                <p v-if="!gilded && !bare" class="text-2xs text-subtle">{{ cost }}</p>
                 <ComposeUpdateHint v-if="action === `Update`" />
                 <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
                 <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
