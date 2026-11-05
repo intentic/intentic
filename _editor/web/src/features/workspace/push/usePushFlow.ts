@@ -1,11 +1,12 @@
-import { workspaceView, type ViewScope } from "../../../app/workspaceScope";
+import { SHARED_SCOPE, sameScope, workspaceView, type ViewScope } from "../../../app/workspaceScope";
 import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
-import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
+import type { PushRun, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
 import { type SyncTarget, useChanges } from "../../../models/changes/useChanges";
 import { workspaceChangedSince, workspaceChangeMark } from "../../../models/workspace/changes/useWorkspaceLive";
 import { usePushRun } from "../../../models/workspace/push/usePushRun";
+import { ahead, behind, unpublished } from "../../../models/workspace/push/outgoingWork";
 import { credentialHostOf, pushNeedsPull } from "../../../models/workspace/push/refusalSummary";
 import { t } from "@intentic/ui/i18n";
 import { type AgentFix, combinedFix } from "../../../models/fixes/agentFix";
@@ -22,7 +23,8 @@ import { type AgentFix, combinedFix } from "../../../models/fixes/agentFix";
 //   same push again. What to do about a refusal is the owner's call; the card only says what happened.
 // - nothing is lost by walking away: the question waits until it's answered.
 // - closing the card is "off my screen", not "that never happened": the verdict stands (`standing`), the panel says
-//   so, and the same card comes back on a press. What retires it is the world changing, never a timer.
+//   so, and the same card comes back on a press. What retires it is the world changing, never a timer: a push of its
+//   own that gets through, or the repos it was about having nothing left to send (`settle`), however that came about.
 
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
 // click ("Publish", "Sync") instead of renaming it "Push".
@@ -210,6 +212,39 @@ const dismiss = (): void => {
     fromMemory.value = false;
 };
 
+/* WHETHER THE WORLD HAS ANSWERED A REFUSED PUSH ITSELF: every repo it was for is listed, readable, and owes its remote
+   nothing it was meant to carry (pushed from a terminal or by an agent, or levelled by a pull). A repo missing from the
+   list or unreadable says nothing either way, so it keeps the verdict. */
+const nothingLeftFor = (push: PendingPush, repos: readonly RepoChanges[]): boolean =>
+    push.targets.every((target) => {
+        const repo = repos.find((entry) => entry.repo === target.repo);
+        if (repo === undefined || repo.error !== undefined) {
+            return false;
+        }
+        return (!target.push || (ahead(repo) === 0 && !unpublished(repo))) && (!target.pull || behind(repo) === 0);
+    });
+
+/* A VERDICT ABOUT WORK THAT HAS SINCE GONE retires, card, badge, panel notice and each repo's own failure alike: left
+   standing, it warns about a push nobody owes any more, and closing the card only hides it until the next press. Read
+   against the copy the push was sent from, never another view's repos of the same name. */
+const settle = (repos: readonly RepoChanges[], view: ViewScope): void => {
+    const held = standing.value;
+    if (held === undefined || sending.value || !sameScope(held.push.view ?? SHARED_SCOPE, view) || !nothingLeftFor(held.push, repos)) {
+        return;
+    }
+    // The failures were filed in the push's own view, which `git` reads off `pending`: name it before clearing them.
+    pending.value = held.push;
+    for (const target of held.push.targets) {
+        const filed = git?.failures.value.get(target.repo);
+        // Only the refusal this verdict is about; a later failure in the same repo is news of its own.
+        if (filed !== undefined && (filed.run === undefined ? held.runs.length === 0 : held.runs.includes(filed.run))) {
+            git?.dismissFailure(target.repo);
+        }
+    }
+    dismiss();
+    standing.value = undefined;
+};
+
 export function usePushFlow() {
     git ??= useChanges(computed(() => pending.value?.view ?? workspaceView.value));
 
@@ -301,6 +336,8 @@ export function usePushFlow() {
         retry,
         // The standing verdict back on screen, whole; what the panel's own press does.
         reopen,
+        // A surface's live read of the repos in `view`, offered so a verdict the world already answered retires.
+        settle,
         dismiss,
     };
 }

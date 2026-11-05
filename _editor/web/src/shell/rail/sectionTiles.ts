@@ -1,7 +1,8 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, type ComputedRef } from "vue";
+import { computed, type ComputedRef, watch } from "vue";
+import { SHARED_SCOPE } from "../../app/workspaceScope";
 import { useRole } from "../../client/sandbox/useRole";
 import { extensionsLoaded } from "../../extension-host/loader";
 import { devicesWorking } from "../../features/sandbox/devices/runners/deviceWork";
@@ -68,6 +69,9 @@ function useWorkspaceBadge(): ComputedRef<ViewBadge | undefined> {
     const changes = useChanges();
     const pushFlow = usePushFlow();
     const words = useVocabulary();
+    // The rail is always up, so this is where a verdict the world has since answered (pushed from a terminal, by an
+    // agent) stops warning, even with the Changes panel closed.
+    watch(changes.repos, (repos) => pushFlow.settle(repos, SHARED_SCOPE));
     return computed<ViewBadge | undefined>(() => {
         // Orthogonal to whatever the badge SAYS: a running mark is drawn beside the tile, so a land rides whichever badge
         // wins below and stands alone when none does — the count is still 0 until the patch is in the tree.

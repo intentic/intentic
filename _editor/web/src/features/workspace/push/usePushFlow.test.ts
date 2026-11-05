@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
+import type { PushRun, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { workspaceView, type ViewScope } from "../../../app/workspaceScope";
 import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
@@ -33,7 +33,12 @@ jest.mock(`../../../models/changes/useChanges`, () => {
     const syncAll = jest.fn(async () => { sentViews.push(toValue(selected)); });
     return { COMMIT_SCOPE: `commit`, sentViews, useChanges: (view?: MaybeRefOrGetter<ViewScope>) => {
         if (view !== undefined) { selected = view; }
-        return { actionBusy, failures, syncAll };
+        const dismissFailure = (scope: string): void => {
+            const next = new Map(failures.value);
+            next.delete(scope);
+            failures.value = next;
+        };
+        return { actionBusy, failures, syncAll, dismissFailure };
     } };
 
 });
@@ -398,4 +403,69 @@ test(`a refused push retries in its original checkout`, async () => {
     loaded.flow.retry();
     await flush();
     expect(loaded.sentViews).toEqual([view, view]);
+});
+
+/* THE WORLD ANSWERING IT: a verdict about commits that have since left the machine some other way retires. */
+
+// A repo as the changes read lists it, with the remote state the verdict is judged against.
+// SAFETY: the flow reads only `repo`, `error` and `remote` off a listed repo; the file lists stay empty.
+const listed = (remote: { ahead?: number; behind?: number; upstream?: string }, over: Partial<RepoChanges> = {}): RepoChanges =>
+    ({ repo: `intentic`, staged: [], unstaged: [], conflicted: [], remote: { remote: `origin`, upstream: `origin/main`, ...remote }, ...over }) as RepoChanges;
+
+test(`a verdict whose commits were pushed some other way retires, card, badge and the repo's failure alike`, async () => {
+    const loaded = await load();
+    const { flow, git } = loaded;
+    await pushRefused(loaded);
+    flow.dismiss();
+    flow.reopen();
+
+    flow.settle([listed({ ahead: 0 })], {});
+
+    expect({ question: flow.question.value, held: flow.held.value, failure: git.failures.value.get(`intentic`) }).toEqual({
+        question: undefined,
+        held: undefined,
+        failure: undefined,
+    });
+});
+
+test(`a verdict stands while the commits it was about are still here to send`, async () => {
+    const loaded = await load();
+    const { flow, git } = loaded;
+    await pushRefused(loaded);
+    flow.dismiss();
+
+    flow.settle([listed({ ahead: 3 })], {});
+    // A branch never published owes its remote everything, whatever `ahead` says.
+    flow.settle([listed({ ahead: 0, upstream: undefined })], {});
+    // A repo the read could not scan, or did not list, says nothing either way.
+    flow.settle([listed({ ahead: 0 }, { error: `not a git repository` })], {});
+    flow.settle([], {});
+
+    expect(flow.held.value).toMatchObject({ push: { targets: PUSH } });
+    expect(git.failures.value.has(`intentic`)).toBe(true);
+});
+
+test(`a verdict is settled only by a read of the copy it was sent from`, async () => {
+    const loaded = await load();
+    const { flow } = loaded;
+    await pushRefused(loaded);
+    flow.dismiss();
+
+    flow.settle([listed({ ahead: 0 })], { agent: `wise-fern-usz1` });
+
+    expect(flow.held.value).toMatchObject({ push: { targets: PUSH } });
+});
+
+test(`settling leaves a later failure in the same repo standing`, async () => {
+    const loaded = await load();
+    const { flow, git } = loaded;
+    await pushRefused(loaded);
+    flow.dismiss();
+    const later = { action: `Push failed`, detail: `rejected`, run: refusedBy(`remote`) };
+    git.failures.value = new Map([[`intentic`, later]]);
+
+    flow.settle([listed({ ahead: 0 })], {});
+
+    expect(flow.held.value).toBeUndefined();
+    expect(git.failures.value.get(`intentic`)).toEqual(later);
 });

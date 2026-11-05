@@ -97,6 +97,9 @@ const pushFlow = usePushFlow();
 // Ticks while a push is in flight, and while a verdict stands unanswered below — that line counts up too, and a
 // frozen "4m ago" over a failure from an hour back is worse than no clock at all.
 const now = useNow(() => pushFlow.running.value || pushFlow.held.value !== undefined);
+// The rail settles the shared tree's verdicts; a push sent from a conversation's copy or a branch is settled by the
+// panel reading that copy.
+watch(changes.repos, (repos) => pushFlow.settle(repos, workspaceView.value));
 
 // A repo the daemon couldn't scan (empty lists, `error` set) stays out of every computation below but still
 // renders as its own row, rather than silently disappearing.
