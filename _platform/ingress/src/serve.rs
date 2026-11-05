@@ -61,7 +61,9 @@ where
     H: Fn(Request<Incoming>, SocketAddr) -> F + Clone + Send + Sync + 'static,
     F: Future<Output = Response<Body>> + Send + 'static,
 {
-    started(listener, move |stream, remote| {
+    started(listener, move |stream, remote: SocketAddr| {
+        // A dual-stack listener names an IPv4 peer as `::ffff:a.b.c.d`; read it as the IPv4 address it is.
+        let remote = SocketAddr::new(remote.ip().to_canonical(), remote.port());
         serve(stream, remote, handler.clone())
     })
 }

@@ -26,6 +26,9 @@ COPY --from=build /intentic-ingress /usr/local/bin/intentic-ingress
 # Declared after the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh passes the
 # content-addressed tag it pushes, so identical content always bakes an identical value.
 ARG BUILD_ID=unreleased
-ENV INGRESS_HOST=0.0.0.0 INGRESS_PORT=8080 INGRESS_BUILD=$BUILD_ID
+# `::` is dual-stack: IPv4 from Fly's proxy, and IPv6 from a peer forwarding a request for a tunnel it does not hold,
+# which arrives on the Fly private network (IPv6 only). `0.0.0.0` refused every such forward, so a tunnel that
+# registered on the other machine answered `no-tunnel` on every path (2026-11-04, after a deploy at 23:29).
+ENV INGRESS_HOST=:: INGRESS_PORT=8080 INGRESS_BUILD=$BUILD_ID
 EXPOSE 8080
 CMD ["intentic-ingress"]

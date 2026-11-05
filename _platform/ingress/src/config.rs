@@ -64,7 +64,7 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             public_key: text("INGRESS_PUBLIC_KEY"),
-            host: text("INGRESS_HOST").or("0.0.0.0"),
+            host: text("INGRESS_HOST").or("::"),
             port: port("INGRESS_PORT", 8080)?,
             build: text("INGRESS_BUILD"),
             instance_id: text("INGRESS_INSTANCE_ID"),
@@ -92,7 +92,7 @@ impl Config {
                 "" => None,
                 _ => Some(port("INGRESS_QUIC_PORT", 0)?),
             },
-            quic_host: text("INGRESS_QUIC_HOST").or(&text("INGRESS_HOST").or("0.0.0.0")),
+            quic_host: text("INGRESS_QUIC_HOST").or(&text("INGRESS_HOST").or("::")),
             alt_svc: text("INGRESS_ALT_SVC"),
         })
     }
