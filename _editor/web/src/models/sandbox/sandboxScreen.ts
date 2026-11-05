@@ -6,7 +6,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { insideScreen, type LandingRole, sandboxEntry } from "../../lib/routes/firstScreens";
 import { type HomeSection, homeSection, sectionLink, showsSection } from "../../lib/routes/homeSection";
-import { frameOf, homePath, insidePath, isSandboxPage, linkOf, pageOf, routeSandbox } from "../../lib/routes/links";
+import { frameOf, isSandboxPage, linkOf, pageOf, routeSandbox, routeSegment, segmentOf, toHome, toInside } from "../../lib/routes/links";
 
 // Remembers which screen each sandbox was last on and lands there on a switch, since a route naming something
 // in the outgoing sandbox means nothing in the incoming one. Kept per window. Registered at module scope, like
@@ -42,13 +42,13 @@ export const sectionEntryPath = (sandboxId: string, section: Pick<HomeSection, `
     const stored = readWindowState(screenKey(sandboxId), parseScreen);
     const last = stored === undefined ? undefined : insideScreen(sandboxId, stored);
     const link = last === undefined ? undefined : linkOf(last);
-    return homePath(sandboxId, link !== undefined && showsSection(section, link) ? link : sectionLink(section));
+    return toHome(sandboxId, link !== undefined && showsSection(section, link) ? link : sectionLink(section));
 };
 
 /** Where a sandbox opens in Home's frame: the section chosen there of it, else its home conversation. */
 export const homeEntryPath = (sandboxId: string): string => {
     const section = roleNow().homeOnly ? undefined : homeSection.value;
-    return section === undefined ? homePath(sandboxId) : sectionEntryPath(sandboxId, section);
+    return section === undefined ? toHome(sandboxId) : sectionEntryPath(sandboxId, section);
 };
 
 // Overrides "land on the last screen" for a switch with a known destination (opening an agent from another
@@ -78,7 +78,7 @@ const screenOf = (to: RouteLocationNormalized, sandboxId: string): string | unde
         return shown === undefined || !isSandboxPage(shown) ? undefined : to.fullPath;
     }
     const link = shown === undefined || !isSandboxPage(shown) ? undefined : linkOf(to.fullPath);
-    return link === undefined ? undefined : insidePath(sandboxId, link);
+    return link === undefined ? undefined : toInside(sandboxId, link);
 };
 
 // The same frame's entry for the sandbox switched to: inside it, its last screen; in Home's frame, what a press on its
@@ -89,7 +89,7 @@ const entryAfterSwitch = (route: RouteLocationNormalized, sandboxId: string): st
     const frame = frameOf(route);
     if (shown !== undefined && (!isSandboxPage(shown) || (frame === `home` && shown === `sandboxSettings`))) {
         const link = linkOf(route.fullPath);
-        return link === undefined ? undefined : frame === `home` ? homePath(sandboxId, link) : insidePath(sandboxId, link);
+        return link === undefined ? undefined : frame === `home` ? toHome(sandboxId, link) : toInside(sandboxId, link);
     }
     return frame === `home` ? homeEntryPath(sandboxId) : sandboxEntryPath(sandboxId);
 };
@@ -130,5 +130,23 @@ onNavigation((router) => {
             }
         },
         { flush: `post` },
+    );
+
+    // The address on screen names its sandbox as the list writes it now (lib/routes/links.ts `segmentOf`): a sandbox
+    // renamed while it is shown, or an address the list was not in yet to read, is written again in place.
+    watch(
+        () => {
+            const route = router.currentRoute.value;
+            const written = routeSegment(route);
+            const sandboxId = routeSandbox(route);
+            const current = sandboxId === undefined ? undefined : segmentOf(sandboxId);
+            return written === undefined || current === written ? undefined : current;
+        },
+        (current) => {
+            const route = router.currentRoute.value;
+            if (current !== undefined && route.name !== undefined && route.name !== null) {
+                void router.replace({ name: route.name, params: { ...route.params, sandbox: current }, query: route.query, hash: route.hash });
+            }
+        },
     );
 });

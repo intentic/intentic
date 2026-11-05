@@ -70,7 +70,8 @@ const conversationLinkOf = (url: string): string | undefined => {
 };
 
 /**
- * Where a tap opens, once the daemon knows its own platform id (`sandbox`, its connect token's): a page of the sandbox,
+ * Where a tap opens, once the daemon knows its own platform id (`sandbox`, the row its announce was answered with,
+ * store/platform-row.ts; never the tunnel id of its connect token, which no reader's list names it by): a page of the sandbox,
  * written as every notification writes one (notifications.ts, the address before frames), is placed inside THIS sandbox
  * (`/s/<id>/…`), so the tap opens it whichever sandbox the reader had open last. A conversation's link goes to this
  * sandbox the same way (`/s/<id>?conversation=`), where the conversation-link guard reads the sandbox off the route. An
@@ -91,8 +92,18 @@ export const placedIn =
         return target === undefined || !isSandboxPage(target.link.page) ? notification : { ...notification, url: insidePath(sandbox, target.link) };
     };
 
-export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction, sandbox?: string): PushSender => {
-    const placed = placedIn(sandbox);
+// The platform's id for this sandbox when one is known, read per notification since the announce learns it after boot. One
+// that cannot be read leaves the tap where the notification wrote it, the sandbox opened last.
+const platformIdOf = async (sandbox: (() => Promise<string | undefined>) | undefined, logger: Logger): Promise<string | undefined> => {
+    try {
+        return await sandbox?.();
+    } catch (error) {
+        logger.warn({ err: error }, "push: this sandbox's platform id could not be read, the tap opens the sandbox open last");
+        return undefined;
+    }
+};
+
+export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction, sandbox?: () => Promise<string | undefined>): PushSender => {
     const forRelay = async (notification: PushNotification): Promise<PushNotification> => {
         if (redact === undefined) {
             return notification;
@@ -112,7 +123,7 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
     const sentWords = createSentNotifications();
     // Sends to every registered device `wanted` keeps.
     const send = async (asked: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
-        const notification = placed(asked);
+        const notification = placedIn(await platformIdOf(sandbox, logger))(asked);
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
         const channels = registered.filter(wanted);
         if (channels.length === 0) {

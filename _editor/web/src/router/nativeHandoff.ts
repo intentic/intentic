@@ -6,7 +6,7 @@ import { EMBED_QUERY, embedded, LOOK_QUERY, type NativeLook, nativeLook, nativeL
 import { type ThemeRow, themeRowLook } from "../skins/themeRow";
 import { returnPath } from "../lib/routes/signIn";
 import { legacyPathOf, legacySandbox, page, type PageLink, parseAppPath, topPath } from "@intentic/sandbox-contract/app-routes";
-import { linkOf } from "../lib/routes/links";
+import { linkOf, sandboxOfAddress } from "../lib/routes/links";
 import { AGENT_VIEW, CHANGES_VIEW } from "../lib/routes/phoneScreens";
 import { useSkin } from "../skins/useSkin";
 import { linkedConversation } from "./conversationLink";
@@ -42,8 +42,11 @@ const shownBy = (to: NativeRoute): { readonly link: PageLink; readonly sandbox: 
     if (link === undefined) {
         return undefined;
     }
-    const framed = parseAppPath(to.path);
-    return { link, sandbox: framed === undefined ? legacySandbox(to.fullPath) : framed.frame.sandbox };
+    const framed = parseAppPath(to.path)?.frame;
+    if (framed === undefined) {
+        return { link, sandbox: legacySandbox(to.fullPath) };
+    }
+    return { link, sandbox: framed.sandbox === undefined ? undefined : sandboxOfAddress(framed.sandbox) };
 };
 
 // A conversation's own screen as the app's bridge reads it, `/agents/<id>` (the id escaped), in the sandbox named.

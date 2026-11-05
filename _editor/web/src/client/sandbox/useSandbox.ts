@@ -15,6 +15,7 @@ import { SANDBOX_TRASH } from "../../lib/queryKeys";
 import { optimisticUpdate } from "../../lib/optimistic";
 import { apiClient } from "../../lib/useApi";
 import { withConcurrency } from "../../lib/concurrency";
+import { nameSandboxesFrom } from "../../lib/routes/links";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "./connection";
 import { daemonReady } from "./useDaemonBoot";
 import { closeAllWakeWindows, closeWakeWindow, openWakeWindow } from "./wake/wakeWindow";
@@ -53,6 +54,8 @@ queryClient.getQueryCache().subscribe((event) => {
         sandboxes.value = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY) ?? [];
     }
 });
+// The list an address names a sandbox among (lib/routes/links.ts): by its name and the tail of its id.
+nameSandboxesFrom(sandboxes);
 
 // Browser-owned connection state machine (see connection.ts); starts idle so a not-yet-ready sandbox never
 // renders as live.

@@ -140,16 +140,20 @@ describe("where a tap opens", () => {
         expect(turnFinished("conv-1", "Fix it", { ok: true }).url).toBe("/?conversation=conv-1");
     });
 
+    // The platform's id for this sandbox's row, as its announce answered it (store/platform-row.ts): the one every
+    // reader's list names it by, which the editor writes again by name once it has the row.
+    const ROW = "cmtu1eqyv0001dawma7zi4n3i";
+
     test("a daemon that knows its own id places each page inside itself, its query and anchor kept", () => {
-        const place = placedIn("abcdef012345");
-        expect(place(fired).url).toBe(insidePath("abcdef012345", page.extension("automations")));
+        const place = placedIn(ROW);
+        expect(place(fired).url).toBe(insidePath(ROW, page.extension("automations")));
         const access = { title: "dev asks to run a task here", body: "check r1", url: "/sandbox/access?section=programs#linked-sandboxes" };
-        expect(place(access).url).toBe("/s/abcdef012345/settings/access?section=programs#linked-sandboxes");
+        expect(place(access).url).toBe(`/s/${ROW}/settings/access?section=programs#linked-sandboxes`);
     });
 
     test("a conversation's link opens in this sandbox, where the conversation-link guard reads it, and a daemon with no id changes nothing", () => {
         const finished = turnFinished("conv-1", "Fix it", { ok: true });
-        expect(placedIn("abcdef012345")(finished).url).toBe(`${insidePath("abcdef012345")}?conversation=conv-1`);
+        expect(placedIn(ROW)(finished).url).toBe(`${insidePath(ROW)}?conversation=conv-1`);
         expect(placedIn(undefined)(finished)).toEqual(finished);
         expect(placedIn(undefined)(fired)).toEqual(fired);
     });
@@ -157,10 +161,20 @@ describe("where a tap opens", () => {
     test("the sender sends, and remembers, the placed address", async () => {
         const reached = stubSends();
         const store = storeOf(device("https://push.example/bob", "bob@example.com"));
-        const pushed = createPushSender(store, pino({ level: "silent" }), undefined, "abcdef012345");
+        const pushed = createPushSender(store, pino({ level: "silent" }), undefined, async () => ROW);
         await pushed.notify(fired);
-        expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual(["/s/abcdef012345/ext/automations"]);
-        expect(pushed.sent(fired.tag ?? "", "bob@example.com")?.url).toBe("/s/abcdef012345/ext/automations");
+        expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual([`/s/${ROW}/ext/automations`]);
+        expect(pushed.sent(fired.tag ?? "", "bob@example.com")?.url).toBe(`/s/${ROW}/ext/automations`);
+    });
+
+    test("a sender whose platform id is not known yet, or cannot be read, sends each page as it was written", async () => {
+        const reached = stubSends();
+        const store = storeOf(device("https://push.example/bob", "bob@example.com"));
+        await createPushSender(store, pino({ level: "silent" }), undefined, async () => undefined).notify(fired);
+        await createPushSender(store, pino({ level: "silent" }), undefined, async () => {
+            throw new Error("unreadable platform-row.json");
+        }).notify(fired);
+        expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual(["/ext/automations", "/ext/automations"]);
     });
 });
 

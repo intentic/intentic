@@ -62,7 +62,9 @@ The native Android app `dev.intentic.app`: Kotlin views over the Rust core in [.
   that asks for a passkey shows "Use passkey" (or "Add a passkey") over the board. Tapping it runs the ceremony through
   Credential Manager with the options the core fetched (`auth/Passkeys.kt`), and the core reconnects once it went
   through. A link to `https://app.intentic.dev/agents/<id>` opens that conversation natively, and so does the web app's
-  own form of it, `/s/<sandbox>/agents/<id>` (or `/home/<sandbox>/…`), on the sandbox it names. A link to one of its
+  own form of it, `/s/<sandbox>/agents/<id>` (or `/home/<sandbox>/…`), on the sandbox it names: by its name and the tail
+  of its id (`intentic-zi4n3i`), read back to the id against the account's sandboxes (`web/SandboxSegment.kt`), or by
+  its whole id. A link to one of its
   pages, or to its changes, opens the WebView over it.
 - **Every row is one stop for TalkBack.** A conversation row reads its text, a board card its title, activity, status,
   age and steps, and a card's buttons follow its text. Touch targets are at least 48 dp, and lane titles are headings.

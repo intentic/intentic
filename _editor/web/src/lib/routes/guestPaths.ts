@@ -1,6 +1,6 @@
-import { type FrameKind, insidePath, legacyTarget, matchPattern, page, parseAppPath, parseFloatingPath, TOP_PAGES } from "@intentic/sandbox-contract/app-routes";
+import { type FrameKind, legacyTarget, matchPattern, page, parseAppPath, parseFloatingPath, TOP_PAGES } from "@intentic/sandbox-contract/app-routes";
 import { HOME_PATH } from "./firstScreens";
-import type { PageLink } from "./links";
+import { type PageLink, toInside } from "./links";
 
 // Where a guest member may stand in the shell: the chat it drives, the board of its own conversations, its own
 // settings, and the one sandbox section it has business in. Everywhere else the daemon refuses every read, so the
@@ -88,5 +88,5 @@ export const guestFenceOf = (homeOnly: boolean, sandbox?: string): GuestFence =>
     if (homeOnly) {
         return { home: HOME_PATH, allowed: homeOnlyAllowedPath };
     }
-    return { home: sandbox === undefined ? HOME_PATH : insidePath(sandbox, page.chat()), allowed: guestAllowedPath };
+    return { home: sandbox === undefined ? HOME_PATH : toInside(sandbox, page.chat()), allowed: guestAllowedPath };
 };

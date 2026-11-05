@@ -208,6 +208,13 @@ the top pages (`/login`, `/invite/:token`, …) by name, and the desktop app's o
 `/settings/billing`) into the page they meant, so an installed app, a push message or a bookmark that holds one still
 lands; `legacyPathOf` writes that old form for a reader that only knows it (the Android app's native screens).
 
+`sandbox-segment.ts` says how an address names its sandbox: by its name's words and the last six characters of its
+platform id, `/s/intentic-zi4n3i/agents`, with more of the id only when another sandbox the reader lists ends the same
+way. The id's tail is the key and the name is not read back, so an address from before a rename still opens the sandbox,
+and a whole id (an address from before 2026-11-05, the daemon's push) is read too. `sandboxSegment` writes one from the
+reader's list and `sandboxOfSegment` reads one against it; the editor does both in `lib/routes/links.ts` and writes an
+address that names its sandbox any other way again in its current form.
+
 The editor's router is built from this table, the daemon's push messages and the desktop app build their links with
 it, and an extension gets the same constructors as `api.links`. `_tools/checks/route-literals.mjs` refuses an address
 typed by hand anywhere else. (2026-11-04: which frame a page was drawn in lived in session storage, so Back, a reload
@@ -220,6 +227,7 @@ and a shared link could each show something else; the sandbox and the frame are 
 - [src/protocol/raw/raw-routes.ts](src/protocol/raw/raw-routes.ts) — every route the daemon serves outside oRPC, and `rawRouteUrl`.
 - [src/protocol/routes.ts](src/protocol/routes.ts) — route naming, `streamOf` for streamed routes, and the route list a daemon advertises.
 - [src/app-routes/app-pages.ts](src/app-routes/app-pages.ts) — every page of the editor and its path pattern, and the `page.*` link constructors.
+- [src/app-routes/sandbox-segment.ts](src/app-routes/sandbox-segment.ts) — how an address names its sandbox (`intentic-zi4n3i`), written and read back.
 - [contract.lock.json](contract.lock.json) — the committed fingerprint of the wire surface.
 - [src/webext/index.ts](src/webext/index.ts) — a narrow entry point, one of several that keep small bundles off the barrel.
 

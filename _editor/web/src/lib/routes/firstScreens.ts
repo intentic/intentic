@@ -1,4 +1,5 @@
-import { homePath, insidePath, isSandboxPage, legacyTarget, page, parseAppPath } from "@intentic/sandbox-contract/app-routes";
+import { homePath, isSandboxPage, legacyTarget, page, parseAppPath } from "@intentic/sandbox-contract/app-routes";
+import { sandboxOfAddress, toHome, toInside } from "./links";
 
 // WHERE THE APP OPENS, AND WHERE A SANDBOX OPENS. Two answers since 2026-10-25, when Home (the master view, every
 // sandbox at once) became the first screen: the bare address `/` lands on Home, and going INTO a sandbox (its tile's
@@ -20,9 +21,9 @@ export const HOME_PATH = homePath();
 /** A sandbox's own first screen: its agents board; a guest's chat, or a home-only guest's home. */
 export const sandboxLanding = (sandbox: string, role: LandingRole): string => {
     if (role.isGuest) {
-        return role.homeOnly ? homePath(sandbox) : insidePath(sandbox, page.chat());
+        return role.homeOnly ? toHome(sandbox) : toInside(sandbox, page.chat());
     }
-    return insidePath(sandbox, page.agents());
+    return toInside(sandbox, page.agents());
 };
 
 /**
@@ -46,12 +47,12 @@ export const insideScreen = (sandbox: string, address: string): string | undefin
     const parsed = parseAppPath(address);
     if (parsed !== undefined) {
         const shown = parsed.page?.name;
-        return parsed.frame.kind === `inside` && parsed.frame.sandbox === sandbox && shown !== undefined && isSandboxPage(shown)
+        return parsed.frame.kind === `inside` && sandboxOfAddress(parsed.frame.sandbox) === sandbox && shown !== undefined && isSandboxPage(shown)
             ? address
             : undefined;
     }
     const legacy = legacyTarget(address);
-    return legacy === undefined || legacy.frame !== `inside` ? undefined : insidePath(sandbox, legacy.link);
+    return legacy === undefined || legacy.frame !== `inside` ? undefined : toInside(sandbox, legacy.link);
 };
 
 /** Where opening a sandbox goes: the screen it was last left on, when that was a screen of its own, else its first screen. */

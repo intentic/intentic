@@ -1,9 +1,7 @@
 import {
     type FloatingPanel,
     FLOATING_PANELS,
-    floatingPath,
     homePath,
-    insidePath,
     isSandboxPage,
     LEGACY_PATTERNS,
     legacySandbox,
@@ -13,7 +11,7 @@ import type { FunctionalComponent } from "vue";
 import { type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw, START_LOCATION } from "vue-router";
 import { activeSandboxId } from "../app/storage/activeSandbox";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { frameOf, routeSandbox } from "../lib/routes/links";
+import { frameOf, routeSandbox, toFloating, toHome, toInside } from "../lib/routes/links";
 
 // THE ADDRESSES FROM BEFORE FRAMES, STILL ANSWERED (2026-11-04). Until then every page sat at the root (`/agents/<id>`,
 // `/sandbox/models`, `/settings/appearance`) and meant "of the sandbox this browser had open last". They are still out
@@ -49,12 +47,12 @@ const legacyLanding = async (
     const sandbox =
         legacySandbox(to.fullPath) ?? (from === undefined ? undefined : routeSandbox(from)) ?? activeSandboxId.value ?? (await sandboxToOpen());
     if (!isSandboxPage(target.link.page)) {
-        return pressedIn === `inside` && sandbox !== undefined ? insidePath(sandbox, target.link) : homePath(undefined, target.link);
+        return pressedIn === `inside` && sandbox !== undefined ? toInside(sandbox, target.link) : homePath(undefined, target.link);
     }
     if (sandbox === undefined) {
         return homePath();
     }
-    return (pressedIn ?? target.frame) === `home` ? homePath(sandbox, target.link) : insidePath(sandbox, target.link);
+    return (pressedIn ?? target.frame) === `home` ? toHome(sandbox, target.link) : toInside(sandbox, target.link);
 };
 
 const fromShown = (from: RouteLocationNormalized): RouteLocationNormalized | undefined => (from === START_LOCATION ? undefined : from);
@@ -70,7 +68,7 @@ export const legacyRoutes = (): RouteRecordRaw[] =>
 // The live app's own window became a tab of Browsers (2026-10-08), so `preview` is that panel's.
 const floatingLanding = async (panel: FloatingPanel, fullPath: string): Promise<RouteLocationRaw> => {
     const sandbox = legacySandbox(fullPath) ?? activeSandboxId.value ?? (await sandboxToOpen());
-    return sandbox === undefined ? homePath() : floatingPath(sandbox, panel);
+    return sandbox === undefined ? homePath() : toFloating(sandbox, panel);
 };
 
 /** The top-level records of a floating window's old address, behind the guards a floating window has (`entry`). */

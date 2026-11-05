@@ -28,6 +28,7 @@ import dev.intentic.app.state.Snapshot
 import dev.intentic.app.web.AgentLink
 import dev.intentic.app.web.WebActivity
 import dev.intentic.app.web.WebHost
+import dev.intentic.app.web.sandboxOfSegment
 import java.io.File
 
 /**
@@ -176,9 +177,10 @@ class MainActivity : ComponentActivity() {
     }
 
     // The agent's conversation, natively, on the sandbox the link names (the core takes requests in order, so the
-    // conversation opens on it); a page or the changes go over it on the shared WebView, Back returning to it.
+    // conversation opens on it); a page or the changes go over it on the shared WebView, Back returning to it. A web
+    // address names the sandbox by its name and the tail of its id (web/SandboxSegment.kt), read back to its id here.
     private fun openLink(link: AgentLink, snapshot: Snapshot) {
-        val sandbox = link.sandbox ?: snapshot.open
+        val sandbox = link.sandbox?.let { named -> sandboxOfSegment(named, snapshot.sandboxes)?.id ?: named } ?: snapshot.open
         if (sandbox != null && sandbox != snapshot.open) {
             Calls.send(Request.OpenSandbox(RequestOpenSandboxInner(sandbox = sandbox)))
         }

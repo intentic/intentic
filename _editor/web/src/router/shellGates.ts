@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { sandboxOfSegment } from "@intentic/sandbox-contract/app-routes";
 import type { RouteLocationNormalized, RouteLocationRaw, Router } from "vue-router";
 import { t } from "@intentic/ui/i18n";
 import { nothingToOpen } from "../app/environments/nothingToOpen";
@@ -6,7 +7,7 @@ import { openOnProject } from "../app/projectScope";
 import { useAuth } from "../client/auth/useAuth";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { homePath, routeSandbox, toTop } from "../lib/routes/links";
+import { routeSegment, segmentOf, toHome, toTop } from "../lib/routes/links";
 import { routeChoosesSandbox, sandboxEntryPath } from "../models/sandbox/sandboxScreen";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
@@ -58,35 +59,46 @@ export const openNamedSandbox = (to: SandboxArrivalRoute): Promise<true | RouteL
  * sandbox the desktop app has just made; any other is said to be not on the account, and the same page of the sandbox
  * open before is shown instead, or Home with none. A list that cannot be had is the shell gate's to say (settleGate), so
  * the address is taken as it stands meanwhile.
+ *
+ * The address names the sandbox by its name and the tail of its id (lib/routes/links.ts `segmentOf`), and one written
+ * otherwise (the whole id an older link or the daemon's push carries, a name since changed) is replaced by the address
+ * as it is written now, so the bar always shows the sandbox's current name.
  */
 export const selectRouteSandbox = async (to: RouteLocationNormalized): Promise<true | RouteLocationRaw> => {
-    const named = routeSandbox(to);
-    if (named === undefined) {
+    const written = routeSegment(to);
+    if (written === undefined) {
         return true;
     }
     const { sandboxes, activeSandboxId, list, refresh, select } = useSandbox();
     routeChoosesSandbox();
-    const lists = (rows: readonly SandboxSummary[]): boolean => rows.some((row) => row.id === named);
-    if (!lists(sandboxes.value)) {
+    const named = (rows: readonly SandboxSummary[]): SandboxSummary | undefined => sandboxOfSegment(written, rows);
+    let rows: readonly SandboxSummary[] = sandboxes.value;
+    let found = named(rows);
+    if (found === undefined) {
         // allow(silent-catch): a list the platform could not give is said by the shell's gate, not here.
-        const rows = await list().catch(() => undefined);
+        const listed = await list().catch(() => undefined);
         // allow(silent-catch): as above.
-        const fresh = rows === undefined || lists(rows) ? rows : await refresh().catch(() => undefined);
+        const fresh = listed === undefined || named(listed) !== undefined ? listed : await refresh().catch(() => undefined);
         if (fresh === undefined) {
             return true;
         }
-        if (!lists(fresh)) {
+        rows = fresh;
+        found = named(fresh);
+        if (found === undefined) {
             reportMissing();
             const before = activeSandboxId.value;
-            return before === undefined || before === named || to.name === undefined || to.name === null
-                ? homePath()
-                : { name: to.name, params: { ...to.params, sandbox: before }, query: to.query, hash: to.hash };
+            return before === undefined || before === written || to.name === undefined || to.name === null
+                ? toHome()
+                : { name: to.name, params: { ...to.params, sandbox: segmentOf(before, fresh) }, query: to.query, hash: to.hash };
         }
     }
-    if (activeSandboxId.value !== named) {
-        select(named);
+    if (activeSandboxId.value !== found.id) {
+        select(found.id);
     }
-    return true;
+    const current = segmentOf(found.id, rows);
+    return current === written || to.name === undefined || to.name === null
+        ? true
+        : { name: to.name, params: { ...to.params, sandbox: current }, query: to.query, hash: to.hash };
 };
 
 /**

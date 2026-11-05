@@ -1,7 +1,6 @@
-import { homePath, insidePath } from "@intentic/sandbox-contract/app-routes";
 import type { LocationQuery } from "vue-router";
 import { activeSandboxId } from "../app/storage/activeSandbox";
-import { here, page, type PageLink, pageOf, type RouteRead, routeSandbox } from "../lib/routes/links";
+import { here, page, type PageLink, pageOf, type RouteRead, routeSandbox, toHome, toInside } from "../lib/routes/links";
 
 // Where a link naming a conversation opens it. The daemon's push notifications point at `/?conversation=<id>`
 // (sandbox push/notifications.ts, which promises to match this), and so does each of the desktop app's notifications
@@ -26,7 +25,7 @@ const placed = (link: PageLink, route: RouteRead | undefined): string => {
         return here(link, route);
     }
     const sandbox = (route === undefined ? undefined : routeSandbox(route)) ?? activeSandboxId.value;
-    return sandbox === undefined ? homePath() : insidePath(sandbox, link);
+    return sandbox === undefined ? toHome() : toInside(sandbox, link);
 };
 
 export const conversationRedirect = (query: LocationQuery, surface: ConversationSurface, route?: RouteRead): string | undefined => {

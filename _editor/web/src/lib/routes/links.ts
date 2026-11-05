@@ -8,13 +8,16 @@ import {
     legacyTarget,
     type LinkQuery,
     localPath,
+    type NamedSandbox,
     type PageLink,
     type PageName,
     parseAppPath,
+    sandboxOfSegment,
+    sandboxSegment,
     topPath,
     type TopPageName,
 } from "@intentic/sandbox-contract/app-routes";
-import { shallowRef } from "vue";
+import { type Ref, shallowRef } from "vue";
 import type { RouteLocationNormalizedLoaded, Router } from "vue-router";
 import { localFace } from "../../app/environments/local";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
@@ -23,12 +26,11 @@ import { activeSandboxId } from "../../app/storage/activeSandbox";
 // (@intentic/sandbox-contract/app-routes), and the editor makes it here: in the frame and the sandbox the reader is
 // looking at (`here`), or in a frame named outright (`toInside`, `toHome`), and the route read back the same way
 // (`frameOf`, `pageOf`, `routeSandbox`). The address says which frame and which sandbox, so these read the route and
-// nothing else: no window's memory decides what a link opens.
+// nothing else: no window's memory decides what a link opens. The sandbox is written by its name and the tail of its id
+// (`/s/intentic-zi4n3i/agents`, sandbox-segment.ts) and read back to its id, so the rest of the app only ever holds ids.
 
 export {
     type FrameKind,
-    homePath,
-    insidePath,
     isSandboxPage,
     type LinkQuery,
     page,
@@ -74,10 +76,39 @@ export const pageOf = (route: RouteRead): PageName | undefined => route.meta.pag
 /** Whether a route draws that page, in whichever frame. */
 export const isPage = (route: RouteRead, name: PageName): boolean => pageOf(route) === name;
 
-/** The sandbox a route's address names, if it names one. */
-export const routeSandbox = (route: Pick<RouteRead, `params`>): string | undefined => {
+// The account's sandboxes as the shell lists them, handed in by client/sandbox/useSandbox.ts, since this layer may not
+// import that one: what an address names a sandbox among. Empty until the list is in, when every sandbox is written by
+// its whole id, which reads back as well.
+// allow(module-state): the account's list, as its owner hands it in
+const listed = shallowRef<Readonly<Ref<readonly NamedSandbox[]>>>();
+
+/** Hands this module the account's sandbox list; useSandbox's to call. */
+export const nameSandboxesFrom = (list: Readonly<Ref<readonly NamedSandbox[]>>): void => {
+    listed.value = list;
+};
+
+const listedSandboxes = (): readonly NamedSandbox[] => listed.value?.value ?? [];
+
+/** The segment an address names a sandbox by (`intentic-zi4n3i`); its whole id while the list does not have it. */
+export const segmentOf = (sandbox: string, rows: readonly NamedSandbox[] = listedSandboxes()): string => {
+    const row = rows.find((entry) => entry.id === sandbox);
+    return row === undefined ? sandbox : sandboxSegment(row, rows);
+};
+
+/** The id of the sandbox an address's segment names; the segment as it stands while no listed sandbox answers to it. */
+export const sandboxOfAddress = (segment: string, rows: readonly NamedSandbox[] = listedSandboxes()): string =>
+    sandboxOfSegment(segment, rows)?.id ?? segment;
+
+/** The sandbox segment of a route's address as it is written (`intentic-zi4n3i`), if it names one. */
+export const routeSegment = (route: Pick<RouteRead, `params`>): string | undefined => {
     const named = [route.params[`sandbox`]].flat()[0];
     return named === undefined || named === `` ? undefined : named;
+};
+
+/** The id of the sandbox a route's address names, if it names one. */
+export const routeSandbox = (route: Pick<RouteRead, `params`>): string | undefined => {
+    const named = routeSegment(route);
+    return named === undefined ? undefined : sandboxOfAddress(named);
 };
 
 // A desktop window on a folder (router/localRoutes.ts) has two of the shell's pages under addresses of its own: the
@@ -108,26 +139,29 @@ export const here = (link: PageLink, route: RouteRead | undefined = currentRoute
     const frame = route === undefined ? undefined : frameOf(route);
     const sandbox = (route === undefined ? undefined : routeSandbox(route)) ?? activeSandboxId.value;
     if (!isSandboxPage(link.page)) {
-        return frame === `inside` && sandbox !== undefined ? insidePath(sandbox, link) : homePath(undefined, link);
+        return frame === `inside` && sandbox !== undefined ? toInside(sandbox, link) : homePath(undefined, link);
     }
     if (sandbox === undefined) {
         return homePath();
     }
-    return frame === `home` ? homePath(sandbox, link) : insidePath(sandbox, link);
+    return frame === `home` ? toHome(sandbox, link) : toInside(sandbox, link);
 };
 
 /** A link's address in the frame of a route (the current one unless another is named), of another sandbox named. */
 export const hereIn = (sandbox: string, link: PageLink, route: RouteRead | undefined = currentRoute()): string =>
-    !isSandboxPage(link.page) || route === undefined || frameOf(route) !== `home` ? insidePath(sandbox, link) : homePath(sandbox, link);
+    !isSandboxPage(link.page) || route === undefined || frameOf(route) !== `home` ? toInside(sandbox, link) : toHome(sandbox, link);
 
-/** A link's address inside a sandbox; the sandbox's own landing with no page. */
-export const toInside = (sandbox: string, link?: PageLink): string => insidePath(sandbox, link);
+/** A link's address inside a sandbox, named by its id; the sandbox's own landing with no page. */
+export const toInside = (sandbox: string, link?: PageLink): string => insidePath(segmentOf(sandbox), link);
 
-/** A link's address in Home's frame: a sandbox's page, its home conversation with no page, Home itself with neither. */
-export const toHome = (sandbox?: string, link?: PageLink): string => homePath(sandbox, link);
+/**
+ * A link's address in Home's frame, the sandbox named by its id: a sandbox's page, its home conversation with no page,
+ * Home itself with neither.
+ */
+export const toHome = (sandbox?: string, link?: PageLink): string => homePath(sandbox === undefined ? undefined : segmentOf(sandbox), link);
 
-/** A floating window's address: one panel of one sandbox. */
-export const toFloating = (sandbox: string, panel: FloatingPanel): string => floatingPath(sandbox, panel);
+/** A floating window's address: one panel of one sandbox, named by its id. */
+export const toFloating = (sandbox: string, panel: FloatingPanel): string => floatingPath(segmentOf(sandbox), panel);
 
 /** A page that is no sandbox's: `/login`, `/invite/<token>`. */
 export const toTop = (name: TopPageName, params?: Readonly<Record<string, string | undefined>>, query?: LinkQuery): string =>
