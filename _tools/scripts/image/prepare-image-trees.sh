@@ -218,6 +218,8 @@ fi
 # BOUNDED, because this is where a build was seen to hang for good: on rog, 2026-10-26, four rebuilds had sat in this
 # very `docker buildx build` for one to five days, holding their sessions and everything they started. A cold starter is
 # minutes; half an hour is a hang, and it then fails like any other step. Unbounded where there is no `timeout` (macOS).
+# The hang seen since was BuildKit's local exporter deadlocking on the starter's ~43k files (moby/buildkit#2950), which
+# is why the build now hands back two tars instead of the trees (starter.Dockerfile); the bound stays for whatever is next.
 starter_bound=()
 if command -v timeout >/dev/null 2>&1; then
     starter_bound=(timeout --kill-after=30 1800)
@@ -225,10 +227,13 @@ fi
 buildkit_retry "${starter_bound[@]}" docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
     "${starter_args[@]}" \
     --output "type=local,dest=$starter_build" _sandbox/sandbox/starter
-[ -f "$starter_build/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }
-mv "$starter_build/starter" "$out/layers/starter"
-mv "$starter_build/pnpm-metadata" "$out/layers/pnpm-metadata"
-rmdir "$starter_build"
+for tree in starter pnpm-metadata; do
+    [ -f "$starter_build/$tree.tar" ] || { echo "the starter build handed back no $tree.tar" >&2; exit 1; }
+    mkdir -p "$out/layers/$tree"
+    tar -xpf "$starter_build/$tree.tar" --no-same-owner -C "$out/layers/$tree"
+done
+rm -rf "$starter_build"
+[ -f "$out/layers/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }
 cp -R _sandbox/sandbox/starter-site/. "$out/layers/starter/opt/starter/_apps/landing/"
 normalize_times "$out/layers/starter"
 echo "image trees ready in $out/"

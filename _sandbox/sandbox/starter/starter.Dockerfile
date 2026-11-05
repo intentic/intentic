@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build the starter separately into .image-out/layers/starter; normalize volatile pnpm metadata so identical inputs retain a layer digest.
 # Match sandbox Node, pnpm, Debian and absolute store paths so native binaries and seeded store references work in the runtime image.
-# prepare-image-trees.sh exports the local layer; the sandbox Dockerfile copies it from the named trees context.
+# prepare-image-trees.sh exports it as two tars and unpacks them; the sandbox Dockerfile copies the trees context.
 FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS build
 # git: the scaffold inits the repo it lays down (dropped below; the daemon inits its own). curl: pnpm's installer.
 # libatomic1: the template's own pnpm (11, which pnpm 12 fetches for it) is a binary that links it; the image has it
@@ -52,6 +52,11 @@ RUN --mount=type=tmpfs,target=/root/.cache/pnpm \
     done \
     && chmod 700 /meta/root
 
+# TWO TARS, NOT TWO TREES. prepare-image-trees.sh exports this stage to a local directory, and BuildKit's local exporter
+# deadlocks on a tree of tens of thousands of files (moby/buildkit#2950: gRPC flow control, likelier on a loaded
+# machine). On rog, 2026-11-05, it created all 43,166 files, filled 2,549 of them and sat until the bound killed it;
+# a one-file export in the same run went through at once. GNU tar keeps the store's hard links, modes and mtimes.
+RUN mkdir /out && tar -C /layer -cf /out/starter.tar . && tar -C /meta -cf /out/pnpm-metadata.tar .
+
 FROM scratch
-COPY --from=build /layer/ /starter/
-COPY --from=build /meta/ /pnpm-metadata/
+COPY --from=build /out/ /
