@@ -6,8 +6,8 @@ import type { Emit } from "./text.js";
 // Person names, from the first-name and surname registers with Polish inflection, read in context. A word the lists
 // know is never a name by itself: almost every first name is also a word somewhere ("Mark", "Max", "Luna"), a title,
 // a button label or the start of a sentence. A find needs a first name with a surname that is no ordinary word, in
-// either order, or a context that says a person is named: a title before it, a person's field around it, a personal
-// address after it.
+// either order, a first name no word shares right before a registered surname that is a word too ("Aleksandra Wilk"),
+// or a context that says a person is named: a title before it, a person's field around it, a personal address after it.
 
 // One run of capitalized words joined by spaces or cell separators, and what the rules need to read it.
 interface Run {
@@ -108,8 +108,9 @@ const PROSE_AFTER = /^ \p{Ll}/u;
 const namesThing = (run: Run, last: number): boolean => run.joins[last] === "space" && run.tokens[last + 1]?.thing === true;
 
 // First name and surname: "Jan Kowalski", "Annie Kowalskiej", "Jan|Kowalski" in a row. The surname must be one no word
-// shares (a listed surname that is not an ordinary word, or a -ski, -cki, -wicz or -czyk form): a capitalized word the
-// lists do not know may be anything ("Natalia Restaurant"), and a first name followed by nothing is no find at all.
+// shares (a listed surname that is not an ordinary word, or a -ski, -cki, -wicz or -czyk form), or a registered one
+// beside a first name no word shares: a capitalized word the lists do not know may be anything ("Natalia Restaurant"),
+// and a first name followed by nothing is no find at all.
 // When the first names run on with no surname after them, the last of them may itself be a surname: "Anna Bartosz".
 const firstName: Rule = (run, at, token) => {
     if (!token.first) {
@@ -123,6 +124,11 @@ const firstName: Rule = (run, at, token) => {
     // list of first names.
     const next = run.tokens[last + 1];
     if (next?.surnameStrong === true && (run.joins[last] === "space" || (!next.first && next.line.data))) {
+        return report(run, at, last + 1);
+    }
+    // A registered surname that is also a word completes a first name no word shares, written right beside it:
+    // "Aleksandra Wilk", "Natalia Król". The first name vouches for the pair; an ambiguous one does not ("Will Power").
+    if (next?.surname === true && run.joins[last] === "space" && run.tokens.slice(at, last + 1).some((part) => part.firstStrong) && !namesThing(run, last + 1)) {
         return report(run, at, last + 1);
     }
     if (last > at && run.tokens[last]?.surnameStrong === true) {

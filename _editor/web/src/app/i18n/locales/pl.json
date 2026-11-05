@@ -5997,14 +5997,14 @@
             "dictionaryFound": "Napisane samodzielnie wielką literą, „{word}” jest maskowane jako imię lub nazwisko.",
             "dictionaryHandWritten": "spisane ręcznie",
             "dictionaryInflected": "w każdej formie odmiany",
-            "dictionaryIntro": "Imiona i nazwiska są rozpoznawane według tych list, na tym komputerze. Żadne słowo nie jest maskowane samo: imię jest maskowane tylko razem z nazwiskiem, które nie jest zwykłym słowem w żadnym języku, w dowolnej kolejności, albo po tytule (Pan, dr, Mr) lub w polu z imieniem. Wyłącz listę, której Twoje dane nie potrzebują, albo dodaj własne listy.",
+            "dictionaryIntro": "Imiona i nazwiska są rozpoznawane według tych list, na tym komputerze. Żadne słowo nie jest maskowane samo: imię jest maskowane tylko razem z nazwiskiem, które nie jest zwykłym słowem w żadnym języku, w dowolnej kolejności, tuż przed nazwiskiem z listy, które jest też słowem, gdy samo imię słowem nie jest (Aleksandra Wilk), albo po tytule (Pan, dr, Mr) lub w polu z imieniem. Wyłącz listę, której Twoje dane nie potrzebują, albo dodaj własne listy.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Nigdy nie są nazwiskiem, które dopełnia imię; maskowane tylko po tytule lub w polu z imieniem.",
+                    "note": "Dopełniają imię tylko tuż po imieniu, które nie jest słowem (Aleksandra Wilk); poza tym maskowane tylko po tytule lub w polu z imieniem.",
                     "title": "Angielskie imiona będące też słowami"
                 },
                 "ambiguousPl": {
-                    "note": "Nigdy nie są nazwiskiem, które dopełnia imię; maskowane tylko po tytule lub w polu z imieniem.",
+                    "note": "Dopełniają imię tylko tuż po imieniu, które nie jest słowem (Aleksandra Wilk); poza tym maskowane tylko po tytule lub w polu z imieniem.",
                     "title": "Polskie imiona będące też słowami"
                 },
                 "commonWords": {

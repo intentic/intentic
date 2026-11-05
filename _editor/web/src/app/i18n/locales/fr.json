@@ -6595,14 +6595,14 @@
             "dictionaryFound": "Seul et avec une majuscule, « {word} » est masqué comme un nom.",
             "dictionaryHandWritten": "écrite à la main",
             "dictionaryInflected": "toutes les formes fléchies",
-            "dictionaryIntro": "Les noms sont repérés grâce à ces listes, sur cette machine. Aucun mot n'est masqué seul : un prénom n'est masqué qu'avec un nom de famille qui n'est un mot courant dans aucune langue, dans un ordre ou l'autre, ou après un titre (Mr, Dr, Pan) ou dans un champ de nom. Désactivez une liste inutile pour vos données, ou ajoutez vos propres listes.",
+            "dictionaryIntro": "Les noms sont repérés grâce à ces listes, sur cette machine. Aucun mot n'est masqué seul : un prénom n'est masqué qu'avec un nom de famille qui n'est un mot courant dans aucune langue, dans un ordre ou l'autre, juste avant un nom de famille listé qui est aussi un mot quand le prénom n'en est pas un (Aleksandra Wilk), ou après un titre (Mr, Dr, Pan) ou dans un champ de nom. Désactivez une liste inutile pour vos données, ou ajoutez vos propres listes.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Jamais pris comme le nom de famille qui complète un nom ; masqué seulement après un titre ou dans un champ de nom.",
+                    "note": "Complète un nom seulement juste après un prénom qui n'est pas un mot (Aleksandra Wilk) ; sinon masqué seulement après un titre ou dans un champ de nom.",
                     "title": "Noms anglais qui sont aussi des mots"
                 },
                 "ambiguousPl": {
-                    "note": "Jamais pris comme le nom de famille qui complète un nom ; masqué seulement après un titre ou dans un champ de nom.",
+                    "note": "Complète un nom seulement juste après un prénom qui n'est pas un mot (Aleksandra Wilk) ; sinon masqué seulement après un titre ou dans un champ de nom.",
                     "title": "Noms polonais qui sont aussi des mots"
                 },
                 "commonWords": {

@@ -8,7 +8,8 @@ Finds personal data in any text on this machine, with no model and no network: t
   where identifiers must stay readable.
 - Identifiers are held to their own algorithms (PESEL, NIP, Polish ID cards and passports, IBAN and NRB accounts, Luhn with an
   issuer's prefix), so a run of digits is a find only when its checksum says so.
-- A name is masked only as a name: a first name with a surname that is no ordinary word, or what a title, a field for
+- A name is masked only as a name: a first name with a surname that is no ordinary word, a first name no word shares
+  right before a registered surname that is also a word (Aleksandra Wilk, Natalia Król), or what a title, a field for
   a part of a name or a personal mail address vouches for. The lists under `src/data/` are generated from public name
   and word corpora by the `generate*.mjs` scripts beside them, run by hand.
 - The owner adjusts the lists in the privacy shield's policy: any list in `name-lists.ts` can be switched off, and

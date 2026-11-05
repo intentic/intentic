@@ -6595,14 +6595,14 @@
             "dictionaryFound": "Con mayúscula y por sí sola, «{word}» se enmascara como nombre.",
             "dictionaryHandWritten": "escrita a mano",
             "dictionaryInflected": "todas las formas flexionadas",
-            "dictionaryIntro": "Los nombres se detectan con estas listas, en esta máquina. Ninguna palabra se enmascara por sí sola: un nombre de pila solo se enmascara junto con un apellido que no sea una palabra corriente en ningún idioma, en cualquier orden, o tras un tratamiento (Mr, Dr, Pan) o en un campo de nombre. Desactiva las listas que tus datos no necesiten, o añade listas propias.",
+            "dictionaryIntro": "Los nombres se detectan con estas listas, en esta máquina. Ninguna palabra se enmascara por sí sola: un nombre de pila solo se enmascara junto con un apellido que no sea una palabra corriente en ningún idioma, en cualquier orden, justo antes de un apellido de la lista que también es una palabra cuando el nombre de pila no lo es (Aleksandra Wilk), o tras un tratamiento (Mr, Dr, Pan) o en un campo de nombre. Desactiva las listas que tus datos no necesiten, o añade listas propias.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Nunca se toman como el apellido que completa un nombre; solo se enmascaran tras un tratamiento o en un campo de nombre.",
+                    "note": "Completan un nombre solo justo después de un nombre de pila que no es una palabra (Aleksandra Wilk); si no, solo se enmascaran tras un tratamiento o en un campo de nombre.",
                     "title": "Nombres ingleses que también son palabras"
                 },
                 "ambiguousPl": {
-                    "note": "Nunca se toman como el apellido que completa un nombre; solo se enmascaran tras un tratamiento o en un campo de nombre.",
+                    "note": "Completan un nombre solo justo después de un nombre de pila que no es una palabra (Aleksandra Wilk); si no, solo se enmascaran tras un tratamiento o en un campo de nombre.",
                     "title": "Nombres polacos que también son palabras"
                 },
                 "commonWords": {

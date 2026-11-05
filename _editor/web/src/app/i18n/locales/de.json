@@ -6595,14 +6595,14 @@
             "dictionaryFound": "Großgeschrieben und für sich allein wird „{word}“ als Name maskiert.",
             "dictionaryHandWritten": "von Hand geschrieben",
             "dictionaryInflected": "jede gebeugte Form",
-            "dictionaryIntro": "Namen werden über diese Listen gefunden, auf diesem Rechner. Kein Wort wird für sich allein maskiert: Ein Vorname wird nur zusammen mit einem Nachnamen maskiert, der in keiner Sprache ein gewöhnliches Wort ist, in beliebiger Reihenfolge, oder nach einer Anrede (Mr, Dr, Pan) oder in einem Namensfeld. Schalten Sie eine Liste aus, mit der Ihre Daten nichts anfangen, oder fügen Sie eigene Listen hinzu.",
+            "dictionaryIntro": "Namen werden über diese Listen gefunden, auf diesem Rechner. Kein Wort wird für sich allein maskiert: Ein Vorname wird nur zusammen mit einem Nachnamen maskiert, der in keiner Sprache ein gewöhnliches Wort ist, in beliebiger Reihenfolge, direkt vor einem gelisteten Nachnamen, der auch ein Wort ist, wenn der Vorname selbst kein Wort ist (Aleksandra Wilk), oder nach einer Anrede (Mr, Dr, Pan) oder in einem Namensfeld. Schalten Sie eine Liste aus, mit der Ihre Daten nichts anfangen, oder fügen Sie eigene Listen hinzu.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Nie als Nachname gewertet, der einen Namen vervollständigt; nur nach einer Anrede oder in einem Namensfeld maskiert.",
+                    "note": "Vervollständigt einen Namen nur direkt nach einem Vornamen, der kein Wort ist (Aleksandra Wilk); sonst nur nach einer Anrede oder in einem Namensfeld maskiert.",
                     "title": "Englische Namen, die auch Wörter sind"
                 },
                 "ambiguousPl": {
-                    "note": "Nie als Nachname gewertet, der einen Namen vervollständigt; nur nach einer Anrede oder in einem Namensfeld maskiert.",
+                    "note": "Vervollständigt einen Namen nur direkt nach einem Vornamen, der kein Wort ist (Aleksandra Wilk); sonst nur nach einer Anrede oder in einem Namensfeld maskiert.",
                     "title": "Polnische Namen, die auch Wörter sind"
                 },
                 "commonWords": {

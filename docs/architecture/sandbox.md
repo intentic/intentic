@@ -335,6 +335,11 @@ The Changes panel stages everything and commits everything as runs, the push's s
   sixteen digits passes Luhn with an issuer's prefix. Most of the cards in the vault were such places. The card
   detector and the vault's matcher both skip a run that continues a decimal, read by its point only: a comma before a
   card is a CSV cell separator far more often.
+- (2026-11-05) A first name no word shares now vouches for a registered surname that is a word too, written right
+  beside it: "Aleksandra Wilk", "Natalia Król", "Kamil Baran" are masked. A Polish test document of ten profiles had
+  four of its ten names (Wilk, Baran, Król, Wrona: wolf, ram, king, crow) sent in the clear. An ambiguous first name
+  ("Will Power"), a word no register lists after the first name ("Natalia Restaurant"), and a thing's noun after the pair
+  ("Victoria Station") still make no name, and a cell separator between the two still needs a surname no word shares.
 - A runtime it cannot read at all (an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), and a conversation or a child agent
   placed on a runner runs there only on a trusted provider, since a runner calls its provider from its own machine. A native app's push and a public share carry the kind of data instead of the data; a share's

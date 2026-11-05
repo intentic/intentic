@@ -6595,14 +6595,14 @@
             "dictionaryFound": "Capitalized on its own, “{word}” is masked as a name.",
             "dictionaryHandWritten": "written by hand",
             "dictionaryInflected": "every inflected form",
-            "dictionaryIntro": "Names are found by these lists, on this machine. No word is masked on its own: a first name is masked only together with a surname that is no ordinary word in any language, in either order, or after a title (Mr, Dr, Pan) or in a name field. Switch off a list your data has no use for, or add lists of your own.",
+            "dictionaryIntro": "Names are found by these lists, on this machine. No word is masked on its own: a first name is masked only together with a surname that is no ordinary word in any language, in either order, right before a listed surname that is also a word when the first name itself is no word (Aleksandra Wilk), or after a title (Mr, Dr, Pan) or in a name field. Switch off a list your data has no use for, or add lists of your own.",
             "dictionaryLists": {
                 "ambiguousEn": {
-                    "note": "Never taken as the surname that completes a name; masked only after a title or in a name field.",
+                    "note": "Completes a name only right after a first name that is no word (Aleksandra Wilk); otherwise masked only after a title or in a name field.",
                     "title": "English names that are also words"
                 },
                 "ambiguousPl": {
-                    "note": "Never taken as the surname that completes a name; masked only after a title or in a name field.",
+                    "note": "Completes a name only right after a first name that is no word (Aleksandra Wilk); otherwise masked only after a title or in a name field.",
                     "title": "Polish names that are also words"
                 },
                 "commonWords": {

@@ -96,6 +96,19 @@ describe("first name and surname", () => {
         expect(names("Luna Kowalska przyszła.")).toEqual(["Luna Kowalska"]);
     });
 
+    // Wilk, Król, Baran, Young are registered surnames that are also words: a first name no word shares vouches for them.
+    test("a registered surname that is also a word completes a first name no word shares", () => {
+        expect(names("## 01 Aleksandra Wilk")).toEqual(["Aleksandra Wilk"]);
+        expect(names("Natalia Król przyszła, a Kamil Baran nie.")).toEqual(["Natalia Król", "Kamil Baran"]);
+        expect(names("Rozmawiałem z Aleksandrą Wilk.")).toEqual(["Aleksandrą Wilk"]);
+        expect(names("Michael Young wrote it.")).toEqual(["Michael Young"]);
+        // An ambiguous first name vouches for nothing, and a thing's noun after the pair makes it the thing's.
+        expect(names("Will Power and Grace Hopper")).toEqual([]);
+        expect(names("Kevin Rose, Piotr Wielki, Victoria Station")).toEqual([]);
+        // Across a cell separator the surname must still be no word.
+        expect(names("Aleksandra | Wilk")).toEqual([]);
+    });
+
     test("English names", () => {
         expect(names("Yesterday John Smith sent the report to Sarah Johnson.")).toEqual(["John Smith", "Sarah Johnson"]);
     });
