@@ -40,6 +40,20 @@ export const activeAt = (tops: readonly number[], scrollTop: number, atEnd: bool
     return active;
 };
 
+/** A clicked outline row and the scrollTop its jump landed on. */
+export interface Pin {
+    readonly index: number;
+    readonly scrollTop: number;
+}
+
+/**
+ * Whether a clicked row still names the section. A heading near the end can't scroll to the top, so position alone
+ * would mark a later one (the last, at the bottom) and the click would light a row nobody asked for. The click holds
+ * until the reader scrolls away from where it put them, or the heading is gone.
+ */
+export const pinHolds = (pin: Pin | undefined, count: number, scrollTop: number): pin is Pin =>
+    pin !== undefined && pin.index < count && Math.abs(scrollTop - pin.scrollTop) <= END_SLACK;
+
 /** How far through the document the reader is, 0-1; a document that fits its pane is fully read. */
 export const progressAt = (scrollTop: number, scrollHeight: number, clientHeight: number): number => {
     const travel = scrollHeight - clientHeight;
@@ -123,6 +137,7 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
     let watched: Element | undefined;
     let measureFrame: number | undefined;
     let trackFrame: number | undefined;
+    let pinned: Pin | undefined; // last outline click; outranks scroll position while `pinHolds`
 
     // Where the reader is, from the numbers alone; cheap enough to run on every scroll frame.
     const track = (): void => {
@@ -131,7 +146,8 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
             return;
         }
         const travel = view.scrollHeight - view.clientHeight;
-        active.value = activeAt(tops, view.scrollTop, travel - view.scrollTop <= END_SLACK);
+        pinned = pinHolds(pinned, tops.length, view.scrollTop) ? pinned : undefined;
+        active.value = pinned?.index ?? activeAt(tops, view.scrollTop, travel - view.scrollTop <= END_SLACK);
         progress.value = progressAt(view.scrollTop, view.scrollHeight, view.clientHeight);
         scrollable.value = travel > END_SLACK;
     };
@@ -203,6 +219,8 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
             return;
         }
         view.scrollTop = Math.max(0, top - JUMP_INSET);
+        pinned = { index, scrollTop: view.scrollTop }; // read back: the browser clamps a target past the bottom
+        track();
     };
 
     watch(
@@ -219,8 +237,7 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
             mutations = new MutationObserver(scheduleMeasure);
             mutations.observe(view, { childList: true, subtree: true });
             resizes = new ResizeObserver(scheduleMeasure);
-            // The pane itself; a narrower column re-wraps the prose and moves every heading in it.
-            resizes.observe(view);
+            resizes.observe(view); // the pane itself: a narrower column re-wraps the prose and moves every heading
             measure();
         },
         { immediate: true, flush: `post` },
@@ -228,11 +245,8 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
 
     onBeforeUnmount(() => {
         detach(element());
-        if (measureFrame !== undefined) {
-            cancelAnimationFrame(measureFrame);
-        }
-        if (trackFrame !== undefined) {
-            cancelAnimationFrame(trackFrame);
+        for (const frame of [measureFrame, trackFrame].filter((pending) => pending !== undefined)) {
+            cancelAnimationFrame(frame);
         }
     });
 

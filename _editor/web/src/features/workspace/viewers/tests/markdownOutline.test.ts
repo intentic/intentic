@@ -1,6 +1,6 @@
 // Arithmetic behind the markdown preview's outline rail: which section is active, which headings exist.
 import "@intentic/testing/dom";
-import { activeAt, matchHeadings, progressAt, readHeadings, type OutlineHeading } from "../markdownOutline";
+import { activeAt, matchHeadings, pinHolds, progressAt, readHeadings, type OutlineHeading } from "../markdownOutline";
 
 const container = (html: string): HTMLElement => {
     const view = document.createElement(`div`);
@@ -71,6 +71,25 @@ describe(`activeAt`, () => {
     it(`has no answer for a document with no headings`, () => {
         expect(activeAt([], 0, false)).toBe(-1);
         expect(activeAt([], 0, true)).toBe(-1);
+    });
+});
+
+describe(`pinHolds`, () => {
+    // A jump to a heading near the end lands clamped at the bottom, where position alone would name the last section.
+    const pin = { index: 1, scrollTop: 400 };
+
+    it(`keeps the clicked row while the reader stays where the jump put them`, () => {
+        expect(pinHolds(pin, 3, 400)).toBe(true);
+        expect(pinHolds(pin, 3, 401.5)).toBe(true);
+    });
+
+    it(`lets go once the reader scrolls away`, () => {
+        expect(pinHolds(pin, 3, 380)).toBe(false);
+    });
+
+    it(`lets go when the heading is gone, or nothing was clicked`, () => {
+        expect(pinHolds(pin, 1, 400)).toBe(false);
+        expect(pinHolds(undefined, 3, 400)).toBe(false);
     });
 });
 
