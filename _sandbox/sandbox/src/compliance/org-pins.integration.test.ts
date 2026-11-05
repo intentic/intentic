@@ -155,7 +155,8 @@ describe("a person's save that would undo a pin", () => {
     it("is refused by the settings route and the privacy route, naming the pinned items", async () => {
         const orgPolicy = await holder(policy(["judge", "privacy"]));
         expect(await settingsPinRefusal(orgPolicy, LOOSE)).toMatchObject({ reason: "org-pinned", items: ["commandJudge"], org: "Urząd Gminy" });
-        expect(await settingsPinRefusal(orgPolicy, SandboxSettingsSchema.parse({}))).toBeUndefined();
+        // A save that keeps the pinned judge goes through; the default alone would not, since the judge is off by default.
+        expect(await settingsPinRefusal(orgPolicy, SandboxSettingsSchema.parse({ commandJudge: "on" }))).toBeUndefined();
         const off = PrivacyShieldPolicySchema.parse({ mode: "off" });
         expect(await privacyPinRefusal(orgPolicy, off, async () => false)).toMatchObject({ reason: "org-pinned", items: ["privacy.mode"] });
         const client = clientFor(createApp(services({ orgPolicy })));

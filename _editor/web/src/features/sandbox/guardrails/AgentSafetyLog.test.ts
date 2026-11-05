@@ -50,6 +50,8 @@ afterEach(() => {
 
 describe(`AgentSafetyLog`, () => {
     it(`shows the empty state when nothing has needed judging`, () => {
+        // A judge that runs and has judged nothing; the default, off, says so instead.
+        settings.value = SandboxSettingsSchema.parse({ commandJudge: `on` });
         const host = mount();
         expect(host.textContent).toContain(`Nothing has needed judging yet`);
     });

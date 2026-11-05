@@ -96,7 +96,7 @@ test("moving the switch writes the mode", async () => {
 
 // A judge explicitly taken off its setup still runs on the standing rule alone.
 test("says the judge has no model when it is taken off its setup", () => {
-    settings.value = SandboxSettingsSchema.parse({ roleSetups: {} });
+    settings.value = SandboxSettingsSchema.parse({ commandJudge: `on`, roleSetups: {} });
     const host = mount();
     expect(settings.value.roleSetups[`safety-judge`]).toBeUndefined();
     expect(host.textContent).toContain(`No model is set for the judge`);
@@ -108,7 +108,8 @@ test("says the judge has no model when it is taken off its setup", () => {
 });
 
 test("a model pinned on the Models tab is the one this row names", async () => {
-    settings.value = { ...settings.value, ...setupsFromRoleLists({ "safety-judge": [{ provider: `codex`, model: `gpt-5.6` }] }) };
+    // The model row shows only while the judge runs, and the default is off.
+    settings.value = { ...settings.value, commandJudge: `on`, ...setupsFromRoleLists({ "safety-judge": [{ provider: `codex`, model: `gpt-5.6` }] }) };
     const host = mount();
     await nextTick();
 
@@ -119,7 +120,7 @@ test("a model pinned on the Models tab is the one this row names", async () => {
 });
 
 test("reads the safety judge's setup rather than another job's", async () => {
-    settings.value = { ...settings.value, ...setupsFromRoleLists({ "commit-message": [{ provider: `codex`, model: `gpt-5.6` }] }) };
+    settings.value = { ...settings.value, commandJudge: `on`, ...setupsFromRoleLists({ "commit-message": [{ provider: `codex`, model: `gpt-5.6` }] }) };
     const host = mount();
     await nextTick();
 
