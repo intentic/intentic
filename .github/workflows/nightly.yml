@@ -911,7 +911,15 @@ jobs:
           clean: false
       - uses: ./.github/actions/pnpm-setup
       # This job is Valgrind's only user, so it installs it rather than ci-base carrying it for every job.
-      - run: apt-get update && apt-get install -y --no-install-recommends valgrind
+      # --error-on=any, because apt-get update exits 0 with every index unfetched and the install then finds no
+      # valgrind (nightly 42008151778, a minute with no route to deb.debian.org): retried before anything is judged.
+      - run: |
+          for delay in 15 45 -; do
+            apt-get update --error-on=any && break
+            [ "$delay" = - ] && exit 1
+            sleep "$delay"
+          done
+          apt-get install -y --no-install-recommends valgrind
       # Four at a time: the host runs six runner processes, and the counts do not depend on the parallelism.
       - run: pnpm perf:instr --jobs 4
 
