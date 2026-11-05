@@ -57,6 +57,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # THE DEPENDENCIES AND THE PINNED GRADLE, KEPT BETWEEN RUNS. A hosted runner starts empty, so every run fetched
+      # AGP's whole tree from Maven Central off the shared hosted-runner addresses Central rate-limits: release 1.398.1's
+      # build died in 20s on "Received status code 429 from server: Too Many Requests" for every artifact (run
+      # 42126994319). Keyed on everything that names a dependency or the Gradle version; a partial hit after a bump
+      # still holds most of the tree. The release job restores the same key.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.cache/intentic-gradle
+          key: device-android-gradle-${{ runner.os }}-${{ hashFiles('_devices/android/**/*.gradle.kts', '_devices/android/gradle.properties', '_devices/android/scripts/gradle.sh') }}
+          restore-keys: device-android-gradle-${{ runner.os }}-
       - name: Test and build both flavors
         run: >-
           bash _devices/android/scripts/gradle.sh --no-daemon
@@ -83,6 +95,14 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # The build job's cache (its comment says why): Maven Central answered this job 429 for every artifact (run 42126994319).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.cache/intentic-gradle
+          key: device-android-gradle-${{ runner.os }}-${{ hashFiles('_devices/android/**/*.gradle.kts', '_devices/android/gradle.properties', '_devices/android/scripts/gradle.sh') }}
+          restore-keys: device-android-gradle-${{ runner.os }}-
       # The version code must only ever grow: major, minor and patch packed into one integer (1.324.2 → 1324002).
       - name: Read the version
         id: version
