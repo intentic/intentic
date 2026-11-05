@@ -96,6 +96,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 :needle="props.needle"
                 :match-case="props.matchCase"
                 :selected="selected(c.conversationId)"
+                :focused="actions.isFocused(c.conversationId)"
                 :attention="laneOfTab(c, agent) === 'attention'"
                 :closable="actions.closable.value"
                 @select="actions.click($event, c.conversationId)"

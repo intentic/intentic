@@ -389,9 +389,9 @@ it(`names a card's diff and its code review apart`, () => {
 // Archive is withheld too: the worktree belongs to a turn about to run in it again.
 it(`draws an agent whose turn is being resumed as work still in flight`, () => {
     const card = mount(ready(`resuming`));
-    // In flight is the corner's ticking elapsed and the card's blade, not a spinner beside it.
+    // In flight is the corner's ticking elapsed, not a spinner beside it; only a selected card sweeps the blade.
     expect(card.querySelector(`[data-card-when="working"]`)).not.toBeNull();
-    expect(card.querySelector(`.session-card-working`)).not.toBeNull();
+    expect((card.querySelector<HTMLElement>(`.session-card`)?.getAttribute(`style`) ?? ``).includes(`--session-card-blade`)).toBe(false);
     expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
 });
 

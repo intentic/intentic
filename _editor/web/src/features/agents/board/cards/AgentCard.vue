@@ -94,8 +94,9 @@ const props = defineProps<{
     dragging?: boolean;
     // Action the board has in flight, withholding every other press; what it did is the card's own drawn standing.
     pending?: PendingAction;
-    // This agent's chat is on screen, one weight regardless of how many columns share it.
+    // This agent's chat is on screen at one weight; `still` when another column has focus: the ring, no blade's sweep.
     selected?: boolean;
+    still?: boolean;
     // Chat is open only as a temporary look (Conversation.peek); the keep press makes it stick.
     peek?: boolean;
     // Evidence for why the board's filter matched; absent when the hit was the title, marked there instead.
@@ -337,12 +338,12 @@ const tileHint = computed((): TooltipValue => {
     };
 });
 const working = computed(() => turnWorking(props.agent));
-// A fresh blade each time this card is selected, so its sweep starts on the click (selectionBlade.ts); a running card
-// sweeps one in the working ink, which with its ticking elapsed is how it says it is at work. Selection outranks it.
-const blade = useSelectionBlade(() => (props.selected === true ? `on` : working.value ? `working` : undefined));
+// A fresh blade each time this card is focused, so its sweep starts on the click (selectionBlade.ts); a running card says it
+// is at work by its ticking elapsed alone, as several cards sweeping at once was more motion than the board could carry.
+const blade = useSelectionBlade(() => props.selected === true && props.still !== true);
 // The "when" for both seats, corner and closing row: they read it, so a tick redraws them, never this card (cardClock.ts).
 const clock = useCardClock(() => props.agent, () => working.value, titleOfAgent);
-// A running card's corner spends no spinner: its elapsed ticks, and the card sweeps.
+// A running card's corner spends no spinner: its elapsed ticks.
 const statusShown = computed(() => cornerStandingShown(props.agent.status) && !(working.value && statusMeta.value.spin === true));
 // Whether a mark can be addressed to this card at all. A registered one keeps its marks in the roster; a draft of this
 // sandbox's keeps the reader's own with the draft (agents.reactDraft) until its first turn carries them onto the card. A
@@ -577,7 +578,7 @@ const grab = (event: PointerEvent): void => {
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
-            selected ? 'session-card-on' : working ? 'session-card-working' : '',
+            selected ? 'session-card-on' : '',
             /* The halo is an outline, which `outline-none` (a utility, so it outranks any component rule) would erase. */
             idMatch?.exact === true ? 'session-card-found' : 'outline-none',
             dragging ? 'opacity-40' : '',

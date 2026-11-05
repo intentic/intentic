@@ -49,6 +49,8 @@ export const createChatRowActions = (host: ChatRowHost) => {
     // Panes exist only on wide surfaces; the docked column is too narrow for a second chat (see ChatPanel).
     const paneable = computed(() => chatWide.value);
     const isSelected = (id: string): boolean => activeId.value === id || showing(id);
+    // The one chat the keyboard is in, among however many columns are on screen.
+    const isFocused = (id: string): boolean => activeId.value === id;
 
     // Plain click switches to just that row; Ctrl/Cmd+click toggles a column beside it; Shift+click ranges from the
     // anchor — the same gestures and verbs as the terminal strip's onSegmentClick.
@@ -227,6 +229,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
 
     return {
         isSelected,
+        isFocused,
         click,
         registerDrawn,
         renamingId,

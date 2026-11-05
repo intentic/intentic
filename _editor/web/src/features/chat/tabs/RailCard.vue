@@ -42,6 +42,9 @@ const props = defineProps<{
     tight?: boolean;
     // True when this card's chat is open in a column: ring and lifted surface, same weight for every open column.
     selected?: boolean;
+    // True for a selected card that is not the focused one (another column's chat): the same ring and wash, without the
+    // blade's sweep, so several open columns never sweep at once.
+    still?: boolean;
     // True when the session needs the user: left-edge bar, kept separate from selection so both can show at once.
     attention?: boolean;
     // True for a container of rows (a workflow run) rather than a row itself; matches its board card's dashed border.
@@ -64,7 +67,7 @@ const props = defineProps<{
 const tick = useNow(() => props.live?.since !== undefined);
 const now = computed(() => sandboxNow(tick.value));
 
-const blade = useSelectionBlade(() => props.selected);
+const blade = useSelectionBlade(() => props.selected && !props.still);
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 // A chip standing for more than its word carries its own hover (a failure's words, when a scheduled card's messages

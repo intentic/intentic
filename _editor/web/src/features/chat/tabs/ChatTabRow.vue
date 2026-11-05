@@ -48,6 +48,8 @@ const props = defineProps<{
     matchCase?: boolean;
     // True when this chat is the focused one or holds a column.
     selected: boolean;
+    // True when this chat is the focused one: only its card sweeps the selection's blade (RailCard.still).
+    focused: boolean;
     // True for a row in the Attention lane: the card's left-edge bar.
     attention: boolean;
     // Whether the × is offered at all; the last open chat keeps no close affordance.
@@ -121,6 +123,7 @@ const closeRow = (event: Event): void => {
         :live="props.view.live"
         tight
         :selected="props.selected"
+        :still="!props.focused"
         :peek="props.conversation.peek.value"
         :attention="props.attention"
         :snippet="props.view.snippet"
