@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runInNewContext } from "node:vm";
+import { Script } from "node:vm";
 import { packageRoot } from "@intentic/constants/node";
 
 const page = readFileSync(join(packageRoot(import.meta.url), `public/offline.html`), `utf8`);
@@ -8,6 +8,10 @@ const script = [...page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script\s*[^>]
 if (script === undefined) {
     throw new Error(`offline.html must contain its recovery script`);
 }
+// Compiled once, outside the timed run: the timeout is wall-clock and only guards against a script that never returns.
+// 1000ms, with the parse inside it, failed the first call on a loaded CI runner (CI 42120070284: 1750ms there, 31ms idle).
+const compiled = new Script(script, { filename: `offline.html` });
+const RUNAWAY_MS = 10_000;
 
 // Run the shipped page's script, with reduced motion and no real timers or network, and record its navigations.
 // `press` is the button pressed once the page is up: Retry, or the offer of this computer's own sandboxes.
@@ -36,8 +40,7 @@ const recovery = async (to: string, origin: string | null = `https://app.intenti
     const fetch = jest.fn(() => {
         throw new Error(`unexpected network request`);
     });
-    runInNewContext(
-        script,
+    compiled.runInNewContext(
         {
             URL,
             URLSearchParams,
@@ -64,7 +67,7 @@ const recovery = async (to: string, origin: string | null = `https://app.intenti
             setInterval: jest.fn(),
             fetch,
         },
-        { timeout: 1000 },
+        { timeout: RUNAWAY_MS },
     );
     const button = element(press).listeners.get(`click`);
     if (press === `retry` && button === undefined) {
