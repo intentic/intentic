@@ -6511,7 +6511,7 @@
             "judgedBy": "Judged by",
             "modelReadsPolicy": "Which model reads the policy.",
             "noModelSetJudge": "No model is set for the judge",
-            "nothingReadsPolicyEvery": ", so nothing reads your policy and every flagged command falls back to the standing rule alone. Set one in Models.",
+            "nothingReadsPolicyEvery": ", so nothing reads your policy. When judging is on, credential access waits for your approval; other flagged commands use the standing rule alone. Set a model in Models.",
             "off": "Off",
             "on": "On",
             "safetyJudge": "Safety judge",

@@ -25,7 +25,7 @@ const MODES = computed(() => [
 
 const mode = computed(() => settings.value?.commandJudge ?? `on`);
 
-// Resolved chain for role `safety-judge`; empty means no model set, judge falls back to the standing rule.
+// Empty chain: judging on holds credential access for approval; other classes use the standing rule.
 const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(modelChoiceLabel));
 </script>
 
@@ -65,7 +65,7 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                         <span class="text-content">{{ t(`sandbox.agentSafetyJudge.judgedBy`) }}</span
                         >: {{ judgeChain.join(t(`sandbox.agentSafetyJudge.then`)) }}.
                     </p>
-                    <!-- Judge on but no model set: nothing reads the policy; flagged commands fall back to the standing rule. -->
+                    <!-- No model reads the policy: judging on holds credential access; other classes use the standing rule. -->
                     <p v-else-if="settings !== undefined" class="text-2xs text-warning">
                         <span class="font-medium">{{ t(`sandbox.agentSafetyJudge.noModelSetJudge`) }}</span
                         >{{ t(`sandbox.agentSafetyJudge.nothingReadsPolicyEvery`) }}

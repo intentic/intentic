@@ -6511,7 +6511,7 @@
             "judgedBy": "Beurteilt von",
             "modelReadsPolicy": "Welches Modell die Richtlinie liest.",
             "noModelSetJudge": "Für den Richter ist kein Modell gesetzt",
-            "nothingReadsPolicyEvery": ", deshalb liest nichts Ihre Richtlinie, und jeder markierte Befehl fällt allein auf die Standardregel zurück. Setzen Sie eines unter „Modelle“.",
+            "nothingReadsPolicyEvery": ", deshalb liest nichts Ihre Richtlinie. Bei eingeschalteter Bewertung wartet der Zugriff auf Zugangsdaten auf Ihre Freigabe; andere markierte Befehle verwenden allein die Standardregel. Legen Sie unter „Modelle“ ein Modell fest.",
             "off": "Aus",
             "on": "An",
             "safetyJudge": "Sicherheitsrichter",

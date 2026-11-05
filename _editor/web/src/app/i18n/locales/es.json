@@ -6511,7 +6511,7 @@
             "judgedBy": "Juzgado por",
             "modelReadsPolicy": "Qué modelo lee la política.",
             "noModelSetJudge": "No hay modelo configurado para el juez",
-            "nothingReadsPolicyEvery": ", así que nada lee tu política y todo comando marcado recae solo en la regla estándar. Configura uno en Modelos.",
+            "nothingReadsPolicyEvery": ", así que nada lee tu política. Con la evaluación activada, el acceso a credenciales espera tu aprobación; los demás comandos marcados siguen solo la regla estándar. Elige un modelo en Modelos.",
             "off": "Desactivado",
             "on": "Activado",
             "safetyJudge": "Juez de seguridad",

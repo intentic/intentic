@@ -13,10 +13,10 @@ import {
     matchCommand,
     mergeSpans,
 } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandJudgeMode, SafetyLogEntry, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { CommandJudgeMode, SafetyLogEntry } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { CommandJudge, JudgeFacts } from "../agent/tools/command-judge.js";
-import { RoleModelUnsetError } from "../seams/role-model-unset.js";
+import { type CommandVerdict, unavailableCommandVerdict } from "../safety/command-judge-fallback.js";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";
@@ -29,8 +29,8 @@ import type { ProjectInstallGate } from "../agent/providers/project-installs.js"
 
 // Second layer under the admission floor (guard/actions.ts sessionStart): what an already-running session's commands
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last
-// interrupts anyone. A card waits for its answer whoever started the turn: an unattended turn's is answered when the
-// owner gets to it, never turned into a refusal (docs/architecture/conventions.md, A person's answers).
+// interrupts anyone. Cards wait for the owner even in unattended turns, including credential access held because
+// enforcing judgment is unavailable.
 
 export interface CommandGuardOptions {
     // The owner's policy text, snapshotted once per turn; edits take effect on the next turn, not mid-turn.
@@ -38,7 +38,7 @@ export interface CommandGuardOptions {
     // Mode (off/watch/on), snapshotted per turn like the policy; the hard rule applies at every setting.
     readonly judging: CommandJudgeMode;
     // Nobody at a composer when the turn started (automation, loop, chore). Told to the judge, which may weigh that an
-    // ask waits for the owner; never a refusal.
+    // ask waits for the owner. The unavailable-judge fallback also waits for credential access.
     readonly unattended: boolean;
     // Whether a person has since steered this turn, read per command rather than snapshotted like the two above: an
     // unattended turn somebody is visibly typing into has somebody watching after all. Absent reads as nobody.
@@ -204,28 +204,19 @@ const hardRuled = (matches: readonly CommandMatch[]): CommandClass | undefined =
 const nobodyWatching = (options: CommandGuardOptions): boolean => options.unattended && options.steered?.() !== true;
 
 // Why a command can't be asked about (or undefined if a card can be raised): a property of the runtime, not of the
-// policy or of who is watching. The refusal tells the model not to retry.
-const cannotAsk = (reason: string, options: CommandGuardOptions): GuardOutcome | undefined => {
+// policy or of who is watching. A missing verdict requires owner approval without inviting autonomous retries.
+const cannotAsk = (reason: string, options: CommandGuardOptions, judgeUnavailable = false): GuardOutcome | undefined => {
     if (options.canPark === false) {
-        return {
-            allow: false,
-            reason:
-                `${reason} This agent cannot pause to ask, so it was refused instead. ` +
-                `Do not retry: carry on with what you can do without this command, and say plainly what you left undone. ` +
-                `The owner can change their safety policy, or run this on an agent that can ask.`,
-        };
+        const next = judgeUnavailable
+            ? `Owner approval is required. Do not retry this command on your own; ask the owner to use an agent that can pause.`
+            : `Do not retry: carry on with what you can do without this command, and say plainly what you left undone. The owner can change their safety policy, or run this on an agent that can ask.`;
+        return { allow: false, reason: `${reason} This agent cannot pause to ask, so it was refused instead. ${next}` };
     }
     return undefined;
 };
 
-// Judge unreachable: falls back to the hard rule, allowing everything else.
-const JUDGE_UNAVAILABLE = `The safety judge could not be reached, so this was decided by the standing rule alone.`;
-
-// Same posture as JUDGE_UNAVAILABLE, worded differently since `off` is a choice, not a fault.
+// Off is an explicit choice: only the standing rule applies.
 const JUDGE_OFF = `The safety judge is turned off, so this was decided by the standing rule alone.`;
-
-// Same posture again: judge is on but no model is set for it, a choice rather than a fault.
-const JUDGE_UNSET = `No model is set for the safety judge, so this was decided by the standing rule alone.`;
 
 // Keeps the line an Always answer accepted, when the judge proposed one and this gate has somewhere to put it. The yes to
 // the command stands whether or not the line sticks, so a failure is reported to the one who wired the callback instead of
@@ -315,14 +306,13 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             ...(outsideSource === undefined ? {} : { outsideSource }),
             ...(options.machine === undefined ? {} : { machine: options.machine }),
         };
-        // Tier 2: an unreachable judge leaves the hard rule standing and allows the rest; `off` never asks at all.
-        const verdict: SafetyVerdict =
+        // Tier 2: credential access fails closed when enforcing judgment is unavailable; other classes keep the standing rule.
+        const verdict: CommandVerdict =
             options.judging === "off"
                 ? { decision: "allow", sentence: JUDGE_OFF }
-                : await askJudge(program, facts).catch((error: unknown): SafetyVerdict => ({
-                      decision: "allow",
-                      sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
-                  }));
+                : await askJudge(program, facts).catch((error: Error): CommandVerdict =>
+                      unavailableCommandVerdict(error, options.judging === "on" && classes.includes("secrets.access")),
+                  );
         // What's enforced, not what was said: only `on` obeys the verdict; `off` and `watch` never do.
         const enforced = options.judging === "on" ? verdict.decision : "allow";
         // The hard rule can only make a verdict stricter, never looser: allow becomes ask, refuse stays refuse.
@@ -347,7 +337,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
             record({ ...entry, outcome: "allowed", answer: "allowed" }, at);
             return ALLOWED;
         }
-        const unaskable = cannotAsk(verdict.sentence, options);
+        const unaskable = cannotAsk(verdict.sentence, options, verdict.unavailable === true);
         if (unaskable !== undefined) {
             record({ ...entry, outcome: "refused" }, at);
             return unaskable;

@@ -5913,7 +5913,7 @@
             "judgedBy": "Oceniane przez",
             "modelReadsPolicy": "Który model czyta politykę.",
             "noModelSetJudge": "Dla sędziego nie ustawiono modelu",
-            "nothingReadsPolicyEvery": ", więc nic nie czyta Twojej polityki, a każde oznaczone polecenie opiera się wyłącznie na regule standardowej. Ustaw model w Modelach.",
+            "nothingReadsPolicyEvery": ", więc nic nie odczytuje Twojej polityki. Gdy ocena jest włączona, dostęp do danych uwierzytelniających czeka na Twoją zgodę; pozostałe oznaczone polecenia podlegają wyłącznie regule standardowej. Wybierz model w sekcji Modele.",
             "off": "Wyłączone",
             "on": "Włączone",
             "safetyJudge": "Sędzia bezpieczeństwa",

@@ -6511,7 +6511,7 @@
             "judgedBy": "Jugé par",
             "modelReadsPolicy": "Quel modèle lit la politique.",
             "noModelSetJudge": "Aucun modèle n'est défini pour le juge",
-            "nothingReadsPolicyEvery": ", donc rien ne lit votre politique et chaque commande signalée retombe sur la règle par défaut seule. Définissez-en un dans Modèles.",
+            "nothingReadsPolicyEvery": ", donc rien ne lit votre politique. Lorsque le jugement est actif, l’accès aux identifiants attend votre approbation ; les autres commandes signalées suivent uniquement la règle par défaut. Choisissez un modèle dans Modèles.",
             "off": "Désactivé",
             "on": "Activé",
             "safetyJudge": "Juge de sécurité",

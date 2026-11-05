@@ -5,7 +5,8 @@ import { DeviceScopesSchema } from "@intentic/sandbox-contract/schemas/capabilit
 import { type ProgramKind, type ProgramReading, programInCall } from "@intentic/sandbox-contract/policy/device-programs";
 import { roleLadder } from "@intentic/sandbox-contract/models/model-setups";
 import { raiseRequest } from "../guard/card-offers.js";
-import { RoleModelUnsetError } from "../seams/role-model-unset.js";
+import { unavailableCommandVerdict } from "../safety/command-judge-fallback.js";
+import { unlessAborted } from "@intentic/base/async";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
@@ -110,6 +111,7 @@ const hostVerdict = async (
         readonly machine: string;
         readonly command: string;
         readonly consequences: readonly string[];
+        readonly secretAccess: boolean;
         readonly unattended: boolean;
         readonly outsideSource: string | undefined;
         // How the judge reads it: a shell command, or the plain launch of an application or document.
@@ -124,30 +126,28 @@ const hostVerdict = async (
             verdict: { decision: "allow", sentence: `The safety judge is turned off, so this was decided by the standing rule alone.` },
         };
     }
-    const verdict = await guards.judge(
-        {
-            policy,
-            program: input.command,
-            ladder: roleLadder(settings, `safety-judge`),
-            facts: {
-                consequences: input.consequences,
-                unattended: input.unattended,
-                language: input.language,
-                machine: input.machine,
-                ...(input.outsideSource === undefined ? {} : { outsideSource: input.outsideSource }),
+    const signal = AbortSignal.timeout(JUDGE_DEADLINE_MS);
+    const pending = Promise.resolve()
+        .then(() => guards.judge(
+            {
+                policy,
+                program: input.command,
+                ladder: roleLadder(settings, `safety-judge`),
+                facts: {
+                    consequences: input.consequences,
+                    unattended: input.unattended,
+                    language: input.language,
+                    machine: input.machine,
+                    ...(input.outsideSource === undefined ? {} : { outsideSource: input.outsideSource }),
+                },
             },
-        },
-        AbortSignal.timeout(JUDGE_DEADLINE_MS),
-    ).catch(
-        // A judge that cannot run leaves the hard rule standing; the rest passes through to the machine's own scopes.
-        (error: unknown): SafetyVerdict => ({
-            decision: "allow",
-            sentence:
-                error instanceof RoleModelUnsetError
-                    ? `No model is set for the safety judge, so this was decided by the standing rule alone.`
-                    : `The safety judge could not be reached, so this was decided by the standing rule alone.`,
-        }),
-    );
+            signal,
+        ))
+        .catch((error: Error): SafetyVerdict =>
+            unavailableCommandVerdict(error, judging === "on" && input.secretAccess),
+        );
+    const verdict = await unlessAborted(pending, signal,
+        unavailableCommandVerdict(new Error("Safety judge deadline expired"), judging === "on" && input.secretAccess));
     return { verdict, judging };
 };
 
@@ -273,13 +273,14 @@ export const judgeHostCommand = async (
     const hard = matches.find(
         (match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow",
     )?.commandClass;
-    // Told to the judge, never a refusal: whether anybody is watching the live turn right now.
+    // Told to the judge and the credential fallback: whether anybody is watching the live turn right now.
     const unattended = conversationId === undefined || conversationUnattended(conversationId);
     const outsideSource = conversationId === undefined ? undefined : conversationTaintSource(conversationId);
     const { verdict, judging } = await hostVerdict(services, guards, {
         machine: input.machine,
         command: input.command,
         consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
+        secretAccess: classes.includes("secrets.access"),
         unattended,
         outsideSource,
         language: languageOf(kind),

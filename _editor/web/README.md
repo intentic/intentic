@@ -13,6 +13,7 @@ flowchart LR
     ext["Extensions<br/>built-in + daemon bundles"] --> web
 ```
 
+- **Safety settings** show the daemon's judge mode and explain when credential access waits for approval.
 - **Where it runs.** A static SPA served by the nginx image in `Dockerfile`. `entrypoint.sh` fills `API_URL` and
   `POSTHOG_KEY` into `assets/js/env.js` at container start, so one build serves any environment, and inlines that
   script into `index.html` so the first page load does not wait on a second, uncached request for it. It also writes
