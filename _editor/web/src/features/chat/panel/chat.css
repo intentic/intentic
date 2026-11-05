@@ -149,16 +149,12 @@
    which this unlayered sheet would beat anyway.
    In the light the fill is a sand: the accent stirred into a step of ink on the paper, so the person's voice is warm
    where everything the agent opened (`--chat-inset`, a plain ink-on-paper wash) is not; the lift is the room's warm
-   shadow at its faintest. The composer (`.composer-frame`, below) reads the same four properties: it is the next prompt. */
-.chat-surface,
-.composer-frame {
+   shadow at its faintest. */
+.chat-surface {
     --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, color-mix(in oklab, var(--color-content) 4%, var(--color-card)));
     --chat-prompt-face: none;
     --chat-prompt-lift: 0 1px 2px rgb(var(--ui-shadow-tint) / 0.08);
-    --chat-prompt-shape: 1.125rem 0.375rem 1.125rem 1.125rem;
-}
-.chat-surface {
-    border-radius: var(--chat-prompt-shape);
+    border-radius: 1.125rem 0.375rem 1.125rem 1.125rem;
     background-color: var(--chat-prompt-fill);
     background-image: var(--chat-prompt-face);
     box-shadow: var(--chat-prompt-lift);
@@ -167,7 +163,7 @@
    down the lightness scale (it was read as a brown slab), and a lift as large as the overlay step made a long prompt
    the heaviest shape on the screen; a sheen and a drop under it read as a 3D button. So: a small step of the stone's
    own ink, no more than a card's hover, and the faint glint the dark looks give a pane's top edge. */
-[data-mode="dark"] :is(.chat-surface, .composer-frame) {
+[data-mode="dark"] .chat-surface {
     --chat-prompt-fill: color-mix(in oklab, var(--color-content) 6.5%, var(--color-card));
     --chat-prompt-lift: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
@@ -1022,37 +1018,6 @@
     animation: none;
 }
 
-/* THE COMPOSER IS THE NEXT PROMPT, NOT A FORM FIELD. The words are written in the material they are read in once sent
-   (`.chat-surface`'s fill, face and soft corner above, and each look's own recipe for them), so the bubbles and the box they
-   come from read as one voice. A plain overlay box with a strong rim was the one surface in the chat that looked like
-   another product's. What it adds to the bubble is standing: a rim, since it is a field the caret lives in, and a lift,
-   since it floats over the transcript. Its whole look is here rather than in utilities on the form; a look that wants
-   another rim sets these properties (silver.css) instead of racing the focus rule for `border-color`. Focus deepens the
-   rim and adds a faint halo: a whole rim in the accent was the loudest thing on the screen whenever anyone typed. */
-.composer-frame {
-    --composer-rim: var(--color-line);
-    --composer-rim-hover: var(--color-line-strong);
-    --composer-rim-focus: color-mix(in srgb, var(--color-primary-fill) 45%, var(--color-line-strong));
-    --composer-halo: color-mix(in srgb, var(--color-primary-fill) 9%, transparent);
-    border: 1px solid var(--composer-rim);
-    border-radius: 1.125rem; /* the bubble's soft corner all round: its one tight corner points at a speaker, which a box not yet sent has none of */
-    background-color: var(--chat-prompt-fill);
-    background-image: var(--chat-prompt-face);
-    box-shadow: var(--chat-prompt-lift), var(--ui-shadow-2);
-    transition:
-        border-color var(--motion-hover),
-        box-shadow var(--motion-hover);
-}
-.composer-frame:hover {
-    border-color: var(--composer-rim-hover);
-}
-.composer-frame:focus-within {
-    border-color: var(--composer-rim-focus);
-    box-shadow:
-        var(--chat-prompt-lift),
-        var(--ui-shadow-2),
-        0 0 0 3px var(--composer-halo);
-}
 .composer-ghost {
     display: inline-flex;
     align-items: center;
@@ -1183,11 +1148,9 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
 }
 /* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a pill. */
-.composer-frame.composer-voice {
-    --composer-rim: var(--color-primary-500);
-    --composer-rim-hover: var(--color-primary-500);
-    --composer-rim-focus: var(--color-primary-500);
-    background-color: color-mix(in srgb, var(--color-primary-500) 8%, var(--chat-prompt-fill));
+.composer-voice {
+    border-color: var(--color-primary-500);
+    background: color-mix(in srgb, var(--color-primary-500) 6%, var(--color-overlay));
 }
 /* The press target only, 8×32px around a 4×12px rung: ::before is the bar, so the drawn rung keeps its own size and
    is never a clip of this one. 32px is the model pill's height, so the target grows and the composer row does not.
@@ -1246,10 +1209,6 @@
     background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 10%, transparent));
     filter: none;
 }
-/* THE ONE SOLID THING IN THE BOX, AND ONLY WHILE IT WOULD SEND. Every other control in the row is a ghost, so the press
-   the words go out by is found without looking for it; with nothing to send it is a quiet circle of the box's own ink,
-   still where it will light, never a glyph floating on nothing. A tint of the accent at rest and at the ready said
-   neither, and was the faintest control in its own row. */
 .composer-send {
     display: inline-flex;
     align-items: center;
@@ -1257,23 +1216,22 @@
     height: 2rem;
     width: 2rem;
     border-radius: 9999px;
-    background: var(--color-primary-fill);
-    color: var(--color-fill-content);
+    background: color-mix(in srgb, var(--color-primary-fill) 14%, transparent);
+    color: var(--color-primary-fill);
     cursor: pointer;
     transition:
         background-color var(--motion-hover),
-        color var(--motion-hover),
         opacity var(--motion-hover);
 }
 .composer-send:hover {
-    background: var(--color-primary-fill-hover);
+    background: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
 }
 /* Every send glyph in the icon sets is a paper plane pointing up-right. */
 .composer-send:not(.composer-stop) svg {
     translate: -1px 1px;
 }
 .composer-send:disabled {
-    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    background: var(--color-overlay);
     color: var(--color-subtle);
     cursor: default;
 }
@@ -1317,7 +1275,7 @@
 /* A split send whose press is refused while its caret still opens (an upload going, an edit waiting): the caret wears the
    press's grey, so the pair keeps reading as one pill and not as a grey stub beside a lit caret. */
 .composer-send.composer-split-main:disabled + .composer-split-caret:not(:disabled) {
-    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    background: var(--color-overlay);
     color: var(--color-subtle);
 }
 .composer-send.composer-split-main:disabled + .composer-split-caret:not(:disabled):hover {
@@ -1334,14 +1292,12 @@
 .composer-send.composer-anyway + .composer-split-caret:hover {
     background: color-mix(in srgb, var(--color-warning) 26%, transparent);
 }
-/* STOP IS NOT THE STEP WE ASK FOR, so it is the box's own ink rather than the accent, but a circle that shows on the box:
-   `--color-overlay` on a box of the same overlay drew no circle at all, and the press read as a stray square. */
 .composer-stop {
-    background: color-mix(in srgb, var(--color-content) 12%, transparent);
+    background: var(--color-overlay);
     color: var(--color-content);
 }
 .composer-stop:hover {
-    background: color-mix(in srgb, var(--color-content) 20%, transparent);
+    background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
 }
 /* THE MIC AND SEND SHARE ONE SLOT IN A NARROW COMPOSER, and this is the one of the two that has stepped aside (ChatPane's
    micShares). A rule rather than `@max-md:hidden`: the ghost and send classes set their own display unlayered, which beats

@@ -545,12 +545,13 @@
     color: var(--silver-heading-ink);
 }
 
-/* The composer's rim is the metal's hairline, and focus brightens it to the field's own focus line (chat.css
-   `.composer-frame` reads these). */
+/* The composer's rim is a utility (`border-line-strong`), which only an unlayered rule outranks. */
 [data-skin="silver"] .composer-frame {
-    --composer-rim: var(--silver-hairline);
-    --composer-rim-focus: var(--ui-field-focus-line);
-    --composer-halo: rgb(255 255 255 / 0.04);
+    border-color: var(--silver-hairline);
+}
+[data-skin="silver"] .composer-frame:focus-within {
+    border-color: var(--ui-field-focus-line);
+    --tw-ring-color: rgb(255 255 255 / 0.05);
 }
 
 /* THE PROMPT BUBBLE (chat.css `.chat-surface`) is a pane of the raised glass: the step above a pane in the metal's own
