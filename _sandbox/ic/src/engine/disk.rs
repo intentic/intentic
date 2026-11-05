@@ -216,7 +216,7 @@ pub fn reclaimed(said: &str) -> Option<u64> {
         .filter(|line| line.contains("Total"))
         .filter_map(|line| line.split_whitespace().last())
         .filter_map(crate::uninstall::parse_docker_size)
-        .last()
+        .next_back()
 }
 
 /// What one relief step did.

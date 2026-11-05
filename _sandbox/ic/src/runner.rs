@@ -250,7 +250,10 @@ pub fn up(args: Up) -> Result<()> {
             log.path.display()
         );
     }
-    ui::step("waiting-health", "waiting for the runner daemon to come up…");
+    ui::step(
+        "waiting-health",
+        "waiting for the runner daemon to come up…",
+    );
     health::wait_answering(&container, &log, "")?;
     ui::done(&format!(
         "Runner {name} is up and enrolling with {parent_url}."

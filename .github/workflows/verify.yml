@@ -118,10 +118,14 @@ jobs:
           SUITES_JUNIT_DIR: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
       - name: Audit sampled Turbo cache hits
         if: ${{ steps.graph.outcome == 'success' }}
-        run: node _tools/scripts/verify/cache-audit.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${{ inputs.report-name }}/audit.json" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REPORT_NAME: ${{ inputs.report-name }}
+        run: node _tools/scripts/verify/cache-audit.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${REPORT_NAME}/audit.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Report cache measurements
         if: ${{ !cancelled() && (steps.graph.outcome == 'success' || steps.graph.outcome == 'failure') }}
-        run: node _tools/scripts/verify/cache-report.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${{ inputs.report-name }}/turbo.json" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REPORT_NAME: ${{ inputs.report-name }}
+        run: node _tools/scripts/verify/cache-report.mjs .turbo/runs "${RUNNER_TEMP}/cache-reports/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${REPORT_NAME}/turbo.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Keep cache measurements
         continue-on-error: true
         if: ${{ always() }}
