@@ -795,7 +795,9 @@ jobs:
   verify-clocks:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'verify-clocks' }}
     runs-on: [self-hosted, intentic]
-    timeout-minutes: 30
+    # Four packages twice over, on six slots: 9 to 15 minutes on a radarsu worker, 28 to 31 on a z440 one, where 30 cut
+    # the last zone's web suite off mid-run (2026-11-05, and 2026-11-03 before it).
+    timeout-minutes: 60
     container:
       image: ghcr.io/intentic/ci-base:latest
       volumes:
