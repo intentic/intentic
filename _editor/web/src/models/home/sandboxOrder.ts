@@ -1,10 +1,14 @@
 import { parseJsonWith } from "@intentic/base/json";
 import { definePreference } from "@intentic/ui/preference";
+import type { SandboxSummary } from "@intentic/api-contract";
 import type { Ref } from "vue";
 import { z } from "zod";
+import { switchableSandboxes } from "../sandbox/live/roster";
+import { orderedSandboxes } from "./homeFacts";
 
-// THE READER'S OWN ORDER OF THEIR SANDBOXES, dragged into place on Home's rail (features/home/HomeSandboxes.vue) and
-// worn by the door up to Home as well (otherSandboxes.ts). The ids in that order; empty until the reader arranges them,
+// THE READER'S OWN ORDER OF THEIR SANDBOXES, dragged into place on Home's rail (features/home/HomeSandboxes.vue) or in
+// the switcher (SandboxSwitcher.vue), and worn by every list of them: those two, Alt+1…9, the phone's menu and the door
+// up to Home (otherSandboxes.ts). The ids in that order; empty until the reader arranges them,
 // which leaves homeFacts.ts `orderedSandboxes` its own order. This device's, like the rail's pins (shell/rail/railPins.ts):
 // chrome, not data.
 
@@ -18,12 +22,9 @@ export const sandboxOrder: Ref<readonly string[]> = definePreference<readonly st
     write: (ids) => (ids.length === 0 ? null : JSON.stringify(ids)),
 });
 
-/** `ids` with the one at `from` taken out and put back at `to`, both indexes into `ids`. */
-export const movedOrder = (ids: readonly string[], from: number, to: number): string[] => {
-    const next = [...ids];
-    const [moved] = next.splice(from, 1);
-    if (moved !== undefined) {
-        next.splice(Math.max(0, Math.min(to, next.length)), 0, moved);
-    }
-    return next;
-};
+/**
+ * The sandboxes a reader can switch to (roster.ts `switchableSandboxes`), in their own order: the one list Home's rail,
+ * the switcher, its Alt+1…9 and the phone's menu all draw, so a sandbox dragged into place is in that place everywhere.
+ */
+export const arrangedSandboxes = (rows: readonly SandboxSummary[]): SandboxSummary[] =>
+    orderedSandboxes(switchableSandboxes(rows), sandboxOrder.value);

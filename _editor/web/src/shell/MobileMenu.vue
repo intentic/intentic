@@ -9,7 +9,8 @@ import { identityHue } from "../lib/identityHue";
 import { here, page, toHome } from "../lib/routes/links";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { switchableSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
+import { unfinishedSandboxes } from "../models/sandbox/live/roster";
+import { arrangedSandboxes } from "../models/home/sandboxOrder";
 import { useRequestAddSandbox } from "../models/sandbox/addSandbox";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
 import type { SandboxPlacement } from "../features/sandbox/overview/placement";
@@ -60,7 +61,8 @@ const pushRow = computed(() => pushMenuRow(pushState.value));
 // The account's deleted sandboxes that can still come back, a row at the foot of its list while there is one.
 
 // Split so an unreachable sandbox isn't offered beside ones that can actually be switched to.
-const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
+// In the reader's own order, as Home's rail and the switcher draw it (sandboxOrder.ts).
+const switchable = computed(() => arrangedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // Where each box runs. The active row borrows the refined answer (a named device, this very computer); the others

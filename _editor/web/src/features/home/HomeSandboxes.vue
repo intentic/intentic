@@ -7,10 +7,10 @@ import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
-import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
-import { movedOrder, sandboxOrder } from "../../models/home/sandboxOrder";
-import { useSandboxTileDrag } from "./sandboxTileDrag";
-import { switchableSandboxes } from "../../models/sandbox/live/roster";
+import { tileAction } from "../../models/home/homeFacts";
+import { arrangedSandboxes, sandboxOrder } from "../../models/home/sandboxOrder";
+import { movedOrder, useSortableDrag } from "../../components/sortable/sortableDrag";
+import SortableLift from "../../components/sortable/SortableLift.vue";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { processAskedBy } from "../../models/processes/processAddress";
@@ -39,21 +39,20 @@ const router = useRouter();
 const sandbox = useSandbox();
 const { homeOnly } = useRole();
 const { user } = useAuth();
-// The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
-// daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
-// The sandbox Home is making (newSandbox.ts) is its own tile until its run ends, not a second one beside it.
+// The switcher's own list in the switcher's own order (sandboxOrder.ts `arrangedSandboxes`), never the account's raw
+// rows: a setup never finished has no daemon to open a home conversation on, and a desktop folder window's own row is no
+// sandbox at all. The sandbox Home is making (newSandbox.ts) is its own tile until its run ends, not a second one beside it.
 const making = computed(() => newSandbox.value?.here.add.created.value?.id);
-// In the reader's own order once they have dragged one into place (sandboxOrder.ts), else owned first and by name.
-const boxes = computed(() =>
-    orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value), sandboxOrder.value).filter((box) => box.id !== making.value),
-);
-// A tile carried along the rail: the others make way for it (sandboxTileDrag.ts), and where it is let go is kept.
+const boxes = computed(() => arrangedSandboxes(sandbox.sandboxes.value).filter((box) => box.id !== making.value));
+// A tile carried along the rail lifts off it and follows the pointer, its place an empty dashed slot the others make way
+// for (sortableDrag.ts); where it is let go is kept, for the switcher's rows as well.
 const list = ref<HTMLElement | null>(null);
-const drag = useSandboxTileDrag({
+const drag = useSortableDrag({
     list: () => list.value,
     ids: () => boxes.value.map((box) => box.id),
     commit: (ids) => (sandboxOrder.value = ids),
 });
+const lifted = computed(() => boxes.value.find((box) => box.id === drag.carried.value));
 const drawn = computed(() => {
     const preview = drag.preview.value;
     return preview === undefined ? boxes.value : preview.flatMap((id) => boxes.value.filter((box) => box.id === id));
@@ -247,18 +246,20 @@ const choose = (id: string, input: `click` | `enter`): void => {
         :class="{ 'cursor-grabbing select-none': drag.carried.value !== undefined }"
     >
         <!-- Drag a tile to arrange them; the others slide aside rather than jump. -->
-        <TransitionGroup move-class="motion-safe:transition-transform motion-safe:duration-150">
+        <TransitionGroup move-class="motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out">
+            <!-- The carried tile's own place is the slot it will land in: empty and dashed, inside the tile's box so the
+                 rail's scrolling frame never clips it. -->
             <button
                 v-for="box in drawn"
                 :key="box.id"
                 type="button"
-                data-sandbox-tile
+                data-sortable-item
                 class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg"
-                :class="{
-                    'opacity-40': readings.get(box.id)?.unreachable,
-                    'ui-row-select-on': selected(box.id),
-                    'z-10 bg-card shadow-lg ring-2 ring-primary-500': drag.carried.value === box.id,
-                }"
+                :class="
+                    drag.carried.value === box.id
+                        ? 'pointer-events-none'
+                        : { 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': selected(box.id) }
+                "
                 :aria-label="labelOf(box.id, box.name)"
                 :aria-current="selected(box.id) ? 'true' : undefined"
                 v-tooltip.right="drag.carried.value === undefined && { title: box.name, note: noteOf(box.id) }"
@@ -267,11 +268,24 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 @keydown.enter.prevent="choose(box.id, 'enter')"
                 @contextmenu="openTileMenu($event, box.id)"
             >
-                <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-lg" />
-                <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
-                <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
+                <span
+                    v-if="drag.carried.value === box.id"
+                    class="absolute inset-1 rounded-lg border-2 border-dashed border-primary-500/70 bg-primary-500/10"
+                    aria-hidden="true"
+                ></span>
+                <template v-else>
+                    <SandboxLogo :image="box.image ?? null" :name="box.name" class="pointer-events-none rounded-lg" />
+                    <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
+                    <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
+                </template>
             </button>
         </TransitionGroup>
+        <!-- The tile itself, held above the rail: raised and shadowed, the rail's own ground behind a logo drawn on nothing. -->
+        <SortableLift :box="drag.lift.value">
+            <span v-if="lifted" class="flex size-full items-center justify-center overflow-hidden rounded-lg bg-card text-lg shadow-xl ring-1 ring-line-strong">
+                <SandboxLogo :image="lifted.image ?? null" :name="lifted.name" class="rounded-lg" />
+            </span>
+        </SortableLift>
         <NewSandboxTile />
         <span class="relative flex shrink-0">
             <button
