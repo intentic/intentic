@@ -13,6 +13,7 @@ import {
     landBroken,
     limited,
     memoryHeld,
+    turnWorking,
     unregistered,
 } from "./agentStatus-standing";
 
@@ -258,11 +259,12 @@ export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
 // Whether the agent's review page has anything on it: written work, or a report about landing it (drillTarget). Every
 // surface offers that page as "View changes" with the diff icon exactly when this holds, whatever else the card's state
 // says, so the same press always looks the same and never opens a page that only says nothing changed. A draft has no
-// branch to read.
+// branch to read. A working turn counts too: `diff` is refreshed only by a land, so mid-turn it is the last land's (often
+// zero) while the page streams what the turn is writing now; gating on it hid a running agent's edits (2026-11-05).
 export const changesToRead = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): boolean =>
     !unregistered(agent.status) &&
     agent.branch !== undefined &&
-    ((agent.diff?.files ?? 0) > 0 || leadingPark(agent) === `conflict` || landFailure(agent) !== undefined);
+    ((agent.diff?.files ?? 0) > 0 || turnWorking(agent) || leadingPark(agent) === `conflict` || landFailure(agent) !== undefined);
 
 // Endings whose destination is named by the ending itself rather than by the diff; tabled for the same reason as
 // `endingReasons`. Anything absent falls to the diff reading below.

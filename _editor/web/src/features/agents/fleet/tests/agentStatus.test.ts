@@ -856,6 +856,9 @@ describe("drillTarget", () => {
         expect(changesToRead({ status: `landed`, attention: none, ...branch, diff: { files: 0 } })).toBe(false);
         expect(changesToRead({ status: `error`, attention: none, ...branch })).toBe(false);
         expect(changesToRead({ status: `landed`, attention: none, diff: { files: 2 } })).toBe(false);
+        // A working turn's diff is the last land's, not what it is writing now, which the page streams.
+        expect(changesToRead({ status: `running`, attention: none, ...branch, diff: { files: 0 } })).toBe(true);
+        expect(changesToRead({ status: `running`, attention: none })).toBe(false);
     });
 
     it("agrees with the label: an Approve leads to the chat", () => {
