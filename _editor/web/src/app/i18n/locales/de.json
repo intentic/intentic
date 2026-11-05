@@ -5356,8 +5356,7 @@
         "apiKey": {
             "offer": "Stattdessen einen {vendor}-API-Schlüssel verwenden",
             "title": "{vendor}-API-Schlüssel",
-            "billing": "{vendor} berechnet jedes Token, getrennt von jedem Abo. Agenten lesen viel Code, daher steigen die Kosten schneller als im Chat.",
-            "limit": "Legen Sie vorher in Ihrem {vendor}-Konto ein Ausgabenlimit fest.",
+            "cost": "Pro Token von {vendor} berechnet, getrennt vom Abo. Agenten verbrauchen viel: Ausgabenlimit setzen.",
             "prices": "Preise",
             "createKey": "Schlüssel erstellen",
             "field": "{vendor}-API-Schlüssel",

@@ -5356,8 +5356,7 @@
         "apiKey": {
             "offer": "Use an API key from {vendor} instead",
             "title": "{vendor} API key",
-            "billing": "Billed by {vendor} for every token, separately from any subscription. Agent sessions read a lot of code, so costs add up faster than in a chat.",
-            "limit": "Set a spending limit in your {vendor} account before you start.",
+            "cost": "Paid per token to {vendor}, apart from any plan. Agents spend fast: set a spending limit.",
             "prices": "Prices",
             "createKey": "Create a key",
             "field": "{vendor} API key",

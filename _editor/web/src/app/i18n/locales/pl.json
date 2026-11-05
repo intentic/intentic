@@ -5356,8 +5356,7 @@
         "apiKey": {
             "offer": "Użyj zamiast tego klucza API {vendor}",
             "title": "Klucz API {vendor}",
-            "billing": "{vendor} nalicza opłatę za każdy token, osobno od subskrypcji. Agenci czytają dużo kodu, więc koszty rosną szybciej niż w czacie.",
-            "limit": "Zanim zaczniesz, ustaw limit wydatków na koncie {vendor}.",
+            "cost": "Płatne za token u {vendor}, poza subskrypcją. Agenci zużywają dużo: ustaw limit wydatków.",
             "prices": "Cennik",
             "createKey": "Utwórz klucz",
             "field": "Klucz API {vendor}",

@@ -5356,8 +5356,7 @@
         "apiKey": {
             "offer": "Usar una clave de API de {vendor}",
             "title": "Clave de API de {vendor}",
-            "billing": "{vendor} cobra cada token, aparte de cualquier suscripción. Los agentes leen mucho código, así que el coste sube más rápido que en un chat.",
-            "limit": "Pon un límite de gasto en tu cuenta de {vendor} antes de empezar.",
+            "cost": "{vendor} cobra por token, aparte de tu plan. Los agentes gastan rápido: pon un límite de gasto.",
             "prices": "Precios",
             "createKey": "Crear una clave",
             "field": "Clave de API de {vendor}",

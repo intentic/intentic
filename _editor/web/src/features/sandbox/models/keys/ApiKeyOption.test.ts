@@ -76,7 +76,7 @@ it(`is one quiet line until asked for, and says nothing for a provider with no k
 it(`says what a key costs before asking for one, and keeps the key masked`, async () => {
     const host = await mount(`claude`);
     await openWithKey(host, ``);
-    expect(host.textContent).toContain(`Billed by Anthropic for every token, separately from any subscription.`);
+    expect(host.textContent).toContain(`Paid per token to Anthropic, apart from any plan.`);
     expect(host.textContent).toContain(`spending limit`);
     expect(host.querySelector<HTMLInputElement>(`input[name="providerApiKey"]`)?.type).toBe(`password`);
     expect([...host.querySelectorAll(`a`)].map((link) => link.getAttribute(`href`))).toEqual([

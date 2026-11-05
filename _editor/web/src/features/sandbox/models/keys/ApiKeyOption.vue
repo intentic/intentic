@@ -92,12 +92,10 @@ const submit = async (): Promise<void> => {
         </button>
 
         <!-- Opened: what it costs first, then the field. -->
-        <div v-else class="flex max-w-xl flex-col gap-3 text-xs">
-            <div class="flex flex-col gap-1">
+        <div v-else class="flex flex-col gap-2.5 text-xs">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <p class="text-sm font-medium text-content">{{ t(`connect.apiKey.title`, { vendor: vendor.label }) }}</p>
-                <p class="text-muted">{{ t(`connect.apiKey.billing`, { vendor: vendor.label }) }}</p>
-                <p class="text-muted">{{ t(`connect.apiKey.limit`, { vendor: vendor.label }) }}</p>
-                <span class="flex flex-wrap gap-x-4 gap-y-1">
+                <span class="flex gap-x-4">
                     <a v-if="vendor.pricingUrl" :href="vendor.pricingUrl" target="_blank" rel="noopener noreferrer" :class="ui.textButton({ size: `xs` })">
                         {{ t(`connect.apiKey.prices`) }}<Icon name="external-link" />
                     </a>
@@ -106,6 +104,10 @@ const submit = async (): Promise<void> => {
                     </a>
                 </span>
             </div>
+            <!-- The cost, said once and marked as money, before the field asks for anything. -->
+            <p class="flex items-center gap-2 rounded-md bg-warning-tint/50 px-2.5 py-1.5 text-content">
+                <Icon name="credit-card" class="shrink-0 text-sm text-warning" />{{ t(`connect.apiKey.cost`, { vendor: vendor.label }) }}
+            </p>
             <label :for="fieldId" class="sr-only">{{ t(`connect.apiKey.field`, { vendor: vendor.label }) }}</label>
             <div class="flex gap-2">
                 <input
