@@ -5342,6 +5342,19 @@
             "linkFirst": "Ma {count} konto, którego ten sandbox nie ma: {providers}. Połącz {name} tutaj, żeby go używać. Użycza tylko tego, co przeniesiesz, i możesz to zakończyć w każdej chwili. | Ma {count} konta, których ten sandbox nie ma: {providers}. Połącz {name} tutaj, żeby ich używać. Użycza tylko tego, co przeniesiesz, i możesz to zakończyć w każdej chwili. | Ma {count} kont, których ten sandbox nie ma: {providers}. Połącz {name} tutaj, żeby ich używać. Użycza tylko tego, co przeniesiesz, i możesz to zakończyć w każdej chwili.",
             "revoked": "{name} nie ma już połączenia z tym sandboxem. Połącz ponownie, żeby przenieść jego konta tutaj.",
             "silent": "Ten sandbox nie może dosięgnąć {name} przez połączenie, więc nic jeszcze stamtąd nie przyjdzie."
+        },
+        "apiKey": {
+            "offer": "Użyj zamiast tego klucza API {vendor}",
+            "title": "Klucz API {vendor}",
+            "billing": "{vendor} nalicza opłatę za każdy token, osobno od subskrypcji. Agenci czytają dużo kodu, więc koszty rosną szybciej niż w czacie.",
+            "limit": "Zanim zaczniesz, ustaw limit wydatków na koncie {vendor}.",
+            "prices": "Cennik",
+            "createKey": "Utwórz klucz",
+            "field": "Klucz API {vendor}",
+            "placeholder": "Wklej klucz API {vendor}…",
+            "add": "Dodaj klucz",
+            "notAccepted": "{vendor} nie przyjął tego klucza: nie zwrócił dla niego żadnych modeli. Sprawdź klucz i spróbuj ponownie.",
+            "couldntAdd": "Nie udało się dodać klucza {vendor}."
         }
     },
     "desktop": {

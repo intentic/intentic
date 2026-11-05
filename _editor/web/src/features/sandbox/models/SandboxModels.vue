@@ -396,6 +396,14 @@ const addKey = async (key: ProviderKey): Promise<void> => {
     }
 };
 
+// A key pasted beside a provider's sign-in (ApiKeyOption.vue) lands as a found key does: named for its vendor, and shown
+// where the page lists servers and keys.
+const keyAdded = (endpoint: AgentProvider, label: string): void => {
+    keyEndpointLabels.set(endpoint, label);
+    landed.value = endpoint;
+    selected.value = LOCAL_TILE;
+};
+
 const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {
     const other = live.value?.provider ?? starting.value;
     return other !== undefined && other !== tile ? other : undefined;
@@ -534,6 +542,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                     :found="foundRows.some((provider) => provider === selected)"
                     :notice="accountsNotice"
                     @connect="connectSelected"
+                    @key-added="keyAdded"
                     @cancel="cancelSignIn"
                     @retry="retry"
                     @dismiss="dismissSignInFailure"

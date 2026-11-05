@@ -6,7 +6,7 @@ import type {
     PersonalDataReach,
     ShieldCover,
 } from "@intentic/sandbox-contract/schemas/compliance";
-import { KEY_PROVIDERS } from "../migrations/provider-keys.js";
+import { KEY_PROVIDERS } from "@intentic/sandbox-contract/models/key-providers";
 import type { ComplianceFacts, ConnectorFact } from "./facts.js";
 import { PUBLIC_OFFICE_ACTION_KEYS, PUBLIC_OFFICE_ADMISSION_KEYS } from "./preset.js";
 

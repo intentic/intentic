@@ -29,6 +29,7 @@ import {
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
+import ApiKeyOption from "./ApiKeyOption.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
 import { accountOffLine } from "./accountOff";
 import {
@@ -97,6 +98,8 @@ const emit = defineEmits<{
     chat: [];
     show: [provider: AgentProvider];
     dismissNotice: [];
+    // An API key added beside the sign-in became this endpoint, named for its vendor.
+    keyAdded: [endpoint: AgentProvider, label: string];
 }>();
 
 const spec = computed(() => providerSpec(provider));
@@ -590,5 +593,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             </div>
         </RowNote>
 
+        <!-- The deliberate alternative to signing in, for Full access, who alone writes connections: one quiet line last. -->
+        <ApiKeyOption v-if="canShip && !signingInHere" :provider="provider" @added="(endpoint, label) => emit(`keyAdded`, endpoint, label)" />
     </RowGroup>
 </template>

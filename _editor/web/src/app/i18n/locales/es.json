@@ -5342,6 +5342,19 @@
             "linkFirst": "Tiene {count} cuenta que este sandbox no tiene: {providers}. Vincula {name} aquí para usarla. Solo presta lo que traigas, y puedes detenerlo cuando quieras. | Tiene {count} cuentas que este sandbox no tiene: {providers}. Vincula {name} aquí para usarlas. Solo presta lo que traigas, y puedes detenerlo cuando quieras.",
             "revoked": "{name} ya no mantiene su vínculo con este sandbox. Vincúlalo de nuevo para traer sus cuentas aquí.",
             "silent": "Este sandbox no puede llegar a {name} por el vínculo, así que aún no puede llegar nada desde allí."
+        },
+        "apiKey": {
+            "offer": "Usar una clave de API de {vendor}",
+            "title": "Clave de API de {vendor}",
+            "billing": "{vendor} cobra cada token, aparte de cualquier suscripción. Los agentes leen mucho código, así que el coste sube más rápido que en un chat.",
+            "limit": "Pon un límite de gasto en tu cuenta de {vendor} antes de empezar.",
+            "prices": "Precios",
+            "createKey": "Crear una clave",
+            "field": "Clave de API de {vendor}",
+            "placeholder": "Pega la clave de API de {vendor}…",
+            "add": "Añadir clave",
+            "notAccepted": "{vendor} no aceptó esta clave: no listó ningún modelo para ella. Revisa la clave y vuelve a intentarlo.",
+            "couldntAdd": "No se pudo añadir la clave de {vendor}."
         }
     },
     "desktop": {

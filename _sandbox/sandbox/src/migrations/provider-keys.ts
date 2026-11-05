@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { parseEnv } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
+import { KEY_PROVIDERS, type KeyProvider } from "@intentic/sandbox-contract/models/key-providers";
 import { type Capability, CapabilitySchema, type EndpointProtocol } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ProviderKey, ProviderKeySource, ProviderKeysApplied } from "@intentic/sandbox-contract/state/arrival";
 import { z } from "zod";
@@ -25,41 +26,9 @@ import { parseJsonWith } from "@intentic/base/json";
 // A missing or unreadable file is an ordinary "nothing here". The key's value stays in the daemon: the browser is shown
 // a digest and four characters, and an add reads the device again rather than taking a value back from it.
 
-// One model API this sandbox knows how to reach with nothing but a key. No such table existed: the endpoint tile takes
-// any URL and suggests none. Each base is the vendor's own documented one, and each serves `GET <base>/models` in the
-// shape the endpoint catalog reads, which is what makes a key here a provider in the picker. A provider missing from
-// this list is reported and not offered.
-interface KeyProvider {
-    readonly id: string;
-    readonly label: string;
-    // Other names the source tools file the same provider under (opencode's models.dev ids, OpenClaw's profiles).
-    readonly aliases: readonly string[];
-    // The environment names a `.env` holds its key under.
-    readonly env: readonly string[];
-    readonly baseUrl: string;
-    readonly protocol: EndpointProtocol;
-}
-
-export const KEY_PROVIDERS: readonly KeyProvider[] = [
-    { id: "anthropic", label: "Anthropic", aliases: [], env: ["ANTHROPIC_API_KEY"], baseUrl: "https://api.anthropic.com", protocol: "anthropic" },
-    { id: "openai", label: "OpenAI", aliases: [], env: ["OPENAI_API_KEY"], baseUrl: "https://api.openai.com/v1", protocol: "openai" },
-    { id: "openrouter", label: "OpenRouter", aliases: [], env: ["OPENROUTER_API_KEY"], baseUrl: "https://openrouter.ai/api/v1", protocol: "openai" },
-    {
-        id: "gemini",
-        label: "Gemini",
-        aliases: ["google", "google-gemini"],
-        env: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        // The platform's free trial reads the same surface (_platform/api config.ts `trial.baseUrl`).
-        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-        protocol: "openai",
-    },
-    { id: "xai", label: "xAI", aliases: ["grok", "x-ai"], env: ["XAI_API_KEY", "GROK_API_KEY"], baseUrl: "https://api.x.ai/v1", protocol: "openai" },
-    { id: "deepseek", label: "DeepSeek", aliases: [], env: ["DEEPSEEK_API_KEY"], baseUrl: "https://api.deepseek.com/v1", protocol: "openai" },
-    { id: "groq", label: "Groq", aliases: [], env: ["GROQ_API_KEY"], baseUrl: "https://api.groq.com/openai/v1", protocol: "openai" },
-    { id: "mistral", label: "Mistral", aliases: [], env: ["MISTRAL_API_KEY"], baseUrl: "https://api.mistral.ai/v1", protocol: "openai" },
-    { id: "moonshot", label: "Moonshot", aliases: ["moonshotai"], env: ["MOONSHOT_API_KEY"], baseUrl: "https://api.moonshot.ai/v1", protocol: "openai" },
-];
-
+// One model API this sandbox knows how to reach with nothing but a key: the shared table (sandbox-contract
+// models/key-providers.ts), which the editor also reads for a key pasted by hand. A provider missing from it is reported
+// and not offered.
 const providerNamed = (name: string): KeyProvider | undefined => {
     const wanted = name.trim().toLowerCase();
     return KEY_PROVIDERS.find((provider) => provider.id === wanted || provider.aliases.includes(wanted));

@@ -5342,6 +5342,19 @@
             "linkFirst": "Holds {count} account this sandbox doesn't have: {providers}. Link {name} here to use it. It lends only what you bring, and you can stop it any time. | Holds {count} accounts this sandbox doesn't have: {providers}. Link {name} here to use them. It lends only what you bring, and you can stop it any time.",
             "revoked": "{name} no longer holds its link to this sandbox. Link again to bring its accounts here.",
             "silent": "This sandbox can't reach {name} over the link, so nothing can come from it yet."
+        },
+        "apiKey": {
+            "offer": "Use an API key from {vendor} instead",
+            "title": "{vendor} API key",
+            "billing": "Billed by {vendor} for every token, separately from any subscription. Agent sessions read a lot of code, so costs add up faster than in a chat.",
+            "limit": "Set a spending limit in your {vendor} account before you start.",
+            "prices": "Prices",
+            "createKey": "Create a key",
+            "field": "{vendor} API key",
+            "placeholder": "Paste the {vendor} API key…",
+            "add": "Add key",
+            "notAccepted": "{vendor} didn't accept this key: it listed no models for it. Check the key and try again.",
+            "couldntAdd": "Couldn't add the {vendor} key."
         }
     },
     "desktop": {

@@ -5342,6 +5342,19 @@
             "linkFirst": "Contient {count} compte que cette sandbox n'a pas : {providers}. Liez {name} ici pour l'utiliser. Elle ne prête que ce que vous importez, et vous pouvez arrêter à tout moment. | Contient {count} comptes que cette sandbox n'a pas : {providers}. Liez {name} ici pour les utiliser. Elle ne prête que ce que vous importez, et vous pouvez arrêter à tout moment.",
             "revoked": "{name} ne détient plus son lien avec cette sandbox. Liez-la à nouveau pour importer ses comptes ici.",
             "silent": "Cette sandbox ne joint pas {name} par le lien, donc rien ne peut encore en venir."
+        },
+        "apiKey": {
+            "offer": "Utiliser plutôt une clé API {vendor}",
+            "title": "Clé API {vendor}",
+            "billing": "{vendor} facture chaque token, en dehors de tout abonnement. Les agents lisent beaucoup de code, le coût monte donc plus vite que dans un chat.",
+            "limit": "Fixez une limite de dépenses dans votre compte {vendor} avant de commencer.",
+            "prices": "Tarifs",
+            "createKey": "Créer une clé",
+            "field": "Clé API {vendor}",
+            "placeholder": "Collez la clé API {vendor}…",
+            "add": "Ajouter la clé",
+            "notAccepted": "{vendor} n'a pas accepté cette clé : aucun modèle n'est listé pour elle. Vérifiez la clé et réessayez.",
+            "couldntAdd": "Impossible d'ajouter la clé {vendor}."
         }
     },
     "desktop": {

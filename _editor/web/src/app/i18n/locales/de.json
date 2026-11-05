@@ -5342,6 +5342,19 @@
             "linkFirst": "Hat {count} Konto, das diese Sandbox nicht hat: {providers}. Verknüpfe {name} hier, um es zu nutzen. Es verleiht nur, was du übernimmst, und du kannst es jederzeit beenden. | Hat {count} Konten, die diese Sandbox nicht hat: {providers}. Verknüpfe {name} hier, um sie zu nutzen. Es verleiht nur, was du übernimmst, und du kannst es jederzeit beenden.",
             "revoked": "{name} hält die Verknüpfung zu dieser Sandbox nicht mehr. Verknüpfe sie erneut, um ihre Konten hierher zu holen.",
             "silent": "Diese Sandbox erreicht {name} über die Verknüpfung nicht, daher kann noch nichts von dort kommen."
+        },
+        "apiKey": {
+            "offer": "Stattdessen einen {vendor}-API-Schlüssel verwenden",
+            "title": "{vendor}-API-Schlüssel",
+            "billing": "{vendor} berechnet jedes Token, getrennt von jedem Abo. Agenten lesen viel Code, daher steigen die Kosten schneller als im Chat.",
+            "limit": "Legen Sie vorher in Ihrem {vendor}-Konto ein Ausgabenlimit fest.",
+            "prices": "Preise",
+            "createKey": "Schlüssel erstellen",
+            "field": "{vendor}-API-Schlüssel",
+            "placeholder": "{vendor}-API-Schlüssel einfügen…",
+            "add": "Schlüssel hinzufügen",
+            "notAccepted": "{vendor} hat diesen Schlüssel nicht akzeptiert: Für ihn wurden keine Modelle aufgelistet. Prüfen Sie den Schlüssel und versuchen Sie es erneut.",
+            "couldntAdd": "Der {vendor}-Schlüssel konnte nicht hinzugefügt werden."
         }
     },
     "desktop": {
