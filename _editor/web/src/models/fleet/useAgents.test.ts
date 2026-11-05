@@ -353,13 +353,23 @@ describe("canArchive", () => {
         expect(canArchive({ status: `draft`, attention: none })).toBe(false);
         // A refused send is in Attention with no entry to file; its affordance is Close, not Archive.
         expect(canArchive({ status: `failed`, attention: none })).toBe(false);
-        // A stopped turn is still live until its generator unwinds; the daemon holds the worktree the whole time.
-        expect(canArchive({ status: `stopping`, attention: none })).toBe(false);
+        // Nor one the sandbox is landing or repairing: nobody ended those, so there is no stop to wait out.
+        expect(canArchive({ status: `landing`, attention: none })).toBe(false);
+        expect(canArchive({ status: `resuming`, attention: none })).toBe(false);
     });
 
     // Once stopped it's a dead end like any other: half-written work, nothing outstanding, safe to archive.
     it("takes a turn the user stopped", () => {
         expect(canArchive({ status: `stopped`, attention: none })).toBe(true);
+    });
+
+    // A runtime that ignores the stop holds the card at Stopping for its whole grace; the press is taken then, the card
+    // leaves at once, and the sandbox files it when the stop has wound down. Clear, which names no card, leaves it.
+    it("takes a turn still unwinding from a person's stop, by its own press only", () => {
+        expect(canArchive({ status: `stopping`, attention: none })).toBe(true);
+        expect(canArchive({ status: `dismissing`, attention: none })).toBe(true);
+        expect(clearable({ status: `stopping`, attention: none })).toBe(false);
+        expect(clearable({ status: `dismissing`, attention: none })).toBe(false);
     });
 
     it("refuses one that is already archived, so the card offers Restore instead of a second Archive", () => {

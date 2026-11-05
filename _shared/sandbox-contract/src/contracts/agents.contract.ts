@@ -487,7 +487,7 @@ export const agentsContract = {
             path: "/agents/archive",
             summary: "Put conversations away",
             description:
-                "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. Its scratch is not committed and goes with the copy. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
+                "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. Its scratch is not committed and goes with the copy. It leaves the live fleet and joins the archive. Refused for a conversation that is running, except one somebody already stopped: that is archived once the stop has finished, and reported in `failed` if it is still stopping half a minute later.",
         })
         .meta({ floor: "collaborator", guest: true })
         .input(AgentIdsSchema)

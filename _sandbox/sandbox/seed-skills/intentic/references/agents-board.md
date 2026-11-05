@@ -63,7 +63,8 @@ Agents have no tags, labels, colors or stars, and personas have no icon or color
 A finished agent is archived after `agentRetentionDays` (default 3; Sandbox ▸ Agent ▸ Finishing, **Archive
 finished agents**: 1 day, 3 days, 1 week or Never), or by hand from its card. The **Finished** lane's **Open the
 archive (N)** lists them, with **Restore** on each. Archiving commits what the conversation still had in progress
-onto its own branch and releases its working copy.
+onto its own branch and releases its working copy. A card still reading **Stopping** can be archived from its card or
+menu too: it leaves the board at once, and the sandbox files it away when the stop has finished.
 
 A subagent rides in the tray under the card of the agent that spawned it. When it stops (an error, a spent
 allowance, a Stop) the stop is reported to that parent, so it moves the parent's card to **Attention** only until

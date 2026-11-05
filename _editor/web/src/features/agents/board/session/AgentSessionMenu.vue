@@ -3,7 +3,7 @@ import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-br
 import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
 import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
 import { computed } from "vue";
-import { effectiveAutoLand, limited, memoryHeld, unregistered, writingNow } from "../../../../models/agent-status/agentStatus-standing";
+import { effectiveAutoLand, endingByHand, limited, memoryHeld, unregistered, writingNow } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway } from "../../fleet/agentStatus-land";
 import AgentReactions from "../cards/AgentReactions.vue";
 import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../../models/conversations/endings/turnBreak";
@@ -33,7 +33,7 @@ const t = useT();
 // The land press in the audience's own word, as the card beside this menu says it.
 const words = useVocabulary();
 
-const { changes, agentId, phone, retryLand = false, renameable, sessionName } = defineProps<{
+const { changes, agentId, phone, retryLand = false, renameable, sessionName, streaming } = defineProps<{
     agentId: string;
     // AgentDetail's one useAgentChanges instance; a second one here would desync the panel's busy/error state.
     changes: ReturnType<typeof useAgentChanges>;
@@ -165,11 +165,17 @@ const run = (action: () => void): void => {
 };
 
 // Same split as the header button (AgentDetail); made independently here since either one can be the press.
-// Archive and discard below still gate on `streaming`; the land items follow `writing` instead, since a turn parked on
-// a question isn't writing.
+// Discard below still gates on `streaming`, Archive on `archiveWaits`; the land items follow `writing` instead, since a
+// turn parked on a question isn't writing.
 const writing = computed(() => {
     const agent = agentById(agentId);
     return agent !== undefined && writingNow(agent);
+});
+// Archive waits for the turn, but not for one a person already stopped: the sandbox files that once the stop has wound
+// down (canArchive), where a runtime that ignores the stop would otherwise hold the press greyed out for seconds.
+const archiveWaits = computed(() => {
+    const agent = agentById(agentId);
+    return streaming && !(agent !== undefined && endingByHand(agent));
 });
 // Every land in this menu goes through here: warns while the agent writes, otherwise lands directly.
 const pressLand = (land: () => void): void => {
@@ -331,14 +337,14 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             v-if="!archived && can(`agents.archive`)"
             type="button"
             :class="ITEM"
-            :disabled="changes.actionBusy.value || archiveBusy || streaming"
+            :disabled="changes.actionBusy.value || archiveBusy || archiveWaits"
             @click="run(() => changes.archive())"
         >
             <Icon name="box" class="text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.archive`) }}</span>
                 <span class="text-2xs text-subtle">
-                    {{ streaming ? t(`agents.words.waitAgentTurnTo`) : t(`agents.agentSessionMenu.branchDiffConversationKept`) }}
+                    {{ archiveWaits ? t(`agents.words.waitAgentTurnTo`) : t(`agents.agentSessionMenu.branchDiffConversationKept`) }}
                 </span>
             </span>
         </button>

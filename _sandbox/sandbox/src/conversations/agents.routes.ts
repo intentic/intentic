@@ -30,7 +30,9 @@ import type { IsolatedAgent, PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { standingsForRead } from "./standings-read.js";
 import { endingOf } from "./registry/projection/turn-ending.js";
-import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
+import { forgetConversations, purgeArchived } from "./registry/archive.js";
+import { archivableNow, archiveOnPress } from "./registry/archive-press.js";
+import { STOP_WAIT_MS } from "../agent/run/frames/stop-grace.js";
 import { landByHandLeased, settleByHand } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { framedSummary, listedTo, visibleTo } from "../auth/fleet-scope.js";
@@ -42,7 +44,7 @@ import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { draftRoutes } from "./drafts/drafts.routes.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
-// discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
+// discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT, but an archive waits out a stop.
 // The card as a press left it, for the press to answer with; missing only once the conversation was deleted meanwhile.
 const summaryAfter = (services: Pick<Services, "agents">, id: string): NonNullable<ReturnType<Services["agents"]["get"]>> => {
     const summary = services.agents.get(id);
@@ -537,9 +539,12 @@ export const createAgentsRoutes = (services: Services) => {
         archive: i.archive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
                 workEntryFor(id, context, "drive");
-                notRunning(id);
+                // A stop under way is waited out (archive-press.ts); any other live turn refuses the press.
+                if (!archivableNow(services.conversations, id)) {
+                    notRunning(id);
+                }
             }
-            const { archived, failed } = await archiveAgents(services, input.ids, Date.now());
+            const { archived, failed } = await archiveOnPress(services, input.ids, Date.now, STOP_WAIT_MS);
             // Read after the archive: summaries carry a fresh archivedAt and revision; a failed id is only reported.
             return {
                 moved: archived.flatMap((id) => {

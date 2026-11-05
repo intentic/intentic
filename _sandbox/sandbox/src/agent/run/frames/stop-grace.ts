@@ -6,6 +6,11 @@ import { unlessAborted, whenAborted } from "@intentic/base/async";
 // it every queued message and the archive that waits for the turn to end.
 export const STOP_GRACE_MS = 15_000;
 
+// How long a press that waits on a stop already under way (archiving a card that reads "Stopping…") gives it: the grace,
+// and as long again for the turn to settle once its runtime is walked away from. Short of the editor's own 45s deadline
+// on a call (sandboxAuthFetch DEADLINE_MS), so the press is answered rather than timed out.
+export const STOP_WAIT_MS = 2 * STOP_GRACE_MS;
+
 // What a read answers once the grace is over, in place of the frame it was waiting for.
 const ABANDONED: unique symbol = Symbol("abandoned");
 

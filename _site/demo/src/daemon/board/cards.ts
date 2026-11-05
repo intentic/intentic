@@ -101,7 +101,8 @@ const archived: AgentSummary[] = [];
 export const archivedAgents = (): AgentSummary[] => [...archived];
 
 // Refused for a running card, as the daemon refuses to release a copy a turn is writing to: it stays on the board with
-// the reason, rather than the press reading as silence.
+// the reason, rather than the press reading as silence. A card already stopping is taken, as the daemon takes it once
+// the stop has wound down (archive-press.ts); the demo's stops have nothing to wind down.
 export const archiveAgents = ({ ids }: SandboxHandlerInput<`agents`, `archive`>): SandboxHandlerOutput<`agents`, `archive`> => {
     const archivedAt = Date.now();
     const moved: AgentSummary[] = [];
