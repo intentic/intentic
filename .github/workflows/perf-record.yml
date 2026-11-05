@@ -51,8 +51,16 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
+      # Retried with --error-on=any for the reason nightly.yml's perf-instr gives: a plain apt-get update succeeds
+      # with every index unfetched.
       - if: ${{ inputs.track != 'browser' }}
-        run: apt-get update && apt-get install -y --no-install-recommends valgrind
+        run: |
+          for delay in 15 45 -; do
+            apt-get update --error-on=any && break
+            [ "$delay" = - ] && exit 1
+            sleep "$delay"
+          done
+          apt-get install -y --no-install-recommends valgrind
       - if: ${{ inputs.track != 'browser' }}
         run: pnpm perf:instr --jobs 4 --update
       - if: ${{ inputs.track != 'instr' }}

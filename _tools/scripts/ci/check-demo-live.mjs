@@ -11,9 +11,28 @@ const DEMO_URL = `${PLATFORM_SITE_ORIGIN}/demo/`;
 // request, and the asset layer answers a real miss with the site's 404 page, so the body is what tells them apart.
 const SHELL_MARKER = "interactive demo";
 
+// A request that never got an answer is retried; an answer is judged as it stands. The fleet runs on a home connection,
+// and a minute without one failed this check while the demo was live (nightly 42008151778: "fetch failed").
+const RETRY_DELAYS_MS = [10_000, 30_000];
+
+async function fetchRetrying(url) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
+        } catch (error) {
+            const delay = RETRY_DELAYS_MS[attempt];
+            if (delay === undefined) {
+                throw error;
+            }
+            console.log(`retry ${url}  request failed (${error instanceof Error ? error.message : String(error)}); again in ${delay / 1000}s`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+}
+
 async function probe(url, what, assert) {
     try {
-        const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const response = await fetchRetrying(url);
         const body = await response.text();
         const type = response.headers.get("content-type") ?? "";
         if (response.status !== 200) {

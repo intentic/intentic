@@ -129,6 +129,22 @@ jobs:
       # The store is named, because pnpm's default sits under the directory pnpm/action-setup installs pnpm into,
       # which it recreates every run ("reused 0, downloaded 561"). The tool cache is on the workspace's drive, so
       # pnpm hard-links from it, and it outlives the job.
+      #
+      # A kept node_modules linked from any OTHER store stops the install cold (ERR_PNPM_UNEXPECTED_STORE, run
+      # 42078081950: the one the default store left behind when the store above was first named), and keeps stopping
+      # it, since a failed install leaves the links as they were. pnpm records the store it linked from in the root
+      # .modules.yaml, so a node_modules from elsewhere (or one whose record cannot be read) is removed, once, and
+      # installed again from the named store.
+      - name: Forget a node_modules linked from another pnpm store
+        shell: pwsh
+        run: |
+          $record = 'node_modules/.modules.yaml'
+          if (-not (Test-Path $record)) { exit 0 }
+          $want = [System.IO.Path]::GetFullPath((Join-Path $env:RUNNER_TOOL_CACHE 'pnpm-store')).TrimEnd('\') + '\'
+          try { $have = [System.IO.Path]::GetFullPath((Get-Content -Raw $record | ConvertFrom-Json).storeDir) } catch { $have = '(unreadable)' }
+          if ($have.StartsWith($want, [System.StringComparison]::OrdinalIgnoreCase)) { exit 0 }
+          Write-Output "node_modules is linked from $have, not from $want; removing it so pnpm links from the named store"
+          Remove-Item -Recurse -Force node_modules
       - run: pnpm install --frozen-lockfile --store-dir "$env:RUNNER_TOOL_CACHE/pnpm-store" --filter=@intentic/desktop-smoke-windows...
       # The tier reads window titles through @intentic/desktop-automation, so both packages are built rather than run from
       # source — the export condition that resolves a workspace package to its TypeScript is a bun/tsgo
