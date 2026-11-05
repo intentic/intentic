@@ -1096,6 +1096,9 @@
             "title": "Lancer un agent là-dessus",
             "sharedNote": "Il travaille dans votre propre copie, là où se trouve le problème, et propose un plan avant de modifier quoi que ce soit.",
             "ownNote": "Il travaille dans sa propre copie ; sa correction arrive sous forme de changements que vous relisez."
+        },
+        "beyondResults": {
+            "showMore": "Afficher {count} de plus · {hidden} non affichés"
         }
     },
     "app": {

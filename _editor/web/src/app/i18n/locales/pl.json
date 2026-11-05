@@ -1096,6 +1096,9 @@
             "title": "Uruchom agenta do tego",
             "sharedNote": "Pracuje w Twojej własnej kopii, tam gdzie jest problem, i przed jakąkolwiek zmianą proponuje plan.",
             "ownNote": "Pracuje we własnej kopii; poprawka trafia do Ciebie jako zmiany do przejrzenia."
+        },
+        "beyondResults": {
+            "showMore": "Pokaż {count} więcej · {hidden} niewyświetlonych"
         }
     },
     "app": {

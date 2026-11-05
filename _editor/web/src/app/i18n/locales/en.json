@@ -1096,6 +1096,9 @@
             "title": "Start an agent on this",
             "sharedNote": "It works in your own checkout, where the problem is, and proposes a plan before it changes anything.",
             "ownNote": "It works in a copy of its own; its fix lands as changes you review."
+        },
+        "beyondResults": {
+            "showMore": "Show {count} more · {hidden} not shown"
         }
     },
     "app": {

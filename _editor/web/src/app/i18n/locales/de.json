@@ -1096,6 +1096,9 @@
             "title": "Einen Agenten daransetzen",
             "sharedNote": "Er arbeitet in deinem eigenen Checkout, wo das Problem liegt, und schlägt einen Plan vor, bevor er etwas ändert.",
             "ownNote": "Er arbeitet in einer eigenen Kopie; seine Korrektur kommt als Änderungen an, die du prüfst."
+        },
+        "beyondResults": {
+            "showMore": "{count} weitere zeigen · {hidden} nicht angezeigt"
         }
     },
     "app": {

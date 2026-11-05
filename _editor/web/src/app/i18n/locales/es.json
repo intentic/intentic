@@ -1096,6 +1096,9 @@
             "title": "Poner un agente en esto",
             "sharedNote": "Trabaja en tu propia copia, donde está el problema, y propone un plan antes de cambiar nada.",
             "ownNote": "Trabaja en una copia propia; su arreglo llega como cambios que revisas."
+        },
+        "beyondResults": {
+            "showMore": "Mostrar {count} más · {hidden} sin mostrar"
         }
     },
     "app": {
