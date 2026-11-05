@@ -518,6 +518,14 @@ const onStop = (state: ConversationState, ending: StopEnding): Decision<undefine
     };
 };
 
+// A settle with no turn under it (a land by hand) writes the entry's ending as idle, which takes away the refusal or
+// stop a held turn stood behind, so the unfired hold goes in the same step. Kept, it went on by itself at its reopen
+// while the card read Landed with no press, no strip and no question to answer (2026-11-04, keen-sable-4bzm: a child's
+// report held behind a spent weekly allowance, its work landed by hand, then booked to re-run two days later with
+// nothing on screen to call it off). A restart already dropped it (limit-hold.ts restoredLimitHold reads the ending).
+const settledResume = (state: ConversationState, ranTurn: boolean): ConversationState =>
+    !ranTurn && state.resume.held !== undefined && !state.resume.held.fired ? withResume(state, { held: undefined }) : state;
+
 // The turn's books go into the entry and are zeroed; the readings a card keeps showing stay. A settle on a rewinding
 // conversation leaves the rewind holding it, and one whose entry is gone writes nothing and keeps the books.
 const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> => {
@@ -542,7 +550,7 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
     };
     return {
         state: {
-            ...state,
+            ...settledResume(state, flush.ranTurn),
             phase,
             turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined, reach: undefined, review: undefined },
         },

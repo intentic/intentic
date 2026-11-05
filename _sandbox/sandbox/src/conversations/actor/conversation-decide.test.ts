@@ -1061,6 +1061,23 @@ describe("the settle", () => {
         expect(decision.state).toStrictEqual(idle({ resuming: true }));
     });
 
+    test("a settle with no turn under it (a land by hand) drops a spent allowance's unfired hold, and writes that down", () => {
+        const held = decide(idle(), { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go" }, reason: "limit", ran: true } }, NOW, ENTRY).state;
+        expect(held.resume.held).toMatchObject({ reason: "limit", fired: false });
+        const decision = decide(held, { kind: "settle" }, NOW, ENTRY);
+        expect(decision.state.resume.held).toBeUndefined();
+        expect(decision.effects).toContainEqual({ kind: "hold-written", hold: undefined });
+        expect(flushOf(decision)?.ranTurn).toBe(false);
+    });
+
+    test("a settle with no turn under it leaves a hold that already fired, and a turn's settle leaves an unfired one", () => {
+        const held = decide(idle(), { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go" }, reason: "limit", ran: true } }, NOW, ENTRY).state;
+        const fired = { ...held, resume: { ...held.resume, held: held.resume.held && { ...held.resume.held, fired: true } } };
+        expect(decide(fired, { kind: "settle" }, NOW, ENTRY).state.resume.held?.fired).toBe(true);
+        const live = { ...held, phase: running().phase };
+        expect(decide(live, { kind: "settle" }, NOW, ENTRY).state.resume.held).toBe(held.resume.held);
+    });
+
     test("a settle with no turn under it carries no answer, whatever the last turn's runtime still holds", () => {
         const decision = decide(idle({ answeredAt: 500 }), { kind: "settle" }, NOW, ENTRY);
         expect(flushOf(decision)?.answeredAt).toBeUndefined();
