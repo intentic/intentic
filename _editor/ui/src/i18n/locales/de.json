@@ -330,7 +330,13 @@
         "sandboxUsingRightNow": "Das ist die Sandbox, die Sie gerade benutzen: diese Seite verliert sie, bis sie zurück ist.",
         "saveForNextRestart": "Für nächsten Neustart speichern",
         "savedForNextRestart": "Für den nächsten Neustart gespeichert: {share}. Die Felder zeigen es; „Jetzt übernehmen“ startet sofort damit neu.",
-        "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. ic behält den neuen Anteil und übernimmt ihn beim nächsten Neustart der Sandbox über ic: Neu starten hier, Starten, ein Update, ein Rollback oder ein Neubau. Startet Docker den Container selbst neu, nach einem Absturz oder einem Neustart des Rechners, wird er nicht übernommen."
+        "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. ic behält den neuen Anteil und übernimmt ihn beim nächsten Neustart der Sandbox über ic: Neu starten hier, Starten, ein Update, ein Rollback oder ein Neubau. Startet Docker den Container selbst neu, nach einem Absturz oder einem Neustart des Rechners, wird er nicht übernommen.",
+        "swap": "Auslagerung",
+        "swapAppliesLive": "Nur die Auslagerung ändert sich: Übernehmen setzt sie sofort, ohne Neustart.",
+        "swapAtLeast": "Mindestens 1 GiB: ganz ohne Auslagerung bleibt die Sandbox bei einem außer Kontrolle geratenen Prozess hängen, statt ihn zu beenden.",
+        "swapCapInGib": "Auslagerung für die Arbeit der Sandbox in GiB",
+        "swapGib": "{count} GiB Auslagerung",
+        "swapWhole": "Ganze GiB, die ihre Arbeit auslagern darf, wenn sie ihren Speicher übersteigt. Eine kleine Grenze verhindert, dass ein einzelner außer Kontrolle geratener Prozess diesen ganzen Computer ausbremst. Leer ist die Vorgabe: ein Viertel ihres Speichers, 1 bis 4 GiB."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Das entfernt die Sandbox und alles darin (ihre Dateien und ihre Historie) von diesem Gerät. Eine Woche lang lässt sie sich dort wiederherstellen: `ic sandbox restore` auf diesem Rechner holt sie zurück.",

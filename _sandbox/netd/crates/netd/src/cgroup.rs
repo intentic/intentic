@@ -1,5 +1,6 @@
 //! Keeps the entrypoint's `daemon` cgroup leaf (no swap, top cpu/io weight) to netd and Node alone: anything else
-//! that lands there by inheritance moves to the sibling `workload` leaf, and Node's children run at nice 10.
+//! that lands there by inheritance moves to the sibling `workload` leaf, Node moves back in whenever it is found
+//! outside, and Node's children run at nice 10.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -7,15 +8,22 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-const CGROUP_ROOT: &str = "/sys/fs/cgroup";
+pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 const POLL: Duration = Duration::from_millis(250);
 const WORKLOAD_NICE: i32 = 10;
 
+/// A process's cgroup from its `/proc/<pid>/cgroup`: the unified hierarchy's path, as the reader's cgroup namespace
+/// names it (`/daemon`, `/workload`).
+pub fn cgroup_of(proc_cgroup: &str) -> Option<&str> {
+    proc_cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))
+        .map(str::trim_end)
+}
+
 /// netd's cgroup from `/proc/self/cgroup`, when it is the entrypoint's `daemon` leaf.
 pub fn daemon_cgroup_of(proc_self_cgroup: &str) -> Option<&str> {
-    let path = proc_self_cgroup
-        .lines()
-        .find_map(|line| line.strip_prefix("0::"))?;
+    let path = cgroup_of(proc_self_cgroup)?;
     path.ends_with("/daemon").then_some(path)
 }
 
@@ -28,34 +36,90 @@ pub fn strays(procs: &str, keep: &[u32]) -> Vec<u32> {
         .collect()
 }
 
-struct Leaves {
-    daemon: PathBuf,
-    workload: PathBuf,
+/// Which of the daemon leaf's strays move out this tick. A child of netd's own waits one tick the first time it is
+/// seen: it may be the Node the supervisor is starting, which is in the leaf from its fork (it inherits netd's cgroup)
+/// while its pid is told to this loop only once its exec went through, and on a loaded machine that is long enough for a
+/// tick to fall between. Moved out then, it ran in `workload` for good, since nothing moved it back: what was seen
+/// live on 2026-11-05, Node in `/workload` and netd alone in `/daemon`. Seen again and still not Node, it is a stray
+/// like any other (a `git` of the change feed's, a terminal's `tmux` client). `waited` holds the children already let
+/// wait, kept to the strays still there.
+pub fn due(found: &[u32], waited: &mut HashSet<u32>, netd_child: impl Fn(u32) -> bool) -> Vec<u32> {
+    waited.retain(|pid| found.contains(pid));
+    found
+        .iter()
+        .copied()
+        .filter(|&pid| !(netd_child(pid) && waited.insert(pid)))
+        .collect()
 }
 
-fn leaves() -> Option<Leaves> {
+/// Where Node is when that is not the daemon leaf (`daemon`, as `/proc/<pid>/cgroup` names it): moved out as a stray,
+/// or put somewhere else by anything at all.
+pub fn outside<'a>(proc_cgroup: &'a str, daemon: &str) -> Option<&'a str> {
+    cgroup_of(proc_cgroup).filter(|path| *path != daemon)
+}
+
+/// The parent pid in a `/proc/<pid>/stat` line: field 4, counted after the `)` that closes the command name.
+pub fn parent_of(stat: &str) -> Option<u32> {
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+/// The entrypoint's two leaves, when netd runs in its `daemon` one: what this loop keeps, and what the memory guard
+/// (memguard) reads and spares.
+#[derive(Debug, Clone)]
+pub struct Leaves {
+    /// The daemon leaf as `/proc/<pid>/cgroup` names it: `/daemon`.
+    pub daemon_path: String,
+    /// The daemon leaf's directory under the cgroup filesystem.
+    pub daemon: PathBuf,
+    /// The `workload` leaf's directory, beside it.
+    pub workload: PathBuf,
+}
+
+impl Leaves {
+    /// The cgroup holding both leaves: the container's own, whose pressure covers everything in the box.
+    pub fn container(&self) -> &Path {
+        self.daemon.parent().unwrap_or(Path::new(CGROUP_ROOT))
+    }
+}
+
+/// The leaves, when netd runs in the entrypoint's daemon leaf and its workload sibling exists: the container's own netd.
+/// A netd anywhere else (a test's, a developer's) keeps nothing, and nothing guards memory from it.
+pub fn leaves() -> Option<Leaves> {
     let own = std::fs::read_to_string("/proc/self/cgroup").ok()?;
-    let daemon = Path::new(CGROUP_ROOT).join(daemon_cgroup_of(&own)?.trim_start_matches('/'));
-    let workload = daemon.parent()?.join("workload").join("cgroup.procs");
-    workload.exists().then(|| Leaves {
-        daemon: daemon.join("cgroup.procs"),
+    let daemon_path = daemon_cgroup_of(&own)?.to_owned();
+    let daemon = Path::new(CGROUP_ROOT).join(daemon_path.trim_start_matches('/'));
+    let workload = daemon.parent()?.join("workload");
+    workload.join("cgroup.procs").exists().then_some(Leaves {
+        daemon_path,
+        daemon,
         workload,
     })
 }
 
-pub async fn govern(node: watch::Receiver<Option<u32>>) {
-    let leaves = leaves();
+pub async fn govern(leaves: Option<Leaves>, node: watch::Receiver<Option<u32>>) {
     let netd = std::process::id();
     let mut reniced: HashSet<u32> = HashSet::new();
     let mut refused: HashSet<u32> = HashSet::new();
+    let mut waited: HashSet<u32> = HashSet::new();
+    let mut returned: HashSet<u32> = HashSet::new();
     let mut tick = tokio::time::interval(POLL);
     loop {
         tick.tick().await;
         let node = *node.borrow();
         if let Some(leaves) = &leaves {
+            if let Some(node) = node {
+                keep_in(leaves, node, &mut returned);
+            }
             move_strays(
                 leaves,
+                netd,
                 &[Some(netd), node].into_iter().flatten().collect::<Vec<_>>(),
+                &mut waited,
                 &mut refused,
             );
         }
@@ -65,16 +129,60 @@ pub async fn govern(node: watch::Receiver<Option<u32>>) {
     }
 }
 
+// Node back into the daemon leaf, wherever it was found: the guarantee, whatever moved it out (the race `due` closes, or
+// anything this loop cannot see). Only the process moves, every thread of it; what Node already started stays where it
+// runs, in `workload`, as it should. Memory Node was charged for while outside stays charged there (cgroup v2 never
+// moves a charge), which is only what it allocated in the meantime. Said once per Node, moved or refused.
+fn keep_in(leaves: &Leaves, node: u32, said: &mut HashSet<u32>) {
+    said.retain(|pid| *pid == node);
+    let Ok(text) = std::fs::read_to_string(format!("/proc/{node}/cgroup")) else {
+        return;
+    };
+    let Some(found) = outside(&text, &leaves.daemon_path) else {
+        return;
+    };
+    match std::fs::write(leaves.daemon.join("cgroup.procs"), node.to_string()) {
+        Ok(()) => {
+            if said.insert(node) {
+                tracing::warn!(
+                    pid = node,
+                    found,
+                    "the daemon was outside its cgroup leaf; moved it back in"
+                );
+            }
+        }
+        Err(error) if error.raw_os_error() == Some(libc::ESRCH) => {}
+        Err(error) => {
+            if said.insert(node) {
+                tracing::warn!(%error, pid = node, found, "the daemon is outside its cgroup leaf: moving it back was refused");
+            }
+        }
+    }
+}
+
 // One pid per write, as cgroup.procs takes them; a process that exits mid-move (ESRCH) is no loss. Any other refusal
 // leaves it in the daemon's leaf every tick after, so it is said once per pid rather than retried in silence.
-fn move_strays(leaves: &Leaves, keep: &[u32], refused: &mut HashSet<u32>) {
-    let Ok(procs) = std::fs::read_to_string(&leaves.daemon) else {
+fn move_strays(
+    leaves: &Leaves,
+    netd: u32,
+    keep: &[u32],
+    waited: &mut HashSet<u32>,
+    refused: &mut HashSet<u32>,
+) {
+    let Ok(procs) = std::fs::read_to_string(leaves.daemon.join("cgroup.procs")) else {
         return;
     };
     let found = strays(&procs, keep);
     refused.retain(|pid| found.contains(pid));
-    for pid in found {
-        if let Err(error) = std::fs::write(&leaves.workload, pid.to_string())
+    let netd_child = |pid: u32| {
+        std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| parent_of(&stat))
+            == Some(netd)
+    };
+    let workload = leaves.workload.join("cgroup.procs");
+    for pid in due(&found, waited, netd_child) {
+        if let Err(error) = std::fs::write(&workload, pid.to_string())
             && error.raw_os_error() != Some(libc::ESRCH)
             && refused.insert(pid)
         {
@@ -239,5 +347,60 @@ mod tests {
     fn everything_but_the_kept_pids_is_a_stray() {
         assert_eq!(strays("1\n42\n43\n", &[1, 42]), vec![43]);
         assert_eq!(strays("", &[1]), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn a_process_cgroup_is_the_unified_line() {
+        assert_eq!(cgroup_of("0::/workload\n"), Some("/workload"));
+        assert_eq!(
+            cgroup_of("12:memory:/x\n0::/docker/abc\n"),
+            Some("/docker/abc")
+        );
+        assert_eq!(cgroup_of("12:memory:/x\n"), None);
+    }
+
+    // The supervisor's new Node is a child of netd's in the leaf before its pid is told: it waits a tick, and only a child
+    // still there and still not Node a tick later moves. Anything else moves at once.
+    #[test]
+    fn a_child_of_netds_waits_one_tick_before_it_moves() {
+        let netd_child = |pid: u32| pid >= 100;
+        let mut waited = HashSet::new();
+        assert_eq!(due(&[42, 100], &mut waited, netd_child), vec![42]);
+        assert_eq!(
+            due(&[100, 101], &mut waited, netd_child),
+            vec![100],
+            "a tick later the first moves, and the next new child waits its own tick"
+        );
+        assert_eq!(due(&[101], &mut waited, netd_child), vec![101]);
+        // Kept as Node (so no longer found), a pid is forgotten, and a child that takes the number again waits afresh.
+        assert_eq!(due(&[], &mut waited, netd_child), Vec::<u32>::new());
+        assert!(waited.is_empty());
+        assert_eq!(due(&[100], &mut waited, netd_child), Vec::<u32>::new());
+    }
+
+    // 2026-11-05: Node seen live in `/workload`, with netd alone in `/daemon`.
+    #[test]
+    fn node_anywhere_but_the_daemon_leaf_is_outside() {
+        assert_eq!(outside("0::/workload\n", "/daemon"), Some("/workload"));
+        assert_eq!(outside("0::/\n", "/daemon"), Some("/"));
+        assert_eq!(outside("0::/daemon\n", "/daemon"), None);
+        assert_eq!(
+            outside("0::/docker/abc/daemon\n", "/docker/abc/daemon"),
+            None
+        );
+        assert_eq!(
+            outside("", "/daemon"),
+            None,
+            "a cgroup unread is no verdict"
+        );
+    }
+
+    #[test]
+    fn the_parent_is_read_after_the_command_name_whatever_it_holds() {
+        assert_eq!(
+            parent_of("64 (node (main)) S 7 64 64 0 -1 4194560 100"),
+            Some(7)
+        );
+        assert_eq!(parent_of("garbage"), None);
     }
 }

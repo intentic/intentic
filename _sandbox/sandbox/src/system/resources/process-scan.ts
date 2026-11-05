@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { endianness } from "node:os";
 import { mapPool } from "@intentic/base/async";
+import { z } from "zod";
 import type { ProcessRole } from "@intentic/sandbox-contract/schemas/metrics";
 import { DAEMON_GEN_ENV, DEADLINE_ENV, DETACHED_ENV, DETACHED_KINDS, type DetachedKind, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
@@ -215,6 +216,80 @@ export const classifyProcess = (command: string, cgroup = ""): ProcessRole => {
     return ROLE_RULES.find(([, matches]) => matches(value))?.[0] ?? "other";
 };
 
+/* WHICH BACKGROUND JOB A PROCESS IS PART OF (2026-11-05). A game client a conversation's background job started grew to
+   17.6 GB and froze the sandbox, and the minute log filed it under `other` with nothing tying it to the job or the
+   conversation. bin/tmux-run runs every agent command as `bash <capture dir>/runner` in a tmux pane, and tmux makes that
+   runner the leader of a session of its own; the kernel keeps the session id on everything the command starts, through
+   any number of forks, a reparenting to init after its launcher exits, or a process group of its own (setpgid), and only
+   a process that calls setsid itself leaves it. So a process's job is found by its session: the session's leader is a
+   runner, and the runner's capture dir names the job. Its process group is the fallback, since the runner's shell runs
+   without job control and everything it starts stays in its group too: that is the id netd's memory guard records with a
+   kill (memory-records.ts `pgid`). Neither is ancestry, which a process reparented to init loses.
+   The runner's argv and the capture dirs are agent/tools/jobs's (job-processes.ts, background-jobs.ts, job-files.ts),
+   which this layer may not import: a background job's dir is `intentic-run-job-<job id>`, and a foreground call filed as
+   a job when it ran past its time keeps its own `intentic-run-…` dir, with the id in the `job.json` written into it. */
+const RUNNER = /^bash\0(\/.*\/intentic-run-[^/\0]+)\/runner\0$/u;
+const JOB_DIR = /\/intentic-run-job-([^/]+)$/u;
+const JOB_FILE = "job.json";
+
+/** The capture dir of the tmux-run runner this argv (NUL-separated, as procfs gives it) is, or undefined for any other. */
+export const runnerDirOf = (cmdline: string): string | undefined => RUNNER.exec(cmdline)?.[1];
+
+// Only the id of the job file background-jobs.ts writes, which is all a scan needs of it.
+const JobFileIdSchema = z.object({ id: z.string().min(1) });
+
+// The job id a filed foreground call's job.json names; undefined while it has none, which is every call that did not overrun.
+const jobFileId = (text: string | undefined): string | undefined => {
+    if (text === undefined) {
+        return undefined;
+    }
+    try {
+        return JobFileIdSchema.safeParse(JSON.parse(text)).data?.id;
+    } catch {
+        // allow(silent-catch): a job file torn mid-rename names no job yet; the next scan reads it whole.
+        return undefined;
+    }
+};
+
+type JobRunners = ReadonlyMap<number, { readonly jobId: string; readonly dir: string }>;
+
+// The jobs of the runners one scan found, by runner pid. A background job's id is in its dir's name; a filed foreground
+// call's is read from its job.json once it has one and kept while its runner lives, the absence read again each scan,
+// since the file is written after the runner starts.
+const jobRunnerResolver = (source: ProcSource): ((runnerDirs: ReadonlyMap<number, string>) => Promise<JobRunners>) => {
+    const fileIds = new Map<string, string>();
+    const jobIdOf = async (dir: string): Promise<string | undefined> => {
+        const id = JOB_DIR.exec(dir)?.[1] ?? fileIds.get(dir) ?? jobFileId(await source.readText(`${dir}/${JOB_FILE}`));
+        if (id !== undefined && JOB_DIR.exec(dir) === null) {
+            fileIds.set(dir, id);
+        }
+        return id;
+    };
+    return async (runnerDirs) => {
+        const runners = new Map<number, { readonly jobId: string; readonly dir: string }>();
+        for (const [pid, dir] of runnerDirs) {
+            const jobId = await jobIdOf(dir);
+            if (jobId !== undefined) {
+                runners.set(pid, { jobId, dir });
+            }
+        }
+        const live = new Set(runnerDirs.values());
+        for (const dir of fileIds.keys()) {
+            if (!live.has(dir)) {
+                fileIds.delete(dir);
+            }
+        }
+        return runners;
+    };
+};
+
+// An argv as the kill records keep it: NUL-separated words joined by spaces, cut to 300 characters (memory-records.ts).
+const ARGV_CHARS = 300;
+const argvOf = (cmdline: string | undefined): string | undefined => {
+    const said = (cmdline ?? "").replaceAll("\0", " ").trim();
+    return said === "" ? undefined : said.slice(0, ARGV_CHARS);
+};
+
 export interface ScannedProcess extends ParsedProcStat {
     readonly pid: number;
     // The conversation its stamp names; undefined for unstamped work.
@@ -222,19 +297,61 @@ export interface ScannedProcess extends ParsedProcStat {
     readonly stamps?: ProcessStamps | undefined;
     readonly role: ProcessRole;
     readonly program: string | undefined;
+    // Its command line, cut to 300 characters: for the record of a kill, never for the minute log, where a prompt or a
+    // token in an argv would outlive the process by a week.
+    readonly argv?: string | undefined;
+    // The background job whose runner leads its session (or its group), when one does.
+    readonly jobId?: string | undefined;
 }
+
+// What the shared scan last saw of each job's runner, by the runner's pid (the session and group id of everything in its
+// job), and of every process found in a job, by its own pid; kept a while after each goes: a kill is told after the
+// fact, and a job's runner exits the moment its command is killed, so the follower that marks the job's ending
+// (agent/tools/jobs/memory-kills.ts) asks here once both are gone. netd's guard names a process by its pid and group
+// alone, and the group is the runner's only for a process that never made one of its own: the incident's game client
+// did, so its own pid is what ties it to its job.
+const RUNNER_MEMORY_MS = 10 * 60_000;
+type SeenRunner = { readonly jobId: string; readonly dir: string; seenAt: number };
+const recentRunners = new Map<number, SeenRunner>();
+const recentJobProcesses = new Map<number, SeenRunner>();
+
+const seenRunner = (seen: SeenRunner | undefined): { readonly jobId: string; readonly dir: string } | undefined =>
+    seen === undefined ? undefined : { jobId: seen.jobId, dir: seen.dir };
+
+/** The job a process group or session led by `pid` belonged to, as the daemon's own scan last saw its runner. */
+export const recentJobRunner = (pid: number): { readonly jobId: string; readonly dir: string } | undefined => seenRunner(recentRunners.get(pid));
+
+/** The job the process `pid` was part of, as the daemon's own scan last saw it: by its own pid, whatever its group. */
+export const recentJobProcess = (pid: number): { readonly jobId: string; readonly dir: string } | undefined => seenRunner(recentJobProcesses.get(pid));
+
+const remember = (into: Map<number, SeenRunner>, seen: ReadonlyMap<number, { readonly jobId: string; readonly dir: string }>, now: number): void => {
+    for (const [pid, runner] of seen) {
+        into.set(pid, { jobId: runner.jobId, dir: runner.dir, seenAt: now });
+    }
+    for (const [pid, runner] of into) {
+        if (now - runner.seenAt > RUNNER_MEMORY_MS) {
+            into.delete(pid);
+        }
+    }
+};
 
 export interface ProcSource {
     readonly listPids: () => Promise<readonly number[]>;
     readonly readText: ReadText;
 }
 
-// `key` is start time and comm, so a reused pid or a renaming exec is read again.
-type Identity = Pick<ScannedProcess, "owner" | "stamps" | "role" | "program"> & { readonly key: string };
+// `key` is start time and comm, so a reused pid or a renaming exec is read again. `runner` is the capture dir of a
+// tmux-run runner, for the one process each job has that leads its session.
+type Identity = Pick<ScannedProcess, "owner" | "stamps" | "role" | "program" | "argv"> & { readonly key: string; readonly runner: string | undefined };
 
-// Scans every process but `except`, keeping what each was found to be for the next scan.
-export const createProcessScanner = (source: ProcSource = { listPids, readText }): ((except?: number) => Promise<ScannedProcess[]>) => {
+// Scans every process but `except`, keeping what each was found to be for the next scan. `remember` is the shared scan's
+// alone: it keeps the runners it saw for recentJobRunner.
+export const createProcessScanner = (
+    source: ProcSource = { listPids, readText },
+    options: { readonly remember?: boolean } = {},
+): ((except?: number) => Promise<ScannedProcess[]>) => {
     const identities = new Map<number, Identity>();
+    const jobRunners = jobRunnerResolver(source);
     const identify = async (pid: number, stat: ParsedProcStat): Promise<Identity> => {
         const key = `${stat.startTimeTicks ?? ""}:${stat.comm}`;
         const known = identities.get(pid);
@@ -253,6 +370,8 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
             stamps: stampsOf(environ ?? ""),
             role: classifyProcess(command, cgroup ?? ""),
             program: programOf(command),
+            argv: argvOf(cmdline),
+            runner: runnerDirOf(cmdline ?? ""),
         };
         identities.set(pid, identity);
         return identity;
@@ -260,6 +379,7 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
     return async (except) => {
         const pids = (await source.listPids()).filter((pid) => pid !== except);
         const scanned: ScannedProcess[] = [];
+        const runnerDirs = new Map<number, string>();
         await mapPool(pids, READ_CONCURRENCY, async (pid) => {
             const text = await source.readText(`/proc/${pid}/stat`);
             const stat = text === undefined ? undefined : parseProcStat(text);
@@ -267,8 +387,11 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
             if (stat === undefined) {
                 return;
             }
-            const { owner, stamps, role, program } = await identify(pid, stat);
-            scanned.push({ pid, ...stat, owner, stamps, role, program });
+            const { owner, stamps, role, program, argv, runner } = await identify(pid, stat);
+            if (runner !== undefined) {
+                runnerDirs.set(pid, runner);
+            }
+            scanned.push({ pid, ...stat, owner, stamps, role, program, ...opt("argv", argv) });
         });
         const alive = new Set(scanned.map((entry) => entry.pid));
         for (const pid of identities.keys()) {
@@ -276,8 +399,23 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
                 identities.delete(pid);
             }
         }
+        const runners = await jobRunners(runnerDirs);
+        // The session first: the kernel keeps it through every fork and regrouping; the group for a session not a runner's.
+        const runnerOf = (entry: ScannedProcess): { readonly jobId: string; readonly dir: string } | undefined =>
+            (entry.session === undefined ? undefined : runners.get(entry.session)) ?? runners.get(entry.pgrp);
+        const jobProcesses = new Map(scanned.flatMap((entry) => {
+            const runner = runnerOf(entry);
+            return runner === undefined ? [] : [[entry.pid, runner] as const];
+        }));
+        if (options.remember === true) {
+            const now = Date.now();
+            remember(recentRunners, runners, now);
+            remember(recentJobProcesses, jobProcesses, now);
+        }
         const byPid = new Map(scanned.map((entry) => [entry.pid, entry]));
-        return scanned.map((entry) => {
+        return scanned.map((scannedEntry) => {
+            const jobId = jobProcesses.get(scannedEntry.pid)?.jobId;
+            const entry = jobId === undefined ? scannedEntry : { ...scannedEntry, jobId };
             if (entry.role !== "other" || !NATIVE_BUILD_STEP.test(entry.comm)) {
                 return entry;
             }
@@ -297,4 +435,4 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
 
 // The daemon's one scanner: the gauge (live-metrics.ts), the minute log (resource-metrics.ts) and the reaper read the
 // same processes, so they share what each process was found to be instead of reading every environ three times.
-export const scanProcesses: (except?: number) => Promise<ScannedProcess[]> = createProcessScanner();
+export const scanProcesses: (except?: number) => Promise<ScannedProcess[]> = createProcessScanner(undefined, { remember: true });

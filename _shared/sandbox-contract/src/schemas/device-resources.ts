@@ -17,11 +17,23 @@ export const SandboxResourcesAskFieldsSchema = z.object({
 // docker's answer: a directive the approved environment demands rides beside it (`overlayRuntime`), and a host
 // without the NVIDIA runtime drops the GPU. `ic` stores it, validates it against the image's run contract when it is
 // saved, and prints it in `ic sandbox list --json`; nobody else merges anything into it.
+//
+// `swapGib` (2026-11-05) is the one field that may be absent: ABSENT is an ic or a machine agent from before it, which
+// neither reports nor takes it (an older agent's reading strips it, and its strict order schema refuses it), so a caller
+// sends it only to a machine whose report carried it. `null` is the default, a value is the owner's ask.
 export const SandboxShapeSchema = z.object({
     memoryGib: z.int().positive().nullable(),
     cpus: z.int().positive().nullable(),
     privileged: z.boolean(),
     gpu: z.boolean(),
+    swapGib: z
+        .int()
+        .positive()
+        .nullable()
+        .optional()
+        .describe(
+            "Whole GiB of swap the sandbox's work (its `workload` cgroup) may page into, the swap alone, not memory plus swap; null for the default, a quarter of the memory cap between 1 and 4 GiB (memory-records.ts defaultSwapGib). Changed alone and now, ic applies it to the running sandbox without a restart. Absent from an ic or agent older than it.",
+        ),
 });
 export type SandboxShape = z.infer<typeof SandboxShapeSchema>;
 // When a `set-shape` takes effect: `now` restarts the sandbox onto it; `nextRestart` saves it in ic's record and
@@ -46,6 +58,22 @@ export const SandboxResourcesSchema = z.object({
     // READ-ONLY, from agents older than `set-shape`: their saved share, a delta against what runs. Nothing new writes
     // it; kept one release so a newer page can still show what an older agent saved. Remove with `later`.
     saved: SandboxResourcesAskFieldsSchema.optional(),
+    // (2026-11-05) The swap bound IN FORCE, read by ic inside the running container from the kernel's own files, never
+    // from docker: an engine without swap-limit support records MemorySwap -1 whatever it was asked, and drops the bound.
+    swapMaxBytes: z
+        .number()
+        .nullable()
+        .optional()
+        .describe(
+            "The container's own swap bound as /sys/fs/cgroup/memory.swap.max inside it holds it, in bytes; null when unbounded. Absent when it was not read: the sandbox is not running, did not answer in time, or ic is older than this field.",
+        ),
+    workloadSwapMaxBytes: z
+        .number()
+        .nullable()
+        .optional()
+        .describe(
+            "The swap bound of the sandbox's work (/sys/fs/cgroup/workload/memory.swap.max: everything but the daemon and netd), in bytes; null when unbounded. Absent when it was not read, or the image is older than the bound a sandbox holds its own work to.",
+        ),
 });
 export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
 

@@ -17,8 +17,11 @@ import { opt } from "../../../opt.js";
 /** The card's own fields an ending is read off: the projected status, never the stored ending, and the failure it reports. */
 export type EndingFacts = Pick<AgentSummary, "status" | "failureCode" | "limitResetsAt" | "next">;
 
-// Whether the held turn ran, what each way of moving on costs, where a policy is sending it, and whether only a press
-// sends it again.
+// Whether the held turn ran, what each way of moving on costs, where a policy is sending it, whether only a press
+// sends it again, and whether memory killed it: the frame says so where it dresses the kill (memory-death.ts), and the
+// card's press, which every window's strip follows over the frame, has to say it too, or a window would ask the stop's
+// question of a turn the stop's answer never moves. A restart memory caused writes no frame at all (memory-restart.ts),
+// so for its cut turns the press is the only place it is said.
 const heldEnding = (held: HeldRecord): NonNullable<TurnEnding["held"]> => ({
     ran: held.ran,
     ...opt("contextTokens", held.contextTokens),
@@ -26,6 +29,7 @@ const heldEnding = (held: HeldRecord): NonNullable<TurnEnding["held"]> => ({
     ...opt("moving", held.move?.account),
     ...opt("handoff", held.handoff),
     ...opt("pressOnly", held.pressOnly === true ? true : undefined),
+    ...opt("memoryKill", held.memoryKill === undefined ? undefined : true),
 });
 // The live hold, never a summary flag: a restart clears the hold, so only it backs a re-run rather than a message.
 // A stopped hold also says how far its automatic re-runs got, once any has gone; one held for a press alone climbs no

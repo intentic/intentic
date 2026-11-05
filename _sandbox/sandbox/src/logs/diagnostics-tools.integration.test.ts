@@ -421,6 +421,26 @@ test("restarts names the host's crash as the end of a run killed without warning
     expect(text).toContain("booted pid 40; the run before was killed without warning (");
 });
 
+// 2026-11-05: a runaway thrashed the VM and netd killed the daemon; the restart said only "killed without warning".
+test("restarts lists each unclean stop's post-mortem: its cause, its sentence, and the conversations it holds", async () => {
+    const summary =
+        "netd killed the daemon after its event loop stopped answering for 300 s while memory pressure was 47%; integra (pid 1077125, 16.8 GB) from sub-tidy-pebble-aii1 was killed by the kernel's global OOM at 04:21:57 UTC";
+    const postMortem = { cause: "memory", killed: [], netd: [], culprits: ["sub-tidy-pebble-aii1"], summary };
+    const deps = await setup({
+        "restarts.jsonl": [
+            JSON.stringify({ at: at(200), boot: { pid: 40 }, previous: { ended: "stopped", graceful: true } }),
+            JSON.stringify({ at: at(60), boot: { pid: 14573 }, previous: { ended: "netd-stuck", graceful: false, startedAt: at(190), postMortem } }),
+        ],
+    });
+
+    const text = await call(deps, "restarts", {});
+    expect(text).toContain("2 daemon boots");
+    expect(text).toContain("Post-mortems of the unclean stops among them");
+    expect(text).toContain(`${at(60)} memory (ended netd-stuck): ${summary} [held as culprits: sub-tidy-pebble-aii1]`);
+    // Out of the window, out of the list.
+    expect(await call(deps, "restarts", { sinceMinutes: 30 })).not.toContain("Post-mortems");
+});
+
 test("restarts falls back to bare boot times on a daemon that keeps no restart log", async () => {
     const deps = await setup({
         // Uptime starts over between these two samples: a boot 2 minutes before the second.

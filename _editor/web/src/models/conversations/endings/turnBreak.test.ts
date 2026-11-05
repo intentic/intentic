@@ -24,6 +24,14 @@ describe(`effectivePolicy`, () => {
         expect(effectivePolicy(`memory`, {}, { memoryPolicy: `wait` })).toBe(`wait`);
     });
 
+    // A memory kill's own answer rides the card (AgentSummary.memoryKillPolicy) as every other ending's does, so a
+    // conversation that said to wait reads as waiting in every window, over the sandbox's default to resume.
+    it(`reads a conversation's own answer to a memory kill over the sandbox's, which resumes by default`, () => {
+        expect(effectivePolicy(`memoryKill`, undefined, undefined)).toBe(`resume`);
+        expect(effectivePolicy(`memoryKill`, { memoryKillPolicy: `wait` }, { memoryKillPolicy: `resume` })).toBe(`wait`);
+        expect(effectivePolicy(`memoryKill`, {}, { memoryKillPolicy: `wait` })).toBe(`wait`);
+    });
+
     // The distinction a three-state override exists for: the card writing the sandbox's own value CLEARS the override
     // rather than freezing a copy of a default the conversation would then quietly stop following.
     it(`reads the sandbox's answer alone, so a writer can tell an override from a match`, () => {

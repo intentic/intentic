@@ -47,12 +47,15 @@ const cardReadings = (state: ConversationState | undefined): Partial<Pick<Conver
 
 // The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
 // menu and the chat's control read them together.
-export const postures = (held: Postures): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy" | "memoryPolicy">> => ({
+export const postures = (
+    held: Postures,
+): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy" | "memoryPolicy" | "memoryKillPolicy">> => ({
     ...opt("autoLand", held.autoLand),
     ...opt("limitPolicy", held.limit),
     ...opt("outagePolicy", held.outage),
     ...opt("stopPolicy", held.stopped),
     ...opt("memoryPolicy", held.memory),
+    ...opt("memoryKillPolicy", held.memoryKill),
 });
 
 // Flat presses grouped into the card's chips. Both orders come straight off press order — the emoji by whoever used it

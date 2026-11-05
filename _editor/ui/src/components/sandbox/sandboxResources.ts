@@ -42,6 +42,15 @@ export const defaultMemoryGib = (engine: EngineFacts | undefined): number | unde
 export const cpuBounds = (engine: EngineFacts | undefined): CapBounds =>
     engine === undefined ? { min: 1 } : { min: 1, max: Math.max(1, Math.floor(engine.cpus)) };
 
+// The swap the sandbox's work may page into (2026-11-05): at least a GiB (with none, a runaway stalls the sandbox instead
+// of meeting its own out-of-memory kill) and no ceiling, the owner's to raise.
+export const SWAP_BOUNDS: CapBounds = { min: 1 };
+
+// What an empty swap field means for a memory cap of `memoryGib`: a quarter of it, 1 to 4 GiB. Mirrored from the
+// sandbox's memory-records.ts `defaultSwapGib`, which the sandbox holds its work to.
+export const defaultSwapGib = (memoryGib: number | undefined): number | undefined =>
+    memoryGib === undefined ? undefined : Math.min(4, Math.max(1, Math.ceil(Math.max(1, Math.floor(memoryGib)) / 4)));
+
 // What the form holds. `null` is the default, shown as an empty field. The switches hold the ASK rather
 // than docker's answer, since a dropped GPU is still asked for (see `gpuDropped`).
 export interface ResourcesForm {
@@ -49,6 +58,9 @@ export interface ResourcesForm {
     cpus: number | null;
     privileged: boolean;
     gpu: boolean;
+    // Whole GiB of swap the sandbox's work may page into, `null` the default. ABSENT when the machine did not report one
+    // (an ic or agent older than it): the form then shows no swap field and sends none, which such an agent refuses.
+    swapGib?: number | null | undefined;
 }
 
 // Whether either asker put this token on the container: the owner (`hostRuntime`) or the approved environment.
@@ -86,8 +98,9 @@ export const gpuDropped = (current: DeviceSandboxResources): boolean => asked(cu
 // Why the form can't be applied yet, per field, as a sentence rather than a flag; an empty field is
 // never a problem, it's the default.
 export interface FormProblems {
-    readonly memory?: string | undefined;
-    readonly cpus?: string | undefined;
+    memory?: string | undefined;
+    cpus?: string | undefined;
+    swap?: string | undefined;
 }
 
 // Each field's own sentences, one per way a value can be refused, built when read.
@@ -109,6 +122,12 @@ const CPU_WORDS: CapWords = {
     atMost: (max) => t(`ui.sandboxResourcesDialog.cpusAtMost`, { max }),
 };
 
+const SWAP_WORDS: CapWords = {
+    whole: () => t(`ui.sandboxResourcesDialog.memoryWholeOnly`),
+    atLeast: () => t(`ui.sandboxResourcesDialog.swapAtLeast`),
+    atMost: () => ``,
+};
+
 const capProblem = (value: number | null, bounds: CapBounds, words: CapWords): string | undefined => {
     if (value === null) {
         return undefined;
@@ -126,9 +145,20 @@ const capProblem = (value: number | null, bounds: CapBounds, words: CapWords): s
 };
 
 export const formProblems = (form: ResourcesForm, engine: EngineFacts | undefined): FormProblems => {
+    const problems: FormProblems = {};
     const memory = capProblem(form.memoryGib, MEMORY_BOUNDS, MEMORY_WORDS);
+    if (memory !== undefined) {
+        problems.memory = memory;
+    }
     const cpus = capProblem(form.cpus, cpuBounds(engine), CPU_WORDS);
-    return { ...(memory === undefined ? {} : { memory }), ...(cpus === undefined ? {} : { cpus }) };
+    if (cpus !== undefined) {
+        problems.cpus = cpus;
+    }
+    const swap = capProblem(form.swapGib ?? null, SWAP_BOUNDS, SWAP_WORDS);
+    if (swap !== undefined) {
+        problems.swap = swap;
+    }
+    return problems;
 };
 
 // What leaves on Apply: only what changed against the form the dialog opened on. `undefined` means
@@ -160,9 +190,13 @@ export const askFrom = (initial: ResourcesForm, form: ResourcesForm): ResourcesA
 // the old `reshape` op's delta.
 export const runningShape = (current: DeviceSandboxResources): ResourcesForm => current.shape ?? formFrom(current);
 
-// Whether two shapes say the same thing, field for field.
+// Whether two shapes say the same thing, field for field. An unreported swap reads as the default.
 export const sameShape = (a: ResourcesForm, b: ResourcesForm): boolean =>
-    a.memoryGib === b.memoryGib && a.cpus === b.cpus && a.privileged === b.privileged && a.gpu === b.gpu;
+    a.memoryGib === b.memoryGib && a.cpus === b.cpus && a.privileged === b.privileged && a.gpu === b.gpu && (a.swapGib ?? null) === (b.swapGib ?? null);
+
+// Whether `form` changes the swap of `running` and nothing else: Apply then sets it in the running sandbox with no restart.
+export const swapOnly = (running: ResourcesForm, form: ResourcesForm): boolean =>
+    !sameShape(running, form) && sameShape(running, { ...form, swapGib: running.swapGib });
 
 // A shape in a few words, e.g. "20 GiB memory · every CPU · not privileged · GPU"; the words `resourcesSummary` uses.
 export const shapeSummary = (shape: ResourcesForm): string =>
@@ -173,6 +207,8 @@ export const shapeSummary = (shape: ResourcesForm): string =>
         shape.cpus === null ? t(`ui.sandboxResourcesDialog.everyCpu`) : t(`ui.deviceDetail.cpuCount`, { count: shape.cpus }, shape.cpus),
         shape.privileged ? t(`ui.deviceDetail.privileged`) : t(`ui.sandboxResourcesDialog.notPrivileged`),
         shape.gpu ? `GPU` : t(`ui.sandboxResourcesDialog.noGpu`),
+        // The swap only when the owner asked for one: the default is the resting state and needs no words.
+        ...(shape.swapGib === undefined || shape.swapGib === null ? [] : [t(`ui.sandboxResourcesDialog.swapGib`, { count: shape.swapGib })]),
     ].join(` · `);
 
 // A number field's text, read back live. Not-a-number stays out entirely, so a field mid-edit ("1e")

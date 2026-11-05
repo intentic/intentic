@@ -242,13 +242,17 @@ pub fn up(args: Up) -> Result<()> {
     let made = sandbox::connect::make_volumes(&slug);
     ui::step("starting-sandbox", &format!("starting runner {name}…"));
     log.section(&format!("docker run {run_image}"));
-    if let Err(refusal) = docker::run_argv(&argv, &log) {
-        docker::quiet(&["rm", "-f", &container]);
-        let left = sandbox::connect::remove_made(&made);
-        bail!(
-            "starting the runner failed — the full docker output is saved to {}.\n{refusal}{left}",
-            log.path.display()
-        );
+    match docker::run_argv(&argv, &log) {
+        Err(refusal) => {
+            docker::quiet(&["rm", "-f", &container]);
+            let left = sandbox::connect::remove_made(&made);
+            bail!(
+                "starting the runner failed — the full docker output is saved to {}.\n{refusal}{left}",
+                log.path.display()
+            );
+        }
+        // A runner is a sandbox container too, with the same bound the engine may have dropped (containment.rs).
+        Ok(said) => sandbox::containment::after_launch(&slug, &argv, &said),
     }
     ui::step(
         "waiting-health",

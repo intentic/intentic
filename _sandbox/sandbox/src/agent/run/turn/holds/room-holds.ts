@@ -7,32 +7,37 @@ import type { DueAt } from "../../../../workload/nudged-pass.js";
 import { breakPolicyFor } from "../break-policy.js";
 import { rebookedForReopen, spentUntil } from "./allowance-gate.js";
 import { carryingOn } from "../../../../conversations/actor/conversation-holdings.js";
+import { noteMemoryRerun, waitsForRoom } from "./memory-kill.js";
 
 // What a low-memory refusal left waiting: a person's words, held in the conversation's queue (turn-admission.ts,
-// handBack), or a turn the sandbox kept whole at the door (`door`), and since when.
+// handBack), or a turn the sandbox kept whole at the door (`door`), and since when. A turn memory killed while it ran
+// (`killed`, memory-kill.ts) waits for the same room, on its own answer: it ran, so it is no refusal.
 export type RoomHold =
     | { readonly conversationId: string; readonly since: number; readonly kind: "queue" }
-    | { readonly conversationId: string; readonly since: number; readonly kind: "door"; readonly held: HeldRecord };
+    | { readonly conversationId: string; readonly since: number; readonly kind: "door" | "killed"; readonly held: HeldRecord };
 
 // Every low-memory hold, longest waiting first, one per conversation.
 const roomHolds = (services: Pick<Services, "agents" | "conversations">): readonly RoomHold[] => {
     const queues = services.conversations.refused().map(({ conversationId, since }): RoomHold => ({ conversationId, since, kind: "queue" }));
-    const doors = services.conversations
-        .stranded()
-        .flatMap(({ conversationId, record }): RoomHold[] =>
-            record.reason === "door" && !record.fired ? [{ conversationId, since: record.recordedAt, kind: "door", held: record }] : [],
-        );
-    // Turned away for room, by the rule the card's `next` reads too (conversation-next.ts).
-    const held = [...queues, ...doors].filter((hold) => roomRefused(services.agents.entry(hold.conversationId)?.ending)).sort((a, b) => a.since - b.since);
+    const stranded = services.conversations.stranded();
+    const doors = stranded.flatMap(({ conversationId, record }): RoomHold[] =>
+        record.reason === "door" && !record.fired ? [{ conversationId, since: record.recordedAt, kind: "door", held: record }] : [],
+    );
+    const killed = stranded.flatMap(({ conversationId, record }): RoomHold[] =>
+        waitsForRoom(record) ? [{ conversationId, since: record.recordedAt, kind: "killed", held: record }] : [],
+    );
+    // Turned away for room, by the rule the card's `next` reads too (conversation-next.ts); a kill needs no such ending.
+    const refused = [...queues, ...doors].filter((hold) => roomRefused(services.agents.entry(hold.conversationId)?.ending));
+    const held = [...refused, ...killed].sort((a, b) => a.since - b.since);
     return held.filter((hold, index) => held.findIndex((other) => other.conversationId === hold.conversationId) === index);
 };
 
 // Whether a low-memory hold also waits on a spent allowance (allowance-gate.ts): its words, booked for the reopen here
 // and now; a turn the sandbox kept, left held for a pass after the reopen.
 const waitsOnAllowance = async (services: Services, hold: RoomHold, now: number): Promise<boolean> =>
-    hold.kind === "door"
-        ? (await spentUntil(services, { ...hold.held.input, account: hold.held.onto?.account ?? hold.held.input.account }, now)) !== undefined
-        : rebookedForReopen(services, hold.conversationId, waitingOf(services.conversations.queued(hold.conversationId)).map((item) => item.id), now);
+    hold.kind === "queue"
+        ? rebookedForReopen(services, hold.conversationId, waitingOf(services.conversations.queued(hold.conversationId)).map((item) => item.id), now)
+        : (await spentUntil(services, { ...hold.held.input, account: hold.held.onto?.account ?? hold.held.input.account }, now)) !== undefined;
 
 // How long memory must stay free before a hold waiting for room lets anything go: one good reading between two short ones
 // is not memory calming down, and a turn let go into it is refused again, with a second notice in its chat.
@@ -43,7 +48,7 @@ export const ROOM_SETTLE_MS = 30_000;
 const ROOM_LOOK_MS = 5_000;
 
 // Lets one low-memory hold go, once memory has stayed free for ROOM_SETTLE_MS, and only where the conversation's answer to
-// the memory wall is to send it then. One a pass, longest waiting first: the next is judged on a reading that counts the
+// the memory wall (for a turn memory killed, to a memory kill) is to send it then. One a pass, longest waiting first: the next is judged on a reading that counts the
 // room the first one took (resource-budget.ts reservations), where letting them all go into one good reading would have
 // every one of them refused again at once. Its words go out as the ordinary turn they would have been; the sandbox's
 // kept turn runs as itself, as its press would run it.
@@ -56,7 +61,8 @@ export const releaseRoomHolds = async (services: Services, now: number, due: Due
     let next: RoomHold | undefined;
     for (const hold of holds) {
         // Room is not all it may wait for: on a spent account it waits for the reopen too, and the next hold gets the room.
-        if (breakArmed(await breakPolicyFor(services, hold.conversationId, "memory")) && !(await waitsOnAllowance(services, hold, now))) {
+        const answer = await breakPolicyFor(services, hold.conversationId, hold.kind === "killed" ? "memoryKill" : "memory");
+        if (breakArmed(answer) && !(await waitsOnAllowance(services, hold, now))) {
             next = hold;
             break;
         }
@@ -71,6 +77,16 @@ export const releaseRoomHolds = async (services: Services, now: number, due: Due
         return;
     }
     const { conversationId } = next;
+    if (next.kind === "killed") {
+        // Counted before it goes, so a re-run killed again before it says a word is still one the cap counts.
+        noteMemoryRerun(services.conversations, conversationId, next.held);
+        services.logger.info(
+            { conversationId, waitedMs: now - next.since, rerun: (next.held.memoryKill?.reruns ?? 0) + 1, restart: next.held.memoryKill?.restart === true },
+            "resume pass: memory freed up, a turn memory killed goes again",
+        );
+        await sendKept(next.held);
+        return;
+    }
     services.logger.info({ conversationId, kind: next.kind, waitedMs: now - next.since }, "resume pass: memory freed up, a held message goes out");
     if (next.kind === "door") {
         await sendKept(next.held);

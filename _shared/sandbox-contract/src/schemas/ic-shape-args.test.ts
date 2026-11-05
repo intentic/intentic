@@ -37,6 +37,14 @@ test("a field left out is left to ic, which keeps what it has for it", () => {
     expect(icShapeArgs("work", { memoryGib: 12, gpu: undefined }, "now")).toEqual(["sandbox", "shape", "work", "--set", "memoryGib=12", "--when", "now"]);
 });
 
+// The swap (2026-11-05) travels like the caps, null being the default; left out, it is left to ic, which is how a page
+// talking to a machine whose report never carried it sends nothing an older agent would refuse.
+test("the swap is one more `--set`, in the contract's own name, and only when it is named", () => {
+    expect(icShapeArgs("work", { swapGib: 4 }, "now")).toEqual(["sandbox", "shape", "work", "--set", "swapGib=4", "--when", "now"]);
+    expect(icShapeArgs("work", { memoryGib: 20, swapGib: null }, "nextRestart").slice(3, 7)).toEqual(["--set", "memoryGib=20", "--set", "swapGib=null"]);
+    expect(icShapeArgs("work", { memoryGib: 20, swapGib: undefined }, "now")).toEqual(["sandbox", "shape", "work", "--set", "memoryGib=20", "--when", "now"]);
+});
+
 test("forgetting and power name only the sandbox", () => {
     expect(icForgetShapeArgs("work")).toEqual(["sandbox", "shape", "work", "--forget"]);
     expect(icPowerArgs("restart", "work")).toEqual(["sandbox", "restart", "work"]);
@@ -47,6 +55,10 @@ test("a shape missing a field is not a shape", () => {
     expect(SandboxShapeSchema.safeParse({ memoryGib: 20, cpus: null, privileged: false }).success).toBe(false);
     expect(SandboxShapeSchema.safeParse({ memoryGib: 0, cpus: null, privileged: false, gpu: false }).success).toBe(false);
     expect(SandboxShapeSchema.safeParse({ memoryGib: null, cpus: null, privileged: false, gpu: false }).success).toBe(true);
+    // The swap alone may be absent: an ic or agent older than it reports a whole shape without it.
+    expect(SandboxShapeSchema.safeParse({ memoryGib: null, cpus: null, privileged: false, gpu: false, swapGib: null }).success).toBe(true);
+    expect(SandboxShapeSchema.safeParse({ memoryGib: null, cpus: null, privileged: false, gpu: false, swapGib: 0 }).success).toBe(false);
+    expect(SandboxShapeSchema.safeParse({ memoryGib: null, cpus: null, privileged: false, gpu: false, swapGib: 1.5 }).success).toBe(false);
 });
 
 // Every device input is strict, the shape nested in one included: an agent that dropped a field it did not know would
@@ -57,8 +69,11 @@ test("a device order refuses a shape or delta field it does not know", () => {
     const accepted = (fields: object): boolean =>
         DeviceSandboxFlowSchema.safeParse(JSON.parse(`{"op":"set-shape","slug":"work","when":"now","shape":${JSON.stringify(fields)}}`)).success;
     expect(accepted(whole)).toBe(true);
-    expect(accepted({ ...whole, swapGib: 4 })).toBe(false);
+    // The swap is the contract's own now; a field it does not know is still refused.
+    expect(accepted({ ...whole, swapGib: 4 })).toBe(true);
+    expect(accepted({ ...whole, diskGib: 40 })).toBe(false);
+    // The old `reshape` op's delta stays as it was released: nothing new sends it, so it never learned the swap.
     expect(DeviceSandboxFlowSchema.safeParse({ op: "reshape", slug: "work", resources: { memoryGib: 20, swapGib: 4 } }).success).toBe(false);
     // A report is read leniently: a newer ic's extra field must not fail an older reader.
-    expect(SandboxShapeSchema.safeParse({ ...whole, swapGib: 4 }).success).toBe(true);
+    expect(SandboxShapeSchema.safeParse({ ...whole, diskGib: 40 }).success).toBe(true);
 });

@@ -14,9 +14,22 @@ test(`an agent that takes whole shapes is sent the whole shape, or the forget`, 
 
 // The agent's input is strict all the way down, so a field a newer machine's report added to the running shape must not
 // ride along into the order.
-test(`a set-shape carries the contract's four fields and nothing else`, () => {
-    const reported = { ...bigger, swapGib: 4 };
+test(`a set-shape carries the contract's fields and nothing else`, () => {
+    const reported = { ...bigger, diskGib: 40 };
     expect(shapeFlow({ shape: reported, when: `now` }, true, running)).toEqual({ op: `set-shape`, payload: { shape: bigger, when: `now` } });
+});
+
+// The swap (2026-11-05) is the contract's, and rides exactly when the machine's report carried it: a form opened on an
+// older machine has no swap, and sending one would be refused by an agent that does not know it.
+test(`a set-shape carries the swap the machine reported, its default included, and none it did not`, () => {
+    expect(shapeFlow({ shape: { ...bigger, swapGib: 4 }, when: `now` }, true, running)).toEqual({
+        op: `set-shape`,
+        payload: { shape: { ...bigger, swapGib: 4 }, when: `now` },
+    });
+    expect(shapeFlow({ shape: { ...bigger, swapGib: null }, when: `nextRestart` }, true, running).payload.shape).toEqual({ ...bigger, swapGib: null });
+    expect(shapeFlow({ shape: bigger, when: `now` }, true, running).payload.shape).not.toHaveProperty(`swapGib`);
+    // The old op's delta never learned the swap: an agent that old is sent the caps alone.
+    expect(shapeFlow({ shape: { ...bigger, swapGib: 4 }, when: `now` }, false, running)).toEqual({ op: `reshape`, payload: { resources: { memoryGib: 20 } } });
 });
 
 test(`an older agent is sent the old op's delta for Apply, and refuses a save rather than restarting`, () => {

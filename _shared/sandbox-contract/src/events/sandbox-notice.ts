@@ -35,11 +35,15 @@ const failure = {
 };
 
 // The re-runs a resumed turn's row can name (events/resume.ts); a reason a reader does not know draws the row's text.
+// `memory` (2026-11-05) is a turn the sandbox killed because it ran out of memory and sent again once memory had stayed
+// free. Its own reason rather than `stopped`: filed there, its row read "the turn stopped short", which says nothing of
+// why, nor that what it had left running is gone.
 const ResumeNoticeReasonSchema = z.enum([
     "auth",
     "outage",
     "restart",
     "stopped",
+    "memory",
     "limit",
     "switched",
     "carried",

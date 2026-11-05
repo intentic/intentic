@@ -66,6 +66,7 @@ const RESUMED = {
     outage: () => t(`chat.sandboxNotice.resumed.outage`),
     restart: () => t(`chat.sandboxNotice.resumed.restart`),
     stopped: () => t(`chat.sandboxNotice.resumed.stopped`),
+    memory: () => t(`chat.sandboxNotice.resumed.memory`),
     limit: () => t(`chat.sandboxNotice.resumed.limit`),
     switched: () => t(`chat.sandboxNotice.resumed.switched`),
     carried: () => t(`chat.sandboxNotice.resumed.carried`),

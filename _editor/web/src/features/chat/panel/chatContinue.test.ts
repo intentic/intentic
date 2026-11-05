@@ -198,7 +198,7 @@ beforeEach(async () => {
     // Mirrors the real writer's optimistic echo into the roster (useAgents-actions.setBreakPolicy); without it the
     // control would snap back to the old answer and the test would assert a state the app never shows.
     setBreakPolicy.mockImplementation(async (_id: string, ending: string, policy: string | null) => {
-        const field = ending === `limit` ? `limitPolicy` : ending === `outage` ? `outagePolicy` : `stopPolicy`;
+        const field = { limit: `limitPolicy`, outage: `outagePolicy`, memoryKill: `memoryKillPolicy` }[ending] ?? `stopPolicy`;
         agentEntry.value = { ...agentEntry.value, [field]: policy ?? undefined } as Record<string, unknown>;
     });
     await nextTick();
@@ -351,6 +351,40 @@ it(`offers only the answers this ending can take`, async () => {
     await mountPanel();
 
     expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Keep trying`]);
+});
+
+// A stop the sandbox killed because memory ran out is asked the memory kill's question, the one its hold goes by: the
+// stop's answers set a ladder it never climbs, so "Keep trying" moved a pill and brought nothing back (2026-11-05). The
+// answer is written as the memory kill's, and the line says it goes once memory frees up, with no clock.
+it(`asks a stop memory killed the memory kill's question, and writes its answer there`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true, memoryKill: true } };
+    await mountPanel();
+
+    expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Resume when memory frees`]);
+    expect(armedAnswer()).toBe(`Resume when memory frees`);
+    // Its line names the kill, not a stop: "stopped short" read as a hung runtime beside a question about memory.
+    expect(composerText()).toContain(`Killed for memory · work kept`);
+    expect(composerText()).not.toContain(`Turn stopped short`);
+    expect(composerText()).toContain(`Goes by itself once memory frees up`);
+
+    answerPill(`Wait for me`)!.click();
+    await settle();
+
+    expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `memoryKill`, `wait`);
+    expect(armedAnswer()).toBe(`Wait for me`);
+    expect(composerText()).not.toContain(`Goes by itself`);
+});
+
+// The likely cause of a memory kill (its own process was the one killed, or killed again after its re-runs) is held for a
+// press alone, so it is asked nothing, as any stop held for a press is.
+it(`asks nothing of a memory kill held for a press alone`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true, memoryKill: true, pressOnly: true } };
+    await mountPanel();
+
+    expect(answerPills()).toEqual([]);
+    expect(composerText()).toContain(`Killed for memory · work kept · only Continue carries it on`);
 });
 
 // An unheld allowance means the daemon has no copy of the refused turn: before its reset a press carries the session on

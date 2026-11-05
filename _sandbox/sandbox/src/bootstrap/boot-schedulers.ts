@@ -33,6 +33,7 @@ import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { announceUnwatchedWrite, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { projectDirOf } from "../system/project-dir.js";
+import { startMemoryKillFollower } from "../agent/tools/jobs/memory-kills.js";
 import { countLandsForRuns } from "../hosts/runs/run-builds.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
@@ -129,6 +130,28 @@ const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "rol
 // Linked sandboxes, both halves (links/): a task another sandbox handed here reports how each of its turns ended, and the
 // tasks this sandbox handed out are followed again after a restart, so their parents still hear how each one ended. A task
 // handed here that was filed but never started before the restart starts now.
+// A process killed for memory (netd's guard, or the kernel inside the workload leaf), told to the conversation whose job
+// it was and marked on that job (agent/tools/jobs/memory-kills.ts). Only the container's daemon: netd and the cgroup
+// detector write memory-kills.jsonl only there, and a kill is told once.
+const startMemoryKills = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
+    if (role.container) {
+        const follower = startMemoryKillFollower({
+            historyRoot: services.config.historyRoot,
+            conversations: services.conversations,
+            activity: services.activity,
+            logger,
+        });
+        shutdown.push(() => follower.stop());
+    }
+};
+
+// What follows the container's own files rather than a turn: its folder's deliveries, and the memory kills netd and the
+// cgroup detector write down.
+const startContainerFeeds = (phase: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
+    startProjectDelivery(phase);
+    startMemoryKills(phase);
+};
+
 const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
     const deps = { links: services.inboundLinks, logger };
     shutdown.push(services.events.subscribe("run.settled", (settled) => noteLinkTurnSettled(deps, settled)));
@@ -220,7 +243,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
     shutdown.push(countLandsForRuns(services));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
-    startProjectDelivery({ role, services, shutdown });
+    startContainerFeeds({ role, services, logger, shutdown });
     startLinks({ role, services, logger, shutdown });
     startKeyrings({ role, services, shutdown });
 

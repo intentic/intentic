@@ -330,7 +330,13 @@
         "sandboxUsingRightNow": "Este es el sandbox que estás usando ahora mismo: esta página lo perderá hasta que vuelva.",
         "saveForNextRestart": "Guardar para el próximo reinicio",
         "savedForNextRestart": "Guardado para el próximo reinicio: {share}. Los campos lo muestran; «Aplicar ahora» reinicia con ello de inmediato.",
-        "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. ic conserva la nueva asignación y la aplica en el próximo reinicio del sandbox a través de ic: Reiniciar aquí, Iniciar, una actualización, una reversión o una reconstrucción. Que Docker reinicie el contenedor por su cuenta, tras un fallo o un reinicio del equipo, no la aplica."
+        "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. ic conserva la nueva asignación y la aplica en el próximo reinicio del sandbox a través de ic: Reiniciar aquí, Iniciar, una actualización, una reversión o una reconstrucción. Que Docker reinicie el contenedor por su cuenta, tras un fallo o un reinicio del equipo, no la aplica.",
+        "swap": "Intercambio",
+        "swapAppliesLive": "Solo cambia el intercambio: Aplicar lo fija al instante, sin reiniciar.",
+        "swapAtLeast": "Al menos 1 GiB: sin nada de intercambio, un proceso desbocado bloquea el sandbox en lugar de detenerse.",
+        "swapCapInGib": "Intercambio para el trabajo del sandbox en GiB",
+        "swapGib": "{count} GiB de intercambio",
+        "swapWhole": "GiB enteros que su trabajo puede paginar cuando supera su memoria. Un límite pequeño evita que un solo proceso desbocado ralentice todo este ordenador. Vacío es el valor por defecto: una cuarta parte de su memoria, de 1 a 4 GiB."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Esto quita el sandbox y todo lo que contiene (sus archivos y su historial) de ese dispositivo. Durante una semana se puede recuperar allí: `ic sandbox restore` en esa máquina lo devuelve.",

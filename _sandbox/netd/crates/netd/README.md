@@ -17,5 +17,9 @@ The binary of the sandbox's network daemon: it owns every port and the ingress t
 - [src/proxy.rs](src/proxy.rs) — where every listener and tunnel stream hands its requests, and how each is relayed.
 - [src/route.rs](src/route.rs) — which side answers a request.
 - [src/supervise.rs](src/supervise.rs) — runs Node, restarts it and ends what it left behind.
+- [src/memguard/mod.rs](src/memguard/mod.rs) — the memory guard, on a thread of its own: kills a runaway, samples
+  pressure, and the rule that holds a restart while memory is short.
+- [src/records.rs](src/records.rs) — `memory-kills.jsonl`, `netd-kills.jsonl` and `pressure.jsonl`, in the daemon's
+  shapes.
 - [src/tunnel.rs](src/tunnel.rs) — dials the edge and serves a stream per request.
 - [tests/routes.rs](tests/routes.rs) — the real binary on real ports: routing, preview relay, TLS, upgrades.

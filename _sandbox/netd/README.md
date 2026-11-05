@@ -108,6 +108,33 @@ flowchart LR
   or by swap read as a dead one.) A Node that has not said its first hello 3 minutes after it started is treated as
   hung, killed and restarted like one that stopped answering pings (2026-10-05: one hung before its hello was never
   killed, since pings start at the hello).
+- Memory is netd's to watch too (2026-11-05: one process an agent started grew to 17.6 GB of RSS and 33 GB of swap,
+  the VM thrashed for 1 h 48 m, the daemon's event loop froze and its own sampler with it, and netd, up and answering
+  throughout, killed the frozen daemon and every one it restarted every three minutes, saying so only on stderr). Every
+  kill netd makes of the daemon is written to `netd-kills.jsonl` in the history volume's `logs/` (`stuck`, `no-hello`,
+  with the pid, how long it had been silent and the memory pressure), and a restart after a crash or a kill waits while
+  the sandbox stalls on memory (`full avg10` at or above 20%) until it is below 10%, read every 5 s for 10 minutes at
+  most, and is written down as `restart-held`; a first start is never held. The memory guard (`memguard/`) runs on a
+  thread of its own, needing neither Node nor netd's async runtime, and reads five cgroup files a second: the
+  container's `memory.pressure`, and the `workload` leaf's memory and swap, used and allowed. When `full avg10` has held
+  at or above 20% for 10 s while the pressure is the sandbox's own (the leaf's memory and swap together at or above 80%
+  of its `memory.max`, or a leaf with no bound to measure against), or the leaf has held at or above 95% of both a
+  bounded `memory.max` and a bounded, non-zero `swap.max` for 5 s, it SIGKILLs the one process with the highest
+  `oom_score` outside the daemon's leaf (never pid 1, netd or Node, nor a kernel thread, a zombie or a process the
+  kernel scores 0), alone and not its group, then rests 15 s; it reads what that process was first (its memory, command
+  line, group, cgroup and the `INTENTIC_TURN_OWNER` stamp, the command line and owner off its own thread with a 2 s
+  deadline, since they are read out of memory that may be in swap) and appends it to `memory-kills.jsonl`. The pressure
+  has to be the sandbox's own because every sandbox on a host shares the VM's memory: on 2026-11-05 the sandbox next to
+  the runaway read `full` near 50% while using 0.7 of its 18 GiB, and counting that would have killed its processes one
+  by one for nothing the VM was short of. While `full avg10` is at or above 10%, or the leaf's swap is half spent, it
+  writes a sample to `pressure.jsonl` every 10 s with the three processes it would reach for first, and one more once
+  it eased (moved to `.1` past 5 MB). Every line is flushed to the disk as it is written. The shapes are the daemon's, in
+  `_sandbox/sandbox/src/system/resources/memory-records.ts`, mirrored by hand in `records.rs`. Only the container's own
+  netd (the default run directory, in the entrypoint's daemon leaf) runs the guard and holds restarts; a test's netd
+  writes its records beside its run directory and kills nothing. `cgroup.rs` keeps the leaf right as well: Node moves
+  back into the daemon leaf whenever it is found outside (seen live on 2026-11-05, Node in `workload` and netd alone in
+  `daemon`), and a child of netd's is let stay a tick before it is moved out as a stray, since the Node being started is
+  one until its pid is known.
 - The change feed: netd keeps a generation per checkout Node reads git in, moved by one inotify instance on
   whatever a `git status` there reads, so Node answers an untouched checkout from memory.
 - Node drives netd over the control socket: length-prefixed JSON frames on a Unix socket that push listen config
@@ -136,6 +163,9 @@ flowchart LR
 - [crates/netd/src/route.rs](crates/netd/src/route.rs) — which side answers a request.
 - [crates/netd/src/supervise.rs](crates/netd/src/supervise.rs) — runs Node, restarts it and ends what it left, reaps orphans as PID 1.
 - [crates/netd/src/guard.rs](crates/netd/src/guard.rs) — the owner's guard on preview hosts: which requests need a pass, and checking one.
+- [crates/netd/src/memguard/mod.rs](crates/netd/src/memguard/mod.rs) — the memory guard: when to kill, when to sample, when to hold a restart.
+- [crates/netd/src/records.rs](crates/netd/src/records.rs) — what netd writes down about memory, in the daemon's shapes.
+- [crates/netd/src/cgroup.rs](crates/netd/src/cgroup.rs) — the daemon's cgroup leaf kept to netd and Node, Node's children reniced.
 - [crates/netd/src/tunnel.rs](crates/netd/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.

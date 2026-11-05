@@ -9,7 +9,10 @@ import { gitRunCallers, gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { logsRoot } from "../../seams/logs-root.js";
 import { lineLog } from "../../store/open-document.js";
+import { opt } from "../../opt.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
+import { type KnownProcess, knownOf, type OomDetector, startDaemonOomDetector } from "./cgroup-oom.js";
+import { MEMORY_KILLS_FILE } from "./memory-records.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";
 import { holdWarnSeconds, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/heavy-rules";
@@ -36,6 +39,15 @@ export interface ProcessRow {
     readonly swapBytes: number;
     readonly threads: number;
     readonly cpuTicks: number;
+    // Whose it is (the INTENTIC_TURN_OWNER stamp: a conversation id, `daemon` or `one-shot`) and the background job it is
+    // part of (process-scan.ts), so a peak is attributable after the fact; both absent for work nobody stamped.
+    readonly owner?: string | undefined;
+    readonly jobId?: string | undefined;
+    // What the OOM detector names a victim by once it is gone (cgroup-oom.ts): never written to the minute log.
+    readonly pgrp?: number;
+    readonly argv?: string | undefined;
+    readonly rssHighWaterBytes?: number;
+    readonly startTimeTicks?: number | undefined;
 }
 
 export interface ParsedProcStatus {
@@ -63,13 +75,13 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
 });
 
 // Swap is only in status, so each scanned process is read once more; one gone since the scan is not a row.
-const rowOf = async ({ pid, ppid, comm, program, role, cpuTicks }: ScannedProcess): Promise<ProcessRow | undefined> => {
+const rowOf = async ({ pid, ppid, pgrp, comm, program, role, cpuTicks, owner, jobId, argv, startTimeTicks }: ScannedProcess): Promise<ProcessRow | undefined> => {
     const status = await readText(`/proc/${pid}/status`);
     if (status === undefined || cpuTicks === undefined) {
         return undefined;
     }
-    const { rssBytes, swapBytes, threads } = parseProcStatus(status);
-    return { pid, ppid, name: comm, program, role, rssBytes, swapBytes, threads, cpuTicks };
+    const { rssBytes, swapBytes, threads, rssHighWaterBytes } = parseProcStatus(status);
+    return { pid, ppid, name: comm, program, role, rssBytes, swapBytes, threads, cpuTicks, owner, jobId, pgrp, argv, rssHighWaterBytes, startTimeTicks };
 };
 
 interface ProcessSummary {
@@ -91,7 +103,8 @@ const addProcess = (summary: ProcessSummary, row: ProcessRow, previousCpu: Reado
     summary.cpuTicksSincePreviousSample += previous === undefined ? 0 : Math.max(0, row.cpuTicks - previous);
 };
 
-// One row per heavy process, so a peak can be attributed after the fact; the roles above only say which bucket it was in.
+// One row per heavy process, so a peak can be attributed after the fact; the roles above only say which bucket it was in,
+// the owner and job whose work it was (2026-11-05: a 17.6 GB game client sat in this list as `other`, tied to nothing).
 export interface TopProcess {
     readonly pid: number;
     readonly name: string;
@@ -100,6 +113,8 @@ export interface TopProcess {
     readonly rssBytes: number;
     readonly swapBytes: number;
     readonly threads: number;
+    readonly owner?: string;
+    readonly jobId?: string;
 }
 
 const TOP_PROCESSES = 8;
@@ -109,7 +124,36 @@ export const topProcesses = (rows: readonly ProcessRow[], limit: number = TOP_PR
     rows
         .toSorted((left, right) => right.rssBytes + right.swapBytes - (left.rssBytes + left.swapBytes))
         .slice(0, limit)
-        .map(({ pid, name, program, role, rssBytes, swapBytes, threads }) => ({ pid, name, program, role, rssBytes, swapBytes, threads }));
+        .map(({ pid, name, program, role, rssBytes, swapBytes, threads, owner, jobId }) => ({
+            pid,
+            name,
+            program,
+            role,
+            rssBytes,
+            swapBytes,
+            threads,
+            ...opt("owner", owner),
+            ...opt("jobId", jobId),
+        }));
+
+// The key unstamped processes are summed under: no conversation id is one word, and neither reserved owner is this one.
+const UNSTAMPED = "unstamped";
+
+export interface OwnerSummary {
+    readonly count: number;
+    readonly rssBytes: number;
+    readonly swapBytes: number;
+}
+
+/** Resident and swapped bytes by owner stamp, so a minute's line says whose work held the memory, not only what kind. */
+export const ownerSums = (rows: readonly Pick<ProcessRow, "owner" | "rssBytes" | "swapBytes">[]): Record<string, OwnerSummary> => {
+    const sums = new Map<string, OwnerSummary>();
+    for (const { owner = UNSTAMPED, rssBytes, swapBytes } of rows) {
+        const sum = sums.get(owner) ?? { count: 0, rssBytes: 0, swapBytes: 0 };
+        sums.set(owner, { count: sum.count + 1, rssBytes: sum.rssBytes + rssBytes, swapBytes: sum.swapBytes + swapBytes });
+    }
+    return Object.fromEntries(sums);
+};
 
 const descendantsOf = (rows: readonly ProcessRow[], parentPid: number): ReadonlySet<number> => {
     const byPid = new Map(rows.map((row) => [row.pid, row]));
@@ -136,8 +180,10 @@ const processSnapshot = async (
     readonly total: ProcessSummary;
     readonly descendants: ProcessSummary;
     readonly byRole: Record<ProcessRole, ProcessSummary>;
+    readonly byOwner: Record<string, OwnerSummary>;
     readonly top: TopProcess[];
     readonly cpuByPid: ReadonlyMap<number, number>;
+    readonly rows: readonly ProcessRow[];
 }> => {
     const rows = (await Promise.all(scanned.map(rowOf))).filter((row) => row !== undefined);
     const descendantPids = descendantsOf(rows, process.pid);
@@ -151,7 +197,15 @@ const processSnapshot = async (
             addProcess(descendants, row, previousCpu);
         }
     }
-    return { total, descendants, byRole, top: topProcesses(rows), cpuByPid: new Map(rows.map((row) => [row.pid, row.cpuTicks])) };
+    return {
+        total,
+        descendants,
+        byRole,
+        byOwner: ownerSums(rows),
+        top: topProcesses(rows),
+        cpuByPid: new Map(rows.map((row) => [row.pid, row.cpuTicks])),
+        rows,
+    };
 };
 
 const activeResources = (): Record<string, number> => {
@@ -188,6 +242,33 @@ const systemSnapshot = async (): Promise<Readonly<Record<"memory" | "cgroup" | "
 
 const finiteMs = (nanoseconds: number): number => (Number.isFinite(nanoseconds) ? Math.round(nanoseconds / 1e3) / 1e3 : 0);
 
+// V8's own account of the daemon's heap, by space: what grew when the resident figure did.
+const v8Snapshot = () => {
+    const heap = getHeapStatistics();
+    return {
+        heapSizeLimitBytes: heap.heap_size_limit,
+        totalAvailableBytes: heap.total_available_size,
+        mallocedMemoryBytes: heap.malloced_memory,
+        peakMallocedMemoryBytes: heap.peak_malloced_memory,
+        externalMemoryBytes: heap.external_memory,
+        nativeContexts: heap.number_of_native_contexts,
+        detachedContexts: heap.number_of_detached_contexts,
+        globalHandles: heap.total_global_handles_size,
+        usedGlobalHandles: heap.used_global_handles_size,
+        spaces: Object.fromEntries(
+            getHeapSpaceStatistics().map((space) => [
+                space.space_name,
+                {
+                    sizeBytes: space.space_size,
+                    usedBytes: space.space_used_size,
+                    availableBytes: space.space_available_size,
+                    physicalBytes: space.physical_space_size,
+                },
+            ]),
+        ),
+    };
+};
+
 export interface ResourceSnapshot {
     readonly schema: 2;
     readonly at: string;
@@ -205,6 +286,8 @@ export interface ResourceSnapshot {
 export interface ResourceSampler {
     readonly sample: () => Promise<ResourceSnapshot>;
     readonly stop: () => void;
+    // Every process the last sample scanned, for the OOM detector; absent from a sampler that scans none.
+    readonly processes?: () => readonly KnownProcess[];
 }
 
 const createResourceSampler = (
@@ -230,6 +313,7 @@ const createResourceSampler = (
     let lastElu = performance.eventLoopUtilization();
     let lastAt = performance.now();
     let previousProcessCpu: ReadonlyMap<number, number> = new Map();
+    let lastProcesses: readonly KnownProcess[] = [];
 
     const sample = async (): Promise<ResourceSnapshot> => {
         const now = performance.now();
@@ -280,7 +364,7 @@ const createResourceSampler = (
             room(),
         ]);
         previousProcessCpu = processes.cpuByPid;
-        const heap = getHeapStatistics();
+        lastProcesses = processes.rows.map(knownOf);
         const snapshot: ResourceSnapshot = {
             schema: 2,
             at: new Date().toISOString(),
@@ -310,28 +394,7 @@ const createResourceSampler = (
                     rssSharedBytes: selfStatus?.rssSharedBytes,
                     swapBytes: selfStatus?.swapBytes,
                 },
-                v8: {
-                    heapSizeLimitBytes: heap.heap_size_limit,
-                    totalAvailableBytes: heap.total_available_size,
-                    mallocedMemoryBytes: heap.malloced_memory,
-                    peakMallocedMemoryBytes: heap.peak_malloced_memory,
-                    externalMemoryBytes: heap.external_memory,
-                    nativeContexts: heap.number_of_native_contexts,
-                    detachedContexts: heap.number_of_detached_contexts,
-                    globalHandles: heap.total_global_handles_size,
-                    usedGlobalHandles: heap.used_global_handles_size,
-                    spaces: Object.fromEntries(
-                        getHeapSpaceStatistics().map((space) => [
-                            space.space_name,
-                            {
-                                sizeBytes: space.space_size,
-                                usedBytes: space.space_used_size,
-                                availableBytes: space.space_available_size,
-                                physicalBytes: space.physical_space_size,
-                            },
-                        ]),
-                    ),
-                },
+                v8: v8Snapshot(),
                 handles: { openFds, threads: selfStatus?.threads, activeResources: activeResources() },
                 // queuedBulk > 0 means checkouts are queued, not slow; byRole.git only counts running processes.
                 gitSpawn: gitSpawnStats(),
@@ -344,7 +407,7 @@ const createResourceSampler = (
             // The resource budget's own snapshot beside the raw figures: the limit, used, free and stall every admission
             // was judged by, so the log reads what the gate saw.
             system: { ...(system as Record<string, unknown>), room: roomNow },
-            processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole, top: processes.top },
+            processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole, byOwner: processes.byOwner, top: processes.top },
             queue,
             owners: owners(),
         };
@@ -357,6 +420,7 @@ const createResourceSampler = (
             loopDelay.disable();
             gcObserver.disconnect();
         },
+        processes: () => lastProcesses,
     };
 };
 
@@ -373,6 +437,9 @@ export interface ResourceMetricsOptions {
     readonly room?: () => Promise<unknown>;
     readonly intervalMs?: number;
     readonly sampler?: ResourceSampler;
+    // Names what the workload leaf's OOM killed on each sample (cgroup-oom.ts). The daemon's own, reading the kernel's log
+    // and appending to memory-kills.jsonl, where no sampler is supplied; none beside a supplied one unless given.
+    readonly oom?: OomDetector;
 }
 
 // OOM alarm: logged at error the moment a kill is observed. Reported as a delta since the raw counter is cumulative;
@@ -451,13 +518,17 @@ export const startResourceMetrics = ({
     room,
     intervalMs = SAMPLE_INTERVAL_MS,
     sampler: suppliedSampler,
+    oom: suppliedOom,
 }: ResourceMetricsOptions): ResourceMetrics => {
     if (historyRoot === "") {
         return { sample: async () => {}, stop: () => suppliedSampler?.stop() };
     }
     const sampler = suppliedSampler ?? createResourceSampler(owners, room);
+    const ownOom = suppliedSampler === undefined && suppliedOom === undefined ? startDaemonOomDetector(join(logsRoot(historyRoot), MEMORY_KILLS_FILE), logger) : undefined;
+    const oom = suppliedOom ?? ownOom?.detector;
     let inFlight: Promise<void> | undefined;
     let persistenceFailed = false;
+    let oomFailed = false;
     // Previous sample for the OOM diff, held in memory: a restart has nothing to compare against, on purpose.
     let previous: ResourceSnapshot | undefined;
     // Pools already reported as stuck, so the warning fires on the edge and not every minute the slot stays held.
@@ -475,6 +546,14 @@ export const startResourceMetrics = ({
             // Persisted before diffing, so the record on disk doesn't depend on the alarm firing.
             const killed = previous === undefined ? undefined : oomSinceSample(previous, snapshot);
             previous = snapshot;
+            // Whom the kernel killed and whose it was, recorded where the conversation that owned it is told
+            // (memory-kills.jsonl); its own failure is said once, like the series', and never costs the sample.
+            await oom?.observe(sampler.processes?.() ?? []).catch((error: Error) => {
+                if (!oomFailed) {
+                    oomFailed = true;
+                    logger.warn({ err: error }, "resource metrics: a kill in the workload cgroup could not be named or recorded");
+                }
+            });
             if (killed !== undefined) {
                 logger.error(
                     { ...killed.kills, lostByRole: killed.lostByRole, at: snapshot.at },
@@ -512,6 +591,7 @@ export const startResourceMetrics = ({
         stop: () => {
             loop.dispose();
             sampler.stop();
+            ownOom?.stop();
         },
     };
 };

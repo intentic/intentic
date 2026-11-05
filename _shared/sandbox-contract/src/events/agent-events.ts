@@ -10,7 +10,7 @@ import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/ke
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { PrivacyBypassSchema } from "../schemas/privacy-egress.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
-import { RetryLadderSchema } from "../schemas/turn-break.js";
+import { MemoryKillMarkSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { FreshStartSchema, HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { SwitchedSchema } from "../schemas/providers/switched.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
@@ -447,6 +447,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 handoff: HandoffOfferSchema.optional(),
                 // A turn at its own ceiling or ended incomplete: only a press sends it again, never a standing answer.
                 pressOnly: z.boolean().optional().describe("Only a press sends it again: no standing answer re-runs it. Absent for every other hold."),
+                // A stopped turn memory killed, asked the memory kill's question rather than the stop's.
+                memoryKill: MemoryKillMarkSchema,
             })
             .optional(),
         // provider-outage only, while the breaker has tries left: epoch seconds its backoff next lets one through.

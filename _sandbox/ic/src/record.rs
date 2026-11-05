@@ -267,8 +267,9 @@ fn read_file(path: &Path) -> Result<ChannelRecord> {
 /// The record's text, read. Pure: the home file and the copy on the sandbox's volume are read the same way.
 pub fn parse(content: &str) -> ChannelRecord {
     let mut record = ChannelRecord::default();
-    // The shape's four keys are read together at the end: all four, or no shape.
-    let mut desired: [Option<String>; 4] = Default::default();
+    // The shape's keys are read together at the end: the first four all, or no shape; the fifth (the swap, 2026-11-05) is
+    // absent from a record an older ic wrote, and reads as the default.
+    let mut desired: [Option<String>; 5] = Default::default();
     // So are a kept target's image, version and environment build, and a swap's keys: a half-written group is no group.
     let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
@@ -283,6 +284,7 @@ pub fn parse(content: &str) -> ChannelRecord {
             "desired_cpus" => &mut desired[1],
             "desired_privileged" => &mut desired[2],
             "desired_gpus" => &mut desired[3],
+            "desired_swap" => &mut desired[4],
             "channel" => &mut record.channel,
             "current" => &mut record.current,
             "previous" => &mut record.previous,
@@ -331,12 +333,13 @@ pub fn parse(content: &str) -> ChannelRecord {
         };
         *field = Some(value.to_string());
     }
-    let [memory, cpus, privileged, gpus] = &desired;
+    let [memory, cpus, privileged, gpus, swap_gib] = &desired;
     record.desired = Shape::from_record(
         memory.as_deref(),
         cpus.as_deref(),
         privileged.as_deref(),
         gpus.as_deref(),
+        swap_gib.as_deref(),
     );
     let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash, asleep, wake_at, alarm_woke_at, wake_cost] =
         rest;
@@ -519,6 +522,7 @@ pub fn serialize(record: &ChannelRecord) -> String {
             "desired_cpus",
             "desired_privileged",
             "desired_gpus",
+            "desired_swap",
         ];
         for (key, value) in keys.iter().zip(desired.to_record()) {
             put(key, Some(&value));
@@ -717,6 +721,7 @@ mod tests {
             cpus: None,
             privileged: false,
             gpus: true,
+            swap: Some("3g".to_string()),
         };
         let waiting = ChannelRecord {
             staged: Some("img:next".to_string()),
@@ -726,14 +731,14 @@ mod tests {
         write_file(&path, &waiting).expect("write");
         let written = std::fs::read_to_string(&path).expect("read");
         assert!(written.contains(
-            "desired_memory=20g\ndesired_cpus=default\ndesired_privileged=off\ndesired_gpus=on\n"
+            "desired_memory=20g\ndesired_cpus=default\ndesired_privileged=off\ndesired_gpus=on\ndesired_swap=3g\n"
         ));
         assert_eq!(
             read_file(&path).expect("read").desired,
             Some(desired.clone())
         );
         // A prepare that no longer fits is dropped; nothing restarted, so the shape is still waiting.
-        assert_eq!(waiting.without_staged().desired, Some(desired));
+        assert_eq!(waiting.without_staged().desired, Some(desired.clone()));
         // Half a shape (a hand edit, a crash mid-write of some other tool) is no shape rather than a guess.
         std::fs::write(
             &path,
@@ -741,6 +746,19 @@ mod tests {
         )
         .expect("write");
         assert_eq!(read_file(&path).expect("read").desired, None);
+        // A record an older ic wrote, with the four keys it knew: still a whole shape, the swap left to the default.
+        std::fs::write(
+            &path,
+            "channel=stable\ndesired_memory=20g\ndesired_cpus=default\ndesired_privileged=off\ndesired_gpus=on\n",
+        )
+        .expect("write");
+        assert_eq!(
+            read_file(&path).expect("read").desired,
+            Some(Shape {
+                swap: None,
+                ..desired
+            })
+        );
     }
 
     #[test]

@@ -569,7 +569,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "list_sandboxes",
         description:
-            "The Intentic sandboxes on this device, as JSON, as the device's `ic` reports them: each one's slug, whether it is running, whether its tunnel is up, and under `resources` its share of this machine as docker enforces it (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for), the shape it runs with (`shape`: memoryGib, cpus, privileged, gpu as the owner asked; null is the default) and, when one is saved, the shape its next restart applies (`desired`). `staged` names an update downloaded and waiting. From a current `ic` also: `version`, `parked` (a swap was interrupted and the sandbox is down; manage_sandbox start brings it back), `probationUntil` (the host is still watching a new version and goes back by itself if it fails), `lastUpdate` (what the host last did about its version, and why) and `rollbackTargets` (what swap_sandbox rollback can return to, newest first). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+            "The Intentic sandboxes on this device, as JSON, as the device's `ic` reports them: each one's slug, whether it is running, whether its tunnel is up, and under `resources` its share of this machine as docker enforces it (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for), the shape it runs with (`shape`: memoryGib, cpus, privileged, gpu and swapGib as the owner asked; null is the default) and, when one is saved, the shape its next restart applies (`desired`), and, for a running sandbox, the swap bound actually in force as read inside it (`swapMaxBytes` for the container, `workloadSwapMaxBytes` for its work; null is unbounded, which lets one runaway page the whole machine into a standstill). `staged` names an update downloaded and waiting. From a current `ic` also: `version`, `parked` (a swap was interrupted and the sandbox is down; manage_sandbox start brings it back), `probationUntil` (the host is still watching a new version and goes back by itself if it fails), `lastUpdate` (what the host last did about its version, and why) and `rollbackTargets` (what swap_sandbox rollback can return to, newest first). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
@@ -605,9 +605,17 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "reshape_sandbox",
         description:
-            "Set how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give the fields that should change and `when`; a field left out keeps the value already saved for the next restart, else the one it runs with. `null` for a cap means back to the default (the memory share derived from this machine; every core). `when: \"now\"` RESTARTS the sandbox onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the values then survive every later update. `when: \"nextRestart\"` restarts nothing: the device's `ic` checks the shape against the sandbox's image and saves it, and the sandbox's next restart through ic applies it (manage_sandbox start or restart, or swap_sandbox update, rollback or rebuild; not Docker restarting the container by itself). `forget: true`, with no fields and no `when`, drops what is saved. A call with no fields and no `forget` is refused and changes nothing. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
+            "Set how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, how much swap its work may page into in whole GiB (swapGib, the swap alone), whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give the fields that should change and `when`; a field left out keeps the value already saved for the next restart, else the one it runs with. `null` for a cap means back to the default (the memory share derived from this machine; every core; for swap a quarter of the memory cap, 1 to 4 GiB). swapGib alone with `when: \"now\"` takes effect at once WITHOUT a restart. Any other `when: \"now\"` RESTARTS the sandbox onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the values then survive every later update. `when: \"nextRestart\"` restarts nothing: the device's `ic` checks the shape against the sandbox's image and saves it, and the sandbox's next restart through ic applies it (manage_sandbox start or restart, or swap_sandbox update, rollback or rebuild; not Docker restarting the container by itself). `forget: true`, with no fields and no `when`, drops what is saved. A call with no fields and no `forget` is refused and changes nothing. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
         effect: "write",
         input: SandboxResourcesAskFieldsSchema.extend({
+            swapGib: z
+                .int()
+                .positive()
+                .nullable()
+                .optional()
+                .describe(
+                    "Whole GiB of swap the sandbox's work may page into (the swap alone), or null for the default: a quarter of its memory cap, 1 to 4 GiB. A small bound is what stops one runaway process from paging the whole machine to a standstill.",
+                ),
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
             when: SandboxShapeWhenSchema.optional().describe(
                 "`now` restarts onto the shape; `nextRestart` saves it for the sandbox's next restart through ic. Required with any field.",
@@ -624,7 +632,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             }
             if (!named || when === undefined) {
                 throw new Error(
-                    'Nothing was changed: give at least one field (memoryGib, cpus, privileged, gpu) and `when` ("now" or "nextRestart"), or `forget: true`. To apply what is saved, use manage_sandbox restart.',
+                    'Nothing was changed: give at least one field (memoryGib, cpus, swapGib, privileged, gpu) and `when` ("now" or "nextRestart"), or `forget: true`. To apply what is saved, use manage_sandbox restart.',
                 );
             }
             return textResult(await shapeSandbox(slug, fields, when, scopes, () => {}));
@@ -678,7 +686,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "diagnose_sandbox",
         description:
-            "Check every link of one Intentic sandbox's reachability chain on this device (Docker, its container, its daemon, its registration with the platform, the network, the tunnel) and say what is broken and what fixes it, as JSON from the device's `ic sandbox doctor`. Changes nothing, and answers while Docker is down, when list_sandboxes cannot: how you find out why a sandbox on this device cannot be reached. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+            "Check every link of one Intentic sandbox's reachability chain on this device (Docker, its container, its daemon, its registration with the platform, the network, the tunnel) and say what is broken and what fixes it, as JSON from the device's `ic sandbox doctor`. Beside the report, `containment` says what would hold a runaway process in the sandbox (warnings at worst): whether its swap is bounded, whether the Docker engine honours swap limits, whether the machine's swap dwarfs the sandbox's memory cap, whether an out-of-memory killer runs where it cannot see the sandbox, and whether the daemon has its own cgroup. Changes nothing, and answers while Docker is down, when list_sandboxes cannot: how you find out why a sandbox on this device cannot be reached. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         effect: "read",
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes, or the first label of its address.") }),
         run: async ({ slug }, scopes) => textResult(await diagnoseSandbox(slug, scopes)),

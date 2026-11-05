@@ -22,10 +22,12 @@ const ROOM_REFUSALS: ReadonlySet<string> = new Set(["sandbox-memory-low", "works
 /** Whether the turn a conversation last tried was turned away for room, as its stored ending says. */
 export const roomRefused = (ending: Ending | undefined): boolean => ending?.kind === "failed" && ending.code !== undefined && ROOM_REFUSALS.has(ending.code);
 
-/** The conversation's answers to the two walls whose holds go by themselves: its own, else the sandbox's. */
+/** The conversation's answers to the walls whose holds go by themselves: its own, else the sandbox's. */
 export interface WallAnswers {
     readonly limit: TurnBreakPolicy;
     readonly memory: TurnBreakPolicy;
+    // A turn memory killed while it ran (held-turn.ts memoryKill), let go by the same release once there is room.
+    readonly memoryKill: TurnBreakPolicy;
 }
 
 // A spent allowance's held turn, re-run at its reopen or moved now, where the conversation's answer to the limit says so.
@@ -35,11 +37,15 @@ const rerunOf = (state: ConversationState, limit: TurnBreakPolicy): AgentNext | 
 };
 
 // What a room refusal holds, sent once memory frees where the answer to the memory wall is to send it: the person's
-// words a refusal holds in the queue, or a turn the sandbox kept whole at the door.
-const roomOf = (state: ConversationState, ending: Ending | undefined, memory: TurnBreakPolicy): AgentNext | undefined => {
+// words a refusal holds in the queue, or a turn the sandbox kept whole at the door. A turn memory killed goes by the same
+// release on the answer to a memory kill, unless only a press may send it (room-holds.ts, the release's own rule).
+const roomOf = (state: ConversationState, ending: Ending | undefined, answers: WallAnswers): AgentNext | undefined => {
     const held = state.resume.held;
+    if (held?.reason === "stopped" && held.memoryKill !== undefined) {
+        return held.pressOnly !== true && !held.fired && breakArmed(answers.memoryKill) ? { kind: "room" } : undefined;
+    }
     const holding = (holdOf(state.queue) === "refused" && waitingOf(state.queue).length > 0) || (held?.reason === "door" && !held.fired);
-    return holding && roomRefused(ending) && breakArmed(memory) ? { kind: "room" } : undefined;
+    return holding && roomRefused(ending) && breakArmed(answers.memory) ? { kind: "room" } : undefined;
 };
 
 // The messages booked for later, each by its own booking: the soonest instant speaks, else the first land waited for.
@@ -61,4 +67,4 @@ const bookedOf = (queue: TurnQueue): AgentNext | undefined => {
 export const nextOf = (state: ConversationState | undefined, entry: Pick<PersistedAgent, "ending" | "queue">, answers: WallAnswers): AgentNext | undefined =>
     state === undefined
         ? bookedOf(entry.queue ?? NO_QUEUE)
-        : (rerunOf(state, answers.limit) ?? roomOf(state, entry.ending, answers.memory) ?? bookedOf(state.queue));
+        : (rerunOf(state, answers.limit) ?? roomOf(state, entry.ending, answers) ?? bookedOf(state.queue));

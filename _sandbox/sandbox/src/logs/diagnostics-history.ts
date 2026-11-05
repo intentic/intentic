@@ -8,7 +8,8 @@ import { opt } from "../opt.js";
 import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
 import { openDocument } from "../store/open-document.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
-import { crashesDuring, describePreviousRun, type PreviousRun, RESTARTS_FILE, type RunEnding } from "../system/boot/restarts/restart-record.js";
+import { crashesDuring, describePreviousRun, type PreviousRun, RESTARTS_FILE, RUN_ENDINGS, type RunEnding } from "../system/boot/restarts/restart-record.js";
+import { PostMortemSchema } from "../system/resources/memory-records.js";
 import { type HostCrashRow, readHostCrashes } from "../system/boot/restarts/host-crash-rows.js";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { compactRecord } from "./diagnostics-shape.js";
@@ -48,7 +49,9 @@ const RestartRowSchema = z.object({
     boot: z.object({ pid: loose(z.number()), version: loose(z.string()), commit: loose(z.string()) }).catch({}),
     previous: loose(
         z.object({
-            ended: loose(z.enum(["stopped", "exited", "crashed", "killed", "unknown"])),
+            // Every ending the record names (restart-record.ts), the named causes netd-stuck and oom-victim among them.
+            ended: loose(z.enum(RUN_ENDINGS)),
+            postMortem: loose(PostMortemSchema),
             graceful: loose(z.boolean()),
             startedAt: loose(z.string()),
             uptimeSeconds: loose(z.number()),
@@ -100,6 +103,7 @@ const restartText = (row: RestartRow, at: number, crashes: readonly HostCrashRow
         ...opt("fatalReports", previous.fatalReports),
         ...opt("containerRestarted", previous.containerRestarted),
         ...opt("tmpCleared", previous.tmpCleared),
+        ...opt("postMortem", previous.postMortem),
     };
     return `${booted}; the run before ${describePreviousRun(run, crashesDuring(crashes, previous.startedAt, new Date(at).toISOString()))}.`;
 };

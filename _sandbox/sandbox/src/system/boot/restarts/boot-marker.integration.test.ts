@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Logger, pino } from "pino";
 import { claimBootMarker as claim, previousRun, previousRunDied, resetStopNoted, writeRestartIntent } from "./boot-marker.js";
 import { announceStop } from "./daemon-stop.js";
+import { BOOT_AT, CONTAINER_ID, CULPRIT, jsonLines, KERNEL_ZERO, kmsgText, netdKills, NIGHT_SUMMARY, pressure, STARTED_AT } from "./memory-incident.testing.js";
+import { type PostMortemSources, readPostMortem, resetPostMortem } from "./post-mortem.js";
 import { RESTART_INTENT_FILE, type RestartRecord, RESTARTS_FILE } from "./restart-record.js";
+import { kernelLinesOf } from "../../resources/kernel-oom-lines.js";
+import { NETD_KILLS_FILE, PRESSURE_FILE } from "../../resources/memory-records.js";
 import { processIdentity, type ProcessIdentity } from "../../resources/proc-stat.js";
 
 const setup = async (): Promise<{ dir: string; lines: Record<string, unknown>[]; logger: Logger }> => {
@@ -17,10 +21,13 @@ const setup = async (): Promise<{ dir: string; lines: Record<string, unknown>[];
     return { dir, lines, logger };
 };
 
+// The kernel's log as a test sees it unless it says otherwise: empty, so no claim here reads this machine's own ring.
+const QUIET_KERNEL: PostMortemSources = { kernelLog: () => ({ lines: [], source: "kmsg" }), containerId: () => undefined, kernelZero: () => 0 };
+
 // Every claim keeps its /tmp marker inside its own directory, never the machine's.
-const claimBootMarker = (dir: string, logger: Logger, now?: number): ReturnType<typeof claim> => {
+const claimBootMarker = (dir: string, logger: Logger, now?: number, postMortem: PostMortemSources = QUIET_KERNEL): ReturnType<typeof claim> => {
     const tmpMarker = join(dir, "tmp-marker");
-    return claim(dir, logger, now === undefined ? { tmpMarker } : { tmpMarker, now });
+    return claim(dir, logger, now === undefined ? { tmpMarker, postMortem } : { tmpMarker, now, postMortem });
 };
 
 const restarts = async (dir: string): Promise<RestartRecord[]> =>
@@ -32,7 +39,10 @@ const restarts = async (dir: string): Promise<RestartRecord[]> =>
 
 const messageOf = (line: Record<string, unknown> | undefined): string => String(line?.["message"]);
 
-afterEach(() => resetStopNoted());
+afterEach(() => {
+    resetStopNoted();
+    resetPostMortem();
+});
 
 const self = (): ProcessIdentity => {
     const identity = processIdentity();
@@ -186,4 +196,35 @@ test("a running marker whose pid was recycled is a death certificate, not a live
 
     expect(lines[0]).toMatchObject({ level: 50, diedPid: identity.pid });
     expect(lines[0]).not.toHaveProperty("ownerPid");
+});
+
+// 2026-11-05: the boot after the runaway filed "killed without warning". The records it now has name the cause.
+test("a run netd killed while memory ran out is filed under its named cause, with its post-mortem, and handed to the resume pass", async () => {
+    const root = await mkdtemp(join(tmpdir(), "boot-marker-"));
+    const dir = join(root, "logs");
+    await mkdir(dir);
+    const { lines, logger } = await setup();
+    const died = deadPid();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: STARTED_AT }));
+    await writeFile(join(dir, NETD_KILLS_FILE), jsonLines(netdKills().map((kill) => (kill.kind === "stuck" ? { ...kill, pid: died } : kill))));
+    await writeFile(join(dir, PRESSURE_FILE), jsonLines(pressure()));
+    const night: PostMortemSources = { kernelLog: () => ({ lines: kernelLinesOf(kmsgText()), source: "kmsg" }), containerId: () => CONTAINER_ID, kernelZero: () => KERNEL_ZERO };
+    claimBootMarker(dir, logger, BOOT_AT, night);
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 50, diedPid: died, previous: { ended: "netd-stuck", postMortem: { cause: "memory", culprits: [CULPRIT] } } });
+    expect(messageOf(lines[0])).toContain(`previous run ended: was killed: ${NIGHT_SUMMARY}`);
+    const [filed] = await restarts(dir);
+    expect(filed?.previous).toMatchObject({ ended: "netd-stuck", graceful: false, postMortem: { cause: "memory", summary: NIGHT_SUMMARY } });
+    // The record keeps the stuck kill and the newest of the restarts netd killed; the resume pass gets every one.
+    expect(filed?.previous.postMortem?.netd).toHaveLength(11);
+    expect((await readPostMortem(root))?.netd).toHaveLength(35);
+});
+
+test("a killed run with nothing on file keeps the guess, and says what was looked at", async () => {
+    const { dir, lines, logger } = await setup();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: deadPid(), startTimeTicks: 1, startedAt: Date.now() - 60_000 }));
+    claimBootMarker(dir, logger);
+    expect(lines[0]).toMatchObject({ previous: { ended: "killed", postMortem: { cause: "unknown", culprits: [] } } });
+    expect(messageOf(lines[0])).toContain("was killed without warning (SIGKILL, a kernel OOM kill, a forced container stop, netd killing a stuck daemon, or the host going down); nothing on file names the hand");
 });

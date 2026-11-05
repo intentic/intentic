@@ -20,6 +20,7 @@ use tokio::sync::watch;
 use tokio::time::MissedTickBehavior;
 
 use crate::link::Link;
+use crate::records::NetdKillKind;
 use crate::standing::Standing;
 use crate::supervise::Restarts;
 
@@ -56,6 +57,16 @@ pub fn serves(path: &str) -> bool {
     path == VITALS_PATH
 }
 
+/// Why netd called a Node stuck, and since when it has been silent: what the supervisor's kill writes down
+/// (`netd-kills.jsonl`), since the kill is all stderr kept of it before (2026-11-05).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Verdict {
+    /// `Stuck` (a ping unanswered) or `NoHello` (no hello since it started).
+    pub kind: NetdKillKind,
+    /// When the unanswered ping was sent, or when the Node with no hello started.
+    pub since: Instant,
+}
+
 pub struct Vitals {
     link: &'static Link,
     restarts: Arc<Restarts>,
@@ -63,7 +74,7 @@ pub struct Vitals {
     started: Instant,
     cgroup: PathBuf,
     ping: Mutex<Ping>,
-    stuck: watch::Sender<()>,
+    stuck: watch::Sender<Option<Verdict>>,
     // `STUCK_AFTER` and `HELLO_DEADLINE`, fields so a test runs the rules in a second rather than minutes.
     stuck_after: Duration,
     hello_within: Duration,
@@ -78,7 +89,7 @@ impl Vitals {
             started: Instant::now(),
             cgroup: PathBuf::from(CGROUP_ROOT),
             ping: Mutex::default(),
-            stuck: watch::Sender::new(()),
+            stuck: watch::Sender::new(None),
             stuck_after: STUCK_AFTER,
             hello_within: HELLO_DEADLINE,
         }
@@ -93,6 +104,7 @@ impl Vitals {
                 Ok(pid) => *pid,
                 Err(_) => return,
             };
+            let since = Instant::now();
             let mut state = self.link.state();
             // A connection of the Node before may not be read as gone yet; only a hello on another one counts.
             let before = *state.borrow_and_update();
@@ -108,7 +120,10 @@ impl Vitals {
                     "the daemon has not said hello {:?} after it started: it is stuck before serving",
                     self.hello_within
                 );
-                self.stuck.send_replace(());
+                self.stuck.send_replace(Some(Verdict {
+                    kind: NetdKillKind::NoHello,
+                    since,
+                }));
             }
             if started.wait_for(|now| *now != pid).await.is_err() {
                 return;
@@ -116,8 +131,9 @@ impl Vitals {
         }
     }
 
-    /// Told each time a ping has gone unanswered for `STUCK_AFTER`: the Node on the link is stuck and is to be killed.
-    pub fn stuck(&self) -> watch::Receiver<()> {
+    /// Told each time a ping has gone unanswered for `STUCK_AFTER`, or a Node has not said hello by `HELLO_DEADLINE`: the
+    /// Node is stuck and is to be killed, and the verdict says which and since when.
+    pub fn stuck(&self) -> watch::Receiver<Option<Verdict>> {
         self.stuck.subscribe()
     }
 
@@ -149,7 +165,10 @@ impl Vitals {
                         "the daemon has not answered a ping for {:?}: its event loop is stuck",
                         self.stuck_after
                     );
-                    self.stuck.send_replace(());
+                    self.stuck.send_replace(Some(Verdict {
+                        kind: NetdKillKind::Stuck,
+                        since: sent,
+                    }));
                     asking.await
                 }
             };
@@ -540,10 +559,14 @@ mod tests {
         let answered = Instant::now();
         writer.write_all(&frame(&pong).unwrap()).await.unwrap();
 
-        // The next goes unanswered: the verdict comes once the limit has passed, not before.
+        // The next goes unanswered: the verdict comes once the limit has passed, not before, and dates the silence from
+        // the ping.
         asked_ping(&mut reader).await;
         assert!(timeout(LIMIT * 3, stuck.changed()).await.is_ok());
         assert!(answered.elapsed() >= LIMIT);
+        let verdict = stuck.borrow_and_update().expect("a verdict");
+        assert_eq!(verdict.kind, NetdKillKind::Stuck);
+        assert!(verdict.since >= answered && verdict.since.elapsed() >= LIMIT);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -607,8 +630,12 @@ mod tests {
         let watching = vitals.clone();
         tokio::spawn(async move { watching.deadline_first_hellos(started).await });
 
+        let started = Instant::now();
         pid.send_replace(Some(41));
         assert!(timeout(LIMIT * 4, stuck.changed()).await.is_ok());
+        let verdict = stuck.borrow_and_update().expect("a verdict");
+        assert_eq!(verdict.kind, NetdKillKind::NoHello);
+        assert!(verdict.since >= started && verdict.since.elapsed() >= LIMIT);
 
         pid.send_replace(None);
         pid.send_replace(Some(42));

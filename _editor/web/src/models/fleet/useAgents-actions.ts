@@ -55,11 +55,16 @@ export const setKeepWarm = (id: string, until: number | null): Promise<void> =>
 // The echo narrowed to what the ending's field can hold: an answer that ending cannot take echoes as inherit, which is
 // what the daemon refuses it as too.
 const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Partial<AgentSummary> => {
+    // Named rather than "anything but retry": the answers grew (`resume`, a memory kill's), and a limit takes none of them.
     if (ending === `limit`) {
-        return { limitPolicy: policy === `retry` ? undefined : policy };
+        return { limitPolicy: policy === `wait` || policy === `resend` || policy === `move` ? policy : undefined };
     }
     if (ending === `memory`) {
         return { memoryPolicy: policy === `wait` || policy === `resend` ? policy : undefined };
+    }
+    // A memory kill takes its own two answers, never the stop ladder's, though the turn it holds reads as stopped.
+    if (ending === `memoryKill`) {
+        return { memoryKillPolicy: policy === `wait` || policy === `resume` ? policy : undefined };
     }
     const retry = policy === `retry` || policy === `wait` ? policy : undefined;
     return ending === `outage` ? { outagePolicy: retry } : { stopPolicy: retry };

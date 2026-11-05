@@ -16,7 +16,8 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
 import { markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
-import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
+import { killNote, runtimeKilled, witnessedKillCause } from "./child-death.js";
+import { ownKillOf, recentMemoryKills } from "../run/turn/holds/memory-kill.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { heldResult, type Placed, releasedGate, startGate } from "./fan-out-budget.js";
@@ -252,20 +253,27 @@ export const pendingQuestionOf = (actors: Actors, childId: string): PendingChild
     return pending?.kind === "question" ? pending : undefined;
 };
 
-/** Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. */
+/**
+ * Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. A kill
+ * netd recorded around the death (memory-kill.ts) names memory too, and one of a process the child started itself names
+ * the child as the likely cause, which its own hold says too (classify-failure.ts dressDeath). `comesBack`: the child's
+ * failure frame promised a re-run the sandbox sends by itself (a memory kill held for the memory release).
+ */
 export const childKillNote = async (
-    services: Pick<Services, "conversations" | "resources">,
+    services: Pick<Services, "conversations" | "resources" | "config" | "logger">,
     childId: string,
     failure: string,
+    comesBack = false,
 ): Promise<string | undefined> => {
     if (!runtimeKilled(failure)) {
         return undefined;
     }
-    const before = services.conversations.holdings(CHILDREN).get(childId)?.oomKillsAtStart;
-    // Read now, not reused: the count has to be the one after the death.
-    const shortRecently = await services.resources.shortRecently();
-    const snapshot = await services.resources.snapshot();
-    return killNote(killCauseOf({ oomKills: snapshot.reading.oomKills, shortRecently }, before), failure);
+    const kills = await recentMemoryKills(services.config.historyRoot, Date.now()).catch((error: Error) => {
+        services.logger.warn({ err: error, conversationId: childId }, "subagent: the memory kills on record could not be read, the child's death is judged by the budget alone");
+        return [];
+    });
+    const cause = kills.length > 0 ? "memory" : await witnessedKillCause(services, childId);
+    return killNote(cause, failure, ownKillOf(kills, childId), comesBack);
 };
 
 // What the roster row says while a follow-up waits behind a turn somebody else started on the child.
@@ -600,7 +608,7 @@ const settleChildTurn = async (
     const whole = (tally.bubble.trim() !== "" ? tally.bubble : tally.report).trim();
     const closing = whole.slice(0, REPORT_KEPT);
     // Read while the record still says running, so a `send` cannot start a follow-up this settle then overwrites.
-    const killed = tally.failure === undefined ? undefined : await childKillNote(services, childId, tally.failure);
+    const killed = tally.failure === undefined ? undefined : await childKillNote(services, childId, tally.failure, tally.rerun !== undefined);
     const cancelled = kid?.cancelled === true;
     FAN_OUT.ended(childId, { answered: tally.answered, failure: cancelled ? undefined : providerRefusal(tally) });
     const giveSeatBack = onceOnly(() => freeSeat(services, parent));

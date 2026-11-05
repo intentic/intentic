@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Shared admission formula for ResourceBudget and scripts without a daemon; dependency-free for pre-install use.
-// Limit is memory.high, else memory.max, else host RAM, capped at host RAM; free resident room is also capped at MemAvailable.
+// Limit is memory.high, else memory.max, else host RAM, capped at host RAM, and never above the workload leaf's own wall
+// plus what runs outside that leaf; free resident room is also capped at MemAvailable.
 // Exclude reclaimable inactive cache; count swapped pages only near full swap. Memory full PSI avg10/avg60 catches paging pressure.
 // I/O full PSI holds background work only: a busy disk may slow a person's turn but must not refuse it.
 import { spawnSync } from "node:child_process";
@@ -86,6 +87,8 @@ export const RESERVATION_MS = 90_000;
 export const ROOM_SOCKET = process.env.INTENTIC_ROOM_SOCKET ?? "/run/intentic/room.sock";
 
 const CGROUP = "/sys/fs/cgroup";
+// The leaf the entrypoint puts everything but netd and the daemon in, and bounds below the sandbox's cap (workloadWalls).
+const WORKLOAD = `${CGROUP}/workload`;
 // Every file the reading is made of, for a caller that reads them itself (the daemon, asynchronously).
 export const READING_FILES = Object.freeze([
     `${CGROUP}/memory.high`,
@@ -97,6 +100,11 @@ export const READING_FILES = Object.freeze([
     `${CGROUP}/memory.pressure`,
     `${CGROUP}/memory.events`,
     `${CGROUP}/io.pressure`,
+    `${WORKLOAD}/memory.max`,
+    `${WORKLOAD}/memory.current`,
+    `${WORKLOAD}/memory.stat`,
+    `${WORKLOAD}/memory.swap.current`,
+    `${WORKLOAD}/memory.swap.max`,
     "/proc/meminfo",
     "/proc/pressure/memory",
     "/proc/pressure/io",
@@ -133,25 +141,74 @@ const stallOf = (read, resource) => {
     return { recent: fullAvg(text, "avg10") ?? 0, sustained: fullAvg(text, "avg60") ?? 0 };
 };
 
+// A cgroup's working set (memory.current less the inactive file cache the kernel reclaims first) and its swap, or
+// undefined where it keeps no memory.current. Unaccounted swap (swapaccount off) is none, never unknown: it must not
+// blank a measurable ceiling.
+const chargeOf = (read, dir) => {
+    const current = numeric(read(`${dir}/memory.current`));
+    return current === undefined
+        ? undefined
+        : { residentBytes: Math.max(0, current - (keyed(read(`${dir}/memory.stat`)).inactive_file ?? 0)), swapBytes: numeric(read(`${dir}/memory.swap.current`)) ?? 0 };
+};
+
+// (2026-11-05) THE WORKLOAD LEAF'S WALLS. Everything this gate admits (a turn, a build, a test run) runs in the workload
+// leaf, which the entrypoint and daemon-cgroup.ts hold below the sandbox's cap (memory-records.ts: workloadMemoryMax,
+// defaultSwapGib). On a 16 GiB cap the container's memory.high is 14.4 GiB and the leaf's memory.max 12.5 GiB, so a gate
+// judging by the container alone admitted work the leaf had no room for, which then ended in an OOM kill inside the leaf
+// instead of a wait for room.
+//
+// The leaf's wall bounds only what runs in it, so as a ceiling on the whole sandbox it is that wall plus what runs
+// outside the leaf now. Outside is the container's charge less the leaf's, not the daemon leaf's own figure: the
+// sandbox's own Docker containers sit beside the two leaves too. The limit less what counts against it then comes to the
+// leaf's wall less the leaf's own working set, the workload judged against its own max. That is kept as a lower limit
+// rather than a second reading so that used stays the whole sandbox's (the gauge, the shortage sentence and the cap a
+// client offers to raise all speak of the sandbox), and every caller of the limit sees the lower wall without knowing
+// the leaf exists.
+//
+// Swap the same way: the leaf's memory.swap.max plus what is swapped outside it (normally nothing: the daemon's leaf
+// allows none), so swap counts as full once the leaf's own is nearly spent. From then on the swapped pages count against
+// the limit too (countedBytesOf), and the outside's swapped pages join the offset, so the leaf is still judged by its own.
+//
+// A leaf that is absent, or whose bound reads `max`, is no wall, and the reading is the container's as before. A root
+// cgroup has none either: with no container charge there is no inside to tell from outside.
+const workloadWalls = (read, sandbox, swapLimit) => {
+    const leaf = chargeOf(read, WORKLOAD);
+    if (leaf === undefined) {
+        return { limit: Number.POSITIVE_INFINITY, swapLimit };
+    }
+    const outsideResident = Math.max(0, sandbox.residentBytes - leaf.residentBytes);
+    const outsideSwap = Math.max(0, sandbox.swapBytes - leaf.swapBytes);
+    const swapWall = numeric(read(`${WORKLOAD}/memory.swap.max`));
+    const walledSwap = Math.min(swapLimit, swapWall === undefined ? Number.POSITIVE_INFINITY : swapWall + outsideSwap);
+    const wall = numeric(read(`${WORKLOAD}/memory.max`));
+    if (wall === undefined) {
+        return { limit: Number.POSITIVE_INFINITY, swapLimit: walledSwap };
+    }
+    const full = swapFullOf({ swapBytes: sandbox.swapBytes, swapLimitBytes: Number.isFinite(walledSwap) ? walledSwap : undefined });
+    return { limit: wall + outsideResident + (full ? outsideSwap : 0), swapLimit: walledSwap };
+};
+
 /** The reading, from a reader that answers each of READING_FILES with its text or undefined. */
 export const readingFrom = (read) => {
     const meminfo = keyed(read("/proc/meminfo"));
     const machine = kib(meminfo, "MemTotal");
-    const bound = Math.min(
+    let bound = Math.min(
         numeric(read(`${CGROUP}/memory.high`)) ?? Number.POSITIVE_INFINITY,
         numeric(read(`${CGROUP}/memory.max`)) ?? Number.POSITIVE_INFINITY,
         machine ?? Number.POSITIVE_INFINITY,
     );
-    const current = numeric(read(`${CGROUP}/memory.current`));
+    const sandbox = chargeOf(read, CGROUP);
     let usedBytes;
     let swapBytes = 0;
     let swapLimit = Number.POSITIVE_INFINITY;
-    if (current !== undefined) {
-        // Unaccounted swap (swapaccount off) is none, never unknown: it must not blank a measurable ceiling.
-        swapBytes = numeric(read(`${CGROUP}/memory.swap.current`)) ?? 0;
-        usedBytes = Math.max(0, current - (keyed(read(`${CGROUP}/memory.stat`)).inactive_file ?? 0)) + swapBytes;
+    if (sandbox !== undefined) {
+        swapBytes = sandbox.swapBytes;
+        usedBytes = sandbox.residentBytes + swapBytes;
         // The cgroup's own swap ceiling, and never more than what it holds plus what the machine's swap can still take.
         swapLimit = Math.min(numeric(read(`${CGROUP}/memory.swap.max`)) ?? Number.POSITIVE_INFINITY, swapBytes + (kib(meminfo, "SwapFree") ?? Number.POSITIVE_INFINITY));
+        const walls = workloadWalls(read, sandbox, swapLimit);
+        bound = Math.min(bound, walls.limit);
+        swapLimit = walls.swapLimit;
     } else if (machine !== undefined && kib(meminfo, "MemAvailable") !== undefined) {
         swapBytes = Math.max(0, (kib(meminfo, "SwapTotal") ?? 0) - (kib(meminfo, "SwapFree") ?? 0));
         usedBytes = Math.max(0, machine - (kib(meminfo, "MemAvailable") ?? 0)) + swapBytes;

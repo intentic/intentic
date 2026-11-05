@@ -1,5 +1,5 @@
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
-import { classifyProcess, createProcessScanner, ownerOf, parseAuxv, programOf } from "./process-scan.js";
+import { classifyProcess, createProcessScanner, ownerOf, parseAuxv, programOf, recentJobProcess, recentJobRunner, runnerDirOf } from "./process-scan.js";
 
 describe("what a process is", () => {
     test("the owner is read out of a NUL-separated environ and ignores every other variable", () => {
@@ -153,4 +153,79 @@ test("native compilers and linkers count as toolchain only beneath a Rust proces
     // Cached identities do not retain a role inherited from a parent that has since disappeared.
     delete texts["/proc/1/stat"];
     expect((await roles()).slice(0, 3)).toEqual([[2, "other"], [3, "other"], [4, "other"]]);
+});
+
+/* WHICH JOB A PROCESS IS PART OF (2026-11-05): a game client a background job started grew to 17.6 GB, and the minute
+   log had nothing tying it to the job. Every process here is staged as /proc would show it: pid, parent, group, session. */
+describe("a process's background job", () => {
+    const JOB = "/tmp/intentic-run-job-6f1c2d4e-0b7a-4e1f-9d2c-5a8b3c7e9f10";
+    const FILED = "/tmp/intentic-run-Ab12Cd34";
+    const stage = (rows: readonly (readonly [pid: number, ppid: number, pgrp: number, session: number, comm: string, cmdline: string])[]) => {
+        const texts: Record<string, string> = {};
+        for (const [pid, ppid, pgrp, session, comm, cmdline] of rows) {
+            const fields = Array.from({ length: 22 }, () => "0");
+            fields[0] = "S";
+            fields[1] = String(ppid);
+            fields[2] = String(pgrp);
+            fields[3] = String(session);
+            fields[19] = String(pid);
+            texts[`/proc/${pid}/stat`] = `${pid} (${comm}) ${fields.join(" ")}`;
+            texts[`/proc/${pid}/cmdline`] = cmdline;
+            texts[`/proc/${pid}/environ`] = `${WORKLOAD_ENV}=sub-tidy-pebble-aii1\0`;
+        }
+        return { texts, pids: rows.map(([pid]) => pid) };
+    };
+
+    test("a runner is only tmux-run's own `bash <capture dir>/runner`, never a command that names one", () => {
+        expect(runnerDirOf(`bash\0${JOB}/runner\0`)).toBe(JOB);
+        expect(runnerDirOf(`bash\0${FILED}/runner\0`)).toBe(FILED);
+        expect(runnerDirOf(`cat\0${JOB}/runner\0`)).toBeUndefined();
+        expect(runnerDirOf(`bash\0${JOB}/cmd\0`)).toBeUndefined();
+        expect(runnerDirOf(`bash\0/tmp/elsewhere/runner\0`)).toBeUndefined();
+    });
+
+    test("everything in the runner's session is its job's, through a reparenting and a group of its own, and nothing outside it is", async () => {
+        const { texts, pids } = stage([
+            [500, 1, 500, 500, "bash", `bash\0${JOB}/runner\0`],
+            [501, 500, 500, 500, "bash", `bash\0${JOB}/cmd\0`],
+            // The game client, reparented to init once its launcher exited, and in a process group of its own.
+            [502, 1, 502, 500, "integra", "./integra\0--headless\0"],
+            // A process netd would name by its group alone: its session is not a runner's, its group is.
+            [503, 1, 500, 77, "helper", "helper\0"],
+            [600, 1, 600, 600, "node", "node\0server.js\0"],
+        ]);
+        const scan = createProcessScanner({ listPids: async () => pids, readText: async (path) => texts[path] });
+        const jobs = Object.fromEntries((await scan()).map(({ pid, jobId }) => [pid, jobId]));
+        expect(jobs).toEqual({ 500: JOB.slice(-36), 501: JOB.slice(-36), 502: JOB.slice(-36), 503: JOB.slice(-36), 600: undefined });
+    });
+
+    test("a foreground call is a job only once it was filed as one, by the id its job file names", async () => {
+        const { texts, pids } = stage([
+            [700, 1, 700, 700, "bash", `bash\0${FILED}/runner\0`],
+            [701, 700, 700, 700, "vite", "vite\0"],
+        ]);
+        const scan = createProcessScanner({ listPids: async () => pids, readText: async (path) => texts[path] });
+        expect((await scan()).map((entry) => entry.jobId)).toEqual([undefined, undefined]);
+        texts[`${FILED}/job.json`] = JSON.stringify({ id: "filed-job-1", conversationId: "c" });
+        expect((await scan()).map((entry) => entry.jobId)).toEqual(["filed-job-1", "filed-job-1"]);
+    });
+
+    test("the argv is kept for a kill's record, cut to 300 characters, and the shared scan alone remembers runners", async () => {
+        const { texts, pids } = stage([
+            [800, 1, 800, 800, "bash", `bash\0${JOB}/runner\0`],
+            [801, 800, 800, 800, "integra", `./integra\0${"x".repeat(400)}\0`],
+        ]);
+        const scan = createProcessScanner({ listPids: async () => pids, readText: async (path) => texts[path] });
+        const argv = (await scan()).find((entry) => entry.pid === 801)?.argv;
+        expect(argv?.startsWith("./integra xxx")).toBe(true);
+        expect(argv).toHaveLength(300);
+        expect(recentJobRunner(800)).toBeUndefined();
+        expect(recentJobProcess(801)).toBeUndefined();
+        const remembering = createProcessScanner({ listPids: async () => pids, readText: async (path) => texts[path] }, { remember: true });
+        await remembering();
+        expect(recentJobRunner(800)).toEqual({ jobId: JOB.slice(-36), dir: JOB });
+        // Each of the job's processes by its own pid too, for a kill that names it by pid and a group of its own.
+        expect(recentJobProcess(801)).toEqual({ jobId: JOB.slice(-36), dir: JOB });
+        expect(recentJobRunner(801)).toBeUndefined();
+    });
 });

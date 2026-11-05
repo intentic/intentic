@@ -34,8 +34,28 @@ interface HeldBase {
     readonly handoffTokens?: number | undefined;
     // Held for a person's press alone, never re-run by a clock whatever the conversation's answer to its wall: a turn that
     // reached its own iteration or time ceiling, or ended incomplete (failure-codes.ts, the `carry` course with a code).
-    // A ladder re-running it is the runaway the ceiling exists to stop.
+    // A ladder re-running it is the runaway the ceiling exists to stop. Also a memory kill that must not come back by
+    // itself: its own process was the one killed, or memory has killed it too often (memory-kill.ts).
     readonly pressOnly?: boolean | undefined;
+    // Killed because the sandbox ran out of memory (memory-kill.ts): a `stopped` hold that the memory release lets go once
+    // memory has stayed free, one conversation at a time, on the conversation's answer to a memory kill (room-holds.ts),
+    // rather than on the stop ladder's clock, which would send it back into the same shortage seconds later.
+    readonly memoryKill?: MemoryKillHold | undefined;
+}
+
+// What a memory kill's hold knows of the kill, which its re-run and its card say.
+export interface MemoryKillHold {
+    // How many times the sandbox had already sent this request again after a memory kill, before this one: the release
+    // counts on from here (MEMORY_KILL_RERUNS), so a restart between two kills does not forget the first.
+    readonly reruns: number;
+    // What the sandbox found, in a sentence: the boot's post-mortem summary, or the kill on record around the death. Told
+    // to the re-run, and on the card of one held for a press.
+    readonly found?: string | undefined;
+    // Cut by the daemon going down rather than killed under a running one: its re-run also hears what a restart costs.
+    readonly restart?: boolean | undefined;
+    // A subagent of this conversation's whose own process was the one killed, named to the re-run so the parent does not
+    // hand it the same work as it was.
+    readonly culpritChild?: string | undefined;
 }
 
 // An account a spent allowance's held turn goes on instead of the one that refused it, and whether its session goes too.

@@ -52,6 +52,16 @@ export const StoredLimitHoldSchema = z.object({
     // A stopped turn held for a press alone (held-turn.ts pressOnly): a restart must not put it on the ladder it was kept
     // off, which would re-run a turn that reached its own ceiling by itself.
     pressOnly: z.boolean().optional(),
+    // A stopped turn memory killed (held-turn.ts memoryKill): a restart must put it back for the memory release, not the
+    // stop ladder, with the re-runs it already had and what the sandbox found.
+    memoryKill: z
+        .object({
+            reruns: z.number().int().nonnegative(),
+            found: z.string().optional(),
+            restart: z.boolean().optional(),
+            culpritChild: z.string().optional(),
+        })
+        .optional(),
     // A flagged turn's session entry before the stopped response (refusal-fork.ts), where a press resumes it.
     forkAt: z.string().optional(),
     input: HeldInputSchema,
@@ -181,8 +191,10 @@ const standsBehind = (stored: StoredLimitHold, ending: PersistedAgent["ending"])
         case "flagged":
             return ending.kind === "failed" && ending.code === "safeguard-flagged";
         // Booked to come back at once, so its failure reads as work in progress (conversation-decide.ts comingBackNow):
-        // the entry is left as the turn before it left it, or failed where the wall said so.
+        // the entry is left as the turn before it left it, or failed where the wall said so. A memory restart's cut turn
+        // (memory-restart.ts) is held with its entry still reading as the turn the restart interrupted.
         case "stopped":
+            return ending.kind === "failed" || ending.kind === "idle" || (stored.memoryKill !== undefined && ending.kind === "interrupted");
         case "outage":
         case "overflow":
             return ending.kind === "failed" || ending.kind === "idle";
@@ -196,7 +208,9 @@ const standsBehind = (stored: StoredLimitHold, ending: PersistedAgent["ending"])
 // answer became `wait` nothing fired the hold nor withdrew a promise (held-standing.ts withdrawUnarmedResume) that would
 // have offered it for a press, so it sat held under a card offering nothing.
 const comingBack = (held: HeldRecord, entry: PersistedAgent | undefined): boolean =>
-    (held.reason === "stopped" || held.reason === "outage") && held.pressOnly !== true && entry?.ending.kind === "idle";
+    (held.reason === "stopped" || held.reason === "outage") &&
+    held.pressOnly !== true &&
+    (entry?.ending.kind === "idle" || (held.memoryKill !== undefined && entry?.ending.kind === "interrupted"));
 
 /**
  * Puts back every spent allowance's hold its entry kept across the restart, so the resume pass fires a booked resend at

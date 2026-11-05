@@ -11,7 +11,7 @@ import { GpuSettingsSchema } from "./gpu-settings.js";
 import { NightHoursSchema } from "./night-hours.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
-import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
+import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 import { DEFAULT_SANDBOX_MODE, SandboxModeSchema } from "./sandbox-mode.js";
 import { VoiceSettingsSchema } from "./voice.js";
@@ -503,6 +503,18 @@ export const SandboxSettingsSchema = z.object({
     memoryPolicy: RoomPolicySchema.default("resend").describe(
         "What happens to a message the sandbox held because it was short of memory: nothing ran, so nothing was spent. `resend` sends it by itself once memory has stayed free for a while, one held conversation at a time. `wait` holds it until somebody presses Send anyway. The sandbox-wide default; any one conversation can say otherwise.",
     ),
+    // The one answer that re-runs a turn which RAN without being asked, on by default, where autoResumeOnRestart (below)
+    // is off by default. The two differ in what the sandbox knows. A restart is any cause (an update, a rebuild, a crash
+    // nobody named), and re-running everything it cut, all at once, spends the allowance on work nobody is watching and
+    // edits files while the owner still waits for the sandbox to come back. A memory kill is one named cause the sandbox
+    // can steer around: its turns go one at a time, only once memory has stayed free, never the turn whose own process was
+    // the one killed, and not after a second memory kill of the same request (MEMORY_KILL_RERUNS), so what comes back is
+    // the victims and not the runaway. Held for a press instead, every victim of the 2026-11-05 runaway sat in Attention
+    // with "autoResumeOnRestart is off" though only one conversation had caused it; and switching autoResumeOnRestart on
+    // to avoid that would have re-run the cause too, all at once, into a machine still recovering.
+    memoryKillPolicy: MemoryKillPolicySchema.default("resume").describe(
+        "What happens to a turn the sandbox killed because it ran out of memory, whether only that turn was killed or the whole sandbox restarted. `resume` sends it again by itself once memory has stayed free for a while, one conversation at a time, and tells it what happened. Never a turn whose own process was the one using the memory, and never one killed for memory twice already: those wait for a press whatever this says. `wait` holds every such turn until somebody presses Continue. After a restart that ran out of memory this decides for the turns it cut, instead of the switch for resuming after a restart. The sandbox-wide default; any one conversation can say otherwise.",
+    ),
     // How a held turn continues once its cache has gone cold (schemas/providers/handoff.ts). The card asks each time and
     // preselects this; a booked send (a move, a resend at the reset) uses it unless a person picked on the card.
     limitHandoff: LimitHandoffSchema.default("suggested").describe(
@@ -590,7 +602,7 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(false)
         .describe(
-            "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
+            "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost. A restart the sandbox traces to memory running out goes by `memoryKillPolicy` instead, whatever this says.",
         ),
     // The owner's night (night-hours.ts): with nobody at the editor inside it, an agent's own question is answered by the
     // sandbox rather than parking the turn until morning. Off until the owner sets the hours: a sleep window guessed for

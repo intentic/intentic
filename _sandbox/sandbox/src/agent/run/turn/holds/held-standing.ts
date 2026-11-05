@@ -54,6 +54,7 @@ const retimeLimitHold = async (services: Services, conversationId: string, held:
 const NO_LONGER_ARMED = "This turn is no longer picked up by itself: the answer to how it ended is now to wait. Continue carries it on.";
 // The same for a hold nothing but a press ever lets go, whatever the answer.
 const PRESS_ONLY = "This turn stopped at its own limit and is not picked up by itself. Continue carries it on.";
+const MEMORY_PRESS_ONLY = "This turn was killed for memory and is likely the cause, so it is not picked up by itself. Continue carries it on.";
 
 // A stopped or outage hold armed when its turn ended reads "resuming", in Active. Once its answer is wait, nothing will
 // resume it, so the promise is withdrawn and the hold left for a press: the card falls to Attention with Continue. Left
@@ -64,10 +65,13 @@ const withdrawUnarmedResume = async (services: Services, conversationId: string,
         return;
     }
     const pressOnly = held.pressOnly === true;
-    if (!pressOnly && breakArmed(await breakPolicyFor(services, conversationId, held.reason))) {
+    // A memory kill is answered by the memory release's question, not the stop ladder's (room-holds.ts).
+    const ending = held.memoryKill === undefined ? held.reason : "memoryKill";
+    if (!pressOnly && breakArmed(await breakPolicyFor(services, conversationId, ending))) {
         return;
     }
-    if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: pressOnly ? PRESS_ONLY : NO_LONGER_ARMED }, now).settled) {
+    const said = pressOnly ? (held.memoryKill === undefined ? PRESS_ONLY : MEMORY_PRESS_ONLY) : NO_LONGER_ARMED;
+    if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: said }, now).settled) {
         services.logger.info({ conversationId, reason: held.reason, pressOnly }, "resume pass: a resuming turn's answer is now to wait, so it waits for a press");
     }
 };

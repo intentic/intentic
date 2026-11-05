@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { longHeldPools, parseProcStatus, type ProcessRow, type ResourceSnapshot, topProcesses } from "./resource-metrics.js";
+import { longHeldPools, ownerSums, parseProcStatus, type ProcessRow, type ResourceSnapshot, topProcesses } from "./resource-metrics.js";
 
 describe("resource metric process attribution", () => {
     test("parses the memory fields from proc status", () => {
@@ -43,6 +43,43 @@ Threads:\t7
             { pid: 3, name: "MainThread", program: "vite", role: "toolchain", rssBytes: 300, swapBytes: 0, threads: 3 },
         ]);
         expect(topProcesses(rows).map((top) => top.pid)).toEqual([2, 3, 1, 4]);
+    });
+
+    // 2026-11-05: a 17.6 GB game client sat in the top rows as `other`, with nothing tying it to its job or conversation.
+    test("a top row names whose work it is and its background job, and never the argv the scan read", () => {
+        const runaway: ProcessRow = {
+            pid: 19,
+            ppid: 1,
+            name: "integra",
+            program: undefined,
+            role: "other",
+            rssBytes: 17_600_000_000,
+            swapBytes: 33_000_000_000,
+            threads: 40,
+            cpuTicks: 0,
+            owner: "sub-tidy-pebble-aii1",
+            jobId: "job-1",
+            argv: "./integra --headless --token=secret",
+            pgrp: 12,
+        };
+        expect(topProcesses([runaway])).toEqual([
+            { pid: 19, name: "integra", program: undefined, role: "other", rssBytes: 17_600_000_000, swapBytes: 33_000_000_000, threads: 40, owner: "sub-tidy-pebble-aii1", jobId: "job-1" },
+        ]);
+    });
+
+    test("resident and swapped bytes are summed by owner, unstamped work under a name no conversation has", () => {
+        expect(
+            ownerSums([
+                { owner: "conv-a", rssBytes: 100, swapBytes: 10 },
+                { owner: "conv-a", rssBytes: 50, swapBytes: 0 },
+                { owner: "daemon", rssBytes: 7, swapBytes: 0 },
+                { owner: undefined, rssBytes: 3, swapBytes: 1 },
+            ]),
+        ).toEqual({
+            "conv-a": { count: 2, rssBytes: 150, swapBytes: 10 },
+            daemon: { count: 1, rssBytes: 7, swapBytes: 0 },
+            unstamped: { count: 1, rssBytes: 3, swapBytes: 1 },
+        });
     });
 });
 

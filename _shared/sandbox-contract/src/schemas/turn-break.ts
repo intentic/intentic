@@ -10,9 +10,12 @@ import { z } from "zod";
 // The walls a turn can stop at that take a standing answer. The first three end a turn that leaves finished work behind
 // a live session, spelled exactly as `TurnEndingSchema.reason` spells them, so the ending a surface reads and the
 // question it asks are one word. `memory` is the door: the sandbox too short of memory to start the turn at all, which
-// holds the message (or the turn the sandbox kept) until a press or room comes back. A restart is handled apart
+// holds the message (or the turn the sandbox kept) until a press or room comes back. `memoryKill` is a turn that was
+// running when the sandbox ran out of memory and was killed for it, whether its runtime alone was killed or the whole
+// daemon went down with it (2026-11-05): it reads as a stopped turn, but what brings it back is room, not a clock, and it
+// ran, so it is a question of its own rather than the stop ladder's or the door's. A restart is otherwise handled apart
 // (SandboxSettings.autoResumeOnRestart): nobody is watching a restart, so it has no in-chat question.
-export const TurnBreakSchema = z.enum(["limit", "outage", "stopped", "memory"]);
+export const TurnBreakSchema = z.enum(["limit", "outage", "stopped", "memory", "memoryKill"]);
 export type TurnBreak = z.infer<typeof TurnBreakSchema>;
 
 // Every ending that leaves a held turn behind: a spent allowance, an outage, a turn that stopped short, plus the
@@ -39,8 +42,14 @@ export type RetryPolicy = z.infer<typeof RetryPolicySchema>;
 export const RoomPolicySchema = z.enum(["wait", "resend"]);
 export type RoomPolicy = z.infer<typeof RoomPolicySchema>;
 
-// One answer, whichever ending asked. Read against the ending: only `limit` can be `move`.
-export const TurnBreakPolicySchema = z.enum(["wait", "resend", "move", "retry"]);
+// A memory kill's two answers: hold it for a press, or send it again by itself once memory has stayed free, one
+// conversation at a time. Never the turn whose own process was the one killed, nor one killed for memory twice already
+// (MEMORY_KILL_RERUNS): those wait for a press whatever the answer, since re-running them is re-running the runaway.
+export const MemoryKillPolicySchema = z.enum(["wait", "resume"]);
+export type MemoryKillPolicy = z.infer<typeof MemoryKillPolicySchema>;
+
+// One answer, whichever ending asked. Read against the ending: only `limit` can be `move`, only `memoryKill` `resume`.
+export const TurnBreakPolicySchema = z.enum(["wait", "resend", "move", "retry", "resume"]);
 export type TurnBreakPolicy = z.infer<typeof TurnBreakPolicySchema>;
 
 // Which answers an ending may take, so a surface offers exactly these and a writer refuses anything else.
@@ -49,6 +58,7 @@ export const TURN_BREAK_POLICIES: Readonly<Record<TurnBreak, readonly TurnBreakP
     outage: ["wait", "retry"],
     stopped: ["wait", "retry"],
     memory: ["wait", "resend"],
+    memoryKill: ["wait", "resume"],
 };
 
 /** Whether this ending may be answered this way; the one gate every writer goes through. */
@@ -62,6 +72,22 @@ export const breakArmed = (policy: TurnBreakPolicy): boolean => policy !== "wait
 // leaves, so the number and the sentence cannot drift.
 export const RETRY_LADDER_MS = [5_000, 15_000, 45_000] as const;
 export const RETRY_LADDER_TRIES = RETRY_LADDER_MS.length;
+
+// How many times the sandbox sends one request again by itself after memory killed it. The kill after that holds it for
+// a press: a turn killed for memory every time it runs is more likely the cause than a victim, whatever its process was
+// called. Quoted in the notice that holds it, so the number and the sentence cannot drift.
+export const MEMORY_KILL_RERUNS = 2;
+
+// The mark a held turn carries where memory killed it: the failure frame's `held` (agent-events.ts) and the recorded
+// ending's (transcript.ts TurnEnding), which the card's press repeats. A memory kill is held as a stop, so without the
+// mark a surface asked the stop's question, whose answer sets the stop ladder that a memory kill never climbs, and the
+// question that does decide it was asked nowhere. One schema for both, so the frame and the record cannot word it apart.
+export const MemoryKillMarkSchema = z
+    .boolean()
+    .optional()
+    .describe(
+        "Killed because the sandbox ran out of memory: the answer that decides whether it goes again by itself is the memory kill's (wait, or resume once memory has stayed free), not the stop's. Absent for every other hold.",
+    );
 
 /** The wait before the next rung, or undefined once the ladder is spent. */
 export const retryLadderDelay = (triesWithoutProgress: number): number | undefined => RETRY_LADDER_MS[triesWithoutProgress];

@@ -67,10 +67,11 @@ export interface DeviceSandboxShape {
     cpus: number | null;
     privileged: boolean;
     gpu: boolean;
+    swapGib?: number | null | undefined;
 }
 
-// One container's share of its machine right now: caps, whether privileged, whether the GPU rides along,
-// and who asked for each privilege (`overlayRuntime`: the approved environment; `hostRuntime`: the owner).
+// One container's share of its machine now: caps, privileged or not, the GPU, and who asked for each privilege
+// (`overlayRuntime`: the approved environment; `hostRuntime`: the owner).
 export interface DeviceSandboxResources {
     /** The memory ceiling in bytes; absent when docker imposes none. */
     memoryBytes?: number | undefined;
@@ -81,10 +82,9 @@ export interface DeviceSandboxResources {
     hostRuntime: readonly string[];
     overlayRuntime: readonly string[];
     /**
-     * The shape the container runs with, the owner's own ask it carries (`null` on a cap is the default), and the
-     * shape saved for its next restart through ic; both whole, both as ic reports them (the contract's `shape` and
-     * `desired`). Absent from an agent older than `set-shape`. The same shape as `ResourcesForm`, spelled here
-     * rather than imported so the two modules don't import each other.
+     * The shape the container runs with (the owner's own ask; `null` on a cap is the default) and the one saved for its
+     * next restart through ic, both whole as ic reports them (`shape`, `desired`); absent from an agent older than
+     * `set-shape`, `swapGib` from one older than it. As `ResourcesForm`, spelled here so the two modules don't import each other.
      */
     shape?: DeviceSandboxShape | undefined;
     desired?: DeviceSandboxShape | undefined;

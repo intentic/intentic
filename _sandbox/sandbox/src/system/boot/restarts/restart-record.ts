@@ -8,6 +8,7 @@ import {
 import type { HostCrashEvent } from "@intentic/sandbox-contract/schemas/hosts";
 import { opt } from "../../../opt.js";
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
+import type { PostMortem } from "../../resources/memory-records.js";
 
 // WHY THE DAEMON LAST STOPPED, SAID ONCE AT THE NEXT BOOT (2026-10-11). A restart used to leave a bare "shutting down"
 // line and a boot timestamp, so whoever asked why a job died or /tmp emptied rebuilt it from uptime drops across two
@@ -76,7 +77,18 @@ export interface EndedRun {
 // without it; `crashed` exited non-zero on its own or left a fatal-error report; `killed` never ran its exit hook at all
 // (SIGKILL, a kernel OOM kill, a forced container stop, netd killing a stuck daemon, the host losing power); `unknown`
 // left no marker (a first boot, or a marker that was lost).
-export type RunEnding = "stopped" | "exited" | "crashed" | "killed" | "unknown";
+// Two kills the boot can name from the records left behind (2026-11-05, post-mortem.ts): `netd-stuck`, netd killed it
+// for not answering (a ping unanswered for five minutes, or a start that never said hello); `oom-victim`, the kernel's
+// OOM killer chose the daemon itself. `killed` stays for a kill nothing on file names.
+export const RUN_ENDINGS = ["stopped", "exited", "crashed", "killed", "netd-stuck", "oom-victim", "unknown"] as const;
+export type RunEnding = (typeof RUN_ENDINGS)[number];
+
+// The endings in which the daemon never ran its exit hook: what it was writing may be half-written (a git object, a
+// database page), which a boot after one of them checks (git integrity, the conversation database).
+const UNCLEAN: ReadonlySet<RunEnding> = new Set(["killed", "netd-stuck", "oom-victim", "unknown"]);
+
+/** Whether the run ended without its exit hook (killed, by any hand, or no marker at all). */
+export const endedUncleanly = (ended: RunEnding | undefined): boolean => ended !== undefined && UNCLEAN.has(ended);
 
 export interface PreviousRun {
     readonly ended: RunEnding;
@@ -97,6 +109,9 @@ export interface PreviousRun {
     readonly containerRestarted?: boolean;
     // /tmp no longer holds what the previous run left there: the container was recreated.
     readonly tmpCleared?: boolean;
+    // What the boot found on file about an unclean end (post-mortem.ts): what was killed for memory, what netd did, whose
+    // turns it holds, and the named cause in a sentence. Absent after a clean stop.
+    readonly postMortem?: PostMortem;
 }
 
 export interface EndFacts {
@@ -106,6 +121,9 @@ export interface EndFacts {
     readonly fatalReports?: readonly string[];
     readonly containerRestarted?: boolean;
     readonly tmpCleared?: boolean;
+    readonly postMortem?: PostMortem;
+    // Who killed the run, when the records name the hand (post-mortem.ts namedEndingOf): refines `killed`, nothing else.
+    readonly namedEnding?: "netd-stuck" | "oom-victim";
 }
 
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -128,7 +146,8 @@ const endingOf = (marker: EndedRun | undefined, fatalReports: readonly string[])
 export const previousRunOf = (facts: EndFacts): PreviousRun => {
     const { marker, now } = facts;
     const fatalReports = facts.fatalReports ?? [];
-    const ended = endingOf(marker, fatalReports);
+    const marked = endingOf(marker, fatalReports);
+    const ended = marked === "killed" && facts.namedEnding !== undefined ? facts.namedEnding : marked;
     const intent = standingIntent(facts.intent, marker?.startedAt, now);
     const endedAt = marker?.state === "exited" ? marker.endedAt : undefined;
     return {
@@ -147,6 +166,7 @@ export const previousRunOf = (facts: EndFacts): PreviousRun => {
         ...opt("fatalReports", fatalReports.length > 0 ? fatalReports : undefined),
         ...opt("containerRestarted", facts.containerRestarted),
         ...opt("tmpCleared", facts.tmpCleared),
+        ...opt("postMortem", facts.postMortem),
     };
 };
 
@@ -175,8 +195,36 @@ const ENDINGS = {
             ? `crashed: exited with code ${String(run.exitCode)} without being asked to stop (an uncaught exception or a fatal error; the lines before it in daemon.log say which)`
             : `died on a fatal error (read ${run.fatalReports.join(", ")} for the cause)`,
     killed: () => "was killed without warning (SIGKILL, a kernel OOM kill, a forced container stop, netd killing a stuck daemon, or the host going down)",
+    "netd-stuck": () => "was killed by netd, which found it not answering (an event loop stopped for five minutes, or a start that never said hello)",
+    "oom-victim": () => "was killed by the kernel's OOM killer, which chose the daemon itself",
     unknown: () => "unknown: it left no exit marker (a first boot, or the marker was lost)",
 } satisfies Record<RunEnding, (run: PreviousRun) => string>;
+
+const KILLS: ReadonlySet<RunEnding> = new Set(["killed", "netd-stuck", "oom-victim"]);
+
+/**
+ * A kill the post-mortem named, in place of the five-way guess: "was killed: netd killed the daemon after its event loop
+ * stopped answering for 300 s …". A plain `killed` with memory killed around it says so first, since the post-mortem
+ * then names what died for memory but not the hand that ended the daemon. Undefined when nothing was named.
+ */
+const namedKill = (run: PreviousRun): string | undefined => {
+    const found = run.postMortem;
+    if (found === undefined || found.cause === "unknown" || !KILLS.has(run.ended)) {
+        return undefined;
+    }
+    return `was killed${run.ended === "killed" && found.cause === "memory" ? " without warning while memory ran out" : ""}: ${found.summary}`;
+};
+
+// The run's end in words, before why and what it cost: a named kill, else the host's crash, else the ending's own, with
+// whatever the post-mortem found beside it (around a crash, or that nothing on file names the hand of a kill).
+const endingText = (run: PreviousRun, crashes: readonly HostCrashEvent[]): string => {
+    const named = namedKill(run);
+    if (named !== undefined) {
+        return named;
+    }
+    const own = crashes.length > 0 && (run.ended === "killed" || run.ended === "unknown") ? hostCrashText(crashes) : ENDINGS[run.ended](run);
+    return run.postMortem === undefined ? own : `${own}; ${run.postMortem.summary}`;
+};
 
 // How long after a boot the host's own record of the crash before it may still be dated: Windows logs Kernel-Power 41 as
 // it boots again, and its error reporting files a GPU reset's LiveKernelEvent minutes later.
@@ -229,8 +277,7 @@ export const describePreviousRun = (run: PreviousRun, crashes: readonly HostCras
             : run.tmpCleared === true
               ? "; /tmp was emptied"
               : "";
-    const ending = crashes.length > 0 && (run.ended === "killed" || run.ended === "unknown") ? hostCrashText(crashes) : ENDINGS[run.ended](run);
-    return `${ending}${why}${lost}`;
+    return `${endingText(run, crashes)}${why}${lost}`;
 };
 
 /**

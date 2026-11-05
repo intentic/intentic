@@ -1,4 +1,4 @@
-import { type DeathWitness, killCauseOf, runtimeKilled } from "../child-death.js";
+import { type DeathWitness, killCauseOf, killNote, runtimeKilled } from "../child-death.js";
 
 // What the budget saw: the OOM count now, and whether a reading in the last few minutes was short.
 const witness = (shortRecently: boolean, oomKills: number | undefined): DeathWitness => ({ oomKills, shortRecently });
@@ -32,4 +32,33 @@ test("a steady counter on a box with room names something outside the turn", () 
     expect(killCauseOf(witness(false, 3), 3)).toBe("outside");
     // No count at the start (no cgroup then) cannot prove the killer moved.
     expect(killCauseOf(witness(false, 9), undefined)).toBe("outside");
+});
+
+// (2026-11-05) A child memory killed is held for the memory release, which sends it again by itself once memory has
+// stayed free; its parent sending it the same work meanwhile would run it twice. One whose own process grew is the likely
+// cause and waits for a press, so its parent hears not to hand it the same work as it was.
+describe("what a parent hears of a child memory killed", () => {
+    const failure = "Claude Code process terminated by signal SIGKILL";
+
+    test("that it comes back by itself, where its own frame said the sandbox sends it again", () => {
+        const note = killNote("memory", failure, undefined, true);
+        expect(note).toContain("sends this turn again by itself once memory has stayed free");
+        expect(note).toContain("do not `send` it the same work meanwhile");
+        expect(note).not.toContain("`send` it a message");
+    });
+
+    test("that it is the likely cause, naming the process, where the process killed was its own", () => {
+        const own = { at: 1, killer: "netd-guard", pid: 4242, comm: "cargo", owner: "sub-tidy-pebble-aii1", jobId: "job-7" } as const;
+        const note = killNote("memory", failure, own, true);
+        expect(note).toContain("the process killed was its own: cargo (pid 4242), background job job-7");
+        expect(note).toContain("not sent again by itself");
+        expect(note).not.toContain("once memory has stayed free");
+    });
+
+    test("the way back by a message, where nothing brings it back by itself", () => {
+        expect(killNote("memory", failure)).toContain("`send` it a message and it carries on from where it stopped, once there is room for it");
+        expect(killNote("outside", failure, undefined, true)).toBe(
+            `Killed from outside its turn (${failure}). Its session is intact: \`send\` it a message and it carries on from where it stopped.`,
+        );
+    });
 });

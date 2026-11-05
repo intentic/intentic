@@ -7,6 +7,7 @@ import {
     cooledPickUp,
     handoffPicked,
     LIMIT_COOLDOWN_MS,
+    memoryKilled,
     pickUpNext,
     pickUpOf,
     pickUpOfPress,
@@ -413,6 +414,43 @@ describe(`a stop held for a press alone`, () => {
         const ending = { reason: `stopped`, held: { ran: true, pressOnly: true } } as const;
         expect(pickUpOf(ending)).toEqual(pressOnly);
         expect(pickUpOfPress({ kind: `continue`, ending }, undefined, { status: `error`, failureCode: `turn-cap`, attention: NO_ATTENTION })).toEqual(pressOnly);
+    });
+});
+
+// A stop the sandbox killed because memory ran out (the daemon's memory-death.ts marks the frame, turn-ending.ts the
+// card's press): its question is the memory kill's, and what it goes by is room, never the stop ladder's clock.
+describe(`a stop memory killed`, () => {
+    const killed: PickUp = { reason: `stopped`, held: { ran: true, memoryKill: true } };
+
+    it(`is told apart from a plain stop, and only a stop's mark counts`, () => {
+        expect(memoryKilled(killed)).toBe(true);
+        expect(memoryKilled({ reason: `stopped`, held: { ran: true } })).toBe(false);
+        expect(memoryKilled({ reason: `limit`, held: { ran: true, memoryKill: true } })).toBe(false);
+        expect(memoryKilled(undefined)).toBe(false);
+    });
+
+    it(`says it goes once memory frees up, with no instant and no ladder; nothing while the answer is to wait`, () => {
+        expect(pickUpNext(killed, `resume`, NOW)).toBe(`Goes by itself once memory frees up`);
+        expect(pickUpNext({ ...killed, retries: { made: 1, max: 2 } }, `resume`, NOW)).toBe(`Goes by itself once memory frees up`);
+        expect(pickUpNext(killed, `wait`, NOW)).toBeUndefined();
+        // The likely cause is held for a press alone, whatever the answer.
+        expect(pickUpNext({ reason: `stopped`, held: { ran: true, memoryKill: true, pressOnly: true } }, `resume`, NOW)).toBeUndefined();
+    });
+
+    it(`says on the strip that memory killed it, not that it stopped short, with its re-runs and its press`, () => {
+        expect(pickUpStatus(killed, NOW)).toBe(`Killed for memory · work kept`);
+        expect(pickUpStatus({ ...killed, retries: { made: 1, max: 2 } }, NOW)).toBe(`Killed for memory · work kept · retried 1 of 2`);
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true, memoryKill: true, pressOnly: true } }, NOW)).toBe(
+            `Killed for memory · work kept · only Continue carries it on`,
+        );
+        // A plain stop keeps its own line.
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW)).toBe(`Turn stopped short · work kept`);
+    });
+
+    it(`comes through from the record's ending and the card's press`, () => {
+        const ending = { reason: `stopped`, held: { ran: true, memoryKill: true } } as const;
+        expect(pickUpOf(ending)).toEqual(killed);
+        expect(pickUpOfPress({ kind: `continue`, ending }, undefined, { status: `error`, attention: NO_ATTENTION })).toEqual(killed);
     });
 });
 

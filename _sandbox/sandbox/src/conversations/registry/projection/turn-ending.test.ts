@@ -40,6 +40,23 @@ describe("a turn that stopped with nothing to repair", () => {
         expect(endingOf(fleet, "c1")).toEqual({ reason: "stopped", held: { ran: true, contextTokens: 9_000 } });
     });
 
+    // A death memory caused (memory-death.ts) is held as a stop with the kill on it, and the card's press, which every
+    // window's strip follows over the frame once nothing is coming back by itself, says so too: without it a reloaded
+    // window asked the stop's question of a turn the stop's answer never moves. Waiting for a press here (`available`):
+    // one the memory release will send reads as resuming, which presses nothing.
+    test("ends a death memory caused as stopped, marked as memory's", async () => {
+        const fleet = memoryFleet();
+        await fleet.agents.init();
+        await beginTurn(fleet.conversations, { conversationId: "c1", isolated: true, prompt: "Fix the parser", profile: PROFILE }, 1_000);
+        fleet.conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", message: "Process killed.", autoResume: "available", held: { ran: true, memoryKill: true } },
+        });
+        fleet.conversations.send("c1", { kind: "turn-held", held: { input, reason: "stopped", ran: true, memoryKill: { reruns: 0 } } }, 1_500);
+        await fleet.conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(endingOf(fleet, "c1")).toEqual({ reason: "stopped", held: { ran: true, memoryKill: true } });
+    });
+
     test("offers nothing for a code naming something to repair first", async () => {
         const fleet = await endedOn("agent-busy", false, false);
         expect(fleet.agents.get("c1")).toMatchObject({ status: "error", failureCode: "agent-busy" });

@@ -401,13 +401,15 @@ fn elsewhere_report(side: &Side) -> serde_json::Value {
 }
 
 /// One sandbox's final `--json` line: its report, and beside it (never inside, which is the platform's shape) what this
-/// side adopted, the repairs ic has made to it (ledger.rs) and, for doctor, how it last went down. Pure.
+/// side adopted, the repairs ic has made to it (ledger.rs) and, for doctor, how it last went down and what would hold a
+/// runaway in it (`containment`, sandbox/containment.rs). Pure.
 fn answer_line(
     slug: &str,
     report: &serde_json::Value,
     adopted: Option<&side::Adoption>,
     ledger: &crate::sandbox::ledger::Ledger,
     last_down: Option<serde_json::Value>,
+    containment: Option<serde_json::Value>,
 ) -> String {
     let mut line = serde_json::json!({ "slug": slug, "report": report });
     if let Some(adoption) = adopted {
@@ -418,6 +420,9 @@ fn answer_line(
     }
     if let Some(last_down) = last_down {
         line["lastDown"] = last_down;
+    }
+    if let Some(containment) = containment {
+        line["containment"] = containment;
     }
     line.to_string()
 }
@@ -951,6 +956,29 @@ impl Engine {
                 }),
                 self.upkeep.as_ref(),
             );
+            // (2026-11-05) What would hold a runaway in it: doctor's alone, warnings at worst, beside the report rather than
+            // in it (the report's checks are the platform's fixed list). Read only with the engine up and the container
+            // there; printed under the rows for a person, and carried in the `--json` line the machine agent's
+            // `diagnose_sandbox` answers with.
+            let containment = match (
+                &sandbox.facts.container,
+                self.doctor && snapshot.host.engine.up(),
+            ) {
+                (chain::Container::Present(state), true) => {
+                    let findings = crate::sandbox::containment::findings(
+                        &sandbox.slug,
+                        &format!("{}{}", crate::sandbox::CONTAINER_PREFIX, sandbox.slug),
+                        state.memory,
+                        state.running(),
+                    );
+                    ui::note(&format!("sandbox {}: what holds a runaway", sandbox.slug));
+                    for finding in &findings {
+                        crate::checks::print_row(finding);
+                    }
+                    Some(crate::sandbox::containment::findings_json(&findings))
+                }
+                _ => None,
+            };
             if self.json {
                 // Doctor is asked what happened; its reader gets the last exit and the last intent, a fix's does not
                 // pay the extra docker read on every keeper round.
@@ -965,6 +993,7 @@ impl Engine {
                     self.adoption_of(&sandbox.slug),
                     &sandbox.facts.ledger,
                     down.flatten(),
+                    containment,
                 ));
             }
             if let (false, Some(target)) = (self.doctor, self.targets.get(&sandbox.slug)) {
@@ -1378,6 +1407,7 @@ mod tests {
             None,
             &crate::sandbox::ledger::Ledger::default(),
             None,
+            None,
         ))
         .expect("JSON");
         assert_eq!(plain, serde_json::json!({ "slug": "s", "report": report }));
@@ -1386,9 +1416,16 @@ mod tests {
             since: Some(7),
         };
         let ledger = crate::sandbox::ledger::Ledger::default().noted("restart", 9, true);
-        let full: serde_json::Value =
-            serde_json::from_str(&answer_line("s", &report, Some(&adoption), &ledger, None))
-                .expect("JSON");
+        let full: serde_json::Value = serde_json::from_str(&answer_line(
+            "s",
+            &report,
+            Some(&adoption),
+            &ledger,
+            None,
+            Some(serde_json::json!([{ "check": "Swap bound", "state": "ok" }])),
+        ))
+        .expect("JSON");
+        assert_eq!(full["containment"][0]["check"], "Swap bound");
         assert_eq!(full["adopted"]["from"], "windows");
         assert_eq!(full["repairs"]["restart"]["count"], 1);
         assert_eq!(full["report"], report, "the platform's report is untouched");
@@ -1422,6 +1459,7 @@ mod tests {
             None,
             &crate::sandbox::ledger::Ledger::default(),
             Some(down),
+            None,
         ))
         .expect("JSON");
         assert_eq!(line["lastDown"]["container"]["exitCode"], 137);

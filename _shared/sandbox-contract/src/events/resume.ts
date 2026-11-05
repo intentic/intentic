@@ -14,6 +14,11 @@ export const RESUME_NOTES = {
     restart: `The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back. ${REPEATED}`,
     // Anything that killed a turn with no remedy of its own: a runtime that hung, a harness that crashed.
     stopped: `The previous attempt at this request stopped before it finished, and it has been sent again. ${REPEATED}`,
+    // Killed because the sandbox ran out of memory, its runtime alone or the whole daemon with it (2026-11-05), and sent
+    // again by the sandbox once memory had stayed free. What the boot's post-mortem named rides the tail
+    // (resumeNoteWith). Its own note rather than `stopped` or `restart`: the model has to hear what it must not do again,
+    // since a turn that comes back and starts the same unbounded build is the runaway a second time.
+    memory: `The sandbox ran out of memory while this turn was running, and this turn was killed to free it; it has been sent again by itself once memory had stayed free. Every background job, dev server and other process this turn started is gone, so check before relying on any of them. Run builds and tests one at a time rather than several at once, and do not repeat whatever grew without limit: if it was a command or a job of yours, bound it, split it or run it on less before running it again. ${REPEATED}`,
     // Three notes, one allowance failure: `limit` continues, `switched` opens fresh, `refused` says the opposite.
     limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
     switched:
@@ -101,6 +106,12 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
         "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.",
     ),
     stopped: notice("stopped", "Sent again after the turn stopped short, picking up where it left off."),
+    // Said as the owner would say it, as `restart` is: what ran out, that it came back by itself once there was room, and
+    // what it lost on the way, in the words a person uses for what a turn leaves running.
+    memory: notice(
+        "memory",
+        "Sent again once memory freed up, after the sandbox ran out of memory and stopped this turn; background commands and dev servers it started have ended.",
+    ),
     // None of these four auto-resumed, a person pressed Continue; `switched`/`carried` name the differing account.
     limit: notice("limit", "Sent again after the allowance ran out mid-turn, picking up where it left off."),
     switched: notice("switched", "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session."),

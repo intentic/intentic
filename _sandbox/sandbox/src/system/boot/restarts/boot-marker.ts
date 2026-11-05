@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
 import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
@@ -10,8 +10,12 @@ import { opt } from "../../../opt.js";
 import { processIdentity, type ProcessIdentity, sameProcess } from "../../resources/proc-stat.js";
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 import { buildInfo, buildText } from "../build-info.js";
+import { bootHistoryDocument } from "./boot-history.js";
+import { type Assembled, collectPostMortem, notePostMortem, postMortemForRecord, type PostMortemSources } from "./post-mortem.js";
 import {
     describePreviousRun,
+    endedUncleanly,
+    type EndFacts,
     type PreviousRun,
     previousRunOf,
     readRestartIntent,
@@ -95,6 +99,8 @@ const TMP_MARKER = join(tmpdir(), ".intentic-daemon-run");
 export interface ClaimOptions {
     readonly now?: number;
     readonly tmpMarker?: string;
+    // Where an unclean stop's post-mortem reads the kernel's log and the memory records; a test hands its own.
+    readonly postMortem?: PostMortemSources;
 }
 
 // Whether the container restarted since the previous run: its PID 1 is no longer the process it was.
@@ -118,18 +124,41 @@ const readMarker = (path: string): ExitMarker | undefined =>
     // SAFETY: only this module writes the file, always whole as an ExitMarker, and the fields every reader needs are checked.
     readJsonMarkerSync(path, ExitMarkerOnDisk) as ExitMarker | undefined;
 
+// The post-mortem of an unclean end (post-mortem.ts), read here so the restart record carries it and its sentence names
+// the cause. `logsDir` is <historyRoot>/logs (seams/logs-root.ts), so boot-history.json is beside it. Never throws: a
+// boot that cannot draw one still files how the run ended, as before.
+const postMortemOf = (logsDir: string, logger: Logger, run: PreviousRun, marker: ExitMarker | undefined, now: number, sources: PostMortemSources | undefined): Assembled | undefined => {
+    try {
+        return collectPostMortem(
+            logsDir,
+            join(dirname(logsDir), bootHistoryDocument.path),
+            { ended: run.ended, ...opt("pid", marker?.pid), ...opt("startedAt", marker?.startedAt) },
+            now,
+            sources,
+        );
+    } catch (error) {
+        logger.warn({ reason: errorMessage(error) }, "boot: the post-mortem of the previous run could not be drawn, so its end is filed unnamed");
+        return undefined;
+    }
+};
+
 // Says how the previous run ended, in one line beside this run's build, and files it in restarts.jsonl; the intent
 // left for that stop is spent here. Never throws.
-const reportPreviousRun = (logsDir: string, logger: Logger, previous: ExitMarker | undefined, now: number, tmpMarker: string): void => {
+const reportPreviousRun = (logsDir: string, logger: Logger, previous: ExitMarker | undefined, now: number, tmpMarker: string, sources?: PostMortemSources): void => {
     const reports = previous?.state === "running" ? fatalReports(logsDir, previous.pid) : [];
-    const run = previousRunOf({
+    const facts: EndFacts = {
         marker: previous,
         intent: readRestartIntent(logsDir),
         now,
         fatalReports: reports,
         ...opt("containerRestarted", containerRestarted(previous)),
         ...opt("tmpCleared", tmpCleared(previous, tmpMarker)),
-    });
+    };
+    const plain = previousRunOf(facts);
+    const found = postMortemOf(logsDir, logger, plain, previous, now, sources);
+    notePostMortem(logsDir, found?.postMortem);
+    const run =
+        found === undefined ? plain : previousRunOf({ ...facts, postMortem: postMortemForRecord(found.postMortem), ...opt("namedEnding", found.namedEnding) });
     lastPrevious = run;
     previousDied = previous?.state === "running";
     const build = buildInfo();
@@ -143,9 +172,10 @@ const reportPreviousRun = (logsDir: string, logger: Logger, previous: ExitMarker
     };
     const message = `daemon ${buildText(build)} starting; previous run ended: ${describePreviousRun(run)}`;
     // A death nobody announced is the news; one an initiator announced first, or a stop that went wrong, is worth a look.
-    if ((run.ended === "killed" || run.ended === "crashed") && run.intent === undefined) {
+    const died = run.ended === "crashed" || (endedUncleanly(run.ended) && run.ended !== "unknown");
+    if (died && run.intent === undefined) {
         logger.error(fields, message);
-    } else if (run.ended === "killed" || run.ended === "crashed" || run.ended === "exited") {
+    } else if (died || run.ended === "exited") {
         logger.warn(fields, message);
     } else {
         logger.info(fields, message);
@@ -175,9 +205,11 @@ export const claimBootMarker = (
     // Not a death: a live daemon owns this history root; leave its marker alone and claim nothing.
     if (previous?.state === "running" && sameProcess(previous)) {
         logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root, leaving its boot marker alone");
+        // Nor is the restart on file this process's to explain: the resume pass reads no post-mortem here.
+        notePostMortem(logsDir, undefined);
         return { claimed: false, markExited: () => undefined };
     }
-    reportPreviousRun(logsDir, logger, previous, now, tmpMarker);
+    reportPreviousRun(logsDir, logger, previous, now, tmpMarker, options.postMortem);
     try {
         writeFileSync(tmpMarker, String(process.pid));
     } catch (error) {

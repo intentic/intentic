@@ -56,6 +56,9 @@ export interface HeldTurn {
     // Only a press sends it again: the turn reached its own ceiling or ended incomplete, and no standing answer re-runs it
     // (the daemon's held-turn.ts pressOnly), so the strip asks no question about it.
     readonly pressOnly?: boolean;
+    // The sandbox killed it because memory ran out (turn-break.ts MemoryKillMarkSchema). It is held as a stop, but the
+    // stop's answer never moves it: what does is the conversation's answer to a memory kill, which the strip asks instead.
+    readonly memoryKill?: boolean;
 }
 
 /** The pick-up a Continue press was made on: the one the pane shows (the card's, where it says), not only this window's. */
@@ -201,6 +204,13 @@ const CLOCK_FROM_MS = 90 * 60 * 1_000;
 /** A stopped turn held for a press alone (HeldTurn.pressOnly): no answer to the stop's question would ever send it. */
 export const pressOnlyStop = (pickUp: PickUp | undefined): boolean => pickUp?.reason === `stopped` && pickUp.held?.pressOnly === true;
 
+/**
+ * A stopped turn memory killed (HeldTurn.memoryKill): the wall whose question it is asked is `memoryKill`, not the
+ * stop's. Before the mark the strip offered the stop's answers, which set a ladder this hold never climbs, so a reader
+ * who picked "retry" saw the pill move and nothing come back, while the answer that did decide it went unasked.
+ */
+export const memoryKilled = (pickUp: PickUp | undefined): boolean => pickUp?.reason === `stopped` && pickUp.held?.memoryKill === true;
+
 // A held turn is always pressable, whatever the reset says: disabling it protected against a re-fail that costs nothing
 // (the daemon's own fire is idempotent), while a dead button next to a countdown just pushed the user to type the word
 // by hand instead. Only endings with nothing held still gate on the reset, where a press really would append a message.
@@ -281,7 +291,11 @@ const originStatus = (pickUp: PickUp): string => {
     }
     // Held for a press alone: nothing carries it on by itself, which the line says rather than leaving a reader to wait.
     const pressed = pressOnlyStop(pickUp) ? ` · ${t(`chat.turnBreak.waitsForPress`)}` : ``;
-    return `${t(`chat.turnBreak.stoppedStatus`)}${retriedSoFar(pickUp)}${pressed}`;
+    // A stop memory killed says so: "stopped short" read as a hung runtime or a crash, beside the memory kill's own
+    // question and its "once memory frees up", and left the reader to work out that memory was the cause. Its count is
+    // the memory kill's re-runs (memory-death.ts), so the same suffixes follow it.
+    const head = memoryKilled(pickUp) ? t(`chat.turnBreak.memoryKillStatus`) : t(`chat.turnBreak.stoppedStatus`);
+    return `${head}${retriedSoFar(pickUp)}${pressed}`;
 };
 
 // Limit reached comes in two shapes: work kept (hit mid-flight) or nothing ran (spent before the first request);
@@ -314,6 +328,11 @@ export const pickUpNext = (pickUp: PickUp, policy: TurnBreakPolicy, now: number 
     // Held for a press alone, nothing goes by itself whatever the answer says.
     if (policy === `wait` || pressOnlyStop(pickUp)) {
         return undefined;
+    }
+    // A memory kill goes once memory has stayed free, which has no instant to name, and climbs no ladder: its re-runs are
+    // capped by the daemon (MEMORY_KILL_RERUNS), which holds the one past the cap for a press and says so on the frame.
+    if (memoryKilled(pickUp)) {
+        return t(`chat.turnBreak.goesWhenRoom`);
     }
     const at = pickUp.nextAt ?? pickUp.readyAt;
     // A laddered retry counts its tries; an allowance reopening is a one-shot appointment, with nothing to count.

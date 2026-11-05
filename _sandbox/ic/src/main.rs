@@ -789,6 +789,10 @@ enum SandboxCommand {
         /// Pass this device's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
         #[arg(long, value_enum, group = "ask")]
         gpus: Option<Switch>,
+        /// Swap the sandbox's work may page into, whole GiB of swap alone, e.g. 4g — or `default` for a quarter of
+        /// its memory cap, 1 to 4 GiB. Changed alone it takes effect at once, with no restart
+        #[arg(long, group = "ask")]
+        swap: Option<String>,
         /// Save the ask, laid over what runs, for the sandbox's next restart through ic instead of restarting it
         /// now (the older spelling of `shape --when next-restart`, kept for machine agents that send it)
         #[arg(long, requires = "ask", conflicts_with = "forget")]
@@ -817,9 +821,9 @@ enum SandboxCommand {
         slug: String,
         /// One field of the shape in the sandbox contract's own spelling, FIELD=JSON: memoryGib=12,
         /// memoryGib=null (the share derived from this device), cpus=4, cpus=null (every core),
-        /// privileged=true, gpu=false. Repeat it per field; a field ic does not know is refused. What every
+        /// privileged=true, gpu=false, swapGib=4, swapGib=null (a quarter of the memory cap, 1 to 4 GiB). Repeat it per field; a field ic does not know is refused. What every
         /// program calling ic sends (the contract's `icShapeArgs`, the desktop app)
-        #[arg(long = "set", value_name = "FIELD=JSON", group = "fields", conflicts_with_all = ["memory", "cpus", "privileged", "gpus"])]
+        #[arg(long = "set", value_name = "FIELD=JSON", group = "fields", conflicts_with_all = ["memory", "cpus", "privileged", "gpus", "swap"])]
         set: Vec<String>,
         /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this device. The
         /// older spelling of `--set memoryGib=…`, kept for machine agents older than `--set`
@@ -836,6 +840,10 @@ enum SandboxCommand {
         /// (`--set gpu=…`)
         #[arg(long, value_enum, group = "fields")]
         gpus: Option<Switch>,
+        /// Swap the sandbox's work may page into, whole GiB of swap alone, e.g. 4g — or `default` (`--set swapGib=…`).
+        /// With `--when now` and nothing else changed it takes effect at once, with no restart
+        #[arg(long, group = "fields")]
+        swap: Option<String>,
         /// `now` restarts onto the shape; `next-restart` saves it and restarts nothing
         #[arg(long, value_enum, requires = "fields")]
         when: Option<When>,
@@ -1082,18 +1090,20 @@ fn seed_value(given: Option<String>) -> Option<String> {
     })
 }
 
-/// The four optional fields as the ask both shape verbs take.
+/// The five optional fields as the ask both shape verbs take.
 fn ask_of(
     memory: Option<String>,
     cpus: Option<String>,
     privileged: Option<Switch>,
     gpus: Option<Switch>,
+    swap: Option<String>,
 ) -> shape::Ask {
     shape::Ask {
         memory: seed_value(memory),
         cpus: seed_value(cpus),
         privileged: privileged.map(|switch| switch == Switch::On),
         gpus: gpus.map(|switch| switch == Switch::On),
+        swap: seed_value(swap),
     }
 }
 
@@ -1273,6 +1283,7 @@ fn main() {
                 cpus,
                 privileged,
                 gpus,
+                swap,
                 later,
                 forget,
                 skip_preflight,
@@ -1281,7 +1292,7 @@ fn main() {
                 if no_resume {
                     sandbox::resume::decline();
                 }
-                let ask = ask_of(memory, cpus, privileged, gpus);
+                let ask = ask_of(memory, cpus, privileged, gpus, swap);
                 if forget {
                     sandbox::desired::forget(slug)
                 } else if later {
@@ -1297,6 +1308,7 @@ fn main() {
                 cpus,
                 privileged,
                 gpus,
+                swap,
                 when,
                 forget,
                 skip_preflight,
@@ -1308,7 +1320,7 @@ fn main() {
                         sandbox::resume::decline();
                     }
                     let ask = if set.is_empty() {
-                        Ok(ask_of(memory, cpus, privileged, gpus))
+                        Ok(ask_of(memory, cpus, privileged, gpus, swap))
                     } else {
                         shape::Ask::from_fields(&set)
                     };
@@ -2523,6 +2535,7 @@ mod tests {
                     cpus: None,
                     privileged: None,
                     gpus: None,
+                    swap: None,
                     later: false,
                     forget: false,
                     ..
@@ -2539,6 +2552,7 @@ mod tests {
                     cpus,
                     privileged,
                     gpus,
+                    swap,
                     later: false,
                     forget: false,
                     skip_preflight: false,
@@ -2556,11 +2570,14 @@ mod tests {
             "on",
             "--gpus",
             "off",
+            "--swap",
+            "default",
         ])
         else {
             panic!("reshape did not parse")
         };
         assert_eq!(slug, "abc123");
+        assert_eq!(swap.as_deref(), Some("default"));
         assert_eq!(memory.as_deref(), Some("12g"));
         assert_eq!(cpus.as_deref(), Some("4"));
         assert_eq!(privileged, Some(Switch::On));
@@ -2625,6 +2642,7 @@ mod tests {
                     cpus,
                     privileged,
                     gpus,
+                    swap,
                     when,
                     forget: false,
                     skip_preflight: false,
@@ -2642,12 +2660,15 @@ mod tests {
             "off",
             "--gpus",
             "on",
+            "--swap",
+            "4g",
             "--when",
             "next-restart",
         ])
         else {
             panic!("a whole shape for the next restart did not parse")
         };
+        assert_eq!(swap.as_deref(), Some("4g"));
         assert_eq!(slug, "abc123");
         assert!(set.is_empty());
         assert_eq!(
@@ -2718,9 +2739,14 @@ mod tests {
                 cpus: Some(String::new()),
                 privileged: Some(false),
                 gpus: Some(true),
+                swap: None,
             }
         );
         // One spelling per call: the pairs and the older flags never mix.
+        assert!(parse(&[
+            "sandbox", "shape", "work", "--set", "cpus=4", "--swap", "4g", "--when", "now"
+        ])
+        .is_err());
         assert!(parse(&[
             "sandbox", "shape", "work", "--set", "cpus=4", "--memory", "12g", "--when", "now"
         ])

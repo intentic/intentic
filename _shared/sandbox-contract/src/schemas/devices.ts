@@ -136,7 +136,8 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     to: z.string().min(1).optional(),
     // `set-shape` only, both required by it: the whole shape, and when it takes effect.
     // Strict too, unlike the same shape read off a report (where a newer ic's extra field must not fail an older
-    // reader): an order carrying a field this agent does not know is refused rather than carried out without it.
+    // reader): an order carrying a field this agent does not know is refused rather than carried out without it. So the
+    // shape's `swapGib` (2026-11-05) is sent only to a machine whose report carried it, which an older agent's never does.
     shape: z.strictObject(SandboxShapeSchema.shape).optional(),
     when: SandboxShapeWhenSchema.optional(),
     // `set-egress` only: the whole policy (required), the owner's passkey over a change that loosens it, and,

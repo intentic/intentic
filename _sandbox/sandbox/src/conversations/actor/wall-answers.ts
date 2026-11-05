@@ -6,7 +6,7 @@ import type { Postures } from "../registry/agents-store.js";
 // the card must follow the moment Settings changes them, as the resume pass does (resume-nudges.ts). Read here once and
 // again on every write, since a card is projected synchronously and the settings store answers only asynchronously.
 
-type Defaults = Pick<SandboxSettings, "limitPolicy" | "memoryPolicy">;
+type Defaults = Pick<SandboxSettings, "limitPolicy" | "memoryPolicy" | "memoryKillPolicy">;
 
 /** The sandbox's settings as the registry follows them: a read that answers undefined when it failed, and every write. */
 export interface WallAnswersSource {
@@ -21,7 +21,7 @@ export interface WallAnswersFollower {
     readonly follow: (changed: () => void) => Promise<void>;
 }
 
-const answersIn = (settings: Defaults): WallAnswers => ({ limit: settings.limitPolicy, memory: settings.memoryPolicy });
+const answersIn = (settings: Defaults): WallAnswers => ({ limit: settings.limitPolicy, memory: settings.memoryPolicy, memoryKill: settings.memoryKillPolicy });
 
 // Without a source (a fixture), the schema's own defaults answer, as an unwritten settings file does.
 export const wallAnswersFollower = (source: WallAnswersSource | undefined): WallAnswersFollower => {
@@ -31,7 +31,7 @@ export const wallAnswersFollower = (source: WallAnswersSource | undefined): Wall
         sandbox = settings === undefined ? sandbox : answersIn(settings);
     };
     return {
-        of: (postures) => ({ limit: postures.limit ?? sandbox.limit, memory: postures.memory ?? sandbox.memory }),
+        of: (postures) => ({ limit: postures.limit ?? sandbox.limit, memory: postures.memory ?? sandbox.memory, memoryKill: postures.memoryKill ?? sandbox.memoryKill }),
         follow: async (changed) => {
             await read();
             source?.onSet(() => void read().then(changed));

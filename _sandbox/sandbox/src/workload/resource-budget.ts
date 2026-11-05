@@ -20,7 +20,8 @@ import {
 import type { WorkloadClass } from "./workload-class.js";
 
 // The one place this daemon decides whether there is room for more work. One sampler reads the sandbox's memory by the
-// formula in @intentic/constants/memory-room (limit memory.high → memory.max → the machine; used = working set + swap,
+// formula in @intentic/constants/memory-room (limit memory.high → memory.max → the machine, and never above the workload
+// leaf's wall plus what runs outside the leaf, since everything admitted runs in it; used = working set + swap,
 // counted against the limit by its resident part until swap is full; stall = PSI full over ten seconds and a minute), and every consumer reads that one snapshot: the turn door, a child waiting for room, the
 // heavy-command queue through the room socket (room-socket.ts), the editor's gauge (live-metrics.ts), and a child's
 // death certificate (child-death.ts). What admitted work holds before the reading shows it is kept in one ledger, keyed

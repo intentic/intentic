@@ -15,7 +15,7 @@ use crate::sandbox::{
     at_rest, compose, composition, desired, identity, mirror, now_ms, preparing, probation,
     resolve_slug, resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
-use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
+use crate::shape::{self, Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::ui;
 use crate::util::{bail, sha256_hex, Fail, Result};
 
@@ -943,6 +943,16 @@ fn recreate(
         None => (carried_runtime, Vec::new()),
         Some(shape) => reshape_seeds(&shape.as_ask(), &carried_runtime),
     };
+    /* THE SWAP the new container carries (2026-11-05): the target's when this recreate applies a shape, else the one the
+    container runs with, which a live reshape may have changed without touching its env (desired::running reads that
+    back). Put into the env the contract replays rather than seeded on the probe like the caps: an image whose contract
+    lists SANDBOX_SWAP replays it from here and sizes `--memory-swap` by it, and one from before it never sees it, which is
+    why `swap_stamp` below puts it on the run line itself when the contract left it off. */
+    let carried_swap = target
+        .clone()
+        .unwrap_or_else(|| desired::running(&container))
+        .swap;
+    env_nul = shape::with_swap_env(&env_nul, carried_swap.as_deref());
     // Which asks this host cannot honour — probed via the image (the list lives in the run contract), so
     // the sandbox starts without an optional extra instead of `docker run` refusing the whole launch.
     let probes = if runtime_lines.is_empty() && host_runtime.is_empty() {
@@ -1038,9 +1048,15 @@ fn recreate(
         // keeps, and the daemon guards against replays anyway (workspaceArrivedEmpty).
         definition_b64: None,
     };
+    let contract_argv =
+        contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?;
     let argv = labels::into_run(
-        &contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?,
-        &stamped_run,
+        &contract_argv,
+        &[
+            stamped_run.clone(),
+            shape::swap_stamp(&contract_argv, carried_swap.as_deref()),
+        ]
+        .concat(),
     );
     /* A check ends here: the image has answered for this shape, and nothing has been pinned, recorded or stopped. */
     if reach == Reach::Checked {
@@ -1190,13 +1206,24 @@ fn recreate(
     // again at run time, and it can answer differently (an nvidia runtime registered against a mismatched
     // driver satisfies `docker info` and then fails the container). A sandbox that comes back saying it has
     // no GPU beats no sandbox. The failed attempt leaves a created-but-stopped container holding the name.
+    // What docker said beside the launch it took, and the run line it took: the engine may have dropped the swap bound
+    // that line asked for, and said so only in a warning (containment.rs).
+    let mut took: Option<(String, Vec<String>)> = launched
+        .as_ref()
+        .ok()
+        .map(|said| (said.clone(), argv.clone()));
     if launched.is_err() {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
             match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log)
                 .map(|retry_argv| {
-                    crate::os::policy::sandbox_run(labels::into_run(&retry_argv, &stamped_run))
+                    let extra = [
+                        stamped_run.clone(),
+                        shape::swap_stamp(&retry_argv, carried_swap.as_deref()),
+                    ]
+                    .concat();
+                    crate::os::policy::sandbox_run(labels::into_run(&retry_argv, &extra))
                 })
                 .and_then(|retry_argv| storage::check(&parked, &retry_argv).map(|()| retry_argv))
             {
@@ -1212,7 +1239,8 @@ fn recreate(
                     );
                 }
             };
-        if let Err(refusal) = docker::run_argv(&retry_argv, &log) {
+        let retried = docker::run_argv(&retry_argv, &log);
+        if let Err(refusal) = &retried {
             let reason = format!("starting the new version failed: {refusal}");
             heartbeat.stop();
             let restored = restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
@@ -1223,6 +1251,10 @@ fn recreate(
             );
         }
         ui::note("recreated without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
+        took = retried.ok().map(|said| (said, retry_argv));
+    }
+    if let Some((said, ran)) = &took {
+        crate::sandbox::containment::after_launch(&slug, ran, said);
     }
 
     ui::note("waiting for the sandbox daemon to come up…");
@@ -1419,6 +1451,11 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
     let container = format!("{CONTAINER_PREFIX}{slug}");
     if docker::container_exists(&container) {
         desired::adopt_legacy(&slug, &container)?;
+        // The swap alone is `shape`'s to apply, which changes it in the running sandbox with no restart (desired.rs).
+        // Never a loop: what that path hands back here names every field, which is no longer the swap alone.
+        if ask.swap_only() {
+            return desired::set(slug, ask, desired::When::Now, preflight);
+        }
     }
     if ask.is_empty() && record::read(&slug)?.desired.is_none() {
         bail!(
@@ -1426,7 +1463,7 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
             ui::explain(
                 "Nothing changed.",
                 Some("the command names no change."),
-                Some("give at least one of --memory, --cpus, --privileged, --gpus."),
+                Some("give at least one of --memory, --cpus, --privileged, --gpus, --swap."),
             )
         );
     }
@@ -1444,9 +1481,10 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
     Ok(())
 }
 
-/// The caps an ask names, as a shape whose spelling can be checked (the switches cannot be misspelled).
+/// The caps and the swap an ask names, as a shape whose spelling can be checked (the switches cannot be misspelled).
 fn ask_spelling(ask: &Ask) -> Option<Shape> {
-    (ask.memory.is_some() || ask.cpus.is_some()).then(|| Shape::default().with(ask))
+    (ask.memory.is_some() || ask.cpus.is_some() || ask.swap.is_some())
+        .then(|| Shape::default().with(ask))
 }
 
 /// Ask the image this sandbox runs whether it would start with `shape`, exactly as the restart that applies it
@@ -2077,6 +2115,9 @@ fn intent_of(mode: &Mode, channel: &str, from: Option<&str>, to: Option<&str>) -
             }
             if let Some(on) = ask.gpus {
                 asked.push(format!("gpus {}", switch(on)));
+            }
+            if let Some(swap) = cap(&ask.swap) {
+                asked.push(format!("swap {swap}"));
             }
             let what = if asked.is_empty() {
                 "the shape saved for its next restart".to_string()

@@ -20,14 +20,16 @@ export const ROOM_SOCKET: string;
 export const READING_FILES: readonly string[];
 
 export interface MemoryReading {
-    // memory.high, else memory.max, else the machine's memory; undefined where nothing bounds it.
+    // memory.high, else memory.max, else the machine's memory; undefined where nothing bounds it. Never above the workload
+    // leaf's memory.max plus what runs outside that leaf, where the leaf is bounded: admitted work runs in the leaf.
     readonly limitBytes: number | undefined;
     // Working set plus swap; undefined where nothing measures it. Free memory is counted against its resident part.
     readonly usedBytes: number | undefined;
     // The swapped part of `usedBytes`; 0 when swap is off or unaccounted.
     readonly swapBytes: number;
-    // What swap can hold: memory.swap.max, never more than what is swapped plus the machine's SwapFree; at a root cgroup
-    // the machine's SwapTotal. Undefined where nothing bounds it. Past SWAP_FULL_SHARE of it, swap counts as used.
+    // What swap can hold: memory.swap.max, never more than what is swapped plus the machine's SwapFree, nor than the
+    // workload leaf's memory.swap.max plus what is swapped outside it; at a root cgroup the machine's SwapTotal.
+    // Undefined where nothing bounds it. Past SWAP_FULL_SHARE of it, swap counts as used.
     readonly swapLimitBytes?: number | undefined;
     // The machine's MemAvailable, which free memory never exceeds; absent where the machine does not say.
     readonly availableBytes?: number | undefined;

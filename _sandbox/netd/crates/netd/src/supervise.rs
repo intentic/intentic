@@ -1,7 +1,8 @@
 //! Runs the Node daemon as a child and keeps it running. A crash restarts it with backoff while netd holds every
-//! socket, once what the dead daemon left in its process group is gone; a Node netd found stuck is killed and
-//! restarted the same way. A deliberate stop (exit 0) or a refused config (exit 78) ends netd too, as they ended
-//! the container.
+//! socket, once what the dead daemon left in its process group is gone; a Node netd found stuck is killed, the kill
+//! written down (`netd-kills.jsonl`), and restarted the same way. A restart into a sandbox stalling on memory waits for
+//! it to ease (memguard). A deliberate stop (exit 0) or a refused config (exit 78) ends netd too, as they ended the
+//! container.
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -14,6 +15,10 @@ use relay::Backoff;
 use tokio::process::{Child, Command};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
+
+use crate::memguard::{self, Container};
+use crate::records::{self, NetdKill, NetdKillKind};
+use crate::vitals::Verdict;
 
 // Restarts climb from a second to thirty; a run of a minute counts as working, and the next crash starts from the floor.
 const BACKOFF: Backoff = Backoff::new(
@@ -90,15 +95,17 @@ pub struct NodeCommand {
     pub env: Vec<(OsString, OsString)>,
 }
 
-/// Runs Node until it stops on purpose or `stop` is raised; the answer is netd's own exit code. A value sent on
-/// `stuck` while a Node runs kills it, and it is restarted as after a crash. Every start after a crash or a failed start
-/// is recorded in `restarts`.
+/// Runs Node until it stops on purpose or `stop` is raised; the answer is netd's own exit code. A verdict sent on
+/// `stuck` while a Node runs kills it, which is written down with `container`'s pressure, and it is restarted as after
+/// a crash. Every start after a crash or a failed start is recorded in `restarts`; one after a crash or a kill waits
+/// while `container` is stalling on memory.
 pub async fn supervise(
     command: NodeCommand,
     pid: watch::Sender<Option<u32>>,
     mut stop: watch::Receiver<bool>,
-    mut stuck: watch::Receiver<()>,
+    mut stuck: watch::Receiver<Option<Verdict>>,
     restarts: &Restarts,
+    container: &Container,
 ) -> i32 {
     let mut backoff = BACKOFF;
     // Which start of Node this is, told to each in `GENERATION_ENV` and said back in its hello: the control socket lets a
@@ -125,7 +132,14 @@ pub async fn supervise(
         let status = tokio::select! {
             status = child.wait() => status,
             () = raised(&mut stop) => terminate(&mut child, node).await,
-            () = told(&mut stuck) => kill_stuck(&mut child).await,
+            () = told(&mut stuck) => {
+                let verdict = *stuck.borrow_and_update();
+                let status = kill_stuck(&mut child).await;
+                if let Some(verdict) = verdict {
+                    record(container, killed(verdict, node)).await;
+                }
+                status
+            }
         };
         pid.send_replace(None);
         let code = status.as_ref().map_or(1, exit_code);
@@ -138,10 +152,88 @@ pub async fn supervise(
         if let Some(group) = node {
             reclaim(group).await;
         }
-        if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
+        if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await
+            || hold_while_short(container, &mut stop).await
+        {
             return code;
         }
     }
+}
+
+// What the kill of a stuck Node says: which verdict, the Node's pid, and how long it had been silent by the kill.
+fn killed(verdict: Verdict, pid: Option<u32>) -> NetdKill {
+    NetdKill {
+        at: records::now_ms(),
+        kind: verdict.kind,
+        pid,
+        silent_ms: Some(records::millis(verdict.since.elapsed())),
+        held_ms: None,
+        psi: None,
+    }
+}
+
+// Written with the pressure of the moment, both off the async threads: a flush to a volume the thrash is paging
+// through can take seconds.
+async fn record(container: &Container, line: NetdKill) {
+    let container = container.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        let psi = container.psi();
+        container.record(&NetdKill { psi, ..line });
+    })
+    .await;
+}
+
+// A restart after a crash or a kill, held while the sandbox stalls on memory (memguard's rule): a daemon started into a
+// thrash pages in its modules for minutes, misses its hello deadline and is killed again, and its restarts are the
+// load. Waits, reading the pressure every `hold_check`, until it eased or `hold_at_most` passed, then writes the hold
+// down. True when stop was raised meanwhile.
+async fn hold_while_short(container: &Container, stop: &mut watch::Receiver<bool>) -> bool {
+    if !container.holds_restarts() {
+        return false;
+    }
+    let psi = {
+        let reading = container.clone();
+        tokio::task::spawn_blocking(move || reading.psi())
+            .await
+            .ok()
+            .flatten()
+    };
+    if !memguard::holds_restart(psi) {
+        return false;
+    }
+    tracing::warn!(
+        full_avg10 = psi.map(|psi| psi.full_avg10),
+        "the sandbox is stalling on memory: the daemon's restart waits until it eases"
+    );
+    let began = Instant::now();
+    let mut stopped = false;
+    let mut psi = psi;
+    while memguard::keeps_holding(psi, began.elapsed(), container.hold_at_most) {
+        if wait_or_stop(container.hold_check, stop).await {
+            stopped = true;
+            break;
+        }
+        let reading = container.clone();
+        psi = tokio::task::spawn_blocking(move || reading.psi())
+            .await
+            .ok()
+            .flatten();
+    }
+    let held = began.elapsed();
+    tracing::info!(held = ?held, full_avg10 = psi.map(|psi| psi.full_avg10), "the daemon's restart waited for memory");
+    record(
+        container,
+        NetdKill {
+            at: records::now_ms(),
+            kind: NetdKillKind::RestartHeld,
+            pid: None,
+            silent_ms: None,
+            held_ms: Some(records::millis(held)),
+            psi: None,
+        },
+    )
+    .await;
+    stopped
 }
 
 // Its own process group, so the daemon's "my group" still means its own descendants and never netd; and it dies
@@ -235,7 +327,7 @@ async fn raised(flag: &mut watch::Receiver<bool>) {
 }
 
 // The next value sent after the last one seen; never, once nobody is left to send one.
-async fn told(signal: &mut watch::Receiver<()>) {
+async fn told<T>(signal: &mut watch::Receiver<T>) {
     if signal.changed().await.is_err() {
         std::future::pending::<()>().await;
     }
@@ -286,8 +378,41 @@ mod tests {
     }
 
     // A stuck verdict nobody will ever send.
-    fn never_stuck() -> watch::Receiver<()> {
-        watch::channel(()).1
+    fn never_stuck() -> watch::Receiver<Option<Verdict>> {
+        watch::channel(None).1
+    }
+
+    fn verdict(kind: NetdKillKind) -> Option<Verdict> {
+        Some(Verdict {
+            kind,
+            since: Instant::now(),
+        })
+    }
+
+    // A container whose records go to `dir/logs` and whose pressure is read off `dir/memory.pressure`, which the test
+    // writes; restarts are held for it, checked every 50 ms.
+    fn container_in(dir: &std::path::Path) -> Container {
+        let mut container = Container::new(
+            dir.to_owned(),
+            true,
+            Arc::new(crate::records::Records::in_dir(dir.join("logs"))),
+        );
+        container.hold_check = Duration::from_millis(50);
+        container
+    }
+
+    fn netd_kills(dir: &std::path::Path) -> Vec<serde_json::Value> {
+        std::fs::read_to_string(dir.join("logs").join(crate::records::NETD_KILLS_FILE))
+            .unwrap_or_default()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    }
+
+    fn pressure(full: f64) -> String {
+        format!(
+            "some avg10={full:.2} avg60=0.00 avg300=0.00 total=1\nfull avg10={full:.2} avg60=0.00 avg300=0.00 total=1\n"
+        )
     }
 
     // Alive, as opposed to gone or a zombie nobody has reaped yet.
@@ -333,7 +458,15 @@ mod tests {
         let (_stop, stopping) = watch::channel(false);
         let restarts = Restarts::default();
         assert_eq!(
-            supervise(sh("exit 0"), pid, stopping, never_stuck(), &restarts).await,
+            supervise(
+                sh("exit 0"),
+                pid,
+                stopping,
+                never_stuck(),
+                &restarts,
+                &Container::detached()
+            )
+            .await,
             0
         );
         assert!(!restarts.ever());
@@ -349,7 +482,8 @@ mod tests {
                 pid,
                 stopping,
                 never_stuck(),
-                &Restarts::default()
+                &Restarts::default(),
+                &Container::detached()
             )
             .await,
             78
@@ -369,7 +503,15 @@ mod tests {
         let (_stop, stopping) = watch::channel(false);
         let restarts = Restarts::default();
         assert_eq!(
-            supervise(sh(&script), pid, stopping, never_stuck(), &restarts).await,
+            supervise(
+                sh(&script),
+                pid,
+                stopping,
+                never_stuck(),
+                &restarts,
+                &Container::detached()
+            )
+            .await,
             0
         );
         assert_eq!(restarts.within_window(Instant::now()), 1);
@@ -388,6 +530,7 @@ mod tests {
                 stopping,
                 never_stuck(),
                 &Restarts::default(),
+                &Container::detached(),
             )
             .await
         });
@@ -437,26 +580,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_stuck_daemon_is_killed_and_restarted_as_after_a_crash() {
-        let marker =
-            std::env::temp_dir().join(format!("netd-supervise-stuck-{}", std::process::id()));
-        let _ = std::fs::remove_file(&marker);
+    async fn a_stuck_daemon_is_killed_written_down_and_restarted_as_after_a_crash() {
+        let dir = std::env::temp_dir().join(format!("netd-supervise-stuck-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("marker");
         // The first run ignores SIGTERM, as a Node whose event loop is stuck does, and never ends by itself; the second
-        // stops cleanly, which is proof of the restart.
+        // stops cleanly, which is proof of the restart. No pressure file: nothing holds the restart.
         let script = format!(
             "if [ -e {0} ]; then exit 0; fi; touch {0}; trap '' TERM; while :; do sleep 0.05; done",
             marker.display()
         );
         let (pid, mut started) = watch::channel(None);
         let (_stop, stopping) = watch::channel(false);
-        let (stuck, verdicts) = watch::channel(());
-        stuck.send_replace(());
+        let (stuck, verdicts) = watch::channel(None);
+        stuck.send_replace(verdict(NetdKillKind::NoHello));
         let restarts = Arc::new(Restarts::default());
         let counted = restarts.clone();
-        let running =
-            tokio::spawn(
-                async move { supervise(sh(&script), pid, stopping, verdicts, &counted).await },
-            );
+        let container = container_in(&dir);
+        let running = tokio::spawn(async move {
+            supervise(sh(&script), pid, stopping, verdicts, &counted, &container).await
+        });
         let first = *started.wait_for(Option::is_some).await.unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert_eq!(
@@ -465,7 +609,10 @@ mod tests {
             "a verdict sent before this Node started kills nothing"
         );
 
-        stuck.send_replace(());
+        stuck.send_replace(Some(Verdict {
+            kind: NetdKillKind::Stuck,
+            since: Instant::now() - Duration::from_secs(300),
+        }));
         assert_eq!(
             tokio::time::timeout(Duration::from_secs(10), running)
                 .await
@@ -474,7 +621,100 @@ mod tests {
             0
         );
         assert_eq!(restarts.within_window(Instant::now()), 1);
-        let _ = std::fs::remove_file(&marker);
+        let kills = netd_kills(&dir);
+        assert_eq!(kills.len(), 1, "{kills:?}");
+        assert_eq!(kills[0]["kind"], "stuck");
+        assert_eq!(kills[0]["pid"], first.unwrap());
+        assert!(kills[0]["silentMs"].as_u64().unwrap() >= 300_000);
+        assert!(kills[0].get("psi").is_none(), "no pressure to read");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A crash while the sandbox stalls on memory: the restart waits until the pressure eases below 10, and the wait is
+    // written down. A first start is never held, however short memory is.
+    #[tokio::test]
+    async fn a_restart_waits_while_the_sandbox_stalls_on_memory() {
+        let dir = std::env::temp_dir().join(format!("netd-supervise-held-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("memory.pressure"), pressure(35.0)).unwrap();
+        let marker = dir.join("marker");
+        let script = format!(
+            "if [ -e {0} ]; then exit 0; fi; touch {0}; exit 3",
+            marker.display()
+        );
+        let (pid, mut started) = watch::channel(None);
+        let (_stop, stopping) = watch::channel(false);
+        let container = container_in(&dir);
+        let running = tokio::spawn(async move {
+            supervise(
+                sh(&script),
+                pid,
+                stopping,
+                never_stuck(),
+                &Restarts::default(),
+                &container,
+            )
+            .await
+        });
+        started.wait_for(Option::is_some).await.unwrap();
+        started.wait_for(Option::is_none).await.unwrap();
+        let crashed = Instant::now();
+
+        // Past the backoff (one to two seconds after a first crash), still held; and still at 15, which is below the 20
+        // that holds but not below the 10 that releases.
+        tokio::time::sleep(Duration::from_millis(2_300)).await;
+        std::fs::write(dir.join("memory.pressure"), pressure(15.0)).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(started.borrow().is_none(), "held while memory is short");
+        assert!(!running.is_finished());
+
+        std::fs::write(dir.join("memory.pressure"), pressure(4.0)).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(10), running)
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
+        let kills = netd_kills(&dir);
+        assert_eq!(kills.len(), 1, "{kills:?}");
+        assert_eq!(kills[0]["kind"], "restart-held");
+        let held = kills[0]["heldMs"].as_u64().unwrap();
+        assert!(
+            held >= 500 && u128::from(held) <= crashed.elapsed().as_millis(),
+            "{held} ms"
+        );
+        assert_eq!(kills[0]["psi"]["fullAvg10"], 4.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The hold has a ceiling: past it the daemon starts into whatever memory is left.
+    #[tokio::test]
+    async fn a_held_restart_goes_ahead_after_its_ceiling() {
+        let dir =
+            std::env::temp_dir().join(format!("netd-supervise-ceiling-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("memory.pressure"), pressure(80.0)).unwrap();
+        let mut container = container_in(&dir);
+        container.hold_at_most = Duration::from_millis(300);
+        let (_stop, mut stopping) = watch::channel(false);
+        let began = Instant::now();
+        assert!(!hold_while_short(&container, &mut stopping).await);
+        assert!(began.elapsed() >= Duration::from_millis(300));
+        assert_eq!(netd_kills(&dir)[0]["kind"], "restart-held");
+
+        // One not the container's own netd holds nothing.
+        let detached = Container::new(
+            dir.clone(),
+            false,
+            Arc::new(crate::records::Records::nowhere()),
+        );
+        let began = Instant::now();
+        assert!(!hold_while_short(&detached, &mut stopping).await);
+        assert!(began.elapsed() < Duration::from_millis(300));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // Each start is told which one it is, which it says back in its hello (link.rs).

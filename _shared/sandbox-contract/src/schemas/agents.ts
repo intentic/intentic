@@ -7,7 +7,7 @@ import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, Conversatio
 import { FROM_BRANCHES_DESCRIPTION } from "./conversation-links.js";
 import { RepoBranchSchema } from "./shared.js";
 import { LoopStateSchema } from "./loops.js";
-import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
+import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
 import { AgentNeedSchema } from "./needs.js";
 import { StrandedCloneSchema } from "./stranded-clone.js";
@@ -339,6 +339,12 @@ export const AgentSummarySchema = z.object({
     outagePolicy: RetryPolicySchema.optional(),
     stopPolicy: RetryPolicySchema.optional(),
     memoryPolicy: RoomPolicySchema.optional(),
+    // Carried like the four above, so the chat's control and the board's menu show this conversation's own answer to a
+    // memory kill rather than the sandbox's: without it the card could only ever say the sandbox-wide answer, and an
+    // answer given in one window read as unchanged in every other until the setting itself moved.
+    memoryKillPolicy: MemoryKillPolicySchema.optional().describe(
+        "This conversation's own answer to a turn the sandbox killed because it ran out of memory: `resume` sends it again by itself once memory has stayed free, `wait` holds it for a press. Absent means it follows the sandbox-wide setting.",
+    ),
     // A collaborator's ask to land (collaborators can't merge themselves); cleared by whichever merge or discard
     // answers it.
     landRequested: z

@@ -19,6 +19,8 @@ import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/holds/held-turn.js";
 import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
+import { withClause } from "./frame-clause.js";
+import { dressedForMemory, type MemoryDeath } from "./memory-death.js";
 
 // One failure frame, classified read-only: the frame the window reads, the records to file, its log line and its hold.
 
@@ -108,6 +110,8 @@ export interface FailureQueries {
     readonly stopLadder: (conversationId: string) => { readonly made: number; readonly nextAt: number | undefined };
     // The sign-ins of a routed provider's accounts benched until their owner verifies them on the provider's page.
     readonly awaitingVerification: (provider: AgentProvider) => Promise<readonly string[]>;
+    // Whether memory killed a runtime that died under a conversation's turn (memory-death.ts); absent, every death is a stop.
+    readonly memoryDeath?: (conversationId: string, turn: RoutedTurn, now: number) => Promise<MemoryDeath | undefined>;
 }
 
 // A record a classification files; the turn performs each fire-and-forget, with its own named failure line.
@@ -449,12 +453,6 @@ const FRESH_RERUN =
 const TOO_LARGE =
     "A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.";
 
-// The provider's sentence, then the daemon's; one the provider left unpunctuated ("Prompt is too long") gets its stop.
-const withClause = (message: string, clause: string): string => {
-    const said = message.trimEnd();
-    return `${said}${/[.!?]$/.test(said) ? "" : "."} ${clause}`;
-};
-
 // A first overflow is held for a fresh session at once, on no policy; the fresh re-run overflowing too says to split the task.
 const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
     if (context.turn.resume === "overflow") {
@@ -490,11 +488,14 @@ const dressDeath = async (event: ErrorFrame, context: FailureContext, conversati
         };
         return { frame: { ...event, held: heldOf(true, left, turn.account), autoResume: "scheduled" }, held };
     }
-    if (!answered && turn.resume === "stopped") {
-        return bare(event);
+    // A kill memory made goes by room, re-run or not (memory-death.ts): one killed before it said a word is what the cap counts.
+    const stopped = { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) };
+    const killed = await dressedForMemory(event, { conversationId, turn, now: context.now, contextTokens: context.contextTokens, base: stopped }, queries);
+    if (killed !== undefined || (!answered && turn.resume === "stopped")) {
+        return killed ?? bare(event);
     }
     const frame = await stoppedFrame(queries, event, { conversationId, ran: answered, contextTokens: context.contextTokens });
-    return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) } };
+    return { frame, held: stopped };
 };
 
 // A turn that reached its own iteration or time ceiling, or ended incomplete: stopped partway with nothing to repair, its

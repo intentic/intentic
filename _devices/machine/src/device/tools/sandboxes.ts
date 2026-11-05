@@ -20,6 +20,7 @@ import { z } from "zod";
 import { assertScope } from "../policy.js";
 import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
 import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
+import { swapOnlyNow } from "./shape-now.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
@@ -588,8 +589,8 @@ export const swapSandbox = async (
 };
 
 // Set a sandbox's shape, now or for its next restart, over the same `ic` door as the swaps. Rides `sandboxes`, not the
-// removal switch, since every value it changes is undone by the next one. The shape is a closed form (two caps, two
-// switches) rather than flags, so nothing reaches ic as text; a field left out keeps what ic has for it.
+// removal switch, since every value it changes is undone by the next one. The shape is a closed form (two caps, a swap
+// bound, two switches) rather than flags, so nothing reaches ic as text; a field left out keeps what ic has for it.
 export const shapeSandbox = async (
     slug: string,
     fields: SandboxShapeFields,
@@ -599,12 +600,17 @@ export const shapeSandbox = async (
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     if (Object.values(fields).every((value) => value === undefined)) {
-        throw new Error("A shape has to set something: a memory or CPU cap, or a privileged/GPU switch. To apply what is saved, restart the sandbox.");
+        throw new Error("A shape has to set something: a memory or CPU cap, a swap bound, or a privileged/GPU switch. To apply what is saved, restart the sandbox.");
     }
-    await find(slug);
+    const box = await find(slug);
     const run = await icFlow(slug, icShapeArgs(slug, fields, when), onLine, { moves: when === "now" });
     if (run.code !== 0) {
         throw new Error(`That shape was not ${when === "now" ? "applied" : "saved"} on this device.\n\n${run.output}`);
+    }
+    // The swap alone changed now is applied without a restart (ic's sandbox/desired.rs): said in ic's own words, which
+    // name the bound in force, rather than claiming a restart that did not happen.
+    if (when === "now" && swapOnlyNow(box, fields)) {
+        return run.output.trim() === "" ? `Set the swap of sandbox "${slug}". Nothing was restarted.` : run.output.trim();
     }
     return when === "now"
         ? `Reshaped sandbox "${slug}". Its files and its history were kept, and the new shape survives every later update.`

@@ -12,6 +12,7 @@ import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
 import { previousRun } from "../system/boot/restarts/boot-marker.js";
+import { endedUncleanly } from "../system/boot/restarts/restart-record.js";
 import { DAY_MS } from "../system/chore-clock.js";
 import { sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -76,7 +77,9 @@ const startRootSweeps = (phase: BootPhase): void => {
     if (phase.traits.relocateGitDirs) {
         const ended = previousRun()?.ended;
         const scope = { workspaceRoot: services.workspace.root, historyRoot: phase.config.historyRoot, logger };
-        void startGitIntegrity(scope, ended === "killed" || ended === "unknown")?.catch((err) =>
+        // Every unclean ending, the named ones (netd-stuck, oom-victim) among them: those are the stops most likely to have
+        // cut a write in half.
+        void startGitIntegrity(scope, endedUncleanly(ended))?.catch((err) =>
             logger.warn({ err }, "git integrity: the check after an unclean stop failed"),
         );
     }

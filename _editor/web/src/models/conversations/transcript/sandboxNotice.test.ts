@@ -152,7 +152,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
             }),
         );
         // Nothing slipped through uncoded: every row above is worded by the chat, none falls back to its text.
-        expect(RESUMED).toHaveLength(14);
+        expect(RESUMED).toHaveLength(15);
         expect(rows.filter((row) => row.noticeCode === undefined && row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined)).toEqual([]);
     });
 

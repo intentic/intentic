@@ -7,8 +7,10 @@ mod feed;
 mod guard;
 mod link;
 mod listen;
+mod memguard;
 mod proxy;
 mod quic;
+mod records;
 mod remember;
 mod route;
 mod standing;
@@ -20,7 +22,7 @@ mod vitals;
 
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -32,7 +34,9 @@ use tracing_subscriber::EnvFilter;
 use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
+use crate::memguard::Container;
 use crate::proxy::Netd;
+use crate::records::Records;
 use crate::standing::Standing;
 use crate::supervise::{NodeCommand, Restarts};
 use crate::term::{Hubs, Terminals, Tmux};
@@ -113,6 +117,27 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     let serving = control.clone();
     tokio::spawn(async move { link.serve(&serving).await });
 
+    // THE CONTAINER'S OWN NETD, AND WHAT ONLY IT DOES ABOUT MEMORY. The entrypoint starts netd with the default run
+    // directory, from the `daemon` cgroup leaf it made; a test's netd names a run directory of its own, from wherever its
+    // shell runs. Only the container's writes its records to the history volume, where the daemon reads them back,
+    // holds the daemon's restarts while the sandbox stalls on memory, and, from the daemon leaf, runs the memory guard,
+    // which may kill: another netd (a test's, a developer's) writes beside its run directory and kills nothing.
+    let own = run_dir == Path::new(RUN_DIR);
+    let leaves = cgroup::leaves();
+    let records = Arc::new(Records::in_dir(if own {
+        records::history_logs()
+    } else {
+        run_dir.join("logs")
+    }));
+    let container = Container::new(
+        leaves.as_ref().map_or_else(
+            || PathBuf::from(cgroup::CGROUP_ROOT),
+            |leaves| leaves.container().to_owned(),
+        ),
+        own,
+        records.clone(),
+    );
+
     let restarts = Arc::new(Restarts::default());
     let standing = Arc::new(Standing::default());
     let vitals = Arc::new(Vitals::new(link, restarts.clone(), standing.clone()));
@@ -147,7 +172,13 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     }
     let started = node_pids.clone();
     tokio::spawn(async move { greeting.deadline_first_hellos(started).await });
-    tokio::spawn(cgroup::govern(node_pids));
+    tokio::spawn(cgroup::govern(leaves.clone(), node_pids.clone()));
+    match leaves {
+        Some(leaves) if own => memguard::start(leaves, records, node_pids),
+        _ => tracing::info!(
+            "the memory guard is off: this netd is not the container's own, in its daemon cgroup leaf"
+        ),
+    }
 
     // Unavailable (no inotify) is a feed that knows nothing: every sync answers null and Node reads git itself.
     let feed = match Feed::start(run_dir.join("feed")) {
@@ -256,7 +287,8 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
             (INSTANCE_ENV.into(), instance.into()),
         ],
     };
-    let code = supervise::supervise(command, node_pid, stopping, stuck, &restarts).await;
+    let code =
+        supervise::supervise(command, node_pid, stopping, stuck, &restarts, &container).await;
     tunnel.lock().await.shut().await;
     code
 }

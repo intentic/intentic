@@ -9,14 +9,17 @@ import type { IconName } from "@intentic/ui";
 // The words are built by functions, never a table evaluated at import: `t` reads the active language from a ref, and a
 // table born at module load holds the language it was born with (docs/architecture/languages.md).
 
-// Which field holds an ending's answer, on the agent and in the settings alike; the daemon's registry keeps the same
-// table (agents-registry.ts POLICY_KEY), and the two must not drift.
-const FIELD = { limit: `limitPolicy`, outage: `outagePolicy`, stopped: `stopPolicy`, memory: `memoryPolicy` } as const;
+// Which field holds an ending's answer, on the agent and in the settings alike; the daemon's card keeps the same table
+// (agent-summary.ts postures, from the stored postures keyed by the ending), and the two must not drift. The optimistic
+// echo of a press writes the same field (useAgents-actions.ts policyPatch), so a memory kill's answer moves the chat's
+// control at once rather than after the next roster.
+const FIELD = { limit: `limitPolicy`, outage: `outagePolicy`, stopped: `stopPolicy`, memory: `memoryPolicy`, memoryKill: `memoryKillPolicy` } as const;
 
 // Each ending's answer where nobody has given one, as the sandbox's settings default it (SandboxSettingsSchema), for a
 // window whose settings have not arrived yet. Memory alone goes by itself: nothing ran, so sending it once there is room
-// spends nothing twice.
-const DEFAULT_POLICY: Readonly<Record<TurnBreak, TurnBreakPolicy>> = { limit: `wait`, outage: `wait`, stopped: `wait`, memory: `resend` };
+// spends nothing twice; and a turn memory killed comes back once there is room, one at a time, never the one that used
+// the memory up (SandboxSettingsSchema memoryKillPolicy says why that one is on where a restart's is off).
+const DEFAULT_POLICY: Readonly<Record<TurnBreak, TurnBreakPolicy>> = { limit: `wait`, outage: `wait`, stopped: `wait`, memory: `resend`, memoryKill: `resume` };
 
 // Structural, not `Pick<AgentSummary>`: `AgentSummary` and `SandboxSettings` both satisfy it, and naming the fields
 // rather than either owner is what lets one fold answer for both scopes.
@@ -55,9 +58,24 @@ const memoryAnswerOf = (policy: TurnBreakPolicy): BreakAnswer =>
               icon: `clock`,
           };
 
+// A turn memory killed ran, so it is held as a turn and carried on with Continue; what it waits for is room, as above.
+const memoryKillAnswerOf = (policy: TurnBreakPolicy): BreakAnswer =>
+    policy === `wait`
+        ? { value: policy, label: t(`chat.turnBreak.wait`), note: t(`chat.turnBreak.waitMemoryKillNote`), brief: t(`chat.turnBreak.waitBrief`), icon: `pause` }
+        : {
+              value: policy,
+              label: t(`chat.turnBreak.resumeMemoryKill`),
+              note: t(`chat.turnBreak.resumeMemoryKillNote`),
+              brief: t(`chat.turnBreak.resumeMemoryKillBrief`),
+              icon: `clock`,
+          };
+
 const answerOf = (ending: TurnBreak, policy: TurnBreakPolicy, account: string | undefined): BreakAnswer => {
     if (ending === `memory`) {
         return memoryAnswerOf(policy);
+    }
+    if (ending === `memoryKill`) {
+        return memoryKillAnswerOf(policy);
     }
     switch (policy) {
         case `wait`:
@@ -101,6 +119,8 @@ export const breakLabel = (ending: TurnBreak): string => {
             return t(`chat.turnBreak.outageEnding`);
         case `memory`:
             return t(`chat.turnBreak.memoryEnding`);
+        case `memoryKill`:
+            return t(`chat.turnBreak.memoryKillEnding`);
         default:
             return t(`chat.turnBreak.stoppedEnding`);
     }

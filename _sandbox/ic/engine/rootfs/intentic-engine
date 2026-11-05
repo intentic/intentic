@@ -50,6 +50,42 @@ if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
   fi
 fi
 
+# SWAP LIMITS FOR THE SANDBOXES (2026-11-05). dockerd decides ONCE, as it starts, whether it can bound a container's swap:
+# it reads its own cgroup out of /proc/self/cgroup and looks for memory.swap.max in that cgroup's directory (moby
+# pkg/sysinfo/cgroup2_linux.go, getSwapLimitV2, unchanged through Docker 29). A cgroup has that file only once its parent
+# has switched the memory controller on for its children (the parent's cgroup.subtree_control). The keeper, and so
+# dockerd, runs in the distro's `/non-systemd` leaf, and nothing switches memory on below the distro's cgroup root before
+# dockerd starts: runc does, on its way to the containers' own `/docker` tree, but only when the first container starts,
+# seconds after dockerd has concluded "No swap limit support". From then on dockerd drops every `--memory-swap` it is
+# handed (one warning at `docker run`, "Memory limited without swap", and MemorySwap -1 on the container), and a
+# sandbox's swap has no bound: on rog, 2026-11-05, one paged 33 GB and the WSL VM thrashed for 1 h 48 m. So the keeper
+# switches it on itself before dockerd starts, as runc would a moment later, and says what dockerd will find.
+#
+# Read on rog without restarting anything (2026-11-05, Docker 29.9.0, kernel 6.18.54 WSL2): dockerd runs in
+# `0::/non-systemd`; the root's cgroup.subtree_control now holds memory (runc put it there) and
+# /sys/fs/cgroup/non-systemd/memory.swap.max exists now; the distro's cgroup root holds no process of its own (the
+# kernel refuses a controller below a cgroup that does, and refused runc nothing), so this write is allowed from here;
+# dockerd's log of its own start says "No swap limit support" at 00:07:12 on 2026-11-04, before its API listened
+# (00:07:15) and so before it started any container; `docker info` still says SwapLimit false, the answer it cached at
+# start. NOT verified until the engine next starts (nothing here may restart it while sandboxes run): that memory was
+# off at the moment dockerd looked, and that this turns its check true. The keeper's log says which way it went at
+# every start.
+enable_swap_limits() {
+  root=/sys/fs/cgroup
+  [ -f "$root/cgroup.subtree_control" ] || return 0
+  if ! grep -qw memory "$root/cgroup.subtree_control" 2>/dev/null; then
+    echo +memory >"$root/cgroup.subtree_control" 2>/dev/null || true
+  fi
+  own="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null | head -n 1)"
+  if [ -n "$own" ] && [ -e "$root${own%/}/memory.swap.max" ]; then
+    say "swap limits: dockerd will find memory.swap.max in its cgroup ($own), so it enforces --memory-swap"
+  else
+    say "swap limits: no memory.swap.max in the keeper's cgroup (${own:-unknown}), so dockerd will ignore --memory-swap and each sandbox bounds its own work instead"
+  fi
+  return 0
+}
+enable_swap_limits
+
 if [ ! -f "$TLS_DIR/server-cert.pem" ]; then
   say "TLS material missing in $TLS_DIR — run ic engine install on Windows first."
   exit 1

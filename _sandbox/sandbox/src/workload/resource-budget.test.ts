@@ -1,6 +1,6 @@
 import { askRoom, type MemoryReading } from "@intentic/constants/memory-room";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
-import { type Admission, type AdmitRequest, createResourceBudget, hostAwareReading, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
+import { type Admission, type AdmitRequest, createResourceBudget, hostAwareReading, readMemoryReading, type ResourceBudget, WORKLOAD_COST_BYTES } from "./resource-budget.js";
 
 const GIB = 1024 ** 3;
 
@@ -108,6 +108,37 @@ test("a stalled box is short whatever its byte count, and a stall refusal carrie
         waitedMs: 0,
     });
     expect((await budgetOf(() => box(10, 3, 19.9)).admit(person("ada"))).verdict).toBe("run");
+});
+
+// (2026-11-05) The daemon's own read of the files, a 16 GiB sandbox as the entrypoint bounds it: memory.high 14.4 GiB, the
+// workload leaf walled at 12.5 GiB with 4 GiB of swap, 12 GiB in use of which the daemon's leaf holds 1.25. The container
+// alone leaves 2.4 GiB, which fits a background build's 1 GiB and a person's turn; the leaf, where that build would run,
+// has 1.75.
+test("the daemon reads the workload leaf's wall, and holds a build the leaf has no room for", async () => {
+    const CG = "/sys/fs/cgroup";
+    const container = {
+        "/proc/meminfo": "MemTotal: 33554432 kB\nMemAvailable: 20971520 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
+        [`${CG}/memory.high`]: `${Math.floor((16 * GIB) / 100) * 90}\n`,
+        [`${CG}/memory.max`]: `${16 * GIB}\n`,
+        [`${CG}/memory.current`]: `${12 * GIB}\n`,
+    };
+    const bounded = { ...container, [`${CG}/workload/memory.current`]: `${10.75 * GIB}\n`, [`${CG}/workload/memory.max`]: `${12.5 * GIB}\n` };
+    const filesOf =
+        (texts: Readonly<Record<string, string>>) =>
+        async (path: string): Promise<string | undefined> =>
+            texts[path];
+    const budgetOver = (texts: Readonly<Record<string, string>>): ResourceBudget => createResourceBudget({ read: () => readMemoryReading(filesOf(texts)), sampleMs: 0 });
+    const build: AdmitRequest = { workload: "toolchain", attended: false };
+
+    expect((await readMemoryReading(filesOf(bounded))).limitBytes).toBe(13.75 * GIB);
+    expect((await budgetOver(bounded).snapshot()).freeBytes).toBe(1.75 * GIB);
+    expect((await budgetOver(bounded).admit(build)).verdict).toBe("wait");
+    expect((await budgetOver(bounded).admit(person("ada"))).verdict).toBe("run");
+    // A leaf with no wall, or none at all, is the container's reading as before, and the build fits.
+    const unbounded = { ...bounded, [`${CG}/workload/memory.max`]: "max\n" };
+    expect(await readMemoryReading(filesOf(unbounded))).toEqual(await readMemoryReading(filesOf(container)));
+    expect((await budgetOver(unbounded).admit(build)).verdict).toBe("run");
+    expect((await budgetOver(container).admit(build)).verdict).toBe("run");
 });
 
 test("a sandbox nothing measures has no opinion, and runs", async () => {

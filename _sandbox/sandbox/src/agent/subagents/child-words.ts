@@ -50,6 +50,7 @@ const RERUN_WHY = {
     outage: "its model provider came back",
     restart: "the sandbox restarted in the middle of its turn",
     stopped: "its last turn stopped short",
+    memory: "the sandbox ran out of memory and killed its last turn, and memory has since stayed free",
     limit: "its allowance reopened",
     switched: "its allowance ran out and it moved to another account",
     carried: "its allowance ran out and it moved to another account",

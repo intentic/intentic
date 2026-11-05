@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultSwapGib, workloadMemoryMax } from "./system/resources/memory-records.js";
 
 const entrypoint = readFileSync(fileURLToPath(new URL("../docker-entrypoint.sh", import.meta.url)), "utf8");
 
@@ -172,5 +173,63 @@ describe(`entrypoint cgroup filesystem, read-only`, () => {
         expect(existsSync(asked)).toBe(false);
         expect(ran.stderr).toMatch(warning);
         expect(existsSync(join(root, "daemon"))).toBe(false);
+    });
+});
+
+/* THE WORKLOAD LEAF'S BOUNDS (2026-11-05): a runaway grew to 17.6 GB resident and 33 GB of swap in a leaf with neither
+   bounded. The shell writes memory-records.ts's formulas again, so these runs hold the two to the same numbers. */
+describe(`entrypoint workload bounds`, () => {
+    const GIB = 1024 ** 3;
+    const setup = cgroupSetup();
+    const stage = (cap: string, override?: string) => {
+        const root = mkdtempSync(join(tmpdir(), "entrypoint-cgroup-"));
+        writeFileSync(join(root, "cgroup.controllers"), "cpu io memory\n");
+        writeFileSync(join(root, "cgroup.subtree_control"), "");
+        writeFileSync(join(root, "cgroup.procs"), "1\n");
+        writeFileSync(join(root, "memory.max"), `${cap}\n`);
+        stageMount(root, "rw");
+        const overridePath = `${root}.workload-bounds.json`;
+        if (override !== undefined) {
+            writeFileSync(overridePath, override);
+        }
+        return { root, overridePath };
+    };
+    const run = ({ root, overridePath }: { root: string; overridePath: string }, env: Record<string, string> = {}, refuseSwap = false) => {
+        if (refuseSwap) {
+            // A directory where the control file should be: the write fails, as a kernel refusing it would.
+            mkdirSync(join(root, "workload", "memory.swap.max"), { recursive: true });
+        }
+        const script = cgroupScript(setup, root).replaceAll("/run/intentic/workload-bounds.json", overridePath);
+        const ran = spawnSync("sh", ["-ec", script], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "", ...env } });
+        const read = (file: string): string | undefined => (existsSync(join(root, "workload", file)) ? readFileSync(join(root, "workload", file), "utf8").trim() : undefined);
+        return { status: ran.status, stderr: ran.stderr, max: read("memory.max"), swap: refuseSwap ? undefined : read("memory.swap.max"), group: read("memory.oom.group") };
+    };
+
+    it(`bounds the leaf below the cap and its swap at a quarter of it, at most 4 GiB, by memory-records.ts's own numbers`, () => {
+        for (const cap of [18 * GIB, 16 * GIB, 4 * GIB, 2 * GIB, 6 * GIB + 512 * 1024 ** 2]) {
+            const ran = run(stage(String(cap)));
+            expect(ran).toEqual({ status: 0, stderr: "", max: String(workloadMemoryMax(cap)), swap: String(defaultSwapGib(cap) * GIB), group: "0" });
+        }
+        // The incident's own box: an 18 GiB cap leaves the daemon 3.5 GiB, and the leaf 4 GiB of swap where it had 33.
+        expect(run(stage(String(18 * GIB)))).toMatchObject({ max: String(14.5 * GIB), swap: String(4 * GIB) });
+    });
+
+    it(`takes the swap ic set on the container, and the one it wrote on a live reshape over that`, () => {
+        expect(run(stage(String(16 * GIB)), { SANDBOX_SWAP: "2g" }).swap).toBe(String(2 * GIB));
+        expect(run(stage(String(16 * GIB), `{"swapGib": 6}\n`), { SANDBOX_SWAP: "2g" }).swap).toBe(String(6 * GIB));
+        // Neither may be zero: a leaf with no swap livelocks reclaiming instead of reaching its OOM.
+        expect(run(stage(String(16 * GIB), `{"swapGib": 0}`), { SANDBOX_SWAP: "0g" }).swap).toBe(String(4 * GIB));
+        expect(run(stage(String(16 * GIB)), { SANDBOX_SWAP: "lots" }).swap).toBe(String(4 * GIB));
+    });
+
+    it(`leaves the leaf's memory unbounded where the sandbox has no cap, and still bounds its swap`, () => {
+        expect(run(stage("max"))).toEqual({ status: 0, stderr: "", max: undefined, swap: String(GIB), group: "0" });
+    });
+
+    it(`says so when the swap bound did not take, and still starts`, () => {
+        const ran = run(stage(String(16 * GIB)), {}, true);
+        expect(ran.status).toBe(0);
+        expect(ran.stderr).toBe("intentic: the workload cgroup's swap is not yet bounded (4 GiB asked); the daemon tries again once it starts\n");
+        expect(ran.max).toBe(String(workloadMemoryMax(16 * GIB)));
     });
 });

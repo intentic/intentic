@@ -735,7 +735,11 @@ fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str), said
 ///
 /// Err is docker's own refusal, the words a failure message quotes: never the command line, which carries
 /// every env pair the launch was given (a runner's pairing token among them) to whoever reads the error.
-pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<(), String> {
+///
+/// Ok is what docker said on stderr beside a launch it accepted: its warnings, which it prints and then starts the
+/// container anyway. One of them is the only sign that it dropped the sandbox's swap bound (2026-11-05,
+/// sandbox/containment.rs), so the launch's caller reads it rather than the log alone.
+pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<String, String> {
     if argv.is_empty() {
         return Err("the run contract printed no docker command.".to_string());
     }
@@ -756,7 +760,7 @@ pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<(), String> {
     log.write(&out.stdout);
     log.write(&out.stderr);
     if out.status.success() {
-        return Ok(());
+        return Ok(String::from_utf8_lossy(&out.stderr).into_owned());
     }
     Err(refusal_of(&out.stderr)
         .unwrap_or_else(|| format!("docker exited with {} and said nothing.", out.status)))

@@ -330,7 +330,13 @@
         "sandboxUsingRightNow": "To jest sandbox, w którym właśnie pracujesz: ta strona straci go, dopóki nie wróci.",
         "saveForNextRestart": "Zapisz na następny restart",
         "savedForNextRestart": "Zapisane na następny restart: {share}. Pola to pokazują; „Zastosuj teraz” od razu restartuje z tym przydziałem.",
-        "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. ic zachowuje nowy przydział i stosuje go przy następnym restarcie sandboxa przez ic: Uruchom ponownie tutaj, Uruchom, aktualizacja, cofnięcie lub przebudowa. Restart kontenera wykonany przez samego Dockera, po awarii lub ponownym uruchomieniu komputera, go nie stosuje."
+        "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. ic zachowuje nowy przydział i stosuje go przy następnym restarcie sandboxa przez ic: Uruchom ponownie tutaj, Uruchom, aktualizacja, cofnięcie lub przebudowa. Restart kontenera wykonany przez samego Dockera, po awarii lub ponownym uruchomieniu komputera, go nie stosuje.",
+        "swap": "Swap",
+        "swapAppliesLive": "Zmienia się tylko swap: Zastosuj ustawia go od razu, bez restartu.",
+        "swapAtLeast": "Co najmniej 1 GiB: bez swapu proces, który wymknął się spod kontroli, zawiesza piaskownicę, zamiast zostać zatrzymany.",
+        "swapCapInGib": "Swap dla pracy piaskownicy w GiB",
+        "swapGib": "{count} GiB swapu",
+        "swapWhole": "Całe GiB, które jej praca może wykorzystać na swap, gdy przekroczy pamięć. Mały limit nie pozwala jednemu procesowi, który wymknął się spod kontroli, spowolnić całego komputera. Puste to wartość domyślna: ćwierć jej pamięci, od 1 do 4 GiB."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest (jego pliki i jego historię), z tego urządzenia. Przez tydzień można go tam odzyskać: `ic sandbox restore` na tej maszynie go przywraca.",

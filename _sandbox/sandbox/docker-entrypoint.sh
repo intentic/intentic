@@ -215,6 +215,57 @@ elif grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
     if [ "$(cat "$cgroup_root/daemon/memory.swap.max" 2>/dev/null)" != "0" ]; then
         echo "intentic: the daemon's cgroup is not yet kept out of swap; the daemon tries again once it starts" >&2
     fi
+
+    # THE WORKLOAD LEAF'S BOUNDS (2026-11-05). Everything an agent starts runs in `workload`, and it ran there with no
+    # bound of its own: one game client grew to 17.6 GB resident and 33 GB of swap, because the engine silently drops
+    # `--memory-swap` and the container's swap had no end. The WSL VM paged for 1 h 48 m, the daemon's event loop froze
+    # until netd killed it, and five turns came back interrupted with nothing on file saying why. The leaf now has a
+    # wall below the sandbox's cap, leaving the daemon its heap and a margin, and a swap bound short enough that a
+    # runaway meets the leaf's own OOM in under a minute, where the kernel kills that one process instead of the
+    # machine grinding. `memory.oom.group` 0: the kernel kills the process it scores worst, never every process in the
+    # leaf with it (the owner's dev server and every other conversation's build live there too).
+    #
+    # The formulas are memory-records.ts's (src/system/resources: workloadMemoryMax, defaultSwapGib), written again here
+    # in shell because nothing of the daemon is running yet; change one, change both. The daemon keeps the same bounds
+    # every minute after (daemon-cgroup.ts), which is also how a live reshape by ic reaches the leaf.
+    workload_cap="$(cat "$cgroup_root/memory.max" 2>/dev/null || echo max)"
+    case "$workload_cap" in '' | *[!0-9]*) workload_cap=max ;; esac
+    if [ "$workload_cap" != "max" ]; then
+        # workloadMemoryMax: the cap less the daemon's reserve (a quarter of the cap, at most 3.5 GiB), down to a MiB.
+        workload_reserve=$((workload_cap / 4))
+        [ "$workload_reserve" -gt $((3584 * 1048576)) ] && workload_reserve=$((3584 * 1048576))
+        cgroup_set "$cgroup_root/workload/memory.max" $(((workload_cap - workload_reserve) / 1048576 * 1048576))
+    fi
+    # The swap bound in whole GiB: what ic wrote into the running container on a live reshape, else what it set on the
+    # container (SANDBOX_SWAP, `<n>g`), else a quarter of the cap between 1 and 4 (defaultSwapGib). Never 0: a cgroup
+    # with no swap livelocks reclaiming file pages instead of reaching its OOM. With no cap at all, the machine's own
+    # memory stands in for it, as it does for the daemon's heap above.
+    workload_swap_gib="$(sed -n 's/.*"swapGib"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' /run/intentic/workload-bounds.json 2>/dev/null | head -n 1)"
+    case "$workload_swap_gib" in '' | *[!0-9]* | 0) workload_swap_gib="" ;; esac
+    if [ -z "$workload_swap_gib" ]; then
+        case "${SANDBOX_SWAP:-}" in
+            *[0-9]g) workload_swap_gib="${SANDBOX_SWAP%g}" ;;
+        esac
+        case "$workload_swap_gib" in '' | *[!0-9]* | 0) workload_swap_gib="" ;; esac
+    fi
+    if [ -z "$workload_swap_gib" ]; then
+        workload_cap_gib=0
+        if [ "$workload_cap" != "max" ]; then
+            workload_cap_gib=$((workload_cap / 1073741824))
+        elif [ -n "$engine_kib" ]; then
+            workload_cap_gib=$((engine_kib / 1048576))
+        fi
+        [ "$workload_cap_gib" -lt 1 ] && workload_cap_gib=1
+        workload_swap_gib=$(((workload_cap_gib + 3) / 4))
+        [ "$workload_swap_gib" -gt 4 ] && workload_swap_gib=4
+    fi
+    workload_swap_bytes=$((workload_swap_gib * 1073741824))
+    cgroup_set "$cgroup_root/workload/memory.swap.max" "$workload_swap_bytes"
+    cgroup_set "$cgroup_root/workload/memory.oom.group" 0
+    # The one bound worth a word when it did not take: without it a runaway pages the whole machine to a standstill.
+    if [ "$(cat "$cgroup_root/workload/memory.swap.max" 2>/dev/null)" != "$workload_swap_bytes" ]; then
+        echo "intentic: the workload cgroup's swap is not yet bounded (${workload_swap_gib} GiB asked); the daemon tries again once it starts" >&2
+    fi
 fi
 
 # A DEV SANDBOX'S MANIFESTS, from its checkout. dev-sandbox.sh mounts the checkout's compiled dists over the packages

@@ -42,6 +42,8 @@ import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
+import { memoryTail } from "./holds/memory-kill.js";
+import { holdCutForMemory } from "./recovery/memory-restart.js";
 import { limitDue } from "./holds/limit-due.js";
 import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
 import { breakPolicyFor } from "./break-policy.js";
@@ -145,8 +147,9 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
         // press moved runtimes, which no session crosses.
         case "flagged":
             return retiresSession(held.input, routing) ? { reason: "flagged", fresh: true, restate: true } : { reason: "flagged", restate: true };
+        // A memory kill's re-run is told what killed it and what not to do again, on the session a stop's would take.
         default:
-            return wallNote(held, routing);
+            return held.memoryKill === undefined ? wallNote(held, routing) : { ...wallNote(held, routing), reason: "memory", tail: memoryTail(held.memoryKill) };
     }
 };
 
@@ -444,10 +447,10 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
     },
     // A bounded ladder, since it fires repeatedly: spent, it stands down and says so, leaving the hold for a press. A hold
     // for a press alone (a turn that reached its own ceiling, held-turn.ts pressOnly) is never on it, whatever the answer:
-    // re-run by a clock, it is the runaway the ceiling exists to stop.
+    // re-run by a clock, it is the runaway the ceiling exists to stop. Nor is a memory kill: it goes by room (room-holds.ts).
     stopped: {
         verdict: (held, now) => {
-            if (held.pressOnly === true) {
+            if (held.pressOnly === true || held.memoryKill !== undefined) {
                 return undefined;
             }
             const dueAt = stopRungAt(held.recordedAt, held.tries);
@@ -456,7 +459,7 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
             }
             return dueAt <= now ? { armedBy: "stopped" } : undefined;
         },
-        nextAt: (held) => (held.pressOnly === true ? undefined : stopRungAt(held.recordedAt, held.tries)),
+        nextAt: (held) => (held.pressOnly === true || held.memoryKill !== undefined ? undefined : stopRungAt(held.recordedAt, held.tries)),
         spent: "ladder-spent",
         fire: dispatch(true),
     },
@@ -869,6 +872,11 @@ export const recordOrRerun = async (
     const drawn = await drawnOf(services, entry);
     const recordedAs = { drawn, run: entry.run?.id };
     const { spent, stale } = resumeBars(entry, now);
+    // A restart memory caused holds its turns for the memory release, whatever the restart answer (memory-restart.ts).
+    if (resume.memory !== undefined && !spent && !stale) {
+        await holdCutForMemory(services, entry, resume.memory, recordedAs, now);
+        return;
+    }
     if (!resume.resume || spent || stale) {
         // Recorded from the provider's own session store before the entry clears, so a failed write keeps the
         // journal instead of losing the turn. Uses the journal's session id, not the registry's, which may still

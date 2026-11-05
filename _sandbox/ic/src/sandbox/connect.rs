@@ -665,10 +665,29 @@ fn connect(
             }
         }
     }
+    // The owner's swap ask (2026-11-05), kept by a replace like every ask the old container carried: the one it runs with,
+    // which a live reshape may have changed without touching its env, handed over in the env the contract replays, and
+    // put on the run line by ic when the image's contract predates it (shape.rs `swap_stamp` says why). A new sandbox has
+    // none, and holds its work to the default its cap gives it.
+    let carried_swap = replacing
+        .as_ref()
+        .and_then(|replacing| crate::sandbox::desired::running(&replacing.container).swap);
+    if replacing.is_some() {
+        env_pairs = crate::shape::with_swap_env(&env_pairs, carried_swap.as_deref());
+    }
+    let with_swap = |contract_argv: &[String]| -> Vec<String> {
+        [
+            stamped_run.clone(),
+            crate::shape::swap_stamp(contract_argv, carried_swap.as_deref()),
+        ]
+        .concat()
+    };
     // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
+    let contract_argv =
+        contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?;
     let argv = crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
-        &contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?,
-        &stamped_run,
+        &contract_argv,
+        &with_swap(&contract_argv),
     ));
     // The old container is set aside only now, with the new run line in hand: it comes back if the new one fails.
     if let Some(replacing) = &replacing {
@@ -684,7 +703,10 @@ fn connect(
     // Two attempts: the loopback shortcut (127.0.0.1:<derived port>:8787, a browser on this machine skipping
     // the tunnel) is the one part whose failure doesn't mean a broken sandbox — docker refuses the WHOLE
     // launch when the port is held, so the retry drops just the shortcut.
-    if docker::run_argv(&argv, &log).is_err() {
+    let first = docker::run_argv(&argv, &log);
+    let mut took: Option<(String, Vec<String>)> =
+        first.as_ref().ok().map(|said| (said.clone(), argv.clone()));
+    if first.is_err() {
         docker::quiet(&["rm", "-f", &container]);
         // Everything optional comes off together on the retry, as on a recreate's: the loopback shortcut and every
         // runtime directive whose probe passed but whose run may still not.
@@ -693,14 +715,15 @@ fn connect(
             match contract::run_command(&request, &env_pairs, true, &all_optional, &[], &log) {
                 Ok(retry) => crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
                     &retry,
-                    &stamped_run,
+                    &with_swap(&retry),
                 )),
                 Err(err) => match &replacing {
                     Some(replacing) => bail!("{}{}", err.0, replacing.put_back(&err.0, &log)),
                     None => return Err(err),
                 },
             };
-        if let Err(refusal) = docker::run_argv(&retry, &log) {
+        let retried = docker::run_argv(&retry, &log);
+        if let Err(refusal) = &retried {
             let left = match &replacing {
                 Some(replacing) => {
                     replacing.put_back(&format!("starting it again failed: {refusal}"), &log)
@@ -716,6 +739,11 @@ fn connect(
             );
         }
         ui::note("started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
+        took = retried.ok().map(|said| (said, retry));
+    }
+    // The engine may have dropped the swap bound the run line asked for, and said so only in a warning (containment.rs).
+    if let Some((said, ran)) = &took {
+        crate::sandbox::containment::after_launch(&slug, ran, said);
     }
     // Its egress rules at once, before it is waited on (sandbox/egress): a machine whose baseline fences every sandbox
     // fences this one from its first minute, and a replaced sandbox keeps the policy its record holds.

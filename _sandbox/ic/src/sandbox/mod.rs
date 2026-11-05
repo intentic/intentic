@@ -4,6 +4,7 @@ pub mod backup;
 pub mod compose;
 pub mod composition;
 pub mod connect;
+pub mod containment;
 pub mod desired;
 pub mod doctor;
 pub mod egress;

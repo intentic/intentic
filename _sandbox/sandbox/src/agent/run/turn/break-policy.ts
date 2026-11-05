@@ -25,6 +25,8 @@ const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, e
             return settings.outagePolicy;
         case "memory":
             return settings.memoryPolicy;
+        case "memoryKill":
+            return settings.memoryKillPolicy;
         default:
             return settings.stopPolicy;
     }

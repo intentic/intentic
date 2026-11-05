@@ -50,6 +50,16 @@ which it writes and passes as `--config-file`. Without the cap, BuildKit sizes i
 which reports 1 TB: on rog the cache reached 396 GB and the engine's VHDX 810 GB. When `/etc/docker/daemon.json`
 exists, the keeper leaves it in charge and writes no cap.
 
+Before it starts `dockerd`, the keeper switches the memory controller on for the children of the distro's cgroup root
+(2026-11-05). `dockerd` decides once, as it starts, whether it can bound a container's swap: it looks for
+`memory.swap.max` in its own cgroup (`/non-systemd`), which is there only once that controller is on. Nothing turned it
+on before `dockerd` looked; runc does when the first container starts, too late. So rog's engine reported
+`SwapLimit: false`, dropped every sandbox's `--memory-swap` (`Memory limited without swap` at `docker run`,
+`MemorySwap: -1` on the container), and one sandbox paged 33 GB into the WSL VM's swap. The keeper's log says at each
+start whether `dockerd` will find the file. Read on rog without a restart; that it turns the check true is confirmed only
+at the engine's next start. Each sandbox also bounds its own work's swap, whatever the engine does, and
+`ic sandbox doctor` warns when the engine reports no swap-limit support.
+
 A PC where the namespace cannot be set up (no `/dev/net/tun`, no pasta or socat and no network to fetch them on an
 engine imported from 1.0.0) runs `dockerd` in the shared namespace as before 1.1.0 rather than not at all. There the
 keeper leaves Windows' connections to `127.0.0.1` to `docker-proxy` (mirrored networking otherwise loses them), and does

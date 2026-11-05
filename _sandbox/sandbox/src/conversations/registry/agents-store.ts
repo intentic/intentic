@@ -20,7 +20,7 @@ import {
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract/schemas/agents";
 import { LandingDeliverySchema } from "@intentic/sandbox-contract/schemas/project-delivery";
-import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "@intentic/sandbox-contract/schemas/turn-break";
+import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema } from "@intentic/sandbox-contract/schemas/turn-break";
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
@@ -170,13 +170,18 @@ export type Ending = z.infer<typeof EndingSchema>;
 export type FailedEnding = Extract<Ending, { kind: "failed" | "limited" }>;
 
 // The conversation's own answer to each sandbox-wide default, absent inheriting it: whether its work lands on its own,
-// and each ending's one question (turn-break.ts), armed for a resume with nobody watching.
+// and each ending's one question (turn-break.ts), armed for a resume with nobody watching. One key per ending, spelled as
+// the ending is, so the registry's write (setBreakPolicy) and every read (break-policy.ts, wall-answers.ts) index it by
+// the ending itself. `memoryKill` added 2026-11-05, optional: a row from before it has no answer of its own to a memory
+// kill and follows the sandbox's. Without the key here the parse stripped it, so an answer given in the chat held only
+// until the next restart reloaded the row, and the conversation then quietly went back to the sandbox-wide answer.
 const PosturesSchema = z.object({
     autoLand: z.boolean().optional(),
     limit: LimitPolicySchema.optional(),
     outage: RetryPolicySchema.optional(),
     stopped: RetryPolicySchema.optional(),
     memory: RoomPolicySchema.optional(),
+    memoryKill: MemoryKillPolicySchema.optional(),
 });
 export type Postures = z.infer<typeof PosturesSchema>;
 

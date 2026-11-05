@@ -106,11 +106,39 @@ const GIB = 1024 ** 3;
 const SANDBOX_MEMORY_RESERVE = 3 * GIB;
 // Below this any cap, derived or asked, breaks the image's own toolchain.
 const SANDBOX_MEMORY_FLOOR = 4 * GIB;
-// Swap a capped sandbox may page into, as a share of its cap: runway for a peak past the cap, never the engine's whole
-// swap. Unbounded (`-1`), one sandbox paged 24 of a WSL guest's 28 GiB of swap until the guest itself ran dry; bounded,
-// an overrun ends in an OOM kill inside the sandbox's own cgroup. Never zero: a no-swap cgroup livelocks reclaiming
-// file-backed pages rather than triggering OOM.
-const SANDBOX_SWAP_SHARE = 0.5;
+// Swap a capped sandbox may page into: runway for a peak past the cap, never the engine's whole swap. Unbounded (`-1`),
+// one sandbox paged 24 of a WSL guest's 28 GiB of swap until the guest itself ran dry; bounded, an overrun ends in an OOM
+// kill inside the sandbox's own cgroup. Never zero: a no-swap cgroup livelocks reclaiming file-backed pages rather than
+// triggering OOM.
+//
+// (2026-11-05) A quarter of the cap, 1 to 4 GiB, where it was half the cap: on rog one process paged 33 GB at about 7 GB a
+// minute, so half of an 18 GiB cap was over a minute of thrashing where 4 GiB is gone in seconds and the sandbox's own OOM
+// fires. The owner may ask for another amount (SANDBOX_SWAP, `<n>g`, the swap alone), which `ic` sets on the container
+// and a recreate replays. This is a COPY of `defaultSwapGib` in the sandbox's system/resources/memory-records.ts, which
+// the sandbox holds its own workload leaf to whatever the engine does with `--memory-swap` (rog's engine ignores it);
+// this package cannot import the daemon, and ic's shape.rs keeps a third copy. Change one, change all three.
+const SANDBOX_SWAP_SHARE = 0.25;
+const SANDBOX_SWAP_MAX_GIB = 4;
+
+// The env var the owner's swap ask rides on (`<n>g`, whole GiB of swap alone, not memory plus swap): replayed like the
+// caps, and read back by the sandbox to bound its workload leaf. memory-records.ts SWAP_ENV names the same variable.
+export const SANDBOX_SWAP_ENV = "SANDBOX_SWAP";
+
+// The default swap in whole GiB for a cap of `capGib` whole GiB: a quarter of it, rounded up, at least 1 and at most 4.
+export const defaultSandboxSwapGib = (capGib: number): number =>
+    Math.min(SANDBOX_SWAP_MAX_GIB, Math.max(1, Math.ceil(Math.max(1, Math.floor(capGib)) * SANDBOX_SWAP_SHARE)));
+
+// The owner's swap ask in whole GiB, or undefined for the default; a malformed one throws, never falls back to unbounded.
+const swapAskGib = (swap: string | undefined): number | undefined => {
+    if (swap === undefined || swap.trim() === "") {
+        return undefined;
+    }
+    const asked = /^(\d+)g$/u.exec(swap.trim());
+    if (asked === null || Number(asked[1]) < 1) {
+        throw new Error(`${SANDBOX_SWAP_ENV} must be whole GiB of swap spelled '<n>g', at least '1g' (e.g. '4g'), got '${swap}'`);
+    }
+    return Number(asked[1]);
+};
 
 // Formats a byte cap as docker's `<n>g`; shared so a derived and an explicit ask round identically.
 const capString = (capBytes: number): string => `${Math.max(1, Math.floor(capBytes / GIB))}g`;
@@ -136,15 +164,16 @@ export const localSandboxMemory = (totalBytes: number, override?: string): strin
     return capString(Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR));
 };
 
-// Docker's `--memory-swap` for a `<n>g` cap: the cap plus its swap share, rounded up to a whole GiB and at least one.
-// Every cap this package emits is `<n>g`; anything else throws, since falling back to unbounded is the failure above.
-export const localSandboxMemorySwap = (memory: string): string => {
+// Docker's `--memory-swap` for a `<n>g` cap: the cap plus the swap, which is the owner's `swap` ask (SANDBOX_SWAP) or the
+// default above. Docker's flag is memory PLUS swap, where SANDBOX_SWAP is the swap alone. Every cap this package emits is
+// `<n>g`; anything else throws, since falling back to unbounded is the failure above.
+export const localSandboxMemorySwap = (memory: string, swap?: string): string => {
     const cap = /^(\d+)g$/u.exec(memory.trim());
     if (cap === null) {
         throw new Error(`a sandbox memory cap must be whole GiB spelled '<n>g' (e.g. '10g'), got '${memory}'`);
     }
     const capGib = Number(cap[1]);
-    return `${capGib + Math.max(1, Math.ceil(capGib * SANDBOX_SWAP_SHARE))}g`;
+    return `${capGib + (swapAskGib(swap) ?? defaultSandboxSwapGib(capGib))}g`;
 };
 
 // No derived cap, unlike memory: 'nothing asked' means every core, since `--cpus` is a hard CFS ceiling, not a share.
@@ -298,6 +327,10 @@ export const REPLAY_VARS = [
     // The owner's other standing asks, replayed like the memory cap: CPU ceiling and runtime directives.
     { name: "SANDBOX_CPUS", role: "choice" },
     { name: "SANDBOX_RUNTIME", role: "choice" },
+    // (2026-11-05) The swap the sandbox's work may page into (SANDBOX_SWAP_ENV), replayed so `--memory-swap` is sized by it
+    // and the sandbox holds its workload leaf to it. Images published before this row drop it, so `ic` also stamps it on
+    // the run line itself when the contract left it off (its shape.rs `swap_stamp`); never both, and never empty.
+    { name: SANDBOX_SWAP_ENV, role: "choice" },
     // A runner's parent sandbox and pairing token, replayed since a recreate can't re-derive either.
     { name: "RUNNER_PARENT_URL", role: "identity" },
     { name: "RUNNER_PAIR_TOKEN", role: "identity", secret: true },
@@ -405,12 +438,16 @@ export interface SandboxRun {
 // dialect (sh, PowerShell, the SSH provider).
 // Cgroup ceilings, local shape only (`init: false` sizes elsewhere). A bounded `--memory-swap` always rides with a cap so
 // an overrun pages for a while instead of livelocking, then stops inside the sandbox; `--cpus` only when the owner asked.
+// The swap comes from the replayed SANDBOX_SWAP, which `env` also puts on the container: an engine that ignores
+// `--memory-swap` (one without swap-limit support, rog's on 2026-11-05) still has the sandbox hold its own workload leaf
+// to the same number.
 const resourceArgs = (run: SandboxRun): string[] => {
     if (run.init === false) {
         return [];
     }
     const memory = run.memory ?? LOCAL_SANDBOX_MEMORY;
-    return ["--memory", memory, "--memory-swap", localSandboxMemorySwap(memory), ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
+    const swap = run.env?.find(([name]) => name === SANDBOX_SWAP_ENV)?.[1];
+    return ["--memory", memory, "--memory-swap", localSandboxMemorySwap(memory, swap), ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
 };
 
 // Resolves both directive sources into one deduped union; everything downstream sees only the union, so an owner-asked

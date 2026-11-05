@@ -289,6 +289,21 @@ flowchart LR
   `--set`: a shim fetches a fresh ic on every run, so an older agent can be driving this one. They can go once no
   agent older than the release carrying `--set` is left; a `sandbox-<slug>.shape` delta an older ic saved is
   converted into the record the first time it is read, then deleted.
+- The shape's fifth field is the **swap** (2026-11-05, `--set swapGib=4`, `--swap 4g`, whole GiB and at least 1;
+  `null`/`default` for the default, a quarter of the memory cap rounded up, at least 1 and at most 4 GiB): how much the
+  sandbox's `workload` cgroup may page into, the swap alone. The default is never carried; a swap the owner set rides on
+  the container as `SANDBOX_SWAP=<n>g`, which the run contract replays and sizes `--memory-swap` (the cap plus the swap)
+  by; an image whose contract predates it drops the variable, so ic stamps it on the run line itself when the contract
+  left it off. Changed alone with `--when now`, it is written into the running sandbox instead of restarting it:
+  `/run/intentic/workload-bounds.json` (which the sandbox reads its bounds from), the leaf's `memory.swap.max`, and a
+  best-effort `docker update --memory-swap`; the shape it runs with is then read from that file, and the next recreate
+  carries it in the env. A record an older ic wrote has the four other `desired_*` keys and reads with the default
+  swap. `ic sandbox list --json` rows carry the bound in force as read inside the running container
+  ([`containment.rs`](src/sandbox/containment.rs)): `resources.swapMaxBytes` (the container) and
+  `resources.workloadSwapMaxBytes` (its work), bytes or null for none, and left out for a sandbox that is stopped or
+  does not answer within 5 s. They are read inside because on an engine without swap-limit support docker's own
+  `MemorySwap` says -1 whatever it was asked. After a launch that engine warns about, ic says once that it ignores
+  `--memory-swap`.
 - A sandbox's **egress** is what it may reach on the networks around this machine ([`sandbox/egress/`](src/sandbox/egress/),
   the contract's `egress.ts`). `ic sandbox egress <slug> --policy <JSON>` sets the whole policy: `open` (nothing fenced,
   no rules at all) or `internet-only`, which refuses every private, link-local, shared and multicast range and the
@@ -384,7 +399,11 @@ flowchart LR
   progress to the platform's host report, which the page mirrors. The platform never sends it anything. A finished
   report also carries the machine agent's last upkeep pass (`~/.intentic/machine/upkeep.json`, summed, with the agent's
   version), so the platform can tell whether a release brought machines to the current shape (2026-10-05).
-  `ic sandbox doctor` is the same engine, read-only.
+  `ic sandbox doctor` is the same engine, read-only. It also says what would hold a runaway in each sandbox
+  (`containment.rs`, warnings at worst, printed under the rows and carried as `containment` beside the report in its
+  `--json`): no swap bound at the container or its work, an engine reporting no swap-limit support, the machine's swap
+  more than twice the sandbox's cap, an out-of-memory killer (earlyoom, systemd-oomd, nohang) running in a WSL distro
+  other than the engine's, where it cannot see the sandbox's processes, and a daemon outside its own `/daemon` cgroup.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
 - **Sandbox windows on Intentic OS desktop.** No sandbox may draw until the owner allows it (`ic os screen allow|deny

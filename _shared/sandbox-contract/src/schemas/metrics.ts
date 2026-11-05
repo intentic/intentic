@@ -89,7 +89,7 @@ export const SandboxUsageSchema = z.object({
     memoryLimitBytes: z
         .number()
         .describe(
-            "The memory limit work is admitted against: where the kernel starts throttling the container (memory.high), else its hard limit, else the machine's memory.",
+            "The memory limit work is admitted against: where the kernel starts throttling the container (memory.high), else its hard limit, else the machine's memory; never above the workload cgroup leaf's own limit plus what runs outside that leaf, since admitted work runs in it.",
         ),
     memoryBreakdown: z
         .object({

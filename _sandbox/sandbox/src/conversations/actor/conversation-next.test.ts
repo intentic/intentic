@@ -11,8 +11,8 @@ import { sendableAt } from "./limit-booking.js";
 
 const RECORDED = 1_800_000_000_000;
 const RESET = RECORDED / 1000 + 3_600;
-const SEND = { limit: "resend", memory: "resend" } as const satisfies WallAnswers;
-const WAIT = { limit: "wait", memory: "wait" } as const satisfies WallAnswers;
+const SEND = { limit: "resend", memory: "resend", memoryKill: "resume" } as const satisfies WallAnswers;
+const WAIT = { limit: "wait", memory: "wait", memoryKill: "wait" } as const satisfies WallAnswers;
 const MEMORY: Ending = { kind: "failed", failure: "short of memory", code: "sandbox-memory-low" };
 const LIMITED: Ending = { kind: "limited", failure: "spent", resetsAt: RESET, held: true };
 

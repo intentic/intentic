@@ -5,6 +5,7 @@ import {
     capFromField,
     cpuBounds,
     defaultMemoryGib,
+    defaultSwapGib,
     engineMemoryGib,
     formFrom,
     formProblems,
@@ -14,6 +15,8 @@ import {
     runningShape,
     sameShape,
     shapeSummary,
+    SWAP_BOUNDS,
+    swapOnly,
 } from "@intentic/ui/sandbox-resources";
 
 // Pins the resources form's arithmetic here (the kit that owns it has no test runner): what it starts from,
@@ -162,4 +165,27 @@ test(`compares whole shapes field for field and says one in words`, () => {
     expect(sameShape(shape, { ...shape, gpu: false })).toBe(false);
     expect(shapeSummary(shape)).toBe(`20 GiB memory · 1 CPU · not privileged · GPU`);
     expect(shapeSummary({ memoryGib: null, cpus: null, privileged: true, gpu: false })).toBe(`default memory · every CPU · privileged · no GPU`);
+});
+
+// (2026-11-05) The swap the sandbox's work may page into: a field only where the machine reported one, at least a GiB,
+// its default a quarter of the memory (the sandbox's own memory-records.ts defaultSwapGib), and a change of it alone is
+// the one Apply that restarts nothing.
+test(`holds the swap to a whole GiB, defaults it to a quarter of the memory, and tells a swap-only change apart`, () => {
+    expect(SWAP_BOUNDS).toEqual({ min: 1 });
+    expect([4, 7, 12, 18, 64].map((memoryGib) => defaultSwapGib(memoryGib))).toEqual([1, 2, 3, 4, 4]);
+    expect(defaultSwapGib(undefined)).toBeUndefined();
+    const reported = { memoryGib: 18, cpus: null, privileged: false, gpu: false, swapGib: null };
+    expect(formProblems({ ...reported, swapGib: 0 }, undefined)).toEqual({ swap: expect.stringContaining(`At least 1 GiB`) });
+    expect(formProblems({ ...reported, swapGib: 1.5 }, undefined)).toEqual({ swap: expect.any(String) });
+    expect(formProblems({ ...reported, swapGib: 6 }, undefined)).toEqual({});
+    // An unreported swap reads as the default, so a form from an older machine compares as it always did.
+    const { swapGib: _unreported, ...older } = reported;
+    expect(sameShape(older, reported)).toBe(true);
+    expect(sameShape(reported, { ...reported, swapGib: 4 })).toBe(false);
+    expect(swapOnly(reported, { ...reported, swapGib: 4 })).toBe(true);
+    expect(swapOnly(reported, { ...reported, swapGib: 4, memoryGib: 20 })).toBe(false);
+    expect(swapOnly(reported, reported)).toBe(false);
+    // Said only when the owner asked for one: the default is the resting state.
+    expect(shapeSummary({ ...reported, swapGib: 4 })).toBe(`18 GiB memory · every CPU · not privileged · no GPU · 4 GiB swap`);
+    expect(shapeSummary(reported)).toBe(`18 GiB memory · every CPU · not privileged · no GPU`);
 });

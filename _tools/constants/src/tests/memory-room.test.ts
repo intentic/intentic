@@ -137,6 +137,62 @@ test("swap's limit is memory.swap.max, never more than what is swapped plus what
     );
 });
 
+// (2026-11-05) A 16 GiB sandbox as the entrypoint bounds it: memory.high at 90% of the cap, and the workload leaf, where
+// everything the gate admits runs, walled at 12.5 GiB (the cap less the daemon's 3.5 GiB) with 4 GiB of swap. Outside the
+// leaf, the daemon's 1.25 GiB.
+const WL = `${CG}/workload`;
+const bounded16 = (sandbox: { readonly residentGib: number; readonly swapGib: number }, leaf: { readonly residentGib: number; readonly swapGib: number }) => ({
+    "/proc/meminfo": meminfo(32, 20, 34, 30),
+    [`${CG}/memory.high`]: `${Math.floor((16 * GIB) / 100) * 90}\n`,
+    [`${CG}/memory.max`]: `${16 * GIB}\n`,
+    [`${CG}/memory.current`]: `${(sandbox.residentGib + 0.5) * GIB}\n`,
+    [`${CG}/memory.stat`]: `inactive_file ${0.5 * GIB}\n`,
+    [`${CG}/memory.swap.current`]: `${sandbox.swapGib * GIB}\n`,
+    [`${CG}/memory.swap.max`]: "max\n",
+    [`${WL}/memory.max`]: `${12.5 * GIB}\n`,
+    [`${WL}/memory.current`]: `${(leaf.residentGib + 0.25) * GIB}\n`,
+    [`${WL}/memory.stat`]: `inactive_file ${0.25 * GIB}\n`,
+    [`${WL}/memory.swap.current`]: `${leaf.swapGib * GIB}\n`,
+    [`${WL}/memory.swap.max`]: `${4 * GIB}\n`,
+});
+
+test("the workload leaf's wall, plus what runs outside it, is the limit where it is lower than the container's", () => {
+    const reading = readingFrom(files(bounded16({ residentGib: 12, swapGib: 1 }, { residentGib: 10.75, swapGib: 1 })));
+    // 12.5 GiB for the leaf and the daemon's 1.25 beside it, under the container's 14.4; used is still the whole sandbox's.
+    expect(reading).toMatchObject({ limitBytes: 13.75 * GIB, usedBytes: 13 * GIB, swapBytes: GIB, swapLimitBytes: 4 * GIB });
+    // Free is the leaf's own room, 12.5 − 10.75 GiB, where the container alone would read 2.4 GiB.
+    expect(freeBytesOf(reading)).toBe(1.75 * GIB);
+    // So a build nobody waits on (its 1 GiB and a person's turn) waits for room instead of meeting the leaf's OOM, and a
+    // person's turn still fits.
+    expect(judge(reading, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "wait", freeBytes: 1.75 * GIB });
+    expect(judge(reading, { workload: "agentRuntime", attended: true })).toMatchObject({ verdict: "run" });
+    // Outside the leaf grown past what the container leaves it: the container's own limit is the lower, and stands.
+    const crowded = readingFrom(files(bounded16({ residentGib: 13, swapGib: 0 }, { residentGib: 9, swapGib: 0 })));
+    expect(crowded.limitBytes).toBe(Math.floor((16 * GIB) / 100) * 90);
+});
+
+test("the leaf's swap bound is swap's limit, and once it is nearly spent the leaf is judged by its own pages", () => {
+    // 3.75 of the leaf's 4 GiB swapped, and 0.25 GiB swapped outside it (a Docker container beside the leaves).
+    const reading = readingFrom(files(bounded16({ residentGib: 7.25, swapGib: 4 }, { residentGib: 6, swapGib: 3.75 })));
+    expect(reading.swapLimitBytes).toBe(4.25 * GIB);
+    expect(swapFullOf(reading)).toBe(true);
+    // The swapped pages now count: free is the leaf's wall less its own resident and swapped pages, 12.5 − 6 − 3.75 GiB.
+    expect(freeBytesOf(reading)).toBe(2.75 * GIB);
+    // A sandbox with no cap has no wall, but its leaf's swap is still bounded.
+    const uncapped = { ...bounded16({ residentGib: 7.25, swapGib: 4 }, { residentGib: 6, swapGib: 3.75 }), [`${CG}/memory.high`]: "max\n", [`${CG}/memory.max`]: "max\n", [`${WL}/memory.max`]: "max\n" };
+    expect(readingFrom(files(uncapped))).toMatchObject({ limitBytes: 32 * GIB, swapLimitBytes: 4.25 * GIB });
+});
+
+test("a workload leaf that is absent or unbounded leaves the reading the container's", () => {
+    const container = Object.fromEntries(Object.entries(bounded16({ residentGib: 12, swapGib: 1 }, { residentGib: 10.75, swapGib: 1 })).filter(([path]) => !path.startsWith(WL)));
+    const before = readingFrom(files(container));
+    expect(before).toMatchObject({ limitBytes: Math.floor((16 * GIB) / 100) * 90, swapLimitBytes: 31 * GIB });
+    const unbounded = { ...bounded16({ residentGib: 12, swapGib: 1 }, { residentGib: 10.75, swapGib: 1 }), [`${WL}/memory.max`]: "max\n", [`${WL}/memory.swap.max`]: "max\n" };
+    expect(readingFrom(files(unbounded))).toEqual(before);
+    // A leaf with bounds but no charge of its own to tell inside from outside by is no wall either.
+    expect(readingFrom(files({ ...container, [`${WL}/memory.max`]: `${GIB}\n`, [`${WL}/memory.swap.max`]: `${GIB}\n` }))).toEqual(before);
+});
+
 // The reading of 2026-10-05 22:14 that started every turn: 12 GiB resident, 10 of 10 GiB swapped, a 20 GiB limit.
 test("once swap is nearly full the swapped pages count against the limit, and a sandbox past it is short", () => {
     const reading = {

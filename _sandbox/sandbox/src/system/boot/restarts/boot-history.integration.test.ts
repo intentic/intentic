@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NETD_KILLS_FILE, type NetdKill } from "../../resources/memory-records.js";
 import { bootFacts, bootFactsOf, keptBoots, recordBoot, resetBootRecord, RESTART_STORM, restartStormProblem } from "./boot-history.js";
 
 /* A restart storm is told from a restart by the boots before this one, and decides only whether this boot resumes. */
@@ -21,6 +22,42 @@ test("the third boot within half an hour is a storm, this boot counted", () => {
 test("boots outside the window, or in the future of a clock that stepped back, do not make a storm", () => {
     expect(bootFactsOf([NOW - 31 * MINUTE, NOW - 40 * MINUTE], NOW)).toMatchObject({ bootsInWindow: 1, storm: false });
     expect(bootFactsOf([NOW + MINUTE, NOW + 2 * MINUTE], NOW)).toMatchObject({ bootsInWindow: 1, storm: false });
+});
+
+// 2026-11-05: while a runaway thrashed the VM, netd killed every daemon it started that could not say hello in three
+// minutes. Those that recorded their boot must not hold the one that finally came up from resuming the turns they cut.
+test("boots netd killed before their hello are not counted towards a storm; boots that failed on their own still are", () => {
+    const failed = new Set([NOW - 9 * MINUTE, NOW - 6 * MINUTE]);
+    expect(bootFactsOf([NOW - 120 * MINUTE, ...failed], NOW, RESTART_STORM, failed)).toEqual({
+        bootedAt: NOW,
+        previousBootAt: NOW - 6 * MINUTE,
+        bootsInWindow: 1,
+        neverStartedInWindow: 2,
+        storm: false,
+    });
+    expect(bootFactsOf([NOW - 12 * MINUTE, ...failed], NOW, RESTART_STORM, new Set([NOW - 9 * MINUTE]))).toMatchObject({ bootsInWindow: 3, storm: true });
+});
+
+test("which boots never started is read off netd's record of the daemons it killed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "boot-history-"));
+    try {
+        const starts = [NOW - 120 * MINUTE, NOW - 9 * MINUTE, NOW - 6 * MINUTE];
+        const kills: NetdKill[] = [
+            { at: NOW - 101 * MINUTE, kind: "stuck", pid: 65, silentMs: 5 * MINUTE },
+            { at: NOW - 6 * MINUTE - 5_000, kind: "no-hello", pid: 100, silentMs: 3 * MINUTE - 5_000 },
+            { at: NOW - 3 * MINUTE, kind: "no-hello", pid: 101, silentMs: 3 * MINUTE },
+        ];
+        await writeFile(join(root, "boot-history.json"), JSON.stringify({ boots: starts }));
+        await mkdir(join(root, "logs"));
+        await writeFile(join(root, "logs", NETD_KILLS_FILE), kills.map((kill) => `${JSON.stringify(kill)}\n`).join(""));
+        expect(await recordBoot(root, quiet, { now: NOW })).toMatchObject({ bootsInWindow: 1, neverStartedInWindow: 2, storm: false });
+        // Without netd's record, the same boots are a storm, as before.
+        resetBootRecord();
+        await rm(join(root, "logs", NETD_KILLS_FILE));
+        expect(await recordBoot(root, quiet, { now: NOW + 1000 })).toMatchObject({ bootsInWindow: 4, storm: true });
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test("the record keeps a day of boots, oldest first, and this one", () => {

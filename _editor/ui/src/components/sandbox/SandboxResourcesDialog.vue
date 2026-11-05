@@ -1,4 +1,4 @@
-<!-- Confirmation dialog for one sandbox's memory, CPU, privileged and GPU share; shared by the web and desktop apps.
+<!-- Confirmation dialog for one sandbox's memory, CPU, swap, privileged and GPU share; shared by the web and desktop apps.
      It holds a WHOLE shape and emits one: Apply restarts the sandbox onto it now; Save (where the caller can carry it)
      has ic keep it for the sandbox's next restart through ic. -->
 <script setup lang="ts">
@@ -15,6 +15,7 @@ import {
     capFromField,
     cpuBounds,
     defaultMemoryGib,
+    defaultSwapGib,
     type EngineFacts,
     engineMemoryGib,
     formProblems,
@@ -25,6 +26,8 @@ import {
     runningShape,
     sameShape,
     shapeSummary,
+    SWAP_BOUNDS,
+    swapOnly,
 } from "./sandboxResources.js";
 import { ui } from "../../lib/ui.js";
 
@@ -92,7 +95,9 @@ const cpus = computed(() => cpuBounds(engine));
 const problems = computed(() => formProblems(form.value, engine));
 const desired = computed(() => current?.desired);
 const desiredSummary = computed(() => (desired.value === undefined ? undefined : shapeSummary(desired.value)));
-const valid = computed(() => problems.value.memory === undefined && problems.value.cpus === undefined);
+const valid = computed(() => problems.value.memory === undefined && problems.value.cpus === undefined && problems.value.swap === undefined);
+// The swap alone changed (2026-11-05): ic sets it in the running sandbox, so Apply restarts nothing, which is said.
+const swapAlone = computed(() => swapOnly(running.value, form.value));
 // Apply is worth pressing when the form differs from what runs, or when a saved shape is waiting to be applied.
 const applyReady = computed(() => valid.value && (!sameShape(form.value, running.value) || desired.value !== undefined));
 // Save is worth pressing when it would change what is saved: a new shape, or forgetting the one there is.
@@ -101,7 +106,7 @@ const saveReady = computed(() => valid.value && !sameShape(form.value, desired.v
 
 // A cap field's text, read back on every keystroke: the problem and the Apply button both follow the
 // typing. Not-a-number mid-edit leaves the form as it was, rather than flipping the cap to the default.
-const setCap = (field: `memoryGib` | `cpus`, event: Event): void => {
+const setCap = (field: `memoryGib` | `cpus` | `swapGib`, event: Event): void => {
     const value = capFromField((event.target as HTMLInputElement).value);
     if (value !== undefined) {
         form.value = { ...form.value, [field]: value };
@@ -115,6 +120,11 @@ const memoryPlaceholder = computed(() =>
         ? t(`ui.sandboxResourcesDialog.default`)
         : t(`ui.sandboxResourcesDialog.defaultIs`, { value: memoryDefault.value }),
 );
+// The swap's default follows the memory field as typed, else the memory default: a quarter of it, 1 to 4 GiB.
+const swapPlaceholder = computed(() => {
+    const swap = defaultSwapGib(form.value.memoryGib ?? memoryDefault.value);
+    return swap === undefined ? t(`ui.sandboxResourcesDialog.default`) : t(`ui.sandboxResourcesDialog.defaultIs`, { value: swap });
+});
 const cpuPlaceholder = computed(() =>
     cpus.value.max === undefined ? t(`ui.sandboxResourcesDialog.all`) : t(`ui.sandboxResourcesDialog.allMax`, { max: cpus.value.max }),
 );
@@ -144,7 +154,7 @@ const uid = useId();
         @update:open="emit(`cancel`)"
     >
         <div v-if="current !== undefined" class="flex flex-col gap-4">
-            <!-- The four rows are one group: on the dialog that is the rows and their hairlines, with no box of its own. -->
+            <!-- The rows are one group: on the dialog that is the rows and their hairlines, with no box of its own. -->
             <RowGroup>
                 <!-- Memory is whole GiB; empty means the default, said by the placeholder rather than a second control. -->
                 <Row
@@ -208,6 +218,37 @@ const uid = useId();
                     </template>
                 </Row>
 
+                <!-- The swap its work may page into: only where the machine reported one, since an older machine refuses the field. -->
+                <Row
+                    v-if="form.swapGib !== undefined"
+                    icon="database"
+                    :title="t(`ui.sandboxResourcesDialog.swap`)"
+                    :tone="problems.swap === undefined ? `default` : `warning`"
+                >
+                    <template #description>{{ t(`ui.sandboxResourcesDialog.swapWhole`) }}</template>
+                    <template #control>
+                        <label class="flex items-center gap-2 text-xs text-muted">
+                            <input
+                                :id="`${uid}-swap`"
+                                type="number"
+                                :min="SWAP_BOUNDS.min"
+                                step="1"
+                                :value="form.swapGib ?? ``"
+                                :placeholder="swapPlaceholder"
+                                :aria-label="t(`ui.sandboxResourcesDialog.swapCapInGib`)"
+                                :class="ui.input({ size: `sm` }, `w-28 text-right`)"
+                                @input="setCap(`swapGib`, $event)"
+                                @keydown.ctrl.enter.prevent="applyReady && emit(`apply`, form)"
+                                @keydown.meta.enter.prevent="applyReady && emit(`apply`, form)"
+                            />
+                            <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.gib`) }}</span>
+                        </label>
+                    </template>
+                    <template v-if="problems.swap !== undefined" #below>
+                        <p class="text-2xs text-warning">{{ problems.swap }}</p>
+                    </template>
+                </Row>
+
                 <!-- Locked, with the reason, when the approved environment demands it: a reshape can add to what it asks but never withdraw it. -->
                 <Row
                     icon="shield"
@@ -259,7 +300,10 @@ const uid = useId();
             <p v-if="canSave" class="text-xs text-muted">
                 {{ t(`ui.sandboxResourcesDialog.savingKeepsItRunning`) }}
             </p>
-            <p v-if="selfWarning" class="text-xs text-warning">
+            <p v-if="swapAlone" class="text-xs text-info">
+                {{ t(`ui.sandboxResourcesDialog.swapAppliesLive`) }}
+            </p>
+            <p v-if="selfWarning && !swapAlone" class="text-xs text-warning">
                 {{ t(`ui.sandboxResourcesDialog.sandboxUsingRightNow`) }}
             </p>
         </div>

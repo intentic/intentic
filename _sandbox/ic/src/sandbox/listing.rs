@@ -309,6 +309,42 @@ fn with_egress(
     listed
 }
 
+/// (2026-11-05) Each running row's swap bound as the kernel inside it holds it, under `resources`: the container root's
+/// (`swapMaxBytes`) and the workload leaf's (`workloadSwapMaxBytes`), bytes or null for unbounded (containment.rs). Read
+/// from inside because docker's own account lies on an engine without swap-limit support: it records `MemorySwap: -1`
+/// whatever it was asked, and rog's engine drops every bound it is handed. A live reshape's swap, which changes no env
+/// var, is the shape's swap too. One short exec per running sandbox, all at once; a row whose sandbox did not answer in
+/// time, or that is not running, is listed without the two fields rather than holding the listing.
+fn with_swap_bounds(
+    mut listed: Value,
+    readings: &HashMap<String, crate::sandbox::containment::Reading>,
+) -> Value {
+    for row in listed.as_array_mut().into_iter().flatten() {
+        let Some(reading) = row["container"]
+            .as_str()
+            .and_then(|name| readings.get(name))
+        else {
+            continue;
+        };
+        let Some(resources) = row.get_mut("resources").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for (field, value) in crate::sandbox::containment::listed_fields(reading) {
+            resources.insert(field.into(), value);
+        }
+        if let (Some(live), Some(shape)) = (
+            reading.live,
+            resources.get_mut("shape").and_then(Value::as_object_mut),
+        ) {
+            shape.insert(
+                "swapGib".into(),
+                live.ask().map_or(Value::Null, |gib| json!(gib)),
+            );
+        }
+    }
+    listed
+}
+
 /// `docker inspect --format '{{json .}}'` over several containers prints one object per line, each named with a
 /// leading slash no other reader uses. A line that is not one object is a warning riding along.
 fn inspected_from(listing: &str) -> HashMap<String, Value> {
@@ -457,6 +493,18 @@ pub fn list_json() -> Result<()> {
         .filter_map(|row| row["container"].as_str().map(str::to_string))
         .collect();
     let listed = with_egress(listed, &inspected, &records);
+    let running: Vec<String> = listed
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["running"] == true)
+        .filter_map(|row| row["container"].as_str().map(str::to_string))
+        .collect();
+    let readings: HashMap<String, crate::sandbox::containment::Reading> =
+        crate::sandbox::containment::read_all(&running)
+            .into_iter()
+            .collect();
+    let listed = with_swap_bounds(listed, &readings);
     let platform_ids = loopback::platform_ids(&containers, &inspected);
     // allow(terminal-output): the --json answer, one line of JSON the desktop app and the machine agent read.
     println!(
@@ -476,6 +524,46 @@ mod tests {
              intentic-sandbox-tunnel-work\texited\tcloudflare/cloudflared\n\
              intentic-sandbox-tunnel-lab\tcreated\tintentic-sandbox-env-lab:abc\n",
         )
+    }
+
+    #[test]
+    fn the_swap_bound_in_force_is_listed_as_read_inside_and_a_live_swap_is_the_shapes() {
+        use crate::sandbox::containment::{parse_reading, Reading};
+        let listed = json!([
+            { "container": "intentic-sandbox-a", "running": true, "resources": { "shape": { "swapGib": null } } },
+            { "container": "intentic-sandbox-b", "running": true, "resources": { "shape": { "swapGib": 2 } } },
+            { "container": "intentic-sandbox-c", "running": false, "resources": { "shape": { "swapGib": null } } },
+            { "container": "intentic-sandbox-d", "running": true, "resources": { "shape": { "swapGib": 2 } } },
+        ]);
+        let mut readings: HashMap<String, Reading> = HashMap::new();
+        readings.insert(
+            "intentic-sandbox-a".into(),
+            parse_reading("root=max\nworkload=4294967296\noverride={\"swapGib\":4}\n"),
+        );
+        readings.insert(
+            "intentic-sandbox-b".into(),
+            parse_reading("root=max\nworkload=\noverride=\n"),
+        );
+        readings.insert(
+            "intentic-sandbox-d".into(),
+            parse_reading(
+                "root=max\nworkload=4294967296\noverride={\"default\":true,\"swapGib\":4}\n",
+            ),
+        );
+        let out = with_swap_bounds(listed, &readings);
+        assert_eq!(out[0]["resources"]["swapMaxBytes"], Value::Null);
+        assert_eq!(
+            out[0]["resources"]["workloadSwapMaxBytes"],
+            json!(4294967296u64)
+        );
+        assert_eq!(out[0]["resources"]["shape"]["swapGib"], json!(4));
+        // An image without a workload leaf lists the root alone, and keeps the swap its env names.
+        assert!(out[1]["resources"].get("workloadSwapMaxBytes").is_none());
+        assert_eq!(out[1]["resources"]["shape"]["swapGib"], json!(2));
+        // Nothing read, nothing claimed.
+        assert!(out[2]["resources"].get("swapMaxBytes").is_none());
+        // Set back to the default live: listed as the default, over the number its env still names.
+        assert_eq!(out[3]["resources"]["shape"]["swapGib"], Value::Null);
     }
 
     #[test]
@@ -600,6 +688,7 @@ mod tests {
                     cpus: None,
                     privileged: false,
                     gpus: true,
+                    swap: Some("2g".to_string()),
                 }),
                 ..ChannelRecord::default()
             },
@@ -621,8 +710,8 @@ mod tests {
                         "gpu": true,
                         "hostRuntime": ["--gpus=all"],
                         "overlayRuntime": ["--device=/dev/net/tun"],
-                        "shape": { "memoryGib": 12, "cpus": null, "privileged": false, "gpu": true },
-                        "desired": { "memoryGib": 20, "cpus": null, "privileged": false, "gpu": true },
+                        "shape": { "memoryGib": 12, "cpus": null, "privileged": false, "gpu": true, "swapGib": null },
+                        "desired": { "memoryGib": 20, "cpus": null, "privileged": false, "gpu": true, "swapGib": 2 },
                     },
                     "staged": { "image": "img:next", "version": "1.4.2" },
                 },
@@ -700,7 +789,7 @@ mod tests {
                 "gpu": true,
                 "hostRuntime": [],
                 "overlayRuntime": [],
-                "shape": { "memoryGib": null, "cpus": null, "privileged": false, "gpu": false },
+                "shape": { "memoryGib": null, "cpus": null, "privileged": false, "gpu": false, "swapGib": null },
             })
         );
     }

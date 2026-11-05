@@ -4,7 +4,7 @@ use crate::docker;
 use crate::logfile::intentic_home;
 use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
-use crate::sandbox::{lock, mirror, CONTAINER_PREFIX};
+use crate::sandbox::{containment, lock, mirror, CONTAINER_PREFIX};
 use crate::shape::{Ask, Shape};
 use crate::ui;
 use crate::util::{bail, Fail, Result};
@@ -21,13 +21,15 @@ pub enum When {
     NextRestart,
 }
 
-/// The shape `container` runs with now: the owner's ask it carries in its env. The default shape when the
-/// container could not be read, which only ever feeds a comparison or a base for an ask.
+/// The shape `container` runs with now: the owner's ask it carries in its env, with the swap a live reshape wrote into
+/// it since (containment.rs), which changes no env var. The default shape when the container could not be read, which
+/// only ever feeds a comparison or a base for an ask.
 pub fn running(container: &str) -> Shape {
     let env: Vec<String> = docker::inspect(container, "{{json .Config.Env}}")
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default();
     Shape::from_env(&env)
+        .with_live_swap(containment::live_swap(container).map(containment::Live::ask))
 }
 
 /// `ic sandbox shape <slug> … --when now|next-restart` — the one verb that sets a sandbox's shape. The ask is laid
@@ -40,7 +42,7 @@ pub fn set(slug: String, ask: Ask, when: When, preflight: Preflight) -> Result<(
             ui::explain(
                 "Nothing changed.",
                 Some("the command names no change."),
-                Some("add --memory, --cpus, --privileged or --gpus."),
+                Some("add --memory, --cpus, --privileged, --gpus or --swap."),
             )
         );
     }
@@ -49,15 +51,64 @@ pub fn set(slug: String, ask: Ask, when: When, preflight: Preflight) -> Result<(
     let _held = lock::hold_for_person(&slug)?;
     adopt_legacy(&slug, &container)?;
     let running = running(&container);
-    let target = mirror::reconcile(&slug)
-        .desired
-        .unwrap_or_else(|| running.clone())
-        .with(&ask);
+    let saved = mirror::reconcile(&slug).desired;
+    let target = saved.clone().unwrap_or_else(|| running.clone()).with(&ask);
     target.check_spelling()?;
     match when {
+        When::Now if running.differs_only_in_swap(&target) && runs(&container) => {
+            match live_swap(&slug, &container, &target, saved.is_some())? {
+                true => Ok(()),
+                false => recreate::reshape(slug, target.as_ask(), preflight),
+            }
+        }
         When::Now => recreate::reshape(slug, target.as_ask(), preflight),
         When::NextRestart => save(&slug, &target, &running),
     }
+}
+
+fn runs(container: &str) -> bool {
+    docker::inspect(container, "{{.State.Running}}").as_deref() == Some("true")
+}
+
+/// THE SWAP ALONE, NOW, WITH NO RESTART (2026-11-05). A swap bound is one number the kernel takes at once, so a change to
+/// it and nothing else is written into the running sandbox (containment::apply_live) instead of recreating it: the
+/// override file the sandbox reads its bounds from, and the workload leaf's own bound. Nothing about the container
+/// changes, so its env still names the swap it was made with; every later read of the shape it runs with
+/// (`running`, the listing) takes the override's over it, and every recreate carries the override's value in the env
+/// it hands the new container (recreate.rs), which is how it survives the restart that drops the file. A shape saved for
+/// the next restart that differed from what runs in the swap alone is now in force, and is dropped.
+///
+/// False when the container would not take it (an exec it refused or never answered): the caller then recreates, as a
+/// `--when now` always did.
+fn live_swap(slug: &str, container: &str, target: &Shape, had_saved: bool) -> Result<bool> {
+    let Some((gib, leaf)) = containment::apply_live(container, target) else {
+        ui::note(&format!(
+            "{slug} did not take the new swap while running, so it is restarted onto it instead."
+        ));
+        return Ok(false);
+    };
+    if had_saved {
+        clear(slug)?;
+    }
+    let in_force = containment::read(container)
+        .map(|reading| format!(" In force now: {}.", containment::in_force_words(&reading)))
+        .unwrap_or_default();
+    let named = match &target.swap {
+        Some(_) => format!("{gib} GiB"),
+        None => format!("the default, {gib} GiB for its memory cap"),
+    };
+    match leaf {
+        containment::Leaf::Bounded => ui::done(&format!(
+            "{slug}'s work may now use {named} of swap, at once and with no restart. Every later restart and update keeps it.{in_force}"
+        )),
+        containment::Leaf::Missing => ui::warn(&format!(
+            "{slug} runs an image from before a sandbox bounded its own work, so nothing inside it holds the {named} of swap yet: it is kept, and takes hold when the sandbox is next updated (ic sandbox update {slug}).{in_force}"
+        )),
+        containment::Leaf::Refused => ui::warn(&format!(
+            "{slug} kept the {named} of swap but its workload refused the new bound for now; its next restart applies it (ic sandbox restart {slug}).{in_force}"
+        )),
+    }
+    Ok(true)
 }
 
 /// `ic sandbox reshape <slug> … --later`, the spelling machine agents released before `shape` send. Kept for one
@@ -70,7 +121,7 @@ pub fn save_later(slug: String, ask: Ask) -> Result<()> {
             ui::explain(
                 "Nothing was saved.",
                 Some("the command names no change."),
-                Some("add --memory, --cpus, --privileged or --gpus, or --forget to drop what is saved."),
+                Some("add --memory, --cpus, --privileged, --gpus or --swap, or --forget to drop what is saved."),
             )
         );
     }
@@ -281,6 +332,7 @@ mod tests {
                 cpus: Some(String::new()),
                 privileged: None,
                 gpus: Some(true),
+                swap: None,
             }
         );
         assert_eq!(dropped, vec!["privileged=maybe".to_string()]);

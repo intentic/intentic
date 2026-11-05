@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { HANDOFF_MODES, type LimitHandoff } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { type KeepWarmSettings, KeepWarmSettingsSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
-import type { LimitPolicy, RetryPolicy, RoomPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { LimitPolicy, MemoryKillPolicy, RetryPolicy, RoomPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -40,6 +40,7 @@ const limitRows = rowsFor(`limit`);
 const outageRows = rowsFor(`outage`);
 const stoppedRows = rowsFor(`stopped`);
 const memoryRows = rowsFor(`memory`);
+const memoryKillRows = rowsFor(`memoryKill`);
 
 const limitPolicy = computed<TurnBreakPolicy>({
     get: () => settings.value?.limitPolicy ?? `wait`,
@@ -56,6 +57,11 @@ const stopPolicy = computed<TurnBreakPolicy>({
 const memoryPolicy = computed<TurnBreakPolicy>({
     get: () => settings.value?.memoryPolicy ?? `resend`,
     set: (value) => patch({ memoryPolicy: value as RoomPolicy }),
+});
+const memoryKillPolicy = computed<TurnBreakPolicy>({
+    get: () => settings.value?.memoryKillPolicy ?? `resume`,
+    // SAFETY: the control offers memoryKillRows alone, TURN_BREAK_POLICIES.memoryKill's two answers, both MemoryKillPolicy.
+    set: (value) => patch({ memoryKillPolicy: value as MemoryKillPolicy }),
 });
 
 // How a turn a spent allowance held continues once its cache is cold (models/conversations/endings/handoffChoice.ts): the chat's card asks
@@ -272,6 +278,21 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     <SegmentedControl
                         v-model="memoryPolicy"
                         :options="memoryRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
+
+            <!-- A turn the sandbox killed because memory ran out, under a running daemon or by a restart memory caused: it
+                 ran, so it is the memory wall's twin rather than the door's, and on by default where the restart switch
+                 below is off, since the sandbox knows the cause and never sends back the turn that caused it. -->
+            <Row icon="cpu" :title="breakLabel(`memoryKill`)" :description="t(`sandbox.agentRecovery.memoryKillPolicyNote`)">
+                <template #control>
+                    <SegmentedControl
+                        v-model="memoryKillPolicy"
+                        :options="memoryKillRows"
                         size="xs"
                         :wrap="true"
                         :class="{ 'pointer-events-none opacity-60': settings === undefined }"

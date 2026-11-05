@@ -6,9 +6,11 @@ import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
 import { logContext } from "../logger.js";
 import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/restarts/boot-history.js";
+import { readPostMortem } from "../system/boot/restarts/post-mortem.js";
 import { type LeftWork, recoverLeftWork } from "../seams/restart/in-flight.js";
 import type { BootPhase } from "./boot-phase.js";
 import { inFlightFailed } from "./restart/in-flight-kinds.js";
+import { readMemoryRestart } from "./restart/memory-restart-read.js";
 
 // Everything a restart cut, recovered in one pass over what was read before the gate opened (bootstrap/restart/in-flight-kinds.ts),
 // under the one answer this boot gives to whether any of it comes back. Each kind bounds its own retries; a failure leaves
@@ -54,9 +56,10 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
 
 // The one answer this boot gives every kind of work a restart cut: the owner's ask for this restart, autoResumeOnRestart,
 // and whether this boot is one of a restart storm (agent/run/turn/recovery/restart-resume-policy.ts). An ask or a setting that cannot be read counts as not given, so an unreadable
-// file never restarts work nobody asked back.
+// file never restarts work nobody asked back. Beside it, whether the post-mortem traced the restart to memory running
+// out, which holds the cut turns for the memory release instead (bootstrap/restart/memory-restart-read.ts).
 const bootResumePolicy = async ({ logger, services }: Pick<BootPhase, "logger" | "services">): Promise<RestartResume> => {
-    const [ownerAsked, storm, autoResumeOnRestart] = await Promise.all([
+    const [ownerAsked, storm, autoResumeOnRestart, memory] = await Promise.all([
         readOrFalse(logger, () => fileRestartResume(services.config.historyRoot).take(Date.now()), "whether the owner asked this restart to resume could not be read, so only the settings decide"),
         bootFacts().then((facts) => {
             if (facts?.storm !== true) {
@@ -74,8 +77,9 @@ const bootResumePolicy = async ({ logger, services }: Pick<BootPhase, "logger" |
             async () => (await services.sandboxSettings.get()).autoResumeOnRestart,
             "settings unreadable at boot, so nothing the restart cut is resumed unless the owner asked",
         ),
+        readMemoryRestart({ logger, services }, { readPostMortem }),
     ]);
-    return restartResume({ ownerAsked, storm, autoResumeOnRestart });
+    return restartResume({ ownerAsked, storm, autoResumeOnRestart, memory });
 };
 
 // A yes that could not be read is a no, said in the log.

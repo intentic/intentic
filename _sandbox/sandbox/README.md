@@ -620,6 +620,16 @@ flowchart LR
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
+- Everything but netd and the daemon runs in the `workload` cgroup leaf, bounded from inside the container since
+  2026-11-05 (`system/resources/daemon-cgroup.ts`, the entrypoint, and the formulas in
+  `system/resources/memory-records.ts`): a wall below the cap that leaves the daemon its heap, and a swap bound short
+  enough that a runaway meets the leaf's own OOM in under a minute instead of paging the machine for hours. The daemon
+  names each kill there (`system/resources/cgroup-oom.ts`, from the kernel's log as `kernel-oom-lines.ts` reads it)
+  with the owner and job its process scan knew, writes it to `/history/logs/memory-kills.jsonl` beside the kills of netd's
+  memory guard, and tells the conversation whose process it was (`agent/tools/jobs/memory-kills.ts`). A turn memory
+  killed comes back by `memoryKillPolicy`, one conversation at a time once memory has stayed free, and never by itself
+  for the conversation whose process it was (`agent/run/turn/holds/memory-kill.ts`). [When memory runs
+  out](../../docs/architecture/sandbox.md) has the bounds, the guard's rules and the reasons.
 - A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
   the line that started it: the daemon hands every agent command the table (`workload/heavy-commands.ts`,
   the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
@@ -849,6 +859,11 @@ flowchart LR
   container restarted and whether `/tmp` was emptied), appends it to `/history/logs/restarts.jsonl` (newest 500) and
   spends the intent. `/health` carries `build` (version, source commit from `build-info.json` or `INTENTIC_COMMIT`, and
   build time; `system/boot/build-info.ts`).
+  (2026-11-05) After an unclean stop the boot also draws a post-mortem from what netd and the kernel left on file
+  (`system/boot/restarts/post-mortem.ts`): the cause (`memory`, `oom-victim`, `netd-stuck` or `unknown`), what was
+  killed and whose, and one sentence, filed on the restart record, whose ending `killed` becomes `netd-stuck` or
+  `oom-victim` where the records name the hand. The resume pass reads it: the turns a restart memory caused cut come
+  back by `memoryKillPolicy` instead of autoResumeOnRestart.
   (2026-11-03) A run killed without warning is explained by its host where the host can say: the Windows side's machine
   agent answers each device heartbeat with the GPU resets and crashes Windows logged in the last day (LiveKernelEvent
   141/117/116, Display 4101, a bugcheck, Kernel-Power 41; `DevicePingSchema.crashes`), `hosts/gpu/host-crashes.ts` keeps

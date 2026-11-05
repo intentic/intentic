@@ -1,4 +1,5 @@
 import { CONTINUATION_NOTE, RESTART_LOSSES, RESUME_NOTES, resumeDisclosure, resumeNoteWith, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
+import { sandboxNoticeOf } from "./sandbox-notice.js";
 
 // Wrapping then unwrapping a resume note must return the exact original prompt; a mismatch leaks machine narration into
 // the user's own words on screen.
@@ -103,4 +104,25 @@ test("a carried-on turn's note stands alone, leaves no words, and records as a n
 test("a manual continuation explains what a sandbox restart can have lost", () => {
     expect(CONTINUATION_NOTE).toContain(`If the sandbox restarted: ${RESTART_LOSSES}`);
     expect(withoutResumeNote(CONTINUATION_NOTE)).toBe("");
+});
+
+// A turn memory killed comes back told what killed it, what it lost and what not to do again, with what the sandbox
+// found riding the tail; its own words still come back out whole, and the row it records is no stranger to a reader.
+test("a turn re-run after a memory kill is told why, what it lost, and not to repeat what grew", () => {
+    const found = "The sandbox ran out of memory: cargo (pid 4242) started by sub-tidy-pebble-aii1 was killed at 17.6 GB.";
+    const prompt = withResumeNote("ship the parser", resumeNoteWith(RESUME_NOTES.memory, found));
+    expect(prompt.startsWith(RESUME_NOTES.memory)).toBe(true);
+    expect(RESUME_NOTES.memory).toMatch(/ran out of memory/);
+    expect(RESUME_NOTES.memory).toMatch(/background job/);
+    expect(RESUME_NOTES.memory).toMatch(/one at a time/);
+    expect(RESUME_NOTES.memory).toMatch(/grew without limit/);
+    expect(prompt).toContain(found);
+    expect(withoutResumeNote(prompt)).toBe("ship the parser");
+    const disclosure = resumeDisclosure(prompt);
+    expect(disclosure).toEqual({ kind: "notice", text: expect.stringContaining("ran out of memory"), reason: "memory" });
+    // Filed under its own reason, which this build's notice vocabulary reads back, so a reader words it as a memory kill
+    // rather than as a turn that stopped short.
+    const row = disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined;
+    expect(row?.noticeCode).toEqual({ code: "resumed", params: { reason: "memory" } });
+    expect(row === undefined ? undefined : sandboxNoticeOf(row)).toEqual({ code: "resumed", params: { reason: "memory" } });
 });

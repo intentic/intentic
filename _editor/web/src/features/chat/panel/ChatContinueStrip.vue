@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { keyCap } from "@intentic/ui/keys";
 import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
-import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { isTurnBreak, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { LimitResetClaim } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
@@ -15,7 +15,7 @@ import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost, pressOnlyStop } from "../../../models/conversations/endings/pickUp";
+import { atReopenPhrase, type ContinueOptions, handoffPicked, memoryKilled, pickUpNext, pickUpStatus, pickUpWhen, pressCost, pressOnlyStop } from "../../../models/conversations/endings/pickUp";
 import { pressWayOf } from "../../../models/conversations/endings/pressWay";
 import type { ReopenPress } from "../composer/composerIntent";
 import { handoffLine } from "../../../models/conversations/endings/handoffChoice";
@@ -256,15 +256,19 @@ const fallback = computed(() =>
 const outdated = computed(() => allowanceWall.value && accountsOutdated.value && accounts.value.length > 1);
 
 // The one question, asked through the control every wall shares (TurnBreakQuestion): a flagged turn has none, since the
-// person picks each time, nor a stop held for a press alone (pickUp.ts pressOnlyStop), which no answer would send. On a
-// spent account it is asked only where its answer is the appointment (a held limit turn): a ladder's or an outage's tries
-// could only be refused before the reopen, and the card's own press books the continuation.
-const breakWall = computed(() => {
+// person picks each time, nor a stop held for a press alone (pickUp.ts pressOnlyStop), which no answer would send. A stop
+// memory killed is asked the memory kill's question (pickUp.ts memoryKilled), the one its hold goes by. On a spent account
+// it is asked only where its answer is the appointment (a held limit turn): a ladder's or an outage's tries could only be
+// refused before the reopen, and the card's own press books the continuation.
+const breakWall = computed((): TurnBreak | undefined => {
     const wall = ending.value;
     if (wall === undefined || !isTurnBreak(wall) || pressOnlyStop(pickUp.value)) {
         return undefined;
     }
-    return spent.value && props.atReopen !== `arm` && props.atReopen !== `armed` ? undefined : wall;
+    if (spent.value && props.atReopen !== `arm` && props.atReopen !== `armed`) {
+        return undefined;
+    }
+    return memoryKilled(pickUp.value) ? `memoryKill` : wall;
 });
 const fallbackName = computed(() => (fallback.value === undefined ? undefined : fallbackLabel(fallback.value)));
 

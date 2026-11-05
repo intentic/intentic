@@ -895,6 +895,22 @@ pub struct Shape {
     pub cpus: Option<u32>,
     pub privileged: bool,
     pub gpu: bool,
+    /// Whole GiB of swap for the sandbox's workload, `Some(None)` for back to the default (a quarter of the memory cap,
+    /// 1 to 4 GiB), and absent when the form did not carry it. Absent is sent as nothing at all rather than as null: an ic
+    /// older than the field refuses a `--set` it does not know, and the form shows the field only where ic reported a swap.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub swap_gib: Option<Option<u32>>,
+}
+
+// A field that is there, null included, as `Some`: serde's own Option would read a present null as absent.
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<u32>>, D::Error> {
+    Option::<u32>::deserialize(deserializer).map(Some)
 }
 
 /// `ic sandbox shape`'s arguments for a whole shape and when it takes effect (`now`, `nextRestart`), or `--forget` for
@@ -1420,6 +1436,7 @@ mod tests {
             cpus: None,
             privileged: false,
             gpu: true,
+            swap_gib: None,
         }
     }
 
@@ -1805,10 +1822,28 @@ mod tests {
                 memory_gib: None,
                 cpus: Some(8),
                 privileged: false,
-                gpu: true
+                gpu: true,
+                swap_gib: None,
             }
         );
         assert!(serde_json::from_str::<Shape>(r#"{"cpus":8}"#).is_err());
+    }
+
+    /* swapGib rides only when the form carried it: a number, or null for the default; never invented for an older ic. */
+    #[test]
+    fn swap_is_sent_only_when_the_form_carried_it() {
+        let read = |json: &str| serde_json::from_str::<Shape>(json).unwrap();
+        let base = r#""memoryGib":12,"cpus":null,"privileged":false,"gpu":false"#;
+        let flags = |shape: &Shape| shape_flags(Some(shape), "now").unwrap().join(" ");
+        assert_eq!(
+            read(&format!("{{{base},\"swapGib\":3}}")).swap_gib,
+            Some(Some(3))
+        );
+        assert!(flags(&read(&format!("{{{base},\"swapGib\":3}}"))).contains("--set swapGib=3"));
+        assert!(
+            flags(&read(&format!("{{{base},\"swapGib\":null}}"))).contains("--set swapGib=null")
+        );
+        assert!(!flags(&read(&format!("{{{base}}}"))).contains("swapGib"));
     }
 
     /// The engine's size as `docker info` prints it for the form's rails. Unreadable is None, never a guess.

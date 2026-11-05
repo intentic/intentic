@@ -4,6 +4,8 @@ import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usa
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { opt } from "../opt.js";
+import { logsRoot } from "../seams/logs-root.js";
+import { type FiledPostMortem, readFiledPostMortems } from "../system/boot/restarts/post-mortem.js";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { type LevelName, readLogLines, readMetricSeries, readSlowSpans } from "./diagnostics.js";
 import { readRestarts, readTimeline } from "./diagnostics-history.js";
@@ -268,7 +270,12 @@ const resourcesTool = (deps: DiagnosticsToolDeps, now: () => number) =>
             "value instead. Useful paths: `system.cgroup.event_oom_kill` (processes the kernel killed), " +
             "`processes.byRole.toolchain.rssBytes` (a build, test or typecheck fan-out; also browser, agentRuntime, localModel, " +
             "container, searchEngine, terminal, languageServer, git, extension), `processes.top` (the eight heaviest " +
-            "processes), `window.eventLoop.delayP99Ms`, `window.cpu.utilizationPercent`, `daemon.memory.rssBytes`, " +
+            "processes by resident plus swapped, each with its `owner`, the conversation whose turn or job started it or " +
+            "`daemon` / `one-shot`, absent on a process nothing stamped, and its `jobId` when it ran under a job (a background " +
+            "job, or a foreground command filed as one)), `processes.byOwner` (count, rssBytes and swapBytes per owner, " +
+            "unstamped processes under `unstamped`, e.g. `processes.byOwner.<conversationId>.rssBytes`: which conversation " +
+            "holds the memory), " +
+            "`window.eventLoop.delayP99Ms`, `window.cpu.utilizationPercent`, `daemon.memory.rssBytes`, " +
             "`system.pressure.memory.some`, `system.loadAverage`, `uptimeSeconds`, and `queue.heavy.longestHoldSeconds` " +
             "(with .held and .slots) for a heavy command that took a queue slot and did not give it back.",
         {
@@ -284,16 +291,40 @@ const resourcesTool = (deps: DiagnosticsToolDeps, now: () => number) =>
         { annotations: toolAnnotations("read") },
     );
 
+// The post-mortems boot-marker.ts filed with each unclean restart (system/boot/restarts/post-mortem.ts), one line each:
+// the named cause, its sentence, and the conversations whose own process was killed (their cut turns are held, not
+// resumed). Listed beside the boots rather than folded into their lines, so a row from a build that did not know the
+// named endings still reads, and the culprits stand out.
+const postMortemLines = (filed: readonly FiledPostMortem[], limit: number): string[] =>
+    filed.length === 0
+        ? []
+        : [
+              "",
+              `Post-mortems of the unclean stops among them, newest first (cause: memory, netd-stuck, oom-victim or unknown):`,
+              ...filed
+                  .slice(0, limit)
+                  .map(
+                      ({ at, ended, postMortem }) =>
+                          `${new Date(at).toISOString()} ${postMortem.cause}${ended === undefined ? "" : ` (ended ${ended})`}: ${postMortem.summary}${postMortem.culprits.length === 0 ? "" : ` [held as culprits: ${postMortem.culprits.join(", ")}]`}`,
+                  ),
+          ];
+
 const restartsTool = (deps: DiagnosticsToolDeps, now: () => number) =>
     sdk().tool(
         "restarts",
         "The daemon's boots, newest first, and for each why the run before it ended: stopped cleanly or killed, on which " +
             "signal, after how long, and who asked for it (the owner, `ic`, the host's keeper, an update) with their reason. " +
-            "Reach for it when turns were interrupted, a session vanished, or the editor reconnected by itself.",
+            "A run killed without warning is named where the records allow: `netd-stuck` (netd killed a daemon that stopped " +
+            "answering or never said hello) or `oom-victim` (the kernel's OOM killer chose the daemon), and each unclean stop's " +
+            "post-mortem says what was killed for memory, by whom (netd's guard, the sandbox's own memory bound, the kernel's " +
+            "global OOM), whose process it was, and which conversations' turns it holds. Reach for it when turns were " +
+            "interrupted, a session vanished, or the editor reconnected by itself.",
         { sinceMinutes: minutes(), limit: limitArg() },
         async ({ sinceMinutes, limit }) => {
             const window = windowOf(now(), sinceMinutes);
-            return ok(renderRestarts(await readRestarts(deps.historyRoot, { sinceMs: window.sinceMs }), window, limit ?? DEFAULT_LINES));
+            const shown = limit ?? DEFAULT_LINES;
+            const boots = renderRestarts(await readRestarts(deps.historyRoot, { sinceMs: window.sinceMs }), window, shown);
+            return ok([boots, ...postMortemLines(readFiledPostMortems(logsRoot(deps.historyRoot), window.sinceMs), shown)].join("\n"));
         },
         { annotations: toolAnnotations("read") },
     );

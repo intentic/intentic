@@ -4,7 +4,7 @@ import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { NightAnswerSchema } from "../schemas/night-hours.js";
-import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
+import { HeldEndingSchema, MemoryKillMarkSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
@@ -558,6 +558,7 @@ export const TurnEndingSchema = z.object({
                 .describe(
                     "Only a press sends it again: no standing answer re-runs it, whatever the conversation's answer to its wall says, since it reached its own ceiling or ended incomplete. Absent for every other hold.",
                 ),
+            memoryKill: MemoryKillMarkSchema,
         })
         .optional()
         .describe("Present when the daemon still holds the refused turn whole, so a press re-runs it rather than appending a message after it."),

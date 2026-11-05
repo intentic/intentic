@@ -12,9 +12,16 @@ import type { DeviceSandboxPayload } from "./useDevices";
 /** A shape and when it takes effect, or dropping the one saved for the next restart. */
 export type ShapeIntent = { readonly shape: ResourcesForm; readonly when: SandboxShapeWhen } | { readonly forget: true };
 
-// The contract's four fields and nothing else: the agent refuses a field it does not know, and a form opened on a newer
-// machine's report may carry one.
-const contractFields = ({ memoryGib, cpus, privileged, gpu }: ResourcesForm): ResourcesForm => ({ memoryGib, cpus, privileged, gpu });
+// The contract's fields and nothing else: the agent refuses a field it does not know, and a form opened on a newer
+// machine's report may carry one. The swap (2026-11-05) rides only when the form has it, which is when the machine's
+// report carried it: an agent older than the field strips it from what it reports and refuses it in an order.
+const contractFields = ({ memoryGib, cpus, privileged, gpu, swapGib }: ResourcesForm): ResourcesForm => {
+    const fields: ResourcesForm = { memoryGib, cpus, privileged, gpu };
+    if (swapGib !== undefined) {
+        fields.swapGib = swapGib;
+    }
+    return fields;
+};
 
 /** Whether this machine's agent takes whole shapes (and so can save one for the next restart). */
 export const canSetShape = (facts: Pick<DeviceFacts, "features"> | undefined): boolean => deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE);

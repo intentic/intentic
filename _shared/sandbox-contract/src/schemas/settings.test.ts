@@ -283,3 +283,18 @@ describe(`default job setups`, () => {
         expect(SandboxSettingsWriteSchema.parse({ ...saved, commandJudge: `watch` }).roleSetups).toEqual({});
     });
 });
+
+// A memory kill's answer is on to begin with where the restart switch is off: the sandbox knows the cause, and lets its
+// victims back one at a time once memory settles (turn-break.ts). Only the two answers it takes are written.
+describe(`the answer to a memory kill`, () => {
+    test(`resumes by default, while resuming after any restart stays off`, () => {
+        const defaults = SandboxSettingsSchema.parse({});
+        expect(defaults.memoryKillPolicy).toBe(`resume`);
+        expect(defaults.autoResumeOnRestart).toBe(false);
+    });
+
+    test(`takes wait or resume and nothing else`, () => {
+        expect(SandboxSettingsSchema.parse({ memoryKillPolicy: `wait` }).memoryKillPolicy).toBe(`wait`);
+        expect(SandboxSettingsSchema.safeParse({ memoryKillPolicy: `retry` }).success).toBe(false);
+    });
+});
