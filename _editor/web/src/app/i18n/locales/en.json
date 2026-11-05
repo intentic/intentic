@@ -7010,7 +7010,6 @@
             "comeBackWithCode": "Sign in, then paste the code it shows.",
             "codeCopied": "Code copied: paste it on the page.",
             "copyCode": "Copy the code",
-            "finish": "Finish",
             "finishesOn": "Finishes by itself on {where}.",
             "nameAccount": "Name this account…",
             "notThere": "Signing in elsewhere? Paste the address",
@@ -7040,7 +7039,10 @@
             "tripGooglePlayMeans": "fine to continue",
             "tripWindsurfMeans": "the company behind Devin",
             "tripDevinToken": "an authentication token for Devin CLI",
-            "tripDevinTokenMeans": "paste this one"
+            "tripDevinTokenMeans": "paste this one",
+            "tabOpening": "Opening {destination}…",
+            "tabEnterCode": "The next page asks for this code.",
+            "tabCopyContinue": "Copy it and continue to {destination}"
         },
         "connectionNotice": {
             "cantStartedRightNow": "\"{name}\" can't be started right now",

@@ -13,7 +13,7 @@ interface Flow {
     url: string;
     code: string;
     state?: string;
-    flow?: `device` | `redirect`;
+    flow?: `device` | `redirect` | `paste`;
     handshake?: string;
     redeemed?: boolean;
     catchers?: { kind: `device` | `browser`; label: string }[];
@@ -22,6 +22,7 @@ interface Flow {
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
 const translatorConnectFlow = ref<Flow | undefined>(undefined);
 const connectSent = ref(false);
+const connectCodeCopied = ref(false);
 const completeConnect = jest.fn(async () => true);
 const completeTranslator = jest.fn(async () => true);
 
@@ -31,6 +32,7 @@ jest.mock(`../../../models/conversations/run/useChat`, () => ({
         nativeConnectFlow,
         translatorConnectFlow,
         connectSent,
+        connectCodeCopied,
         accountBusy: ref(undefined),
         connectLabel: ref(``),
         completeConnect,
@@ -65,6 +67,7 @@ afterEach(() => {
     nativeConnectFlow.value = undefined;
     translatorConnectFlow.value = undefined;
     connectSent.value = false;
+    connectCodeCopied.value = false;
     completeConnect.mockClear();
     completeTranslator.mockClear();
 });
@@ -406,5 +409,91 @@ describe(`what the provider's own pages will show`, () => {
         const host = await mount({ provider: `claude`, url: `https://claude.ai/oauth/authorize`, code: ``, handshake: `hc` });
         expect(host.textContent).not.toContain(`You'll see`);
         expect(host.textContent).toContain(`paste the code it shows`);
+    });
+});
+
+// Claude's page shows `code#state`, the state being the attempt the sandbox handed back as its handshake. Readers pasted it
+// and left "Finish" (Polish "Zakończ", read as "quit") unpressed, so a code that is this attempt's own now connects as it
+// lands; anything the panel cannot vouch for still waits for the press, which says what it does.
+describe(`a pasted Claude code`, () => {
+    const CLAUDE_PASTE = { provider: `claude`, url: `https://claude.ai/oauth/authorize?state=hs-7`, code: ``, flow: `paste`, handshake: `hs-7` } as const;
+
+    it(`connects by itself when it carries this attempt's own state`, async () => {
+        const host = await mount({ ...CLAUDE_PASTE });
+        await paste(host, `  abc123XYZ#hs-7 `);
+        expect(completeConnect).toHaveBeenCalledWith(`abc123XYZ#hs-7`);
+    });
+
+    it(`waits for the press with a bare code, another attempt's, or something that is not a code`, async () => {
+        const host = await mount({ ...CLAUDE_PASTE });
+        for (const text of [`abc123XYZ`, `abc123XYZ#hs-other`, `two words#hs-7`, `a#hs-7#more`, `#hs-7`]) {
+            await paste(host, text);
+        }
+        expect(completeConnect).not.toHaveBeenCalled();
+        const press = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Connect`);
+        expect(press?.textContent?.trim(), `the press is named for what it does`).toBe(`Connect`);
+        expect(host.textContent).not.toContain(`Finish`);
+        press!.click();
+        expect(completeConnect).toHaveBeenCalledWith(`#hs-7`);
+    });
+
+    it(`is not taken from a Devin token, which carries no state`, async () => {
+        const host = await mount({ provider: `devin`, url: `https://app.devin.ai/auth/cli/continue`, code: ``, flow: `paste`, handshake: `hd` });
+        await paste(host, `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZpbiJ9.c2lnbmF0dXJl`);
+        expect(completeConnect).toHaveBeenCalledTimes(0);
+    });
+});
+
+// One press from "Add account" to the provider's page (signInTab.ts): the panel opens with the trip already made, so it
+// says what to bring back on the field itself and offers going again only quietly.
+describe(`a sign-in whose starting press already opened the provider`, () => {
+    it(`opens on the field, says what to bring back, and puts the caret there`, async () => {
+        connectSent.value = true;
+        const host = await mount({ provider: `claude`, url: `https://claude.ai/oauth/authorize`, code: ``, flow: `paste`, handshake: `hc` });
+        await nextTick();
+        const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
+        expect(field).not.toBeNull();
+        expect(document.activeElement).toBe(field);
+        expect(host.textContent).toContain(`paste the code it shows`);
+        const links = [...host.querySelectorAll(`a`)];
+        expect(links.map((link) => link.textContent?.trim())).toEqual([`Open again`]);
+    });
+
+    it(`keeps a redirect's warning that the last page won't load beside the field`, async () => {
+        connectSent.value = true;
+        const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+        expect(host.querySelector(`input[name="connectCode"]`)).not.toBeNull();
+        expect(host.textContent).toContain(`won't load`);
+        expect(host.textContent, `the trip note is still there for a reader who meets the page first`).toContain(`Google Antigravity`);
+    });
+
+    it(`a device sign-in says the code went with the press, and offers going again only quietly`, async () => {
+        connectSent.value = true;
+        connectCodeCopied.value = true;
+        const host = await mount({ provider: `codex`, url: `https://auth.openai.com/codex/device`, code: `K7QX-2MPD`, flow: `device`, handshake: `h9` });
+        expect(host.textContent).toContain(`Code copied: paste it on the page.`);
+        expect([...host.querySelectorAll(`a`)].map((link) => link.textContent?.trim())).toEqual([`Open again`]);
+    });
+
+    it(`a watched sign-in waits for the landing rather than asking to go`, async () => {
+        connectSent.value = true;
+        const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+        expect(host.textContent).toContain(`Waiting for the sign-in on rog`);
+        expect([...host.querySelectorAll(`a`)].map((link) => link.textContent?.trim())).toEqual([`Open again`]);
+    });
+
+    it(`takes Claude's code off the clipboard when the reader comes back`, async () => {
+        connectSent.value = true;
+        await withClipboard(
+            async () => undefined,
+            async () => {
+                Object.defineProperty(navigator.clipboard, `readText`, { configurable: true, value: async () => `zz9#hs-9` });
+                await mount({ provider: `claude`, url: `https://claude.ai/oauth/authorize`, code: ``, flow: `paste`, handshake: `hs-9` });
+                window.dispatchEvent(new Event(`focus`));
+                await new Promise((resolve) => setTimeout(resolve));
+                await nextTick();
+                expect(completeConnect).toHaveBeenCalledWith(`zz9#hs-9`);
+            },
+        );
     });
 });

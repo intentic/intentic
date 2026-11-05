@@ -7010,7 +7010,6 @@
             "comeBackWithCode": "Connectez-vous, puis collez le code affiché.",
             "codeCopied": "Code copié : collez-le sur la page.",
             "copyCode": "Copier le code",
-            "finish": "Terminer",
             "finishesOn": "Se termine tout seul sur {where}.",
             "nameAccount": "Nommez ce compte…",
             "notThere": "Connexion ailleurs ? Collez l'adresse",
@@ -7040,7 +7039,10 @@
             "tripGooglePlayMeans": "vous pouvez continuer",
             "tripWindsurfMeans": "l'entreprise derrière Devin",
             "tripDevinToken": "un jeton d'authentification pour Devin CLI",
-            "tripDevinTokenMeans": "celui à coller"
+            "tripDevinTokenMeans": "celui à coller",
+            "tabOpening": "Ouverture de {destination}…",
+            "tabEnterCode": "La page suivante vous demandera ce code.",
+            "tabCopyContinue": "Copier et continuer vers {destination}"
         },
         "connectionNotice": {
             "cantStartedRightNow": "« {name} » ne peut pas être démarré pour l'instant",

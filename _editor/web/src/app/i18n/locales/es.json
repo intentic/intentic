@@ -7010,7 +7010,6 @@
             "comeBackWithCode": "Inicia sesión y pega el código que muestra.",
             "codeCopied": "Código copiado: pégalo en la página.",
             "copyCode": "Copiar el código",
-            "finish": "Terminar",
             "finishesOn": "Termina sola en {where}.",
             "nameAccount": "Ponle nombre a esta cuenta…",
             "notThere": "¿Inicias sesión en otro sitio? Pega la dirección",
@@ -7040,7 +7039,10 @@
             "tripGooglePlayMeans": "puedes continuar",
             "tripWindsurfMeans": "la empresa detrás de Devin",
             "tripDevinToken": "un token de autenticación para Devin CLI",
-            "tripDevinTokenMeans": "pega este"
+            "tripDevinTokenMeans": "pega este",
+            "tabOpening": "Abriendo {destination}…",
+            "tabEnterCode": "La página siguiente te pedirá este código.",
+            "tabCopyContinue": "Cópialo y continúa a {destination}"
         },
         "connectionNotice": {
             "cantStartedRightNow": "«{name}» no se puede iniciar ahora mismo",

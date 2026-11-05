@@ -26,6 +26,7 @@ import { translatorAccounts } from "../../providers/providerAccounts";
 import { accountFacts, accountState } from "../../providers/usageStatus";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import type { SignInTab } from "./signInTab";
 
 // In-flight subscription login, identified by the translator's own attempt state.
 // `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
@@ -38,6 +39,26 @@ export const translatorConnectFlow = sandboxRef<
 // turns — ours to send them, theirs to come back with the grant — and a live flow alone cannot tell them apart:
 // without this, a card that nobody has acted on still claims to be signing in.
 export const connectSent = sandboxRef(() => false);
+// Whether a device sign-in's code went to the clipboard with the trip that the press made (signInTab.ts), so the panel
+// says it is there instead of asking for a copy that already happened.
+export const connectCodeCopied = sandboxRef(() => false);
+
+// The press that started this sign-in held a tab for it (signInTab.ts): the reader goes to the provider's page now, and
+// the panel opens on its second step. `still` says the attempt is the one on screen, since the copy can outlast it.
+const handOff = (tab: SignInTab | undefined, url: string, code: string, still: () => boolean): void => {
+    if (tab === undefined) {
+        return;
+    }
+    connectSent.value = true;
+    void tab.send(url, code).then(({ sent, copied }) => {
+        if (!still()) {
+            return;
+        }
+        // A held tab closed before the address came back went nowhere: the panel's own Open is the way, as without one.
+        connectSent.value = sent;
+        connectCodeCopied.value = copied;
+    });
+};
 
 // The last sign-in that ended without connecting anything, and the sentence saying why: what the chat's strip and the
 // connect view show until the reader tries again or dismisses it. Without it a sign-in that expired, was refused or
@@ -81,6 +102,7 @@ const settleTranslator = (): void => {
     translatorPoll.value.abort();
     translatorConnectFlow.value = undefined;
     connectSent.value = false;
+    connectCodeCopied.value = false;
 };
 
 // Provider's own account label for the sign-in-expired sentence, not a hardcoded default.
@@ -121,8 +143,9 @@ const pollTranslator = async (target: KeyedProvider, state: string, until: numbe
 
 // Starts a subscription login for a routed provider; returns a sign-in URL and, for some providers, a
 // one-time code. One sign-in at a time, of either mechanism: a new connect supersedes any prior one, and does so up
-// front, so a start that fails leaves nothing behind rather than the old panel with its poll already stopped.
-export const connectTranslator = async (target: KeyedProvider): Promise<void> => {
+// front, so a start that fails leaves nothing behind rather than the old panel with its poll already stopped. `tab` is
+// the one the press held, sent on to the page once there is one (the caller releases it when nothing was).
+export const connectTranslator = async (target: KeyedProvider, tab?: SignInTab): Promise<void> => {
     if (accountBusy.value !== undefined) {
         return;
     }
@@ -139,6 +162,8 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
             return;
         }
         translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
+        // By the attempt's own state, as the poll reads it: the ref hands back a proxy, never the object put in.
+        handOff(tab, started.url, started.code, () => translatorConnectFlow.value?.state === started.state);
         void pollTranslator(target, started.state, Date.now() + CODEX_POLL_DEADLINE_MS);
     } catch (caught) {
         failSignIn(target, messageOr(caught, t(`chat.chatConnect.subscriptionNotStarted`)));
@@ -235,6 +260,7 @@ const settleConnect = (): void => {
     nativeConnectFlow.value = undefined;
     connectLabel.value = ``;
     connectSent.value = false;
+    connectCodeCopied.value = false;
 };
 
 // Abandons an in-progress handshake, safe to call repeatedly. Also tells the daemon (fire-and-forget): for
@@ -352,8 +378,9 @@ const pollNativeStatus = async (target: AgentProvider, handshake: string, until:
 // starts its own poll. Routed subscriptions (including Kimi Code) use connectTranslator above.
 
 // Only started by the row's own Connect button, never a provider switch. `accountBusy` holds the provider for
-// the round trip, so the sign-in replaces the button rather than appearing beside a still-clickable one.
-export const startConnect = async (variant?: string): Promise<void> => {
+// the round trip, so the sign-in replaces the button rather than appearing beside a still-clickable one. `tab` is the
+// one that press held (connectTranslator).
+export const startConnect = async (variant?: string, tab?: SignInTab): Promise<void> => {
     const target = managedProvider.value;
     if (accountBusy.value !== undefined) {
         return;
@@ -396,6 +423,8 @@ export const startConnect = async (variant?: string): Promise<void> => {
             catchers: body.catchers ?? [],
             redeemed: false,
         };
+        // Read by attempt, not by object: a redeemed grant re-stamps the same attempt as a new object.
+        handOff(tab, body.url, body.code, () => nativeConnectFlow.value?.handshake === body.handshake);
         // A watched sign-in can finish with nobody touching this tab, so it polls the attempt itself, and so does a loop's
         // own CLI sign-in (Grok Build, Kimi CLI), whose CLI can be turned away by the vendor after the code was shown:
         // only the attempt says so. Otherwise paste-back never polls, and every other shape watches the account list.

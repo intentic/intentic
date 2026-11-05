@@ -21,6 +21,7 @@ import { useOperation } from "../../../workbench/operations/operations";
 import { defaultModelFor, endpointProviders,runnableReadFailure } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
+import { holdSignInTab } from "../../../models/conversations/run/signInTab";
 import { rememberPick } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { accessKnown, providerReady } from "../../../models/providers/access";
@@ -220,19 +221,24 @@ const connect = async (provider: NativeProvider, { variant, via }: { variant?: s
     if (starting.value !== undefined || !mayConnect(provider, via)) {
         return;
     }
+    // The press that asked is the one moment a tab may open, so it is held now, before anything is awaited, and the
+    // provider's page goes there once the sandbox names it: one press from Add to the page (signInTab.ts).
+    const tab = holdSignInTab(providerSpec(provider)?.destination ?? provider);
     // A new attempt is the thing happening now; the last one's banner is over.
     landed.value = undefined;
     selected.value = provider;
     starting.value = provider;
     lastVariant = variant;
     setManagedProvider(provider);
-    await nextTick();
-    void panel.value?.reveal();
     try {
+        await nextTick();
+        void panel.value?.reveal();
         const routed = via === undefined ? routedByDefault(provider) : via === `routed`;
         // SAFETY: only a translator-held provider is asked for its subscription, by its own panel's button.
-        await (routed ? connectTranslator(provider as KeyedProvider) : startConnect(variant));
+        await (routed ? connectTranslator(provider as KeyedProvider, tab) : startConnect(variant, tab));
     } finally {
+        // A start that failed, or never ran, sent nothing there: the held tab closes rather than sitting blank.
+        tab?.release();
         starting.value = undefined;
     }
 };

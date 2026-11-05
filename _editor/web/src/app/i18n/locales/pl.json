@@ -6412,7 +6412,6 @@
             "comeBackWithCode": "Zaloguj się, a potem wklej pokazany kod.",
             "codeCopied": "Kod skopiowany: wklej go na stronie.",
             "copyCode": "Skopiuj kod",
-            "finish": "Zakończ",
             "finishesOn": "Zakończy się samo na {where}.",
             "nameAccount": "Nazwij to konto…",
             "notThere": "Logujesz się gdzie indziej? Wklej adres",
@@ -6442,7 +6441,10 @@
             "tripGooglePlayMeans": "można kontynuować",
             "tripWindsurfMeans": "firma stojąca za Devinem",
             "tripDevinToken": "token uwierzytelniający dla Devin CLI",
-            "tripDevinTokenMeans": "wklej ten"
+            "tripDevinTokenMeans": "wklej ten",
+            "tabOpening": "Otwieranie {destination}…",
+            "tabEnterCode": "Następna strona poprosi o ten kod.",
+            "tabCopyContinue": "Skopiuj i przejdź do {destination}"
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}” nie da się teraz uruchomić",

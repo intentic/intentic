@@ -228,6 +228,55 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.error.value).toBeNull();
     });
 
+    // One press from "Add account" to the provider's page (signInTab.ts): the tab the press held is sent the attempt's
+    // address, with a device code to carry, and the panel learns the trip is made and whether the code went with it.
+    it(`sends the tab the starting press held to the sign-in page, with the device code to carry`, async () => {
+        resetSandboxScope();
+        const chat = useChat();
+        daemonAnswers((procedure, input) =>
+            procedure === `translator.connect` && field(input, `provider`) === `codex`
+                ? Promise.resolve({ url: `https://auth.openai.com/codex/device`, code: `ABCD-EFGH`, state: `codex-held`, flow: `device` })
+                : undefined,
+        );
+        const send = jest.fn(async () => ({ sent: true, copied: true }));
+
+        await chat.connectTranslator(`codex`, { send, release: jest.fn() });
+        await waitFor(() => expect(chat.connectCodeCopied.value).toBe(true));
+
+        expect(send).toHaveBeenCalledWith(`https://auth.openai.com/codex/device`, `ABCD-EFGH`);
+        expect(chat.connectSent.value).toBe(true);
+        chat.cancelTranslatorConnect();
+        expect(chat.connectCodeCopied.value, `a copied note outlived its sign-in`).toBe(false);
+    });
+
+    it(`leaves the panel's own Open in place when the held tab was closed before the address came back`, async () => {
+        resetSandboxScope();
+        const chat = useChat();
+        chat.setManagedProvider(`claude`);
+        daemonAnswers((procedure) =>
+            procedure === `accounts.start`
+                ? Promise.resolve({
+                      url: `https://claude.ai/oauth/authorize?state=hs-1`,
+                      code: ``,
+                      state: ``,
+                      flow: `paste`,
+                      variant: ``,
+                      handshake: `hs-1`,
+                      expiresAt: Date.now() + 900_000,
+                  })
+                : undefined,
+        );
+        let gone: ((answer: { sent: boolean; copied: boolean }) => void) | undefined;
+        const send = jest.fn(() => new Promise<{ sent: boolean; copied: boolean }>((resolve) => (gone = resolve)));
+
+        await chat.startConnect(undefined, { send, release: jest.fn() });
+        expect(chat.connectSent.value, `the trip counts from the moment the address goes`).toBe(true);
+        gone!({ sent: false, copied: false });
+        await waitFor(() => expect(chat.connectSent.value).toBe(false));
+        expect(send).toHaveBeenCalledWith(`https://claude.ai/oauth/authorize?state=hs-1`, ``);
+        chat.cancelConnect();
+    });
+
     it(`takes the Google sign-in down on the paste's own answer, not three seconds later on a poll tick`, async () => {
         jest.useFakeTimers();
         resetSandboxScope();
