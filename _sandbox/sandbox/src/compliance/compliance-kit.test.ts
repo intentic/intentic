@@ -65,7 +65,7 @@ describe("defaults", () => {
         expect(settings.aiNotice.show).toBe(false);
         expect(settings.actionRules).toEqual({});
         expect(settings.admission.webchat).toBe("allow");
-        expect(settings.commandJudge).toBe("on");
+        expect(settings.commandJudge).toBe("off");
         expect(DEFAULT_PRIVACY_SHIELD.mode).toBe("off");
     });
 
@@ -122,7 +122,7 @@ describe("measures", () => {
         expect(statusOf(measures, "product-analytics")).toBe("off");
         expect(statusOf(measures, "ai-notice")).toBe("off");
         expect(statusOf(measures, "action-rules")).toBe("off");
-        expect(statusOf(measures, "command-judge")).toBe("on");
+        expect(statusOf(measures, "command-judge")).toBe("off");
         expect(statusOf(measures, "local-models")).toBe("on");
         expect(statusOf(measures, "host-guards")).toBe("on");
         expect(statusOf(measures, "encryption-at-rest")).toBe("off");

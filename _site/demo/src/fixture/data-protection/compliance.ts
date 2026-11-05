@@ -186,7 +186,7 @@ const seededItems = (): PresetItem[] => [
     item(`admission.listener`, `admission`, `allow`, `hold`),
     item(`admission.webchat`, `admission`, `allow`, `hold`),
     item(`admission.issues`, `admission`, `hold`, `hold`),
-    item(`commandJudge`, `judge`, `on`, `on`),
+    item(`commandJudge`, `judge`, `off`, `on`),
 ];
 
 export const demoPresetItems = (): PresetItem[] =>

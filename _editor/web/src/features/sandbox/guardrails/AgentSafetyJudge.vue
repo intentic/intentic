@@ -24,7 +24,7 @@ const MODES = computed(() => [
     { label: t(`sandbox.agentSafetyJudge.on`), value: `on` },
 ]);
 
-const mode = computed(() => settings.value?.commandJudge ?? `on`);
+const mode = computed(() => settings.value?.commandJudge ?? `off`);
 
 // Resolved chain for role `safety-judge`; empty means no model set, judge falls back to the standing rule.
 const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(modelChoiceLabel));

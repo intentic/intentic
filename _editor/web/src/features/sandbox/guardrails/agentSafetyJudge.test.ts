@@ -80,7 +80,7 @@ const pill = (host: HTMLElement, label: string): HTMLElement =>
 // Reads the default off the schema instead of hardcoding it, so a schema change can't silently drift from the test.
 test("opens on the setting's own default", () => {
     const host = mount();
-    expect(SandboxSettingsSchema.parse({}).commandJudge).toBe(`on`);
+    expect(SandboxSettingsSchema.parse({}).commandJudge).toBe(`off`);
     expect(host.textContent).not.toContain(`The verdict decides`);
 });
 

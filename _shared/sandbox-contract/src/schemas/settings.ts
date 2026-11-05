@@ -671,7 +671,7 @@ export const SandboxSettingsSchema = z.object({
         .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
     // Command policy itself lives at .intentic/config/safety.md (edited by the Safety page), not here; this only says
     // whether the judge runs at all. Which model judges is the `safety-judge` job's setup (`roleSetups`), not a field here.
-    commandJudge: CommandJudgeModeSchema.default("on").describe(
+    commandJudge: CommandJudgeModeSchema.default("off").describe(
         "Whether a model reads your safety policy before a flagged command runs. Off judges nothing and asks about nothing; Watch judges everything and records it without ever interrupting you, which is how you find out what your policy actually does before you let it stop anything; On lets the verdict decide. Wiping a disk or deleting under /history asks at every setting — that rule is typed rather than judged, and cannot be turned off.",
     ),
     // Only whether a person is asked: where the install lands (the conversation's own copy, or the daemon's install lane
