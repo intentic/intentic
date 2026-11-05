@@ -41,6 +41,23 @@ const put = async (path: string, text: string): Promise<void> => {
 const lineSection = (...lines: string[]): string => [LEGACY_ADDED_HEADING, ``, LEGACY_ADDED_NOTE, ``, ...lines.map((line) => `- ${line}`), ``].join(`\n`);
 const trashed = async (roots: StateRoots): Promise<string[]> => (await readdir(join(roots.history, "trash"))).toSorted();
 
+test("a skipped card-line migration recognizes the previous shipped policy without replacing custom text", async () => {
+    const previous = DEFAULT_SAFETY_POLICY.replace("Treat every secret reference as a credential, including documentation-like text; decide by its destination, not its stated purpose.\n", "");
+    const roots = await volumes();
+    await put(policyPath(roots), `${previous}\n${lineSection("Local builds are fine.")}`);
+    await converge(roots);
+    expect(await readFile(policyPath(roots), "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") { return undefined; }
+        throw error;
+    })).toBeUndefined();
+    expect((await fileOwnerGrants(grantsPath(roots)).read()).commandPolicy.map(({ line }) => line)).toEqual(["Local builds are fine."]);
+
+    const custom = await volumes();
+    await put(policyPath(custom), `${previous}\nMy custom exception.\n\n${lineSection("Local builds are fine.")}`);
+    await converge(custom);
+    expect(await readFile(policyPath(custom), "utf8")).toContain("My custom exception.");
+});
+
 test("the lines accepted on cards become owner-wide grants, leave the owner's file, and the file as it stood is kept in the trash", async () => {
     const roots = await volumes();
     const owner = `## In this sandbox\n\nOrdinary work is fine.\n\n${lineSection(`Deleting build directories under /work is fine.`, `Pushing to a scratch branch is fine.`)}`;

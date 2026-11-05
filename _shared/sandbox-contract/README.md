@@ -82,6 +82,12 @@ flowchart LR
 - Who reaches a route is decided here once for both sides: `memberRefusal` in `src/protocol/member-reach.ts` reads a
   route's floor and a guest's list off its `RouteMeta`, the daemon's bearer middleware refuses with it, and the editor
   asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
+- The shipped safety policy treats every secret reference as a credential even in documentation-like text,
+  and judges its destination rather than its stated purpose. A policy with `custom: false` always returns the
+  current shipped text; an existing `safety.md` stays the owner's custom policy. This prose change alters no
+  stored document shape and needs no document conversion under `COMPATIBILITY.md`. The existing one-shot
+  card-line migration recognizes the prior shipped text too, so a sandbox that skipped it does not keep
+  that stock text as a custom policy; actual custom text remains untouched.
 - What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
   issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
   pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter

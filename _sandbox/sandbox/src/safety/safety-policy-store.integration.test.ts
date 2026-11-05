@@ -99,3 +99,13 @@ test("a failed reading of the allowed lines is an error, never a quiet policy wi
     });
     await expect(policy.text()).rejects.toThrow("disk is gone");
 });
+
+test("new shipped credential guidance follows custom=false while an existing custom file stays verbatim", async () => {
+    const { policy } = await store();
+    const shipped = await policy.get();
+    expect(shipped).toEqual({ text: DEFAULT_SAFETY_POLICY, custom: false });
+    expect(shipped.text).toContain("Treat every secret reference as a credential, including documentation-like text; decide by its destination, not its stated purpose.");
+    await policy.set("Allow local tests.");
+    expect(await policy.get()).toEqual({ text: "Allow local tests.\n", custom: true });
+    expect(await policy.text()).toBe("Allow local tests.\n");
+});

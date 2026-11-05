@@ -81,3 +81,8 @@ describe("COMMAND_RULE_CATALOG", () => {
         expect(tiers("sandbox")).not.toBe(tiers("device"));
     });
 });
+
+// A reference is substituted even when an agent presents it as an example in prose.
+test("the shipped policy judges secret references by destination, including documentation-like text", () => {
+    expect(DEFAULT_SAFETY_POLICY).toContain("Treat every secret reference as a credential, including documentation-like text; decide by its destination, not its stated purpose.");
+});

@@ -24,6 +24,9 @@ export interface CardLines {
     readonly rest: string;
 }
 
+// Recognize the shipped policy from before credential-reference guidance for sandboxes that skipped this step.
+const PREVIOUS_DEFAULT = DEFAULT_SAFETY_POLICY.replace("Treat every secret reference as a credential, including documentation-like text; decide by its destination, not its stated purpose.\n", "");
+
 const squeezed = (text: string): string => `${text.replace(/\n{3,}/gu, `\n\n`).trimEnd()}\n`;
 
 // Splits the card-added section off a policy; undefined when there is none or it holds no line.
@@ -77,7 +80,7 @@ export const safetyCardLinesStep = defineStep({
         writes.set(join(roots.history, `trash/safety-before-card-lines-${at}.md`), text);
         // A file that only ever held the shipped text plus those lines was never the owner's: it goes, so the shipped text
         // applies again and follows the release.
-        writes.set(policy, squeezed(taken.rest) === squeezed(DEFAULT_SAFETY_POLICY) ? undefined : taken.rest);
+        writes.set(policy, [DEFAULT_SAFETY_POLICY, PREVIOUS_DEFAULT].some((shipped) => squeezed(taken.rest) === squeezed(shipped)) ? undefined : taken.rest);
         return {
             changes: [
                 `carries ${taken.lines.length} line(s) accepted on permission cards from ${SAFETY_POLICY} into ${ownerGrantsDocument.path}`,
