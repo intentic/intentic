@@ -493,6 +493,33 @@ test("serves a machine whose last pull failed what that pull established, at onc
     expect((await devices(services))[0]?.report?.hostname).toBe("back");
 });
 
+// A loaded host lists its containers in 4-8 s against an 8 s deadline. One late listing used to wipe the containers it
+// last listed for a whole TTL, which took "Rebuild from checkout" back to its copyable command (device-listing.ts).
+test("a listing that misses the deadline keeps the containers the machine last listed", async () => {
+    jest.useFakeTimers();
+    let late = false;
+    const fleet = JSON.stringify([{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }]);
+    const { services, calls } = fakeServices("late-pc", async (call) => {
+        if (call.tool === "report") {
+            return report("late", { capturedAt: Date.now() });
+        }
+        if (late) {
+            throw new DOMException("no answer", "TimeoutError");
+        }
+        return answer(fleet);
+    });
+    expect((await devices(services))[0]?.sandboxes?.map((box) => box.slug)).toEqual(["work"]);
+
+    late = true;
+    jest.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await waitFor(() => expect(calls).toHaveLength(4));
+    const [row] = await devices(services);
+    expect(row?.sandboxes?.map((box) => box.slug)).toEqual(["work"]);
+    expect(row?.gap).toBeUndefined();
+    expect(readLog.lines.some((line) => line["device"] === "late-pc" && String(line["message"]).includes("answered late"))).toBe(true);
+});
+
 // The browser maps `hosts` to its Devices read, so a machine that answers after the reader stopped waiting is on
 // screen in a second instead of at the next ten-second poll. Silent on a routine refresh: news it already has.
 test("announces only a landing that changes what the view says", async () => {

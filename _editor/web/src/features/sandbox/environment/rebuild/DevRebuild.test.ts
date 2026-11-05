@@ -19,6 +19,8 @@ import { IconStub } from "@intentic/ui/testing";
 import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../../workbench/hub/hubWork";
 
 const hostId = ref<string | undefined>(`host-1`);
+// The device list's own read: answered unless a test holds it back.
+const devicesRead = ref<{ state: string }>({ state: `ready` });
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
 // doors and only the checkout's path picks between them.
 const askedAbout: (string | undefined)[] = [];
@@ -28,7 +30,7 @@ jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
         askedAbout.push(path());
         return hostId;
     },
-    useDevices: () => ({ devices: ref([]) }),
+    useDevices: () => ({ devices: ref([]), loaded: devicesRead }),
     runDeviceCommand,
 }));
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
@@ -138,6 +140,7 @@ afterEach(() => {
     // row.
     forgetHubWork();
     hostId.value = `host-1`;
+    devicesRead.value = { state: `ready` };
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -175,6 +178,16 @@ it(`renders rebuild command in fallback when device is absent`, () => {
     expect(el.textContent).toContain(`Rebuild command`);
     expect(el.textContent).toContain(`pnpm rebuild:sandbox`);
     expect(el.textContent).not.toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
+});
+
+// The device list not having answered yet says nothing about the machine: a loaded sandbox takes seconds over its first
+// read, and the command drawn for that wait made the offer flicker between a button and a paste.
+it(`waits on a busy button, not the command, while the device list is still being read`, () => {
+    hostId.value = undefined;
+    devicesRead.value = { state: `waiting` };
+    const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/radarsu/intentic` });
+    expect(el.textContent).not.toContain(`Rebuild command`);
+    expect(buttonSaying(`Rebuild from checkout`)?.disabled).toBe(true);
 });
 
 // THE OFFER IS A BUTTON, NOT A PARAGRAPH. This rebuild applies the waiting recipe too — it rebases the overlay onto

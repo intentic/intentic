@@ -10,7 +10,7 @@ import { useDevSwapWhenIdle } from "./useDevSwapWhenIdle";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
-import { useHostHolding } from "../../../../models/sandbox/devices/useDevices";
+import { useDevices, useHostHolding } from "../../../../models/sandbox/devices/useDevices";
 import { rebuildRunning, useDevRebuild } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
@@ -42,6 +42,11 @@ const hostId = useHostHolding(
     () => props.root,
 );
 const { run, elapsed, start, adopt, dismiss, hold, release, cancel } = useDevRebuild(props.slug);
+// No door yet because the device list has not answered yet, which is not the machine being unreachable: a page opened
+// on a loaded sandbox waits seconds for its first read, and drawing the copyable command for that wait is what made the
+// offer flicker between a button and a command. The button waits instead, drawn but busy.
+const { loaded: devicesRead } = useDevices({ poll: false });
+const readingDevices = computed(() => props.root !== undefined && devicesRead.value.state === `waiting`);
 
 // The card is drawn from the machine's log, not from having clicked the button: a rebuild started in a terminal, in
 // another tab, or by this tab before the restart wiped it all land here the same way.
@@ -382,6 +387,12 @@ const checkout = computed(() => {
                 </div>
             </ConfirmDialog>
         </template>
+
+        <div v-else-if="readingDevices" class="flex">
+            <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" tier="boring" :loading="true" :disabled="true">
+                <template #icon><Icon name="hammer" /></template>
+            </Button>
+        </div>
 
         <template v-else>
             <!-- Two different gaps, one fallback: no checkout recorded, or nobody here can reach the machine holding it. -->

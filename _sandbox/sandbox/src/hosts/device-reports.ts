@@ -1,5 +1,4 @@
 import { sleep, within } from "@intentic/base/async";
-import { errorMessage } from "@intentic/base/errors";
 import {
     type Device,
     type DeviceAgentFlow,
@@ -27,10 +26,9 @@ import { opt } from "../opt.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { createRepeatGate } from "../logs/repeat-gate.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
-import { sandboxesFromTool, unreadFromTool } from "./device-listing.js";
+import { sandboxesFromTool, unreadFromTool,type AnswerMemory,gapOf,keepLastAnswer,type LateHalves,lateReason,noteReading,type Reading } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
 // capability needed) and a `host` capability's pull (adds containers, never a mounted docker socket). The pull asks the
@@ -48,7 +46,7 @@ const PULL_TTL_MS = 30_000;
 // a flat 2.0 s p50, 2026-10-21). The landing announces itself (`worthAnnouncing`), so the view still catches up.
 const PULL_SETTLE_MS = 2_000;
 
-// Deadline on one reading, both halves together; a miss reads as offline.
+// Deadline on one reading, both halves together. A half that misses it keeps what the machine last said (device-listing.ts).
 const PULL_TIMEOUT_MS = 8_000;
 
 // Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching.
@@ -80,6 +78,8 @@ interface PullEntry {
     sentAt: number;
     /** How long the last reading took to land, which says whether waiting on the next one can pay. */
     took: number;
+    /** Each half's last real answer, what a late half is read as. */
+    answered: AnswerMemory;
 }
 
 const pulled = new Map<string, PullEntry>();
@@ -150,50 +150,37 @@ const refreshFacts = async (services: Services, id: string): Promise<void> => {
 // (LINK_STAMP_MS in the machine's device/config.ts), and the agent closes the dropped links on its next pass first.
 const LINKS_SETTLE_MS = 12_000;
 
-// Every failure reads as a named gap, not an absence. Report and fleet go out together under one deadline; the report
-// alone decides the gap, and the fleet answer survives either verdict — a card granting sandbox management and nothing
-// else lists its containers while refusing to describe the machine, and that list is what every "do it out there"
-// button is gated on.
-const pull = async (services: Services, id: string): Promise<PullResult> => {
+// Every failure reads as a named gap, not an absence. Report and fleet go out together under one deadline and settle
+// apart: the report alone decides the gap, and the fleet answer survives either verdict, a late report included — a
+// card granting sandbox management and nothing else lists its containers while refusing to describe the machine, and
+// that list is what every "do it out there" button is gated on.
+const pull = async (services: Services, id: string): Promise<Reading> => {
     const client = services.hostHub.client(id);
     if (client === undefined) {
-        return { gap: "offline" };
+        return { result: { gap: "offline" }, late: {} };
     }
     // One deadline over both calls: the reading is what has a budget, not either half of it.
     const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
+    const late: LateHalves = {};
     const [described, fleet] = await Promise.all([
-        describeMachine(client, signal),
-        callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
+        describeMachine(client, signal).catch((error: Error) => {
+            late.report = lateReason(error, PULL_TIMEOUT_MS);
+            return { gap: "offline" } as const;
+        }),
+        callTool(services, id, "list_sandboxes", {}, signal).catch((error: Error) => {
+            late.sandboxes = lateReason(error, PULL_TIMEOUT_MS);
+            return { text: "", refused: true };
+        }),
         refreshFacts(services, id),
     ]);
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
     const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
-    const unread = sandboxes === undefined ? unreadFromTool(fleet.text, fleet.refused) : undefined;
-    return { ...described, ...(sandboxes === undefined ? {} : { sandboxes }), ...(unread === undefined ? {} : { sandboxesUnread: unread }) };
-};
-
-const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
-
-// Every failed reading turned into `offline` (or another gap) and said why to nobody: a device shown asleep that was in
-// fact refusing, timing out or unreachable could not be told apart afterwards. One line per change of a device's gap
-// and its reason, the repeats folded into a count, and one line when it answers again.
-const readings = createRepeatGate();
-
-const noteReading = (services: Pick<Services, "logger">, id: string, result: PullResult, thrown: string | undefined): void => {
-    const gap = gapOf(result);
-    if (gap === undefined) {
-        const outage = readings.clear(id);
-        if (outage !== undefined) {
-            services.logger.info({ device: id, was: outage.state, repeated: outage.repeated }, `device reads: ${id} answering again`);
-        }
-        return;
-    }
-    const reason = thrown ?? (gap === "offline" ? "no connection to it" : gap === "scope-off" ? `its "Run commands" switch is off` : "its agent did not answer the report call");
-    const verdict = readings.check(id, `${gap}: ${reason}`);
-    if (verdict.log) {
-        services.logger.info({ device: id, gap, reason, repeated: verdict.repeated }, `device reads: ${id} read as ${gap} (${reason})`);
-    }
+    const unread = sandboxes === undefined && late.sandboxes === undefined ? unreadFromTool(fleet.text, fleet.refused) : undefined;
+    return {
+        result: { ...described, ...(sandboxes === undefined ? {} : { sandboxes }), ...(unread === undefined ? {} : { sandboxesUnread: unread }) },
+        late,
+    };
 };
 
 // Which containers the machine holds and whether each runs, as one comparable string; undefined when it did not list.
@@ -220,19 +207,19 @@ const worthAnnouncing = (before: { at: number; result: PullResult | undefined },
 const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
     const had = { at: entry.at, result: entry.result };
     const sentAt = Date.now();
-    let thrown: string | undefined;
     const inflight = services.perf
         .track("devices.pull", { id }, () => pull(services, id))
-        // Never rejects (an abandoned caller leaves nothing unhandled); a deadline miss reads as offline.
-        .catch((error: Error): PullResult => {
-            thrown = error instanceof DOMException && error.name === "TimeoutError" ? `no answer within ${PULL_TIMEOUT_MS / 1000} s` : errorMessage(error);
-            return { gap: "offline" };
+        // Never rejects (an abandoned caller leaves nothing unhandled); a pull that threw whole got no answer at all.
+        .catch((error: Error): Reading => {
+            const reason = lateReason(error, PULL_TIMEOUT_MS);
+            return { result: { gap: "offline" }, late: { report: reason, sandboxes: reason } };
         })
-        .then((result) => {
+        .then((reading) => {
             entry.at = Date.now();
+            const result = keepLastAnswer(entry.answered, reading, entry.at);
             entry.result = result;
             entry.took = entry.at - sentAt;
-            noteReading(services, id, result, thrown);
+            noteReading(services, id, result, reading.late.report ?? reading.late.sandboxes);
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
             }
@@ -252,7 +239,7 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
 // PULL_TIMEOUT_MS) and one held long enough to read as quiet (what is left of the refresh's PULL_SETTLE_MS, and only
 // when the machine's last reading landed inside it; then served anyway).
 const pullCached = async (services: Services, id: string): Promise<PullResult> => {
-    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined, sentAt: 0, took: 0 };
+    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined, sentAt: 0, took: 0, answered: {} };
     pulled.set(id, entry);
     const held = entry.result;
     if (held !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
