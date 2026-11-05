@@ -5,7 +5,8 @@ import { Button, Icon, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId, useTemplateRef } from "vue";
 import ConnectFlow from "../secrets/ConnectFlow.vue";
-import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
+import { elapsedWords, overdue } from "../../../components/progress/progress";
 import { useBusySince, useProgress } from "../../../components/progress/useProgress";
 
 // A provider's sign-in, inside its own panel in Sandbox ▸ Models, under the accounts it is adding to. Not a card of its
@@ -42,9 +43,17 @@ const heading = computed(() =>
         : t(`connect.connect.connecting`, { provider: name.value }),
 );
 
-// How long the press has been on its way to the sandbox, under "Opening the sign-in…": a sandbox that is busy or still
-// waking answers late, and a line that never changed read as a press that went nowhere.
-const startWait = useProgress(useBusySince(() => phase === `starting`));
+// How long the press has been on its way to the sandbox, on the same line as the spinner: a sandbox that is busy or still
+// waking answers late, and a line that never changed read as a press that went nowhere. Three stacked lines (heading,
+// spinner sentence, a detached "4s so far") said nothing about what comes next; the wait is now one block: the provider's
+// mark ringed by the spinner, what is happening with its time, and what the reader will do next (or, once it runs long,
+// why it is slow).
+const startWait = useProgress(
+    useBusySince(() => phase === `starting`),
+    { expectedMs: 8_000 },
+);
+const startElapsed = computed(() => elapsedWords(startWait.value));
+const startSlow = computed(() => startWait.value !== undefined && overdue(startWait.value));
 
 const headingId = useId();
 // Where ConnectFlow puts the step's own button: in the heading's row, beside Cancel.
@@ -93,10 +102,23 @@ defineExpose({ reveal });
             </button>
         </div>
 
-        <template v-if="phase === `starting`">
-            <p class="flex items-center gap-1.5 text-xs text-subtle" role="status"><Icon name="spinner" spin />{{ t(`connect.connectAttempt.opening`) }}</p>
-            <ProgressMeter v-if="startWait" :progress="startWait" />
-        </template>
+        <div v-if="phase === `starting`" class="flex items-center gap-3 py-1" role="status">
+            <!-- The provider's mark inside a turning ring: whose sign-in is being fetched, and that it is moving. -->
+            <span class="relative flex size-9 shrink-0 items-center justify-center text-base text-content" aria-hidden="true">
+                <span class="absolute inset-0 rounded-full border-2 border-line"></span>
+                <span class="absolute inset-0 rounded-full border-2 border-transparent border-t-info motion-safe:animate-spin"></span>
+                <ProviderLogo :provider="provider" />
+            </span>
+            <div class="flex min-w-0 flex-col gap-0.5">
+                <p class="text-sm text-content">
+                    {{ t(`connect.connectAttempt.opening`) }}
+                    <span v-if="startElapsed" class="ml-1 text-xs tabular-nums text-subtle" aria-hidden="true">{{ startElapsed }}</span>
+                </p>
+                <p class="text-xs" :class="startSlow ? `text-warning` : `text-muted`">
+                    {{ startSlow ? t(`connect.connectAttempt.openingSlow`) : t(`connect.connectAttempt.openingNext`, { provider: name }) }}
+                </p>
+            </div>
+        </div>
         <p v-else-if="phase === `failed`" class="whitespace-pre-line break-words text-xs text-muted">{{ problem }}</p>
         <template v-else>
             <!-- A refused step stays beside the steps it refused, not in a banner over the page. -->
