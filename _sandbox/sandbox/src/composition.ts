@@ -123,7 +123,7 @@ import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { authRootOf, statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
-import { connectorHostDefaults } from "./capabilities/contributions.js";
+import { secretHostSources } from "./capabilities/secret-host-sources.js";
 import { createSecretsSlice, principalsOfAuth, type SecretsSlice } from "./secrets/secrets-slice.js";
 import { accessRosterOf } from "./access/invariant.js";
 import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
@@ -659,7 +659,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         releasesChanged: grantsChanged,
         conversationGrants,
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
-        connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
+        ...secretHostSources({ workspace, files: workspaceSlice.files, capabilities, config }, capabilitiesParts),
         ...principalsOfAuth(authSlice, orgPolicy),
         conversationEntry: agents.entry,
         warn: (message, error) => logger.warn({ err: error }, message),

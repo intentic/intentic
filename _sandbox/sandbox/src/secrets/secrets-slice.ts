@@ -30,14 +30,14 @@ import { type CredentialGatesStore, fileCredentialGates } from "./credential-gat
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
 import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./guards/host-guards.js";
-import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
+import { type SecretRegistry, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, notifyingSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
 
 // Secret references, their uses, the named-approver gates on spending them, and the hosts each may be sent to.
 export interface SecretsSlice {
     // Every credential under a stable name; read by the agent's masking and the exits resolving a reference back.
-    readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
+    readonly secretRegistry: SecretRegistry;
     // Use ledger those exits feed, one row per resolved reference, joined onto the secrets inventory as last-used.
     readonly secretUses: SecretUsesStore;
     // Which credentials need a person's click: policy is owner-written, releases kept in the auth root, gate the shared
@@ -63,7 +63,11 @@ export interface SecretsSlice {
     // Each secret's host guard, the second half of its approval beside the named approvers: the owner's settings,
     // stored beside the gate policy, and the guards in force once a connector's own hosts are laid under them.
     readonly secretHostGuards: SecretHostGuardsStore;
-    readonly hostGuards: () => Promise<readonly SecretHostGuard[]>;
+    readonly hostGuards: {
+        (): Promise<readonly SecretHostGuard[]>;
+        // Guard facts from the unhydrated capability manifest, never the credential vault.
+        readonly metadata?: () => Promise<readonly SecretHostGuard[]>;
+    };
     // The check every exit makes before a host-guarded value leaves, sharing the gate's card seams.
     readonly hostGuardGate: HostGuardGate;
     // The keyrings on the owner's computers (device/): the link that reads the pointers each shares here and asks for a
@@ -98,6 +102,7 @@ export interface SecretsDeps {
     readonly conversationGrants: Pick<ConversationGrants, "of" | "add">;
     // The hosts each connected capability's connector declares for its credential (host-guards.ts connectorHostDefaults).
     readonly connectorHosts: () => Promise<ReadonlyMap<string, readonly string[]>>;
+    readonly connectorHostMetadata?: () => Promise<ReadonlyMap<string, readonly string[]>>;
     // Who may loosen a guard on a card the agent raised, and the one person no reach ever limits.
     readonly ownerEmail: () => Promise<string | undefined>;
     // The roster each member's reach is written on, and the conversation records that name who a conversation works for.
@@ -128,6 +133,21 @@ export const principalsOfAuth = (
     principals: { services: auth.services, profiles: auth.accessProfiles, org, connectors: auth.accountConnectors },
 });
 
+// Read the owner settings afresh on both paths; only enforcement may hydrate connector credentials.
+const hostGuardReaders = (
+    secretHostGuards: Pick<SecretHostGuardsStore, "list">,
+    connectorHosts: SecretsDeps["connectorHosts"],
+    connectorHostMetadata: NonNullable<SecretsDeps["connectorHostMetadata"]>,
+) => Object.assign(async (): Promise<readonly SecretHostGuard[]> => {
+        const [stored, defaults] = await Promise.all([secretHostGuards.list(), connectorHosts()]);
+        return effectiveHostGuards(stored, defaults);
+    }, {
+        metadata: async (): Promise<readonly SecretHostGuard[]> => {
+            const [stored, defaults] = await Promise.all([secretHostGuards.list(), connectorHostMetadata()]);
+            return effectiveHostGuards(stored, defaults);
+        },
+    });
+
 // Builds the secrets slice.
 export const createSecretsSlice = ({
     workspace,
@@ -138,6 +158,7 @@ export const createSecretsSlice = ({
     releasesChanged,
     conversationGrants,
     connectorHosts,
+    connectorHostMetadata = async () => new Map(),
     ownerEmail,
     members,
     conversationEntry,
@@ -165,10 +186,7 @@ export const createSecretsSlice = ({
     const toolCeiling = createConversationCeiling(chainDeps);
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
-    const hostGuards = async (): Promise<readonly SecretHostGuard[]> => {
-        const [stored, defaults] = await Promise.all([secretHostGuards.list(), connectorHosts()]);
-        return effectiveHostGuards(stored, defaults);
-    };
+    const hostGuards = hostGuardReaders(secretHostGuards, connectorHosts, connectorHostMetadata);
     const keyrings = createKeyringParts({ authRoot, hub: deviceHub, publicUrl, logger });
     const secretRegistry = secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets, {
         copies: () => keyrings.keyringCopies.all(),

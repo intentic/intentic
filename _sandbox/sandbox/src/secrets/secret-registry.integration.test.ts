@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
-import { hasSecretReferences, resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
+import { hasSecretReferences, resolveSecretReferences, secretReference, secretRegistryOf, type KeptFromKeyrings } from "./secret-registry.js";
 import { fileSandboxSecrets } from "./sandbox-secrets.js";
 import { maskTargets } from "../agent/tools/agent-redaction.js";
 
@@ -12,7 +12,7 @@ import { maskTargets } from "../agent/tools/agent-redaction.js";
 // vault); pins that the registry unions them, each value keeps its reference name, and a store that fails fails the
 // read: its values could not be masked.
 
-const withStores = () => {
+const withStores = (keyrings?: KeptFromKeyrings) => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
     const repo = join(root, "desired-state");
     const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
@@ -21,8 +21,36 @@ const withStores = () => {
         await writeFile(join(repo, file), body);
     };
     const sandbox = fileSandboxSecrets(join(root, "auth", "sandbox-secrets.json"));
-    return { vault, write, sandbox, registry: secretRegistryOf(vault, () => repo, sandbox) };
+    return { vault, write, sandbox, registry: secretRegistryOf(vault, () => repo, sandbox, keyrings) };
 };
+
+test("names are a value-free projection of the last successful registry read", async () => {
+    const { sandbox, registry, write } = withStores();
+    expect(registry.names?.()).toBeUndefined();
+    await sandbox.set("API_TOKEN", "synthetic-fixture");
+    await registry();
+    expect(registry.names?.()).toEqual(["API_TOKEN"]);
+    const refreshing = registry();
+    expect(registry.names?.()).toEqual(["API_TOKEN"]);
+    await refreshing;
+    await write(SECRETS_FILE, "invalid JSON");
+    await expect(registry()).rejects.toThrow();
+    expect(registry.names?.()).toBeUndefined();
+});
+
+test("the names projection excludes device releases but retains sandbox-held and copied names", async () => {
+    const { registry, sandbox } = withStores({
+        copies: async () => ({ COPIED_TOKEN: "synthetic-copy" }),
+        released: () => ({ DEVICE_TOKEN: "synthetic-release" }),
+    });
+    await sandbox.set("API_TOKEN", "synthetic-local");
+    expect((await registry()).map(({ name }) => name)).toEqual(["API_TOKEN", "COPIED_TOKEN", "DEVICE_TOKEN"]);
+    expect(registry.names?.()).toEqual(["API_TOKEN", "COPIED_TOKEN"]);
+    // A local value of the same name takes precedence and should use sandbox guard metadata.
+    await sandbox.set("DEVICE_TOKEN", "synthetic-local-override");
+    await registry();
+    expect(registry.names?.()).toContain("DEVICE_TOKEN");
+});
 
 test("the registry is the union of all three stores, each value under its name", async () => {
     const { vault, write, registry } = withStores();

@@ -18,11 +18,6 @@ const cards = parkedCards(memoryFleet().conversations);
 
 const FORCE_PUSH = "git push --force origin main";
 
-// A judge that always answers the same way, so tests cover the gate's pipeline, not model accuracy.
-const always =
-    (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGuardOptions["judge"] =>
-    async () => ({ decision, sentence, ...(policyLine === undefined ? {} : { policyLine }) });
-
 interface Harness {
     readonly run: (command: unknown) => Promise<SyncHookJSONOutput>;
     // The same Bash call from a shell standing in `cwd`, as Claude Code's hook input names it.
@@ -80,10 +75,10 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
         ...(judge === undefined
             ? {}
             : {
-                  judge: (program, facts, signal) => {
+                  judge: Object.assign<NonNullable<CommandGuardOptions["judge"]>, object>((program, facts, signal) => {
                       seen.push({ program, facts });
                       return judge(program, facts, signal);
-                  },
+                  }, judge.secretFacts === undefined ? {} : { secretFacts: judge.secretFacts }),
               }),
     }).PreToolUse;
     const hookFor = (toolName: string): ((input: unknown, id: undefined, context: { signal: AbortSignal }) => Promise<unknown>) => {
@@ -133,6 +128,35 @@ const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve
 
 // Log rows minus `at` (a clock reading, not a decision), so tests can match an entire row exactly.
 const rowsOf = (logged: readonly SafetyLogEntry[]): Omit<SafetyLogEntry, "at">[] => logged.map(({ at: _at, ...row }) => row);
+
+// A judge that always answers the same way, so tests cover the gate's pipeline, not model accuracy.
+const always =
+    (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGuardOptions["judge"] =>
+    async () => ({ decision, sentence, ...(policyLine === undefined ? {} : { policyLine }) });
+
+test("repeated secret commands are re-judged as metadata can change", async () => {
+    let calls = 0;
+    const gate = harness({ judge: Object.assign(async () => ({ decision: ++calls === 1 ? "allow" as const : "refuse" as const, sentence: "The guard changed." }), { secretFacts: async () => [`- Guard version: ${calls}`] }) });
+    const program = `echo '{{secret:API_TOKEN}}'`;
+    expect((await gate.run(program)).hookSpecificOutput).toBeUndefined();
+    expect((await gate.run(program)).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+    expect(calls).toBe(2);
+});
+
+test("concurrent and completed identical secret checks share the judgment", async () => {
+    let release = (): void => {};
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const judge = jest.fn(async () => { await waiting; return { decision: "allow" as const, sentence: "Only reads it." }; });
+    const gate = harness({ judge });
+    const first = gate.run("echo {{secret:API_TOKEN}}");
+    const second = gate.run("echo {{secret:API_TOKEN}}");
+    await settled();
+    expect(judge).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.all([first, second]);
+    await gate.run("echo {{secret:API_TOKEN}}");
+    expect(judge).toHaveBeenCalledTimes(1);
+});
 
 // Triage + judge fields most FORCE_PUSH tests share, before the verdict is added.
 const FORCE_PUSH_ROW = { program: FORCE_PUSH, classes: ["git.destructive"], sentence: `It does the thing.` };

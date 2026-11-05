@@ -245,6 +245,9 @@ flowchart LR
   the owner's own `.intentic/config/safety.md` and then the lines a person allowed with a card's Always
   (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
   Sandbox-wide permissions on Access ▸ Allowed and are never shipped in a definition export.
+  Secret-reference facts tell sandbox and device judges that substitution happens before execution, even in
+  documentation-like text, and show value-free metadata about references and destinations. This helps the judge
+  assess where credentials would go; no credential values or approver identities are included.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
   A manual Fix can start before the run finishes. Its start shares the automatic handover's branch lock and records
   the job IDs in its evidence, so completion and restart replay deliver only additional failures; a refused or busy

@@ -39,6 +39,17 @@ const PROGRAMS: ReadonlyMap<string, ProgramReader> = new Map<string, ProgramRead
 // `R=https://host;` reads as `host`.
 const URL_ANYWHERE = /[a-z][a-z0-9+.-]*:\/\/[^\s'"`);|<>]*/gi;
 
+// Syntactically named hosts, even when the destination reader cannot account for a script or heredoc.
+// This is evidence for the judge, never proof that these are all destinations.
+export const namedCommandHosts = (command: string): readonly string[] => {
+    const text = command.replace(REFERENCE, STAND_IN);
+    const parsed = commandDestination(command);
+    return [...new Set([
+        ...(parsed.certain ? parsed.hosts : []),
+        ...Array.from(text.matchAll(URL_ANYWHERE), (match) => urlHost(match[0])).filter((host): host is string => host !== undefined),
+    ])];
+};
+
 // The program one stage runs and what its arguments reach, or why neither can be trusted.
 const programReach = (words: readonly Word[]): Reach => {
     const [program, ...args] = words;

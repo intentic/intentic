@@ -1,4 +1,12 @@
-import { commandDestination, pageDestination, SCRIPT_DESTINATION } from "./secret-destinations.js";
+import { commandDestination, namedCommandHosts, pageDestination, SCRIPT_DESTINATION } from "./secret-destinations.js";
+
+test("named hosts remain visible when a heredoc or script makes destinations unreadable", () => {
+    const command = `python - <<'EOF'\n# https://api.example.com\nprint('{{secret:API_TOKEN}}')\nEOF`;
+    expect(commandDestination(command).certain).toBe(false);
+    expect(namedCommandHosts(command)).toEqual(["api.example.com"]);
+    expect(namedCommandHosts(`curl https://{{secret:API_TOKEN}}/`)).toEqual([]);
+    expect(namedCommandHosts(`echo 'ordinary text'`)).toEqual([]);
+});
 
 // Where a use would send a secret, read from the text before it runs. A line is trusted when every stage of it is one
 // the reader can account for — a program whose destination is in its arguments (curl, wget, git), a bare literal
