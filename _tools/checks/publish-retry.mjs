@@ -218,11 +218,19 @@ rm -f "$landed"
                 "a blob collected out from under the unpack",
                 "failed to extract layer sha256:278bf3cda023: failed to get reader from content store: content digest sha256:ceeb23b44c46: not found",
             ],
+            [
+                "a downloaded blob whose ingest file went missing before its commit, which 1.398.1's core half printed",
+                'failed commit on ref "attestation-sha256:453c942e3b2e786bb5958b6ae54fbc8c2dac785516b4edf3589ccc52006d7f05": commit failed: rename /var/lib/containerd/io.containerd.content.v1.content/ingest/6423e00bf5d5f47c7e8c4096353ce9f7ed225626e5a1853f72092441f14059e2/data /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/453c942e3b2e786bb5958b6ae54fbc8c2dac785516b4edf3589ccc52006d7f05: no such file or directory',
+            ],
         ],
         // A pull is not re-run for anything re-running cannot fix: a disk with no room for 5 GB stays that way, and
         // every verdict the registry reaches is registry-retry.sh's to judge one layer in.
         failAtOnce: [
             ["a full disk", "failed to register layer: write /var/lib/docker/overlay2/2f0c/merged/opt/sandbox/node_modules/a: no space left on device"],
+            [
+                "a full disk at the same commit",
+                'failed commit on ref "layer-sha256:453c942e3b2e": commit failed: write /var/lib/containerd/io.containerd.content.v1.content/ingest/6423e00bf5d5/data: no space left on device',
+            ],
             // The image's own fault, which 1.338.0's arm64 smoke printed: no fresh unpack registers a 126th layer.
             ["an image deeper than the layer store takes", "failed to register layer: max depth exceeded"],
             [
