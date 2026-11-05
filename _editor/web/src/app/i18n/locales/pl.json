@@ -525,7 +525,6 @@
             "findSomethingToImprove": "Znajdź coś do poprawy",
             "foundById": "{title} ma to id. Naciśnij Enter, aby go otworzyć.",
             "finishedAgentsLandWork": "Skończone agenty scalają swoją pracę do Twojej przestrzeni roboczej.",
-            "hide": "Ukryj",
             "ignoreCase": "Ignoruj wielkość liter",
             "ignoreOuterSpaces": "Szukaj bez spacji na końcach",
             "inArchive": "W archiwum",
@@ -548,7 +547,6 @@
             "openArchive": "Otwórz archiwum ({archiveSize})",
             "reviewMyChanges": "Przejrzyj moje zmiany",
             "reviewMyUncommittedChanges": "Przejrzyj moje niezacommitowane zmiany i oznacz wszystko ryzykowne, zanim zrobię commit.",
-            "show": "Pokaż",
             "suggestThreeSmallSafe": "Zaproponuj trzy małe, bezpieczne ulepszenia tej bazy kodu. Poczekaj, aż wybiorę jedno, zanim cokolwiek zmienisz.",
             "synthesize": "Podsumuj",
             "thisAgent": "Ten agent",
@@ -5211,7 +5209,9 @@
         },
         "connectAttempt": {
             "didntConnect": "Nie udało się podłączyć: {provider}",
-            "opening": "Otwieranie logowania…"
+            "opening": "Przygotowuję stronę logowania",
+            "openingNext": "Potem zalogujesz się na stronie {provider}, w nowej karcie.",
+            "openingSlow": "Trwa dłużej niż zwykle: piaskownica może być zajęta albo jeszcze się uruchamia."
         },
         "localModelLane": {
             "bestHere": "Najlepszy wybór",

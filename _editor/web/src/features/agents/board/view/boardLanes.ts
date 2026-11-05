@@ -185,16 +185,14 @@ export const useBoardLanes = (host: LanesHost) => {
     const beyondCount = computed(() => archivedHits.value.length + filter.sessionMatches.value.length);
     // Not while the archive is the Finished column, since those cards are on screen there already.
     const beyondVisible = computed(() => filter.active.value && !view.value.archive && beyondCount.value > 0);
-    const beyondLabel = computed(() => {
-        const parts: string[] = [];
-        if (archivedHits.value.length > 0) {
-            parts.push(t(`agents.boardLanes.inArchive`, { count: archivedHits.value.length }));
-        }
-        if (filter.sessionMatches.value.length > 0) {
-            parts.push(t(`agents.boardLanes.inEarlierChats`, { count: filter.sessionMatches.value.length }));
-        }
-        return parts.join(` · `);
-    });
+    const beyondLabel = computed(() =>
+        [
+            archivedHits.value.length > 0 ? t(`agents.boardLanes.inArchive`, { count: archivedHits.value.length }) : ``,
+            filter.sessionMatches.value.length > 0 ? t(`agents.boardLanes.inEarlierChats`, { count: filter.sessionMatches.value.length }) : ``,
+        ]
+            .filter((part) => part !== ``)
+            .join(` · `),
+    );
     // What is on screen: a run's steps count once, as its row, and a held wake counts, so a hold alone is not an empty board.
     const total = computed(
         () =>
@@ -216,6 +214,7 @@ export const useBoardLanes = (host: LanesHost) => {
     const matchTally = computed(() =>
         filter.partial.value ? t(`agents.boardLanes.searchingRest`) : t(`agents.boardLanes.keptOfTotal`, { kept: kept.value, total: total.value }),
     );
+    const beyondOnly = computed(() => beyondVisible.value && !filter.partial.value && kept.value === 0);
     // The filter's own empty state (cards exist, none matched), never while its answer is still partial.
     const noMatches = computed(
         () => filter.active.value && !filter.partial.value && !view.value.archive && kept.value === 0 && beyondCount.value === 0,
@@ -248,6 +247,7 @@ export const useBoardLanes = (host: LanesHost) => {
         archivedHits,
         beyondVisible,
         beyondLabel,
+        beyondOnly,
         matchTally,
         noMatches,
         clearable,

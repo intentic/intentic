@@ -525,7 +525,6 @@
             "findSomethingToImprove": "Etwas finden, das sich verbessern lässt",
             "foundById": "{title} hat diese ID. Drücken Sie die Eingabetaste, um ihn zu öffnen.",
             "finishedAgentsLandWork": "Fertige Agenten landen ihre Arbeit in Ihrem Workspace.",
-            "hide": "Ausblenden",
             "ignoreCase": "Groß-/Kleinschreibung ignorieren",
             "ignoreOuterSpaces": "Ohne die Leerzeichen am Rand suchen",
             "inArchive": "Im Archiv",
@@ -548,7 +547,6 @@
             "openArchive": "Archiv öffnen ({archiveSize})",
             "reviewMyChanges": "Meine Änderungen durchsehen",
             "reviewMyUncommittedChanges": "Sieh meine nicht committeten Änderungen durch und markiere alles Riskante, bevor ich sie committe.",
-            "show": "Zeigen",
             "suggestThreeSmallSafe": "Schlage drei kleine, sichere Verbesserungen an dieser Codebasis vor. Warte, bis ich eine gewählt habe, bevor du etwas änderst.",
             "synthesize": "Zusammenführen",
             "thisAgent": "Dieser Agent",
@@ -5211,7 +5209,9 @@
         },
         "connectAttempt": {
             "didntConnect": "{provider} wurde nicht verbunden",
-            "opening": "Anmeldung wird geöffnet…"
+            "opening": "Anmeldeseite wird vorbereitet",
+            "openingNext": "Danach meldest du dich in einem neuen Tab auf der Seite von {provider} an.",
+            "openingSlow": "Dauert länger als üblich: Die Sandbox ist vielleicht ausgelastet oder startet noch."
         },
         "localModelLane": {
             "bestHere": "Beste Wahl",

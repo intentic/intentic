@@ -525,7 +525,6 @@
             "findSomethingToImprove": "Find something to improve",
             "foundById": "{title} has that id. Press Enter to open it.",
             "finishedAgentsLandWork": "Finished agents land their work in your workspace.",
-            "hide": "Hide",
             "ignoreCase": "Ignore case",
             "ignoreOuterSpaces": "Search without the spaces at the ends",
             "inArchive": "In the archive",
@@ -548,7 +547,6 @@
             "openArchive": "Open the archive ({archiveSize})",
             "reviewMyChanges": "Review my changes",
             "reviewMyUncommittedChanges": "Review my uncommitted changes and flag anything risky before I commit them.",
-            "show": "Show",
             "suggestThreeSmallSafe": "Suggest three small, safe improvements to this codebase. Wait for me to choose one before you change anything.",
             "synthesize": "Synthesize",
             "thisAgent": "This agent",
@@ -5211,7 +5209,9 @@
         },
         "connectAttempt": {
             "didntConnect": "{provider} didn't connect",
-            "opening": "Opening the sign-in…"
+            "opening": "Getting the sign-in page ready",
+            "openingNext": "Next you'll sign in on {provider}'s own page, in a new tab.",
+            "openingSlow": "Taking longer than usual: the sandbox may be busy or still waking up."
         },
         "localModelLane": {
             "bestHere": "Best fit",

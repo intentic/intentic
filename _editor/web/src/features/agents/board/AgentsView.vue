@@ -9,7 +9,6 @@ import {
     SearchBar,
     SegmentedControl,
     SwipeRow,
-    timeAgo,
     toneWash,
     ui,
     useDevice,
@@ -42,8 +41,8 @@ import { openRunInChat, pointAtChat } from "../../../models/fleet/openRun";
 import { summonChat } from "../../../models/conversations/run/summon";
 import { chatStrip } from "../../../models/conversations/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
-import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
+import BeyondResults from "./BeyondResults.vue";
 import { cardSwipeAction, cardSwipeOf } from "./cards/cardSwipe";
 import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
 import LaneSkeleton from "./cards/LaneSkeleton.vue";
@@ -133,7 +132,14 @@ const waiting = computed(() => !agents.rosterKnown.value && connection.value.pha
 const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId, waiting });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
 const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
-const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, first } = lanes;
+const { beyondVisible, beyondLabel, beyondOnly, matchTally, noMatches, clearable, first } = lanes;
+// A restored hit lands on the board and so ends `beyondOnly`; the list the reader is going through stays open rather than folding under them.
+const restoreFound = (agent: FleetAgent): void => {
+    if (beyondOnly.value) {
+        move({ kind: `unfold` });
+    }
+    void restore([agent.id]);
+};
 // What opens and shuts the trays under the cards (ChildRows' `shown`): the ring, the panes beside it, a subagent's
 // transcript on screen, one of Active's groups folded. A render that moves any of it is one the lanes' motion measures across.
 const folds = (): string => `${highlightId.value}|${chatStrip.value.panes.join(`,`)}|${subagentShown.value?.id}|${lanes.activeFolded.value}`;
@@ -605,71 +611,27 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <NoMatchesNote v-if="noMatches" v-model:query="query" v-model:match-case="matchCase" />
         </div>
         <!-- What the query found off the board: the Finished window and the archive both hide agents the filter would otherwise miss entirely. -->
-        <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2" :class="narrow ? '' : 'lg:px-4'">
-            <button
-                type="button"
-                class="flex w-full shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"
-                :aria-expanded="view.beyond"
-                @click="move({ kind: 'beyond' })"
-            >
-                <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
-                <span class="shrink-0 font-medium text-link">{{ view.beyond ? t(`agents.agentsView.hide`) : t(`agents.agentsView.show`) }}</span>
-                <Icon :name="view.beyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
-            </button>
-            <!-- Padded by the found card's halo (a 2px outline 2px out), which the scroll box would otherwise clip. -->
-            <div v-if="view.beyond" class="-mx-1 mt-2 flex min-h-0 flex-col gap-3 overflow-auto px-1 pb-1">
-                <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-3.5">
-                    <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" class="px-1" />
-                    <!-- Archived agents retain the branch, diff, and transcript actions. -->
-                    <div class="grid gap-3.5" :class="narrow ? '' : paired ? 'grid-cols-2 items-start lg:gap-4.5' : 'grid-cols-3 items-start lg:gap-4.5'">
-                        <AgentCard
-                            v-for="agent in archivedHits"
-                            :key="agent.id"
-                            :agent="agent"
-                            :dense="narrow"
-                            :pending="pendingFor(agent)"
-                            :selected="ringed(agent.id)"
-                            :still="agent.id !== highlightId"
-                            :match="snippetOf(agent)"
-                            :id-match="idMatchOf(agent)"
-                            :query="needle"
-                            :match-case="matchCase"
-                            @open="(event) => focusAgent(agent, event)"
-                            @review="drillIn(agent)"
-                            @changes="reviewAgent(agent)"
-                            @enter="enterAgent(agent)"
-                            @restore="restore([agent.id])"
-                            @unwatch="unwatchNow(agent.id)"
-                            @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
-                            menus
-                            @menu="(event, presses) => openCardMenu(agent, event, presses)"
-                        />
-                    </div>
-                </section>
-                <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
-                    <LaneHeader :label="t(`agents.agentsView.inEarlierChats`)" icon="history" class="px-1" />
-                    <!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
-                    <button
-                        v-for="session in sessionMatches"
-                        :key="session.id"
-                        type="button"
-                        class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
-                        @click="openSession(session.id)"
-                    >
-                        <span class="truncate text-xs text-content">{{ session.title }}</span>
-                        <MatchLine
-                            v-if="session.snippet !== undefined"
-                            :snippet="session.snippet"
-                            :needle="needle"
-                            :match-case="matchCase"
-                            class="line-clamp-2 text-2xs text-muted"
-                        />
-                        <span class="text-2xs text-subtle">{{ timeAgo(session.updatedAt, { days: true }) }}</span>
-                    </button>
-                </section>
-            </div>
-        </div>
+        <BeyondResults
+            v-if="beyondVisible"
+            :agents="archivedHits"
+            :sessions="sessionMatches"
+            :label="beyondLabel"
+            :open="view.beyond || beyondOnly"
+            :fill="beyondOnly"
+            :narrow="narrow"
+            :needle="needle"
+            :match-case="matchCase"
+            :snippet-of="snippetOf"
+            :id-match-of="idMatchOf"
+            :ringed="ringed"
+            :busy="(agent) => pendingFor(agent) !== undefined"
+            @toggle="move({ kind: 'beyond' })"
+            @open="(agent, event) => focusAgent(agent, event)"
+            @changes="reviewAgent"
+            @restore="restoreFound"
+            @menu="(agent, event) => openCardMenu(agent, event, {})"
+            @open-session="openSession"
+        />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"
