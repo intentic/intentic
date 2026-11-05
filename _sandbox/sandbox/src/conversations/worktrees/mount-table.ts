@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
 import type { WarmMount } from "./cargo-warm.js";
 import type { IsolationPlan } from "./isolation.js";
-import { OVERLAY_FS_NAME, overlayOptions } from "./overlay-layers.js";
+import { OVERLAY_FS_NAME, overlayOptions } from "./layers/overlay-layers.js";
 
 // An isolated turn's mount table: what the namespace mounts, in order, spelled as fstab(5) reads it, and the mount
 // points it needs on disk first. Pure: isolation.ts prepares the disk and starts the holder that mounts it.

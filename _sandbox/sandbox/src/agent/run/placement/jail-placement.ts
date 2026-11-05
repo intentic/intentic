@@ -4,14 +4,13 @@ import { join } from "node:path";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../../../composition.js";
 import { sealJailWanted } from "../../../conversations/seal/seal-jail.js";
-import { startAnchor, type TurnPlacement } from "../../../conversations/worktrees/isolation.js";
+import { startAnchor, type TurnPlacement,type AnchorOptions } from "../../../conversations/worktrees/isolation.js";
 import { jailPlanOf, peopleShellArgs } from "../../../conversations/worktrees/turn-sandbox.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import { enterJailStore, leaveJailStore } from "../../../sessions/jail-store.js";
 import { armShellJail, disarmShellJail, shellJailFiles } from "../../../terminal/shell-jail.js";
 import { gitsRoot } from "../../../workspace/layout/git-dir-owners.js";
 import { opt } from "../../../opt.js";
-import { retryNote } from "./setup-refusal.js";
 
 /* THE JAIL PRIVATE CONVERSATIONS PUT EVERY TURN IN (2026-11-04). While the house rule lets a conversation be private, or
    one still is (conversations/seal/seal-jail.ts), a turn that would run as root over the shared tree, in a worktree of
@@ -87,6 +86,7 @@ export const jailedPlacementOf = async (
     input: RoutedTurn,
     localCwd: string,
     sshSocket: string | undefined,
+    notes: AnchorOptions,
 ): Promise<TurnPlacement | { readonly refused: string } | undefined> => {
     const decision = await jailDecision({ wanted: () => sealJailWanted(services), sandboxAvailable: () => services.turnIsolation.sandboxAvailable() }, input);
     if ("refused" in decision) {
@@ -104,5 +104,5 @@ export const jailedPlacementOf = async (
     const sessions = await jailStoreOf(services, input);
     const base = await services.turnIsolation.planFor(localCwd, undefined);
     const plan = jailPlanOf(base, sessions, { gits: gitsRoot(services.config.historyRoot), ...opt("sshSocket", sshSocket) });
-    return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
+    return { plan, anchor: await startAnchor(plan, notes) };
 };

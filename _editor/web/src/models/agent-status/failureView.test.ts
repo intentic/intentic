@@ -46,6 +46,22 @@ describe(`a failure, as one line`, () => {
         expect(failureView({ message: own, error: `trial-unavailable`, own: true })).toEqual({ line: own, ends: true });
     });
 
+    // The sentence a broken copy of the workspace is refused with carries the namespace holder's own error after it
+    // (setup-refusal.ts): the line is this build's, in the reader's language, and all the sandbox said is the details.
+    it(`says a broken copy of the workspace in this build's words, the sandbox's sentence and its holder's error behind it`, async () => {
+        const said = `This conversation's copy of the workspace could not be set up, and setting it up again did not help. Nothing ran, and sending again will fail the same way: continue in a new conversation, which gets a copy of its own. (namespace setup exited 1: bwrap: Can't make overlay mount on /newroot/work: Invalid argument)`;
+        expect(failureView({ message: said, error: `workspace-broken`, own: true })).toEqual({
+            line: `This conversation's copy of the workspace can't be set up, and sending again will fail the same way.`,
+            said,
+            ends: true,
+        });
+        await setLocale(`de`);
+        expect(failureView({ message: said, error: `workspace-broken`, own: true }).line).toBe(
+            `Die Kopie des Workspace für diese Unterhaltung lässt sich nicht einrichten, und erneutes Senden schlägt genauso fehl.`,
+        );
+        await setLocale(`en`);
+    });
+
     it(`names a failure coded by a newer sandbox, or one whose words say nothing, as unclassified, its words the details`, () => {
         const unclassified = `The agent stopped on an error this app does not recognize.`;
         expect(failureView({ message: `Something new.`, error: `some-new-code` }).line).toBe(unclassified);

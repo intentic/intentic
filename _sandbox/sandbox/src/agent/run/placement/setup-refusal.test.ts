@@ -3,7 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import { NamespaceSetupError } from "../../../workload/namespace-holder.js";
-import { setupRefusalOf, setupRefusalSentence } from "./setup-refusal.js";
+import { BROKEN_SENTENCE, setupNotes, type SetupSink, setupRefusalOf, setupRefusalSentence, withSetupRefusal } from "./setup-refusal.js";
 
 const GIB = 1024 ** 3;
 
@@ -52,5 +52,35 @@ describe("the placement's refusal for a holder that did not come up in time", ()
     it("promises no resend where nothing will send it: a conversation that waits for a press, or a turn nobody typed", async () => {
         expect((await setupRefusalOf(servicesWith("wait", []), turn(false), stalled)).refused).not.toContain("by itself");
         expect((await setupRefusalOf(servicesWith("resend", []), turn(true), stalled)).refused).not.toContain("by itself");
+    });
+});
+
+// 2026-11-05: the holder answered, and what it answered was the kernel refusing a mount. Uncoded, that read as a turn
+// that stopped short, and Continue ran into it twenty times; coded, it is held at the door and the chat offers a way out.
+describe("the placement's refusal for a holder that refused past its repair", () => {
+    const said = "namespace setup exited 1: bwrap: Can't make overlay mount on (null) with options upperdir=/proc/self/fd/6,workdir=/proc/self/fd/9,lowerdir=/proc/self/fd/10,userxattr: Invalid argument (no mount reported done)";
+    const refused = new NamespaceSetupError("exited", said, { steps: 0, awakeMs: 40, frozenMs: 0 });
+    const services = (warnings: unknown[][]) =>
+        unstubbed<Pick<Services, "agents" | "sandboxSettings" | "resources" | "logger">>("services", {
+            logger: unstubbed<Services["logger"]>("logger", { warn: (...args: unknown[]) => { warnings.push(args); } }),
+        });
+    const turn = unstubbed<RoutedTurn>("turn", { conversationId: "pawel-overlay", prompt: "continue" });
+
+    it("is coded as one that repeats, in the sandbox's own sentence with the holder's words behind it", async () => {
+        const warnings: unknown[][] = [];
+        const answer = await withSetupRefusal(services(warnings), turn, () => Promise.reject(refused));
+        expect(answer).toEqual({ code: "workspace-broken", refused: `${BROKEN_SENTENCE} (${said})` });
+        expect(warnings[0]?.[0]).toMatchObject({ conversationId: "pawel-overlay", failure: "exited", reason: said });
+    });
+
+    it("leaves any other placement failure its own error", async () => {
+        const other = new Error("checkout gone");
+        await expect(withSetupRefusal(services([]), turn, () => Promise.reject(other))).rejects.toBe(other);
+    });
+
+    it("records the repair the anchor made on the way up, for the turn to say", () => {
+        const sink: SetupSink = {};
+        setupNotes(services([]), turn, sink).onRepair(2, refused);
+        expect(sink).toEqual({ repaired: 2 });
     });
 });

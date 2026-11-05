@@ -46,12 +46,23 @@ const WORDED = {
 // Looked up by the row's code, a bare string on the wire.
 const WORDED_BY_CODE = new Map<string, (said: string) => string>(Object.entries(WORDED));
 
+// The sandbox's own sentences this build words itself and keeps whole behind the details press: a broken copy of the
+// workspace carries the namespace holder's own error after its sentence, which only someone repairing it reads.
+const WORDED_WITH_DETAILS = {
+    "workspace-broken": () => t(`chat.failure.workspaceBroken`),
+} as const satisfies Partial<Record<AgentErrorCode, () => string>>;
+const DETAILED_BY_CODE = new Map<string, () => string>(Object.entries(WORDED_WITH_DETAILS));
+
 /** A failure's line, details and ending, from the facts its notice carries. */
 export const failureView = ({ message, error, own }: FailureSaid): FailureView => {
     const ends = error !== `codex-advisory`;
     const worded = error === undefined ? undefined : WORDED_BY_CODE.get(error);
     if (worded !== undefined) {
         return { line: worded(message), ends };
+    }
+    const detailed = error === undefined ? undefined : DETAILED_BY_CODE.get(error);
+    if (detailed !== undefined) {
+        return { line: detailed(), said: message, ends };
     }
     if (own === true) {
         return { line: message, ends };

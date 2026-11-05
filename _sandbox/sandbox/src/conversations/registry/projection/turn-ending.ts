@@ -15,7 +15,7 @@ import { opt } from "../../../opt.js";
    and a reloaded window lost its strip or kept a stale one. */
 
 /** The card's own fields an ending is read off: the projected status, never the stored ending, and the failure it reports. */
-export type EndingFacts = Pick<AgentSummary, "status" | "failureCode" | "limitResetsAt" | "next">;
+export type EndingFacts = Pick<AgentSummary, "status" | "failureCode" | "failureRepeats" | "limitResetsAt" | "next">;
 
 // Whether the held turn ran, what each way of moving on costs, where a policy is sending it, whether only a press
 // sends it again, and whether memory killed it: the frame says so where it dresses the kill (memory-death.ts), and the
@@ -61,8 +61,9 @@ const failureEnding = (card: EndingFacts, held: HeldRecord | undefined, now: num
     }
     // Stopped work with nothing to repair (a death nothing coded, a turn at its own ceiling or ended incomplete: the
     // `carry` course, failure-codes.ts), so the press just carries on. Any other code names something to repair first,
-    // so no offer beats a press that would only re-fail.
-    return failureCourseOf(card.failureCode) === "carry" ? { reason: "stopped", ...heldOn(held) } : undefined;
+    // so no offer beats a press that would only re-fail. Nor does one on a failure that has already come back the same
+    // with nothing run (failureRepeats): the chat offers the ways out instead (2026-11-05, twenty presses into one wall).
+    return failureCourseOf(card.failureCode) === "carry" && card.failureRepeats === undefined ? { reason: "stopped", ...heldOn(held) } : undefined;
 };
 
 /**

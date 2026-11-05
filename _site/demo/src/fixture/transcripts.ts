@@ -1,4 +1,13 @@
-import { ACCESS_WALL_CHAT_ID, accessWallTranscript, SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
+import {
+    ACCESS_WALL_CHAT_ID,
+    accessWallTranscript,
+    REPEATED_FAILURE_CHAT_ID,
+    repeatedFailureTranscript,
+    SPECIMEN_CHAT_ID,
+    SPECIMEN_TRANSCRIPT,
+    WORKSPACE_BROKEN_CHAT_ID,
+    workspaceBrokenTranscript,
+} from "./specimen";
 import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { homeStoryOf } from "./home/recording";
 import type { HomeSandbox } from "./home/sandboxes";
@@ -689,6 +698,8 @@ const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,
     [SPECIMEN_CHAT_ID]: SPECIMEN_TRANSCRIPT,
     [ACCESS_WALL_CHAT_ID]: accessWallTranscript(),
+    [WORKSPACE_BROKEN_CHAT_ID]: workspaceBrokenTranscript(),
+    [REPEATED_FAILURE_CHAT_ID]: repeatedFailureTranscript(),
 };
 
 // A quiet recording (mode.ts `demoQuiet`) ends the soft-deletes run on the agent's own report, which is what a review

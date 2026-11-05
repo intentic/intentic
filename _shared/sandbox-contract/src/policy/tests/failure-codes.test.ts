@@ -1,6 +1,6 @@
 import { AgentErrorCodeSchema } from "../../events/agent-events.js";
 import { isPrivacyRefusal } from "../../schemas/privacy-egress.js";
-import { FAILURE_CODES, failureCourseOf, failureTraitsOf,anotherModelClears,turnedAwayCode } from "../failure-codes.js";
+import { FAILURE_CODES, failureCourseOf, failureFingerprint, failureTraitsOf, anotherModelClears, repeatsUntilRepaired, turnedAwayCode } from "../failure-codes.js";
 
 // The codes whose row says `test`, sorted, so a pin reads as a list.
 const codesWhere = (test: (code: string) => boolean): string[] => AgentErrorCodeSchema.options.filter(test).toSorted();
@@ -13,7 +13,7 @@ test("every code the wire names has a row, and the table names no code the wire 
 });
 
 // The door course names the codes refused before the model saw a word.
-test("the codes turned away at the door are exactly the eighteen refused before the model saw a word", () => {
+test("the codes turned away at the door are exactly the nineteen refused before the model saw a word", () => {
     const door = codesWhere((code) => failureCourseOf(code) === "door");
     expect(door).toEqual(
         [
@@ -29,6 +29,7 @@ test("the codes turned away at the door are exactly the eighteen refused before 
             "privacy-instructions",
             "sandbox-memory-low",
             "workspace-setup",
+            "workspace-broken",
             "sandbox-disk-low",
             "trial-unavailable",
             "trial-model-unavailable",
@@ -100,6 +101,7 @@ test("every code keeps the kind the board named it by", () => {
         "safeguard-flagged": "flagged",
         "trial-exhausted": "limit",
         "workspace-setup": "held",
+        "workspace-broken": "held",
         "turn-cap": "cutShort",
         "harness-incomplete": "cutShort",
         "privacy-unshielded": "privacy",
@@ -138,4 +140,23 @@ test("a failure nothing coded is carried on, and a code this build does not know
     // A plain record lookup would answer these with Object.prototype's own members.
     expect(failureTraitsOf("constructor")).toBeUndefined();
     expect(failureTraitsOf("toString")).toBeUndefined();
+});
+
+// A retry is the wrong offer exactly where the turn fails the same way until something outside it is repaired.
+test("only a workspace that failed past its repair repeats until repaired", () => {
+    expect(codesWhere(repeatsUntilRepaired)).toEqual(["workspace-broken"]);
+    expect(repeatsUntilRepaired(undefined)).toBe(false);
+    expect(failureCourseOf("workspace-broken")).toBe("door");
+});
+
+// The user's own failure, twice: bwrap opened other descriptors the second time, and the sentence is still one failure.
+test("one failure said twice with different descriptors, pids and suffixes has one fingerprint", () => {
+    const first = "namespace setup exited 1: bwrap: Can't make overlay mount on (null) with options upperdir=/proc/self/fd/6,workdir=/proc/self/fd/9,lowerdir=/proc/self/fd/10,userxattr: Invalid argument";
+    const again = "namespace setup exited 1: bwrap: Can't make overlay mount on (null) with options upperdir=/proc/self/fd/7,workdir=/proc/self/fd/10,lowerdir=/proc/self/fd/11,userxattr: Invalid argument";
+    expect(failureFingerprint(undefined, first)).toBe(failureFingerprint(undefined, again));
+    expect(failureFingerprint(undefined, "sandbox-3fa9c1d2 died at 12:04:31")).toBe(failureFingerprint(undefined, "sandbox-77e0b4aa died at 09:58:02"));
+    // Another code, or other words, is another failure.
+    expect(failureFingerprint("workspace-broken", first)).not.toBe(failureFingerprint(undefined, first));
+    expect(failureFingerprint(undefined, "the runtime died")).not.toBe(failureFingerprint(undefined, "the session file is corrupt"));
+    expect(failureFingerprint(undefined, undefined)).toBe("|");
 });

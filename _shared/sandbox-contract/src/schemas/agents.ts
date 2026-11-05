@@ -281,6 +281,16 @@ export const AgentSummarySchema = z.object({
         .describe(
             "Whether `failure` is the sandbox's own sentence rather than the provider's or the harness's words. Absent for theirs, and for an ending recorded before it was said.",
         ),
+    // How many turns in a row ended on this same failure with nothing run (failure-codes.ts failureFingerprint): the chat
+    // stops offering Continue at two, since a third press would only fail the same way, and offers the ways out instead.
+    failureRepeats: z
+        .number()
+        .int()
+        .min(2)
+        .optional()
+        .describe(
+            "How many turns in a row have ended on this same failure before the model answered. Absent until it has happened twice: sending again would most likely fail the same way.",
+        ),
     // Epoch seconds the spent allowance reopens; absent means genuinely unknown (Grok, Cursor) — never guess one.
     limitResetsAt: z.number().optional().describe("When the spent allowance reopens, in epoch seconds. Absent when the provider publishes no instant."),
     limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),

@@ -14,7 +14,7 @@ import { breakPolicyFor } from "../turn/break-policy.js";
 
 export interface SetupRefusal {
     readonly refused: string;
-    readonly code: "workspace-setup";
+    readonly code: "workspace-setup" | "workspace-broken";
 }
 
 const GIB = 1024 ** 3;
@@ -85,7 +85,26 @@ export const retryNote =
         );
     };
 
-// A second stalled placement is refused before anything runs; other placement failures keep their own error.
+/* A TURN WHOSE OWN VIEW OF THE WORKSPACE FAILED WITH AN ERROR OF ITS OWN: the holder answered, and what it answered was a
+   refusal (a mount the kernel would not make), past the one repair the anchor makes by itself (isolation.ts
+   startAnchor). Nothing ran, and the same turn sent again fails the same way, so it is turned away at the door with a code
+   that says so (`workspace-broken`, failure-codes.ts `repeats`): its words are held for a press, the chat offers the ways
+   out instead of Continue, and the holder's own words ride behind the sentence for whoever reads the details. Before this,
+   the holder's stderr was the turn's only word, uncoded, so it read as a turn that stopped short and every press of
+   Continue ran into it again (2026-11-05, twenty presses on one conversation). */
+export const BROKEN_SENTENCE =
+    "This conversation's copy of the workspace could not be set up, and setting it up again did not help. Nothing ran, and sending again will fail the same way: continue in a new conversation, which gets a copy of its own.";
+
+const brokenRefusalOf = (services: Pick<Services, "logger">, input: RoutedTurn, error: NamespaceSetupError): SetupRefusal => {
+    services.logger.warn(
+        { conversationId: input.conversationId, failure: error.failure, ...error.facts, reason: error.message },
+        "turn placement: the conversation's namespace failed past its repair, refused at the door as workspace-broken",
+    );
+    return { refused: `${BROKEN_SENTENCE} (${error.message})`, code: "workspace-broken" };
+};
+
+// A second stalled placement is refused before anything runs, and so is one the holder refused past its repair; any
+// other placement failure keeps its own error.
 export const withSetupRefusal = async <T>(
     services: Parameters<typeof setupRefusalOf>[0],
     input: RoutedTurn,
@@ -94,9 +113,26 @@ export const withSetupRefusal = async <T>(
     try {
         return await place();
     } catch (error) {
-        if (!(error instanceof NamespaceSetupError) || !error.transient) {
+        if (!(error instanceof NamespaceSetupError)) {
             throw error;
         }
-        return setupRefusalOf(services, input, error);
+        return error.transient ? setupRefusalOf(services, input, error) : brokenRefusalOf(services, input, error);
     }
 };
+
+/** What a turn's placement did on its own way up, for the turn to say: how many layers its one repair set aside. */
+export interface SetupSink {
+    repaired?: number;
+}
+
+// The anchor's two notes, one per way it went on by itself: a second attempt after a stall, and a repair after a refusal.
+export const setupNotes = (services: Pick<Services, "logger">, input: RoutedTurn, sink: SetupSink) => ({
+    onRetry: retryNote(services, input),
+    onRepair: (layers: number, error: NamespaceSetupError): void => {
+        sink.repaired = layers;
+        services.logger.warn(
+            { conversationId: input.conversationId, layers, failure: error.failure, ...error.facts, reason: error.message },
+            "turn placement: the conversation's namespace was refused, its layers set aside and set up once more",
+        );
+    },
+});

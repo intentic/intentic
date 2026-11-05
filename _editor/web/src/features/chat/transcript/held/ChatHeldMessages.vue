@@ -26,7 +26,7 @@ defineProps<{
 }>();
 
 const t = useT();
-const { conversation, waiting, streaming, resumeQueue, bookedGroups, lastFailure } = usePaneView();
+const { conversation, waiting, streaming, resumeQueue, bookedGroups, lastFailure, wayOut } = usePaneView();
 const { held, notice, reason, detail } = useHeldQueue();
 
 // Once per refused turn this pane sees happen: fires when `held` turns true with a refusal reason, not for a chat opened
@@ -58,7 +58,8 @@ const sendAtLabel = reopen.label;
 const sendAtHint = reopen.hint;
 const sendAtReopen = (): void => reopen.bookWords(heldIds.value);
 // No account of the provider can serve these (accessWall.ts): sent again they are only re-tested and held once more, so
-// the press steps back to a quiet one and the card above the composer carries the fix (ChatContinueStrip).
+// the press steps back to a quiet one and the card above the composer carries the fix (ChatContinueStrip). The same where
+// sending them again fails the same way (`wayOut`): the card over the composer lights the way out (ChatWayOutStrip).
 const accessWall = useAccessWall();
 // The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
 const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
@@ -94,7 +95,7 @@ const press = computed((): HeldPress => {
                     <Button
                         size="small"
                         thumb
-                        :tier="reopenAt === undefined && accessWall === undefined ? `accent` : `quiet`"
+                        :tier="reopenAt === undefined && accessWall === undefined && wayOut === undefined ? `accent` : `quiet`"
                         :disabled="reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? press.hint"
                         @click="resumeQueue(heldIds)"

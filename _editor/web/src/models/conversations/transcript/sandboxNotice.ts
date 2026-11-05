@@ -148,9 +148,10 @@ const FAILURE_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([
 ]);
 const isFailure = (notice: SandboxNotice): notice is FailureNotice => FAILURE_CODES.has(notice.code);
 // What a turn started from (the contract's notice-rows.ts): what a thin send left out, how a held turn continued, where
-// a home's session started over, and what the turn switched to since the one before it.
-type StartingNotice = Coded<`contextTrim` | `handedOff` | `freshStart` | `switched`>;
-const STARTING_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([`contextTrim`, `handedOff`, `freshStart`, `switched`]);
+// a home's session started over, what the turn switched to since the one before it, and the copy of the workspace the
+// sandbox had to set up again for it.
+type StartingNotice = Coded<`contextTrim` | `handedOff` | `freshStart` | `switched` | `workspaceRepaired`>;
+const STARTING_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([`contextTrim`, `handedOff`, `freshStart`, `switched`, `workspaceRepaired`]);
 const isStarting = (notice: SandboxNotice): notice is StartingNotice => STARTING_CODES.has(notice.code);
 
 // Where the work went, in the audience's own words.
@@ -257,6 +258,11 @@ const startingLine = (notice: StartingNotice, audience: Audience): string => {
             return audience === `maker` ? freshStartPlain(notice.params) : freshStartLine(notice.params);
         case `switched`:
             return switchedLine(notice.params);
+        // The sandbox's one repair, made before the model was asked anything: what it set aside, by count.
+        case `workspaceRepaired`: {
+            const { layers } = notice.params;
+            return layers === 0 ? t(`chat.sandboxNotice.workspaceRepaired`) : t(`chat.sandboxNotice.workspaceRepairedLayers`, { count: layers }, layers);
+        }
         case `contextTrim`: {
             const { window, omitted, base } = notice.params;
             return sentences(

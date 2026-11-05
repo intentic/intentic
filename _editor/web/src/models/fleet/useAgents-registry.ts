@@ -1,5 +1,6 @@
 import type { AgentChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { observeLandFailure } from "../agent-status/landFailureTelemetry";
+import { turnFailureTelemetry } from "../agent-status/turnFailureTelemetry";
 import { invalidatePushedQueries } from "../../lib/pushInvalidation";
 import { type AgentSummary, AgentSummarySchema } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
@@ -229,10 +230,12 @@ const applySnapshot = (agents: AgentSummary[], rev: number): void => {
             pending.value.delete(id);
         }
     }
-    // One event per server failure transition, independent of how many cards or hovers are mounted.
+    // One event per server failure transition (a land's, a turn's, a way out's answer), independent of how many cards or
+    // hovers are mounted.
     for (const agent of agents) {
         const review = queryClient.getQueryData<AgentChanges>(rpcKey(`agents.diff`, { id: agent.id }));
         observeLandFailure(agent, activeSandboxId.value, review?.conflicts);
+        turnFailureTelemetry.observe(agent, activeSandboxId.value);
     }
     latchRegistered(agents);
     rosterHeard.value = true;

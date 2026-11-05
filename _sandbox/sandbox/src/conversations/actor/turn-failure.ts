@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { failureFingerprint } from "@intentic/sandbox-contract/policy/failure-codes";
 import { opt } from "../../opt.js";
-import type { FailedEnding } from "../registry/agents-store.js";
+import type { Ending, FailedEnding } from "../registry/agents-store.js";
 
 // What a failed turn's ending records on its conversation, read off the turn's error frame (conversation-decide.ts).
 
@@ -29,4 +30,21 @@ export const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Failed
         // Whether it goes again by itself is never filed: the card derives it from the hold (conversation-next.ts).
         held: event.held !== undefined,
     };
+};
+
+// A failure the provider never answered, counted against the ending before it: the same failure again
+// (failureFingerprint) adds one, anything else starts the count at one. A failure the provider answered counts nothing,
+// since a retry may well get past it. The card reads the count (failureRepeats) to stop offering a press that would
+// only fail the same way.
+export const repeatedFailure = (
+    before: Ending,
+    failure: FailedEnding,
+    turn: { readonly ranTurn: boolean; readonly answeredAt: number | undefined },
+): FailedEnding => {
+    if (failure.kind !== "failed" || !turn.ranTurn || turn.answeredAt !== undefined) {
+        return failure;
+    }
+    const again =
+        before.kind === "failed" && before.repeats !== undefined && failureFingerprint(before.code, before.failure) === failureFingerprint(failure.code, failure.failure);
+    return { ...failure, repeats: again ? (before.repeats ?? 0) + 1 : 1 };
 };

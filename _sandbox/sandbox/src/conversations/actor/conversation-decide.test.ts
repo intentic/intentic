@@ -4,9 +4,10 @@ import type { AgentJob, AgentWatch, TurnProof, TurnReach } from "@intentic/sandb
 import { isolatedAgent } from "../registry/agents-store.testing.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
-import type { PersistedAgent } from "../registry/agents-store.js";
+import type { Ending, FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
 import { hold, joined, NO_QUEUE, released, rescheduled, scheduled } from "./conversation-queue.js";
+import { repeatedFailure } from "./turn-failure.js";
 import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type ParkedCard, type StopEnding } from "./conversation-state.js";
 
 // Every transition the conversation's one writer makes, as a table: the state an event meets, what it leaves, the
@@ -1149,5 +1150,42 @@ describe("a review frame", () => {
         const flush = settled.effects.find((effect) => effect.kind === "entry-settled");
         expect(flush?.kind === "entry-settled" ? flush.flush.review : "missing").toStrictEqual({ source: "codex", findings: 1, open: 1 });
         expect(settled.state.turn.review).toBeUndefined();
+    });
+});
+
+// How many turns in a row ended on one failure before the provider answered: what lets the chat stop offering a press
+// that would only fail the same way (AgentSummary.failureRepeats).
+describe("how many turns in a row ended on one failure", () => {
+    type Failed = Extract<Ending, { kind: "failed" }>;
+
+    const BWRAP = (fd: number): Failed => ({
+        kind: "failed",
+        failure: `namespace setup exited 1: bwrap: Can't make overlay mount on (null) with options upperdir=/proc/self/fd/${String(fd)},workdir=/proc/self/fd/${String(fd + 3)}: Invalid argument`,
+    });
+    const UNANSWERED = { ranTurn: true, answeredAt: undefined };
+
+    it("the same failure again, with nothing answered, counts up from one", () => {
+        const first = repeatedFailure({ kind: "idle" }, BWRAP(6), UNANSWERED);
+        expect(first).toEqual({ ...BWRAP(6), repeats: 1 });
+        // The second time bwrap opened other descriptors: the same failure all the same.
+        const second = repeatedFailure(first, BWRAP(7), UNANSWERED);
+        expect(second).toEqual({ ...BWRAP(7), repeats: 2 });
+        expect(repeatedFailure(second, BWRAP(6), UNANSWERED)).toEqual({ ...BWRAP(6), repeats: 3 });
+    });
+
+    it("another failure starts the count over, and one the provider answered counts nothing", () => {
+        const before: Failed = { ...BWRAP(6), repeats: 4 };
+        expect(repeatedFailure(before, { kind: "failed", failure: "the runtime died" }, UNANSWERED)).toEqual({ kind: "failed", failure: "the runtime died", repeats: 1 });
+        expect(repeatedFailure(before, { ...BWRAP(6), code: "workspace-broken" }, UNANSWERED)).toEqual({ ...BWRAP(6), code: "workspace-broken", repeats: 1 });
+        // The provider answered this time: a retry may get past it, so nothing is counted.
+        expect(repeatedFailure(before, BWRAP(6), { ranTurn: true, answeredAt: 1_800_000_000_000 })).toEqual(BWRAP(6));
+        // After an answered failure, the next unanswered one starts at one.
+        expect(repeatedFailure(BWRAP(6), BWRAP(7), UNANSWERED)).toEqual({ ...BWRAP(7), repeats: 1 });
+    });
+
+    it("a spent allowance and a settle with no turn are no repeats", () => {
+        const limited: FailedEnding = { kind: "limited", failure: "spent", held: false };
+        expect(repeatedFailure({ ...BWRAP(6), repeats: 2 }, limited, UNANSWERED)).toEqual(limited);
+        expect(repeatedFailure({ ...BWRAP(6), repeats: 2 }, BWRAP(6), { ranTurn: false, answeredAt: undefined })).toEqual(BWRAP(6));
     });
 });

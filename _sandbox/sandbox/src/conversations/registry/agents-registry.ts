@@ -27,6 +27,7 @@ import { type ConversationActors, type ConversationBooks, createConversationActo
 import { activateLoadedFleet } from "./fleet-activation.js";
 import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } from "./land-marks.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
+import { repeatedFailure } from "../actor/turn-failure.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation, servicesOfConversation } from "../actor/identity-latch.js";
 import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
@@ -229,7 +230,7 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         // Only the provider's answer moves it: a land, a conflict, a failure the sandbox records on its own leave the
         // card's "how long since it last worked" alone, which is what the reader times a cold cache by.
         ...opt("answeredAt", flush.answeredAt ?? entry.answeredAt),
-        ending: flush.failure ?? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }),
+        ending: flush.failure === undefined ? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }) : repeatedFailure(entry.ending, flush.failure, flush),
         totals: {
             costUsd: entry.totals.costUsd + flush.usage.costUsd,
             inputTokens: entry.totals.inputTokens + flush.usage.inputTokens,

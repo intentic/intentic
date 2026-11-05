@@ -15,7 +15,8 @@ import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { PACKAGE_STORE } from "../../workload/worktree-paths.js";
 import { gitPointersIn, type SandboxLayout, sandboxAvailable, startSandboxAnchor, type WholeJail } from "./turn-sandbox.js";
-import { currentBoot, OVERLAY_FS_NAME, overlayOptions, prepareLayer } from "./overlay-layers.js";
+import { withLayerRepair } from "./layers/layer-repair.js";
+import { currentBoot, OVERLAY_FS_NAME, overlayOptions, prepareLayer } from "./layers/overlay-layers.js";
 import { fstabOf, layerDirOf, mountPointsOf, mountTable, SHELF } from "./mount-table.js";
 import {
     type CargoWarmRequest,
@@ -340,15 +341,19 @@ export const handoffDirOf = (anchor: IsolationAnchor | undefined): string | unde
 export interface AnchorOptions {
     // Told when the first attempt did not answer in time and a second is about to start (withSetupRetry).
     readonly onRetry?: (error: NamespaceSetupError) => void;
+    // Told when the holder refused a mount and `layers` of the conversation's own were set aside for one more attempt.
+    readonly onRepair?: (layers: number, error: NamespaceSetupError) => void;
     readonly retryDelayMs?: number;
 }
 
 export const startAnchor = async (plan: IsolationPlan, options: AnchorOptions = {}): Promise<IsolationAnchor> => {
     const fence = plan.fence;
-    return withSetupRetry(() => (fence === undefined ? startMountAnchor(plan) : startSandboxAnchor({ ...plan, fence })), {
-        ...opt("onRetry", options.onRetry),
-        ...opt("delayMs", options.retryDelayMs),
-    });
+    const start = (): Promise<IsolationAnchor> =>
+        withSetupRetry(() => (fence === undefined ? startMountAnchor(plan) : startSandboxAnchor({ ...plan, fence })), {
+            ...opt("onRetry", options.onRetry),
+            ...opt("delayMs", options.retryDelayMs),
+        });
+    return withLayerRepair(plan, start, options.onRepair);
 };
 
 type MountAnchorProcess = NamespaceHolder & {

@@ -6,10 +6,16 @@ import { freshStartLine, freshStartNotice, handedOffLine, handedOffNotice } from
 import { switchedLine, switchedNotice } from "../schemas/providers/switched.js";
 
 // The notices that say what a turn was given to start from, each a row of its own worded from its frame's facts: what
-// the window left out of the message, how a held turn continued, where a home's session started over, and what the
-// turn switched to since the one before it.
-type StartingFrame = Extract<AgentEvent, { kind: "context_trim" | "handoff" | "fresh_start" | "switched" }>;
-const STARTING_KINDS: ReadonlySet<AgentEvent["kind"]> = new Set<StartingFrame["kind"]>(["context_trim", "handoff", "fresh_start", "switched"]);
+// the window left out of the message, how a held turn continued, where a home's session started over, what the turn
+// switched to since the one before it, and the copy of the workspace the sandbox had to set up again for it.
+type StartingFrame = Extract<AgentEvent, { kind: "context_trim" | "handoff" | "fresh_start" | "switched" | "workspace_repaired" }>;
+const STARTING_KINDS: ReadonlySet<AgentEvent["kind"]> = new Set<StartingFrame["kind"]>(["context_trim", "handoff", "fresh_start", "switched", "workspace_repaired"]);
+
+// The sandbox's one repair of a conversation's view of the workspace, made before the model was asked anything.
+const repairedLine = (layers: number): string =>
+    layers === 0
+        ? "This conversation's copy of the workspace failed to come up, and was set up again."
+        : `This conversation's copy of the workspace failed to come up, so its installed dependencies (${String(layers)} ${layers === 1 ? "layer" : "layers"}) were set aside and it was set up again. Install them again if the work needs them.`;
 
 /** Whether the frame is one of those notices. */
 export const isStartingFrame = (event: AgentEvent): event is StartingFrame => STARTING_KINDS.has(event.kind);
@@ -25,6 +31,8 @@ export const startingRow = (event: StartingFrame): TranscriptRow => {
             return { role: "notice", text: freshStartLine(event), noticeCode: noticeCode(freshStartNotice(event)) };
         case "switched":
             return { role: "notice", text: switchedLine(event), noticeCode: noticeCode(switchedNotice(event)) };
+        case "workspace_repaired":
+            return { role: "notice", text: repairedLine(event.layers), noticeCode: noticeCode({ code: "workspaceRepaired", params: { layers: event.layers } }) };
     }
 };
 

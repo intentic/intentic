@@ -3351,7 +3351,9 @@
                 "refused": "Lief auf {to}: Tarif oder Organisation des Kontos {from} lassen es nicht zu.",
                 "reach": "Lief auf {to}: Die Personen, für die diese Unterhaltung arbeitet, dürfen das Konto {from} nicht nutzen.",
                 "cold": "Von {from} zu {to} gewechselt, das mehr Spielraum hat: Der Cache war abgelaufen, der Wechsel hat also nichts gekostet."
-            }
+            },
+            "workspaceRepaired": "Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten und wurde neu eingerichtet.",
+            "workspaceRepairedLayers": "Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten, daher wurden ihre installierten Abhängigkeiten ({count} Schicht) beiseitegelegt und sie wurde neu eingerichtet. Installieren Sie sie erneut, wenn die Arbeit sie braucht. | Die Kopie des Workspace für diese Unterhaltung ließ sich nicht starten, daher wurden ihre installierten Abhängigkeiten ({count} Schichten) beiseitegelegt und sie wurde neu eingerichtet. Installieren Sie sie erneut, wenn die Arbeit sie braucht."
         },
         "failure": {
             "access": "Der Anbieter hat dieses Konto abgelehnt: Sein Tarif oder seine Organisation erlaubt es nicht.",
@@ -3374,7 +3376,8 @@
             "messageId": "Nachrichten-ID",
             "learnMore": "Mehr erfahren",
             "copyDetails": "Details kopieren",
-            "copyValue": "{name} kopieren"
+            "copyValue": "{name} kopieren",
+            "workspaceBroken": "Die Kopie des Workspace für diese Unterhaltung lässt sich nicht einrichten, und erneutes Senden schlägt genauso fehl."
         },
         "chatJobRow": {
             "ended": "Beendet nach {elapsed}",
@@ -5042,6 +5045,18 @@
             "tipNote": "Übernimmt, speichert, sichert",
             "tipTitle": "Automatisch",
             "yes": "Der Sandbox überlassen"
+        },
+        "wayOut": {
+            "workspace": "Diese Kopie des Workspace lässt sich nicht einrichten, daher schlägt ein erneuter Versuch hier genauso fehl.",
+            "workspaceRepeated": "{count}-mal auf dieselbe Weise fehlgeschlagen: Diese Kopie des Workspace lässt sich nicht einrichten. Nichts ist gelaufen.",
+            "repeated": "{count}-mal auf dieselbe Weise fehlgeschlagen. Nichts ist gelaufen.",
+            "newConversation": "In neuem Chat fortsetzen",
+            "newTitle": "Neue Sitzung",
+            "newNote": "Liest den Chat einmal, ohne Cache",
+            "otherModel": "Anderes Modell versuchen",
+            "tryAgain": "Erneut versuchen",
+            "tryTitle": "Dieselbe Unterhaltung",
+            "tryNote": "Schlägt wohl erneut fehl"
         }
     },
     "common": {

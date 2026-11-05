@@ -47,6 +47,7 @@ import ChatCommandPopover from "../composer/commands/ChatCommandPopover.vue";
 import ChatCommandResult from "../composer/commands/ChatCommandResult.vue";
 import ChatAgentStatus from "./ChatAgentStatus.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
+import ChatWayOutStrip from "./endings/ChatWayOutStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/later/ChatQueue.vue";
 import ChatWaitingBar from "./pane/ChatWaitingBar.vue";
@@ -108,7 +109,8 @@ const chat = computed(() => props.conversation);
 // agree; a turn only the card says runs is stopped as the board stops it, by the run the card shows.
 const paneView = conversationView(chat, (id) => useAgents().agentById(id), (stopped) => stopAgent(stopped.conversationId, stopped.box.value));
 provide(PANE_VIEW, paneView);
-const { messages, streaming, turnStoppable, ending, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
+// A failure that comes back the same however often it is sent (wayOut.ts): its ways out stand where Continue would.
+const { messages, streaming, turnStoppable, ending, mode, provider, model, draft, attachments, staged, connected, editing, wayOut } = paneView;
 const { reachable, connection } = useSandbox();
 // The daemon refused this account outright, unlike "not connected yet": waiting won't fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
@@ -538,10 +540,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     <template v-if="!blocked">
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip); a subagent's bar carries its own Continue instead. -->
+                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip), or the ways out of a wall a press would only hit again (ChatWayOutStrip); a subagent's bar carries its own Continue instead. -->
+                        <ChatWayOutStrip v-if="wayOut !== undefined && !subagentOf && !strip && !readOnly" :way-out="wayOut" />
                         <ChatContinueStrip
                             v-if="!subagentOf && !strip && !readOnly"
-                            :visible="continueStrip"
+                            :visible="continueStrip && wayOut === undefined"
                             :ready="pickUpPressable"
                             :enter-continues="continueOffer"
                             :spent-until="spentUntil"

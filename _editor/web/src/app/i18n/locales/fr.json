@@ -3351,7 +3351,9 @@
                 "refused": "Exécuté sur {to} : le forfait ou l’organisation du compte {from} ne le permet pas.",
                 "reach": "Exécuté sur {to} : les personnes pour qui travaille cette conversation ne peuvent pas utiliser le compte {from}.",
                 "cold": "Déplacé de {from} vers {to}, qui a plus de marge : le cache avait expiré, le déplacement n’a donc rien coûté."
-            }
+            },
+            "workspaceRepaired": "La copie de l'espace de travail de cette conversation n'a pas pu démarrer et a été remise en place.",
+            "workspaceRepairedLayers": "La copie de l'espace de travail de cette conversation n'a pas pu démarrer : ses dépendances installées ({count} couche) ont été mises de côté et elle a été remise en place. Réinstallez-les si le travail en a besoin. | La copie de l'espace de travail de cette conversation n'a pas pu démarrer : ses dépendances installées ({count} couches) ont été mises de côté et elle a été remise en place. Réinstallez-les si le travail en a besoin."
         },
         "failure": {
             "access": "Le fournisseur a refusé ce compte : son forfait ou son organisation ne le permet pas.",
@@ -3374,7 +3376,8 @@
             "messageId": "ID de message",
             "learnMore": "En savoir plus",
             "copyDetails": "Copier les détails",
-            "copyValue": "Copier {name}"
+            "copyValue": "Copier {name}",
+            "workspaceBroken": "La copie de l'espace de travail de cette conversation ne peut pas être mise en place, et renvoyer échouera de la même façon."
         },
         "chatJobRow": {
             "ended": "Arrêté après {elapsed}",
@@ -5042,6 +5045,18 @@
             "tipNote": "Intègre, enregistre, sauvegarde",
             "tipTitle": "Automatique",
             "yes": "Laisser le sandbox s'en charger"
+        },
+        "wayOut": {
+            "workspace": "Cette copie de l'espace de travail ne peut pas être mise en place : réessayer ici échoue de la même façon.",
+            "workspaceRepeated": "Même échec {count} fois : cette copie de l'espace de travail ne peut pas être mise en place. Rien ne s'est exécuté.",
+            "repeated": "Même échec {count} fois. Rien ne s'est exécuté.",
+            "newConversation": "Continuer dans un nouveau chat",
+            "newTitle": "Nouvelle session",
+            "newNote": "Relit le chat une fois, sans cache",
+            "otherModel": "Essayer un autre modèle",
+            "tryAgain": "Réessayer",
+            "tryTitle": "Même conversation",
+            "tryNote": "Échouera sans doute encore"
         }
     },
     "common": {

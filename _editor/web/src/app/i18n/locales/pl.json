@@ -3351,7 +3351,9 @@
                 "refused": "Uruchomiono na {to}: plan lub organizacja konta {from} na to nie pozwala.",
                 "reach": "Uruchomiono na {to}: osoby, dla których pracuje ta rozmowa, nie mogą używać konta {from}.",
                 "cold": "Przeniesiono z {from} na {to}, które ma więcej zapasu: pamięć podręczna wygasła, więc przeniesienie nic nie kosztowało."
-            }
+            },
+            "workspaceRepaired": "Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc przygotowano ją od nowa.",
+            "workspaceRepairedLayers": "Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności ({count} warstwa) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje. | Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności ({count} warstwy) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje. | Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności ({count} warstw) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje."
         },
         "failure": {
             "access": "Dostawca odrzucił to konto: jego plan lub organizacja na to nie pozwala.",
@@ -3374,7 +3376,8 @@
             "messageId": "ID wiadomości",
             "learnMore": "Dowiedz się więcej",
             "copyDetails": "Kopiuj szczegóły",
-            "copyValue": "Kopiuj: {name}"
+            "copyValue": "Kopiuj: {name}",
+            "workspaceBroken": "Nie da się przygotować kopii przestrzeni roboczej tej rozmowy, a ponowne wysłanie skończy się tak samo."
         },
         "chatJobRow": {
             "ended": "Zakończone po {elapsed}",
@@ -5042,6 +5045,18 @@
             "tipNote": "Scala, zapisuje i wysyła",
             "tipTitle": "Automatycznie",
             "yes": "Niech sandbox się tym zajmie"
+        },
+        "wayOut": {
+            "workspace": "Tej kopii przestrzeni roboczej nie da się przygotować, więc kolejna próba tutaj skończy się tak samo.",
+            "workspaceRepeated": "{count} razy to samo niepowodzenie: tej kopii przestrzeni roboczej nie da się przygotować. Nic się nie uruchomiło.",
+            "repeated": "{count} razy to samo niepowodzenie. Nic się nie uruchomiło.",
+            "newConversation": "Kontynuuj w nowym czacie",
+            "newTitle": "Nowa sesja",
+            "newNote": "Czyta czat raz, bez pamięci podręcznej",
+            "otherModel": "Wypróbuj inny model",
+            "tryAgain": "Spróbuj ponownie",
+            "tryTitle": "Ta sama rozmowa",
+            "tryNote": "Najpewniej znów się nie uda"
         }
     },
     "common": {

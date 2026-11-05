@@ -249,6 +249,16 @@ const everyCase = async () => {
     return { fleet, ids: entries.map((entry) => entry.id), holds };
 };
 
+// 2026-11-05: a failure nothing coded, back the same with nothing run, was carried on by every press of Continue. From
+// the second time the card offers no press: the chat offers the ways out instead.
+test("a failure that came back the same with nothing run offers no press", () => {
+    const card: EndingFacts = { status: "error", failureRepeats: 2 };
+    expect(turnEndingOf(card, undefined, NOW)).toBeUndefined();
+    expect(pressOf(card, undefined, NOW).kind).not.toBe("continue");
+    // Once, it is still a turn that stopped short, carried on by a press.
+    expect(turnEndingOf({ status: "error" }, undefined, NOW)).toEqual({ reason: "stopped" });
+});
+
 describe("the card's press and the record's ending, through the fleet", () => {
     test("say the same thing in every case, and the card always says it", async () => {
         const { fleet, ids, holds } = await everyCase();

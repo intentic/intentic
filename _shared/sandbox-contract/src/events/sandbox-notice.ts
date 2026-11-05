@@ -61,6 +61,9 @@ export type ResumeNoticeReason = z.infer<typeof ResumeNoticeReasonSchema>;
 export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     z.object({ code: z.literal("compacted") }),
     z.object({ code: z.literal("stopped") }),
+    // The conversation's view of the workspace failed to come up, and `layers` of its dependency layers were set aside
+    // for fresh ones before the turn went on (agent-events.ts workspace_repaired).
+    z.object({ code: z.literal("workspaceRepaired"), params: z.object({ layers: count }) }),
     // The branch was rebased onto `commits` new commits, and/or could not be in the repos named in `blocked`.
     z.object({ code: z.literal("synced"), params: z.object({ commits: count, blocked: z.string().optional() }) }),
     z.object({ code: z.literal("intoParent") }),

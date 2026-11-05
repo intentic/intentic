@@ -11,6 +11,7 @@ import type { PendingAttachment } from "../../../features/chat/drafts/useChatAtt
 import { providerCommands } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
 import { type ContinueOptions, type PickUp, pickUpOfPress, withCardBooking } from "../endings/pickUp";
+import { wayOutOf } from "../endings/wayOut";
 import type { ForkLink } from "../run/turnRequest";
 import { reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerReadyOn } from "../../providers/access";
@@ -29,7 +30,12 @@ import { useAuth } from "../../../client/auth/useAuth";
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
 // the fleet store; a view handed none reads only what its own window saw. The run it names and when it last moved are
 // what tell a card that has not yet caught up with a run this window followed to its end (liveView).
-type PaneCard = AgentStanding & { readonly run?: string | undefined; readonly updatedAt?: number | undefined };
+type PaneCard = AgentStanding & {
+    readonly run?: string | undefined;
+    readonly updatedAt?: number | undefined;
+    // How many turns in a row ended on the same failure before the model answered (AgentSummary.failureRepeats).
+    readonly failureRepeats?: number | undefined;
+};
 type CardOf = (conversationId: string) => PaneCard | undefined;
 
 // How the pane stops a turn its card says runs while this window follows no stream of it: the board's own Stop
@@ -157,12 +163,14 @@ const liveView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | unde
 
 // How the last turn failed, as the board's card says: what a held queue was refused for once the refusal's own row is
 // gone, since a turn that ran nothing is never recorded and stays attachable for only a minute. Undefined for a view
-// handed no card, and for a turn nothing failed.
+// handed no card, and for a turn nothing failed. And the ways out of one that comes back the same however often it is
+// sent (wayOut.ts), which every press after it reads, so none of them lights a retry the card has stopped offering.
 const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
     lastFailure: computed(() => {
         const card = cardOf?.(conversation.value.conversationId);
         return card?.failureCode === undefined ? undefined : { code: card.failureCode, text: card.failure };
     }),
+    wayOut: computed(() => wayOutOf(cardOf?.(conversation.value.conversationId) ?? {})),
 });
 
 // What the board's card says this chat waits on a person for (a question, a plan, a permission), known before this

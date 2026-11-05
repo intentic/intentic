@@ -1,5 +1,6 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 
 // The overlay layers an isolated turn's mirrors are mounted from (isolation.ts, and the fenced sandbox's bwrap overlays in
 // turn-sandbox.ts over the same dirs): how their options are spelled, and how a layer is made ready to mount again,
@@ -63,4 +64,33 @@ export const prepareLayer = async (layer: string, boot: string | undefined, moun
         await writeFile(join(layer, LAYER_BOOT), `${boot}\n`);
     }
     return stale ? "discarded" : "kept";
+};
+
+// Where a layer's upper and work go when they are set aside: inside the layer, so they go with the conversation's
+// overlays when its checkout is removed, and named by when, so a second repair never meets the first.
+const SET_ASIDE = "set-aside";
+
+/**
+ * Sets a layer's upper and work aside for fresh ones, the anchor's one repair of a mount the kernel refused (isolation.ts
+ * startAnchor). Moved, never deleted: an earlier turn's sandbox that still runs something the person kept (a dev server)
+ * may have them mounted, and a rename leaves that mount reading the same directories. What the layer held over the main
+ * checkout's (the conversation's own installs and builds) is gone from the next mount, and rebuilt by the next install.
+ * Answers whether the layer held anything to set aside.
+ */
+export const setLayerAside = async (layer: string, stamp: string): Promise<boolean> => {
+    const aside = join(layer, SET_ASIDE, stamp);
+    let moved = false;
+    for (const part of ["upper", "work"]) {
+        try {
+            await mkdir(aside, { recursive: true });
+            await rename(join(layer, part), join(aside, part));
+            moved = true;
+        } catch (error) {
+            if (!isMissing(error)) {
+                throw error;
+            }
+        }
+    }
+    await rm(join(layer, LAYER_BOOT), { force: true });
+    return moved;
 };

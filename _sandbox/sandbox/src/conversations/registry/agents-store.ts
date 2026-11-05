@@ -153,7 +153,15 @@ const EndingSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("stopped") }),
     // `own`: the failure is the sandbox's own sentence (the error frame's `own`); absent for the provider's words, and in rows
     // written before it was kept.
-    z.object({ kind: z.literal("failed"), failure: z.string().optional(), code: z.string().optional(), own: z.literal(true).optional() }),
+    // `repeats`: how many turns in a row ended on this same failure before the provider answered (failure-codes.ts
+    // failureFingerprint), counted from one; absent for a failure the provider had answered before, which a retry may get past.
+    z.object({
+        kind: z.literal("failed"),
+        failure: z.string().optional(),
+        code: z.string().optional(),
+        own: z.literal(true).optional(),
+        repeats: z.number().int().positive().optional(),
+    }),
     z.object({
         kind: z.literal("limited"),
         failure: z.string().optional(),

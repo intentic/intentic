@@ -2,7 +2,8 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
-import { accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { accountMovedRow, startingRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { NO_PRESS } from "@intentic/sandbox-contract/schemas/agent-press";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { SEAT_OFF } from "../daemon/account/seatOff";
 import { seatsOff } from "../mode";
@@ -723,3 +724,98 @@ export const accessWallCard = (now: number): AgentSummary => ({
     turns: 2,
     toolUses: 0,
 });
+
+// TWO CONVERSATIONS A PRESS WOULD ONLY SEND INTO THE SAME WALL (2026-11-05: Continue pressed twenty times into one). The
+// first one's own copy of the workspace will not come up, past the one repair the sandbox makes by itself: refused at the
+// door, coded `workspace-broken`, an earlier turn's repair said above it. The second failed the same way three turns in a
+// row before the model answered, with nothing coded. The daemon offers no Continue for either (`press: none`), and the chat
+// offers the ways out instead (`@intentic/web` ChatWayOutStrip, wayOut.ts). Dev builds only, beside the specimen.
+export const WORKSPACE_BROKEN_CHAT_ID = `cnv_workspace_broken_specimen`;
+export const REPEATED_FAILURE_CHAT_ID = `cnv_repeated_failure_specimen`;
+
+// The sandbox's sentence and the namespace holder's own error after it, as setup-refusal.ts writes them.
+const WORKSPACE_BROKEN = `This conversation's copy of the workspace could not be set up, and setting it up again did not help. Nothing ran, and sending again will fail the same way: continue in a new conversation, which gets a copy of its own. (namespace setup exited 1: bwrap: Can't make overlay mount on /newroot/work/intentic with options lowerdir=/work/intentic,upperdir=/history/overlays/cnv_workspace_broken_specimen/upper: Invalid argument)`;
+const REPEATED_FAILURE = `Claude Code process exited with code 1. stderr: Error: spawn /opt/claude/cli.js EACCES\n    at ChildProcess._handle.onexit (node:internal/child_process:286:19)`;
+
+const failedRow = (event: Parameters<TranscriptFold[`apply`]>[0]): TranscriptRow => {
+    const fold = new TranscriptFold([], () => Date.now());
+    fold.apply(event);
+    return fold.rows.at(-1)!;
+};
+const continuedRow = (): TranscriptRow => {
+    const disclosure = resumeDisclosure(RESUME_NOTES.continued);
+    return disclosure?.kind === `notice` ? resumeNoticeRow(disclosure) : { role: `notice`, text: `Continued.` };
+};
+
+export const workspaceBrokenTranscript = () => ({
+    sessionId: `ses_01j9workspacebroken`,
+    provider: `claude` as const,
+    harness: `claude-code` as const,
+    account: `acc_claude_demo`,
+    messages: [
+        { role: `user`, text: `Add a retry with backoff to the upload client in web/src/uploads.` },
+        startingRow({ kind: `workspace_repaired`, layers: 2 }),
+        {
+            role: `assistant`,
+            text: `Added \`withBackoff\` around \`uploadChunk\`: three tries, 250 ms doubling, and a 4xx is never retried. The upload tests pass.`,
+        },
+        { role: `user`, text: `Now cover the timeout path with a test: a chunk that never answers is retried, then the upload fails with a clear error.` },
+        failedRow({ kind: `error`, code: `workspace-broken`, message: WORKSPACE_BROKEN, own: true, held: { ran: false } }),
+    ] satisfies TranscriptRow[],
+});
+
+export const repeatedFailureTranscript = () => ({
+    sessionId: `ses_01j9repeatedfailure`,
+    provider: `claude` as const,
+    harness: `claude-code` as const,
+    account: `acc_claude_demo`,
+    messages: [
+        { role: `user`, text: `Regenerate the OpenAPI client from api/openapi.yaml and fix the call sites that break.` },
+        failedRow({ kind: `error`, message: REPEATED_FAILURE }),
+        continuedRow(),
+        failedRow({ kind: `error`, message: REPEATED_FAILURE }),
+        continuedRow(),
+        failedRow({ kind: `error`, message: REPEATED_FAILURE }),
+    ] satisfies TranscriptRow[],
+});
+
+const wallCard = (now: number, over: Pick<AgentSummary, `id` | `title`> & Partial<AgentSummary>): AgentSummary => ({
+    startIn: `web`,
+    status: `error`,
+    provider: `claude`,
+    harness: `claude-code`,
+    model: `claude-opus-5-5`,
+    account: `acc_claude_demo`,
+    base: `4f1c8ab`,
+    autoLand: false,
+    costUsd: 0.31,
+    inputTokens: 21_000,
+    outputTokens: 1_400,
+    updatedAt: now - 2 * 60_000,
+    seenAt: now - 60_000,
+    attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    turns: 2,
+    toolUses: 6,
+    press: NO_PRESS,
+    ...over,
+});
+
+export const workspaceBrokenCard = (now: number): AgentSummary =>
+    wallCard(now, {
+        id: WORKSPACE_BROKEN_CHAT_ID,
+        title: `Retry with backoff in the upload client`,
+        branch: `agent/upload-backoff`,
+        failureCode: `workspace-broken`,
+        failure: WORKSPACE_BROKEN,
+        failureOwn: true,
+    });
+
+export const repeatedFailureCard = (now: number): AgentSummary =>
+    wallCard(now, {
+        id: REPEATED_FAILURE_CHAT_ID,
+        title: `Regenerate the OpenAPI client`,
+        failure: REPEATED_FAILURE,
+        failureRepeats: 3,
+        turns: 4,
+        toolUses: 0,
+    });

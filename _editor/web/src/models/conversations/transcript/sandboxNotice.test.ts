@@ -23,6 +23,7 @@ const conflicts = [
     { repo: `web`, paths: [{ path: `b.ts`, reason: `diverged` as const }, { path: `c.ts`, reason: `diverged` as const }], clean: 0 },
 ];
 const refused: AgentEvent = { kind: `error`, code: `claude-token-refused`, message: `Token refused.`, autoResume: `scheduled` };
+const BROKEN = `This conversation's copy of the workspace could not be set up, and setting it up again did not help. (namespace setup exited 1: bwrap: Invalid argument)`;
 
 // Every notice the fold codes, as a live turn and a stored one both draw it.
 const FOLDED: readonly TranscriptRow[] = [
@@ -47,6 +48,8 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, own: true, unattended: true }]),
     ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, own: true, held: { ran: false } }]),
     ...turn([{ kind: `error`, code: `agent-busy`, message: `This agent is already running a turn, wait for it to finish.`, own: true }]),
+    // A broken copy of the workspace, refused at the door with the holder's own error after the sandbox's sentence.
+    ...turn([{ kind: `error`, code: `workspace-broken`, message: BROKEN, own: true, held: { ran: false } }]),
     // The same door refusals, once the turn had already run a tool: stopped partway, nothing held.
     ...turn([
         { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` },
@@ -89,6 +92,10 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `switched`, segment: `loop`, provider: `kimi`, loop: `OpenCode`, fresh: true }]),
     ...turn([{ kind: `switched`, segment: `model`, provider: `claude`, model: `claude-sonnet-5`, loop: `Claude Code`, fresh: false }]),
     ...turn([{ kind: `switched`, segment: `model`, provider: `claude`, model: `claude-sonnet-5`, loop: `Claude Code`, fresh: true }]),
+    // The conversation's copy of the workspace set up again before the turn went on, with nothing set aside, one layer, more.
+    ...turn([{ kind: `workspace_repaired`, layers: 0 }]),
+    ...turn([{ kind: `workspace_repaired`, layers: 1 }]),
+    ...turn([{ kind: `workspace_repaired`, layers: 3 }]),
 ];
 
 // What the daemon writes outside the fold, each as it writes it.
@@ -271,6 +278,32 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Zu Claude Sonnet 5 gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
         ]);
         await setLocale(`en`);
+    });
+
+    // The sandbox's one repair of a copy that would not come up: said by what it set aside, in each language's plurals.
+    it(`says a repaired copy of the workspace by the layers it set aside, in Polish with its three plurals`, async () => {
+        const repaired = FOLDED.filter((row) => row.noticeCode?.code === `workspaceRepaired`);
+        expect(repaired.map((row) => noticeLine(row, `developer`))).toEqual([
+            `This conversation's copy of the workspace failed to come up, and was set up again.`,
+            `This conversation's copy of the workspace failed to come up, so its installed dependencies (1 layer) were set aside and it was set up again. Install them again if the work needs them.`,
+            `This conversation's copy of the workspace failed to come up, so its installed dependencies (3 layers) were set aside and it was set up again. Install them again if the work needs them.`,
+        ]);
+        await setLocale(`pl`);
+        expect(repaired.map((row) => noticeLine(row, `developer`))).toEqual([
+            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc przygotowano ją od nowa.`,
+            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności (1 warstwa) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje.`,
+            `Kopia przestrzeni roboczej tej rozmowy nie uruchomiła się, więc jej zainstalowane zależności (3 warstwy) odłożono na bok i przygotowano ją od nowa. Zainstaluj je ponownie, jeśli praca ich potrzebuje.`,
+        ]);
+        await setLocale(`en`);
+    });
+
+    // A broken copy's row leads with this build's line and keeps the sandbox's sentence and the holder's error as details.
+    it(`says a broken copy of the workspace in this build's line, the holder's error behind the row's details`, () => {
+        const broken = FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `workspace-broken`)!;
+        expect(noticeLine(broken, `developer`)).toBe(
+            `This conversation's copy of the workspace can't be set up, and sending again will fail the same way. Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+        );
+        expect(noticeFailure(broken)?.said).toBe(BROKEN);
     });
 
     // An unattended memory hold is the one coded failure drawn on the generic line: its figures stay, its words translate.

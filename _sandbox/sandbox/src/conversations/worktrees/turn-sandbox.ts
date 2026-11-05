@@ -22,7 +22,7 @@ import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/na
 import { SHARED_STATE } from "../../workload/worktree-paths.js";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolation.js";
-import { currentBoot, prepareLayer } from "./overlay-layers.js";
+import { currentBoot, prepareLayer } from "./layers/overlay-layers.js";
 
 // Fence turns with unprivileged bubblewrap (no capabilities/user namespaces), private PID/proc and an allowlisted filesystem.
 // System paths are read-only with sensitive files masked; /work is writable but .git and excluded areas are hidden.
@@ -199,6 +199,11 @@ export const gitPointersIn = async (worktree: string): Promise<string[]> => {
 
 // Where a layer over a main-checkout directory keeps this conversation's writes; the mirrors' convention, shared.
 export const layerOf = (plan: Pick<IsolationPlan, "overlays">, rel: string): string => join(plan.overlays, encodeURIComponent(rel));
+
+/** The workspace paths a fenced or jailed sandbox reads through layers of the conversation's own. A main-tree jail reads
+ * the package store in place, as part of the main checkout, so it needs no layer for it. */
+export const sandboxLayers = (plan: FencedPlan): readonly string[] =>
+    plan.fence.whole !== undefined && plan.worktree === plan.root ? plan.mirrors : [...plan.mirrors, PACKAGE_STORE];
 
 export const readHostView = (paths: readonly string[]): HostView => {
     const links = new Map<string, string>();
@@ -523,8 +528,7 @@ export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSourc
     }
     await writeFile(layout.held, "");
     await writeFile(layout.empty, "", { mode: 0o444 });
-    // A main-tree jail reads the package store in place, as part of the main checkout, so it needs no layer for it.
-    const layered = plan.fence.whole !== undefined && plan.worktree === plan.root ? plan.mirrors : [...plan.mirrors, PACKAGE_STORE];
+    const layered = sandboxLayers(plan);
     // The same layer dirs an unfenced turn of this conversation mounts volatile (isolation.ts), so readied as it readies
     // them: a work dir an earlier volatile mount marked is refused by the kernel however this one mounts it.
     const boot = await currentBoot();

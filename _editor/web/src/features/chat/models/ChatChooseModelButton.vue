@@ -11,8 +11,9 @@ import { usePaneModelPick } from "../../../models/conversations/accounts/paneMod
 const t = useT();
 
 // A notice may name the press for its own moment ("Continue with another model" on a spent trial) and make it the
-// card's filled press; the account gate keeps the plain "Choose a model".
-const props = defineProps<{ label?: string; tier?: `accent` }>();
+// card's filled press, or one of its alternatives beside that press (`boring`); the account gate keeps the plain
+// "Choose a model".
+const props = defineProps<{ label?: string; tier?: `accent` | `boring` }>();
 
 const pick = usePaneModelPick();
 

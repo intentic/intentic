@@ -21,13 +21,19 @@ export const reportedFailure = (
     ending: Ending,
     status: AgentStatus,
     hold: HeldRecord | undefined,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "failureOwn" | "limitResetsAt" | "limitHeld">> => {
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "failureOwn" | "failureRepeats" | "limitResetsAt" | "limitHeld">> => {
     if (status !== "error") {
         return {};
     }
     switch (ending.kind) {
         case "failed":
-            return { ...opt("failure", ending.failure), ...opt("failureCode", ending.code), ...opt("failureOwn", ending.own) };
+            return {
+                ...opt("failure", ending.failure),
+                ...opt("failureCode", ending.code),
+                ...opt("failureOwn", ending.own),
+                // Said from the second: once is a failure, twice the same one with nothing run is a wall.
+                ...opt("failureRepeats", ending.repeats !== undefined && ending.repeats >= 2 ? ending.repeats : undefined),
+            };
         case "limited":
             return {
                 ...opt("failure", ending.failure),

@@ -90,6 +90,10 @@ export const AgentErrorCodeSchema = z.enum([
     // before anything ran: the sandbox too loaded to set it up. Held like a memory hold, and sent again by
     // itself once the sandbox has had room for a while (the memory wall's answer).
     "workspace-setup",
+    // The conversation's own view of the workspace failed to come up with an error of its own (a mount the kernel
+    // refused), not for want of time, and the one repair the sandbox makes by itself did not clear it: nothing ran, and
+    // sending again fails the same way. Held at the door with the person's words; the way on is a new conversation.
+    "workspace-broken",
     // The history volume cannot fit a new conversation checkout while keeping its free-space floor.
     "sandbox-disk-low",
     // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
@@ -270,6 +274,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     }),
     // What the turn's first request found in the prompt cache, sent as soon as it is known.
     PromptCacheOpeningSchema.extend({ kind: z.literal("prompt_cache") }),
+    // The conversation's own view of the workspace failed to come up, and the sandbox repaired it before the turn went
+    // on: its dependency layers were set aside for fresh ones, so what it had installed over the main checkout's is gone.
+    // Made before the model is asked anything, so the request the turn sends is the one it would have sent anyway.
+    z.object({
+        kind: z.literal("workspace_repaired"),
+        layers: z.number().int().nonnegative().describe("How many of the conversation's dependency layers were set aside."),
+    }),
     // The provider's live answer to whether this turn may run, pushed mid-turn; drives the rate-limited notice, not the
     // headroom readouts.
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),

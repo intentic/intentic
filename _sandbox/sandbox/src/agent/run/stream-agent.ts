@@ -18,7 +18,8 @@ import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { startAnchor, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { withSetupRetry } from "../../workload/namespace-holder.js";
-import { retryNote, type SetupRefusal, withSetupRefusal } from "./placement/setup-refusal.js";
+import { retryNote, setupNotes, type SetupRefusal, type SetupSink, withSetupRefusal } from "./placement/setup-refusal.js";
+import { fencedRefusal } from "./placement/fence-refusal.js";
 import { startDomainAnchor } from "../../conversations/worktrees/domain-anchor.js";
 import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
@@ -356,20 +357,6 @@ const handoffNoteFor = async (
               retiredSessionId: held?.sessionId ?? services.agents.entry(input.conversationId)?.sessionId,
           });
 
-// A fenced conversation runs only where its fence holds: inside a sandbox (turn-sandbox.ts), under a runtime whose own
-// state the sandbox can carry. Codex and Cursor keep one sandbox-wide home holding every conversation's sessions, and a
-// runtime that never enters a namespace would read the whole tree, so all of those are refused rather than run open.
-const fencedRefusal = async (services: Services, input: RoutedTurn): Promise<string | undefined> => {
-    const capabilities = capabilitiesOf(input.agent, input.harness);
-    if (capabilities.isolation !== "namespace" || capabilities.runtime !== "claude-code") {
-        return "This conversation is limited to some areas of the workspace, and only Claude Code can run such a conversation so far. Switch it to a Claude model to continue.";
-    }
-    if (!(await services.turnIsolation.sandboxAvailable())) {
-        return "This conversation is limited to some areas of the workspace, and this sandbox cannot build the isolated environment that needs (bubblewrap with user namespaces). Ask a maintainer to recreate the sandbox.";
-    }
-    return undefined;
-};
-
 // In unprivileged mode every turn runs in an agent domain, a main-tree turn as much as an isolated one; what cannot be
 // placed in one is refused, never run as root instead. Only Claude Code so far: the other runtimes keep their homes and
 // logins in the auth root, which the domain masks, and Cursor's turn host and the shared servers are not domain-placed.
@@ -419,7 +406,9 @@ const isolationOf = async (
     worktree: WorktreeRun | undefined,
     localCwd: string,
     cliEnv: Readonly<Record<string, string>>,
+    sink: SetupSink,
 ): Promise<TurnPlacement | undefined | { readonly refused: string }> => {
+    const notes = setupNotes(services, input, sink);
     if (mode === "unprivileged") {
         return domainIsolationOf(services, input, worktree, localCwd, cliEnv["SSH_AUTH_SOCK"]);
     }
@@ -429,10 +418,10 @@ const isolationOf = async (
             return { refused };
         }
         const plan = await services.turnIsolation.planFor(localCwd, worktree.fence);
-        return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
+        return { plan, anchor: await startAnchor(plan, notes) };
     }
     // While conversations can be private, every other turn too, main tree and worktree alike (jail-placement.ts).
-    const jailed = await jailedPlacementOf(services, input, localCwd, cliEnv["SSH_AUTH_SOCK"]);
+    const jailed = await jailedPlacementOf(services, input, localCwd, cliEnv["SSH_AUTH_SOCK"], notes);
     if (jailed !== undefined) {
         return jailed;
     }
@@ -443,7 +432,7 @@ const isolationOf = async (
     if (!(await services.turnIsolation.available())) {
         return { plan };
     }
-    return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
+    return { plan, anchor: await startAnchor(plan, notes) };
 };
 
 // What a conversation turn's gates ask of its actor as they go: whether a person has steered it, and whether a card
@@ -532,6 +521,8 @@ interface Preflight {
     readonly handedOff: HandedOff | undefined;
     // How a home conversation went on in a fresh session instead of its old one (conversations/home/home-rollover.ts).
     readonly freshStart: FreshStart | undefined;
+    // How many of the conversation's layers its placement set aside to come up (layer-repair.ts), for the chat's notice.
+    readonly repaired: number | undefined;
     readonly coldTrimStamps: TurnExperimentStamps;
     readonly repoSync: Promise<RepoSync[]> | undefined;
     readonly carriedOff: boolean;
@@ -559,7 +550,9 @@ const preflight = async (
     }
     // Two paths: `localCwd` is the daemon's tree; `effectiveCwd` is the root as the agent sees it.
     const localCwd = worktree?.cwd ?? services.workspace.root;
-    const placed = await withSetupRefusal(services, input, () => isolationOf(services, input, executionScope.mode, worktree, localCwd, cliEnv));
+    // What the placement did by itself on the way up (its one repair), said by the turn once it is placed.
+    const sink: SetupSink = {};
+    const placed = await withSetupRefusal(services, input, () => isolationOf(services, input, executionScope.mode, worktree, localCwd, cliEnv, sink));
     if (placed !== undefined && "refused" in placed) {
         return placed;
     }
@@ -615,6 +608,7 @@ const preflight = async (
         coldTrimStamps: going.stamps,
         repoSync,
         carriedOff: carriedOffOf(input, held),
+        repaired: sink.repaired,
     };
 };
 
@@ -759,6 +753,9 @@ async function* prepareTurn(
     }
     if (ready.freshStart !== undefined) {
         yield { kind: "fresh_start", ...ready.freshStart };
+    }
+    if (ready.repaired !== undefined) {
+        yield { kind: "workspace_repaired", layers: ready.repaired };
     }
     const planned = await planTurn(services, asked, ready.context);
     const plan = planned.ok ? { ...planned, experiments: { ...planned.experiments, ...ready.coldTrimStamps } } : planned;

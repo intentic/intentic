@@ -3351,7 +3351,9 @@
                 "refused": "Se ejecutó en {to}: el plan o la organización de la cuenta {from} no lo permite.",
                 "reach": "Se ejecutó en {to}: las personas para las que trabaja esta conversación no pueden usar la cuenta {from}.",
                 "cold": "Se movió de {from} a {to}, que tiene más margen: la caché había caducado, así que el cambio no costó nada."
-            }
+            },
+            "workspaceRepaired": "La copia del espacio de trabajo de esta conversación no llegó a arrancar y se preparó de nuevo.",
+            "workspaceRepairedLayers": "La copia del espacio de trabajo de esta conversación no llegó a arrancar, así que sus dependencias instaladas ({count} capa) se apartaron y se preparó de nuevo. Vuelve a instalarlas si el trabajo las necesita. | La copia del espacio de trabajo de esta conversación no llegó a arrancar, así que sus dependencias instaladas ({count} capas) se apartaron y se preparó de nuevo. Vuelve a instalarlas si el trabajo las necesita."
         },
         "failure": {
             "access": "El proveedor rechazó esta cuenta: su plan u organización no lo permite.",
@@ -3374,7 +3376,8 @@
             "messageId": "ID de mensaje",
             "learnMore": "Más información",
             "copyDetails": "Copiar detalles",
-            "copyValue": "Copiar {name}"
+            "copyValue": "Copiar {name}",
+            "workspaceBroken": "No se puede preparar la copia del espacio de trabajo de esta conversación, y volver a enviar fallará de la misma manera."
         },
         "chatJobRow": {
             "ended": "Se detuvo tras {elapsed}",
@@ -5042,6 +5045,18 @@
             "tipNote": "Incorpora, guarda y respalda",
             "tipTitle": "Automático",
             "yes": "Que se encargue el sandbox"
+        },
+        "wayOut": {
+            "workspace": "Esta copia del espacio de trabajo no se puede preparar, así que volver a intentarlo aquí falla de la misma manera.",
+            "workspaceRepeated": "Falló de la misma manera {count} veces: esta copia del espacio de trabajo no se puede preparar. No se ejecutó nada.",
+            "repeated": "Falló de la misma manera {count} veces. No se ejecutó nada.",
+            "newConversation": "Seguir en un chat nuevo",
+            "newTitle": "Sesión nueva",
+            "newNote": "Lee el chat una vez, sin caché",
+            "otherModel": "Probar otro modelo",
+            "tryAgain": "Volver a intentarlo",
+            "tryTitle": "Misma conversación",
+            "tryNote": "Lo más probable es que vuelva a fallar"
         }
     },
     "common": {

@@ -44,6 +44,7 @@ export const movesOn = (kid: ChildRecord, event: Extract<AgentEvent, { kind: "er
 const SANDBOX_SIDE: ReadonlySet<string> = new Set([
     "sandbox-memory-low",
     "workspace-setup",
+    "workspace-broken",
     "sandbox-disk-low",
     "privacy-unshielded",
     "privacy-instructions",

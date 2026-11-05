@@ -3351,7 +3351,9 @@
                 "refused": "Ran on {to}: the {from} account's plan or organization does not allow it.",
                 "reach": "Ran on {to}: the people this conversation works for may not use the {from} account.",
                 "cold": "Moved from {from} to {to}, which has more room left: the cache had expired, so moving cost nothing."
-            }
+            },
+            "workspaceRepaired": "This conversation's copy of the workspace failed to come up, and was set up again.",
+            "workspaceRepairedLayers": "This conversation's copy of the workspace failed to come up, so its installed dependencies ({count} layer) were set aside and it was set up again. Install them again if the work needs them. | This conversation's copy of the workspace failed to come up, so its installed dependencies ({count} layers) were set aside and it was set up again. Install them again if the work needs them."
         },
         "failure": {
             "access": "The provider refused this account: its plan or organization does not allow it.",
@@ -3374,7 +3376,8 @@
             "messageId": "Message ID",
             "learnMore": "Learn more",
             "copyDetails": "Copy details",
-            "copyValue": "Copy {name}"
+            "copyValue": "Copy {name}",
+            "workspaceBroken": "This conversation's copy of the workspace can't be set up, and sending again will fail the same way."
         },
         "chatJobRow": {
             "ended": "Ended after {elapsed}",
@@ -5042,6 +5045,18 @@
             "tipNote": "Accepts, saves and backs up",
             "tipTitle": "Hands-off",
             "yes": "Let the sandbox handle it"
+        },
+        "wayOut": {
+            "workspace": "This copy of the workspace can't be set up, so trying again here fails the same way.",
+            "workspaceRepeated": "Failed the same way {count} times: this copy of the workspace can't be set up. Nothing ran.",
+            "repeated": "Failed the same way {count} times. Nothing ran.",
+            "newConversation": "Continue in a new chat",
+            "newTitle": "New session",
+            "newNote": "Reads this chat once, uncached",
+            "otherModel": "Try another model",
+            "tryAgain": "Try again",
+            "tryTitle": "Same conversation",
+            "tryNote": "Most likely fails again"
         }
     },
     "common": {

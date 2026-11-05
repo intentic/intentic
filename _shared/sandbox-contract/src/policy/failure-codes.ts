@@ -65,6 +65,9 @@ export interface FailureTraits {
     // A refusal about the model itself (its allowance, its account, its catalogue, its window), which another model gets
     // past: a turn one of these stops partway offers to carry on elsewhere rather than to wait.
     readonly anotherModelClears?: true;
+    // Sending the same turn again fails the same way until something outside it is repaired: no press offers a retry as
+    // the way on, and the chat offers the ways out instead (2026-11-05: a person pressed Continue twenty times into one).
+    readonly repeats?: true;
 }
 
 // Every code the wire names, with its kind and its course. The privacy shield's own refusals (privacy-egress.ts
@@ -109,6 +112,8 @@ export const FAILURE_CODES = {
     "sandbox-memory-low": { kind: "held", course: "door" },
     // The conversation's own view of the workspace could not be set up in time: nothing was started in it.
     "workspace-setup": { kind: "held", course: "door" },
+    // The conversation's own view of the workspace failed with an error of its own, past the sandbox's one repair.
+    "workspace-broken": { kind: "held", course: "door", repeats: true },
     "sandbox-disk-low": { kind: "held", course: "door" },
     // The turn reached its own iteration or time ceiling, its work perhaps half done: carried on by a press, never by a
     // clock, since a re-run on a timer is the runaway the ceiling exists to stop.
@@ -155,3 +160,24 @@ export const anotherModelClears = (code: string | undefined): boolean => code !=
 
 /** Whether a failure code refuses a turn before the model sees any of it. */
 export const turnedAwayCode = (code: string | undefined): boolean => code !== undefined && TURNED_AWAY.has(code);
+
+const REPEATS = codesWhere((traits) => traits.repeats === true);
+
+/** Whether sending the turn again fails the same way until something outside it is repaired. */
+export const repeatsUntilRepaired = (code: string | undefined): boolean => code !== undefined && REPEATS.has(code);
+
+/* THE SAME FAILURE AGAIN. Two failures are one when they would read as one: the same code, and for words nobody coded
+   the same sentence once what changes from attempt to attempt is taken out (a descriptor bwrap opened, a pid, a port, a
+   temp dir's random suffix, a timestamp). The words are the stored ending's, already one bounded line (turn-failure.ts
+   sanitizeFailure), so two copies of one failure differ only in those. */
+
+// Hex and decimal runs, with what joins them (`/proc/self/fd/6`, `0x7f3a…`, `12:04:31`, `sandbox-3fa9c1d2`).
+const VARYING = /(?:0x)?[0-9a-f]*\d[0-9a-f]*/giu;
+// Enough of a sentence to tell two failures apart; past it, a long one is the same failure with a longer tail.
+const FINGERPRINT_LENGTH = 160;
+
+/** What two failures share when they are the same failure again: the code, and the words without what varies. */
+export const failureFingerprint = (code: string | undefined, message: string | undefined): string => {
+    const words = (message ?? "").toLowerCase().replaceAll(VARYING, "#").replaceAll(/\s+/gu, " ").trim().slice(0, FINGERPRINT_LENGTH);
+    return `${code ?? ""}|${words}`;
+};
