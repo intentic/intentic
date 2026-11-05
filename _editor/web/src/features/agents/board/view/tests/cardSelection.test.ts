@@ -8,6 +8,7 @@ import { quickBarShowAsk } from "../../../../../models/conversations/panel/chatP
 import { agentTabOf } from "../../../../../models/conversations/panel/useChat-reveal";
 import { useLayout } from "../../../../../workbench/window/useLayout";
 import type { Summons } from "../../../../../models/conversations/run/summon";
+import { composerFocus } from "../../../../../models/conversations/tabs/useChat-tabs";
 import { EMPTY_STRIP, type Strip, type TabFacts } from "../../../../../models/conversations/tabs/tabFacts";
 import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import { isRemote } from "../../../../../models/fleet/fleetScope";
@@ -281,6 +282,17 @@ describe(`a press on a card`, () => {
         ]);
         expect(board.agents.open.mock.calls).toEqual([[a1]]);
         expect(board.push.mock.calls).toEqual([[agentAt(`a1`)]]);
+    });
+
+    // A double-click on a card with no changes to read went nowhere (2026-11-05): it goes into the chat, kept, caret in it.
+    it(`enters a card's chat for real on a double-click with nothing to read`, () => {
+        const board = boardOf([a1]);
+        const caret = composerFocus.value;
+        board.focus.enterAgent(a1);
+        expect(board.agents.open.mock.calls).toEqual([[a1]]);
+        expect(board.summon.mock.calls).toEqual([[{ kind: `keep`, conversationIds: [`a1`] }]]);
+        expect(board.push).not.toHaveBeenCalled();
+        expect(composerFocus.value).toBe(caret + 1);
     });
 
     it(`opens a conversation no card stands for as a fresh tab on its session`, () => {

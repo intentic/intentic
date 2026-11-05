@@ -151,7 +151,7 @@ const focus = useCardFocus({
     strip: chatStrip,
     summon: summonChat,
 });
-const { focusAgent, focusSubagent, drillIn, reviewAgent, keepAgent, closeAgent, openSession } = focus;
+const { focusAgent, focusSubagent, drillIn, reviewAgent, enterAgent, keepAgent, closeAgent, openSession } = focus;
 // The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
 // click would; with nothing named, Enter does what it always did, which is nothing.
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
@@ -553,6 +553,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                             @keep="keepAgent(agent)"
                                             @review="drillIn(agent)"
                                             @changes="reviewAgent(agent)"
+                                            @enter="enterAgent(agent)"
                                             @resolve="resolveNow(agent.id, agent.sandboxId)"
                                             @keep-deleted="(owner, main) => keepDeletedNow(agent.id, owner, main)"
                                             @restore-deleted="(owner) => restoreDeletedNow(agent.id, owner, agent.sandboxId)"
@@ -645,6 +646,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @open="(event) => focusAgent(agent, event)"
                             @review="drillIn(agent)"
                             @changes="reviewAgent(agent)"
+                            @enter="enterAgent(agent)"
                             @restore="restore([agent.id])"
                             @unwatch="unwatchNow(agent.id)"
                             @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"

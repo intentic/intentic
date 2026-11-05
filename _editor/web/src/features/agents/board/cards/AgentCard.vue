@@ -121,8 +121,9 @@ const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
     review: [];
-    // The agent's page with its diff: the change count and a double-click.
+    // The agent's page with its diff (the change count, a double-click), or its chat on a double-click with none (`enter`).
     changes: [];
+    enter: [];
     resolve: [];
     // A land held by the owner's own deletion: keep it deleted (the agent drops its edits) or put it back and land.
     keepDeleted: [owner: OwnerHold, mainBranch: string | undefined];
@@ -427,8 +428,7 @@ const openCard = (event?: MouseEvent): void => {
     emit(`open`, event);
 };
 
-// Never a side effect of a plain click: the drill-in fires this, and it goes where the drill-in's label says
-// (useCardFocus.drillIn). A phone has no drill-in (`review` is undefined there).
+// Never a side effect of a plain click: the drill-in fires it, where its label says (useCardFocus.drillIn); a phone has none.
 const reviewCard = (): void => {
     if (edit.editing || review.value === undefined) {
         return;
@@ -436,20 +436,21 @@ const reviewCard = (): void => {
     emit(`review`);
 };
 
-// A desktop double-click is the bar's View changes (/agents/<id>), wherever that page has something on it, whatever the
-// drill-in says: a chat-bound one is where a single click already went. A phone's double-tap stays two taps.
+// A desktop double-click is the bar's View changes wherever that page has something on it, whatever the drill-in says;
+// with nothing to read it goes into the chat (`enter`), never nowhere (2026-11-05). A phone's double-tap is two taps.
 const openPage = (): void => {
-    if (edit.editing || mobile.value || !changesToRead(props.agent)) {
+    if (edit.editing || mobile.value) {
         return;
     }
-    emit(`changes`);
+    if (changesToRead(props.agent)) {
+        emit(`changes`);
+    } else {
+        emit(`enter`);
+    }
 };
 
-// One shared class for the header's icon affordances on a touch screen (a phone's ⋯ or lone press, a tablet's ⋯), where
-// there is no hover for the bar (CardHoverBar) to appear on. Ink stays 20px, but `touch-target` widens the hit area to 44.
-// Hover fill is an ink tint, not `bg-overlay`: these glyphs sit ON the card.
-// A surface-named fill would vanish on a selected card (whose own fill is that overlay) and in the light scheme, where
-// overlay equals card.
+// The header's touch-screen icon presses (a phone's ⋯ or lone press, a tablet's ⋯; no hover for CardHoverBar): 20px ink,
+// a 44px hit (`touch-target`), an ink-tint hover, since `bg-overlay` vanishes on a selected card and in the light scheme.
 const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-content/10 hover:text-content`;
 // Always drawn, quieter than the ink around it: with no hover to reveal it on, a hidden press is one nobody finds.
 const actionClass = `${HOVER_ACTION} opacity-60`;
@@ -460,9 +461,8 @@ const toolActions = computed(() =>
     toolPresses(props.agent, { desktop: !mobile.value, mayRun: can(`agent.run`), openChanges: () => emit(`changes`) }),
 );
 
-// Every press the card offers on its own, in the order a phone's sheet lists them; the tools close the list. Keep open
-// lives in the card's menu only. Adding a mark rides with the card's other actions, not with the marks themselves: the
-// stats row below has no seat to spare, and a control revealed there moved the line under it.
+// Every press the card offers on its own, in a phone's sheet order; the tools close it. Keep open is in the card's menu
+// only. Adding a mark rides with the actions, not the marks: a control revealed in the stats row moved the line under it.
 const closeHint = computed(() => closeTip(props.agent));
 const archiveHint = computed(() => archiveTip(props.agent, props.family ?? 0));
 const cardActions = computed((): ActionItem[] => {

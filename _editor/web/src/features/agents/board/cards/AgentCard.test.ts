@@ -79,6 +79,7 @@ const mount = (
         onOpen?: () => void;
         onReview?: () => void;
         onChanges?: () => void;
+        onEnter?: () => void;
         onClose?: () => void;
         onReland?: () => void;
         onLand?: () => void;
@@ -853,7 +854,7 @@ it(`marks words left unsent in a running conversation with a pencil among its co
 });
 
 // On desktop a double-click opens the agent's page, after its two clicks opened the chat; only where that page has
-// something on it (changesToRead), never onto one saying nothing changed.
+// something on it (changesToRead), never onto one saying nothing changed. Without, it goes into the chat instead.
 it(`opens the agent's page on a double-click`, () => {
     const onOpen = jest.fn();
     const onChanges = jest.fn();
@@ -864,8 +865,11 @@ it(`opens the agent's page on a double-click`, () => {
     face.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
     expect([onOpen.mock.calls.length, onChanges.mock.calls.length]).toEqual([2, 1]);
     const blank = jest.fn();
-    mount(ready(`error`), undefined, { onChanges: blank }).querySelector<HTMLElement>(`.session-card`)!.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
-    expect(blank).not.toHaveBeenCalled();
+    const onEnter = jest.fn();
+    mount(ready(`error`), undefined, { onChanges: blank, onEnter })
+        .querySelector<HTMLElement>(`.session-card`)!
+        .dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+    expect([blank.mock.calls.length, onEnter.mock.calls.length]).toEqual([0, 1]);
 });
 
 // The hover bar's tools are fixed: the diff's icon under one name, only with changes to read, and never a drill-in whose

@@ -6,6 +6,7 @@ import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
 import { afterPaint } from "../../../../lib/afterPaint";
 import { uuid } from "../../../../lib/uuid";
 import { showParkedChat } from "../../../../models/conversations/panel/chatPanelLayout";
+import { focusComposer } from "../../../../models/conversations/tabs/useChat-tabs";
 import { agentTabOf } from "../../../../models/conversations/panel/useChat-reveal";
 import { showingRunGraph } from "../../../../models/conversations/run/chatRun";
 import { traceFocus } from "../../../../models/conversations/run/focusTrace";
@@ -25,7 +26,8 @@ import { here, page } from "../../../../lib/routes/links";
 // A click must put the chat's turns on screen: with the chat's home on the rail, the look used to land in the quick
 // bar's pill, which named the agent and showed nothing, so readers clicked three and four times. It opens /chat
 // there now (showParkedChat).
-// A double-click on a card opens its page (AgentCard.openPage), on every lane alike.
+// A double-click on a card opens its page where that page has something to read (AgentCard.openPage), on every lane alike,
+// and otherwise goes into its chat for real (enterAgent): it never does nothing.
 
 // The keys that turn a click on a card into a pane gesture.
 export type PaneKeys = Pick<MouseEvent, `shiftKey` | `altKey` | `ctrlKey` | `metaKey`>;
@@ -134,6 +136,16 @@ export interface FocusHost {
     readonly summon: (summons: Summons) => void;
 }
 
+// A double-click on a card with no changes to read (AgentCard.openPage): its two clicks opened the chat as a look, so this
+// keeps it and puts the caret in its composer, an editor's preview-then-pin. Never the review page, which would say only
+// that nothing changed (reviewAction, 2026-11-04).
+const enterChat = (agent: FleetAgent, open: (agent: FleetAgent) => void, keep: (agent: FleetAgent) => void): void => {
+    open(agent);
+    keep(agent);
+    showParkedChat();
+    focusComposer();
+};
+
 // What a press on a card does, and what a link to one does. A click focuses rather than navigates: it points the chat at
 // the card, shows its turns and rings it, cheap and reversible, so clicking down a lane is skimming; a phone has no dock
 // and navigates.
@@ -175,9 +187,7 @@ export const useCardFocus = (host: FocusHost) => {
     const agentHref = (agent: FleetAgent): string => router.resolve(isRemote(agent) ? remotePath(agent) : agentPath(agent)).href;
     // Keeps a chat this board only opened for a look. A summons: the tab lives in whichever window draws the chat, and a
     // local promotion alone would be swept on that window's next focus move.
-    const keepAgent = (agent: FleetAgent): void => {
-        summon({ kind: `keep`, conversationIds: [agent.id] });
-    };
+    const keepAgent = (agent: FleetAgent): void => summon({ kind: `keep`, conversationIds: [agent.id] });
     // The deliberate view change: points the chat at the agent and walks to its page, which makes the look a keep.
     const reviewAgent = (agent: FleetAgent): void => {
         // Another box's card mints no tab, which would file into the chat pointed at THIS daemon; its page reaches that box.
@@ -189,6 +199,8 @@ export const useCardFocus = (host: FocusHost) => {
         keepAgent(agent);
         void router.push(agentPath(agent));
     };
+    // Another box's card has no chat here, so its page, where its click went too.
+    const enterAgent = (agent: FleetAgent): void => (isRemote(agent) ? reviewAgent(agent) : enterChat(agent, agents.open, keepAgent));
     const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
         if (host.drag.consumeSuppressedOpen()) {
             return;
@@ -326,5 +338,5 @@ export const useCardFocus = (host: FocusHost) => {
         { immediate: true },
     );
 
-    return { focusAgent, focusSubagent, reviewAgent, drillIn, keepAgent, closeAgent, agentHref, openSession };
+    return { focusAgent, focusSubagent, reviewAgent, enterAgent, drillIn, keepAgent, closeAgent, agentHref, openSession };
 };
