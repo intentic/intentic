@@ -527,6 +527,7 @@
             "finishedAgentsLandWork": "Finished agents land their work in your workspace.",
             "hide": "Hide",
             "ignoreCase": "Ignore case",
+            "ignoreOuterSpaces": "Search without the spaces at the ends",
             "inArchive": "In the archive",
             "inEarlierChats": "In earlier chats",
             "leaveArchive": "Leave archive",

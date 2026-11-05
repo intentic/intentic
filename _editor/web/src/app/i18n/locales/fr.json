@@ -527,6 +527,7 @@
             "finishedAgentsLandWork": "Les agents terminés intègrent leur travail dans votre espace de travail.",
             "hide": "Masquer",
             "ignoreCase": "Ignorer la casse",
+            "ignoreOuterSpaces": "Rechercher sans les espaces aux extrémités",
             "inArchive": "Dans l'archive",
             "inEarlierChats": "Dans des chats antérieurs",
             "leaveArchive": "Quitter l'archive",

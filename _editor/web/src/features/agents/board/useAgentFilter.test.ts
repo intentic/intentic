@@ -138,6 +138,23 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(first as FleetAgent)).toBeUndefined();
     });
 
+    it(`keeps the spaces typed at the ends, so " ui " finds the word and not "build"`, async () => {
+        setAgents([agent(`a1`, { title: `rebuild the panel` }), agent(`a2`, { title: `ui polish` }), agent(`a3`, { title: `make the ui calmer` })], 1);
+        const filter = filterIn();
+        const cards = (): boolean[] => useAgents().fleet.value.map((card) => filter.matches(card));
+        filter.query.value = `ui`;
+        await nextTick();
+        expect(cards()).toEqual([true, true, true]);
+        filter.query.value = ` ui `;
+        await nextTick();
+        expect(filter.needle.value).toBe(` ui `);
+        expect(cards()).toEqual([false, true, true]);
+        // Spaces alone never reach the floor.
+        filter.query.value = ` u `;
+        await nextTick();
+        expect(filter.active.value).toBe(false);
+    });
+
     // An id is how agents, the CLI and every link name a conversation, and nothing it says contains it.
     it(`finds a card by its pasted id on the keystroke and names it whole, and only it, among cards that mention it`, async () => {
         setAgents(

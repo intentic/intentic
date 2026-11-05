@@ -1,6 +1,7 @@
 import type { Caller } from "../auth/auth.js";
 import { conversationReader, registryProvenance, seesWholeFleet } from "../auth/scope/conversation-reader.js";
 import { sessionsContract } from "@intentic/sandbox-contract/contracts/sessions.contract";
+import { searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -30,7 +31,8 @@ export const createSessionsRoutes = (services: SessionsRoutesDeps) => {
     const i = implement(sessionsContract).$context<OrpcContext>();
     return {
         list: i.list.handler(async ({ input, context }) => {
-            const query = input.query?.trim();
+            // Spaces at the ends are part of the query (agent-search.ts); a query of spaces alone is no query.
+            const query = input.query !== undefined && input.query.trim() !== "" ? searchTermOf(input.query) : undefined;
             const root = services.workspace.root;
             const reads = sessionReader(services, context.identity);
             const sessions = query ? await services.sessions.search(query, input.caseSensitive === true) : await services.sessions.list(root);

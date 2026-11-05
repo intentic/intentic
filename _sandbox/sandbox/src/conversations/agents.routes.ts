@@ -7,6 +7,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { agentsContract } from "@intentic/sandbox-contract/contracts/agents.contract";
 import type { AgentChanges, AgentScratch, ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { indexOfTerm, searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { newRowId } from "@intentic/sandbox-contract/ids/row-ids";
 import { implement, ORPCError } from "@orpc/server";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
@@ -138,17 +139,19 @@ export const createAgentsRoutes = (services: Services) => {
         // Answers over the live roster and the archive, since the board hides finished/archived agents from the live
         // list. Matches the title or either side's said lines; a title hit carries no snippet.
         search: i.search.handler(async ({ input, context }) => {
-            // Folded once here so needle and haystack share a case; the index folds its side the same way.
+            // Folded once here so needle and haystack share a case; the index folds its side the same way. Spaces at
+            // the ends are kept: they are part of what was asked for (agent-search.ts).
             const caseSensitive = input.caseSensitive === true;
-            const needle = caseSensitive ? input.query : input.query.toLowerCase();
+            const term = searchTermOf(input.query);
+            const needle = caseSensitive ? term : term.toLowerCase();
             // Only what the caller may see: a snippet is a reading of the transcript, and even a bare id says a
             // conversation behind the fence matched the words.
             const entries = [...services.agents.list(), ...services.agents.listArchived()].filter((agent) => visibleTo(context.identity, agent));
             // One query for the whole fleet, not a read per entry.
-            const said = await services.saidIndex.search(input.query, "conversation", caseSensitive);
+            const said = await services.saidIndex.search(term, "conversation", caseSensitive);
             const matches = entries.flatMap((agent) => {
                 const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
-                if (title?.includes(needle) === true) {
+                if (title !== undefined && indexOfTerm(title, needle) !== -1) {
                     return [{ id: agent.id }];
                 }
                 const indexed = said.get(agent.id);

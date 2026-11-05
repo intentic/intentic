@@ -1,4 +1,4 @@
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
+import { indexOfTerm, type MatchSnippet, type Speaker, searchable, searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { useSettled } from "@intentic/ui/async";
 import { computed, ref } from "vue";
@@ -16,7 +16,8 @@ import { rpcKey } from "../../../lib/queryKeys";
 // Filters the fleet by what was said, as a factory (not a singleton) so each surface owns its own query. Matches in two
 // tiers, local per keystroke over open transcripts and titles, debounced daemon for the rest, merged as a union so
 // refining a query never empties the board. Match case is shared across every surface since it's a reading habit, not a
-// per-search setting; minimum two characters, matching the daemon's own floor.
+// per-search setting; minimum two characters besides spaces, matching the daemon's own floor. Spaces are never trimmed:
+// " ui " asks for the word, and the tiers read it by one rule (agent-search.ts).
 
 // What an open conversation said, matchable without asking the daemon: both user and assistant text, folded (whitespace
 // collapsed, lowercased unless case-sensitive) once here rather than per test, since the board asks about a card
@@ -56,7 +57,7 @@ const snippetFor = (lines: readonly SpokenLine[], needle: string): MatchSnippet 
             if (spoken.speaker !== speaker) {
                 continue;
             }
-            const at = spoken.folded.indexOf(needle);
+            const at = indexOfTerm(spoken.folded, needle);
             if (at === -1) {
                 continue;
             }
@@ -94,7 +95,6 @@ const sameHit = (left: AgentHit, right: AgentHit): boolean => sameSnippet(left.s
 // sharing one.
 const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent.id}`;
 
-const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
 
 // The case rule, shared by every filter field and remembered across reloads and windows: the ref is the preference, so
@@ -107,15 +107,15 @@ export function useAgentFilter() {
 
     const query = ref(``);
     // Folded once to whatever case rule is in force, so every tier runs a substring test against a haystack folded the
-    // same way.
-    const needle = computed(() => (matchCase.value ? query.value.trim() : query.value.trim().toLowerCase()));
-    const active = computed(() => needle.value.length >= MIN_QUERY);
+    // same way. Whitespace runs fold to one space, as every searched line is folded; spaces at the ends stay.
+    const needle = computed(() => (matchCase.value ? searchTermOf(query.value) : searchTermOf(query.value).toLowerCase()));
+    const active = computed(() => searchable(needle.value));
 
     // The daemon tier's input, trailing the typed one so a keystroke burst becomes one request. Read off `needle`, not
-    // `query`, so trimming whitespace doesn't spend a round trip.
+    // `query`, so a doubled space doesn't spend a round trip.
     const settled = useSettled(needle, DEBOUNCE_MS);
 
-    const enabled = computed(() => reachable.value && settled.value.length >= MIN_QUERY);
+    const enabled = computed(() => reachable.value && searchable(settled.value));
 
     // Flipping `Aa` re-asks at once rather than debouncing with the text, and rides in the key as well as the request,
     // since the same words under the other rule cache separately.
@@ -202,7 +202,7 @@ export function useAgentFilter() {
                 if (id !== undefined) {
                     return { id };
                 }
-                if (title?.includes(term) === true) {
+                if (title !== undefined && indexOfTerm(title, term) !== -1) {
                     return {};
                 }
                 const local = snippetFor(index.get(agent.id) ?? [], term);

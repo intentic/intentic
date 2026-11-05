@@ -1,3 +1,4 @@
+import { indexOfTerm } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -49,8 +50,8 @@ export const insideRun = (agent: FleetAgent, ledger: ReadonlySet<string>): boole
 // Whether a run answers a search, since its steps can't answer for themselves. Matches on the run's name, its
 // request text, or any step via the board's own agent predicate.
 export const runMatches = (run: WorkflowRun, needle: string, fleet: readonly FleetAgent[], agentMatches: (agent: FleetAgent) => boolean): boolean =>
-    run.workflow.name.toLowerCase().includes(needle) ||
-    run.request?.toLowerCase().includes(needle) === true ||
+    indexOfTerm(run.workflow.name.toLowerCase(), needle) !== -1 ||
+    (run.request !== undefined && indexOfTerm(run.request.toLowerCase(), needle) !== -1) ||
     fleet.some((agent) => agent.workflow?.runId === run.runId && agentMatches(agent));
 
 // Runs in a lane, shared by the board and rail. Finished is capped by the caller: a capped run hides its steps

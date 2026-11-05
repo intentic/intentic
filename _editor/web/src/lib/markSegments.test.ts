@@ -33,4 +33,17 @@ describe(`markSegments`, () => {
         expect(markSegments(`nothing here`, `zzz`)).toEqual([{ text: `nothing here`, hit: false }]);
         expect(markSegments(`nothing here`, ``)).toEqual([{ text: `nothing here`, hit: false }]);
     });
+
+    // A spaced query marks its spaces too, so the hit shows it was the word; a line's own start stands in for a space.
+    it(`marks a spaced term with its spaces, reading the text's ends as spaces`, () => {
+        expect(markSegments(`the ui and quiet`, ` ui `)).toEqual([
+            { text: `the`, hit: false },
+            { text: ` ui `, hit: true },
+            { text: `and quiet`, hit: false },
+        ]);
+        expect(markSegments(`ui first`, ` ui `)).toEqual([
+            { text: `ui `, hit: true },
+            { text: `first`, hit: false },
+        ]);
+    });
 });

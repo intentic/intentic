@@ -29,6 +29,19 @@ test("matches a mid-word fragment and a multi-word phrase alike", async () => {
     expect((await index.search("fleet filter", "conversation", false)).has("c1")).toBe(false);
 });
 
+// Spaces at the ends are asked for: " ui " is the word, and a line's own start or end stands in for the space.
+test("a space at either end of the query is matched, the line's own ends counting as one", async () => {
+    const index = fresh();
+    await index.put("c1", "conversation", "1", said(["rebuild the quiet panel", "user"]));
+    await index.put("c2", "conversation", "1", said(["make the ui calmer", "user"]));
+    await index.put("c3", "conversation", "1", said(["UI first, then the rest", "user"]));
+
+    expect([...(await index.search("ui", "conversation", false)).keys()].sort()).toEqual(["c1", "c2", "c3"]);
+    expect([...(await index.search(" ui ", "conversation", false)).keys()].sort()).toEqual(["c2", "c3"]);
+    expect([...(await index.search(" UI ", "conversation", true)).keys()]).toEqual(["c3"]);
+    expect((await index.search("the ui ", "conversation", false)).get("c2")).toEqual({ text: "make the ui calmer", speaker: "user" });
+});
+
 test("prefers the oldest user line, falling back to the agent's", async () => {
     const index = fresh();
     await index.put(

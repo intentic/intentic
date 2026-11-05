@@ -2,7 +2,7 @@ import { cachedAsync } from "@intentic/base/held";
 import { sdk } from "../engines/claude-sdk.js";
 import { AskQuestionSchema, type TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
+import { indexOfTerm, type MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { TranscriptQuestion, TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
@@ -148,7 +148,7 @@ export const searchWorkspaceSessions = async (
     const hits = await said(query, "session", caseSensitive);
     // Copies, never the cached objects: writing a snippet onto one would leak into the next query.
     return sessions.flatMap(({ snippet: _stale, ...session }): SessionSummary[] => {
-        if ((caseSensitive ? session.title : session.title.toLowerCase()).includes(needle)) {
+        if (indexOfTerm(caseSensitive ? session.title : session.title.toLowerCase(), needle) !== -1) {
             return [session];
         }
         const indexed = hits.get(session.id);

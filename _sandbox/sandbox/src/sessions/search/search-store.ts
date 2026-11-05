@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { immediateTransaction, IN_MEMORY, openSqlite } from "@intentic/base/sqlite";
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
+import { indexOfTerm, type MatchSnippet, type Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { FoundLine, SearchIndexMetrics, SearchKind } from "./search-index.js";
 import type { LineVia, SpokenLine } from "./transcript-search.js";
 
@@ -80,10 +80,13 @@ const windowed = (text: string, at: number, length: number): string => {
 };
 
 // Never escaped: sqlite offers fts5 only a two-argument LIKE, so an ESCAPE clause turns the trigram index into a scan.
-const likePattern = (folded: string): string => `%${folded}%`;
+// The needle's spaces at either end are left to the re-check below: a line's own ends read as a space
+// (agent-search.ts), which a LIKE over the bare column cannot say.
+const likePattern = (folded: string): string => `%${folded.trim()}%`;
 
-// A typed `%` or `_` only widens the LIKE; this literal re-check narrows it back, empty (always true) when none is typed.
-const literalNeedle = (folded: string): string => (/[%_]/u.test(folded) ? folded : "");
+// A typed `%` or `_` only widens the LIKE, and a space at either end is a test the LIKE left out; this literal re-check,
+// over the line with a space either side, narrows it back, empty (always true) when neither is typed.
+const literalNeedle = (folded: string): string => (/[%_]/u.test(folded) || folded !== folded.trim() ? folded : "");
 
 // Oldest user line per source, else oldest agent's, else a deed by the rank below, via a partition ordered by that rank
 // then rowid. Binds: kind, likePattern, literalNeedle, then the raw needle when case-sensitive or "" when not, since
@@ -103,7 +106,7 @@ export const SEARCH_SQL = `
                 END, rowid
             ) AS rn
         FROM said
-        WHERE kind = ? AND fold LIKE ? AND instr(fold, ?) > 0 AND instr(text, ?) > 0 AND (? OR via = '')
+        WHERE kind = ? AND fold LIKE ? AND instr(' ' || fold || ' ', ?) > 0 AND instr(' ' || text || ' ', ?) > 0 AND (? OR via = '')
     ) WHERE rn = 1
 `;
 
@@ -197,7 +200,7 @@ export const openSearchStore = (dir: string): SearchStore => {
                 }
                 // Recomputed here, not from sqlite's instr, since that answers in bytes and a slice needs UTF-16 code
                 // units.
-                const at = (caseSensitive ? row.text : row.text.toLowerCase()).indexOf(caseSensitive ? needle : folded);
+                const at = indexOfTerm(caseSensitive ? row.text : row.text.toLowerCase(), caseSensitive ? needle : folded);
                 const snippet: MatchSnippet = { text: windowed(row.text, at === -1 ? 0 : at, needle.length), speaker: row.speaker };
                 found.set(row.key, isVia(row.via) ? { ...snippet, via: row.via } : snippet);
             }

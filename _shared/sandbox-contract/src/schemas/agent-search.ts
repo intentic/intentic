@@ -2,14 +2,33 @@ import { z } from "zod";
 
 // The board's search over what conversations said: the query, and what came back with its evidence.
 
+// Spaces count, at the ends too: " ui " is the word, not "build" or "quit", and a box that trimmed them made the one
+// cheap way to say "a whole word" impossible. A run of whitespace reads as one space, because every searched line is
+// collapsed the same way, and a line's own start and end read as a space, so " fix" still finds a line opening "fix".
+// One rule for the board's local tier, the daemon's index and its overlay, so the tiers never disagree on a hit.
+export const MIN_SEARCH_CHARS = 2;
+
+// The query as it is matched: whitespace runs folded to one space, never trimmed.
+export const searchTermOf = (query: string): string => query.replace(/\s+/gu, " ");
+
+// Whether a term is long enough to search: its spaces don't count toward the floor, or " a" would match most lines.
+export const searchable = (term: string): boolean => term.trim().length >= MIN_SEARCH_CHARS;
+
+// Where `term` starts in `line`, reading the line's ends as spaces; -1 when absent. Both are already folded to the
+// same case.
+export const indexOfTerm = (line: string, term: string): number => {
+    const at = ` ${line} `.indexOf(term);
+    return at === -1 ? -1 : Math.min(line.length, Math.max(0, at - 1));
+};
+
 // Searches only speech, both sides of the conversation, never thinking, tool output or protocol text, which would
-// otherwise match nearly the whole board. Two-char minimum; `caseSensitive` off means case-insensitive, matching
-// workspace search's own switch.
+// otherwise match nearly the whole board. Two characters besides spaces at least, the spaces kept as typed;
+// `caseSensitive` off means case-insensitive, matching workspace search's own switch.
 export const AgentSearchQuerySchema = z.object({
     query: z
         .string()
-        .trim()
-        .min(2)
+        .min(MIN_SEARCH_CHARS)
+        .refine(searchable, { message: "Too short to search: two characters besides spaces." })
         .describe(
             "What to look for. Searched against what was said, both sides of the conversation, and nothing else: not the thinking, not the tool output, which between them name nearly every identifier in the workspace and would return most of the board.",
         ),

@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import type { AgentSearchResult } from "@intentic/sandbox-contract/schemas/agent-search";
+import { type AgentSearchResult, indexOfTerm, searchTermOf } from "@intentic/sandbox-contract/schemas/agent-search";
 import { isTurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { refuse } from "@intentic/contract-serve";
@@ -214,13 +214,13 @@ export const stopJob = ({ id, jobId }: SandboxHandlerInput<`agents`, `stopJob`>)
 const folded = (text: string, caseSensitive: boolean): string => (caseSensitive ? text : text.toLowerCase());
 
 export const searchAgents = (query: string, caseSensitive: boolean): AgentSearchResult => {
-    const needle = folded(query.trim(), caseSensitive);
+    const needle = folded(searchTermOf(query), caseSensitive);
     const matches =
-        needle === ``
+        needle.trim() === ``
             ? []
             : [...roster.agents, ...archived]
                   // A conversation sealed from the reader is never found by its title (seal/sealWorld.ts), as the daemon finds none.
-                  .filter((agent) => !sealedFromCaller(agent.id) && folded(agent.title ?? ``, caseSensitive).includes(needle))
+                  .filter((agent) => !sealedFromCaller(agent.id) && indexOfTerm(folded(agent.title ?? ``, caseSensitive), needle) !== -1)
                   .map((agent) => ({ id: agent.id }));
     // No phrase index behind this; nothing is ever still being indexed. The archive is searched with the live board.
     return { matches, scanned: roster.agents.length + archived.length, indexing: false };
@@ -228,6 +228,6 @@ export const searchAgents = (query: string, caseSensitive: boolean): AgentSearch
 
 export const searchSessions = (query: string, caseSensitive: boolean): ReturnType<typeof sessions> => {
     const all = sessions(Date.now());
-    const needle = folded(query.trim(), caseSensitive);
-    return needle === `` ? all : all.filter((session) => folded(session.title, caseSensitive).includes(needle));
+    const needle = folded(searchTermOf(query), caseSensitive);
+    return needle.trim() === `` ? all : all.filter((session) => indexOfTerm(folded(session.title, caseSensitive), needle) !== -1);
 };

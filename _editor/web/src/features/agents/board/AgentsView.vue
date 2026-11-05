@@ -59,6 +59,7 @@ import ActiveGroupHead from "./ActiveGroupHead.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
+import NoMatchesNote from "./NoMatchesNote.vue";
 import { usePhoneLanes } from "./view/phoneLanes";
 import { useBoardLaunches } from "./view/boardLaunches";
 import { useAttentionAsk } from "./view/attentionAsk";
@@ -601,16 +602,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </button>
                 </section>
             </div>
-            <!-- The filter's own empty state, not the board's: agents exist, just none matched. -->
-            <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
-                <template v-if="matchCase">
-                    {{ t(`agents.agentsView.noAgentMentions`) }}{{ query.trim() }}{{ t(`agents.agentsView.thoseExactCapitals`) }}
-                    <button type="button" class="font-medium text-link underline-offset-2 hover:underline" @click="matchCase = false">
-                        {{ t(`agents.agentsView.ignoreCase`) }}
-                    </button>
-                </template>
-                <template v-else>{{ t(`agents.agentsView.noAgentYoursMentions`, { trim: query.trim() }) }}</template>
-            </p>
+            <NoMatchesNote v-if="noMatches" v-model:query="query" v-model:match-case="matchCase" />
         </div>
         <!-- What the query found off the board: the Finished window and the archive both hide agents the filter would otherwise miss entirely. -->
         <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2" :class="narrow ? '' : 'lg:px-4'">

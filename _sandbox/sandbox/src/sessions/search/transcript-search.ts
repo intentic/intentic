@@ -1,5 +1,5 @@
 import { sdk } from "../../engines/claude-sdk.js";
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
+import { indexOfTerm, type MatchSnippet, type Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { oneLine } from "@intentic/base/one-line";
 import { parsePromptEnvelope } from "../vocabulary/prompt-envelope.js";
@@ -200,7 +200,7 @@ const SNIPPET_CHARS = 120;
 const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
     // Already collapsed by `spoken` at construction; nothing to normalize here.
     const text = line.text;
-    const at = (caseSensitive ? text : text.toLowerCase()).indexOf(needle);
+    const at = indexOfTerm(caseSensitive ? text : text.toLowerCase(), needle);
     if (at === -1) {
         return undefined;
     }

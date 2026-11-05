@@ -527,6 +527,7 @@
             "finishedAgentsLandWork": "Skończone agenty scalają swoją pracę do Twojej przestrzeni roboczej.",
             "hide": "Ukryj",
             "ignoreCase": "Ignoruj wielkość liter",
+            "ignoreOuterSpaces": "Szukaj bez spacji na końcach",
             "inArchive": "W archiwum",
             "inEarlierChats": "We wcześniejszych czatach",
             "leaveArchive": "Wyjdź z archiwum",
