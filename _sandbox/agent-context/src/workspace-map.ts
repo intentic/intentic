@@ -284,7 +284,9 @@ const packagesIn = (dir: string, root: string): { name: string; dir: string }[] 
 
 // A project's own top-level directories, except when the root itself is just a shelf (one or two entries, one of them a
 // container): then its packages are promoted to areas instead. A shelf among real areas stays one line until the run is
-// inside it.
+// inside it. A lone directory is a wrapper, not an area: a repository whose whole project sits in one folder beside its
+// AGENTS.md (`integra/` with `crates/`, `games/`, … inside) has that folder's own directories as its areas. Mapped as
+// one area, that layout yielded no map at all, on every turn of a sandbox that had the map switched on (2026-11-05).
 const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
     const names = childDirs(projectRoot, root);
     const areas = names.map((name) => {
@@ -292,7 +294,13 @@ const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
         return { name, dir, packages: packagesIn(dir, root) };
     });
     const shelf = areas.length <= 2 ? areas.find((area) => area.packages.length > 0) : undefined;
-    return shelf === undefined ? areas : shelf.packages.map((entry) => ({ name: `${shelf.name}/${entry.name}`, dir: entry.dir, packages: [] }));
+    if (shelf !== undefined) {
+        return shelf.packages.map((entry) => ({ name: `${shelf.name}/${entry.name}`, dir: entry.dir, packages: [] }));
+    }
+    const [lone] = areas;
+    return areas.length === 1 && lone !== undefined
+        ? areaDirsOf(lone.dir, root).map((area) => ({ ...area, name: `${lone.name}/${area.name}` }))
+        : areas;
 };
 
 export interface WorkspaceMapInput {
@@ -336,7 +344,9 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
     // shelf of packages.
     const total = base.reduce((sum, entry) => sum + entry.measured.files, 0);
     const biggest = base.toSorted((left, right) => right.measured.files - left.measured.files)[0];
-    const dominant = cwdRel === "" && biggest !== undefined && biggest.measured.files >= total * DOMINANT_SHARE ? biggest.name : undefined;
+    // Standing nowhere: at the project root, or in the wrapper folder the areas were promoted out of.
+    const nowhere = !base.some((area) => isHere(area.name));
+    const dominant = nowhere && biggest !== undefined && biggest.measured.files >= total * DOMINANT_SHARE ? biggest.name : undefined;
     const measured = base.map(({ name, dir, packages, measured: area }): MapArea => {
         if (isHere(name)) {
             return { ...area, ...expand(name, packages) };

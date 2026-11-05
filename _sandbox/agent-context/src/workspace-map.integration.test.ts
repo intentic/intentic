@@ -87,6 +87,37 @@ test("a repository that IS a shelf promotes its packages to areas", async () => 
     expect(map?.areas.find((area) => area.name === "packages/api")?.purpose).toBe("HTTP surface");
 });
 
+test("a project wrapped in one folder maps that folder's directories, from the root or from inside it", async () => {
+    const files = {
+        ".git/HEAD": "ref: refs/heads/main\n",
+        "AGENTS.md": "",
+        "refs/cloned/a.rs": "",
+        "integra/Cargo.toml": "[workspace]\n",
+        "integra/crates/kernel/Cargo.toml": "[package]\n",
+        "integra/crates/kernel/lib.rs": "",
+        "integra/crates/render/Cargo.toml": "[package]\n",
+        "integra/crates/render/lib.rs": "",
+        "integra/crates/ui/Cargo.toml": "[package]\n",
+        "integra/crates/ui/lib.rs": "",
+        "integra/games/shinobi/package.json": pkg("shinobi"),
+        "integra/scripts/run.sh": "",
+    };
+    const root = await scaffold(files);
+
+    const top = workspaceMapOf({ root, cwd: root });
+    const inside = workspaceMapOf({ root, cwd: join(root, "integra") });
+
+    expect(named(top)).toEqual(["integra/crates", "integra/games", "integra/scripts"]);
+    expect(named(inside)).toEqual(["integra/crates", "integra/games", "integra/scripts"]);
+    // Standing in the wrapper is standing nowhere in particular: the area holding most of the project still opens.
+    expect(inside?.areas[0]?.children.map((child) => child.name)).toEqual([
+        "integra/crates/kernel",
+        "integra/crates/render",
+        "integra/crates/ui",
+    ]);
+    expect(workspaceMapNote({ root, cwd: root })).toContain("integra/crates");
+});
+
 test("a shelf among real areas stays one line, and opens only when the run is inside it", async () => {
     const files = {
         ".git/HEAD": "ref: refs/heads/main\n",
