@@ -28,7 +28,7 @@ describe(`what the machine last did, in plain words`, () => {
             tone: `info`,
             failed: undefined,
             probation: true,
-            ready: `That version stays ready on this machine until 14:05 tomorrow, so going back takes seconds.`,
+            ready: `14:05 tomorrow`,
         });
     });
 

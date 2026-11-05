@@ -431,7 +431,8 @@ it(`says a fresh update worked without pitching the way back, which waits behind
     expect(el.textContent).not.toMatch(/roll back|stays ready/i);
     expect(recreates(el)).toEqual([]);
     await press(el, `Having trouble?`);
-    expect(el.textContent).toContain(`That version stays ready on this machine until`);
+    // How long the way back lasts rides in the hover card beside its name, for a reader who never hovers too.
+    expect(el.textContent).toContain(`Ready until`);
     expect(recreates(el)).toEqual([`Roll back`]);
 });
 

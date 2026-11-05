@@ -1,9 +1,9 @@
-<!-- The way back, once someone asked for it: one row naming the step, its button, and what it costs as a line of facts
-     the reader takes in at a glance. The sentences behind each fact are its tooltip, and the confirmation names the
-     agents it interrupts, so nothing here is a paragraph. Opened from the update card's quiet "Having trouble?" or from
-     a withdrawn release's notice; never drawn unasked. -->
+<!-- The way back, once someone asked for it: its name and its one control, nothing else in words. What it costs is a
+     single mark beside the name (a quiet ⓘ, amber when agents are mid-turn) whose hover card holds the figures; the
+     confirmation names the agents it interrupts. Opened from the update card's quiet "Having trouble?" or from a
+     withdrawn release's notice; never drawn unasked. -->
 <script setup lang="ts">
-import { Button, type IconName } from "@intentic/ui";
+import { Button, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
@@ -11,8 +11,8 @@ import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 const t = useT();
 
 const props = defineProps<{
-    /** How long the previous version stays ready on this machine, as a sentence, when the last update said so. */
-    ready?: string;
+    /** Until when the previous version stays parked on this machine ("14:05 tomorrow"), when the last update said. */
+    readyUntil?: string;
     /** Agents mid-turn right now, whose work going back interrupts. */
     midTurn: number;
     hosted: boolean;
@@ -22,52 +22,42 @@ const props = defineProps<{
 // The platform asks its own question for a hosted sandbox (HostedRollbackDialog), which the card owns.
 const emit = defineEmits<{ hostedRollback: [] }>();
 
-interface Fact {
-    readonly icon: IconName;
-    readonly label: string;
-    readonly tip: string;
-    readonly warn?: boolean;
-}
-const facts = computed((): Fact[] => [
-    { icon: `clock`, label: t(`sandbox.sandboxUpdateCard.factDowntime`), tip: props.ready ?? t(`capabilities.hostRecreate.costRollBack`) },
-    { icon: `shield`, label: t(`sandbox.sandboxUpdateCard.factFilesStay`), tip: t(`sandbox.sandboxUpdateCard.filesStay`) },
-    ...(props.midTurn > 0
-        ? [
-              {
-                  icon: `exclamation-triangle` as const,
-                  label: t(`sandbox.sandboxUpdateCard.factAgentsWorking`, { count: props.midTurn }, props.midTurn),
-                  tip: t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: props.midTurn }, props.midTurn),
-                  warn: true,
-              },
-          ]
-        : []),
-]);
+const tip = computed(
+    (): Tip => ({
+        title: t(`capabilities.hostRecreate.rollBackVerb`),
+        rows: [
+            { label: t(`sandbox.sandboxUpdateCard.tipDowntime`), value: t(`sandbox.sandboxUpdateCard.tipDowntimeValue`) },
+            { label: t(`sandbox.sandboxUpdateCard.tipFiles`), value: t(`sandbox.sandboxUpdateCard.tipKept`) },
+            ...(props.readyUntil === undefined ? [] : [{ label: t(`sandbox.sandboxUpdateCard.tipReadyUntil`), value: props.readyUntil }]),
+            ...(props.midTurn > 0 ? [{ label: t(`sandbox.sandboxUpdateCard.tipAgentsWorking`), value: props.midTurn, tone: `warning` as const }] : []),
+        ],
+    }),
+);
+// The sentence the card's figures stand for, for a reader who never hovers.
+const spoken = computed(() =>
+    [t(`capabilities.hostRecreate.costRollBack`), t(`sandbox.sandboxUpdateCard.filesStay`)]
+        .concat(props.readyUntil === undefined ? [] : [`${t(`sandbox.sandboxUpdateCard.tipReadyUntil`)} ${props.readyUntil}.`])
+        .concat(props.midTurn > 0 ? [t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: props.midTurn }, props.midTurn)] : [])
+        .join(` `),
+);
 </script>
 
 <template>
     <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div class="flex min-w-0 flex-col gap-1.5">
-            <p class="text-sm font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}</p>
-            <ul class="flex flex-wrap gap-x-4 gap-y-1">
-                <li
-                    v-for="fact in facts"
-                    :key="fact.icon"
-                    v-tooltip.top="fact.tip"
-                    class="flex items-center gap-1.5 text-2xs"
-                    :class="fact.warn ? `text-warning` : `text-muted`"
-                >
-                    <Icon :name="fact.icon" class="shrink-0" :class="!fact.warn && `text-subtle`" aria-hidden="true" />{{ fact.label }}
-                    <!-- The sentence behind the fact, for a reader who never hovers. -->
-                    <span class="sr-only">{{ fact.tip }}</span>
-                </li>
-            </ul>
-        </div>
+        <p class="flex min-w-0 items-center gap-2 text-sm font-medium text-content">
+            {{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}
+            <span v-tooltip.top="tip" tabindex="0" class="inline-flex shrink-0" :class="midTurn > 0 ? `text-warning` : `text-subtle`">
+                <Icon :name="midTurn > 0 ? `exclamation-triangle` : `info-circle`" aria-hidden="true" />
+                <span class="sr-only">{{ spoken }}</span>
+            </span>
+        </p>
         <!-- Own block so a wrapping row doesn't stretch a small button to full width. -->
         <div v-if="hosted">
             <Button :label="t(`capabilities.hostRecreate.rollBackVerb`)" size="small" tier="accent" @click="emit(`hostedRollback`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </div>
-        <HostRecreate v-else-if="slug" :slug="slug" action="Roll back" bare />
+        <!-- On a machine this page cannot reach, the command alone takes the row under the name. -->
+        <HostRecreate v-else-if="slug" class="max-w-full" :slug="slug" action="Roll back" bare terse />
     </div>
 </template>

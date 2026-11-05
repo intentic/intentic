@@ -37,7 +37,7 @@ export interface OutcomeNews {
     /** The previous version is parked and ready right now: going back takes seconds. */
     readonly probation: boolean;
     /**
-     * Until when it stays parked, as a sentence. Not part of `text`: an update that worked is good news, and the way
+     * Until when it stays parked, as a moment on the reader's clock ("14:05 tomorrow"). Not part of `text`: an update that worked is good news, and the way
      * back belongs to the card's quiet "Having trouble?" escape, not to the headline.
      */
     readonly ready: string | undefined;
@@ -76,7 +76,7 @@ const updatedNews = (outcome: UpdateOutcome, now: number, applied: Applied): Out
     if (moved === undefined || (!probation && now - outcome.at > UPDATE_NEWS_MS)) {
         return undefined;
     }
-    const ready = probation && outcome.keepUntil !== undefined ? t(`sandbox.updateOutcome.previousReadyUntil`, { when: formatUntil(outcome.keepUntil, now) }) : undefined;
+    const ready = probation && outcome.keepUntil !== undefined ? formatUntil(outcome.keepUntil, now) : undefined;
     return {
         text: moved,
         reason: undefined,

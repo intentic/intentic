@@ -535,7 +535,7 @@ const finePrint = computed(
                 </div>
                 <UpdateRollbackPanel
                     v-if="rollbackShown"
-                    :ready="plan.news?.ready"
+                    :ready-until="plan.news?.ready"
                     :mid-turn="midTurn"
                     :hosted="hosted !== undefined"
                     :slug="slug"
@@ -653,7 +653,7 @@ const finePrint = computed(
                     <!-- The way back, opened from "Having trouble?" in the heading's row or, for a withdrawn release, from its notice. -->
                     <UpdateRollbackPanel
                         v-if="rollbackShown"
-                        :ready="plan.news?.ready"
+                        :ready-until="plan.news?.ready"
                         :mid-turn="midTurn"
                         :hosted="hosted !== undefined"
                         :slug="slug"

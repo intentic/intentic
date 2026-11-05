@@ -76,6 +76,9 @@ const props = defineProps<{
     // anyone. The caller states the cost beside it, so no line here repeats it, and on a machine this page cannot reach
     // the command waits behind the button (`open`) instead of being printed at whoever opens the page.
     gilded?: boolean;
+    // Only the command on a machine this page cannot reach: no explanation, label, cost or app pitch around it. For a
+    // caller that already names the step (the rollback panel's title) and keeps its cost in a hover card.
+    terse?: boolean;
 }>();
 // The sandbox answered again after a swap this ran: the caller's moment to say how it went.
 const emit = defineEmits<{ back: [] }>();
@@ -551,13 +554,17 @@ const command = (os: CommandOs): string => {
                 v-if="!gilded || open"
                 :class="gilded ? `flex flex-col gap-2.5 rounded-lg border border-line-subtle bg-canvas/50 p-3.5` : `flex flex-col gap-2`"
             >
-                <RunCommand :command="command" :explanation="t(`capabilities.hostRecreate.runInTerminal`)" />
+                <RunCommand
+                    :command="command"
+                    :explanation="terse ? undefined : t(`capabilities.hostRecreate.runInTerminal`)"
+                    :label="terse ? `` : undefined"
+                />
                 <p v-if="!gilded && !bare" class="text-2xs text-subtle">{{ cost }}</p>
                 <ComposeUpdateHint v-if="action === `Update`" />
                 <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
                 <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
                 <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
-                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-subtle">
+                <p v-if="!terse" class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-subtle">
                     <span>{{ t(`capabilities.hostRecreate.skipTerminalNextTime`) }}</span>
                     <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">{{ t(`capabilities.hostRecreate.intenticWindows`) }}</a>
                     <span>·</span>
