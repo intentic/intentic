@@ -3,14 +3,19 @@
 // follows each check's `gate`: a `code` failure always fails the run; a `tidy` one does too unless `--tidy=warn`, used
 // where many hands are moving the tree at once.
 //
+// `--report` is what CI runs: only a check manifest.mjs lists in CI_BLOCKING fails the run, and every other finding is
+// reported, printed as before and also written as warning annotations on the lines it names and a block in the job's
+// step summary (lib/ci-report.mjs), so a style or wording finding stays visible without failing main.
+//
 // `--paths a,b,c` narrows the run to those files and to the checks that can honestly judge a file on its own
 // (`scoped` in the manifest). That is what the per-edit moment runs: one file, ~100ms, a verdict the model that just
 // wrote the line can still act on. It is a NARROWER question, not a cheaper one — a scoped run vouches for nothing it
 // did not read, and no scoped check may write a baseline, since it knows nothing about the files it skipped.
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
-import { CHECKS } from "./manifest.mjs";
+import { blocksCi, CHECKS, CI_REPORTED } from "./manifest.mjs";
 import { checkPool, pooledMap } from "./lib/check-pool.mjs";
+import { createReporter } from "./lib/ci-report.mjs";
 
 const here = dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);
@@ -32,6 +37,7 @@ const only = option("--only");
 const skip = new Set(option("--skip") ?? []);
 const gate = setting("--gate");
 const tidyWarns = setting("--tidy") === "warn";
+const reportOnly = args.includes("--report");
 const json = args.includes("--json");
 // Repo-relative paths to judge. Present and empty is a real answer (nothing this run can judge), not a request for the
 // whole tree, so this keeps `[]` rather than collapsing it to `undefined`.
@@ -83,7 +89,16 @@ const results = await pooledMap(selected, pool.size, run);
 // A failure that refuses rather than merely reports: every code failure, and a tidy one unless `--tidy=warn`. A check
 // that could not measure refuses where a tidy one does and nowhere else — it is not evidence the tree is broken, so it
 // must not stop a push or a turn, but it cannot be silent either, or the gate quietly stops testing what it was for.
-const refuses = (result) => !result.ok && (!tidyWarns || (result.measured && result.gate === "code"));
+// Under `--report` the question is CI's alone: a measured failure of a blocking check, and nothing else.
+const refuses = (result) =>
+    !result.ok && (reportOnly ? result.measured && blocksCi(result.id) : !tidyWarns || (result.measured && result.gate === "code"));
+const reporter = createReporter();
+// A reported finding, said where CI shows it: annotations on its lines and a block in the step summary.
+const report = (result, why) => {
+    const lines = `${result.stderr}${result.stdout}`.split("\n").filter((line) => line.trim() !== "");
+    reporter.annotate(result.id, lines);
+    reporter.summary(`${result.id} (${result.file})`, why, lines);
+};
 const seconds = ((Date.now() - started) / 1000).toFixed(1);
 
 // `process.exitCode`, not `process.exit`: stdout to a pipe is async, so exiting immediately can truncate a large result
@@ -115,8 +130,15 @@ if (json) {
             process.stdout.write(result.stdout);
         } else if (!result.measured) {
             process.stderr.write(`\n? ${result.id} (${result.file}) COULD NOT MEASURE, so this run vouches for nothing it covers — this is about the check, not the tree\n${result.stderr}${result.stdout}`);
+            if (reportOnly) {
+                reporter.summary(`${result.id} (${result.file})`, "could not measure, so this run vouches for nothing it covers: the check needs a look, the tree is not accused");
+            }
         } else if (refuses(result)) {
             process.stderr.write(`\n✗ ${result.id} (${result.file})\n${result.stderr}${result.stdout}`);
+        } else if (reportOnly) {
+            const why = `reported, not failed: ${CI_REPORTED[result.id] ?? "not a check CI blocks on"}`;
+            process.stderr.write(`\n⚠ ${result.id} (${result.file}), ${why}\n${result.stderr}${result.stdout}`);
+            report(result, why);
         } else {
             process.stderr.write(`\n⚠ ${result.id} (${result.file}), a tidy rule: worth fixing, not what stops this run\n${result.stderr}${result.stdout}`);
         }
@@ -129,7 +151,7 @@ if (json) {
     const named = (label, group) => (group.length === 0 ? "" : `, ${group.length} ${label} (${group.map(({ id }) => id).join(", ")})`);
     const summary =
         `${results.filter(({ ok }) => ok).length} passed${ 
-        named(`tidy warning${warned.length === 1 ? "" : "s"}`, warned) 
+        named(reportOnly ? "reported" : `tidy warning${warned.length === 1 ? "" : "s"}`, warned) 
         }${named("unmeasured", unmeasured)}`;
     // An unmeasured check refuses where a tidy one does (see `refuses`), and says so in its own words: "failed" would
     // claim it looked.

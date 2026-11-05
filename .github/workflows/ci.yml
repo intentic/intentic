@@ -263,14 +263,16 @@ jobs:
       # and unrun: five of these had been failing for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
       # only, no node_modules, no network, under two seconds.
       #
-      # `--tidy=warn` because a tidy finding is a cost to readers, not a break. The manifest's `gate` field says which
-      # is which (`code`: the tree does not work or cannot be built; `tidy`: the tree costs its readers more than it
-      # should). Tidy failures print here as warnings; `quick`'s push check refuses the ones a push added, and
-      # nightly.yml's `tidy` job, which reads one commit on a GitHub-hosted runner and gates nothing, refuses the rest.
-      # The flag was added when a run failed here on ghost directories while this job still gated the verify groups,
-      # and the type error and two broken tests underneath it took two more rounds of fixes to find.
+      # `--report`: ONLY A BLOCKING CHECK FAILS THIS STEP. manifest.mjs's CI_BLOCKING names them, each with its reason
+      # (the lockfile, the workflow policy, the release's inputs, the wire contract, generated files against their
+      # source, shell quoting, templates that compile); every other check's findings print as warnings, become
+      # annotations on the lines they name and a block in the step summary, and the step passes. Over main's pushes
+      # 2026-10-23..11-05 this step failed first in 10 of 134 failed runs, i18n-keys 7 of them and the tidy rules the
+      # rest, none a broken product, and since this job gates publication each of those also held a release back.
+      # `--tidy=warn` came before it, added when a run failed here on ghost directories while this job still gated
+      # the verify groups and the type error and two broken tests underneath it took two more rounds of fixes to find.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: node _tools/checks/run.mjs --tidy=warn
+        run: node _tools/checks/run.mjs --report
       # actionlint + zizmor over .github/ — the workflows checked by tools that parse them, rather than by the
       # line scanners the checkout gate was growing to approximate a fraction of the same ground. The script says what
       # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this
@@ -288,9 +290,15 @@ jobs:
       # reads `**` as `*` and would skip the suites at the top of _tools/checks.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs" "_tools/turbo-cache/**/*.test.mjs"
+      # Test code that waits on the wall clock or binds a fixed port (timing-hazards.mjs): 18 of main's 35 red stretches
+      # between 2026-10-23 and 11-05 ended with a commit taking one of these out. A report, never a failure: every
+      # occurrence is in the step summary and the first ten are annotations on their lines. Checkout only, under a second.
+      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: node _tools/scripts/verify/timing-hazards.mjs
 
   # Independently report range-based push checks: introduced tidy violations, assertion strength, changed-file lint and install-aware checks.
-  # Share the changes job's event/base decision; this job gates nothing and main's fix agent hears it with the run's other failures.
+  # `--report`: only a check manifest.mjs lists in CI_BLOCKING fails it; the rest are annotations and a step summary (verify-push.mjs's header).
+  # Share the changes job's event/base decision; this job gates nothing and main's fix agent hears only its blocking failures.
   # Leave typechecking to the verify groups; duplicating their package closures here consumed shared-runner memory without earlier feedback.
   quick:
     needs: [changes, preflight]
@@ -358,7 +366,142 @@ jobs:
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
           BASE: ${{ steps.base.outputs.sha }}
-        run: node _tools/scripts/verify/verify-push.mjs --base "$BASE"
+        run: node _tools/scripts/verify/verify-push.mjs --report --base "$BASE"
+
+  # THE MECHANICAL FIXES, WRITTEN BY CI ON MAIN. The fmt, lint and translation findings the steps above now report
+  # rather than fail are the ones a machine can fix outright, so this job fixes them: fixers.mjs `--only format` runs
+  # rustfmt on the crates the push touched, oxlint's own `--fix` on the lintable files it changed, and the layer-table
+  # and translation writers, then commits exactly the paths they wrote as `style: apply formatters (CI)` and pushes it
+  # to main. Nothing of this runs in a sandbox: CI does the checking, and this is the only place the fix is made.
+  #
+  # Guardrails, each for a way a bot commit could do harm. Push to main only, never a pull request and never a fork
+  # (`github.event.repository.fork`). It pushes only when main's head is still the commit it fixed: fetched again
+  # just before, and when main has moved the job skips and says so in its summary, since rebasing a formatter's
+  # output onto someone else's commit is a guess, and the next push's run fixes what is then on main. Never forced:
+  # a plain push a moved or protected main refuses, and the job says so. It never fails the pipeline
+  # (`continue-on-error`, and every step ends 0), so a fixer that broke costs a missing fix and nothing else.
+  #
+  # The push uses this job's GITHUB_TOKEN with `contents: write`, the only write in this file outside the
+  # publishers. GitHub starts no workflow run from a GITHUB_TOKEN push, so the fix commit is never measured by
+  # CI on its own and cannot start this job again; the next human push's run measures it with everything else. The
+  # checkout keeps no credential (`persist-credentials: false`, as zizmor's artipacked rule asks of every checkout
+  # but release.yml's two): the token reaches git only on the push's own command line, as a header it does not
+  # write anywhere, in the one step that pushes.
+  #
+  # On the light lane, because it waits on nothing heavy, in ci-desktop because that image carries both node and the
+  # rust toolchain rustfmt needs. The install is the one oxlint needs, against the warm shared store; it is skipped
+  # when the push changed no file oxlint reads, and removed again at the end (the last step says why). No job-level concurrency group: a queued run would cancel the one
+  # waiting before it, and the head check before the push already makes two of these at once harmless.
+  autofix:
+    needs: [changes]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.fork
+    runs-on: [self-hosted, intentic-light]
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CARGO_HOME: /ci-cache/cargo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          clean: false
+      # What the push changed, through the environment for the reason the `changes` job's filter step spells out. A
+      # first push names the all-zero sha and a force push can name a commit this clone lacks: neither is a range a
+      # formatter can be scoped to, so the job does nothing for them.
+      - id: range
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "no earlier commit to scope the formatters to, so nothing is fixed" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "before=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$BEFORE" HEAD -- '*.rs' '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.mjs' '*.cjs' '*.jsx' '*.vue' '*.astro' '*.json' '*.md' | wc -l)"
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "lintable=$(git diff --name-only "$BEFORE" HEAD -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.mjs' '*.cjs' '*.jsx' '*.vue' '*.astro' | wc -l)" >> "$GITHUB_OUTPUT"
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+      - id: setup
+        if: steps.range.outputs.before != '' && steps.range.outputs.lintable != '0'
+        continue-on-error: true
+        uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
+      - id: fix
+        if: steps.range.outputs.before != '' && steps.range.outputs.files != '0'
+        shell: bash
+        env:
+          BEFORE: ${{ steps.range.outputs.before }}
+        run: |
+          set -uo pipefail
+          # The install may leave pnpm-lock.yaml or a manifest rewritten; fixers.mjs answers only the paths its own
+          # fixers moved, and only those are committed.
+          if ! out="$(node _tools/scripts/verify/fixers.mjs --worktree . --since "$BEFORE" --only format)"; then
+            echo "the formatters did not run (fixers.mjs exited non-zero), so nothing is fixed" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "$out"
+          node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(r.wrote.join("\n"))' "$out" > "$RUNNER_TEMP/autofix-paths"
+          if [ ! -s "$RUNNER_TEMP/autofix-paths" ]; then
+            echo "the formatters found nothing to change in this push" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git add --pathspec-from-file="$RUNNER_TEMP/autofix-paths" || { echo "could not stage what the formatters wrote" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c core.hooksPath=/dev/null \
+            commit --quiet -m 'style: apply formatters (CI)' || { echo "nothing to commit after staging" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+      - if: steps.fix.outputs.committed == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FIXED: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          remote="https://github.com/${REPOSITORY}.git"
+          header="http.https://github.com/.extraheader=AUTHORIZATION: basic $auth"
+          head="$(git -c "$header" ls-remote "$remote" refs/heads/main | cut -f1)"
+          if [ "$head" != "$FIXED" ]; then
+            echo "main moved from ${FIXED:0:9} to ${head:0:9} while the formatters ran, so their fix is not pushed; the next push's run fixes what is on main then" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git diff --stat HEAD^ HEAD | tee -a "$GITHUB_STEP_SUMMARY"
+          if git -c "$header" push "$remote" "HEAD:refs/heads/main"; then
+            echo "pushed $(git rev-parse --short HEAD) \`style: apply formatters (CI)\` onto ${FIXED:0:9}" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "the push was refused (main moved, or a protection rule refuses this token), so the fix is not on main" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+      # The light lane's workspace outlives the job (`clean: false`), and the next job on it is a `changes` or a
+      # `preflight` that reads the checkout alone: put every tracked file back to the commit this job checked out, so a
+      # fix that was not pushed is not what that job reads, and take the install away again, since preflight's checks
+      # that read node_modules where it exists (vue-templates, i18n-keys) would otherwise read this commit's install
+      # against a later commit's tree.
+      - if: always()
+        shell: bash
+        env:
+          FIXED: ${{ github.sha }}
+          INSTALLED: ${{ steps.setup.outcome }}
+        run: |
+          git reset --quiet --hard "$FIXED" || true
+          if [ "$INSTALLED" != skipped ]; then
+            find . -name node_modules -type d -prune -exec rm -rf {} + || true
+          fi
 
   # Prove append-only applied migrations, safe additions to populated tables, and replay parity with schema.prisma.
   # Fresh databases cannot expose edits to already-applied SQL or NOT NULL additions without defaults; check-migrations.sh reads both.
@@ -809,6 +952,13 @@ jobs:
   # on pull requests as the gate, and on main so a broken desktop surfaces before the release cross-builds the
   # same crate. clippy compiles against real webkit2gtk, covering the Linux target; the Windows msvc target is
   # covered by that release cross-build.
+  #
+  # RUST STYLE IS REPORTED, NOT FAILED, here and in ic-check, netd-check and mobile.yml. Every fmt and clippy step goes
+  # through report-step.mjs: `cargo fmt --check` annotates the lines rustfmt would change and passes (the `autofix` job
+  # writes them on main), and clippy runs without `-D warnings`, so it still fails on a compile error and on the lints
+  # clippy denies by default (its `correctness` group), while its style, complexity, perf and suspicious warnings are
+  # annotated and pass. Over main's pushes 2026-10-23..11-05 fmt failed this job 3 times and netd-check once, and
+  # `-D warnings` failed ic-check once, none of them on code that was wrong.
   desktop-check:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -881,22 +1031,22 @@ jobs:
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: bash _tools/scripts/desktop/stage-desktop-ic.sh
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (desktop-app)" -- cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
       - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' && steps.stage-ic.outcome == 'success' }}
-        run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (desktop-app)" --keep-status -- cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets
       - if: ${{ !cancelled() && steps.stage-scripts.outcome == 'success' && steps.stage-files.outcome == 'success' && steps.stage-ic.outcome == 'success' }}
         run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
       # "Open with Intentic" in Windows 11's own context menu (_editor/desktop-app/explorer-menu): a DLL that is ALL
       # `#[cfg(windows)]`, so the Windows target is the only one that compiles any of it, and clippy runs there.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (explorer-menu)" -- cargo fmt --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo xwin clippy --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (explorer-menu)" --keep-status -- cargo xwin clippy --manifest-path _editor/desktop-app/explorer-menu/Cargo.toml --target x86_64-pc-windows-msvc
 
   # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
   # behind the connect/recreate/connect-host bootstrap shims, and the Windows launcher stub
   # (_devices/win-launcher) the machine-side agents register at logon. Same cargo gate as the desktop crate —
-  # fmt, clippy at -D warnings, tests — in the same image (it bakes the rust toolchain); no webkit/tauri in
+  # fmt and clippy reported as desktop-check's comment says, tests — in the same image (it bakes the rust toolchain); no webkit/tauri in
   # either, so both are seconds off a warm registry.
   ic-check:
     needs: [changes, preflight, ci-base, ci-desktop]
@@ -928,9 +1078,9 @@ jobs:
           persist-credentials: false
           clean: false
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (ic)" -- cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (ic)" --keep-status -- cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets
       # THE WINDOWS TARGET, because half of what this crate does for Windows is not compiled on Linux at all.
       # `prepare/` — the WSL2 + Docker Desktop setup, the largest single thing ic does on the platform it does
       # the most for — is one `#[cfg(windows)]` block, so the three steps above type-check straight past it. On
@@ -939,7 +1089,7 @@ jobs:
       # release's own cross-build — which failed, so the release did not happen. A gate that cannot see the code
       # is a gate the release is standing in for, and the release is the worst possible place to find out.
       #
-      # `check`, not `clippy -D warnings`: this target carries warnings the Linux one does not (code that is
+      # `check`, not `clippy`: this target carries warnings the Linux one does not (code that is
       # dead on Windows and live on unix, and vice versa), and silencing each with a cfg attribute would be a
       # steady tax for no defect caught. The compile error is what this is here for, and check catches it in
       # about the time clippy took.
@@ -949,12 +1099,12 @@ jobs:
         run: cargo test --manifest-path _sandbox/ic/Cargo.toml
       # The launcher stub. The Windows target is not an extra here, it is the ONLY target the shipped binary is
       # ever built for: everything this crate does past argument parsing sits behind `#[cfg(windows)]`, so the
-      # Linux fmt/clippy/test steps see the parser and nothing else. `clippy -D warnings` on the Linux side
-      # (the crate is small enough to be clean there) and `xwin check` on the side that ships.
+      # Linux fmt/clippy/test steps see the parser and nothing else. clippy on the Linux side (the crate is small
+      # enough to be clean there) and `xwin check` on the side that ships.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --manifest-path _devices/win-launcher/Cargo.toml --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (win-launcher)" -- cargo fmt --manifest-path _devices/win-launcher/Cargo.toml --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo clippy --manifest-path _devices/win-launcher/Cargo.toml --all-targets -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (win-launcher)" --keep-status -- cargo clippy --manifest-path _devices/win-launcher/Cargo.toml --all-targets
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo xwin check --manifest-path _devices/win-launcher/Cargo.toml --target x86_64-pc-windows-msvc
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
@@ -963,7 +1113,7 @@ jobs:
   # The tunnel's two Rust ends. The sandbox's netd (_sandbox/netd) owns every port and the ingress tunnel and
   # supervises the daemon; the edge (_platform/ingress) holds the tunnels and routes browsers down them, building the
   # netd's tunnel crate and the relay crate both share (_shared/relay) by path. The ic gate again for all three (fmt,
-  # clippy at -D warnings, tests, which run the real binaries on real sockets), each from its crate's own directory
+  # clippy reported as desktop-check's comment says, tests, which run the real binaries on real sockets), each from its crate's own directory
   # because cargo reads .cargo/config.toml from where it runs, not from the manifest: that config is where the wire
   # crate's TypeScript lands, and netd's last step refuses a control socket whose committed TypeScript is not
   # what the Rust types emit, since Node and netd would then disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
@@ -1000,9 +1150,9 @@ jobs:
       # in netd used to skip the edge's and the relay's whole gate behind it. Every cargo step needs only the
       # checkout; the two below that read another step's output say which.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (netd)" -- cargo fmt --all --check
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (netd)" --keep-status -- cargo clippy --all-targets --locked
       - id: netd-test
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --locked
@@ -1011,19 +1161,19 @@ jobs:
       - if: ${{ !cancelled() && steps.netd-test.outcome != 'skipped' }}
         run: git diff --exit-code -- ../../_shared/sandbox-contract/src/netd/generated
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (ingress)" -- cargo fmt --all --check
         working-directory: _platform/ingress
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (ingress)" --keep-status -- cargo clippy --all-targets --locked
         working-directory: _platform/ingress
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --locked
         working-directory: _platform/ingress
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo fmt --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (relay)" -- cargo fmt --all --check
         working-directory: _shared/relay
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (relay)" --keep-status -- cargo clippy --all-targets --locked
         working-directory: _shared/relay
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: cargo test --locked

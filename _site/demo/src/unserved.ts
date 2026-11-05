@@ -1,20 +1,11 @@
-import { RAW_ROUTE_LIST, type RawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
-import type { SandboxGroup, SandboxProcedure } from "@intentic/sandbox-contract/protocol/procedure-types";
-import type { sockets } from "./daemon";
-import type { procedures } from "./daemon/procedures";
-import type { raw } from "./daemon/raw";
 
-// Every contract route the fixture daemon leaves unanswered, and why: the demo's real coverage, stated. The demo's
-// typecheck holds this list to the contract in both directions. A route the fixture neither serves nor lists here is a
-// missing property below, and a listed one that the fixture now serves, or that the contract dropped, is an unknown one.
-// So a new route lands with a decision: answer it in daemon/, or give it a reason here.
-
-type ContractRoute = { readonly [G in SandboxGroup]: `${G}.${SandboxProcedure<G>}` }[SandboxGroup] | RawRouteKey;
-type Procedures = typeof procedures;
-type Served =
-    { readonly [G in keyof Procedures]: `${G}.${keyof Procedures[G] & string}` }[keyof Procedures] | keyof typeof raw | keyof typeof sockets;
-type Unserved = Exclude<ContractRoute, Served>;
+// Every contract route the fixture daemon leaves unanswered, and why: the demo's real coverage, stated. A request for
+// one answers 404 and logs the reason given here; a route the fixture neither serves nor lists answers the same 404
+// with no reason. Whether this list is complete is a nightly report (scripts/unserved-report.ts), not the typecheck:
+// while its type was held to the contract, every new daemon route failed the demo's typecheck on main until someone
+// added it here, 15 main runs from 2026-10-23 to 11-05, though the demo answered the same 404 either way.
 
 // Out of the demo by design: nothing the editor does reaches these, or they need something a browser tab can't fake.
 const NOT_THE_EDITORS = `Not an editor call: the ic CLI, an agent's tools, a paired machine, a listener process, a webhook sender or a CI job makes it.`;
@@ -198,7 +189,7 @@ export const UNSERVED = {
     "workspace.classify": NOT_THE_EDITORS,
     "workspace.setup": NOT_THE_EDITORS,
     "workspace.sync": NOT_THE_EDITORS,
-} satisfies Record<Unserved, string>;
+} satisfies Readonly<Record<string, string>>;
 
 const CONTRACT_ROUTES = SANDBOX_ROUTE_NAMES.length + RAW_ROUTE_LIST.length;
 

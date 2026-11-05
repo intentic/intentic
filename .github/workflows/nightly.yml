@@ -38,6 +38,7 @@ on:
           - images-public
           - install-urls
           - demo-live
+          - demo-routes
           - provider-canary
           - capabilities
           - verify-providers
@@ -47,6 +48,7 @@ on:
           - ci-audit
           - nav-trend
           - verify-clocks
+          - quarantine
           - perf-instr
           - perf-browser
 
@@ -633,6 +635,31 @@ jobs:
       - run: pnpm --filter @intentic/constants build
       - run: node _tools/scripts/ci/check-demo-live.mjs
 
+  # The demo's route ledger as a report, not a gate. _site/demo/src/unserved.ts gives a reason for each contract route
+  # the demo's fixture daemon does not answer. Its type used to be held to the contract, so every new daemon route
+  # failed @intentic/demo#typecheck on main until someone listed it: 15 main runs from 2026-10-23 to 11-05, while the
+  # demo answered an unlisted route with the same 404 it gives a listed one. This lists the routes out of step as
+  # warnings and in the run's summary, and exits 0 whatever it finds.
+  demo-routes:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'demo-routes' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: node scripts/unserved-report.ts
+        working-directory: _site/demo
+
   # THE VENDOR CANARY: the conformance tier again, but against each provider's NEWEST CLI instead of the
   # version the packs pin.
   #
@@ -760,7 +787,8 @@ jobs:
     uses: ./.github/workflows/mobile.yml
 
   # Nightly tidy checks measure standing costs on main; edit/push checks already report violations introduced by an author's delta.
-  # --gate=tidy uses the shared manifest and fails independently, without blocking other jobs.
+  # --gate=tidy uses the shared manifest; --report keeps its findings as annotations and a step summary rather than a failed
+  # job, since a scheduled failure on main wakes the sandbox's CI fix agent as a push's does, and no tidy check blocks CI.
   # Use a fresh hosted checkout: retained build directories and worktree isolation can hide layout/link problems.
   tidy:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'tidy' }}
@@ -787,7 +815,7 @@ jobs:
       # Checkout only: no repository install, seconds of work. Same runner as ci-audit for the same reason —
       # the self-hosted fleet is six processes on one box, and a check that needs nothing from it should want
       # nothing from it.
-      - run: node _tools/checks/run.mjs --gate=tidy
+      - run: node _tools/checks/run.mjs --gate=tidy --report
 
   # Run clock-sensitive test files in Kiritimati (UTC+14) and Niue (UTC-11); UTC-only jobs cannot expose local-zone/calendar-day bugs.
   # clock-suites.mjs selects files and runs both zones outside turbo, avoiding cached UTC results; neither zone observes DST.
@@ -829,6 +857,33 @@ jobs:
       # formatters are exercised through `@intentic/web`, which imports them. The script checks that each zone took
       # before it judges anything by it (a container without tzdata silently reports UTC).
       - run: node _tools/scripts/verify/clock-suites.mjs _sandbox/sandbox _shared/sandbox-contract _extensions/automations _editor/web
+
+  # THE TESTS THE GATE IS NOT COUNTING (quarantine.mjs): each one the verify groups listed as flaky, run alone every
+  # night. Three nights passed in a row release it, and one failure alone puts it back in the gate's verdict at once and
+  # fails this job, since a test that fails with the box to itself is not a flake. It gates nothing.
+  quarantine:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'quarantine' }}
+    runs-on: [self-hosted, intentic]
+    # A few files alone, after building their dependencies: minutes, and the verify groups' own budget as the ceiling.
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      # The verify groups' mounts: an integration test listed there may need Docker here too.
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      QUARANTINE_FILE: /ci-cache/quarantine/tests.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: node _tools/scripts/verify/quarantine.mjs nightly
 
   # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
   # _tools/perf as the job summary, and fails only on a declared budget (src/*/*-budgets.ts): a count that moved is a

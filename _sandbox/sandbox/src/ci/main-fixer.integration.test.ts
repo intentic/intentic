@@ -302,14 +302,14 @@ test("a run's failed jobs are parked while it goes on, and its finish starts one
     ]);
 });
 
-test("a run still going when its clock runs out hands over what failed so far, and the rest follows when it finishes", async () => {
-    resetMainFixer({ settleCapMs: 20 });
+test("a failed job is handed over while its run goes on, and the rest of the run follows without another turn", async () => {
+    resetMainFixer({ handoverDelayMs: 20 });
     const { services, fetchFn, project, running, started, said, failure, failRun } = await harness();
 
     await jobFailed(services, project, job(41, 410), fetchFn);
     await until(() => started.length === 1);
     expect(started[0]!.prompt).toContain(`run 41 failed 1 job: "verify-core"`);
-    expect(started[0]!.prompt).toContain("so these are the jobs that had failed by then; any that fails later in it is sent to you when it finishes");
+    expect(started[0]!.prompt).toContain("these are the jobs that have failed in it so far; any that fails later in it is sent to you as it fails");
 
     // The rest is the finish's to hand over, so the clock goes back to its real length once the first hand-over is on
     // file (nothing is parked or in flight then): the lint job the finish parks arms a clock of its own, and on a loaded
@@ -322,7 +322,8 @@ test("a run still going when its clock runs out hands over what failed so far, a
     expect(said[0]!.turn.prompt).toContain(`run 41 failed 1 job: "lint"`);
     expect(said[0]!.turn.prompt).toContain("It is the run this failure began in.");
     expect(said[0]!.turn.prompt).toContain("so this is the whole list of what it found wrong");
-    expect(await failure()).toMatchObject({ turns: 2, heard: ["41/410", "41/411"] });
+    // One run is one turn of the streak's budget, however many messages it took.
+    expect(await failure()).toMatchObject({ turns: 1, heard: ["41/410", "41/411"] });
 });
 
 test("each later run's failures go to the same agent as one message: into its live turn for free, a turn of its own when idle", async () => {

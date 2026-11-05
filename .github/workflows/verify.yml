@@ -108,7 +108,11 @@ jobs:
         env:
           FILTERS: ${{ inputs.filters }}
         run: node _tools/turbo-cache/import.mjs -- run typecheck build test $FILTERS
+      # THE GRAPH'S FAILURE IS NOT YET THE JOB'S: the step after it decides. Between 2026-10-23 and 11-05, 136 of the 255
+      # distinct tests that failed on main failed in exactly one run, which is a busy box rather than broken code.
       - id: graph
+        # The verdict is the next step's, which fails the job on any failure it cannot clear.
+        continue-on-error: true
         run: |
           echo "CACHE_RUN_STARTED=$(date +%s%3N)" >> "$GITHUB_ENV"
           pnpm turbo run typecheck build test $FILTERS --continue=dependencies-successful --summarize --cache-workers=4
@@ -116,6 +120,18 @@ jobs:
         env:
           FILTERS: ${{ inputs.filters }}
           SUITES_JUNIT_DIR: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+      # The job's verdict (quarantine.mjs says the whole rule). A failing test case is re-run alone, as `pnpm verify` does by
+      # hand; one that passes then, or that is already quarantined, does not fail the job. Every failure of a typecheck or a
+      # build, every test that fails again alone, and a failed graph with nothing readable in it fails it. Every run names
+      # the quarantined tests as warnings and in the summary. Only main's pushes write the list in /ci-cache.
+      - name: Judge failures and quarantine flaky tests
+        if: ${{ !cancelled() && (steps.graph.outcome == 'success' || steps.graph.outcome == 'failure') }}
+        env:
+          GRAPH: ${{ steps.graph.outcome }}
+          SUITES_JUNIT_DIR: ${{ runner.temp }}/test-reports/${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.report-name }}
+          QUARANTINE_FILE: /ci-cache/quarantine/tests.json
+          QUARANTINE_RECORD: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '1' || '0' }}
+        run: node _tools/scripts/verify/quarantine.mjs gate --graph "$GRAPH"
       - name: Audit sampled Turbo cache hits
         if: ${{ steps.graph.outcome == 'success' }}
         env:

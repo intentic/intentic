@@ -3,6 +3,7 @@
 // failed one is skipped, not run against a broken tree; `finish` prints every failure and skip in one block at the end
 // of the output, where a reader of its tail finds it.
 import { spawnSync } from "node:child_process";
+import { createReporter } from "../../checks/lib/ci-report.mjs";
 
 // Bytes of failure lines the digest prints across every failed step, which keeps the whole digest to about one screen.
 const DETAIL_BYTES = 2_600;
@@ -35,12 +36,41 @@ const spell = (command, args, root) => {
     return [head, ...rest].join(" ");
 };
 
+// Prints each failed step and its details, the details sharing DETAIL_BYTES evenly: what one step leaves unspent passes
+// to the next.
+const printFailed = (failed, width) => {
+    let left = DETAIL_BYTES;
+    let sharing = failed.filter(({ details = [] }) => details.length > 0).length;
+    for (const { label, spelling, why, details = [] } of failed) {
+        console.error(`  ✗ ${label.padEnd(width)}  ${spelling === undefined ? why : `${why} · ${spelling}`}`);
+        if (details.length === 0) {
+            continue;
+        }
+        const shown = within(details, Math.floor(left / sharing));
+        for (const line of shown) {
+            console.error(`      ${line}`);
+        }
+        left -= shown.reduce((sum, line) => sum + line.length + 7, 0);
+        sharing -= 1;
+    }
+};
+
+// Lists every reported finding under the verdict, one line each, so the tail of the log names them too.
+const listReported = (results) => {
+    const reported = results.filter((result) => result.status === "reported");
+    for (const { label, why } of reported) {
+        console.error(`  ⚠ ${label}  ${why}`);
+    }
+    return reported;
+};
+
 // Runner for one gate's steps; `name` prefixes every printed line, `root` is the commands' cwd and the digest's path
 // base.
 export const createSteps = (name, root) => {
     const say = (line) => console.error(`${name}: ${line}`);
     const results = [];
     const started = Date.now();
+    const reporter = createReporter();
 
     // Runs one step; returns pass/fail and never exits, so an independent step still runs. A command that can't start
     // is recorded as a failure, not silently skipped.
@@ -86,6 +116,15 @@ export const createSteps = (name, root) => {
         results.push({ label, spelling, status: "failed", why, details });
     };
 
+    // Records a finding that is said and not failed (CI's `--report`): its lines become warning annotations where they name
+    // a file, it gets a block in the step summary, and `finish` lists it without exiting 1 for it.
+    const warn = (label, why, details = []) => {
+        say(`${label}: reported, not failed`);
+        reporter.annotate(label, details);
+        reporter.summary(label, why, details);
+        results.push({ label, status: "reported", why, details });
+    };
+
     // Prints every step's verdict once at the end and exits 1 if anything failed. `summarize` runs only on a clean tree,
     // so what it says is never a caller's side effect on a failed run; failed steps print before skipped ones.
     const finish = (summarize) => {
@@ -94,29 +133,20 @@ export const createSteps = (name, root) => {
         const seconds = Math.round((Date.now() - started) / 1000);
         if (failed.length === 0) {
             say(`passed in ${seconds}s: ${summarize()}`);
+            const reported = listReported(results);
+            if (reported.length > 0) {
+                say(`${reported.length} finding(s) reported, not failed: ${reported.map(({ label }) => label).join(", ")}`);
+            }
             return;
         }
         const width = Math.max(...[...failed, ...skipped].map(({ label }) => label.length));
         console.error("");
         say(`${failed.length} of ${results.length} steps failed in ${seconds}s: ${failed.map(({ label }) => label).join(", ")}`);
-        // An even share per step with details, what one leaves unspent passing to the next.
-        let left = DETAIL_BYTES;
-        let sharing = failed.filter(({ details = [] }) => details.length > 0).length;
-        for (const { label, spelling, why, details = [] } of failed) {
-            console.error(`  ✗ ${label.padEnd(width)}  ${spelling === undefined ? why : `${why} · ${spelling}`}`);
-            if (details.length === 0) {
-                continue;
-            }
-            const shown = within(details, Math.floor(left / sharing));
-            for (const line of shown) {
-                console.error(`      ${line}`);
-            }
-            left -= shown.reduce((sum, line) => sum + line.length + 7, 0);
-            sharing -= 1;
-        }
+        printFailed(failed, width);
         for (const { label, why } of skipped) {
             console.error(`  – ${label.padEnd(width)}  not run: ${why}`);
         }
+        listReported(results);
         console.error("");
         say(
             skipped.length > 0
@@ -126,5 +156,5 @@ export const createSteps = (name, root) => {
         process.exit(1);
     };
 
-    return { say, step, skip, fail, finish };
+    return { say, step, skip, fail, warn, finish };
 };

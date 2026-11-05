@@ -1,14 +1,13 @@
 // Routes one request per procedure the fixture daemon serves through its dispatcher (src/router.ts), encoded the way the
 // editor's typed client encodes it, and parses every answer with the contract's own output schema. The demo's modules
-// are Vite-shaped (import.meta.glob, .vue), so Vite bundles them for Node first. Run: `pnpm -C _site/demo smoke`.
+// are Vite-shaped, so node-bundle.ts bundles them for Node first. Run: `pnpm -C _site/demo smoke`.
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
 import type { SandboxCallInput, SandboxProcedure } from "@intentic/sandbox-contract/protocol/procedure-types";
-import { build } from "vite";
+import { bundle, loaded as loadedFrom, stubBrowser } from "./node-bundle.ts";
 import { samplesOf } from "./samples/index.ts";
 
 type Contract = typeof import("@intentic/sandbox-contract") & Pick<typeof import("@intentic/sandbox-contract/protocol/routes"), "requestPathFor">;
@@ -30,75 +29,11 @@ interface Schema {
     };
 }
 
-const DEMO_ROOT = fileURLToPath(new URL(`..`, import.meta.url));
 // The dispatcher reads only a request's path, query and body; the origin is never consulted.
 const ORIGIN = `https://daemon.smoke.invalid`;
 // Frames read off a stream before it is let go, and how long to wait for them.
 const FRAMES = 4;
 const STREAM_MS = 5_000;
-
-const store = (): Storage => {
-    const held = new Map<string, string>();
-    return {
-        getItem: (key) => held.get(key) ?? null,
-        setItem: (key, value) => void held.set(key, value),
-        removeItem: (key) => void held.delete(key),
-        clear: () => held.clear(),
-        key: () => null,
-        get length() {
-            return held.size;
-        },
-    };
-};
-
-const ignore = (): void => {};
-
-const element = () => ({
-    dataset: {},
-    style: { setProperty: ignore, removeProperty: ignore, getPropertyValue: () => `` },
-    classList: { add: ignore, remove: ignore, toggle: ignore, contains: () => false },
-    setAttribute: ignore,
-    getAttribute: () => null,
-    removeAttribute: ignore,
-    appendChild: ignore,
-    addEventListener: ignore,
-    removeEventListener: ignore,
-});
-
-// What the demo's modules read from the browser as they load; the full recording, so every agent and extension is on.
-const stubBrowser = (): void => {
-    const sessionStorage = store();
-    sessionStorage.setItem(`intentic.demo.mode`, `full`);
-    Object.assign(globalThis, {
-        window: globalThis,
-        location: new URL(`https://demo.smoke.invalid/demo/s/demo/agents`),
-        history: { state: null, replaceState: ignore, pushState: ignore },
-        sessionStorage,
-        localStorage: store(),
-        addEventListener: ignore,
-        removeEventListener: ignore,
-        dispatchEvent: () => true,
-        matchMedia: (media: string) => ({
-            matches: false,
-            media,
-            addEventListener: ignore,
-            removeEventListener: ignore,
-            addListener: ignore,
-            removeListener: ignore,
-        }),
-        document: {
-            documentElement: element(),
-            head: element(),
-            body: element(),
-            createElement: element,
-            addEventListener: ignore,
-            removeEventListener: ignore,
-            querySelector: () => null,
-            querySelectorAll: () => [],
-            visibilityState: `visible`,
-        },
-    });
-};
 
 // Every module the run reads, bundled once so the daemon and the fixtures below share one instance of each.
 const ENTRIES = {
@@ -116,29 +51,7 @@ const ENTRIES = {
     routes: `@intentic/sandbox-contract/protocol/routes`,
 } as const;
 
-const bundle = async (out: string): Promise<void> => {
-    await build({
-        root: DEMO_ROOT,
-        configFile: join(DEMO_ROOT, `vite.config.ts`),
-        logLevel: `error`,
-        publicDir: false,
-        ssr: { noExternal: true, target: `node` },
-        build: {
-            ssr: true,
-            outDir: out,
-            emptyOutDir: true,
-            minify: false,
-            rolldownOptions: {
-                input: Object.fromEntries(
-                    Object.entries(ENTRIES).map(([name, entry]) => [name, entry.startsWith(`src/`) ? join(DEMO_ROOT, entry) : entry]),
-                ),
-            },
-        },
-    });
-};
-
-// Typed as the module it was bundled from; the bundle is that module, compiled.
-const loaded = async <T>(out: string, entry: keyof typeof ENTRIES): Promise<T> => (await import(pathToFileURL(join(out, `${entry}.js`)).href)) as T;
+const loaded = <T>(out: string, entry: keyof typeof ENTRIES): Promise<T> => loadedFrom<T>(out, entry);
 
 const fixturesOf = async (out: string) => ({
     fleet: await loaded<typeof import("../src/fixture/fleet.ts")>(out, `fleet`),
@@ -264,7 +177,7 @@ const verdictFor = async (contract: Contract, daemon: Daemon["daemon"], name: st
 const main = async (): Promise<number> => {
     stubBrowser();
     const out = await mkdtemp(join(tmpdir(), `demo-smoke-`));
-    await bundle(out);
+    await bundle(out, ENTRIES);
     const { daemon } = await loaded<Daemon>(out, `daemon`);
     const { procedures } = await loaded<typeof import("../src/daemon/procedures.ts")>(out, `procedures`);
     const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);

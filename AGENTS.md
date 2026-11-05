@@ -105,8 +105,12 @@ is no pre-push hook: CI measures what the owner pushes. Its `quick` job runs the
 check the manifest lists, with a `tidy` finding counted only when the pushed range added it; the assertion ratchet
 over the range's test files (weaker only with a `test!:` subject or a `Test-Note:` trailer); and the linter over the
 files the range changed. `pnpm verify:push` runs the same check by hand, the branch against its upstream, and adds
-the manifest/lockfile lockstep and `cargo fmt --check` on the crates the range touched. It exits non-zero on a finding
-and never runs typecheck, build or test (`pnpm verify` does, by hand).
+the manifest/lockfile lockstep and `cargo fmt --check` on the crates the range touched. By hand it exits non-zero on a
+finding and never runs typecheck, build or test (`pnpm verify` does, by hand). In CI it runs with `--report`: only a check
+`_tools/checks/manifest.mjs` lists in `CI_BLOCKING` (lockfile, workflow policy, release inputs, wire contract, shell
+quoting and the rest, each with its reason) fails the job; every other finding, lint and the ratchet included, becomes
+an annotation and a step-summary block, and main's `autofix` job commits the mechanical fixes (rustfmt, `oxlint --fix`)
+as `style: apply formatters (CI)`.
 
 When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
 branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the

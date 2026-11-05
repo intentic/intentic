@@ -25,8 +25,12 @@ flowchart LR
   1, or prints what it vouched for and exits 0; `cannotMeasure` exits 2 when the check could not look. Then add an
   entry to `CHECKS` in `manifest.mjs`.
 - An entry's `needs` says what it may read (`checkout`, `git` history, or `node_modules` when installed). A `code`
-  gate fails every run that reads it. A `tidy` gate fails only what a pushed range adds, and fails the nightly tidy
-  job on main. A new check enters as `tidy`.
+  gate fails every run that reads it. A `tidy` gate fails only what a pushed range adds. A new check enters as `tidy`.
+- CI asks a narrower question with `--report`: only the checks `CI_BLOCKING` in `manifest.mjs` names (a broken or
+  unsafe product, an unreproducible build, a wrong release, each with its reason) fail a job. Every other check is in
+  `CI_REPORTED`, with why its finding should not fail main: it prints, becomes warning annotations on the lines it
+  names and a block in the step summary (`lib/ci-report.mjs`), and the job passes. `checks-ci.test.mjs` keeps every
+  check in exactly one of the two.
 - `scoped: true` means the check takes `--paths a,b` and reaches the same verdict on those files as on the whole
   tree. A check that can repair the tree itself (`lockfile`, `i18n`) says so in its failure, with the `--fix` that
   does it.
@@ -34,10 +38,10 @@ flowchart LR
   fails. What it prints returns with the edit and never stops the turn. As an isolated agent turn ends, its `turn`
   entry runs `_tools/scripts/verify/verify-turn.mjs`: every check on the turn's tree, new files included, and only
   what the change added against where it left `main` is said back to the agent, once. Nothing runs them at a push.
-  CI's preflight runs them all with `--tidy=warn`, and its `quick` job's push check
-  (`_tools/scripts/verify/verify-push.mjs`) runs them again and fails on the tidy lines the pushed range added. The
+  CI's preflight runs them all with `--report`, and its `quick` job's push check
+  (`_tools/scripts/verify/verify-push.mjs --report`) runs them again and reports the lines the pushed range added. The
   turn check and the push check judge a change the same way (`measure-change.mjs`), so what one charges the other
-  does. `pnpm verify` runs them all when asked, and the nightly with `--gate=tidy`.
+  does. `pnpm verify` runs them all when asked, and the nightly with `--gate=tidy --report`.
 - Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
   shrink and never grow unasked. A check run never writes one: it fails on growth and only says where the tree beats
   it. Before a conversation's work lands, the fixers in its worktree (`_tools/scripts/verify/fixers.mjs`) run each

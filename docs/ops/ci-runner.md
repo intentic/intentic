@@ -63,6 +63,7 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | `/ci-cache/turbo` | age sweep in the `pnpm-setup` action; the janitor above 10 GB |
 | `/ci-cache/pnpm-metadata` | 14-day age sweep in `pnpm-setup`; pnpm's successful lockfile/policy verification records survive jobs here |
 | `/ci-cache/test-timings` | [`timings.ts`](../../_tools/testing/src/timings.ts) keeps the 24 newest histories per package and test kind, each written once by Bun; filtered runs merge earlier file timings rather than forgetting them |
+| `/ci-cache/quarantine` | [`quarantine.mjs`](../../_tools/scripts/verify/quarantine.mjs): at most 50 listed tests, each expiring after 14 days, and pending main failures forgotten after the same |
 | each fleet checkout's `.turbo/runs` | verify's cache report, once it has read the run's summary |
 | `/ci-cache/turbo-sandbox` | the [turbo-cache](../../_tools/turbo-cache) server's own 14-day sweep; the janitor above 15 GB |
 | `/ci-cache/*-target` | the janitor, above 20 GB each or after 14 days without a build, and the least recently built first once they add up to 60 GB |

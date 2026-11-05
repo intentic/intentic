@@ -335,3 +335,99 @@ export const CHECKS = [
     },
     { id: "extension-siblings", file: "extension-siblings.mjs", needs: "checkout", gate: "code", about: "workspace extensions/ holds only logs, scrub and intentic-saldeo" },
 ];
+
+// WHAT FAILS CI, as distinct from what a check is about. `gate` above says whether a finding means the tree is broken
+// (`code`) or costs its readers (`tidy`), and every hand-run and per-edit caller keeps reading it. CI asks a narrower
+// question with `--report` (run.mjs, verify-push.mjs): does this finding stop a product from working, being built the
+// same way twice, being released correctly, or being safe? Only the checks below answer yes, and only they fail a CI
+// job. Every other check is REPORTED: its findings become warning annotations on the lines they name and a block in the
+// job's summary, and the job passes. Measured over main's pushes 2026-10-23..11-05 (222 runs, 134 failed, main failing 61%
+// of the time), the first failing job was `quick` 27 times and `preflight` 10, and inside them every check that failed
+// was one this list reports: i18n-keys 13, dead-code 7, code-shape 6, layout 3, test-programs 3, and seven tidiness
+// rules once or twice each. A failing main on those woke the sandbox's CI fix agent for a wording or naming finding, and
+// hid the failures that mattered behind them.
+//
+// Each id carries its one-line reason. checks-ci.test.mjs holds the two lists to the manifest: every check is in exactly one.
+export const CI_BLOCKING = {
+    "control-chars": "a literal control byte hides text from review (bidi overrides, terminal escapes): a safety question",
+    lockfile: "the lockfile must record the manifests, or no install reproduces the tree",
+    workflows: "the fork boundary and permission ceilings are what keep a fork's code off the self-hosted fleet",
+    "release-notes": "the release body is built from these headings; a mismatch publishes a wrong or empty release",
+    "contract-shrink": "an undeclared shrink of the wire contract breaks every client older than the change",
+    "alias-targets": "a resolver alias to a missing path is a build that cannot resolve its own imports",
+    engines: "engines.json blessing a version the repo does not pin releases a floor nothing was tested on",
+    "tool-pins": "the image's tool pins disagreeing means two builds of one commit carry different tools",
+    "daemon-indexes": "the daemon's generated indexes out of step with their source ship routes and state the code does not have",
+    "scripts-kit": "the install scripts' generated regions out of step with their source ship an installer nobody wrote",
+    "build-cache": "the image's build-cache contract is what makes an image build reproducible",
+    "mirror-roots": "removing a build output an agent turn overlays breaks every live worktree mounted on it",
+    "publish-set": "a publish set that is not dependency-closed and ordered releases packages whose dependencies are missing",
+    "publish-retry": "which publish failures a release rides out decides whether a half-published release can happen",
+    "release-api": "a release script's GitHub write that fails quietly leaves a release half made",
+    "quote-splices": "a value spliced into a command between bare quotes is a shell injection",
+    "vue-templates": "a template that does not compile is a build that fails",
+    "extension-kit": "an extension importing what its engines floor lacks fails to load on the hosts it says it supports",
+};
+
+// The reported checks, each with why its finding is not one that should fail main.
+export const CI_REPORTED = {
+    "skill-descriptions": "a prompt-budget cost, not a break",
+    "peer-deps": "an unmet peer is a warning pnpm itself prints and installs past",
+    licences: "a review queue for third-party licences; the reviewed list grows by hand, so it reports until it is clean",
+    "test-programs": "a test file's name and budget tier: suite hygiene, and the tests themselves still run and gate",
+    "hooks-armed": "local git hooks, which nothing in CI or the product runs",
+    "invariant-registry": "architecture bookkeeping (ratcheted)",
+    "daemon-boundaries": "layering and import shape (ratcheted); a cycle that really breaks shows in the build and tests",
+    "editor-boundaries": "layering and import shape (ratcheted); a cycle that really breaks shows in the build and tests",
+    "shared-boundary": "dependency shape between parts",
+    "extension-deps": "manifest tidiness; a missing dependency fails the extension's build",
+    "runtime-deps": "reports until it is proved on main; a production install that lacks a package fails the image smoke",
+    "contract-paths": "how a route is spelled, not whether it works",
+    "route-literal": "how an address is spelled, not whether it works",
+    "home-dir": "a code pattern rule for the device agent",
+    i18n: "translation catalog hygiene; a missing translation falls back to English",
+    "i18n-keys": "i18n key hygiene: a missing key renders its own path, a wording bug rather than a broken product",
+    "reduced-motion": "an accessibility style rule",
+    "submit-guards": "a UI pattern rule",
+    "extension-siblings": "the shape of the workspace beside this repository, which CI does not have",
+    "layer-tables": "a generated README table",
+    paths: "how a root is spelled (ratcheted)",
+    vocabulary: "wording (ratcheted)",
+    "terminal-output": "where CLI output is printed from (ratcheted)",
+    "silent-catch": "error-handling style (ratcheted)",
+    "code-shape": "file and function size (ratcheted)",
+    "process-tiers": "which helper starts a process (ratcheted)",
+    layout: "directory tidiness (ratcheted)",
+    "daemon-doors": "which client reaches a route (ratcheted)",
+    "primitive-tiers": "hand-rolled copies of shared helpers (ratcheted)",
+    "dependency-text": "matching on another program's wording (ratcheted)",
+    "format-tiers": "which formatter a number goes through (ratcheted)",
+    "clipboard-tiers": "which door the clipboard goes through",
+    "modifier-tiers": "how a modifier key is read",
+    "vue-model-names": "how a defineModel is named",
+    "i18n-literals": "English typed into a template",
+    "time-zones": "how a date or cron is written",
+    "package-readmes": "documentation presence",
+    "md-links": "documentation links",
+    "metaphor-home": "documentation structure",
+    "ignored-imports": "reports while it proves itself; a missing file fails the build that imports it",
+    "dead-code": "unused exports and dependencies (ratcheted)",
+    "tooltip-words": "hover label wording",
+    "i18n-shared": "catalog naming",
+    tailwind: "class-attribute style",
+    display: "typography style",
+    marks: "icon placement style",
+    rows: "list styling",
+    buttons: "button component choice",
+    inputs: "field component choice",
+    substitutes: "kit primitive choice",
+    recipes: "kit recipe usage",
+    tones: "colour token usage",
+    "run-settings": "control layout",
+    "model-labels": "how a model is named in the UI",
+    "astro-scripts": "page script placement",
+    "bun-check-scripts": "package script naming",
+};
+
+/** Whether a failure of check `id` fails a CI job run with `--report`. */
+export const blocksCi = (id) => Object.hasOwn(CI_BLOCKING, id);

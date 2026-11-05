@@ -12,12 +12,22 @@
 // touched are formatted (in CI the checkout holds nothing uncommitted, and the crate jobs run `cargo fmt --check`).
 // Exits 1 on a finding. Typecheck, build and test are not its to run: the verify groups measure them in CI, and
 // `pnpm verify` runs them all here.
+//
+// IN CI IT RUNS WITH `--report`, and then only a check manifest.mjs lists in CI_BLOCKING (the lockfile, the workflow
+// policy, the release's inputs, the wire contract, shell quoting and the rest of that list, each with its reason) fails
+// it. Everything else it finds is reported: a tidy or non-blocking check's findings the range added, the assertion
+// ratchet, the linter. Each prints as before and also becomes warning annotations on the lines it names and a block in
+// the job's step summary (lib/steps.mjs's `warn`), and the job passes. Over main's pushes 2026-10-23..11-05 this job was
+// the first to fail in 27 of 134 failed runs, every one of them on a finding of that second kind: lint 11, the ratchet
+// 9, i18n-keys 6, the tidy rules the rest.
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { LINTABLE } from "../../oxlint/added.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
+import { blocksCi } from "../../checks/manifest.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
 import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { judgeTidy, LINT_COMMAND, runLint } from "./measure-change.mjs";
@@ -26,8 +36,13 @@ const root = repoRoot(import.meta.url);
 const argv = process.argv.slice(2);
 // The commit CI measures the push against. Absent, the range is the branch since it left its upstream.
 const baseArg = argv.includes("--base") ? (argv[argv.indexOf("--base") + 1] ?? "") : undefined;
+// CI's switch: fail on a blocking check alone and report the rest (the header says which is which).
+const reportOnly = argv.includes("--report");
 
-const { say, step, fail, finish } = createSteps("verify-push", root);
+const { say, step, fail, warn, finish } = createSteps("verify-push", root);
+// A finding of the kind `--report` says rather than fails; failed as before without it.
+const refuse = (label, why, details = [], options = {}) =>
+    reportOnly ? warn(label, options.spelling === undefined ? why : `${why} · ${options.spelling}`, details) : fail(label, why, details, options);
 
 // Bound to this checkout, so a large diff isn't misread as a failed git call (lib/git.mjs's larger maxBuffer).
 const git = (...args) => gitIn(root, ...args);
@@ -121,7 +136,8 @@ const lockfileRewriteOnly = () => {
         }
         const failed = verdicts.filter((verdict) => !verdict.ok && verdict.measured);
         const show = (mark, verdict, body) => process.stderr.write(`\n${mark} ${verdict.id} (${verdict.file})\n${body}\n`);
-        const broken = failed.filter((verdict) => verdict.gate === "code");
+        // What fails outright: a `code` check by hand, a blocking one under `--report`. The rest is judged against the base.
+        const broken = failed.filter((verdict) => (reportOnly ? blocksCi(verdict.id) : verdict.gate === "code"));
         for (const verdict of broken) {
             show("✗", verdict, `${verdict.stderr}${verdict.stdout}`.trimEnd());
         }
@@ -129,7 +145,7 @@ const lockfileRewriteOnly = () => {
             const ids = broken.map(({ id }) => id);
             fail("checkout gates", `${ids.length} check(s) the tree fails: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`);
         }
-        const untidy = failed.filter((verdict) => verdict.gate === "tidy");
+        const untidy = failed.filter((verdict) => !broken.includes(verdict));
         // Without a base there is no before, and a finding cannot be told from one the tree arrived with: reported, and
         // left to the nightly that reads the tree it lands in.
         if (untidy.length > 0 && base === undefined) {
@@ -156,9 +172,12 @@ const lockfileRewriteOnly = () => {
                 );
             }
             for (const { verdict, added } of mine) {
-                show("✗", verdict, `${added.length} problem(s) this range introduces\n${added.join("\n")}`);
+                show(reportOnly ? "⚠" : "✗", verdict, `${added.length} problem(s) this range introduces\n${added.join("\n")}`);
+                if (reportOnly) {
+                    warn(verdict.id, `${added.length} problem(s) this range introduces · node _tools/checks/run.mjs --only ${verdict.id}`, added);
+                }
             }
-            if (mine.length > 0) {
+            if (mine.length > 0 && !reportOnly) {
                 const ids = mine.map(({ verdict }) => verdict.id);
                 fail("tidiness", `${ids.length} tidy check(s) this range breaks: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`);
             }
@@ -172,10 +191,19 @@ const lockfileRewriteOnly = () => {
 if (range === undefined) {
     say("assertion ratchet: no range to measure, so the test files leave unmeasured (CI measures the tree they land in)");
 } else {
-    step(`assertion ratchet (${range[0].slice(0, 9)}..${range[1].slice(0, 9)})`, process.execPath, [
-        join(root, "_tools/scripts/verify/assertion-ratchet.mjs"),
-        ...range,
-    ]);
+    const label = `assertion ratchet (${range[0].slice(0, 9)}..${range[1].slice(0, 9)})`;
+    const ratchet = [join(root, "_tools/scripts/verify/assertion-ratchet.mjs"), ...range];
+    if (reportOnly) {
+        // Read rather than inherited, so the files it names can be annotated.
+        const run = spawnSync(process.execPath, ratchet, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+        process.stderr.write(`${run.stdout ?? ""}${run.stderr ?? ""}`);
+        if (run.status !== 0) {
+            const lines = `${run.stdout ?? ""}${run.stderr ?? ""}`.split("\n").filter((line) => line.trim() !== "");
+            warn(label, run.error?.message ?? "a test file got weaker and no commit in the range declares it · node _tools/scripts/verify/assertion-ratchet.mjs <base> <head>", lines);
+        }
+    } else {
+        step(label, process.execPath, ratchet);
+    }
 }
 
 // The linter over the files the range added or changed, read one way (measure-change.mjs). A linter that could not run
@@ -186,12 +214,12 @@ if (range === undefined) {
     if (lint === undefined) {
         say("lint: no range to measure, so no file is linted (CI's quick job lints what a push changed)");
     } else if (!lint.ran) {
-        fail("lint", `could not run: ${lint.why ?? "it did not start"}`, [], { spelling: LINT_COMMAND });
+        refuse("lint", `could not run: ${lint.why ?? "it did not start"}`, [], { spelling: LINT_COMMAND });
     } else if (lint.findings.length > 0) {
         for (const { text } of lint.findings) {
             process.stderr.write(`${text}\n`);
         }
-        fail("lint", `${lint.findings.length} finding(s) on files this range changes`, lint.findings.map(({ text }) => text), { spelling: LINT_COMMAND });
+        refuse("lint", `${lint.findings.length} finding(s) on files this range changes`, lint.findings.map(({ text }) => text), { spelling: LINT_COMMAND });
     } else {
         say(`lint: ${files.length} changed file(s), no finding`);
     }

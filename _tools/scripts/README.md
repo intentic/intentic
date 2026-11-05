@@ -23,7 +23,10 @@ flowchart LR
   push check: CI's `quick` job runs it on every push (`--base <sha>`, the commit the push is measured against), and by
   hand it measures the branch against its upstream. It runs the checks with a `tidy` finding counted only when the
   range added it, the assertion ratchet over the range's test files and the linter over the files it changed, and by
-  hand also the manifest/lockfile lockstep and rustfmt on the crates it touched; it exits non-zero on a finding.
+  hand also the manifest/lockfile lockstep and rustfmt on the crates it touched; it exits non-zero on a finding. CI
+  passes `--report`: only a check in the manifest's `CI_BLOCKING` fails it, and the rest are annotations and a
+  step-summary block (`verify/report-step.mjs` does the same for the crate jobs' fmt and clippy). `fixers.mjs --only
+  format` is the formatters alone, which ci.yml's `autofix` job runs and commits on main.
   `verify/verify-turn.mjs` is the turn check, this repository's `turn` entry in `.intentic/checks.json`: the sandbox runs
   it once as an isolated turn is about to stop and says what it printed back to the model. It runs every check the
   manifest lists on the working tree, files nobody has added to git yet included, and prints only what the change added
@@ -47,6 +50,11 @@ flowchart LR
   (`lib/test-memory-pool.mjs`): one-GiB flock slots every job on the box draws from. A band of them is kept for the
   gate jobs, a job can be capped, and a big suite that finds the pool short waits a bounded time for room. On CI
   `suites` also ends a bun that reported every file and never exited (`lib/bun-progress.mjs`), keeping its verdict.
+- `verify/quarantine.mjs` decides a verify group's verdict after its turbo graph: a failing test case is re-run alone
+  (`verify/flakes.mjs`), and one that passes then, or is already quarantined, does not fail the job. The list lives in
+  `/ci-cache/quarantine`, and every gate run names it. Nightly's `quarantine` job re-runs each listed test alone, releasing
+  it after three passing nights and evicting it on one failure. `verify/timing-hazards.mjs` is preflight's report of
+  real sleeps, wall-clock assertions and fixed ports in test code. It fails nothing.
 - `verify/clock-suites.mjs` is the nightly's `verify-clocks`: the test files whose text touches dates, zones or crons, run in
   UTC+14 and UTC-11. `lib/seed-buildinfo.mjs` starts the web's vue-tsc from a sibling worktree's build info, and on the
   fleet from the last passing check's (`TSBUILDINFO_SHARE_DIR`).

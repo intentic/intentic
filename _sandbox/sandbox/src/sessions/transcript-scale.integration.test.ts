@@ -53,6 +53,21 @@ const write = async (root: string, conversationId: string, turns: number): Promi
     }
 };
 
+// A record of `turns` turns written once per file and only read after: every append is a durable write, so the tests
+// that read the same length share one rather than each writing it again.
+const shared = new Map<number, Promise<string>>();
+const writtenOnce = (turns: number): Promise<string> => {
+    let root = shared.get(turns);
+    if (root === undefined) {
+        root = dir().then(async (made) => {
+            await write(made, `c-${turns}`, turns);
+            return made;
+        });
+        shared.set(turns, root);
+    }
+    return root;
+};
+
 const anchorsOf = (indices: readonly number[]): TurnCheckpoints => {
     const all = new Map<number, TurnCheckpoint>(indices.map((index) => [index, { kind: "tree", snapshot: `snap-${index}` }]));
     return {
@@ -92,11 +107,10 @@ const report = (label: string, reading: Reading): void => {
 describe("opening a long conversation", () => {
     // No fan-out, no oversized tool result: length alone.
     it("answers a week of work within one open's budget", async () => {
-        const root = await dir();
         const turns = 400;
-        await write(root, "c-week", turns);
+        const root = await writtenOnce(turns);
 
-        const reading = await measure(root, "c-week", turns);
+        const reading = await measure(root, `c-${turns}`, turns);
         report(`${turns} turns`, reading);
 
         expect(reading.payloadBytes).toBeLessThanOrEqual(OPEN_BUDGET_BYTES);
@@ -105,10 +119,9 @@ describe("opening a long conversation", () => {
     it("returns a window, not a conversation: ten times the history is not ten times the read", async () => {
         const root = await dir();
         await write(root, "c-short", 40);
-        await write(root, "c-tenfold", 400);
 
         const short = await measure(root, "c-short", 40);
-        const long = await measure(root, "c-tenfold", 400);
+        const long = await measure(await writtenOnce(400), "c-400", 400);
         report(`40 turns`, short);
         report(`400 turns`, long);
 
@@ -130,11 +143,9 @@ describe("opening a long conversation", () => {
 
 describe("the transcript window", () => {
     it("starts at a user message, never mid-turn", async () => {
-        const root = await dir();
-        await write(root, "c-turns", 100);
-        const record = fileTranscriptRecord(root);
+        const record = fileTranscriptRecord(await writtenOnce(100));
 
-        const page = await record.window("c-turns", { turns: 5 });
+        const page = await record.window("c-100", { turns: 5 });
 
         expect(page.rows[0]?.role).toBe("user");
         expect(page.rows.filter((row) => row.role === "user").length).toBe(5);
@@ -145,14 +156,12 @@ describe("the transcript window", () => {
     // rewindIndex is the message's absolute position in the whole record; the rewind route, fork and turn-checkpoints
     // checkpoints all address it directly.
     it("keeps rewind indices absolute, counted from the start of the record", async () => {
-        const root = await dir();
         const turns = 100;
-        await write(root, "c-anchors", turns);
-        const record = fileTranscriptRecord(root);
+        const record = fileTranscriptRecord(await writtenOnce(turns));
         const userRows = Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN);
         const deps = { record, turnCheckpoints: anchorsOf(userRows) };
 
-        const windowed = await agentTranscriptPage(deps, { id: "c-anchors" }, { turns: 5 });
+        const windowed = await agentTranscriptPage(deps, { id: `c-${turns}` }, { turns: 5 });
 
         const stamped = windowed.rows.filter((row) => row.rewindIndex !== undefined);
         expect(stamped.length).toBe(5);

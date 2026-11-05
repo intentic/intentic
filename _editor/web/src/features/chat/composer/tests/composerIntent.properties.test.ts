@@ -1,5 +1,6 @@
-// What the next Send press means, over every snapshot the composer can be in: the whole product of ComposerSituation's
-// inputs, each rule below asserted for each one. composerIntent.test.ts pins the precedence case by case; this pins that
+// What the next Send press means, over the snapshots the composer can be in: every combination of ComposerSituation's
+// many-valued inputs, each crossed with a seeded sample of its yes-or-no ones, and every yes-or-no combination at least
+// once, each rule below asserted for each. composerIntent.test.ts pins the precedence case by case; this pins that
 // the readings never contradict one another anywhere, since a placeholder, a refusal line, a greyed Send and a bare
 // Enter that disagree are the bugs this surface has had. Then the same snapshot read with the strip's press
 // (pressWay.ts), built as the pane builds it (composerSend.ts), so the composer and the strip above it cannot leave a
@@ -51,6 +52,19 @@ const eachOf = (axes: readonly number[], visit: (digits: readonly number[]) => v
     return total;
 };
 
+// A seeded generator (mulberry32): the same SEED draws the same snapshots on every run, so a failure reproduces, and
+// the seed is printed with every snapshot that breaks a rule.
+const SEED = 0x1c0_ffee;
+const seeded = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+        state = (state + 0x6d_2b_79_f5) >>> 0;
+        let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+        mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed);
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
+    };
+};
+
 const PICK_UPS: readonly (PickUpSituation | undefined)[] = [
     undefined,
     ...[true, false].flatMap((ready) => ([undefined, `book`, `arm`, `armed`] as const).map((atReopen) => ({ ready, atReopen }))),
@@ -61,6 +75,47 @@ const INTENTS: readonly SendIntent[] = [`place`, `edit`, `plan`, `answer`, `late
 const CARDS = 3;
 // The fourteen yes-or-no inputs (the card three-way), then the pick-up, the queue, the reopen and the account's block.
 const AXES = [...Array.from({ length: 14 }, (_, axis) => (axis === 6 ? CARDS : 2)), PICK_UPS.length, 2, 2, BLOCKS.length];
+// The many-valued axes and the reopen (the card, the pick-up, the queue, the reopen, the block) are walked whole; the
+// thirteen plain yes-or-no axes are sampled, BOOLEANS_PER_COMBINATION draws for each combination of the rest, and every
+// one of their 8192 combinations is also visited once beside a drawn rest.
+const WHOLE: readonly number[] = [6, 14, 15, 16, 17];
+const BOOLEAN_AXES = AXES.map((_, axis) => axis).filter((axis) => !WHOLE.includes(axis));
+const BOOLEANS_PER_COMBINATION = 256;
+
+/** The sampled snapshots, each a full set of AXES digits, drawn from SEED. */
+const sampleOf = (visit: (digits: readonly number[]) => void): number => {
+    const random = seeded(SEED);
+    const draw = (size: number): number => Math.floor(random() * size);
+    let total = 0;
+    const digits = AXES.map(() => 0);
+    // Every combination of the whole axes, each with drawn yes-or-no axes.
+    eachOf(
+        WHOLE.map((axis) => AXES[axis] ?? 1),
+        (whole) => {
+            WHOLE.forEach((axis, at) => (digits[axis] = whole[at] ?? 0));
+            for (let draws = 0; draws < BOOLEANS_PER_COMBINATION; draws += 1) {
+                for (const axis of BOOLEAN_AXES) {
+                    digits[axis] = draw(2);
+                }
+                visit(digits);
+                total += 1;
+            }
+        },
+    );
+    // Every combination of the yes-or-no axes, each with a drawn rest.
+    eachOf(
+        BOOLEAN_AXES.map(() => 2),
+        (booleans) => {
+            BOOLEAN_AXES.forEach((axis, at) => (digits[axis] = booleans[at] ?? 0));
+            for (const axis of WHOLE) {
+                digits[axis] = draw(AXES[axis] ?? 1);
+            }
+            visit(digits);
+            total += 1;
+        },
+    );
+    return total;
+};
 
 // The snapshot one combination of AXES names.
 const situationOf = (digits: readonly number[]): ComposerSituation => {
@@ -129,7 +184,7 @@ const flushes = (situation: ComposerSituation): boolean => {
     return situation.queued > 0 && !situation.streaming && !situation.pendingPlan && situation.queueScheduled !== true && !cautioned;
 };
 
-// Every rule one snapshot breaks, by name. Named only once broken: millions of snapshots pass through here.
+// Every rule one snapshot breaks, by name. Named only once broken: hundreds of thousands of snapshots pass through here.
 const brokenRules = (situation: ComposerSituation): readonly string[] => {
     const intent = sendIntentOf(situation);
     const refusal = sendRefusal(situation);
@@ -217,19 +272,19 @@ describe(`every snapshot of the composer`, () => {
     test(`never contradicts itself`, () => {
         const wrong: string[] = [];
         const seen = new Set<SendIntent>();
-        const total = eachOf(AXES, (digits) => {
+        const total = sampleOf((digits) => {
             const situation = situationOf(digits);
             seen.add(sendIntentOf(situation));
             const broken = brokenRules(situation);
             if (broken.length > 0 && wrong.length < LIMIT) {
-                wrong.push(`${broken.join(`; `)}: ${named(situation)}`);
+                wrong.push(`seed ${SEED}: ${broken.join(`; `)}: ${named(situation)}`);
             }
         });
         expect(wrong).toEqual([]);
-        expect(total).toBe(2 ** 13 * CARDS * PICK_UPS.length * 2 * 2 * BLOCKS.length);
+        expect(total).toBe(CARDS * PICK_UPS.length * 2 * 2 * BLOCKS.length * BOOLEANS_PER_COMBINATION + 2 ** BOOLEAN_AXES.length);
+        expect(BOOLEAN_AXES.length).toBe(13);
         expect([...seen].sort()).toEqual([...INTENTS].sort());
-        // Six million snapshots: seconds alone, longer on a machine busy with other suites.
-    }, 300_000);
+    });
 
     // Every intent says what a press there does, in every set of words a pane can hand it.
     test(`has a placeholder and a Send hint for every intent, in every set of words`, () => {

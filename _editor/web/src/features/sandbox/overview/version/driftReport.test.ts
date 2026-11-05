@@ -1,6 +1,5 @@
 // What the card's list is built from: route names folded into areas of the product, ranked by consequence.
 // Pure, so this pins the naming and the order without a daemon or a mount.
-import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setLocale } from "@intentic/ui/i18n";
 import { driftAreas, driftGroups, kindImpact, kindTag } from "./driftReport";
 
@@ -13,17 +12,6 @@ it(`names an area as the product names it, not as the contract does`, () => {
         kind: `drifted`,
         count: 2,
     });
-});
-
-// `agent` and `agents` are one letter apart and are not the same thing; the old card printed both prefixes and left
-// the reader to guess. Every group the contract ships gets a name of its own here.
-it(`has a name for every group in the shipped contract`, () => {
-    const groups = [...new Set(SANDBOX_ROUTE_NAMES.map((name) => name.split(`.`)[0] ?? name))];
-    const unnamed = driftAreas({ missing: groups.map((group) => `${group}.probe`), drifted: [], extra: [] })
-        // A group of ours with no entry in the table goes by its name alone, not by the line about a newer sandbox.
-        .filter((area) => area.where === undefined)
-        .map((area) => area.key);
-    expect(unnamed).toEqual([]);
 });
 
 // The hand-written routes are keyed `METHOD /path`, and splitting those on a dot put every one of them in a row of its

@@ -12,6 +12,7 @@ import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
 import { crates, DERIVED, fixChange, tightenBaselines, touchedCrates, writeDerived } from "./fixers.mjs";
 import { touchesTables } from "../tools/layer-tables.mjs";
+import { oxlintIn } from "../../oxlint/added.mjs";
 
 test("a crate is touched only by a path inside it, and build output is never walked", () => {
     const root = mkdtempSync(join(tmpdir(), "crates-"));
@@ -175,4 +176,33 @@ test("a name joining the kit or the API writes the extension shims again", () =>
         assert.equal(shims.wants(".", source), true, source);
     }
     assert.equal(shims.wants(".", "_shared/extension-ui/README.md"), false);
+});
+
+// Both formatters are real here: skipped where either is missing (preflight's image has no cargo and no install).
+const formatters = spawnSync("cargo", ["fmt", "--version"]).status === 0 && oxlintIn(repoRoot(import.meta.url)) !== undefined;
+test("--only format runs the formatters on what the change touched and nothing else", { skip: !formatters && "no rustfmt or no oxlint here" }, () => {
+    const root = mkdtempSync(join(tmpdir(), "fix-format-"));
+    try {
+        spawnSync("git", ["init", "-q"], { cwd: root });
+        mkdirSync(join(root, "c/src"), { recursive: true });
+        writeFileSync(join(root, "c/Cargo.toml"), '[package]\nname = "c"\nversion = "0.0.0"\nedition = "2021"\n');
+        writeFileSync(join(root, "c/src/lib.rs"), "pub fn  f( ){}\n");
+        // A rule whose fix oxlint applies as safe, so `--fix` writes it; the change touches a.mjs and not b.mjs.
+        writeFileSync(join(root, ".oxlintrc.json"), '{"rules":{"prefer-const":"error"}}\n');
+        writeFileSync(join(root, "a.mjs"), "export const f = () => {\n    let a = 1;\n    return a;\n};\n");
+        writeFileSync(join(root, "b.mjs"), "export const g = () => {\n    let b = 1;\n    return b;\n};\n");
+        // Committed, as on main: what the fixers wrote is told from what the commit holds.
+        spawnSync("git", ["add", "-A"], { cwd: root });
+        spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"], { cwd: root });
+        const { ran, wrote } = fixChange(root, ["c/src/lib.rs", "a.mjs"], "format");
+        assert.deepEqual(ran, ["rustfmt", "oxlint --fix"]);
+        assert.deepEqual(wrote, ["a.mjs", "c/src/lib.rs"]);
+        assert.equal(readFileSync(join(root, "c/src/lib.rs"), "utf8"), "pub fn f() {}\n");
+        assert.match(readFileSync(join(root, "a.mjs"), "utf8"), /const a = 1;/);
+        // Untouched by the change, so untouched by the fixers.
+        assert.match(readFileSync(join(root, "b.mjs"), "utf8"), /let b = 1;/);
+        assert.deepEqual(fixChange(root, ["c/src/lib.rs", "a.mjs"], "format"), { ran: [], wrote: [] });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });

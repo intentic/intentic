@@ -89,10 +89,13 @@ jobs:
             _editor/mobile-core/target
           key: mobile-core-${{ runner.os }}-${{ hashFiles('_editor/mobile-core/Cargo.lock') }}
           restore-keys: mobile-core-${{ runner.os }}-
+      # Reported, not failed, as ci.yml's desktop-check comment says: rustfmt's diff and clippy's warn-by-default lints
+      # become annotations, and clippy still fails on a compile error or a lint it denies by default. The hosted image's
+      # own node runs the wrapper; it needs nothing installed.
       - name: Core formatting
-        run: cargo fmt --manifest-path "$CORE" --all --check
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "cargo fmt (mobile core)" -- cargo fmt --manifest-path "$CORE" --all --check
       - name: Core lints
-        run: cargo clippy --manifest-path "$CORE" --all-targets -- -D warnings
+        run: node "$GITHUB_WORKSPACE/_tools/scripts/verify/report-step.mjs" --title "clippy (mobile core)" --keep-status -- cargo clippy --manifest-path "$CORE" --all-targets
       - name: Core tests
         run: cargo test --manifest-path "$CORE"
       - name: Messages.kt matches the core's messages

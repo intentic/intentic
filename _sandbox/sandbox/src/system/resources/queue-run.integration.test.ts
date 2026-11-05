@@ -16,7 +16,16 @@ interface Run {
 }
 
 // `bash <path>`, not the path itself: it's mode 644 in git, executable only after the Dockerfile's chmod.
-const queueRun = (dir: string, args: readonly string[], command: string, pathPrefix?: string, extraEnv: NodeJS.ProcessEnv = {}): Promise<Run> =>
+// `onStderr` sees the stderr read so far as it grows: a test frees a slot the moment the waiter says it waits, rather
+// than sizing a holder's sleep to outlast the waiter's start.
+const queueRun = (
+    dir: string,
+    args: readonly string[],
+    command: string,
+    pathPrefix?: string,
+    extraEnv: NodeJS.ProcessEnv = {},
+    onStderr?: (soFar: string) => void,
+): Promise<Run> =>
     new Promise((resolve) => {
         const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", command], {
             env: {
@@ -31,9 +40,19 @@ const queueRun = (dir: string, args: readonly string[], command: string, pathPre
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
-        child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+        child.stderr.on("data", (chunk: Buffer) => {
+            stderr += chunk.toString();
+            onStderr?.(stderr);
+        });
         child.on("close", (code) => resolve({ code, stdout, stderr }));
     });
+
+// Frees the holder's slot once the waiter has said it waits and named who holds it.
+const releaseOnceWaiting = (holder: ChildProcess) => (soFar: string): void => {
+    if (soFar.includes("(holders and waiters:")) {
+        holder.kill("SIGKILL");
+    }
+};
 
 const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "queue-run-"));
 
@@ -125,7 +144,7 @@ test("a command limited to one serialises with its own kind, and the rest of the
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     try {
-        const alsoOne = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2"], "echo serialised");
+        const alsoOne = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1"], "echo serialised");
         // Only slot.1 is visible to it, and the holder has that, so it waits out the deadline.
         expect(alsoOne.stderr).toContain("starting anyway");
 
@@ -176,7 +195,7 @@ test("a HUNG command is killed at the ceiling, and the slot it was holding goes 
     const queue = await dir();
     // The shape that leaked one: a pipeline whose writer never returns, so its reader never sees EOF either, and
     // both of them go on holding the slot's descriptor. Killing only the direct child would leave the lock held.
-    const hung = await queueRun(queue, ["--pool", "p", "--limit", "1", "--max-hold", "2"], "sleep 600 | tail -1");
+    const hung = await queueRun(queue, ["--pool", "p", "--limit", "1", "--max-hold", "1"], "sleep 600 | tail -1");
     expect(hung.code).toBe(124);
 
     const after = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "5"], "echo free");
@@ -201,9 +220,9 @@ test("the deadline path holds no slot, so the ceiling must not reach it", async 
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     try {
-        // Starts unqueued once the deadline passes, then outlives the ceiling: killing it would free no slot,
-        // because it never got one.
-        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--max-hold", "3"], "sleep 6; echo unbounded");
+        // Starts unqueued once the deadline passes, then outlives the ceiling twice over: killing it would free no
+        // slot, because it never got one.
+        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1", "--max-hold", "1"], "sleep 2; echo unbounded");
         expect(ran.stderr).toContain("starting anyway");
         expect(ran.stdout.trim()).toBe("unbounded");
         expect(ran.code).toBe(0);
@@ -216,7 +235,7 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 10);
     try {
-        const waited = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2"], "echo ran; exit 4");
+        const waited = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1"], "echo ran; exit 4");
         expect(waited.stdout.trim()).toBe("ran");
         expect(waited.code).toBe(4);
         expect(waited.stderr).toContain('pool "p"');
@@ -275,10 +294,16 @@ PATH="\${PATH#*:}" exec flock "$@"
 
 test("says in the pane that it is waiting, then that it started", async () => {
     const queue = await dir();
-    // Long enough that the holder still holds when the second command polls; short enough not to wait out the full
-    // deadline.
-    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1", "--label", "vitest"], 5);
-    const second = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "30", "--label", "vitest"], "echo second");
+    // Held until the second command has said it waits, then freed, so it goes on to start inside its deadline.
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1", "--label", "vitest"], 30);
+    const second = await queueRun(
+        queue,
+        ["--pool", "p", "--limit", "1", "--wait", "30", "--label", "vitest"],
+        "echo second",
+        undefined,
+        {},
+        releaseOnceWaiting(holder),
+    );
     expect(second.stderr).toContain('pool "p"');
     expect(second.stderr).toContain("vitest");
     expect(second.stderr).toMatch(/waiting|slot free after/);
@@ -289,7 +314,7 @@ test("says in the pane that it is waiting, then that it started", async () => {
 test("names who holds the pool while it waits, says so again as the wait goes on, and keeps the pool's state on file", async () => {
     const queue = await dir();
     const held = join(queue, "held");
-    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${held}; sleep 5`], {
+    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${held}; sleep 30`], {
         env: { ...process.env, INTENTIC_QUEUE_CAPTURE_DIR: "", INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
     });
     for (let tries = 0; tries < RENDEZVOUS_SECONDS / POLL_SECONDS && !(await readdir(queue)).includes("held"); tries += 1) {
@@ -314,12 +339,16 @@ test("names who holds the pool while it waits, says so again as the wait goes on
             if (seen === "" && stderr.includes("holders and waiters:")) {
                 void readFile(state, "utf8").then((text) => (seen = text));
             }
+            // Freed once the wait has been said again and the state it saw is read: the rest is the waiter starting.
+            if (seen !== "" && stderr.includes("still waiting after")) {
+                holder.kill("SIGKILL");
+            }
         });
         let stdout = "";
         child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
         child.on("close", (code) => resolve({ code, stdout: `${stdout}${seen}`, stderr }));
     });
-    expect(second.stderr).toMatch(/slot\.1: pid \d+, running \d+s by rule bun-test for conversation holding-conversation: .*sleep 5/);
+    expect(second.stderr).toMatch(/slot\.1: pid \d+, running \d+s by rule bun-test for conversation holding-conversation: .*sleep 30/);
     expect(second.stderr).toContain(`(holders and waiters: ${state})`);
     expect(second.stderr).toMatch(/still waiting after \ds for pool "p"/);
     const [ran, json] = second.stdout.split("\n");
@@ -435,7 +464,7 @@ test("--on-deadline skip exits 75 without running once the wait is up", async ()
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     try {
-        const skipped = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--on-deadline", "skip"], "echo ran");
+        const skipped = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1", "--on-deadline", "skip"], "echo ran");
         expect(skipped.code).toBe(75);
         expect(skipped.stdout).toBe("");
         expect(skipped.stderr).toContain("not started");
@@ -447,8 +476,15 @@ test("--on-deadline skip exits 75 without running once the wait is up", async ()
 
 test("--on-deadline skip changes nothing for a command that gets its slot in time", async () => {
     const queue = await dir();
-    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 3);
-    const second = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "30", "--on-deadline", "skip"], "echo second; exit 4");
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    const second = await queueRun(
+        queue,
+        ["--pool", "p", "--limit", "1", "--wait", "30", "--on-deadline", "skip"],
+        "echo second; exit 4",
+        undefined,
+        {},
+        releaseOnceWaiting(holder),
+    );
     expect(second.stdout.trim()).toBe("second");
     expect(second.code).toBe(4);
     holder.kill("SIGKILL");
@@ -458,7 +494,7 @@ test("an unknown deadline mode reads as run, so the wrapper is never the reason 
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     try {
-        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--on-deadline", "later"], "echo ran");
+        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "1", "--on-deadline", "later"], "echo ran");
         expect(ran.stdout.trim()).toBe("ran");
         expect(ran.stderr).toContain("starting anyway");
     } finally {

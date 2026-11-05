@@ -41,18 +41,20 @@ import {
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-/* One persisted fix conversation per default-branch failure streak; batch failed jobs when a run settles or reaches RUN_SETTLE_CAP_MS.
- * Send later failures once per run to the same conversation; end the streak after every affected workflow has a later passing run.
+/* One persisted fix conversation per default-branch failure streak; hand a run's failed jobs over HANDOVER_DELAY_MS after the first
+ * of them, or when the run finishes, whichever is sooner, and any that fail later in it as they come.
+ * Send later failures to the same conversation; end the streak after every affected workflow has a later passing run.
  * Limited turns, no change, failure, stop or archive hand control to the owner. Exclude fleet failures and retry an all-fleet-failure run once.
  * Persist in ci-store across restarts. With autoRepair off, report failures without starting repairs. */
 
-// Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none. One run's failures
-// are one message, so this is three runs' worth.
+// Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none. A run costs one at
+// most, however many of its failures are sent apart, so this is three runs' worth.
 export const TURNS_PER_STREAK = 3;
-// How long a run still going after its first failure is waited on before what failed so far is handed over: past the
-// end of measuring for nearly every run (verification was done by 41 minutes from the start at p90 across September
-// 2026), and short of a release that a failed clock or perf job does not stop.
-export const RUN_SETTLE_CAP_MS = 45 * 60_000;
+// How long a failed job waits before it is handed over, so the jobs one cause fails at the same moment go as one message
+// (preflight and quick on one finding, the jobs one broken install fails). It used to wait for the whole run, up to 45
+// minutes: across 35 red stretches of main (2026-10-23..11-05) that held the agent back a median 14 minutes after the
+// first failure, while the jobs that fail later in a run land minutes apart and are sent into its live turn for free.
+export const HANDOVER_DELAY_MS = 90_000;
 // Runs listed at boot, looking for what main did while the daemon was down.
 const RUNS_LISTED = 15;
 
@@ -71,8 +73,8 @@ interface Batch {
     readonly timer: ReturnType<typeof setTimeout>;
 }
 
-// Why a run's failures are handed over now: the run finished, or it was still going when its clock ran out.
-type HandOverReason = "finished" | "capped";
+// Why a run's failures are handed over now: the run finished, or it is still going and these are what failed so far.
+type HandOverReason = "finished" | "early";
 
 // What only this process holds: a lock per branch, so one branch's news is decided in the order it arrived; the fleet
 // failures already judged, so a job's log is not read twice for them; and each run's failed jobs not yet handed over.
@@ -81,7 +83,7 @@ type HandOverReason = "finished" | "capped";
 let serially = keyedLock<string>();
 const fleetJobs = new Set<string>();
 const batches = new Map<string, Batch>();
-let settleCapMs = RUN_SETTLE_CAP_MS;
+let handoverDelayMs = HANDOVER_DELAY_MS;
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const batchKeyOf = (repo: string, runId: number): string => `${repo}\n${runId}`;
@@ -158,11 +160,11 @@ const endedHandBack = (agent: AgentSummary, streak: CiFailure): HandBack | undef
 const jobsFailed = (runId: number, parked: readonly Parked[]): string =>
     `run ${runId} failed ${parked.length === 1 ? "1 job" : `${parked.length} jobs`}: ${parked.map(({ job }) => `"${job.name}"`).join(", ")}`;
 
-// What the list is: the run's whole word, or what had failed by the time its clock ran out.
+// What the list is: the run's whole word, or what has failed in it so far.
 const completeness = (reason: HandOverReason): string =>
     reason === "finished"
         ? `The run has finished, and every verification job in it ran whatever the others concluded, so this is the whole list of what it found wrong.`
-        : `The run was still going ${Math.round(settleCapMs / 60_000)} minutes after its first failure, so these are the jobs that had failed by then; any that fails later in it is sent to you when it finishes.`;
+        : `The run is still going, so these are the jobs that have failed in it so far; any that fails later in it is sent to you as it fails, so start on these now.`;
 
 // What the fix agent is told first, ahead of the failure's evidence.
 const openingPreface = (project: CiProject, branch: string, runId: number, parked: readonly Parked[], reason: HandOverReason): string =>
@@ -315,7 +317,8 @@ const sendOn = async (
         await handOver(services, project.repo, branch, fixer, { reason: "refused", cause: "why" in receipt ? receipt.why : receipt.invalid });
         return false;
     }
-    if (receipt.delivered !== "steered") {
+    // A run whose earlier failures were already heard has had its turn: the rest of it is part of the same one.
+    if (receipt.delivered !== "steered" && !streak.heard.some((heard) => heard.startsWith(`${runId}/`))) {
         await services.ciStore.failure(project.repo, branch, (current) => (current === undefined ? current : { ...current, turns: current.turns + 1 }));
     }
     return true;
@@ -348,8 +351,8 @@ const handOverRun = (services: Services, project: CiProject, branch: string, run
         }
     });
 
-// Parks a failed job for its run's handover, and starts the run's clock when it is the run's first. `logPath` is where
-// its whole log was kept for the agent, when it was.
+// Parks a failed job for its run's handover, and starts the clock when it is the first parked since the last one. `logPath`
+// is where its whole log was kept for the agent, when it was.
 const park = (services: Services, project: CiProject, job: FailedJob, log: string, logPath: string | undefined, fetchFn: FetchFn): void => {
     const key = batchKeyOf(project.repo, job.runId);
     const batch: Batch = batches.get(key) ?? {
@@ -357,12 +360,12 @@ const park = (services: Services, project: CiProject, job: FailedJob, log: strin
         timer: setTimeout(() => {
             void orElse(
                 services,
-                handOverRun(services, project, job.branch, job.runId, "capped", fetchFn),
+                handOverRun(services, project, job.branch, job.runId, "early", fetchFn),
                 undefined,
                 "ci repair: a run's failures could not be handed over",
                 { repo: project.repo, runId: job.runId },
             );
-        }, settleCapMs),
+        }, handoverDelayMs),
     };
     // The clock must not keep a stopping daemon alive; a restart hands the run over from the forge's own word instead.
     batch.timer.unref?.();
@@ -765,12 +768,12 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
 };
 
 /** Test seam: forget what only this process holds, as a restart does; the failures on file stay. */
-export const resetMainFixer = (options: { readonly settleCapMs?: number } = {}): void => {
+export const resetMainFixer = (options: { readonly handoverDelayMs?: number } = {}): void => {
     serially = keyedLock<string>();
     fleetJobs.clear();
     for (const batch of batches.values()) {
         clearTimeout(batch.timer);
     }
     batches.clear();
-    settleCapMs = options.settleCapMs ?? RUN_SETTLE_CAP_MS;
+    handoverDelayMs = options.handoverDelayMs ?? HANDOVER_DELAY_MS;
 };

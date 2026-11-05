@@ -3,6 +3,10 @@
 //
 //   node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b,c     (or --paths-file <file>, or --since <rev>)
 //
+// `--only format` runs the formatters alone: rustfmt on the crates the change touched, oxlint's own `--fix` on the
+// lintable files it changed, and the two derived writers that need nothing but node (the layer tables, the translations).
+// That is what ci.yml's `autofix` job runs on main after a push, and commits as `style: apply formatters (CI)`.
+//
 // `--only derived` runs just the DERIVED writers. That is all the sandbox runs after a land, in the background and
 // never as part of the land itself (the sandbox's conversations/land/rederive.ts): a land is a git operation, and the
 // derived files it leaves out are written again from what landed. rustfmt and the ratchet's `--tighten` take the whole
@@ -13,9 +17,10 @@
 // argument exits 2. It touches nothing outside the tree it is pointed at.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CHECKS } from "../../checks/manifest.mjs";
+import { LINTABLE, oxlintIn } from "../../oxlint/added.mjs";
 import { changedSince, git } from "../lib/git.mjs";
 import { touchesTables } from "../tools/layer-tables.mjs";
 
@@ -161,9 +166,9 @@ const dirtyContents = (root) =>
 const snapshot = (root) => JSON.stringify([...dirtyContents(root)]);
 
 // Runs, in `root`, every writer whose inputs `changed` touches; answers the ids of those that moved a file. A writer
-// whose directory the tree lacks has nothing to write.
-export const writeDerived = (root, changed) =>
-    DERIVED.filter((writer) => changed.some((path) => writer.wants(root, path)) && existsSync(join(root, writer.cwd)))
+// whose directory the tree lacks has nothing to write. `ids` narrows it to those writers.
+export const writeDerived = (root, changed, ids = undefined) =>
+    DERIVED.filter((writer) => (ids === undefined || ids.has(writer.id)) && changed.some((path) => writer.wants(root, path)) && existsSync(join(root, writer.cwd)))
         .filter((writer) => {
             const before = snapshot(root);
             spawnSync(writer.argv[0], writer.argv.slice(1), { cwd: join(root, writer.cwd), stdio: "ignore" });
@@ -171,21 +176,48 @@ export const writeDerived = (root, changed) =>
         })
         .map((writer) => writer.id);
 
+// The derived writers `--only format` runs: checkout-only node scripts, which a job with an install but no bun can run.
+const FORMAT_DERIVED = new Set(["layer tables", "translations"]);
+
+// oxlint's own fixes (the safe ones `--fix` applies, under the root config `pnpm lint` reads) on the lintable files of
+// `changed` that still exist; answers whether it moved one. False where the tree has no oxlint installed.
+const lintFix = (root, changed) => {
+    const files = changed.filter((path) => LINTABLE.has(extname(path)) && existsSync(join(root, path)));
+    const bin = oxlintIn(root);
+    if (files.length === 0 || bin === undefined) {
+        return false;
+    }
+    const before = snapshot(root);
+    spawnSync(bin, ["--fix", ...files], { cwd: root, stdio: "ignore" });
+    return snapshot(root) !== before;
+};
+
 /**
  * Every machine fixer scoped to `changed` (repo-relative paths), in `root`: rustfmt on the crates it touched, the
  * ratcheted baselines it beat, and every derived file whose sources it reached (DERIVED); with `only` "derived", just
- * the last. Answers which ran and which paths they wrote.
+ * the last; with "format", the formatters (rustfmt, oxlint --fix, FORMAT_DERIVED). Answers which ran and which paths
+ * they wrote.
  */
 export const fixChange = (root, changed, only = undefined) => {
     const before = dirtyContents(root);
     const ran = [];
-    if (only !== "derived") {
+    if (only === "format") {
+        if (rustfmtAvailable(root) && formatCrates(root, touchedCrates(root, changed)).length > 0) {
+            ran.push("rustfmt");
+        }
+        if (lintFix(root, changed)) {
+            ran.push("oxlint --fix");
+        }
+        ran.push(...writeDerived(root, changed, FORMAT_DERIVED));
+    } else if (only !== "derived") {
         if (rustfmtAvailable(root) && formatCrates(root, touchedCrates(root, changed)).length > 0) {
             ran.push("rustfmt");
         }
         ran.push(...tightenBaselines(root, changed));
     }
-    ran.push(...writeDerived(root, changed));
+    if (only !== "format") {
+        ran.push(...writeDerived(root, changed));
+    }
     const after = dirtyContents(root);
     const wrote = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).toSorted();
     return { ran, wrote };
@@ -207,8 +239,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         process.stderr.write("fixers: --worktree <dir> and exactly one of --paths a,b / --paths-file <file> / --since <rev>\n");
         process.exit(2);
     }
-    if (only !== undefined && only !== "derived") {
-        process.stderr.write(`fixers: --only takes "derived", not ${only}\n`);
+    if (only !== undefined && only !== "derived" && only !== "format") {
+        process.stderr.write(`fixers: --only takes "derived" or "format", not ${only}\n`);
         process.exit(2);
     }
     const root = resolve(worktree);

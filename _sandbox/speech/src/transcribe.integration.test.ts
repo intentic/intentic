@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "@intentic/testing/bun";
@@ -37,12 +37,16 @@ const fakeProcess = (heard: (spec: RecognizerSpec, samples: Float32Array) => str
 };
 
 // A baked image directory holding the named engines' files, at their pinned sizes (the store checks only size there).
+// Sparse: a file truncated up to its size reports that size without a byte written, where writing the zeros was up to 1.7 GB
+// of disk per directory.
 const bakedWith = (...engines: SpeechEngine[]): string => {
     const dir = mkdtempSync(join(tmpdir(), "speech-baked-"));
     for (const engine of engines) {
         mkdirSync(join(dir, engine), { recursive: true });
         for (const file of SPEECH_MODELS[engine].files) {
-            writeFileSync(join(dir, engine, file.path), Buffer.alloc(file.size));
+            const path = join(dir, engine, file.path);
+            writeFileSync(path, "");
+            truncateSync(path, file.size);
         }
     }
     return dir;

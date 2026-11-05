@@ -18,8 +18,9 @@ flowchart LR
   than part of each route.
 - `zodConverter` turns zod schemas into JSON Schema with `z.toJSONSchema`, keeping request and response shapes apart
   where `.default()` or `.stringbool()` makes them differ.
-- `spec.test.ts` fails when a contract group has no entry in `groups.ts`, an entry has no routes, or two runs produce
-  different documents.
+- `spec.test.ts` fails when a route is missing from the document, an entry in `groups.ts` has no routes, or two runs
+  produce different documents. A contract group with no entry yet is not a failure: its routes are still documented,
+  under no group.
 
 ## Key files
 
