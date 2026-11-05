@@ -589,10 +589,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             <ChatAgentStatus v-if="!strip" />
                             <!-- A new chat while this machine is busy and another of the owner's has room: the offer, or the move already made (ChatFleetSuggestion). -->
                             <ChatFleetSuggestion v-if="!strip" :conversation="conversation" @placed="flash(`placement`)" />
-                            <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
+                            <!-- The box is the next prompt, in the bubble's own material (chat.css .composer-frame). It changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                             <form
                                 ref="composerForm"
-                                class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
+                                class="composer-frame relative flex flex-col"
                                 :class="{ 'composer-voice': voiceAgent }"
                                 @submit.prevent="submit()"
                             >
@@ -892,7 +892,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             v-tooltip.top="stopHint"
                                             :aria-label="stopLabel"
                                         >
-                                            <Icon name="stop" class="text-sm" />
+                                            <Icon name="stop" class="text-xs" />
                                         </button>
                                         <!-- Send, split: the press sends now (Enter too), the caret picks when else. A time on the press is when it
                                              goes: a spent allowance's reopen, or a booking the words came back with. -->
