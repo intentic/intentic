@@ -82,6 +82,9 @@ flowchart LR
 - Who reaches a route is decided here once for both sides: `memberRefusal` in `src/protocol/member-reach.ts` reads a
   route's floor and a guest's list off its `RouteMeta`, the daemon's bearer middleware refuses with it, and the editor
   asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
+- The shipped safety policy (`src/policy/safety-policy.ts`) tells the judge that a secret reference becomes its real
+  value before a command runs, even inside text that reads like documentation, and to decide by where the value goes:
+  a host on that secret's own list is ordinary use, anywhere else is sending a credential out.
 - What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
   issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
   pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter

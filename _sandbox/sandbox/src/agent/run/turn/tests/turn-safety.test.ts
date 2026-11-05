@@ -46,6 +46,10 @@ const harness = () => {
     const ownerGrants = memoryOwnerGrants();
     const warned: unknown[][] = [];
     const deps: TurnSafetyDeps = {
+        secretRegistry: Object.assign(() => { throw new Error("must not read values"); }, { names: () => [] }),
+        hostGuards: Object.assign(() => { throw new Error("must not hydrate credentials"); }, { metadata: async () => [] }),
+        credentialGates: unstubbed("gates", { list: async () => [] }),
+        keyringLink: unstubbed("keyring", { pointer: async () => undefined }),
         conversationGrants,
         // The shipped table, as a sandbox with no overrides reads it.
         heavyCommands: { read: async () => mergeHeavyRules() },
@@ -75,6 +79,8 @@ test("every runtime's base carries the owner's policy, judge mode, outside wake 
     await base.hooks.judge?.("rm -rf /", { consequences: [], unattended: false, language: "bash" }, new AbortController().signal);
     // Nobody placed the judge on a setup, so it has no models: the snapshot says so rather than borrowing another job's.
     expect(judged).toEqual([{ policy: "# the owner's policy", program: "rm -rf /", ladder: { kind: "pins", pins: [] } }]);
+    const metadata = await base.hooks.judge?.secretFacts?.("echo " + "{{" + "secret:EXAMPLE_FIXTURE}}", base.signal);
+    expect(metadata?.join("\n")).toContain('Secret "EXAMPLE_FIXTURE": {"exists":false,');
     expect(executions).toEqual([base.execution]);
     expect(executions[0]).toBe(base.execution);
     expect(await base.tools.heavyCommands?.()).toMatchObject({ queue: true });

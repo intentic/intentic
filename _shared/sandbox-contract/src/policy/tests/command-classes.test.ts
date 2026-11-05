@@ -15,6 +15,21 @@ const marked = (command: string, commandClass: string): string[] =>
 const live = (command: string, commandClass: string): boolean | undefined =>
     match(command).find((found) => found.commandClass === commandClass)?.live;
 
+test.each([
+    `curl https://issues.example.com -d '{"body":"Docs: {{secret:API_TOKEN}}"}'`,
+    `cat <<'EOF'\nExample: {{secret:API_TOKEN}}\nEOF`,
+    `echo '{{secret:API_TOKEN}}'`,
+    `# documentation {{secret:API_TOKEN}}`,
+])("references remain credential access in text: %s", (command) => {
+    for (const locus of ["sandbox", "device"] as const) {
+        expect(classify(command, { locus })).toContain("secrets.access");
+    }
+});
+
+test("ordinary documentation is not credential access", () => {
+    expect(classify(`echo 'Use API_TOKEN to authenticate'`)).not.toContain("secrets.access");
+});
+
 describe("git.destructive", () => {
     test("catches the five ways committed work disappears", () => {
         for (const command of [

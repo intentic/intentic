@@ -245,6 +245,10 @@ flowchart LR
   the owner's own `.intentic/config/safety.md` and then the lines a person allowed with a card's Always
   (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
   Sandbox-wide permissions on Access ▸ Allowed and are never shipped in a definition export.
+  For a command holding a secret reference, `secrets/secret-judge-facts.ts` tells the judge what the text cannot:
+  that the reference is replaced by its value before the command runs, and for each named secret whether it exists,
+  its host guard and hosts, and whether it needs a named approver, never the value or who approves. A verdict is
+  reused within a turn only while those facts are unchanged (`safety/command-judge-cache.ts`).
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
   A manual Fix can start before the run finishes. Its start shares the automatic handover's branch lock and records
   the job IDs in its evidence, so completion and restart replay deliver only additional failures; a refused or busy

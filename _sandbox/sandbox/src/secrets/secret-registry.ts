@@ -114,12 +114,20 @@ export interface KeptFromKeyrings {
 
 const NOTHING_FROM_KEYRINGS: KeptFromKeyrings = { copies: async () => ({}), released: () => ({}) };
 
+// Names from an already completed registry read. Reading this projection never opens a value store.
+// Keep the last successful projection during a refresh; before the first read or after a failure, existence is unknown.
+export interface SecretRegistry {
+    (): Promise<readonly NamedSecret[]>;
+    readonly names?: () => readonly string[] | undefined;
+}
+
 export const secretRegistryOf = (
     vault: SecretVault,
     desiredStateRepo: () => string,
     sandbox: Pick<SandboxSecrets, "all">,
     keyrings: KeptFromKeyrings = NOTHING_FROM_KEYRINGS,
-) => {
+): SecretRegistry => {
+    let names: readonly string[] | undefined;
     // One reader per store the list names. The auth-root stores are read through their own documents (schema, mode,
     // refusal of an unreadable file), the seams the daemon already holds; the desired-state files are read raw, as the
     // terminal filter reads every store. Exhaustive over `source`, so a store added to the list cannot go unread here.
@@ -139,8 +147,11 @@ export const secretRegistryOf = (
                 return Object.entries(keyrings.released());
         }
     };
-    return async (): Promise<readonly NamedSecret[]> => {
-        const read = await Promise.all(SECRET_STORES.map(async (store) => ({ store, entries: await entriesOf(store) })));
+    const readRegistry = async (): Promise<readonly NamedSecret[]> => {
+        const read = await Promise.all(SECRET_STORES.map(async (store) => ({ store, entries: await entriesOf(store) }))).catch((error: Error) => {
+            names = undefined;
+            throw error;
+        });
         const byName = new Map<string, NamedSecret>();
         for (const { store, entries } of read) {
             for (const [name, value] of entries) {
@@ -149,6 +160,8 @@ export const secretRegistryOf = (
                 }
             }
         }
+        names = [...byName.values()].filter((secret) => secret.source !== "device").map((secret) => secret.name);
         return [...byName.values()];
     };
+    return Object.assign(readRegistry, { names: () => names });
 };

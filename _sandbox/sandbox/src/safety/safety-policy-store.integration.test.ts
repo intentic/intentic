@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { DEFAULT_SAFETY_POLICY, SECRET_REFERENCE_GUIDANCE } from "@intentic/sandbox-contract/policy/safety-policy";
 import { fileSafetyPolicyStore, GRANTED_HEADING, withGrantedLines } from "./safety-policy-store.js";
 
 const store = async (granted: () => Promise<readonly string[]> = async () => []) => {
@@ -98,4 +98,14 @@ test("a failed reading of the allowed lines is an error, never a quiet policy wi
         throw new Error("disk is gone");
     });
     await expect(policy.text()).rejects.toThrow("disk is gone");
+});
+
+test("new shipped credential guidance follows custom=false while an existing custom file stays verbatim", async () => {
+    const { policy } = await store();
+    const shipped = await policy.get();
+    expect(shipped).toEqual({ text: DEFAULT_SAFETY_POLICY, custom: false });
+    expect(shipped.text).toContain(SECRET_REFERENCE_GUIDANCE);
+    await policy.set("Allow local tests.");
+    expect(await policy.get()).toEqual({ text: "Allow local tests.\n", custom: true });
+    expect(await policy.text()).toBe("Allow local tests.\n");
 });

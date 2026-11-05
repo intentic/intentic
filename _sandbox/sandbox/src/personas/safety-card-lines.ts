@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { DEFAULT_SAFETY_POLICY, SECRET_REFERENCE_GUIDANCE } from "@intentic/sandbox-contract/policy/safety-policy";
 import { LEGACY_ADDED_HEADING, LEGACY_ADDED_NOTE } from "../safety/safety-policy-store.js";
 import { stateRelPath } from "../state-paths.js";
 import { defineStep } from "../store/evolution/state-steps.js";
@@ -23,6 +23,10 @@ export interface CardLines {
     // The policy without them: anything else the owner wrote under that heading stays under it.
     readonly rest: string;
 }
+
+// The shipped text from before the secret-reference paragraph, so a sandbox that reaches this step only now still
+// recognizes its untouched policy as shipped rather than keeping it as the owner's own.
+const PREVIOUS_DEFAULT = DEFAULT_SAFETY_POLICY.replace(`${SECRET_REFERENCE_GUIDANCE}\n`, ``);
 
 const squeezed = (text: string): string => `${text.replace(/\n{3,}/gu, `\n\n`).trimEnd()}\n`;
 
@@ -77,7 +81,7 @@ export const safetyCardLinesStep = defineStep({
         writes.set(join(roots.history, `trash/safety-before-card-lines-${at}.md`), text);
         // A file that only ever held the shipped text plus those lines was never the owner's: it goes, so the shipped text
         // applies again and follows the release.
-        writes.set(policy, squeezed(taken.rest) === squeezed(DEFAULT_SAFETY_POLICY) ? undefined : taken.rest);
+        writes.set(policy, [DEFAULT_SAFETY_POLICY, PREVIOUS_DEFAULT].some((shipped) => squeezed(taken.rest) === squeezed(shipped)) ? undefined : taken.rest);
         return {
             changes: [
                 `carries ${taken.lines.length} line(s) accepted on permission cards from ${SAFETY_POLICY} into ${ownerGrantsDocument.path}`,

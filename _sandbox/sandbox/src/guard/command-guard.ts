@@ -1,3 +1,4 @@
+import { commandJudgments } from "../safety/command-judge-cache.js";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AdmissionRule,CommandClass,CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
 import { outboundRefusal } from "./outbound-guard.js";
@@ -14,7 +15,7 @@ import {
 } from "@intentic/sandbox-contract/policy/command-classes";
 import type { CommandJudgeMode, SafetyLogEntry, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
-import type { JudgeFacts } from "../agent/tools/command-judge.js";
+import type { CommandJudge, JudgeFacts } from "../agent/tools/command-judge.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandRun } from "./actions.js";
@@ -60,7 +61,7 @@ export interface CommandGuardOptions {
     readonly taint: TurnTaint;
     // Asks the judge; a rejection means no rung answered. Callback-shaped, so this module knows nothing about accounts
     // or quotas.
-    readonly judge?: ((program: string, facts: JudgeFacts, signal: AbortSignal) => Promise<SafetyVerdict>) | undefined;
+    readonly judge?: CommandJudge | undefined;
     // Logs every judged command, allowed ones too, fire-and-forget so a failure here can't block the command.
     readonly log?: ((entry: SafetyLogEntry) => void) | undefined;
     // Amends a logged `ask` once answered, keyed by when the verdict was reached, not when the card settles.
@@ -250,8 +251,6 @@ const outboundOutcome = (options: CommandGuardOptions, program: string): GuardOu
 export const createCommandGuard = (options: CommandGuardOptions): CommandGuard => {
     // Programs the user has already said yes to this turn, keyed by exact text so a yes means only this command.
     const granted = new Set<string>();
-    // Judged verdicts this turn, keyed by program; concurrent consults of the same program share one promise.
-    const judged = new Map<string, Promise<SafetyVerdict>>();
     // Fact-check for secrets.access; re-read every command since a watched file's contents can change mid-turn.
     const context: CommandContext = {
         locus: SANDBOX,
@@ -263,23 +262,8 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
         options.log?.({ at, ...entry });
     };
 
-    // Asks the judge once per (taint state, program): taint changes mid-turn only toward stricter, so a command allowed
-    // before a page was read is re-judged after.
-    const askJudge = (program: string, facts: JudgeFacts): Promise<SafetyVerdict> => {
-        // NUL-separated: the one character neither a taint source nor a shell command can contain.
-        const key = `${facts.outsideSource ?? ``}\u0000${program}`;
-        const existing = judged.get(key);
-        if (existing !== undefined) {
-            return existing;
-        }
-        // Rejections aren't cached, so a momentarily unreachable judge doesn't condemn every later command.
-        const asking = (options.judge?.(program, facts, options.signal) ?? Promise.reject(new Error(`no judge`))).catch((error: unknown) => {
-            judged.delete(key);
-            throw error;
-        });
-        judged.set(key, asking);
-        return asking;
-    };
+    // Reuse a verdict only for the same program and facts, including fresh secret metadata and turn taint.
+    const askJudge = commandJudgments(options.judge, options.signal);
 
     // The first allowed install of the turn says where it writes and what outlasts it; later ones need not repeat it.
     let placementTold = false;

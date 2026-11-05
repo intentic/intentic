@@ -2,6 +2,7 @@ import { roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
+import { secretJudgeFacts } from "../../../secrets/secret-judge-facts.js";
 import { opt } from "../../../opt.js";
 import type { AgentExecutionContext } from "../../../workload/agent-execution.js";
 import type { TurnBase } from "../../providers/agent-request.js";
@@ -15,16 +16,18 @@ import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../..
 
 export type TurnSafetyDeps = Pick<
     Services,
-    "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
+    "secretRegistry" | "hostGuards" | "credentialGates" | "keyringLink" | "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
 >;
 
 // A closure over the judge, the policy text and the judge's setup rather than any of them directly, because the seam it
 // fills lives in guard/.
 const judgeFor =
-    (deps: Pick<Services, "judgeCommand">, execution: AgentExecutionContext, policy: string, ladder: SetupLadder): CommandGuardOptions["judge"] =>
-    (program, facts, signal) =>
+    (deps: TurnSafetyDeps, execution: AgentExecutionContext, policy: string, ladder: SetupLadder): CommandGuardOptions["judge"] =>
+    Object.assign<NonNullable<CommandGuardOptions["judge"]>, Pick<NonNullable<CommandGuardOptions["judge"]>, "secretFacts">>(
         // A setup emptied at turn start stays off; its snapshot must not substitute a different model.
-        deps.judgeCommand(execution, { policy, program, facts, ladder }, signal);
+        (program, facts, signal) => deps.judgeCommand(execution, { policy, program, facts, ladder }, signal),
+        { secretFacts: (program, signal) => secretJudgeFacts(deps, program, signal) },
+    );
 
 // The turn as the safety layers read it: which conversation, and what woke it when the owner did not.
 export interface TurnSafetyInput {

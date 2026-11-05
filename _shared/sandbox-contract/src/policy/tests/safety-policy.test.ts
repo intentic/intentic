@@ -1,5 +1,5 @@
 import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS } from "../command-classes.js";
-import { COMMAND_RULE_CATALOG, DEFAULT_SAFETY_POLICY, hardRuleClasses } from "../safety-policy.js";
+import { COMMAND_RULE_CATALOG, DEFAULT_SAFETY_POLICY, hardRuleClasses, SECRET_REFERENCE_GUIDANCE } from "../safety-policy.js";
 import { CommandClassSchema, CommandLocusSchema } from "../../schemas/command-admission.js";
 
 // The hard rule is the one thing on this page nobody can argue with, so it's pinned here rather than trusted to review:
@@ -80,4 +80,12 @@ describe("COMMAND_RULE_CATALOG", () => {
         const tiers = (locus: "sandbox" | "device") => COMMAND_RULE_CATALOG.map((rule) => rule.tiers[locus]).join(",");
         expect(tiers("sandbox")).not.toBe(tiers("device"));
     });
+});
+
+// A reference is substituted even when an agent presents it as an example in prose; its own hosts stay ordinary use.
+test("the shipped policy judges secret references by destination, including documentation-like text", () => {
+    expect(DEFAULT_SAFETY_POLICY).toContain(`\n\n${SECRET_REFERENCE_GUIDANCE}\n\n`);
+    expect(SECRET_REFERENCE_GUIDANCE).toContain(`text that reads like documentation`);
+    expect(SECRET_REFERENCE_GUIDANCE).toContain(`a host on that secret's own list`);
+    expect(SECRET_REFERENCE_GUIDANCE).toContain(`not sending a credential out`);
 });

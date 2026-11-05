@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { DEFAULT_SAFETY_POLICY, SECRET_REFERENCE_GUIDANCE } from "@intentic/sandbox-contract/policy/safety-policy";
 import pino from "pino";
 import { clearNewestRun } from "../store/newest-run.js";
 import { convergeState, resetStateStatus, type StateRoots } from "../store/evolution/state-convergence.js";
@@ -40,6 +40,24 @@ const put = async (path: string, text: string): Promise<void> => {
 };
 const lineSection = (...lines: string[]): string => [LEGACY_ADDED_HEADING, ``, LEGACY_ADDED_NOTE, ``, ...lines.map((line) => `- ${line}`), ``].join(`\n`);
 const trashed = async (roots: StateRoots): Promise<string[]> => (await readdir(join(roots.history, "trash"))).toSorted();
+
+test("a skipped card-line migration recognizes the previous shipped policy without replacing custom text", async () => {
+    const previous = DEFAULT_SAFETY_POLICY.replace(`${SECRET_REFERENCE_GUIDANCE}\n`, ``);
+    expect(previous).not.toBe(DEFAULT_SAFETY_POLICY);
+    const roots = await volumes();
+    await put(policyPath(roots), `${previous}\n${lineSection("Local builds are fine.")}`);
+    await converge(roots);
+    expect(await readFile(policyPath(roots), "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") { return undefined; }
+        throw error;
+    })).toBeUndefined();
+    expect((await fileOwnerGrants(grantsPath(roots)).read()).commandPolicy.map(({ line }) => line)).toEqual(["Local builds are fine."]);
+
+    const custom = await volumes();
+    await put(policyPath(custom), `${previous}\nMy custom exception.\n\n${lineSection("Local builds are fine.")}`);
+    await converge(custom);
+    expect(await readFile(policyPath(custom), "utf8")).toContain("My custom exception.");
+});
 
 test("the lines accepted on cards become owner-wide grants, leave the owner's file, and the file as it stood is kept in the trash", async () => {
     const roots = await volumes();
