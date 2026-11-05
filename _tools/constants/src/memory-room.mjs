@@ -152,8 +152,9 @@ const chargeOf = (read, dir) => {
 };
 
 // (2026-11-05) THE WORKLOAD LEAF'S WALLS. Everything this gate admits (a turn, a build, a test run) runs in the workload
-// leaf, which the entrypoint and daemon-cgroup.ts hold below the sandbox's cap (memory-records.ts: workloadMemoryMax,
-// defaultSwapGib). On a 16 GiB cap the container's memory.high is 14.4 GiB and the leaf's memory.max 12.5 GiB, so a gate
+// leaf, which the entrypoint and daemon-cgroup.ts hold below the sandbox's cap (memory-records.ts workloadMemoryMax; the swap
+// default is @intentic/sandbox-run defaultSandboxSwapGib).
+// On a 16 GiB cap the container's memory.high is 14.4 GiB and the leaf's memory.max 12.5 GiB, so a gate
 // judging by the container alone admitted work the leaf had no room for, which then ended in an OOM kill inside the leaf
 // instead of a wait for room.
 //

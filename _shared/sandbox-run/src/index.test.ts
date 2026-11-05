@@ -115,7 +115,7 @@ test("every capped sandbox may page, and only so far: --memory-swap is bounded o
 
 // The guest that prompted the bound: a 20g cap paged 24 GiB of its 28 GiB swap with `-1`, and the guest ran dry. Then
 // (2026-11-05) an 18g cap on rog paged 33 GB at ~7 GB a minute: half the cap was over a minute of thrashing, so the
-// default is a quarter of the cap, 1 to 4 GiB, the same table as memory-records.ts defaultSwapGib and ic's shape.rs.
+// default is a quarter of the cap, 1 to 4 GiB, the same table as the sandbox's entrypoint and ic's shape.rs copy.
 test("the default swap is a quarter of the cap, rounded up to a whole GiB, between one and four", () => {
     expect(localSandboxMemorySwap("20g")).toBe("24g");
     expect(localSandboxMemorySwap("18g")).toBe("22g");

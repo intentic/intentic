@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultSwapGib, workloadMemoryMax } from "./system/resources/memory-records.js";
+import { defaultSandboxSwapGib } from "@intentic/sandbox-run";
+import { workloadMemoryMax } from "./system/resources/memory-records.js";
 
 const entrypoint = readFileSync(fileURLToPath(new URL("../docker-entrypoint.sh", import.meta.url)), "utf8");
 
@@ -205,10 +206,10 @@ describe(`entrypoint workload bounds`, () => {
         return { status: ran.status, stderr: ran.stderr, max: read("memory.max"), swap: refuseSwap ? undefined : read("memory.swap.max"), group: read("memory.oom.group") };
     };
 
-    it(`bounds the leaf below the cap and its swap at a quarter of it, at most 4 GiB, by memory-records.ts's own numbers`, () => {
+    it(`bounds the leaf below the cap and its swap at a quarter of it, at most 4 GiB, by the TypeScript formulas' own numbers`, () => {
         for (const cap of [18 * GIB, 16 * GIB, 4 * GIB, 2 * GIB, 6 * GIB + 512 * 1024 ** 2]) {
             const ran = run(stage(String(cap)));
-            expect(ran).toEqual({ status: 0, stderr: "", max: String(workloadMemoryMax(cap)), swap: String(defaultSwapGib(cap) * GIB), group: "0" });
+            expect(ran).toEqual({ status: 0, stderr: "", max: String(workloadMemoryMax(cap)), swap: String(defaultSandboxSwapGib(cap / GIB) * GIB), group: "0" });
         }
         // The incident's own box: an 18 GiB cap leaves the daemon 3.5 GiB, and the leaf 4 GiB of swap where it had 33.
         expect(run(stage(String(18 * GIB)))).toMatchObject({ max: String(14.5 * GIB), swap: String(4 * GIB) });

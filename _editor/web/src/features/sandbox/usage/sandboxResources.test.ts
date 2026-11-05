@@ -168,7 +168,7 @@ test(`compares whole shapes field for field and says one in words`, () => {
 });
 
 // (2026-11-05) The swap the sandbox's work may page into: a field only where the machine reported one, at least a GiB,
-// its default a quarter of the memory (the sandbox's own memory-records.ts defaultSwapGib), and a change of it alone is
+// its default a quarter of the memory (@intentic/sandbox-run defaultSandboxSwapGib), and a change of it alone is
 // the one Apply that restarts nothing.
 test(`holds the swap to a whole GiB, defaults it to a quarter of the memory, and tells a swap-only change apart`, () => {
     expect(SWAP_BOUNDS).toEqual({ min: 1 });

@@ -222,19 +222,50 @@ fn live_outcome(text: &str) -> Option<Leaf> {
     })
 }
 
-/// The swap `target` asks for, in whole GiB, for a container whose cap is `cap_bytes`: the owner's number, or the default
-/// the sandbox derives from its cap. Pure.
-pub fn swap_gib_for(target: &Shape, cap_bytes: u64) -> u64 {
-    target
-        .swap
-        .as_deref()
-        .and_then(shape::gib_of)
-        .unwrap_or_else(|| shape::default_swap_gib(cap_bytes))
+/* THE DEFAULT, AS THE SANDBOX WORKS IT OUT. The number ic writes into the override file is the one the sandbox then
+holds its leaf to (the file wins over everything), so a default ic sizes differently from the sandbox is pinned as if
+the owner had asked for it. ic once sized it from docker's `HostConfig.Memory`, which is 0 for a sandbox with no cap:
+the formula's floor made that 1 GiB, where the sandbox itself, working from the machine's memory, would hold 4. So the
+basis is read inside the container, from the two files the sandbox's own rule reads (daemon-cgroup.ts
+`workloadSwapGib`, and the entrypoint's copy): its root cgroup's memory.max, and /proc/meminfo's MemTotal when that is
+`max`. Writing `{"default": true}` with no number and leaving the sizing to the sandbox would not do: its keeper takes a
+file without `swapGib` as no override and falls back to SANDBOX_SWAP, which still carries the owner's previous number
+when the container was made with one. */
+
+/// What the sandbox sizes its default swap from: its root cgroup's memory.max and the machine's MemTotal (in kB), one
+/// named line each.
+const BASIS_SCRIPT: &str = "printf 'cap=%s\\n' \"$(cat /sys/fs/cgroup/memory.max 2>/dev/null)\"; \
+     printf 'machine=%s\\n' \"$(sed -n 's/^MemTotal: *\\([0-9][0-9]*\\) kB$/\\1/p' /proc/meminfo 2>/dev/null)\"";
+
+/// The bytes the sandbox's default swap is a share of, from the basis script's answer: its cap (a memory.max above 0),
+/// else the machine's memory, else 1 GiB. daemon-cgroup.ts's `capBytes ?? machineBytes ?? GIB`, by the same reads. Pure.
+pub fn default_basis(text: &str) -> u64 {
+    let number = |name: &str| {
+        field(text, name)
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .filter(|value| *value > 0)
+    };
+    number("cap")
+        .or_else(|| number("machine").map(|kib| kib.saturating_mul(1024)))
+        .unwrap_or(GIB)
+}
+
+/// The default swap of the running `container` in whole GiB, sized as the sandbox sizes it. None when it did not answer.
+fn default_swap_inside(container: &str) -> Option<u64> {
+    docker::ask(&["exec", container, "sh", "-c", BASIS_SCRIPT], READ_LIMIT)
+        .said()
+        .map(|text| shape::default_swap_gib(default_basis(&text)))
+}
+
+/// The owner's own number of GiB in `target`, None when it asks for the default. Pure.
+pub fn asked_swap_gib(target: &Shape) -> Option<u64> {
+    target.swap.as_deref().and_then(shape::gib_of)
 }
 
 /// Change the swap of a RUNNING sandbox to `target`'s without recreating it: the override file the sandbox reads its
 /// bounds from, the workload leaf's memory.swap.max itself, and (best effort) docker's own bound on the container root.
-/// None when the container would not take the override at all, which the caller answers by recreating it as before.
+/// None when the container would not answer the read the default is sized from, or would not take the override at all,
+/// which the caller answers by recreating it as before (and a recreated sandbox sizes its default itself).
 ///
 /// `docker update --memory-swap` is asked for and its answer ignored: an engine without swap-limit support (rog's, on
 /// 2026-11-05) takes it with a warning and keeps the container unbounded, which is exactly why the leaf is written
@@ -243,7 +274,10 @@ pub fn apply_live(container: &str, target: &Shape) -> Option<(u64, Leaf)> {
     let cap = docker::inspect(container, "{{.HostConfig.Memory}}")
         .and_then(|bytes| bytes.trim().parse::<u64>().ok())
         .unwrap_or(0);
-    let gib = swap_gib_for(target, cap);
+    let gib = match asked_swap_gib(target) {
+        Some(gib) => gib,
+        None => default_swap_inside(container)?,
+    };
     // The marker rides only for the default, so a file holding the owner's number is exactly the sandbox's own shape.
     let json_text = if target.swap.is_none() {
         json!({ "swapGib": gib, "default": true })
@@ -746,14 +780,37 @@ mod tests {
     }
 
     #[test]
-    fn the_swap_asked_is_the_owners_number_or_the_default_of_the_cap() {
+    fn the_swap_asked_is_the_owners_number_or_the_default_sized_inside() {
         let asked = Shape {
             swap: Some("6g".into()),
             ..Shape::default()
         };
-        assert_eq!(swap_gib_for(&asked, 18 * GIB), 6);
-        assert_eq!(swap_gib_for(&Shape::default(), 18 * GIB), 4);
-        assert_eq!(swap_gib_for(&Shape::default(), 7 * GIB), 2);
+        assert_eq!(asked_swap_gib(&asked), Some(6));
+        assert_eq!(asked_swap_gib(&Shape::default()), None);
+        let default_of = |text: &str| shape::default_swap_gib(default_basis(text));
+        // A capped sandbox: a quarter of its root's memory.max, whatever the machine has.
+        assert_eq!(default_of("cap=19327352832\nmachine=32768000\n"), 4);
+        assert_eq!(default_of("cap=7516192768\nmachine=32768000\n"), 2);
+    }
+
+    // An uncapped sandbox sizes its default from the machine's memory, as the sandbox does (daemon-cgroup.ts): a 32 GiB
+    // machine gives 4 GiB. Sized from docker's HostConfig.Memory of 0, as ic once did, it came to 1 GiB, which the
+    // override file then pinned.
+    #[test]
+    fn an_uncapped_sandboxs_default_is_a_share_of_the_machines_memory() {
+        let text = "cap=max\nmachine=32768000\n";
+        assert_eq!(default_basis(text), 32_768_000 * 1024);
+        assert_eq!(shape::default_swap_gib(default_basis(text)), 4);
+        assert_eq!(
+            shape::default_swap_gib(default_basis("cap=max\nmachine=8000000\n")),
+            2
+        );
+        // Nothing readable is the sandbox's own last resort, 1 GiB, never 0.
+        assert_eq!(default_basis("cap=\nmachine=\n"), GIB);
+        assert_eq!(default_basis(""), GIB);
+        assert_eq!(default_basis("cap=0\nmachine=8000000\n"), 8_000_000 * 1024);
+        assert!(BASIS_SCRIPT.contains("/sys/fs/cgroup/memory.max"));
+        assert!(BASIS_SCRIPT.contains("/proc/meminfo"));
     }
 
     #[test]

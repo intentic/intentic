@@ -19,10 +19,11 @@ pub struct Shape {
     pub gpus: bool,
     /// (2026-11-05) The swap the sandbox's `workload` cgroup leaf may page into, whole GiB in the same spelling, `4g`: the
     /// swap ALONE, not memory plus swap (docker's `--memory-swap` is the sum; ic and the run contract add the cap).
-    /// `None` is the default the sandbox derives from its cap (a quarter of it, 1 to 4 GiB: `defaultSwapGib` in the
-    /// sandbox's system/resources/memory-records.ts, [`default_swap_gib`] here). The bound that stops a runaway: on
-    /// 2026-11-05 one process on rog paged 33 GB into a swap nothing bounded, because the engine ignored `--memory-swap`,
-    /// and the WSL VM thrashed for 1 h 48 m. The sandbox holds its own workload leaf to this, whatever the engine does.
+    /// `None` is the default the sandbox derives from its cap (a quarter of it, 1 to 4 GiB, and of the machine's memory
+    /// where it has no cap: `defaultSandboxSwapGib` in @intentic/sandbox-run, [`default_swap_gib`] here). The bound that
+    /// stops a runaway: on 2026-11-05 one process on rog paged 33 GB into a swap nothing bounded, because the engine
+    /// ignored `--memory-swap`, and the WSL VM thrashed for 1 h 48 m. The sandbox holds its own workload leaf to this,
+    /// whatever the engine does.
     pub swap: Option<String>,
 }
 
@@ -48,9 +49,12 @@ pub const WORKLOAD_BOUNDS_OVERRIDE: &str = "/run/intentic/workload-bounds.json";
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The default swap bound in whole GiB for a cap of `cap_bytes`: a quarter of the cap in whole GiB, rounded up, at least
-/// 1 and at most 4. A copy of memory-records.ts `defaultSwapGib` (and of @intentic/sandbox-run's, which sizes
-/// `--memory-swap` with it): the three must agree, or the bound ic reports is not the one the sandbox holds. Never 0: a
-/// cgroup with no swap livelocks reclaiming file-backed pages instead of reaching its own OOM. Pure.
+/// 1 and at most 4. Mirrors `defaultSandboxSwapGib` in @intentic/sandbox-run (_shared/sandbox-run/src/index.ts), the one
+/// TypeScript formula: it sizes `--memory-swap`, and the sandbox holds its workload leaf to it (daemon-cgroup.ts, and the
+/// entrypoint's shell copy). ic cannot import it, so this is a copy, and the copies must agree or the bound ic writes or
+/// reports is not the one the sandbox holds. The caller passes what the sandbox passes: its cap, or the machine's memory
+/// for a sandbox with none (containment.rs `default_basis`). Never 0: a cgroup with no swap livelocks reclaiming
+/// file-backed pages instead of reaching its own OOM. Pure.
 pub fn default_swap_gib(cap_bytes: u64) -> u64 {
     let cap_gib = (cap_bytes / GIB).max(1);
     cap_gib.div_ceil(4).clamp(1, 4)
@@ -633,7 +637,7 @@ mod tests {
     #[test]
     fn the_default_swap_is_a_quarter_of_the_cap_between_one_and_four_gib() {
         let gib = 1024 * 1024 * 1024;
-        // The same table as memory-records.ts defaultSwapGib.
+        // The same table as @intentic/sandbox-run's defaultSandboxSwapGib test.
         for (cap_gib, swap_gib) in [
             (1, 1),
             (4, 1),

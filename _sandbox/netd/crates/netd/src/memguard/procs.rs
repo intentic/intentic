@@ -74,6 +74,8 @@ pub struct Spared<'a> {
 /// Whether the guard may kill `proc`: never pid 1 (the container's init), netd, Node (wherever it runs: until govern
 /// moves it back, Node may be found in `workload`), anything in the daemon leaf, nor a process the kill would free
 /// nothing of. An `oom_score` of 0 is one the kernel itself would never pick: `oom_score_adj` -1000, or no memory at all.
+/// Anything else may die, whatever cgroup it is in: a process in a Docker container the sandbox runs itself
+/// (`/docker/<id>`, outside both leaves) is as much the sandbox's runaway as one in `workload`.
 pub fn killable(proc: &Proc, spared: &Spared) -> bool {
     proc.pid != 1
         && proc.pid != spared.netd
@@ -401,7 +403,8 @@ mod tests {
             ranked,
             vec![303, 302, 301, 300],
             "pid 1, netd, Node outside its leaf, the leaf and below it, a kernel thread and a score of 0 are spared; \
-             a tie goes to the later pid; a leaf named like the daemon's is not it"
+             a tie goes to the later pid; a leaf named like the daemon's is not it; an inner Docker container's \
+             process is one to kill"
         );
         assert!(
             ranked_of(vec![proc(7, 2000, "/workload")]).is_empty(),

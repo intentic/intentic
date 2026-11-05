@@ -115,18 +115,21 @@ flowchart LR
   with the pid, how long it had been silent and the memory pressure), and a restart after a crash or a kill waits while
   the sandbox stalls on memory (`full avg10` at or above 20%) until it is below 10%, read every 5 s for 10 minutes at
   most, and is written down as `restart-held`; a first start is never held. The memory guard (`memguard/`) runs on a
-  thread of its own, needing neither Node nor netd's async runtime, and reads five cgroup files a second: the
-  container's `memory.pressure`, and the `workload` leaf's memory and swap, used and allowed. When `full avg10` has held
-  at or above 20% for 10 s while the pressure is the sandbox's own (the leaf's memory and swap together at or above 80%
-  of its `memory.max`, or a leaf with no bound to measure against), or the leaf has held at or above 95% of both a
-  bounded `memory.max` and a bounded, non-zero `swap.max` for 5 s, it SIGKILLs the one process with the highest
-  `oom_score` outside the daemon's leaf (never pid 1, netd or Node, nor a kernel thread, a zombie or a process the
-  kernel scores 0), alone and not its group, then rests 15 s; it reads what that process was first (its memory, command
+  thread of its own, needing neither Node nor netd's async runtime, and reads nine cgroup files a second: the
+  container's `memory.pressure`, and the memory and swap, used and allowed, of the `workload` leaf and of the whole
+  container. When `full avg10` has held at or above 20% for 10 s while the pressure is the sandbox's own (memory and
+  swap together at or above 80% of a bounded `memory.max`, in the leaf or in the whole container, or neither bounded
+  to measure against), or the leaf has held at or above 95% of both a bounded `memory.max` and a bounded, non-zero
+  `swap.max` for 5 s, it SIGKILLs the one process with the highest `oom_score` outside the daemon's leaf (in
+  `workload`, or in a Docker container the sandbox runs itself, under `/docker`; never pid 1, netd or Node, nor a
+  kernel thread, a zombie or a process the kernel scores 0), alone and not its group, then rests 15 s; it reads what that process was first (its memory, command
   line, group, cgroup and the `INTENTIC_TURN_OWNER` stamp, the command line and owner off its own thread with a 2 s
   deadline, since they are read out of memory that may be in swap) and appends it to `memory-kills.jsonl`. The pressure
   has to be the sandbox's own because every sandbox on a host shares the VM's memory: on 2026-11-05 the sandbox next to
   the runaway read `full` near 50% while using 0.7 of its 18 GiB, and counting that would have killed its processes one
-  by one for nothing the VM was short of. While `full avg10` is at or above 10%, or the leaf's swap is half spent, it
+  by one for nothing the VM was short of. The whole container counts beside the leaf because the sandbox's inner
+  dockerd puts its containers in `/docker`, outside the leaf: a runaway there fills the sandbox's cap while the leaf
+  reads small. While `full avg10` is at or above 10%, or the leaf's swap is half spent, it
   writes a sample to `pressure.jsonl` every 10 s with the three processes it would reach for first, and one more once
   it eased (moved to `.1` past 5 MB). Every line is flushed to the disk as it is written. The shapes are the daemon's, in
   `_sandbox/sandbox/src/system/resources/memory-records.ts`, mirrored by hand in `records.rs`. Only the container's own

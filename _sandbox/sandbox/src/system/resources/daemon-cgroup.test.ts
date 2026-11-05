@@ -157,14 +157,14 @@ describe("the workload leaf's bounds", () => {
 });
 
 describe("the keeper and the workload leaf", () => {
-    const keep = async (texts: Record<string, string>, options: { readonly ppid?: number; readonly refuse?: ReadonlySet<string> } = {}) => {
+    const keep = async (texts: Record<string, string>, options: { readonly refuse?: ReadonlySet<string> } = {}) => {
         const { io, writes } = fakeFiles(texts, options.refuse);
         const said: { level: string; fields: unknown; message: string | undefined }[] = [];
         const logger = {
             warn: (fields: unknown, message?: string) => void said.push({ level: "warn", fields, message }),
             info: (fields: unknown, message?: string) => void said.push({ level: "info", fields, message }),
         };
-        const keeper = startDaemonCgroupKeeper(logger, { io, intervalMs: 5, container: true, pid: 64, ppid: options.ppid ?? 7, swapEnv: undefined });
+        const keeper = startDaemonCgroupKeeper(logger, { io, intervalMs: 5, container: true, swapEnv: undefined });
         return {
             writes,
             said,
@@ -176,7 +176,6 @@ describe("the keeper and the workload leaf", () => {
     const leaves = (self: string) =>
         ({
         "/proc/self/cgroup": `0::${self}\n`,
-        "/proc/7/cgroup": "0::/daemon\n",
         [`${ROOT}/memory.max`]: `${18 * GIB}\n`,
         [`${LEAF}/memory.swap.max`]: "0\n",
         [`${LEAF}/cpu.weight`]: "1000\n",
@@ -187,37 +186,19 @@ describe("the keeper and the workload leaf", () => {
         [`${WORKLOAD}/memory.oom.group`]: "0\n",
         }) satisfies Record<string, string>;
 
-    // Observed live on 2026-11-05: the daemon (pid 64) in `workload`, beside the runaway and under its bounds.
-    test("a daemon found in the workload leaf beside netd's moves itself back into its own, said once", async () => {
+    // Observed live on 2026-11-05: the daemon (pid 64) in `workload`, beside the runaway and under its bounds. netd moves
+    // it back and says so (netd cgroup.rs `keep_in`); the daemon is no second mover, and says nothing of its own.
+    test("a daemon found in the workload leaf moves nothing and says nothing, and keeps both leaves once netd puts it back", async () => {
         const run = await keep(leaves("/workload"));
-        try {
-            await run.settle();
-            expect(run.writes).toContainEqual([`${LEAF}/cgroup.procs`, "64"]);
-            const moved = run.said.filter((line) => line.message?.includes("moved it back into its own") === true);
-            expect(moved).toEqual([{ level: "warn", fields: { leaf: LEAF, from: WORKLOAD }, message: expect.any(String) }]);
-            // Kept from there on, the workload leaf's bounds with it.
-            expect(run.texts[`${WORKLOAD}/memory.swap.max`]).toBe(`${4 * GIB}\n`);
-        } finally {
-            run.stop();
-        }
-    });
-
-    test("a second daemon an agent started stays in the workload leaf, and leaves its bounds to the one netd runs", async () => {
-        const run = await keep({ ...leaves("/workload"), "/proc/9/cgroup": "0::/workload\n" }, { ppid: 9 });
         try {
             await run.settle();
             expect(run.writes).toEqual([]);
             expect(run.said).toEqual([]);
-        } finally {
-            run.stop();
-        }
-    });
-
-    test("a move the kernel refuses is said once, and the leaf is kept all the same", async () => {
-        const run = await keep(leaves("/workload"), { refuse: new Set([`${LEAF}/cgroup.procs`]) });
-        try {
+            // netd's tick: the daemon is in its own leaf again, and the next pass keeps the workload leaf's bounds.
+            run.texts["/proc/self/cgroup"] = "0::/daemon\n";
             await run.settle();
-            expect(run.said.filter((line) => line.message?.includes("moving it back into its own was refused") === true)).toHaveLength(1);
+            expect(run.writes.some(([path]) => path.endsWith("/cgroup.procs"))).toBe(false);
+            expect(run.texts[`${WORKLOAD}/memory.swap.max`]).toBe(`${4 * GIB}\n`);
             expect(run.texts[`${WORKLOAD}/memory.max`]).toBe(`${14.5 * GIB}\n`);
         } finally {
             run.stop();

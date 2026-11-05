@@ -1,21 +1,21 @@
-import { open } from "node:fs/promises";
-import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { RESTART_LOSSES, withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
 import { MEMORY_KILL_RERUNS } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../../../conversations/actor/conversation-holdings.js";
 import type { HeldRecord } from "../../../../conversations/actor/conversation-state.js";
 import { logsRoot } from "../../../../seams/logs-root.js";
-import { MEMORY_KILLS_FILE, type MemoryKill, MemoryKillSchema, parseLines } from "../../../../system/resources/memory-records.js";
+import { readTrail } from "../../../../system/boot/restarts/memory-trail.js";
+import { killSentence } from "../../../../system/resources/memory-kill-words.js";
+import { MEMORY_KILLS_FILE, type MemoryKill, MemoryKillSchema } from "../../../../system/resources/memory-records.js";
+import { withClause } from "../../frames/frame-clause.js";
 import type { HeldTurn, MemoryKillHold } from "./held-turn.js";
 
 /* A TURN KILLED BECAUSE THE SANDBOX RAN OUT OF MEMORY (2026-11-05). One background job grew without limit, the VM
    thrashed, netd killed the frozen daemon, and five turns came back "interrupted" in Attention although only one
    conversation had caused it. Two paths now bring the victims back by themselves and hold the cause:
    - a runtime killed under a daemon that stays up is dressed as a memory kill when its death was memory's
-     (classify-failure.ts dressDeath): the records netd writes as it kills (memory-kills.jsonl), the OOM counter, or the
-     budget's sampler seeing the box short;
+     (classify-failure.ts dressDeath): a kill of this conversation's own process in the records netd and the OOM
+     detector write as they kill (memory-kills.jsonl), the OOM counter, or the budget's sampler seeing the box short;
    - a boot after a restart the post-mortem traced to memory holds every turn the restart cut the same way
      (turn-resume.ts recordOrRerun).
    Either way the turn is held as `stopped` with `memoryKill` on it, and goes back through the memory release
@@ -35,35 +35,23 @@ const TAIL_BYTES = 256 * 1024;
 
 /**
  * Every process killed for memory in the `windowMs` before `now` (and a moment after, for a clock read just before the
- * line landed), as netd recorded it under `<history>/logs`. Nothing on file reads as nothing killed.
+ * line landed), as netd recorded it under `<history>/logs`. Nothing on file reads as nothing killed; a file that is there
+ * and cannot be read throws, for the caller to say. Read through the boot's own reader (memory-trail.ts), synchronously:
+ * it is a bounded tail, read once on a runtime's death.
  */
 export const recentMemoryKills = async (historyRoot: string, now: number, windowMs: number = MEMORY_KILL_WINDOW_MS): Promise<readonly MemoryKill[]> => {
-    const text = await tailOf(join(logsRoot(historyRoot), MEMORY_KILLS_FILE), TAIL_BYTES);
-    if (text === undefined) {
-        return [];
+    const trail = readTrail(logsRoot(historyRoot), MEMORY_KILLS_FILE, MemoryKillSchema, TAIL_BYTES);
+    if (trail.unreadable !== undefined) {
+        throw new Error(`the memory kills on record could not be read: ${trail.unreadable}`);
     }
-    // A cut at the front of the tail tears its first line, which parseLines skips like any other torn line.
-    return parseLines(text, MemoryKillSchema).filter((kill) => kill.at >= now - windowMs && kill.at <= now + 60_000);
+    return trail.rows.filter((kill) => kill.at >= now - windowMs && kill.at <= now + 60_000);
 };
 
-// The last `bytes` of a file, or undefined for a file that is not there.
-const tailOf = async (path: string, bytes: number): Promise<string | undefined> => {
-    const file = await open(path, "r").catch(undefinedIfMissing);
-    if (file === undefined) {
-        return undefined;
-    }
-    try {
-        const { size } = await file.stat();
-        const length = Math.min(size, bytes);
-        const buffer = Buffer.alloc(length);
-        await file.read(buffer, 0, length, size - length);
-        return buffer.toString("utf8");
-    } finally {
-        await file.close();
-    }
-};
-
-/** The kill on record whose process this conversation started (netd reads the owner stamp off its environment). */
+/**
+ * The kill on record whose process this conversation started: netd and the OOM detector read the owner stamp off the
+ * process's environment (seams/workload-stamp.ts), which a turn's runtime is spawned with and everything it starts
+ * inherits, so this is a kill of the runtime itself or of anything under it.
+ */
 export const ownKillOf = (kills: readonly MemoryKill[], conversationId: string): MemoryKill | undefined => kills.findLast((kill) => kill.owner === conversationId);
 
 /** The kill that best names what happened: the largest process killed, by what it held. */
@@ -101,32 +89,20 @@ export const noteMemoryRerun = (actors: Actors, conversationId: string, held: He
     actors.holdings(MEMORY_RERUNS).hold(conversationId, conversationId, { request: requestOf(held.input), made });
 };
 
+/**
+ * The count a memory kill's re-run carries on its turn (TurnInput.memoryReruns), undefined for any other hold's: the
+ * hold's own, or the release's where it just counted this one (noteMemoryRerun). The holding above lives as long as the
+ * daemon and the hold only until its re-run starts, so a restart that cuts the re-run would otherwise forget every one
+ * before it: the turn journal keeps the turn, and with it this count, which the boot's hold of the cut turn reads
+ * (recovery/memory-restart.ts). A person's press is not the release, and adds nothing.
+ */
+export const memoryRerunsOf = (actors: Actors, held: HeldTurn): number | undefined =>
+    held.memoryKill === undefined ? undefined : Math.max(held.memoryKill.reruns, memoryRerunsMade(actors, held.input.conversationId, held.input));
+
 /** Whether this hold waits for the memory release: a memory kill not held for a press, not yet sent. */
 export const waitsForRoom = (held: HeldRecord): boolean => held.reason === "stopped" && held.memoryKill !== undefined && held.pressOnly !== true && !held.fired;
 
 /* THE WORDS. */
-
-const KILLER = {
-    "netd-guard": "the sandbox's memory guard",
-    "cgroup-oom": "the kernel, at the sandbox's memory limit,",
-    "kernel-oom": "the kernel, out of memory on the whole machine,",
-} as const satisfies Record<MemoryKill["killer"], string>;
-
-const gb = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-
-/** One kill in a sentence: who killed what, how big it had grown, and why, as the card and the re-run read it. */
-export const killSentence = (kill: MemoryKill): string => {
-    const size = [
-        kill.rssBytes === undefined ? undefined : `${gb(kill.rssBytes)} resident`,
-        kill.swapBytes === undefined || kill.swapBytes === 0 ? undefined : `${gb(kill.swapBytes)} swapped`,
-    ].filter((part): part is string => part !== undefined);
-    const what = `${kill.comm} (pid ${String(kill.pid)}${size.length === 0 ? "" : `, ${size.join(", ")}`})`;
-    const job = kill.jobId === undefined ? "" : ` from background job ${kill.jobId}`;
-    const owner = kill.owner === undefined || kill.owner === "daemon" || kill.owner === "one-shot" ? "" : `, started by ${kill.owner},`;
-    const why = kill.reason === undefined ? "" : `: ${kill.reason.replace(/[.\s]+$/u, "")}`;
-    const killer = KILLER[kill.killer];
-    return `${killer.charAt(0).toUpperCase()}${killer.slice(1)} killed ${what}${job}${owner} for memory${why}.`;
-};
 
 // "twice", the number MEMORY_KILL_RERUNS says, so the notice and the cap cannot drift.
 const timesWord = (count: number): string => {
@@ -149,7 +125,7 @@ export const WAITS_FOR_PRESS = "It was killed because the sandbox ran out of mem
 
 /** What a memory kill whose own process was the one killed says: the kill, and why nothing sends it again. */
 export const ownKillWords = (kill: MemoryKill): string =>
-    `It was killed because the sandbox ran out of memory, and the process killed was this conversation's own. ${killSentence(kill)} ` +
+    `It was killed because the sandbox ran out of memory, and the process killed was this conversation's own. ${killSentence(kill)}. ` +
     "It is not sent again by itself: change what grew without limit before pressing Continue.";
 
 /** What a request memory killed again after its re-runs says. */
@@ -171,5 +147,6 @@ export const memoryTail = (kill: MemoryKillHold): string | undefined => {
               "Do not send it the same work as it was: bound what grew (fewer jobs at once, a smaller build, a capped input), or give the task to an agent that will.",
         kill.restart === true ? RESTART_LOSSES : undefined,
     ].filter((part): part is string => part !== undefined);
-    return parts.length === 0 ? undefined : parts.join(" ");
+    // What was found is the kill's sentence or the post-mortem's, neither of which ends on a stop of its own.
+    return parts.length === 0 ? undefined : parts.reduce((said, part) => withClause(said, part));
 };

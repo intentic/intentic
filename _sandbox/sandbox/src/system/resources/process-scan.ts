@@ -251,7 +251,9 @@ const jobFileId = (text: string | undefined): string | undefined => {
     }
 };
 
-type JobRunners = ReadonlyMap<number, { readonly jobId: string; readonly dir: string }>;
+// A background job, by its id and its capture dir.
+type JobOf = { readonly jobId: string; readonly dir: string };
+type JobRunners = ReadonlyMap<number, JobOf>;
 
 // The jobs of the runners one scan found, by runner pid. A background job's id is in its dir's name; a filed foreground
 // call's is read from its job.json once it has one and kept while its runner lives, the absence read again each scan,
@@ -266,7 +268,7 @@ const jobRunnerResolver = (source: ProcSource): ((runnerDirs: ReadonlyMap<number
         return id;
     };
     return async (runnerDirs) => {
-        const runners = new Map<number, { readonly jobId: string; readonly dir: string }>();
+        const runners = new Map<number, JobOf>();
         for (const [pid, dir] of runnerDirs) {
             const jobId = await jobIdOf(dir);
             if (jobId !== undefined) {
@@ -310,26 +312,32 @@ export interface ScannedProcess extends ParsedProcStat {
 // (agent/tools/jobs/memory-kills.ts) asks here once both are gone. netd's guard names a process by its pid and group
 // alone, and the group is the runner's only for a process that never made one of its own: the incident's game client
 // did, so its own pid is what ties it to its job.
+// A pid outlives its process here, and the kernel hands it out again: a pid kept for a job and then seen by a scan as
+// another process (another start time) and outside any job is forgotten by that scan, or a kill of the stranger would
+// be marked on the old job's ending and told to its conversation. A kill names no start time, so the lookups stay by pid;
+// what is left open is a stranger killed before any scan saw it, which needs it to grow to a kill between two scans.
 const RUNNER_MEMORY_MS = 10 * 60_000;
-type SeenRunner = { readonly jobId: string; readonly dir: string; seenAt: number };
-const recentRunners = new Map<number, SeenRunner>();
-const recentJobProcesses = new Map<number, SeenRunner>();
+type SeenJob = JobOf & { readonly startTimeTicks: number | undefined; readonly seenAt: number };
+const recentRunners = new Map<number, SeenJob>();
+const recentJobProcesses = new Map<number, SeenJob>();
 
-const seenRunner = (seen: SeenRunner | undefined): { readonly jobId: string; readonly dir: string } | undefined =>
-    seen === undefined ? undefined : { jobId: seen.jobId, dir: seen.dir };
+const seenJob = (seen: SeenJob | undefined): JobOf | undefined => (seen === undefined ? undefined : { jobId: seen.jobId, dir: seen.dir });
 
 /** The job a process group or session led by `pid` belonged to, as the daemon's own scan last saw its runner. */
-export const recentJobRunner = (pid: number): { readonly jobId: string; readonly dir: string } | undefined => seenRunner(recentRunners.get(pid));
+export const recentJobRunner = (pid: number): JobOf | undefined => seenJob(recentRunners.get(pid));
 
 /** The job the process `pid` was part of, as the daemon's own scan last saw it: by its own pid, whatever its group. */
-export const recentJobProcess = (pid: number): { readonly jobId: string; readonly dir: string } | undefined => seenRunner(recentJobProcesses.get(pid));
+export const recentJobProcess = (pid: number): JobOf | undefined => seenJob(recentJobProcesses.get(pid));
 
-const remember = (into: Map<number, SeenRunner>, seen: ReadonlyMap<number, { readonly jobId: string; readonly dir: string }>, now: number): void => {
-    for (const [pid, runner] of seen) {
-        into.set(pid, { jobId: runner.jobId, dir: runner.dir, seenAt: now });
+// `started` is every pid this scan found, with its start time. The same process outside any job now (one that called
+// setsid) is still the job's until the memory runs out: the job started it.
+const remember = (into: Map<number, SeenJob>, seen: ReadonlyMap<number, JobOf>, started: ReadonlyMap<number, number | undefined>, now: number): void => {
+    for (const [pid, job] of seen) {
+        into.set(pid, { jobId: job.jobId, dir: job.dir, startTimeTicks: started.get(pid), seenAt: now });
     }
-    for (const [pid, runner] of into) {
-        if (now - runner.seenAt > RUNNER_MEMORY_MS) {
+    for (const [pid, kept] of into) {
+        const reused = started.has(pid) && !seen.has(pid) && (kept.startTimeTicks === undefined || kept.startTimeTicks !== started.get(pid));
+        if (reused || now - kept.seenAt > RUNNER_MEMORY_MS) {
             into.delete(pid);
         }
     }
@@ -401,7 +409,7 @@ export const createProcessScanner = (
         }
         const runners = await jobRunners(runnerDirs);
         // The session first: the kernel keeps it through every fork and regrouping; the group for a session not a runner's.
-        const runnerOf = (entry: ScannedProcess): { readonly jobId: string; readonly dir: string } | undefined =>
+        const runnerOf = (entry: ScannedProcess): JobOf | undefined =>
             (entry.session === undefined ? undefined : runners.get(entry.session)) ?? runners.get(entry.pgrp);
         const jobProcesses = new Map(scanned.flatMap((entry) => {
             const runner = runnerOf(entry);
@@ -409,8 +417,9 @@ export const createProcessScanner = (
         }));
         if (options.remember === true) {
             const now = Date.now();
-            remember(recentRunners, runners, now);
-            remember(recentJobProcesses, jobProcesses, now);
+            const started = new Map(scanned.map((entry) => [entry.pid, entry.startTimeTicks]));
+            remember(recentRunners, runners, started, now);
+            remember(recentJobProcesses, jobProcesses, started, now);
         }
         const byPid = new Map(scanned.map((entry) => [entry.pid, entry]));
         return scanned.map((scannedEntry) => {

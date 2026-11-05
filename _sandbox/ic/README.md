@@ -290,14 +290,16 @@ flowchart LR
   agent older than the release carrying `--set` is left; a `sandbox-<slug>.shape` delta an older ic saved is
   converted into the record the first time it is read, then deleted.
 - The shape's fifth field is the **swap** (2026-11-05, `--set swapGib=4`, `--swap 4g`, whole GiB and at least 1;
-  `null`/`default` for the default, a quarter of the memory cap rounded up, at least 1 and at most 4 GiB): how much the
-  sandbox's `workload` cgroup may page into, the swap alone. The default is never carried; a swap the owner set rides on
+  `null`/`default` for the default, a quarter of the memory cap rounded up, at least 1 and at most 4 GiB, and of the
+  machine's memory for a sandbox with no cap): how much the sandbox's `workload` cgroup may page into, the swap alone. The default is never carried; a swap the owner set rides on
   the container as `SANDBOX_SWAP=<n>g`, which the run contract replays and sizes `--memory-swap` (the cap plus the swap)
   by; an image whose contract predates it drops the variable, so ic stamps it on the run line itself when the contract
   left it off. Changed alone with `--when now`, it is written into the running sandbox instead of restarting it:
   `/run/intentic/workload-bounds.json` (which the sandbox reads its bounds from), the leaf's `memory.swap.max`, and a
   best-effort `docker update --memory-swap`; the shape it runs with is then read from that file, and the next recreate
-  carries it in the env. A record an older ic wrote has the four other `desired_*` keys and reads with the default
+  carries it in the env. A default set live is sized from what the sandbox sizes it from, read inside the container
+  (its cgroup's `memory.max`, else the machine's `MemTotal`), since the file pins whatever number it holds: sized from
+  docker's cap of 0, an uncapped sandbox's default came to 1 GiB where the sandbox holds up to 4. A record an older ic wrote has the four other `desired_*` keys and reads with the default
   swap. `ic sandbox list --json` rows carry the bound in force as read inside the running container
   ([`containment.rs`](src/sandbox/containment.rs)): `resources.swapMaxBytes` (the container) and
   `resources.workloadSwapMaxBytes` (its work), bytes or null for none, and left out for a sandbox that is stopped or

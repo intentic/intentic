@@ -160,15 +160,16 @@ test("native compilers and linkers count as toolchain only beneath a Rust proces
 describe("a process's background job", () => {
     const JOB = "/tmp/intentic-run-job-6f1c2d4e-0b7a-4e1f-9d2c-5a8b3c7e9f10";
     const FILED = "/tmp/intentic-run-Ab12Cd34";
-    const stage = (rows: readonly (readonly [pid: number, ppid: number, pgrp: number, session: number, comm: string, cmdline: string])[]) => {
+    // The start time is the pid's own unless a row names another: a pid the kernel handed out again.
+    const stage = (rows: readonly (readonly [pid: number, ppid: number, pgrp: number, session: number, comm: string, cmdline: string, startTime?: number])[]) => {
         const texts: Record<string, string> = {};
-        for (const [pid, ppid, pgrp, session, comm, cmdline] of rows) {
+        for (const [pid, ppid, pgrp, session, comm, cmdline, startTime] of rows) {
             const fields = Array.from({ length: 22 }, () => "0");
             fields[0] = "S";
             fields[1] = String(ppid);
             fields[2] = String(pgrp);
             fields[3] = String(session);
-            fields[19] = String(pid);
+            fields[19] = String(startTime ?? pid);
             texts[`/proc/${pid}/stat`] = `${pid} (${comm}) ${fields.join(" ")}`;
             texts[`/proc/${pid}/cmdline`] = cmdline;
             texts[`/proc/${pid}/environ`] = `${WORKLOAD_ENV}=sub-tidy-pebble-aii1\0`;
@@ -227,5 +228,32 @@ describe("a process's background job", () => {
         // Each of the job's processes by its own pid too, for a kill that names it by pid and a group of its own.
         expect(recentJobProcess(801)).toEqual({ jobId: JOB.slice(-36), dir: JOB });
         expect(recentJobRunner(801)).toBeUndefined();
+    });
+
+    // A kill is told after the fact, so a job's pids are remembered once they are gone; but a pid the kernel hands out
+    // again names a stranger, whose kill would otherwise be marked on the old job's ending and told to its conversation.
+    test("a remembered pid outlives its process, and is forgotten once a scan sees it reused outside any job", async () => {
+        const live: { texts: Record<string, string>; pids: number[] } = { texts: {}, pids: [] };
+        const scan = createProcessScanner({ listPids: async () => live.pids, readText: async (path) => live.texts[path] }, { remember: true });
+        const now = (rows: Parameters<typeof stage>[0]) => {
+            Object.assign(live, stage(rows));
+            return scan();
+        };
+        const job = { jobId: JOB.slice(-36), dir: JOB };
+        const runner = [900, 1, 900, 900, "bash", `bash\0${JOB}/runner\0`] as const;
+        await now([runner, [901, 900, 901, 900, "integra", "./integra\0"]]);
+        expect([recentJobRunner(900), recentJobProcess(901)]).toEqual([job, job]);
+        // The same process, by its start time, leaving the job's session (setsid): still the job's, which started it.
+        await now([runner, [901, 1, 901, 901, "integra", "./integra\0"]]);
+        expect(recentJobProcess(901)).toEqual(job);
+        // Both gone: still remembered, for the kill that is told after them.
+        await now([[600, 1, 600, 600, "node", "node\0server.js\0"]]);
+        expect([recentJobRunner(900), recentJobProcess(901)]).toEqual([job, job]);
+        // Both pids handed out again, to processes that started later and are in no job.
+        await now([
+            [900, 1, 900, 900, "sshd", "sshd\0", 5_000],
+            [901, 900, 901, 900, "node", "node\0server.js\0", 5_001],
+        ]);
+        expect([recentJobRunner(900), recentJobProcess(901)]).toEqual([undefined, undefined]);
     });
 });

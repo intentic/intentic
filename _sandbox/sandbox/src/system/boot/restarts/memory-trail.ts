@@ -1,7 +1,7 @@
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
-import type { z } from "zod";
+import { z } from "zod";
 import {
     MEMORY_KILLS_FILE,
     type MemoryKill,
@@ -14,6 +14,7 @@ import {
     type PressureSample,
     PressureSampleSchema,
 } from "../../resources/memory-records.js";
+import { RESOURCE_METRICS_FILE } from "../../resources/resource-metrics.js";
 
 /* THE MEMORY TRAIL A STOP LEAVES, READ BACK AT THE NEXT BOOT (2026-11-05). netd writes what it killed and what it did to
    the daemon, and its samples while memory is short; the daemon writes what the kernel killed inside the sandbox's own
@@ -21,7 +22,9 @@ import {
    (boot-marker.ts files the post-mortem on the restart record as it claims the exit marker), so each read is bounded:
    only the newest TAIL_BYTES of a file, and the rotated `<file>.1` before it, are read. A line a kill tore mid-write is
    skipped by parseLines; a file that is not there is an empty trail; one that cannot be read is an empty trail with the
-   reason, for the post-mortem to say. */
+   reason, for the post-mortem to say. The same reader serves the running daemon where it asks what was killed around a
+   runtime's death (agent/run/turn/holds/memory-kill.ts recentMemoryKills), with a smaller tail: one reader, so the boot
+   and the daemon read the same lines of the same files the same way. */
 
 // A day of pressure samples at one every few seconds is a few MiB; a post-mortem reaches back one restart chain, so the
 // newest few MiB of each file are what it can use.
@@ -64,13 +67,16 @@ const tailOf = (path: string, maxBytes: number): string | undefined => {
     }
 };
 
-/** The rows of `<file>.1` then `<file>` under `logsDir` that parse as `schema`, oldest first. Never throws. */
-export const readTrail = <T>(logsDir: string, file: string, schema: z.ZodType<T>): Trail<T> => {
+/**
+ * The rows of `<file>.1` then `<file>` under `logsDir` that parse as `schema`, oldest first, from the newest `tailBytes`
+ * of each. Never throws.
+ */
+export const readTrail = <T>(logsDir: string, file: string, schema: z.ZodType<T>, tailBytes: number = TAIL_BYTES): Trail<T> => {
     const rows: T[] = [];
     const problems: string[] = [];
     for (const name of [`${file}.1`, file]) {
         try {
-            rows.push(...parseLines(tailOf(join(logsDir, name), TAIL_BYTES) ?? "", schema));
+            rows.push(...parseLines(tailOf(join(logsDir, name), tailBytes) ?? "", schema));
         } catch (error) {
             problems.push(`${name}: ${errnoCode(error) ?? errorMessage(error)}`);
         }
@@ -90,6 +96,21 @@ export const readMemoryTrail = (logsDir: string): MemoryTrail => ({
     netd: readTrail(logsDir, NETD_KILLS_FILE, NetdKillSchema),
     pressure: readTrail(logsDir, PRESSURE_FILE, PressureSampleSchema),
 });
+
+/* THE DAEMON'S LAST SIGN OF LIFE. */
+
+// The daemon writes one sample of its resources a minute while it runs (system/resources/resource-metrics.ts), so the
+// newest says it was alive then: for a run killed with nothing on file naming the moment, that is the nearest thing to
+// its end (post-mortem.ts stopOf). A sample is some 10 KB of process rows, so the last few are in this much of the end.
+const SAMPLES_TAIL_BYTES = 64 * 1024;
+const SampleAtSchema = z.object({ at: z.string() });
+
+/** When the daemon wrote its newest minute samples under `logsDir`, epoch ms, oldest first; none on file reads as none. */
+export const readDaemonSamples = (logsDir: string): number[] =>
+    readTrail(logsDir, RESOURCE_METRICS_FILE, SampleAtSchema, SAMPLES_TAIL_BYTES).rows.flatMap(({ at }) => {
+        const ms = Date.parse(at);
+        return Number.isNaN(ms) ? [] : [ms];
+    });
 
 /* BOOTS THAT NEVER FINISHED STARTING. */
 

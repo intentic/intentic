@@ -1,7 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Logger } from "pino";
 import { errorMessage } from "@intentic/base/errors";
-import { defaultSwapGib, SWAP_ENV, WORKLOAD_BOUNDS_OVERRIDE, WorkloadBoundsOverrideSchema, workloadMemoryMax } from "./memory-records.js";
+import { defaultSandboxSwapGib } from "@intentic/sandbox-run";
+import { SWAP_ENV, WORKLOAD_BOUNDS_OVERRIDE, WorkloadBoundsOverrideSchema, workloadMemoryMax } from "./memory-records.js";
 
 // THE DAEMON'S OWN CGROUP, KEPT AS THE ENTRYPOINT MEANT IT. docker-entrypoint.sh puts the daemon in a `daemon` leaf with
 // no swap and the top cpu and io weight, so that a box short of memory swaps out a build rather than the heap every
@@ -92,8 +93,9 @@ export const checkDaemonLeaf = async (leaf: string, io: CgroupFiles = files): Pr
    it ran there with no bound of its own: a game client grew to 17.6 GB resident and 33 GB of swap, because the engine
    silently drops `--memory-swap`, and the WSL VM paged for 1 h 48 m until netd killed the frozen daemon and five turns came
    back interrupted. The entrypoint bounds the leaf as the container starts; the daemon keeps the same bounds every minute
-   after, by the same precedence and memory-records.ts's formulas, which is also how a live reshape reaches it: ic writes
-   the new swap into WORKLOAD_BOUNDS_OVERRIDE (or changes the container's cap) and the next pass writes what differs. */
+   after, by the same precedence and formulas (memory-records.ts's wall, @intentic/sandbox-run's default swap), which is
+   also how a live reshape reaches it: ic writes the new swap into WORKLOAD_BOUNDS_OVERRIDE (or changes the container's
+   cap) and the next pass writes what differs. */
 
 const GIB = 1024 ** 3;
 
@@ -124,9 +126,9 @@ const overrideGib = (text: string | undefined): number | undefined => {
     }
 };
 
-/** The workload leaf's swap bound in whole GiB: the override file, else ic's env var, else a share of the cap. */
+/** The workload leaf's swap bound in whole GiB: the override file, else ic's env var, else the run contract's share of the cap. */
 const workloadSwapGib = (inputs: WorkloadBoundsInputs): number =>
-    overrideGib(inputs.override) ?? swapEnvGib(inputs.swapEnv) ?? defaultSwapGib(inputs.capBytes ?? inputs.machineBytes ?? GIB);
+    overrideGib(inputs.override) ?? swapEnvGib(inputs.swapEnv) ?? defaultSandboxSwapGib((inputs.capBytes ?? inputs.machineBytes ?? GIB) / GIB);
 
 /** The three bounds by file, as each reads back: a wall below the cap (none without one), the swap, no group kill. */
 export const workloadBounds = (inputs: WorkloadBoundsInputs): readonly { readonly file: string; readonly value: string }[] => [
@@ -179,40 +181,14 @@ export const checkWorkloadLeaf = async (root: string, swapEnv: string | undefine
     return { restored, refused, missing };
 };
 
-/* THE DAEMON IN ITS OWN LEAF. The entrypoint puts the shell it execs netd from into the daemon leaf, and netd's child, this
-   daemon, is born there. Observed live on 2026-11-05: the daemon (pid 64) in `workload` instead, under the bounds above and
-   beside the runaway, swapping with it. Only the daemon netd supervises belongs in the daemon leaf, and netd is in it, so
-   the test is the parent: a daemon whose parent sits in the daemon leaf while it sits in `workload` moves itself back. A
-   second daemon an agent started from its shell has a parent in `workload` and stays there, as netd would keep it. */
-
-type Placement =
-    | { readonly kind: "leaf"; readonly leaf: string }
-    | { readonly kind: "moved"; readonly leaf: string; readonly from: string }
-    | { readonly kind: "refused"; readonly leaf: string; readonly from: string; readonly reason: string }
-    | { readonly kind: "none" };
-
-const placeDaemon = async (io: CgroupFiles, pid: number, ppid: number): Promise<Placement> => {
-    const own = (await io.read("/proc/self/cgroup")) ?? "";
-    const leaf = daemonLeafOf(own);
-    if (leaf !== undefined) {
-        return { kind: "leaf", leaf };
-    }
-    const path = cgroupPathOf(own);
-    if (path === undefined || !path.endsWith("/workload")) {
-        return { kind: "none" };
-    }
-    const parent = daemonLeafOf((await io.read(`/proc/${String(ppid)}/cgroup`)) ?? "");
-    const sibling = `${CGROUP_ROOT}${path.slice(0, path.lastIndexOf("/"))}/daemon`;
-    if (parent !== sibling) {
-        return { kind: "none" };
-    }
-    try {
-        await io.write(`${sibling}/cgroup.procs`, String(pid));
-        return { kind: "moved", leaf: sibling, from: `${CGROUP_ROOT}${path}` };
-    } catch (error) {
-        return { kind: "refused", leaf: sibling, from: `${CGROUP_ROOT}${path}`, reason: errorMessage(error) };
-    }
-};
+/* THE DAEMON IN ITS OWN LEAF IS NETD'S TO KEEP. The entrypoint puts the shell it execs netd from into the daemon leaf,
+   and netd's child, this daemon, is born there. Observed live on 2026-11-05: the daemon (pid 64) in `workload` instead,
+   under the bounds above and beside the runaway, swapping with it, because netd's stray sweep had moved it out before
+   it knew the new pid. netd closes that race and, every tick, moves the daemon it supervises back in wherever it finds
+   it, saying so once per daemon in its own log (netd cgroup.rs `due` and `keep_in`). The daemon moves nothing itself: a
+   second mover was a second set of rules for which daemon is netd's, and a second line for the same move. A daemon
+   outside its leaf keeps nothing until netd has put it back (the entrypoint bounded both leaves as the container
+   started), and one an agent started from its shell, which belongs in `workload`, never keeps anything. */
 
 export interface DaemonCgroupKeeper {
     readonly stop: () => void;
@@ -225,20 +201,18 @@ export const cgroupMountOptions = (mounts: string): string | undefined =>
         .map((line) => line.split(" "))
         .find((fields) => fields[1] === CGROUP_ROOT && fields[2] === "cgroup2")?.[3];
 
-/** Keeps the daemon's leaf as the entrypoint meant it, the daemon itself in it, and the workload leaf beside it bounded:
- * at boot and every `intervalMs`, said once per file each way (once per bound a reshape sets).
+/** Keeps the daemon's leaf as the entrypoint meant it, and the workload leaf beside it bounded, from inside the daemon
+ * leaf: at boot and every `intervalMs`, said once per file each way (once per bound a reshape sets).
  * `container` is whether this daemon runs as a sandbox's container: there a container with no daemon leaf at all is said
  * once, since nothing then keeps the heap out of swap (a compose sandbox's read-only cgroup filesystem, 2026-10-27);
- * a local daemon, and a guest beside a leaf another daemon holds, have none to keep and say nothing. `pid`, `ppid` and
- * `swapEnv` are this process's own unless a test names others. */
+ * a local daemon, and a daemon in `workload` beside a daemon leaf (netd's own, until netd moves it back, or a guest an
+ * agent started), have none to keep and say nothing. `swapEnv` is this process's own unless a test names another. */
 export const startDaemonCgroupKeeper = (
     logger: Pick<Logger, "warn" | "info">,
     options: {
         readonly intervalMs?: number;
         readonly io?: CgroupFiles;
         readonly container?: boolean;
-        readonly pid?: number;
-        readonly ppid?: number;
         readonly swapEnv?: string | undefined;
     } = {},
 ): DaemonCgroupKeeper => {
@@ -253,17 +227,7 @@ export const startDaemonCgroupKeeper = (
         }
     };
     const pass = async (): Promise<void> => {
-        const placement = await placeDaemon(io, options.pid ?? process.pid, options.ppid ?? process.ppid);
-        if (placement.kind === "moved") {
-            once(`moved:${placement.from}`, () => {
-                logger.warn({ leaf: placement.leaf, from: placement.from }, "daemon cgroup: the daemon was running in the workload leaf, under the bounds every agent process is held to, moved it back into its own");
-            });
-        } else if (placement.kind === "refused") {
-            once(`move-refused:${placement.from}`, () => {
-                logger.warn({ leaf: placement.leaf, from: placement.from, reason: placement.reason }, "daemon cgroup: the daemon is running in the workload leaf, and moving it back into its own was refused");
-            });
-        }
-        const leaf = placement.kind === "none" ? undefined : placement.leaf;
+        const leaf = daemonLeafOf((await io.read("/proc/self/cgroup")) ?? "");
         if (leaf === undefined) {
             if (options.container === true && !said.has("no-leaf") && (await io.read(`${CGROUP_ROOT}/daemon/cgroup.procs`)) === undefined) {
                 const mount = cgroupMountOptions((await io.read("/proc/mounts")) ?? "");

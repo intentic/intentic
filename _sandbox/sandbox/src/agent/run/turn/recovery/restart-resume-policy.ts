@@ -42,13 +42,14 @@ export const restartResume = (facts: {
     return facts.ownerAsked || facts.autoResumeOnRestart ? { resume: true, asked: facts.ownerAsked, ...memory } : { resume: false, why: "off", ...memory };
 };
 
-// What tells a daemon starved of memory from one stuck on its own, where netd killed it with no memory kill on file: a
-// restart netd held back for want of memory, or tasks stalled on memory for a tenth of the ten seconds before it acted
-// (PSI some avg10, in percent). Below that a loop is slow, not starved.
+// What tells a daemon starved of memory from one stuck on its own, where netd killed it with no memory kill near the end:
+// a restart netd held back for want of memory, or tasks stalled on memory for a tenth of the ten seconds before it acted
+// (PSI some avg10, in percent). Below that a loop is slow, not starved. Not a kill in `killed`: a `netd-stuck` cause
+// means none came near the end (post-mortem.ts NEAR_STOP_MS), so any there is one the run survived.
 const STARVED_SOME_PERCENT = 10;
 
 const pressureOnRecord = (postMortem: PostMortem): boolean =>
-    postMortem.killed.length > 0 || postMortem.netd.some((kill) => kill.kind === "restart-held" || (kill.psi?.someAvg10 ?? 0) >= STARVED_SOME_PERCENT);
+    postMortem.netd.some((kill) => kill.kind === "restart-held" || (kill.psi?.someAvg10 ?? 0) >= STARVED_SOME_PERCENT);
 
 /** Whether the post-mortem traces the restart to memory: a memory kill, the daemon itself the OOM killer's, or netd ending a loop memory starved. */
 export const memoryCaused = (postMortem: PostMortem): boolean =>

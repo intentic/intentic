@@ -42,7 +42,7 @@ import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
-import { memoryTail } from "./holds/memory-kill.js";
+import { memoryRerunsOf, memoryTail } from "./holds/memory-kill.js";
 import { holdCutForMemory } from "./recovery/memory-restart.js";
 import { limitDue } from "./holds/limit-due.js";
 import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
@@ -154,11 +154,13 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
 };
 
 // A held turn sent again where `routing` points, by whoever sends it now; a door refusal's run joins those whose rows the
-// model never saw.
-const rerunOf = (held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
+// model never saw, and a memory kill's re-run carries how many times memory has had it sent again (memory-kill.ts
+// memoryRerunsOf), which the journal keeps for a restart that cuts it.
+const rerunOf = (actors: Pick<Services["conversations"], "holdings">, held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
     const turn = resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing));
     const cut = turn.sessionId === undefined || held.resumeAt === undefined ? turn : { ...turn, resumeAt: held.resumeAt };
-    return held.run === undefined ? cut : { ...cut, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
+    const counted = { ...cut, ...opt("memoryReruns", memoryRerunsOf(actors, held)) };
+    return held.run === undefined ? counted : { ...counted, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
 };
 
 // Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's), a turn runs, or
@@ -172,7 +174,7 @@ export const fireHeldResume = async (
     if (held === undefined || held.reason === "auth" || held.reason === "outage") {
         return undefined;
     }
-    const started = await services.turns.start(rerunOf(held, routing));
+    const started = await services.turns.start(rerunOf(services.conversations, held, routing));
     return typeof started === "string" ? undefined : started;
 };
 
@@ -196,7 +198,7 @@ export const carryOnTurn = async (
     const started = await services.turns.start(
         held === undefined
             ? { ...rest, prompt: CONTINUATION_NOTE, resume: "continued", ...opt("sessionId", sessionFor(services, turn)) }
-            : rerunOf(held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model), ...opt("effort", turn.effort) }),
+            : rerunOf(services.conversations, held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model), ...opt("effort", turn.effort) }),
     );
     return started === "busy" || started === "archived" ? undefined : started;
 };
@@ -327,7 +329,7 @@ interface Rung {
 
 // A held turn's re-run, the sandbox's own, logged once it starts; a refusal names why it did not.
 const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | BeginRefusal> => {
-    const turn = rerunOf(held, routing);
+    const turn = rerunOf(services.conversations, held, routing);
     const started = await services.turns.start(turn);
     const { conversationId } = held.input;
     const { agent, harness } = withRuntimeDefaults(turn);

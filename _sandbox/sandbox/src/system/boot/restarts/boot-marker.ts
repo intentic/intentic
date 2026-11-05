@@ -132,7 +132,13 @@ const postMortemOf = (logsDir: string, logger: Logger, run: PreviousRun, marker:
         return collectPostMortem(
             logsDir,
             join(dirname(logsDir), bootHistoryDocument.path),
-            { ended: run.ended, ...opt("pid", marker?.pid), ...opt("startedAt", marker?.startedAt) },
+            {
+                ended: run.ended,
+                ...opt("pid", marker?.pid),
+                ...opt("startedAt", marker?.startedAt),
+                // Only a run that exited wrote when: a killed one left its marker saying "running".
+                ...opt("endedAt", marker?.state === "exited" ? marker.endedAt : undefined),
+            },
             now,
             sources,
         );

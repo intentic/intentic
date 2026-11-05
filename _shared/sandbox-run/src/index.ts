@@ -114,9 +114,11 @@ const SANDBOX_MEMORY_FLOOR = 4 * GIB;
 // (2026-11-05) A quarter of the cap, 1 to 4 GiB, where it was half the cap: on rog one process paged 33 GB at about 7 GB a
 // minute, so half of an 18 GiB cap was over a minute of thrashing where 4 GiB is gone in seconds and the sandbox's own OOM
 // fires. The owner may ask for another amount (SANDBOX_SWAP, `<n>g`, the swap alone), which `ic` sets on the container
-// and a recreate replays. This is a COPY of `defaultSwapGib` in the sandbox's system/resources/memory-records.ts, which
-// the sandbox holds its own workload leaf to whatever the engine does with `--memory-swap` (rog's engine ignores it);
-// this package cannot import the daemon, and ic's shape.rs keeps a third copy. Change one, change all three.
+// and a recreate replays. `defaultSandboxSwapGib` below is the formula's source: the sandbox imports it to hold its own
+// workload leaf to the same number whatever the engine does with `--memory-swap` (rog's engine ignores it; the
+// sandbox's system/resources/daemon-cgroup.ts). What cannot import it copies it: the sandbox's docker-entrypoint.sh, run
+// before any Node, and ic's shape.rs `default_swap_gib`, in Rust; the editor's resources form (sandboxResources.ts)
+// mirrors it for its placeholder. Change it here, change the copies.
 const SANDBOX_SWAP_SHARE = 0.25;
 const SANDBOX_SWAP_MAX_GIB = 4;
 
@@ -124,7 +126,8 @@ const SANDBOX_SWAP_MAX_GIB = 4;
 // caps, and read back by the sandbox to bound its workload leaf. memory-records.ts SWAP_ENV names the same variable.
 export const SANDBOX_SWAP_ENV = "SANDBOX_SWAP";
 
-// The default swap in whole GiB for a cap of `capGib` whole GiB: a quarter of it, rounded up, at least 1 and at most 4.
+// The default swap in whole GiB for a cap of `capGib` GiB, floored to whole GiB first (the sandbox passes its cgroup's
+// bytes over a GiB): a quarter of it, rounded up, at least 1 and at most 4.
 export const defaultSandboxSwapGib = (capGib: number): number =>
     Math.min(SANDBOX_SWAP_MAX_GIB, Math.max(1, Math.ceil(Math.max(1, Math.floor(capGib)) * SANDBOX_SWAP_SHARE)));
 

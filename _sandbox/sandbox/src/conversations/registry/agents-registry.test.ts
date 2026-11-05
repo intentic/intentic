@@ -3024,7 +3024,7 @@ it("derives nothing from a reset the hold was not timed to", async () => {
 // The sandbox's own answer, changed in Settings, moves every card that inherits it on the write's own broadcast: before
 // 2026-10-20 a held card kept the lane the old answer gave it until the resume pass next re-synced its stored copy.
 it("follows the sandbox's answers as Settings changes them", async () => {
-    let settings: Pick<SandboxSettings, "limitPolicy" | "memoryPolicy"> = { limitPolicy: "wait", memoryPolicy: "resend" };
+    let settings: Pick<SandboxSettings, "limitPolicy" | "memoryPolicy" | "memoryKillPolicy"> = { limitPolicy: "wait", memoryPolicy: "resend", memoryKillPolicy: "resume" };
     const written = new Set<() => void>();
     const onSet = (listener: () => void): (() => void) => {
         written.add(listener);

@@ -27,7 +27,8 @@ import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "../../
 import { MEMORY_KILLS_FILE, type MemoryKill, type PostMortem } from "../../../../system/resources/memory-records.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "../../frames/classify-failure.js";
 import { recordQueries } from "../../frames/failure-queries.js";
-import { GOES_WHEN_ROOM, KILLED_AGAIN, killSentence, WAITS_FOR_PRESS, waitsForRoom } from "../holds/memory-kill.js";
+import { killSentence } from "../../../../system/resources/memory-kill-words.js";
+import { GOES_WHEN_ROOM, KILLED_AGAIN, WAITS_FOR_PRESS, waitsForRoom } from "../holds/memory-kill.js";
 import type { HeldTurn } from "../holds/held-turn.js";
 import { ROOM_SETTLE_MS } from "../holds/room-holds.js";
 import { resumeInterruptedTurns } from "../recovery/cut-turns.testing.js";
@@ -45,9 +46,11 @@ import { createTurnResumeScheduler } from "../turn-resume.js";
 const PROFILE = { agent: "claude", harness: "native" } as const;
 const silent = pino({ level: "silent" });
 
-// When memory last became free, as the budget reads it (resource-budget.ts roomSince); undefined while it is short.
+// When memory last became free, as the budget reads it (resource-budget.ts roomSince); undefined while it is short. And
+// whether a reading in the last few minutes was short, the budget's own witness of a killed runtime (child-death.ts).
 interface Room {
     since: number | undefined;
+    shortRecently: boolean;
 }
 
 // A conversation's actors and registry over one database in a fresh directory, with every record a pass writes real:
@@ -68,7 +71,7 @@ const fleetOn = async (ids: readonly string[], parents: ReadonlyMap<string, stri
     const journal: TurnJournal = sqliteTurnJournal(db);
     const record = fileTranscriptRecord(root);
     const started: (TurnInput & { conversationId: string })[] = [];
-    const room: Room = { since: undefined };
+    const room: Room = { since: undefined, shortRecently: false };
     const ledger: unknown[] = [];
     const services = unstubbed<Services>("services", {
         agents,
@@ -87,8 +90,9 @@ const fleetOn = async (ids: readonly string[], parents: ReadonlyMap<string, stri
         }),
         resources: unstubbed<Services["resources"]>("resources", {
             roomSince: async () => room.since,
-            // The budget's own witness of a killed runtime: no reading short, the OOM counter never moved.
-            shortRecently: async () => false,
+            // The budget's own witness of a killed runtime: the OOM counter never moved, and a reading short only where a
+            // suite says so.
+            shortRecently: async () => room.shortRecently,
             snapshot: async () => unstubbed<BudgetSnapshot>("snapshot", { reading: unstubbed<BudgetSnapshot["reading"]>("reading", { oomKills: 0 }) }),
         }),
         turns: unstubbed<Services["turns"]>("turns", {
@@ -151,14 +155,15 @@ const cut = (conversationId: string): JournalledTurn => ({
 });
 
 // The boot after the night: the post-mortem read through the boot's own reader, stubbed, and the cut turns recovered
-// under the answer it gives, with autoResumeOnRestart off as it was.
-const bootAfter = async (found: PostMortem | undefined, policy?: "wait" | "resume") => {
+// under the answer it gives, with autoResumeOnRestart off as it was. `cuts`: what the journal held, every conversation's
+// turn of the night unless a suite says otherwise.
+const bootAfter = async (found: PostMortem | undefined, policy?: "wait" | "resume", cuts: readonly JournalledTurn[] = NIGHT.map(cut)) => {
     const fleet = await fleetOn(NIGHT, PARENTS);
     if (policy !== undefined) {
         await fleet.setPolicy(policy);
     }
-    for (const id of NIGHT) {
-        await fleet.journal.recordTurn(cut(id));
+    for (const entry of cuts) {
+        await fleet.journal.recordTurn(entry);
     }
     const read: string[] = [];
     const memory = await readMemoryRestart(
@@ -286,6 +291,41 @@ describe("the restart of 2026-11-05, which memory caused", () => {
         const fleet = await bootAfter(undefined);
         expect(fleet.resume).toEqual({ resume: false, why: "off" });
         expect(NIGHT.map((id) => held(fleet.conversations, id))).toEqual(NIGHT.map(() => undefined));
+    });
+
+    // A runaway no record ties to a conversation makes every restart memory's and names no culprit: without the count
+    // riding on the re-run the release sends (and so in the journal a restart reads), each restart held the cut turn as
+    // never re-run, and sent the runaway again after every one of them, for ever.
+    test(`holds a request for a press once restarts memory caused have cut it after ${String(MEMORY_KILL_RERUNS)} re-runs`, async () => {
+        const untied = postMortem({
+            culprits: [],
+            killed: [{ at: KILLED_AT, killer: "kernel-oom", pid: 19_443, comm: "integra", rssBytes: 17.6e9 }],
+        });
+        let turn: JournalledTurn["turn"] = cut(BRAVE).turn;
+        for (let rerun = 1; rerun <= MEMORY_KILL_RERUNS; rerun += 1) {
+            const fleet = await bootAfter(untied, undefined, [{ ...cut(BRAVE), turn }]);
+            expect(held(fleet.conversations, BRAVE)).toMatchObject({ memoryKill: { reruns: rerun - 1, restart: true } });
+            expect(held(fleet.conversations, BRAVE)?.pressOnly).toBeUndefined();
+            fleet.room.since = BOOT_AT;
+            expect(await passAt(fleet, BOOT_AT + ROOM_SETTLE_MS)).toEqual([BRAVE]);
+            const [sent] = fleet.started;
+            if (sent === undefined) {
+                throw new Error("the release sent nothing");
+            }
+            expect(sent.memoryReruns).toBe(rerun);
+            // What the journal held when the next restart cut it.
+            turn = sent;
+        }
+        const last = await bootAfter(untied, undefined, [{ ...cut(BRAVE), turn }]);
+        expect(held(last.conversations, BRAVE)).toMatchObject({ pressOnly: true, memoryKill: { reruns: MEMORY_KILL_RERUNS, found: SUMMARY } });
+        expect(last.conversations.state(BRAVE)?.turn.resuming).toBe(false);
+        const ending = last.agents.entry(BRAVE)?.ending;
+        expect(ending?.kind === "failed" ? ending.failure : "").toContain(KILLED_AGAIN);
+        last.room.since = BOOT_AT - 60 * 60_000;
+        expect(await passAt(last, BOOT_AT + ROOM_SETTLE_MS)).toEqual([]);
+        // A turn from before the count rode on it is known only as a memory re-run, which is one.
+        const older = await bootAfter(untied, undefined, [{ ...cut(BRAVE), turn: { ...cut(BRAVE).turn, resume: "memory" } }]);
+        expect(held(older.conversations, BRAVE)).toMatchObject({ memoryKill: { reruns: 1 } });
     });
 });
 
@@ -417,8 +457,10 @@ describe("a runtime memory killed while the daemon stayed up", () => {
     test("is held for room rather than the stop ladder, told what was killed, and goes once memory has stayed free", async () => {
         const fleet = await fleetOn(["bold-wren-k2j4"]);
         await fleet.services.sandboxSettings.set({ ...(await fleet.services.sandboxSettings.get()), stopPolicy: "retry" });
+        // Another conversation's process was killed, and the budget saw the box short around the death.
         const kill = guardKill();
         recordKills(fleet.root, [kill]);
+        fleet.room.shortRecently = true;
         const ladder: string[] = [];
         const plan = await dieIn(fleet, dyingIn("bold-wren-k2j4"), ladder);
 
@@ -460,6 +502,7 @@ describe("a runtime memory killed while the daemon stayed up", () => {
         const fleet = await fleetOn(["bold-wren-k2j4"]);
         await fleet.setPolicy("wait");
         recordKills(fleet.root, [guardKill()]);
+        fleet.room.shortRecently = true;
         const plan = await dieIn(fleet, dyingIn("bold-wren-k2j4"));
         expect(plan.frame.message).toBe(`${KILLED.message}. ${WAITS_FOR_PRESS}`);
         expect(plan.frame.autoResume).toBe("available");
@@ -480,12 +523,38 @@ describe("a runtime memory killed while the daemon stayed up", () => {
         const crashed = await classifyFailure({ kind: "error", message: "the harness crashed" }, dyingIn("bold-wren-k2j4"), queriesOf(fleet.services));
         expect(crashed.held?.memoryKill).toBeUndefined();
     });
+
+    // Any kill of the last few minutes used to make every runtime death of those minutes memory's, so a crash beside a
+    // runaway killed elsewhere was held for room rather than going on as the stop it was.
+    test("goes on as a stop where the only kill on record is another conversation's and the budget saw nothing short", async () => {
+        const fleet = await fleetOn(["bold-wren-k2j4"]);
+        recordKills(fleet.root, [guardKill(), guardKill({ pid: 5151, owner: "calm-otter-x1y2", jobId: undefined })]);
+        const ladder: string[] = [];
+        const plan = await dieIn(fleet, dyingIn("bold-wren-k2j4"), ladder);
+        expect(plan.held?.memoryKill).toBeUndefined();
+        expect(plan.frame.held).not.toHaveProperty("memoryKill");
+        expect(ladder).toEqual(["bold-wren-k2j4"]);
+        // The budget's own witness ties the death to memory, and the largest kill on record names what was found.
+        fleet.room.shortRecently = true;
+        const witnessed = await dieIn(fleet, dyingIn("bold-wren-k2j4", {}, NOW + 1_000));
+        expect(witnessed.held).toMatchObject({ memoryKill: { reruns: 0, found: killSentence(guardKill()) } });
+        expect(witnessed.held?.pressOnly).toBeUndefined();
+    });
+
+    test("is memory's by a kill of its own process alone, whatever the budget saw", async () => {
+        const fleet = await fleetOn(["bold-wren-k2j4"]);
+        const own = guardKill({ owner: "bold-wren-k2j4", comm: "node", pid: 7070 });
+        recordKills(fleet.root, [guardKill(), own]);
+        const plan = await dieIn(fleet, dyingIn("bold-wren-k2j4"));
+        expect(plan.held).toMatchObject({ pressOnly: true, memoryKill: { found: killSentence(own) } });
+    });
 });
 
 describe("a request memory kills every time it runs", () => {
     test(`comes back ${String(MEMORY_KILL_RERUNS)} times, then is held for a press as the likely cause; a new message starts from none`, async () => {
         const fleet = await fleetOn(["bold-wren-k2j4"]);
         recordKills(fleet.root, [guardKill()]);
+        fleet.room.shortRecently = true;
         const id = "bold-wren-k2j4";
         let at = NOW;
         let context = dyingIn(id, {}, at);

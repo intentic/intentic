@@ -47,7 +47,7 @@ export const cpuBounds = (engine: EngineFacts | undefined): CapBounds =>
 export const SWAP_BOUNDS: CapBounds = { min: 1 };
 
 // What an empty swap field means for a memory cap of `memoryGib`: a quarter of it, 1 to 4 GiB. Mirrored from the
-// sandbox's memory-records.ts `defaultSwapGib`, which the sandbox holds its work to.
+// `defaultSandboxSwapGib` in @intentic/sandbox-run, which the sandbox holds its work to.
 export const defaultSwapGib = (memoryGib: number | undefined): number | undefined =>
     memoryGib === undefined ? undefined : Math.min(4, Math.max(1, Math.ceil(Math.max(1, Math.floor(memoryGib)) / 4)));
 

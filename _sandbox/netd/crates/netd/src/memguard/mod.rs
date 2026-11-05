@@ -5,10 +5,12 @@
 //! and every one it restarted, every three minutes, until the kernel's global OOM killer ended the runaway. So netd
 //! watches memory itself, on a thread of its own that needs neither Node nor netd's async runtime:
 //!
-//! - every second it reads the container's memory pressure and the `workload` leaf's use and bounds, five small files;
+//! - every second it reads the container's memory pressure, and the use and bounds of the `workload` leaf and of the
+//!   whole container, nine small files;
 //! - when the sandbox has been stalling on memory long enough, or the workload leaf has spent its memory and its swap,
-//!   it SIGKILLs the one process the kernel would pick first, outside the daemon's leaf, and writes down what it killed
-//!   and why (`memory-kills.jsonl`), so the boot after and the conversation it hurt are told;
+//!   it SIGKILLs the one process the kernel would pick first, outside the daemon's leaf (in `workload`, or in a Docker
+//!   container the sandbox runs itself, under `/docker`), and writes down what it killed and why
+//!   (`memory-kills.jsonl`), so the boot after and the conversation it hurt are told;
 //! - while memory is short it writes a sample every ten seconds (`pressure.jsonl`), the trail the daemon's own sampler
 //!   cannot leave while its loop is frozen.
 //!
@@ -34,7 +36,7 @@ use crate::records::{
 };
 use procs::{Kill, PROC, Procs, Spared};
 
-// How often the guard reads. Five small cgroup files a second, which the kernel answers from counters.
+// How often the guard reads. Nine small cgroup files a second, which the kernel answers from counters.
 const POLL: Duration = Duration::from_secs(1);
 
 // THE TRIGGERS. (a) The container's `full` memory pressure, the share of time in which every task in it waited for
@@ -45,12 +47,16 @@ const POLL: Duration = Duration::from_secs(1);
 // reclaiming file pages can put off for minutes.
 const FULL_TRIGGER: f64 = 20.0;
 const FULL_HELD: Duration = Duration::from_secs(10);
-// Trigger (a) counts only while the pressure is this sandbox's own: its workload, memory and swap together, at or above
-// this share of the leaf's memory.max. Every sandbox on a host shares the VM's memory, so when ANOTHER one thrashes the
-// VM, this sandbox's tasks stall on memory too and its `full` climbs while its own use is small. On 2026-11-05 the
-// sandbox next to the runaway sat at 0.7 of 18 GiB with `full` near 50%: counted, the guard would have killed its
-// innocent processes one by one every 25 s for the whole 1 h 48 m, and freed nothing the VM was short of. An unbounded
-// leaf (the entrypoint could not write its bounds) gives no share to read, so there the pressure counts as it reads.
+// Trigger (a) counts only while the pressure is this sandbox's own: memory and swap together at or above this share of
+// a bounded memory.max, in the workload leaf OR in the whole container (its root's memory.current and
+// memory.swap.current against its memory.max, the sandbox's cap). Every sandbox on a host shares the VM's memory, so when
+// ANOTHER one thrashes the VM, this sandbox's tasks stall on memory too and its `full` climbs while its own use is small.
+// On 2026-11-05 the sandbox next to the runaway sat at 0.7 of 18 GiB with `full` near 50%: counted, the guard would have
+// killed its innocent processes one by one every 25 s for the whole 1 h 48 m, and freed nothing the VM was short of.
+// The workload leaf alone would miss a runaway in a Docker container the sandbox runs itself: its inner dockerd puts
+// them in `/docker`, outside the leaf, where the leaf's share stays small while the container fills its cap. Where
+// neither is bounded (no cap, and a leaf the entrypoint could not bound) there is no share to read, so there the
+// pressure counts as it reads.
 const OURS_PERCENT: u64 = 80;
 const SPENT_PERCENT: u64 = 95;
 const SPENT_HELD: Duration = Duration::from_secs(5);
@@ -106,36 +112,42 @@ fn read_bytes(path: PathBuf) -> Option<u64> {
     parse_bytes(&std::fs::read_to_string(path).ok()?)
 }
 
-/// The workload leaf's memory and swap, used and allowed. A bound of none is no bound.
+/// One cgroup's memory and swap, used and allowed: the workload leaf's, or the whole container's. A bound of none is no
+/// bound.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Workload {
+pub struct Usage {
     pub memory_current: Option<u64>,
     pub memory_max: Option<u64>,
     pub swap_current: Option<u64>,
     pub swap_max: Option<u64>,
 }
 
-impl Workload {
-    fn read(leaf: &Path) -> Self {
+impl Usage {
+    fn read(cgroup: &Path) -> Self {
         Self {
-            memory_current: read_bytes(leaf.join("memory.current")),
-            memory_max: read_bytes(leaf.join("memory.max")),
-            swap_current: read_bytes(leaf.join("memory.swap.current")),
-            swap_max: read_bytes(leaf.join("memory.swap.max")),
+            memory_current: read_bytes(cgroup.join("memory.current")),
+            memory_max: read_bytes(cgroup.join("memory.max")),
+            swap_current: read_bytes(cgroup.join("memory.swap.current")),
+            swap_max: read_bytes(cgroup.join("memory.swap.max")),
         }
     }
 
-    // Whether the pressure the container reads is this sandbox's own doing: memory and swap together at or above
-    // `OURS_PERCENT` of a bounded memory.max, or a leaf with no bound to measure against.
-    fn pressure_is_ours(&self) -> bool {
-        match self.memory_max.filter(|max| *max > 0) {
-            None => true,
-            Some(max) => {
-                let used = u128::from(self.memory_current.unwrap_or(0))
-                    + u128::from(self.swap_current.unwrap_or(0));
-                used * 100 >= u128::from(max) * u128::from(OURS_PERCENT)
-            }
-        }
+    // Memory and swap together, against a bounded memory.max: whether they are at or above `percent` of it. None where
+    // there is no bound to measure against.
+    fn held_at_least(&self, percent: u64) -> Option<bool> {
+        let max = self.memory_max.filter(|max| *max > 0)?;
+        let used = u128::from(self.memory_current.unwrap_or(0))
+            + u128::from(self.swap_current.unwrap_or(0));
+        Some(used * 100 >= u128::from(max) * u128::from(percent))
+    }
+
+    // Memory and swap together, and the bound, in MiB: how a reason names the share that made the call.
+    fn held_words(&self) -> String {
+        format!(
+            "{} of {} MiB",
+            mib(self.memory_current) + mib(self.swap_current),
+            mib(self.memory_max)
+        )
     }
 
     // The leaf's memory, all but spent.
@@ -164,10 +176,42 @@ fn share_at_least(current: Option<u64>, max: Option<u64>, percent: u64) -> bool 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Reading {
     pub psi: Option<Psi>,
-    pub workload: Workload,
+    pub workload: Usage,
+    /// The whole container's, at its cgroup's root: the workload leaf, the daemon's, and the Docker containers the
+    /// sandbox runs itself (`/docker`), which no leaf of the entrypoint's holds.
+    pub container: Usage,
 }
 
 impl Reading {
+    // Whether the pressure the container reads is this sandbox's own doing (`OURS_PERCENT`): the workload leaf's share
+    // of its bound or the whole container's share of its cap, either one, and where neither has a bound, yes.
+    fn pressure_is_ours(&self) -> bool {
+        match (
+            self.workload.held_at_least(OURS_PERCENT),
+            self.container.held_at_least(OURS_PERCENT),
+        ) {
+            (None, None) => true,
+            (workload, container) => workload == Some(true) || container == Some(true),
+        }
+    }
+
+    // What made the pressure ours, for the reason a kill is written down with.
+    fn ours_words(&self) -> String {
+        if self.workload.held_at_least(OURS_PERCENT) == Some(true) {
+            format!(
+                "the sandbox's own: the workload's memory and swap at {}",
+                self.workload.held_words()
+            )
+        } else if self.container.held_at_least(OURS_PERCENT) == Some(true) {
+            format!(
+                "the sandbox's own: the whole container's memory and swap at {}",
+                self.container.held_words()
+            )
+        } else {
+            "counted as the sandbox's own, with no bound to measure it against".to_string()
+        }
+    }
+
     /// Short enough of memory to keep a trail of.
     pub fn short(&self) -> bool {
         self.psi.is_some_and(|psi| psi.full_avg10 >= SAMPLE_FULL)
@@ -201,13 +245,12 @@ impl Trigger {
         }
         self.resting_until = None;
         let full = reading.psi.map(|psi| psi.full_avg10);
-        self.stalled_since = if full.is_some_and(|full| full >= FULL_TRIGGER)
-            && reading.workload.pressure_is_ours()
-        {
-            Some(self.stalled_since.unwrap_or(now))
-        } else {
-            None
-        };
+        self.stalled_since =
+            if full.is_some_and(|full| full >= FULL_TRIGGER) && reading.pressure_is_ours() {
+                Some(self.stalled_since.unwrap_or(now))
+            } else {
+                None
+            };
         let workload = &reading.workload;
         self.spent_since = if workload.memory_spent() && workload.swap_at_least(SPENT_PERCENT) {
             Some(self.spent_since.unwrap_or(now))
@@ -219,9 +262,10 @@ impl Trigger {
         {
             return Some(format!(
                 "memory pressure: every task in the sandbox stalled on memory {:.1}% of the last 10 s (full avg10), \
-                 at or above {FULL_TRIGGER}% for {} s",
+                 at or above {FULL_TRIGGER}% for {} s, {}",
                 full.unwrap_or_default(),
-                now.duration_since(since).as_secs()
+                now.duration_since(since).as_secs(),
+                reading.ours_words()
             ));
         }
         if let Some(since) = self.spent_since
@@ -385,7 +429,8 @@ impl Guard {
         let now = Instant::now();
         let reading = Reading {
             psi: read_psi(&self.container),
-            workload: Workload::read(&self.leaves.workload),
+            workload: Usage::read(&self.leaves.workload),
+            container: Usage::read(&self.container),
         };
         if let Some(reason) = self.trigger.observe(now, &reading) {
             self.act(&reason, &reading);
@@ -404,9 +449,10 @@ impl Guard {
         }
     }
 
-    // The one process the kernel would pick first, outside the daemon's leaf, killed and written down. A process gone
-    // before the kill is not replaced by the next one: it freed what it held by itself, and the trigger holds afresh
-    // after the cooldown if that was not enough.
+    // The one process the kernel would pick first, outside the daemon's leaf, killed and written down: in `workload`, or
+    // in a Docker container the sandbox runs itself (`/docker`), whose processes the sandbox's own /proc lists like any
+    // other. A process gone before the kill is not replaced by the next one: it freed what it held by itself, and the
+    // trigger holds afresh after the cooldown if that was not enough.
     fn act(&mut self, reason: &str, reading: &Reading) {
         let ranked = procs::ranked(self.procs.scan(), &self.spared());
         let Some(victim) = ranked.first() else {
@@ -520,22 +566,38 @@ mod tests {
     fn stalled(full: f64) -> Reading {
         Reading {
             psi: psi(full),
-            workload: Workload::default(),
+            ..Reading::default()
         }
     }
 
     const GIB: u64 = 1024 * MIB;
 
-    // A leaf bounded at 8 GiB of memory and 2 GiB of swap, using `memory` and `swap` of them.
+    // A leaf bounded at 8 GiB of memory and 2 GiB of swap, using `memory` and `swap` of them, in a container with no
+    // cap: there the leaf's share alone says whose the pressure is.
     fn leaf(memory: u64, swap: u64) -> Reading {
         Reading {
             psi: psi(0.0),
-            workload: Workload {
+            workload: Usage {
                 memory_current: Some(memory),
                 memory_max: Some(8 * GIB),
                 swap_current: Some(swap),
                 swap_max: Some(2 * GIB),
             },
+            container: Usage::default(),
+        }
+    }
+
+    // The same leaf in a container capped at 12 GiB, its swap unbounded as rog's engine leaves it, using `memory` and
+    // `swap` of it in all (the leaf's share, the daemon's and any Docker container the sandbox runs itself).
+    fn capped(leaf_memory: u64, memory: u64, swap: u64) -> Reading {
+        Reading {
+            container: Usage {
+                memory_current: Some(memory),
+                memory_max: Some(12 * GIB),
+                swap_current: Some(swap),
+                swap_max: None,
+            },
+            ..leaf(leaf_memory, 0)
         }
     }
 
@@ -617,6 +679,74 @@ mod tests {
         assert!(
             trigger.observe(at(10), &with(6 * GIB, 410 * MIB)).is_some(),
             "own pressure, held 10 s"
+        );
+    }
+
+    // A runaway in a Docker container the sandbox runs itself is in `/docker`, outside the workload leaf: the leaf reads
+    // small while the whole container fills its cap and pages, and the pressure is still this sandbox's own.
+    #[test]
+    fn an_inner_containers_runaway_counts_though_the_workload_is_small() {
+        let start = Instant::now();
+        let at = |s: u64| start + Duration::from_secs(s);
+        let runaway = Reading {
+            psi: psi(47.0),
+            ..capped(GIB, 11 * GIB, 3 * GIB)
+        };
+        assert_eq!(runaway.workload.held_at_least(OURS_PERCENT), Some(false));
+        let mut trigger = Trigger::default();
+        for s in 0..10 {
+            assert_eq!(trigger.observe(at(s), &runaway), None, "{s} s in");
+        }
+        let reason = trigger.observe(at(10), &runaway).expect("held 10 s");
+        assert!(
+            reason.contains("the whole container's memory and swap at 14336 of 12288 MiB"),
+            "{reason}"
+        );
+        // Memory and swap together at 80% of the cap is enough, as it is for the leaf.
+        let mut trigger = Trigger::default();
+        let edge = Reading {
+            psi: psi(47.0),
+            ..capped(GIB, 9 * GIB, 615 * MIB)
+        };
+        for s in 0..10 {
+            assert_eq!(trigger.observe(at(s), &edge), None, "{s} s in");
+        }
+        assert!(trigger.observe(at(10), &edge).is_some(), "80% of 12 GiB");
+    }
+
+    // The rule's purpose holds with the whole container counted: a neighbour thrashing the VM while this sandbox, leaf
+    // and all, uses a sliver of its cap kills nothing. And a leaf with no bound (the entrypoint could not write it) is
+    // judged by the container's cap, where there is one, rather than counted unseen.
+    #[test]
+    fn a_neighbours_thrash_with_a_small_container_kills_nothing() {
+        let start = Instant::now();
+        let at = |s: u64| start + Duration::from_secs(s);
+        let neighbour = Reading {
+            psi: psi(47.0),
+            ..capped(GIB / 2, GIB, 0)
+        };
+        let mut unbounded_leaf = neighbour;
+        unbounded_leaf.workload.memory_max = None;
+        let mut trigger = Trigger::default();
+        let mut leafless = Trigger::default();
+        for s in 0..=30 {
+            assert_eq!(trigger.observe(at(s), &neighbour), None, "{s} s in");
+            assert_eq!(leafless.observe(at(s), &unbounded_leaf), None, "{s} s in");
+        }
+        // Neither bounded, no cap and no leaf bound: the pressure counts as it reads, as before.
+        let mut nothing_bounded = unbounded_leaf;
+        nothing_bounded.container.memory_max = None;
+        assert!(nothing_bounded.pressure_is_ours());
+        let mut trigger = Trigger::default();
+        for s in 0..10 {
+            assert_eq!(trigger.observe(at(s), &nothing_bounded), None);
+        }
+        let reason = trigger
+            .observe(at(10), &nothing_bounded)
+            .expect("held 10 s");
+        assert!(
+            reason.contains("no bound to measure it against"),
+            "{reason}"
         );
     }
 

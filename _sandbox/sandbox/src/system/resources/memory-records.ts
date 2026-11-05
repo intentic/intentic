@@ -15,19 +15,9 @@ const MIB = 1024 ** 2;
 
 /* THE WORKLOAD LEAF'S BOUNDS. Everything but netd and the daemon runs in /sys/fs/cgroup/workload. */
 
-// The swap the workload leaf may page into, in whole GiB, when the owner asked for none (SANDBOX_SWAP unset): a quarter of
-// the sandbox's cap, at least 1 and at most 4. Runway for a peak past the cap (a linker spike), never a place to live: at
-// the 2026-11-05 runaway's rate (~7 GB of swap a minute) 4 GiB is gone in under a minute and the leaf's own OOM fires,
-// where the engine's whole swap took 1 h 48 m. Never 0: a cgroup with no swap livelocks reclaiming file-backed pages
-// rather than reaching its OOM (the reason @intentic/sandbox-run never emits a zero `--memory-swap` share either).
-const DEFAULT_SWAP_SHARE = 0.25;
-const DEFAULT_SWAP_MAX_GIB = 4;
-
-/** The default swap bound in whole GiB for a cap of `capBytes`. */
-export const defaultSwapGib = (capBytes: number): number => {
-    const capGib = Math.max(1, Math.floor(capBytes / GIB));
-    return Math.min(DEFAULT_SWAP_MAX_GIB, Math.max(1, Math.ceil(capGib * DEFAULT_SWAP_SHARE)));
-};
+// The leaf's default swap (SANDBOX_SWAP unset) is not here: it is @intentic/sandbox-run's `defaultSandboxSwapGib`, which
+// also sizes the engine's `--memory-swap`, so the run contract and this leaf take one number from one formula. It takes
+// whole GiB and floors them, so a cap in bytes is passed as `capBytes / GIB`.
 
 // What the workload leaf leaves the daemon below the sandbox's cap, so that a runaway meets the leaf's wall while the
 // daemon still allocates without reclaiming: its heap ceiling (--max-old-space-size=3072) and half a GiB, or a quarter

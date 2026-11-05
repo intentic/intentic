@@ -93,7 +93,7 @@ test("a kernel kill no sample names is said with the kernel's own pid", () => {
     expect(postMortem.killed[0]).toMatchObject({ pid: 19443, comm: "integra" });
     expect(postMortem.killed[0]).not.toHaveProperty("owner");
     expect(postMortem.culprits).toEqual([]);
-    expect(postMortem.summary).toContain("integra (the kernel's pid 19443, 16.8 GB) was killed by the kernel's global OOM at 04:21:57 UTC");
+    expect(postMortem.summary).toContain("integra (the kernel's pid 19443, 16.8 GB resident) was killed for memory by the kernel's global OOM killer at 04:21:57 UTC");
 });
 
 test("the kernel killing the daemon itself is an oom-victim, and the daemon is no culprit", () => {
@@ -104,7 +104,7 @@ test("the kernel killing the daemon itself is an oom-victim, and the daemon is n
     expect(namedEnding).toBe("oom-victim");
     expect(postMortem.culprits).toEqual([]);
     expect(postMortem.killed[0]).toMatchObject({ owner: "daemon", killer: "kernel-oom" });
-    expect(postMortem.summary).toBe("the daemon itself (the kernel's pid 19001, 3.0 GB) was killed by the kernel's global OOM at 02:35:00 UTC");
+    expect(postMortem.summary).toBe("the daemon itself (the kernel's pid 19001, 3.0 GB resident) was killed for memory by the kernel's global OOM killer at 02:35:00 UTC");
 });
 
 test("netd killing a stuck daemon with nothing killed for memory is netd-stuck", () => {
@@ -121,6 +121,9 @@ test("recorded kills keep their owner and job; the daemon's own and one-shots ar
     const memcgKernel: DatedKernelKill = { ...nightKill(), scope: "memcg", comm: "node", pid: 30_000, at: at("03:10:20") };
     const { postMortem } = assemblePostMortem(
         input({
+            // A run killed at 03:12 with nothing naming the moment: the boot is the end the kills are measured from.
+            bootAt: at("03:12:00"),
+            pressure: [],
             kernel: [memcgKernel],
             netd: [],
             kills: [
@@ -137,9 +140,9 @@ test("recorded kills keep their owner and job; the daemon's own and one-shots ar
     expect(postMortem.killed.map((kill) => kill.pid)).toEqual([4242, 4300, 4400, 4500]);
     expect(postMortem.culprits).toEqual(["wise-fern-usz1", "lively-sage-ndvm"]);
     expect(postMortem.summary).toBe(
-        "node (pid 4242, 17.0 GB) from job job-7 of wise-fern-usz1 was killed by netd's memory guard at 03:00:00 UTC; " +
-            "esbuild (pid 4300, 1.0 GB) (one of the daemon's own) was killed by netd's memory guard at 03:05:00 UTC; " +
-            "node (pid 4500, 17.0 GB) from job job-7 of lively-sage-ndvm was killed by the kernel at the sandbox's own memory bound at 03:10:00 UTC; " +
+        "node (pid 4242, 17.0 GB resident) from background job job-7 of wise-fern-usz1 was killed for memory by the sandbox's memory guard at 03:00:00 UTC; " +
+            "esbuild (pid 4300, 1.0 GB resident) (one of the daemon's own) was killed for memory by the sandbox's memory guard at 03:05:00 UTC; " +
+            "node (pid 4500, 17.0 GB resident) from background job job-7 of lively-sage-ndvm was killed for memory by the kernel at the sandbox's own memory bound at 03:10:00 UTC; " +
             "and one more process killed for memory",
     );
 });
@@ -160,6 +163,55 @@ test("with nothing on file, the sentence says what was looked at, and why the ke
             "the kernel's global OOM also killed 2 processes outside this sandbox; some records could not be read (pressure.jsonl: EIO)",
     );
     expect(denied.namedEnding).toBeUndefined();
+});
+
+/* WHAT COMES NEAR THE END NAMES THE CAUSE (NEAR_STOP_MS): a kill the run survived names nothing. */
+
+test("an unrelated kill hours before a crash leaves the crash unexplained, and holds nobody", () => {
+    const crashedAt = at("04:00:00");
+    const earlier = guardKill({ at: at("01:00:00"), owner: "wise-fern-usz1" });
+    const { postMortem, namedEnding } = assemblePostMortem(
+        input({ previous: { pid: DAEMON_PID, startedAt: at("00:30:00"), endedAt: crashedAt }, since: at("00:30:00"), bootAt: crashedAt + 2_000, kernel: [], netd: [], pressure: [], kills: [earlier] }),
+    );
+    expect(postMortem.cause).toBe("unknown");
+    expect(postMortem.culprits).toEqual([]);
+    expect(namedEnding).toBeUndefined();
+    // The record keeps what happened in the run, and its sentence says why it is not the cause.
+    expect(postMortem.killed).toEqual([earlier]);
+    expect(postMortem.summary).toBe(
+        "nothing on file near its end names the hand: no process was killed for memory, netd killed no daemon, and the kernel's log (it reaches back to 2026-11-05T01:00:00.000Z) has no OOM kill in this sandbox; " +
+            "a process killed for memory earlier in the run, 3h 0m before it ended, is not counted as its cause",
+    );
+    // The same kill a few minutes before the crash is its cause, and its conversation's turns are held.
+    const near = assemblePostMortem(
+        input({ previous: { pid: DAEMON_PID, startedAt: at("00:30:00"), endedAt: crashedAt }, since: at("00:30:00"), bootAt: crashedAt + 2_000, kernel: [], netd: [], pressure: [], kills: [{ ...earlier, at: crashedAt - 4 * MINUTE }] }),
+    );
+    expect(near.postMortem).toMatchObject({ cause: "memory", culprits: ["wise-fern-usz1"] });
+});
+
+test("a run killed with no end on file is measured from its last sign of life: the daemon's own sample, or netd's", () => {
+    const earlier = guardKill({ at: at("01:00:00"), owner: "wise-fern-usz1" });
+    const killedRun = input({ previous: { pid: DAEMON_PID, startedAt: at("00:30:00") }, since: at("00:30:00"), bootAt: at("05:00:00"), kernel: [], netd: [], kills: [earlier] });
+    // Memory was short around the kill and never again: netd's samples end there, and so the run seems to.
+    const short = [{ at: at("01:00:20"), psi: { someAvg10: 61, fullAvg10: 20 }, top: [] }];
+    expect(assemblePostMortem({ ...killedRun, pressure: short }).postMortem.cause).toBe("memory");
+    // The daemon went on writing its minute samples until 04:58: the kill was a survived one.
+    const alive = assemblePostMortem({ ...killedRun, pressure: short, alive: [at("04:57:00"), at("04:58:00")] }).postMortem;
+    expect(alive).toMatchObject({ cause: "unknown", culprits: [] });
+    expect(alive.summary).toContain("a process killed for memory earlier in the run, 3h 58m before it ended, is not counted as its cause");
+    // Nothing at all after the start: the boot is the end, and a kill four hours before it is no cause either.
+    expect(assemblePostMortem({ ...killedRun, pressure: [] }).postMortem.cause).toBe("unknown");
+});
+
+test("the night's runaway, killed at the end of a thrash that began with netd's kill of the daemon, is still the cause", () => {
+    // Measured from netd's first kill of a daemon (02:39:18), the run's end: the thrash after it is the stop itself.
+    const early = guardKill({ at: at("02:30:00"), owner: "wise-fern-usz1" });
+    const old = guardKill({ at: at("02:20:00"), owner: "noble-forge-r92c", pid: 4100 });
+    const { postMortem } = assemblePostMortem(input({ kills: [old, early] }));
+    expect(postMortem.cause).toBe("memory");
+    expect(postMortem.culprits).toEqual(["wise-fern-usz1", CULPRIT]);
+    expect(postMortem.killed.map((kill) => kill.pid)).toEqual([4100, 4242, RUNAWAY_PID]);
+    expect(postMortem.summary).toMatch(/; a process killed for memory earlier in the run, 19m 18s before it ended, is not counted as its cause$/u);
 });
 
 test("the span reaches back past every boot netd killed before its hello, to the run that began it", () => {

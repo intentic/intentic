@@ -86,4 +86,4 @@ export const jsonLines = (rows: readonly unknown[]): string => rows.map((row) =>
 /** The sentence the night's post-mortem reads as. */
 export const NIGHT_SUMMARY =
     "netd killed the daemon after its event loop stopped answering for 300 s while memory pressure was 47%, then 34 daemons it restarted that never said hello; " +
-    "integra (pid 1077125, 16.8 GB resident and 30.7 GB swapped) from sub-tidy-pebble-aii1 was killed by the kernel's global OOM at 04:21:57 UTC";
+    "integra (pid 1077125, 16.8 GB resident and 30.7 GB swapped) started by sub-tidy-pebble-aii1 was killed for memory by the kernel's global OOM killer at 04:21:57 UTC";

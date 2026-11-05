@@ -18,8 +18,8 @@ export const NEVER_RAN = "never-ran";
 const LOST = "lost";
 // The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
 export const JOB_FILE = "job.json";
-// Why its command ended, when it was killed for memory: one sentence (memory-kills.ts), which its report, the watch its
-// end wakes and `wait` all say in place of a bare exit 137.
+// Why its command ended, when it was killed for memory: the kill's one sentence (system/resources/memory-kill-words.ts,
+// written by memory-kills.ts), which its report, the watch its end wakes and `wait` all say in place of a bare exit 137.
 export const MEMORY_KILL_FILE = "memory-kill";
 
 // Every agent run's capture dir, a job's (`intentic-run-job-`) or a foreground call's filed as one when it ran past its

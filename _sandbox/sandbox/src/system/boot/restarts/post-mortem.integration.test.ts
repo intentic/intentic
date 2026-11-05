@@ -86,6 +86,23 @@ test("a chain of starts netd killed before their hello reaches back to the stuck
     expect(found?.postMortem.culprits).toEqual([CULPRIT]);
 });
 
+test("a kill the run survived names nothing: measured from a crash's own end, or from the daemon's last minute sample", async () => {
+    const survived = guardKill({ at: at("01:00:00"), owner: "wise-fern-usz1" });
+    await writeFile(join(logs, MEMORY_KILLS_FILE), jsonLines([survived]));
+    // Memory was short around the kill, and netd sampled it then.
+    await writeFile(join(logs, PRESSURE_FILE), jsonLines([{ at: at("01:00:20"), psi: { someAvg10: 61, fullAvg10: 20 }, top: [] }]));
+    const run = { pid: DAEMON_PID, startedAt: at("00:30:00") };
+    const quiet = sources("");
+    const crashed = collectPostMortem(logs, join(root, "boot-history.json"), { ended: "crashed", ...run, endedAt: at("04:00:00") }, at("04:00:03"), quiet);
+    expect(crashed?.postMortem).toMatchObject({ cause: "unknown", culprits: [], killed: [survived] });
+    // Killed with no end of its own on file, the run lived on by its minute samples until 03:59.
+    const killed = collectPostMortem(logs, join(root, "boot-history.json"), { ended: "killed", ...run }, at("04:00:03"), quiet);
+    expect(killed?.postMortem.cause).toBe("memory");
+    await writeFile(join(logs, "resource-metrics.jsonl"), jsonLines([{ at: new Date(at("03:58:00")).toISOString() }, { at: new Date(at("03:59:00")).toISOString() }]));
+    const sampled = collectPostMortem(logs, join(root, "boot-history.json"), { ended: "killed", ...run }, at("04:00:03"), quiet);
+    expect(sampled?.postMortem).toMatchObject({ cause: "unknown", culprits: [] });
+});
+
 test("after a clean stop there is none; after a first boot with nothing found there is none either", () => {
     expect(collectPostMortem(logs, join(root, "boot-history.json"), { ended: "stopped" }, BOOT_AT, sources())).toBeUndefined();
     expect(collectPostMortem(logs, join(root, "boot-history.json"), { ended: "unknown" }, BOOT_AT, sources(""))).toBeUndefined();

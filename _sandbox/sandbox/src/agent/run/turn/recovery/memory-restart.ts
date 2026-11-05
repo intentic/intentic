@@ -1,12 +1,14 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
-import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
+import { breakArmed, MEMORY_KILL_RERUNS } from "@intentic/sandbox-contract/schemas/turn-break";
 import { supervisorOf } from "../../../../auth/principal.js";
 import type { Services } from "../../../../composition.js";
 import { opt } from "../../../../opt.js";
 import { recordInterruptedTurn } from "../../../../sessions/turn-transcript.js";
 import { consumeEntry, type JournalledTurn } from "../../../../store/journals/turn-journal.js";
+import { withClause } from "../../frames/frame-clause.js";
 import { breakPolicyFor } from "../break-policy.js";
 import type { HeldOf } from "../holds/held-turn.js";
+import { KILLED_AGAIN } from "../holds/memory-kill.js";
 import { dropRunLog } from "./cut-turn-rows.js";
 import { recordInterrupted } from "./interrupted-ledger.js";
 import type { MemoryRestart } from "./restart-resume-policy.js";
@@ -19,21 +21,30 @@ import type { MemoryRestart } from "./restart-resume-policy.js";
    it back rather than losing the turn.
    - A conversation the post-mortem names as a culprit (its own process was the one killed) is held for a press alone,
      with what the post-mortem found on its card, and never comes back by itself.
+   - So is a request the memory release already sent again MEMORY_KILL_RERUNS times, as the runtime path holds one
+     killed again (frames/memory-death.ts): the count rides on the turn the release sent (TurnInput.memoryReruns, in the
+     journal) and on the hold, so a runaway no record ties to a conversation is not sent again after every restart.
    - Every other comes back on its answer: by itself where that is `resume` (the default), told what the post-mortem found
      and, for a parent whose subagent was the culprit, which child it was; held for a press with the same words on its
      card where the answer is `wait`. */
 
-// What its card says, held for a press: what the post-mortem found, then why nothing sends it again.
+// What its card says, held for a press: what the post-mortem found (a sentence of its own, with no stop), then why
+// nothing sends it again.
 const culpritWords = (summary: string): string =>
-    `${summary} This conversation's own process was the one killed, so it is not sent again by itself: change what grew without limit before pressing Continue.`;
+    withClause(summary, "This conversation's own process was the one killed, so it is not sent again by itself: change what grew without limit before pressing Continue.");
+const againWords = (summary: string): string => withClause(summary, KILLED_AGAIN);
 const waitWords = (summary: string): string =>
-    `${summary} The sandbox restarted, which stopped this turn; a turn killed for memory waits for a press here, so Continue sends it again.`;
+    withClause(summary, "The sandbox restarted, which stopped this turn; a turn killed for memory waits for a press here, so Continue sends it again.");
 
 // What became of the turn, in its ledger row and its log line.
 const HOW = {
     culprit: {
         fate: "held for a press: its own process was the one killed for memory",
         line: "interrupted turn held for a press: the restart ran out of memory, and this conversation's own process was the one killed",
+    },
+    again: {
+        fate: `held for a press: memory stopped it again after ${String(MEMORY_KILL_RERUNS)} re-runs`,
+        line: "interrupted turn held for a press: the restart ran out of memory, and the memory release had already sent this request again as often as it may",
     },
     release: {
         fate: "held for the memory release",
@@ -62,7 +73,11 @@ export const holdCutForMemory = async (
 ): Promise<void> => {
     const { conversationId } = entry.turn;
     const culprit = memory.culprits.has(conversationId);
-    const armed = !culprit && breakArmed(await breakPolicyFor(services, conversationId, "memoryKill"));
+    // How many times the release had sent this request again, the cut turn among them; a journal entry from before the
+    // count was carried knows only that it was a memory re-run, which is one.
+    const reruns = entry.turn.memoryReruns ?? (entry.turn.resume === "memory" ? 1 : 0);
+    const again = !culprit && reruns >= MEMORY_KILL_RERUNS;
+    const armed = !culprit && !again && breakArmed(await breakPolicyFor(services, conversationId, "memoryKill"));
     const sessionId = entry.sessionId ?? entry.turn.sessionId;
     // A turn coming back writes no closing notice: its re-run's own notice stands where its words would be shown again.
     if (!(await recordInterruptedTurn(services, entry.turn, sessionId, entry.startedAt, { resuming: armed, ...recordedAs }))) {
@@ -78,19 +93,19 @@ export const holdCutForMemory = async (
         ...opt("sessionId", sessionId),
         // A session the provider minted is one it answered in; without one there is nothing of the turn's to carry on.
         ran: sessionId !== undefined,
-        ...opt("pressOnly", culprit ? true : undefined),
-        // A cut memory re-run is one the release already sent once.
-        memoryKill: { reruns: entry.turn.resume === "memory" ? 1 : 0, found: memory.summary, restart: true, ...opt("culpritChild", culpritChild) },
+        ...opt("pressOnly", culprit || again ? true : undefined),
+        memoryKill: { reruns, found: memory.summary, restart: true, ...opt("culpritChild", culpritChild) },
     };
     services.conversations.send(conversationId, { kind: "turn-held", held }, now);
     // Read as a turn on its way back, as a stop the ladder was bringing back is after a restart (limit-hold.ts comingBack);
     // one nothing sends by itself says why on its card instead, and waits in Attention for the press.
     services.conversations.send(conversationId, { kind: "resume-promised" }, now);
+    const why = culprit ? "culprit" : again ? "again" : armed ? "release" : "wait";
     if (!armed) {
-        await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: culprit ? culpritWords(memory.summary) : waitWords(memory.summary) }, now)
-            .settled;
+        const words = why === "culprit" ? culpritWords : why === "again" ? againWords : waitWords;
+        await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: words(memory.summary) }, now).settled;
     }
-    const how = HOW[culprit ? "culprit" : armed ? "release" : "wait"];
+    const how = HOW[why];
     recordInterrupted(services, entry, how.fate, now);
-    services.logger.info({ conversationId, culprit, armed, ...opt("culpritChild", culpritChild), sessionId, summary: memory.summary }, how.line);
+    services.logger.info({ conversationId, culprit, armed, reruns, ...opt("culpritChild", culpritChild), sessionId, summary: memory.summary }, how.line);
 };

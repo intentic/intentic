@@ -1,5 +1,5 @@
-import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
-import { open } from "node:fs/promises";
+import { closeSync, existsSync, type FSWatcher, fstatSync, openSync, readSync, watch } from "node:fs";
+import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -7,6 +7,7 @@ import type { ActivityStore } from "../../../activity/activity-store.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { logsRoot } from "../../../seams/logs-root.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../../seams/workload-stamp.js";
+import { killSentence } from "../../../system/resources/memory-kill-words.js";
 import { MEMORY_KILLS_FILE, type MemoryKill, MemoryKillSchema, parseLines } from "../../../system/resources/memory-records.js";
 import { recentJobProcess, recentJobRunner } from "../../../system/resources/process-scan.js";
 import { steerTurn } from "../../checkpoints/agent-steering.js";
@@ -31,26 +32,6 @@ import { appendRunFile, writeRunFile } from "./run-files.js";
    - tells the conversation: into its live turn, as the sandbox's own words between two tool calls, so the agent hears it
      while it can still act on it; and in Activity, filed under the conversation, either way. It never starts a turn: a
      conversation at rest hears it from its job's ending when that wakes it, or reads it in Activity. */
-
-const GIB = 1024 ** 3;
-const MIB = 1024 ** 2;
-
-const sized = (bytes: number | undefined): string => {
-    if (bytes === undefined) {
-        return "unknown";
-    }
-    return bytes >= GIB ? `${(bytes / GIB).toFixed(1)} GiB` : `${Math.round(bytes / MIB)} MiB`;
-};
-
-const KILLERS = {
-    "netd-guard": "the sandbox's memory guard",
-    "cgroup-oom": "the kernel, at the bounds of the workload cgroup every agent process runs in",
-    "kernel-oom": "the kernel, for the whole machine",
-} as const satisfies Record<MemoryKill["killer"], string>;
-
-/** The kill in one sentence, as a job's ending and the conversation's notice say it. */
-export const killSentence = (kill: MemoryKill): string =>
-    `killed for memory: ${kill.comm} (pid ${String(kill.pid)}), peak RSS ${sized(kill.rssBytes)}, swap ${sized(kill.swapBytes)}, by ${KILLERS[kill.killer]}: ${kill.reason ?? "no reason was recorded"}`;
 
 // The conversation an owner stamp names; the two reserved owners are the daemon's own work, nobody's to tell.
 const conversationOf = (owner: string | undefined): string | undefined =>
@@ -134,7 +115,8 @@ export const tellMemoryKill = async (deps: MemoryKillDeps, kill: MemoryKill): Pr
         return;
     }
     const subject = job?.record === undefined ? "A process this conversation started" : `Background job "${job.record.job.label}" (${job.record.shellId ?? job.record.job.id})`;
-    const said = `${subject} was ${sentence}.`;
+    // The kill in the sentence every place tells one in (memory-kill-words.ts), after what it was to this conversation.
+    const said = `${subject}: ${sentence}.`;
     // Into the live turn, between two tool calls, as the sandbox's words: a turn at rest is never started for it.
     steerTurn(deps.conversations, conversationId, { text: said, voice: "sandbox" });
     await deps.activity.append({ direction: "system", type: "memory.killed", conversationId, content: said, extra: { kill } });
@@ -146,21 +128,107 @@ export interface MemoryKillFollower {
     readonly stop: () => void;
 }
 
-// Read whole lines only, from `offset`: the offset moves past the last newline read, so a line netd is still writing is
-// read whole next time. A file shorter than the offset was cut, and is read again from its start.
-const readLinesFrom = async (path: string, offset: number): Promise<{ readonly text: string; readonly next: number }> => {
-    // A file not there yet (no kill since the sandbox was made) has nothing to read; any other failure is the pass's.
-    const handle = await open(path, "r").catch(undefinedIfMissing);
-    if (handle === undefined) {
-        return { text: "", next: 0 };
+/* WHERE THE FOLLOWER HAS READ TO, AND KNOWING THE FILE IS STILL THE ONE IT READ. Whole lines only: the offset moves past
+   the last newline read, so a line netd is still writing is read whole next time. Two things can pull the file out from
+   under that offset between two passes: the logs prune cutting it to its newest lines in place (logs/log-files.ts,
+   cutToTail, the same inode), and a writer moving it aside to `<file>.1` for a new one (netd rotates its pressure
+   samples so). A cut file that has grown back past the old offset by the next pass looks untouched by its size alone,
+   and reading on from the offset then starts mid-line in other lines, skipping kills. So a pass trusts the offset only
+   where three things hold: the same inode, a size at least the offset, and the very bytes it last read still just
+   before it (the last line read, `seal`, which also says a newline sits there). Otherwise it looks for that line in what
+   the file now holds and reads on after it, else reads from the start; a kill read twice is told once (`told` below).
+   Not the tail reader the boot and a runtime's death read the same file with (system/boot/restarts/memory-trail.ts
+   readTrail): that one reads the newest bytes of a file once, this one follows a file on from where it last stopped. */
+
+interface ReadMark {
+    readonly offset: number;
+    // Undefined while no file was there.
+    readonly ino: number | undefined;
+    // The last line read, ending at `offset`; empty at the file's start.
+    readonly seal: Buffer;
+}
+
+const UNREAD: ReadMark = { offset: 0, ino: undefined, seal: Buffer.alloc(0) };
+
+// A kill's line is well under this (its argv is cut to 300 characters); a longer one keeps its end, enough to know it by.
+const SEAL_BYTES = 4096;
+// How much of a file that is no longer the one read is searched for the last line read: more than the prune keeps of a
+// file it cuts (a million bytes), less than the cap it cuts at, so a log storm never puts the whole of one in the heap.
+const REREAD_BYTES = 4 * 1024 * 1024;
+
+// The line of `bytes` that ends at `end`, from the newline before it (or its last SEAL_BYTES), copied off `bytes`.
+const lineEndingAt = (bytes: Buffer, end: number): Buffer => {
+    const before = end >= 2 ? bytes.lastIndexOf(0x0a, end - 2) : -1;
+    return Buffer.from(bytes.subarray(Math.max(before + 1, end - SEAL_BYTES), end));
+};
+
+/** Where a follower starting now stands: the file's end as it is, and its last line. */
+const markOfEnd = (path: string): ReadMark => {
+    let fd: number;
+    try {
+        fd = openSync(path, "r");
+    } catch (error) {
+        // A file not there yet (no kill since the sandbox was made) is read from its start once it is; any other failure
+        // is the start's, as it always was.
+        undefinedIfMissing(error);
+        return UNREAD;
     }
     try {
-        const { size } = await handle.stat();
-        const from = size < offset ? 0 : offset;
+        const { size, ino } = fstatSync(fd);
+        const length = Math.min(size, SEAL_BYTES);
+        const tail = Buffer.alloc(length);
+        const got = readSync(fd, tail, 0, length, size - length);
+        return { offset: size, ino, seal: lineEndingAt(tail.subarray(0, got), got) };
+    } finally {
+        closeSync(fd);
+    }
+};
+
+// Whether the bytes up to the mark are still the ones read: the same file, not shorter, and the last line read in place.
+const intact = async (handle: FileHandle, mark: ReadMark, size: number, ino: number): Promise<boolean> => {
+    if (mark.offset === 0) {
+        return true;
+    }
+    if ((mark.ino !== undefined && ino !== mark.ino) || size < mark.offset) {
+        return false;
+    }
+    const there = Buffer.alloc(mark.seal.length);
+    const { bytesRead } = await handle.read(there, 0, there.length, mark.offset - mark.seal.length);
+    return bytesRead === there.length && there.equals(mark.seal);
+};
+
+// Where to read on from in a file that is no longer the one read: after the last line read where it still holds it (a
+// cut keeps the newest lines, so it does), else its start, or the first whole line of its newest REREAD_BYTES.
+const refound = async (handle: FileHandle, mark: ReadMark, size: number): Promise<{ readonly from: number; readonly seal: Buffer }> => {
+    const start = Math.max(0, size - REREAD_BYTES);
+    const window = Buffer.alloc(size - start);
+    const { bytesRead } = await handle.read(window, 0, window.length, start);
+    const held = window.subarray(0, bytesRead);
+    const at = mark.seal.length === 0 ? -1 : held.lastIndexOf(mark.seal);
+    if (at >= 0) {
+        return { from: start + at + mark.seal.length, seal: mark.seal };
+    }
+    return { from: start === 0 ? 0 : start + held.indexOf(0x0a) + 1, seal: Buffer.alloc(0) };
+};
+
+const readLinesFrom = async (path: string, mark: ReadMark): Promise<{ readonly text: string; readonly mark: ReadMark }> => {
+    // A file gone (moved aside, removed) has nothing to read, and whatever next takes its name is read from its start;
+    // any other failure is the pass's.
+    const handle = await open(path, "r").catch(undefinedIfMissing);
+    if (handle === undefined) {
+        return { text: "", mark: UNREAD };
+    }
+    try {
+        const { size, ino } = await handle.stat();
+        const { from, seal } = (await intact(handle, mark, size, ino)) ? { from: mark.offset, seal: mark.seal } : await refound(handle, mark, size);
         const buffer = Buffer.alloc(size - from);
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, from);
-        const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0a);
-        return end < 0 ? { text: "", next: from } : { text: buffer.toString("utf8", 0, end + 1), next: from + end + 1 };
+        const read = buffer.subarray(0, bytesRead);
+        const end = read.lastIndexOf(0x0a);
+        if (end < 0) {
+            return { text: "", mark: { offset: from, ino, seal } };
+        }
+        return { text: read.toString("utf8", 0, end + 1), mark: { offset: from + end + 1, ino, seal: lineEndingAt(read, end + 1) } };
     } finally {
         await handle.close();
     }
@@ -177,10 +245,10 @@ export const settleMemoryKills = (): Promise<void> => active?.settle() ?? Promis
 export const startMemoryKillFollower = (deps: MemoryKillDeps): MemoryKillFollower => {
     const dir = logsRoot(deps.historyRoot);
     const path = join(dir, MEMORY_KILLS_FILE);
-    let offset = existsSync(path) ? statSync(path).size : 0;
+    let mark = markOfEnd(path);
     let queue: Promise<void> = Promise.resolve();
-    // The kills already told, the newest few hundred: the logs prune cuts a file past its cap to its newest lines, which
-    // this then reads again from the start, and a kill is told once however often its line is read.
+    // The kills already told, the newest few hundred: a file cut or replaced under the follower may be read again from
+    // its start (readLinesFrom), and a kill is told once however often its line is read.
     const told: string[] = [];
     const fresh = (kill: MemoryKill): boolean => {
         const key = `${String(kill.at)}:${String(kill.pid)}:${kill.killer}`;
@@ -192,8 +260,9 @@ export const startMemoryKillFollower = (deps: MemoryKillDeps): MemoryKillFollowe
         return true;
     };
     const pass = async (): Promise<void> => {
-        const { text, next } = await readLinesFrom(path, offset);
-        offset = next;
+        const read = await readLinesFrom(path, mark);
+        mark = read.mark;
+        const { text } = read;
         for (const kill of parseLines(text, MemoryKillSchema).filter(fresh)) {
             await tellMemoryKill(deps, kill).catch((error: Error) => {
                 deps.logger.warn({ err: error, pid: kill.pid, comm: kill.comm }, "memory kill: could not be told to its conversation");

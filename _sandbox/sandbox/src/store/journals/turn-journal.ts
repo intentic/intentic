@@ -18,10 +18,15 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
 const MAX_RESUME_ATTEMPTS = 1;
 
 // Re-resolved at resume time (fresh credentials, worktree state); intersected, not extended, so a turn invalid at the
-// route can't be journalled either. `resume` is kept so a restart keeps the kind its prompt's note already names.
+// route can't be journalled either. `resume` is kept so a restart keeps the kind its prompt's note already names, and
+// `memoryReruns` so a restart that cuts a memory kill's re-run still counts it (turn-starter.ts TurnInput).
 const JournalledInputSchema = z.intersection(
     AgentTurnSchema,
-    z.object({ conversationId: z.string(), resume: z.enum(Object.keys(RESUME_NOTES) as [ResumeReason, ...ResumeReason[]]).optional() }),
+    z.object({
+        conversationId: z.string(),
+        resume: z.enum(Object.keys(RESUME_NOTES) as [ResumeReason, ...ResumeReason[]]).optional(),
+        memoryReruns: z.number().int().nonnegative().optional(),
+    }),
 );
 
 // startedAt backs the staleness check on resume; attempts caps re-running a turn whose own output loops the daemon into

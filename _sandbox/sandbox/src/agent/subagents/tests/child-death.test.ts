@@ -1,3 +1,4 @@
+import { killSentence } from "../../../system/resources/memory-kill-words.js";
 import { type DeathWitness, killCauseOf, killNote, runtimeKilled } from "../child-death.js";
 
 // What the budget saw: the OOM count now, and whether a reading in the last few minutes was short.
@@ -50,7 +51,9 @@ describe("what a parent hears of a child memory killed", () => {
     test("that it is the likely cause, naming the process, where the process killed was its own", () => {
         const own = { at: 1, killer: "netd-guard", pid: 4242, comm: "cargo", owner: "sub-tidy-pebble-aii1", jobId: "job-7" } as const;
         const note = killNote("memory", failure, own, true);
-        expect(note).toContain("the process killed was its own: cargo (pid 4242), background job job-7");
+        // Named in the one sentence the job's ending, the held card and the post-mortem use too.
+        expect(note).toContain(`the process killed was its own. ${killSentence(own)}. It is the likely cause`);
+        expect(note).toContain("cargo (pid 4242) from background job job-7 of sub-tidy-pebble-aii1 was killed for memory by the sandbox's memory guard");
         expect(note).toContain("not sent again by itself");
         expect(note).not.toContain("once memory has stayed free");
     });

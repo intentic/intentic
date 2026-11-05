@@ -16,7 +16,7 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
 import { markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
-import { killNote, runtimeKilled, witnessedKillCause } from "./child-death.js";
+import { type KillCause, killNote, runtimeKilled, witnessedKillCause } from "./child-death.js";
 import { ownKillOf, recentMemoryKills } from "../run/turn/holds/memory-kill.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
@@ -254,10 +254,11 @@ export const pendingQuestionOf = (actors: Actors, childId: string): PendingChild
 };
 
 /**
- * Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. A kill
- * netd recorded around the death (memory-kill.ts) names memory too, and one of a process the child started itself names
- * the child as the likely cause, which its own hold says too (classify-failure.ts dressDeath). `comesBack`: the child's
- * failure frame promised a re-run the sandbox sends by itself (a memory kill held for the memory release).
+ * Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. Judged
+ * as any conversation's dead runtime is (failure-queries.ts memoryDeathOf): memory's by a kill on record of a process
+ * the child started itself (memory-kill.ts ownKillOf), which names it the likely cause as its own hold does, else by the
+ * budget's own witness; never by another conversation's kill alone. A witness that cannot be read leaves it outside.
+ * `comesBack`: the child's failure frame promised a re-run the sandbox sends by itself (held for the memory release).
  */
 export const childKillNote = async (
     services: Pick<Services, "conversations" | "resources" | "config" | "logger">,
@@ -272,8 +273,15 @@ export const childKillNote = async (
         services.logger.warn({ err: error, conversationId: childId }, "subagent: the memory kills on record could not be read, the child's death is judged by the budget alone");
         return [];
     });
-    const cause = kills.length > 0 ? "memory" : await witnessedKillCause(services, childId);
-    return killNote(cause, failure, ownKillOf(kills, childId), comesBack);
+    const own = ownKillOf(kills, childId);
+    const cause =
+        own === undefined
+            ? await witnessedKillCause(services, childId).catch((error: Error): KillCause => {
+                  services.logger.warn({ err: error, conversationId: childId }, "subagent: the budget's readings could not be read, the child's death is named from outside");
+                  return "outside";
+              })
+            : "memory";
+    return killNote(cause, failure, own, comesBack);
 };
 
 // What the roster row says while a follow-up waits behind a turn somebody else started on the child.

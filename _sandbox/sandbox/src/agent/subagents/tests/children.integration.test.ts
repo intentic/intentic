@@ -18,7 +18,7 @@ import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
 import { FAN_OUT } from "../fan-out-governor.js";
 import { childLandingWords } from "../../../conversations/land/child-lands.js";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { childActor } from "../../../auth/principal.js";
@@ -58,6 +58,9 @@ import { beginTurn } from "../../../conversations/actor/conversation-actors.test
 import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
 import { drivenBy, fakeTurns } from "../../../seams/turn-starter.testing.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
+import { logsRoot } from "../../../seams/logs-root.js";
+import { killSentence } from "../../../system/resources/memory-kill-words.js";
+import { MEMORY_KILLS_FILE, type MemoryKill } from "../../../system/resources/memory-records.js";
 
 // One fleet's actors for every spawn here, and the cards parked in them: what a parent's own wait and answer read.
 const actors = memoryFleet().conversations;
@@ -2298,6 +2301,57 @@ describe("on a box short of memory", () => {
             status: "killed",
             error: "Killed from outside its turn (Claude Code process exited with code 143). Its session is intact: `send` it a message and it carries on from where it stopped.",
         });
+    });
+
+    // A roomy box whose history root is the suite's own, where `record` writes netd's lines for the processes it killed
+    // (memory-records.ts MEMORY_KILLS_FILE), for the child's death to be judged by.
+    const killsOnFile = async (): Promise<{ over: (body: TurnStarter["stream"]) => Services; record: (kills: readonly MemoryKill[]) => Promise<void> }> => {
+        const root = await mkdtemp(join(tmpdir(), "child-kills-"));
+        await mkdir(logsRoot(root), { recursive: true });
+        const base = spawnServices({}, [], actors, box(8));
+        const config = unstubbed<Services["config"]>("config", { ...base.config, historyRoot: root });
+        return {
+            over: (body) => drivenBy(unstubbed<Services>("services", { ...base, config }), body),
+            record: (kills) => writeFile(join(logsRoot(root), MEMORY_KILLS_FILE), kills.map((kill) => `${JSON.stringify(kill)}\n`).join("")),
+        };
+    };
+    const guardKill = (owner: string): MemoryKill => ({ at: Date.now() - 20_000, killer: "netd-guard", pid: 4242, comm: "cargo", rssBytes: 12 * GIB, owner, jobId: "job-7" });
+    const SIGKILLED = "Claude Code process terminated by signal SIGKILL";
+
+    // Any kill of the last few minutes used to make a child's dead runtime memory's, as it did any conversation's
+    // (failure-queries.ts): a runaway killed elsewhere says nothing of why this child died.
+    it("a runtime killed beside another conversation's kill, with memory to spare, is named killed from outside", async () => {
+        const files = await killsOnFile();
+        await files.record([guardKill("calm-otter-x1y2")]);
+        const services = files.over(fakeTurn([], [{ kind: "error", message: SIGKILLED }, { kind: "done" }]));
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "killed",
+            error: `Killed from outside its turn (${SIGKILLED}). Its session is intact: \`send\` it a message and it carries on from where it stopped.`,
+        });
+    });
+
+    it("a runtime killed beside a kill of its own process is memory's, naming that process as the likely cause", async () => {
+        let own: MemoryKill | undefined;
+        const files = await killsOnFile();
+        const services = files.over(async function* ownKilled(input) {
+            own = guardKill(input.conversationId ?? "");
+            await files.record([guardKill("calm-otter-x1y2"), own]);
+            yield { kind: "error", message: SIGKILLED };
+            yield { kind: "done" };
+        });
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        const row = listSubagentSessions(actors).find((session) => session.id === result.id);
+        expect(own?.owner).toBe(result.id);
+        expect(row?.error).toContain(`and the process killed was its own. ${own === undefined ? "" : killSentence(own)}. It is the likely cause`);
     });
 
     it("a failure of the child's own stays failed, in its own words", async () => {

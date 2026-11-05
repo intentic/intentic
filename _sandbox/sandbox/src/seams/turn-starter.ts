@@ -49,6 +49,10 @@ export type TurnInput = AgentTurn & {
     readonly unseenRuns?: readonly string[];
     // Which re-run this turn is, set where the re-run is made; its prompt opens with the matching note for the model.
     readonly resume?: ResumeReason | undefined;
+    // A memory kill's re-run: how many times the sandbox has sent this request again after memory killed it, this one
+    // included where the memory release sent it (agent/run/turn/holds/memory-kill.ts memoryRerunsOf). Journalled with
+    // the turn, so a restart that cuts it still knows how close it came to MEMORY_KILL_RERUNS. Set by the daemon alone.
+    readonly memoryReruns?: number | undefined;
     // With `sessionId`: resume that session only up to this entry, dropping what came after it (a response the provider's
     // safety classifier stopped, turn-resume.ts). Set by the daemon's re-run alone.
     readonly resumeAt?: string | undefined;

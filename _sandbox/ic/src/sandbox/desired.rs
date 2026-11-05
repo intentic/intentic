@@ -95,7 +95,7 @@ fn live_swap(slug: &str, container: &str, target: &Shape, had_saved: bool) -> Re
         .unwrap_or_default();
     let named = match &target.swap {
         Some(_) => format!("{gib} GiB"),
-        None => format!("the default, {gib} GiB for its memory cap"),
+        None => format!("the default, {gib} GiB for its memory"),
     };
     match leaf {
         containment::Leaf::Bounded => ui::done(&format!(

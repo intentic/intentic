@@ -225,9 +225,11 @@ elif grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
     # machine grinding. `memory.oom.group` 0: the kernel kills the process it scores worst, never every process in the
     # leaf with it (the owner's dev server and every other conversation's build live there too).
     #
-    # The formulas are memory-records.ts's (src/system/resources: workloadMemoryMax, defaultSwapGib), written again here
-    # in shell because nothing of the daemon is running yet; change one, change both. The daemon keeps the same bounds
-    # every minute after (daemon-cgroup.ts), which is also how a live reshape by ic reaches the leaf.
+    # The formulas are TypeScript's, written again here in shell because nothing of the daemon is running yet: the wall
+    # is memory-records.ts's workloadMemoryMax (src/system/resources), the default swap @intentic/sandbox-run's
+    # defaultSandboxSwapGib (_shared/sandbox-run/src/index.ts), the one source ic's shape.rs copies too; change the
+    # source, change the copies (docker-entrypoint.integration.test.ts holds this one to it). The daemon keeps the same
+    # bounds every minute after (daemon-cgroup.ts), which is also how a live reshape by ic reaches the leaf.
     workload_cap="$(cat "$cgroup_root/memory.max" 2>/dev/null || echo max)"
     case "$workload_cap" in '' | *[!0-9]*) workload_cap=max ;; esac
     if [ "$workload_cap" != "max" ]; then
@@ -237,9 +239,9 @@ elif grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
         cgroup_set "$cgroup_root/workload/memory.max" $(((workload_cap - workload_reserve) / 1048576 * 1048576))
     fi
     # The swap bound in whole GiB: what ic wrote into the running container on a live reshape, else what it set on the
-    # container (SANDBOX_SWAP, `<n>g`), else a quarter of the cap between 1 and 4 (defaultSwapGib). Never 0: a cgroup
-    # with no swap livelocks reclaiming file pages instead of reaching its OOM. With no cap at all, the machine's own
-    # memory stands in for it, as it does for the daemon's heap above.
+    # container (SANDBOX_SWAP, `<n>g`), else a quarter of the cap between 1 and 4 (defaultSandboxSwapGib). Never 0: a
+    # cgroup with no swap livelocks reclaiming file pages instead of reaching its OOM. With no cap at all, the machine's
+    # own memory stands in for it, as it does for the daemon's heap above.
     workload_swap_gib="$(sed -n 's/.*"swapGib"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' /run/intentic/workload-bounds.json 2>/dev/null | head -n 1)"
     case "$workload_swap_gib" in '' | *[!0-9]* | 0) workload_swap_gib="" ;; esac
     if [ -z "$workload_swap_gib" ]; then

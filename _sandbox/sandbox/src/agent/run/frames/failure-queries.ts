@@ -28,19 +28,35 @@ export const recordQueries = (services: Services): RecordQueries => ({
 });
 
 /**
- * Whether memory killed a runtime that died under a conversation's turn: any kill netd recorded in the last few minutes
- * says so (memory-kill.ts), and without one the budget's own witness does, as it does for a child's parent
- * (child-death.ts). A record that cannot be read is said in the log and judged as no kill, and a witness that cannot be
- * read leaves the death a stop, as it always was: holding a turn for room on a guess would hold it for nothing.
+ * Whether memory killed a runtime that died under a conversation's turn, by evidence tied to this death: a kill on
+ * record in the last few minutes of a process this conversation started (memory-kill.ts ownKillOf: the owner stamp its
+ * runtime and everything under it carry, so the runtime itself or anything it ran), else the budget's own witness, the
+ * OOM counter moving during a child's turn or a reading short in the last few minutes (child-death.ts, as a child's
+ * parent is told). Another conversation's kill alone is not: a runaway killed elsewhere says nothing of why this runtime
+ * died, and reading it so held every death of those minutes for room. The kills are handed on either way, so a death
+ * the witness calls memory's names the largest of them as what was found. A record that cannot be read is said in the
+ * log and judged as no kill, and a witness that cannot be read leaves the death a stop, as it always was: holding a turn
+ * for room on a guess would hold it for nothing.
  */
-const memoryDeathOf = async (services: Services, conversationId: string, turn: { readonly prompt: string; readonly messageId?: string | undefined }, now: number): Promise<MemoryDeath | undefined> => {
+const memoryDeathOf = async (
+    services: Services,
+    conversationId: string,
+    turn: { readonly prompt: string; readonly messageId?: string | undefined; readonly memoryReruns?: number | undefined },
+    now: number,
+): Promise<MemoryDeath | undefined> => {
     const kills = await recentMemoryKills(services.config.historyRoot, now).catch((error: Error) => {
         services.logger.warn({ err: error, conversationId }, "turn failed: the memory kills on record could not be read, the runtime's death is judged by the budget alone");
         return [];
     });
-    const cause = kills.length > 0 ? "memory" : await witnessedKillCause(services, conversationId).catch((error: Error) => {
-        services.logger.warn({ err: error, conversationId }, "turn failed: the budget's readings could not be read, the killed runtime is held as a stop");
-        return undefined;
-    });
-    return cause === undefined ? undefined : { cause, kills, own: ownKillOf(kills, conversationId), reruns: memoryRerunsMade(services.conversations, conversationId, turn) };
+    const own = ownKillOf(kills, conversationId);
+    const cause =
+        own === undefined
+            ? await witnessedKillCause(services, conversationId).catch((error: Error) => {
+                  services.logger.warn({ err: error, conversationId }, "turn failed: the budget's readings could not be read, the killed runtime is held as a stop");
+                  return undefined;
+              })
+            : "memory";
+    // The count rides on the turn too (memory-kill.ts memoryRerunsOf), for a re-run that outlived a restart, which took the holding.
+    const reruns = Math.max(memoryRerunsMade(services.conversations, conversationId, turn), turn.memoryReruns ?? 0);
+    return cause === undefined ? undefined : { cause, kills, own, reruns };
 };

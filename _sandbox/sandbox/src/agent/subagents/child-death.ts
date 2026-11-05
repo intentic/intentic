@@ -1,4 +1,5 @@
 import type { Services } from "../../composition.js";
+import { killSentence } from "../../system/resources/memory-kill-words.js";
 import type { MemoryKill } from "../../system/resources/memory-records.js";
 import { CHILDREN } from "./child-records.js";
 
@@ -47,18 +48,18 @@ const SAME_WALL = "Starting more agents now meets the same wall; have fewer run 
 /**
  * The ending the parent reads for a killed child: what happened, then the way back. `own` is a kill on record of a
  * process the child itself started (memory-kill.ts): then the child is the likely cause, held for a press rather than
- * sent again by itself, and the parent is told not to hand it the same work as it was. `comesBack`: the child's own
- * failure frame said the sandbox sends the turn again by itself (its memory kill held for the memory release,
- * room-holds.ts), so the parent is told to leave it be rather than to `send` it, which would run the same work a second
- * time beside the re-run.
+ * sent again by itself, named in the one sentence every place that tells of a kill uses (memory-kill-words.ts), and the
+ * parent is told not to hand it the same work as it was. Without one there is no kill to name, only a cause, and the
+ * note says it in its own words. `comesBack`: the child's own failure frame said the sandbox sends the turn again by
+ * itself (its memory kill held for the memory release, room-holds.ts), so the parent is told to leave it be rather than
+ * to `send` it, which would run the same work a second time beside the re-run.
  */
 export const killNote = (cause: KillCause, failure: string, own?: MemoryKill, comesBack = false): string => {
     if (cause === "memory" && own !== undefined) {
         return (
-            `Killed when the sandbox ran out of memory (${failure}), and the process killed was its own: ${own.comm} (pid ${String(own.pid)})` +
-            `${own.jobId === undefined ? "" : `, background job ${own.jobId}`}. It is the likely cause, so it is not sent again by itself. Its ` +
-            `session is intact, but do not \`send\` it the same work as it was: bound what grew (fewer jobs at once, a smaller build, a ` +
-            `capped input), or give the task to an agent that will.`
+            `Killed when the sandbox ran out of memory (${failure}), and the process killed was its own. ${killSentence(own)}. It is the likely ` +
+            `cause, so it is not sent again by itself. Its session is intact, but do not \`send\` it the same work as it was: bound what grew ` +
+            `(fewer jobs at once, a smaller build, a capped input), or give the task to an agent that will.`
         );
     }
     if (cause === "memory" && comesBack) {

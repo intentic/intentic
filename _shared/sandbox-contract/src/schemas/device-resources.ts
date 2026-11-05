@@ -32,7 +32,7 @@ export const SandboxShapeSchema = z.object({
         .nullable()
         .optional()
         .describe(
-            "Whole GiB of swap the sandbox's work (its `workload` cgroup) may page into, the swap alone, not memory plus swap; null for the default, a quarter of the memory cap between 1 and 4 GiB (memory-records.ts defaultSwapGib). Changed alone and now, ic applies it to the running sandbox without a restart. Absent from an ic or agent older than it.",
+            "Whole GiB of swap the sandbox's work (its `workload` cgroup) may page into, the swap alone, not memory plus swap; null for the default, a quarter of the memory cap between 1 and 4 GiB (@intentic/sandbox-run defaultSandboxSwapGib). Changed alone and now, ic applies it to the running sandbox without a restart. Absent from an ic or agent older than it.",
         ),
 });
 export type SandboxShape = z.infer<typeof SandboxShapeSchema>;
