@@ -267,6 +267,31 @@ describe("capability need", () => {
         });
     });
 
+    // 2026-11-05: "Connect Your Chrome for localhost" stayed up, in the chat and over the composer, after Chrome paired:
+    // a browser card holds no site, so read as a filter the target matched no connection ever.
+    it("lets a browser of the person's own meet an ask for a site, since its card holds none", async () => {
+        const CHROME: CapabilityCatalogEntry = { id: "chrome", name: "Your Chrome", kind: "webext", category: "devices", description: "", fields: [] };
+        const chrome = CapabilitySchema.parse({ id: "chrome", kind: "webext", config: { platform: "chrome" } });
+        const later = world();
+        const handler = () =>
+            capabilityNeed({
+                entries: async () => [CHROME],
+                capabilities: async () => later.capabilities,
+                status: async (capability) => later.statuses.get(capability.id) ?? { state: "active" },
+                gates: async () => [],
+                usableNow: async () => [],
+            });
+        const raised = await handler().resolve({ kind: "capability", entry: "chrome", target: "localhost:7880" }, asked());
+        expect(raised).toMatchObject({ kind: "raise", title: "Connect Your Chrome for localhost", subject: { mode: "connect", target: "localhost:7880" } });
+        const need = needOf({ kind: "capability", entry: "chrome", name: "Your Chrome", mode: "connect", target: "localhost:7880" });
+        later.capabilities = [chrome];
+        later.statuses.set("chrome", { state: "pending", detail: "that browser is closed" });
+        expect(await handler().check(need)).toBeUndefined();
+        later.statuses.set("chrome", { state: "active" });
+        expect(await handler().check(need)).toMatchObject({ result: 'Your Chrome is connected as "chrome".' });
+        expect(await handler().resolve({ kind: "capability", entry: "chrome", target: "localhost:7880" }, asked())).toMatchObject({ kind: "met" });
+    });
+
     it("counts two asks for the same site on one entry as one need, and another site as another", () => {
         const handler = kind(world());
         const github = { kind: "capability" as const, entry: "website", name: "Browser session", mode: "connect" as const, target: "https://github.com" };

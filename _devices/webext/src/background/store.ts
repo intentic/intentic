@@ -29,6 +29,8 @@ const KEY_LOG = "log";
 const KEY_REQUESTS = "requests";
 const KEY_CHOICE = "choice";
 const KEY_INBOX = "inbox";
+const KEY_CONNECTING = "connecting";
+const KEY_CONNECT_FAILED = "connectFailed";
 const KEY_DECLINED = "declined";
 const KEY_SETTINGS = "settings";
 const KEY_PROMPTED = "prompted";
@@ -44,6 +46,8 @@ const LEGACY_SCOPES = "scopes";
 const LEGACY_PENDING = "pending";
 
 const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
+const ArmedSchema = object({ url: string(), token: string(), name: string().optional(), at: number() });
+const ConnectFailureSchema = object({ url: string(), error: string() });
 const SiteChoiceSchema = object({ origin: string(), mode: zEnum(["read", "act"]), at: number() });
 const WindowIdSchema = number().int();
 const BoundsSchema = object({ left: number(), top: number(), width: number(), height: number() });
@@ -145,6 +149,18 @@ export interface SiteChoice {
 // How long a pick waits for Chrome's grant: the dialog is answered in seconds, and a pick whose dialog was turned down
 // should not be filed by a grant the person makes much later, some other way.
 export const CHOICE_HOLD_MS = 5 * 60_000;
+
+// A Connect the person pressed, held for Chrome's grant of that sandbox's origin (connecting.ts), for as long as a pick
+// waits for its grant and for the same reason.
+export interface ArmedPairing extends PairedSandbox {
+    readonly at: number;
+}
+
+// Why a pairing finished out of the popup's sight did not connect, kept for the popup to say on that sandbox's card.
+export interface ConnectFailure {
+    readonly url: SandboxKey;
+    readonly error: string;
+}
 
 // The last 200 actions: long enough to answer "what did it just do", short enough to never be a browsing-history
 // record (tool calls, not pages).
@@ -332,6 +348,24 @@ export const store = {
     inbox: async (): Promise<PairedSandbox | undefined> => await read<PairedSandbox | undefined>(KEY_INBOX, undefined, pairedOf),
     setInbox: async (pairing: PairedSandbox | undefined): Promise<void> =>
         pairing === undefined ? await chrome.storage.local.remove([KEY_INBOX]) : await chrome.storage.local.set({ [KEY_INBOX]: pairing }),
+    // The pairing the person just pressed Connect on, waiting for Chrome's grant of its origin.
+    armed: async (): Promise<ArmedPairing | undefined> =>
+        await read<ArmedPairing | undefined>(KEY_CONNECTING, undefined, (raw) => {
+            const parsed = ArmedSchema.safeParse(raw);
+            const pairing = parsed.success ? pairedOf(parsed.data) : undefined;
+            return parsed.success && pairing !== undefined ? { ...pairing, at: parsed.data.at } : undefined;
+        }),
+    setArmed: async (armed: ArmedPairing | undefined): Promise<void> =>
+        armed === undefined ? await chrome.storage.local.remove([KEY_CONNECTING]) : await chrome.storage.local.set({ [KEY_CONNECTING]: armed }),
+    connectFailed: async (): Promise<ConnectFailure | undefined> =>
+        await read<ConnectFailure | undefined>(KEY_CONNECT_FAILED, undefined, (raw) => {
+            const parsed = ConnectFailureSchema.safeParse(raw);
+            return parsed.success ? parsed.data : undefined;
+        }),
+    setConnectFailed: async (failure: ConnectFailure | undefined): Promise<void> =>
+        failure === undefined
+            ? await chrome.storage.local.remove([KEY_CONNECT_FAILED])
+            : await chrome.storage.local.set({ [KEY_CONNECT_FAILED]: failure }),
 
     // Sites the person declined, with when; entries past DECLINE_HOLD_MS are dropped on every write.
     declined: async (): Promise<Record<string, number>> =>

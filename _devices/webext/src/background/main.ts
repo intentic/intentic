@@ -3,6 +3,7 @@ import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
 import { agentWindow, forgetClosedWindow, rememberBounds, showTab } from "./agent-window.js";
 import { answerAsking, clearStaleAsking } from "./asking.js";
 import { redeemPairing } from "./enroll.js";
+import { connecting } from "./connecting.js";
 import { closeLink, ensureLinks, linkState } from "./link.js";
 import type { PopupCommand, PopupState, SandboxState } from "./messages.js";
 import { type PairedSandbox, sandboxKey, sandboxName, store } from "./store.js";
@@ -79,6 +80,8 @@ chrome.windows.onRemoved.addListener((windowId) => void forgetClosedWindow(windo
 // filed, every paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
 chrome.permissions.onAdded.addListener((added) => {
     void granted(added.origins ?? []).then(notifySandboxGrantsChanged);
+    // A sandbox's own origin, granted from a Connect press whose popup Chrome's dialog closed: its pairing ends here.
+    void connect.granted(added.origins ?? []);
     // A site a script needs coming back starts it again; the userScripts permission itself is followed by the popup.
     void syncScripts();
 });
@@ -91,7 +94,7 @@ const sandboxState = async (sandbox: PairedSandbox): Promise<SandboxState> => {
 };
 
 const readState = async (): Promise<PopupState> => {
-    const [paired, grants, pending, offered, paused, log, settings, passwords, asking, scripts] = await Promise.all([
+    const [paired, grants, pending, offered, paused, log, settings, passwords, asking, scripts, failed] = await Promise.all([
         store.sandboxes(),
         currentGrants(),
         store.pending(),
@@ -102,6 +105,7 @@ const readState = async (): Promise<PopupState> => {
         passwordsUiStatus(),
         store.asking(),
         scriptsState(),
+        store.connectFailed(),
     ]);
     const sandboxes = await Promise.all(paired.map(sandboxState));
     return {
@@ -115,6 +119,7 @@ const readState = async (): Promise<PopupState> => {
                       url: sandboxKey(offered.url),
                       name: sandboxName(offered),
                       paired: sandboxes.some((sandbox) => sandbox.url === sandboxKey(offered.url)),
+                      failed: failed?.url === sandboxKey(offered.url) ? failed.error : undefined,
                   },
         paused,
         log,
@@ -167,22 +172,8 @@ const pairWith = async (pairing: PairedSandbox): Promise<{ ok: boolean; message:
     return { ok: true, message: `Connected.` };
 };
 
-const pair = async (code: string): Promise<{ ok: boolean; message: string }> => {
-    const pairing = parseWebextPairingCode(code);
-    if (pairing === undefined) {
-        return { ok: false, message: `That is not a connection code from a sandbox. Copy it again from the browser's capability card.` };
-    }
-    return await pairWith(pairing);
-};
-
-// The pairing a sandbox's page parked (`offer`), accepted with the person's click in the popup.
-const acceptOffer = async (): Promise<{ ok: boolean; message: string }> => {
-    const parked = await store.inbox();
-    if (parked === undefined) {
-        return { ok: false, message: `That request is gone. Click Connect again in your sandbox.` };
-    }
-    return await pairWith(parked);
-};
+// A pasted code, or the pairing a sandbox's page parked (`offer`), redeemed once Chrome holds its origin.
+const connect = connecting(pairWith);
 
 // Forgets one sandbox and drops its socket; the others stay connected, and sites stay granted, since those are the
 // person's decision about this browser, not about that sandbox.
@@ -224,20 +215,21 @@ const enablePasswords = async (): Promise<{ ok: boolean; message?: string }> => 
 };
 
 // Connecting and disconnecting sandboxes, apart from the commands about this browser itself.
-type PairingCommand = Extract<PopupCommand, { readonly type: "pair" | "offer" | "accept-offer" | "dismiss-offer" | "unpair" }>;
-const PAIRING_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["pair", "offer", "accept-offer", "dismiss-offer", "unpair"]);
+type PairingCommand = Extract<PopupCommand, { readonly type: "connect" | "connect-finish" | "offer" | "dismiss-offer" | "unpair" }>;
+const PAIRING_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["connect", "connect-finish", "offer", "dismiss-offer", "unpair"]);
 const isPairing = (command: PopupCommand): command is PairingCommand => PAIRING_COMMANDS.has(command.type);
 
 const handlePairing = async (command: PairingCommand): Promise<unknown> => {
     switch (command.type) {
-        case "pair":
-            return await pair(command.code);
+        case "connect":
+            return await connect.arm(command.code);
+        case "connect-finish":
+            return await connect.finish(sandboxKey(command.sandbox));
         case "unpair":
             return await unpair(command.sandbox);
-        case "accept-offer":
-            return await acceptOffer();
         case "dismiss-offer":
             await store.setInbox(undefined);
+            await store.setConnectFailed(undefined);
             await refreshBadge();
             return { ok: true };
         case "offer": {

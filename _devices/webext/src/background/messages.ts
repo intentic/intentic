@@ -16,9 +16,11 @@ export const ALL_SITES = "*://*/*";
 export type PopupCommand =
     // Everything the popup renders, in one round trip: a popup that made six calls would paint in six stages.
     | { readonly type: "state" }
-    // A pasted or accepted pairing code; the popup already obtained the host permission, so this just redeems it and
-    // dials.
-    | { readonly type: "pair"; readonly code: string }
+    // The person pressed Connect: on a pasted code, or (no code) on the pairing a sandbox's page parked. Sent before the
+    // popup asks Chrome for the sandbox's origin, since Chrome's dialog closes the popup (background/connecting.ts).
+    | { readonly type: "connect"; readonly code?: string }
+    // Chrome said yes and the popup is still open: the worker redeems the pairing, unless the grant already did.
+    | { readonly type: "connect-finish"; readonly sandbox: SandboxKey }
     // The mode the person picked for a site, sent just before the popup asks Chrome for it: filed once Chrome holds the
     // site (site-grants.ts), since Chrome's dialog closes the popup before it could say so itself.
     | { readonly type: "allow"; readonly origin: string; readonly mode: WebExtGrant["mode"] }
@@ -34,8 +36,6 @@ export type PopupCommand =
     | { readonly type: "unpair"; readonly sandbox: SandboxKey }
     // A sandbox's own page offered a pairing (content/pair-bridge.ts); parked, not redeemed.
     | { readonly type: "offer"; readonly code: string }
-    // The person accepted the parked pairing: the worker redeems it, so its token never passes through the popup.
-    | { readonly type: "accept-offer" }
     // The person turned a parked pairing down, which is also what clears the badge it lit.
     | { readonly type: "dismiss-offer" }
     | { readonly type: "passwords-enable" }
@@ -124,8 +124,10 @@ export interface PopupState {
     // The sites the agents are waiting on, at most one per sandbox.
     readonly pending: readonly PendingAccess[];
     // A pairing waiting to be accepted, offered by a sandbox page the person had open; `paired` when that sandbox is
-    // already connected and this would only renew it.
-    readonly offered: { readonly url: SandboxKey; readonly name: string; readonly paired: boolean } | undefined;
+    // already connected and this would only renew it; `failed` when pressing Connect on it did not connect, saying why.
+    readonly offered:
+        | { readonly url: SandboxKey; readonly name: string; readonly paired: boolean; readonly failed: string | undefined }
+        | undefined;
     readonly paused: boolean;
     readonly log: readonly ActivityEntry[];
     readonly settings: Settings;

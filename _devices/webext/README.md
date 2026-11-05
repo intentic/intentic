@@ -25,6 +25,8 @@ flowchart LR
   the taskbar without taking focus. Whichever answers first wins, and the panel on the page is taken down.
 - Pairing: the sandbox page posts a code, `pair-bridge.js` (the only content script, on intentic.dev pages) hands it
   to the worker, and the person finishes it with a click in the popup, which redeems it at `/system/webext/enroll`.
+  Chrome closes the popup when its own permission dialog opens, so the click hands the pairing to the worker first
+  and the worker redeems it once Chrome grants the sandbox's origin (`connecting.ts`): one Connect, one Allow.
   The token it gets back is the only secret the extension stores. The code carries the sandbox's name, which the popup
   lists it by.
 - One extension serves several sandboxes (since 2026-10-28; before, pairing a second replaced the first). Each paired
@@ -82,6 +84,8 @@ flowchart LR
 ## Key files
 
 - [src/background/main.ts](src/background/main.ts) — the service worker: keepalive alarm, pairing, popup messages.
+- [src/background/connecting.ts](src/background/connecting.ts) — a Connect press finished by Chrome's grant, since its
+  dialog closes the popup that asked.
 - [src/background/store.ts](src/background/store.ts) — everything kept, per sandbox or for the whole browser, and the
   move from a build that kept one sandbox.
 - [src/background/policy.ts](src/background/policy.ts) — every allow or refuse decision, with its message.

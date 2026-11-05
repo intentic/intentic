@@ -6,15 +6,19 @@ import { button, byId, h, say, send, show } from "./dom.js";
 // and the way to end that one connection without touching the others. Below them, "Connect another sandbox", since
 // one extension serves every sandbox the person has (2026-10-28; before, pairing a second replaced the first).
 
-// Pairs a sandbox: asks Chrome for its origin while the click that started this is still on the stack (an await in
-// front of the request would spend it), then has the worker redeem the code, or the parked offer when no code is
-// given. Answers the sentence to show, or nothing when it worked.
+// Pairs a sandbox: hands the worker the code (or, with none, the parked offer), then asks Chrome for the sandbox's
+// origin while the click that started this is still on the stack. Chrome closes this popup the moment its own dialog
+// takes focus (crbug.com/40721470), so nothing after the request is sure to run: the worker finishes the pairing once
+// Chrome holds the origin (background/connecting.ts), and the popup, when it is still open, only collects the answer.
+// Sent, not awaited, since an await in front of the request would spend the click. Answers the sentence to show, or
+// nothing when it worked.
 export const pairSandbox = async (url: string, code: string | undefined, refresh: () => Promise<void>): Promise<string | undefined> => {
     const origin = `${new URL(url).origin}/*`;
+    void send(code === undefined ? { type: "connect" } : { type: "connect", code });
     if (!(await chrome.permissions.request({ origins: [origin] }))) {
         return `Without access to ${new URL(url).host} this extension cannot reach that sandbox.`;
     }
-    const result = await send<{ ok: boolean; message: string }>(code === undefined ? { type: "accept-offer" } : { type: "pair", code });
+    const result = await send<{ ok: boolean; message: string }>({ type: "connect-finish", sandbox: url });
     if (!result.ok) {
         return result.message;
     }

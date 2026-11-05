@@ -60,6 +60,25 @@ const settingOf = (capability: Capability, key: string): string => {
 const fillable = (entry: CapabilityCatalogEntry): ReadonlySet<string> =>
     new Set(entry.fields.filter((field) => field.secret !== true && field.value === undefined).map((field) => field.key));
 
+// Whether a target can tell this entry's connections apart: only when the entry has a field that holds a site (or a
+// linked sandbox's name). A browser of the person's own has none (its sites are Chrome's grants, asked for on the
+// page), so a `--target` on it is context for the card and narrows nothing: read as a filter, no connection could
+// ever serve it, and its card stayed up after the browser connected.
+const narrowsByTarget = (entry: CapabilityCatalogEntry): boolean => {
+    const keys = fillable(entry);
+    return entry.kind === "link" || TARGET_FIELDS.some((key) => keys.has(key));
+};
+
+// The target an ask is narrowed by: its own for an entry that holds sites, none for one that holds no site.
+const narrowingTarget = (entry: CapabilityCatalogEntry, target: string | undefined): string | undefined =>
+    narrowsByTarget(entry) ? target : undefined;
+
+// The connections a raised ask is about: the one it names, else any serving its target.
+const answers =
+    (entry: CapabilityCatalogEntry, subject: CapabilityNeed) =>
+    (capability: Capability): boolean =>
+        subject.instance === undefined ? servesTarget(capability, narrowingTarget(entry, subject.target) ?? "") : capability.id === subject.instance;
+
 const secretKeys = (entry: CapabilityCatalogEntry): ReadonlySet<string> =>
     new Set(entry.fields.filter((field) => field.secret === true).map((field) => field.key));
 
@@ -203,12 +222,13 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         if ((ask.set !== undefined && Object.keys(ask.set).length > 0) || ask.reconnect === true) {
             return refused("invalid", "A removal takes no --set and no --reconnect: it changes nothing first.");
         }
-        const matching = matchingOf(found, instancesOf(entry, await deps.capabilities()), ask.target);
+        const narrowed = narrowingTarget(entry, ask.target);
+        const matching = matchingOf(found, instancesOf(entry, await deps.capabilities()), narrowed);
         const [only, ...more] = matching;
         if (only === undefined) {
             return {
                 kind: "met",
-                message: `No ${entry.name} connection${ask.target === undefined ? "" : ` for ${hostOf(ask.target)}`} is connected: there is nothing to remove.`,
+                message: `No ${entry.name} connection${narrowed === undefined ? "" : ` for ${hostOf(narrowed)}`} is connected: there is nothing to remove.`,
             };
         }
         if (more.length > 0) {
@@ -257,7 +277,8 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             );
         }
         const all = instancesOf(entry, await deps.capabilities());
-        const matching = matchingOf(found, all, ask.target);
+        const narrowed = narrowingTarget(entry, ask.target);
+        const matching = matchingOf(found, all, narrowed);
         const statuses = await Promise.all(matching.map(async (capability) => ({ capability, status: await deps.status(capability) })));
         const live = statuses.find(({ status }) => status.state === "active");
         const connected = live ?? statuses[0];
@@ -296,9 +317,9 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             mode: "connect",
             ...(ask.target === undefined ? {} : { target: ask.target }),
             ...(Object.keys(prefill).length === 0 ? {} : { prefill }),
-            ...(all.length > 0 && ask.target !== undefined
+            ...(all.length > 0 && narrowed !== undefined
                 ? {
-                      reason: `${all.map((capability) => `"${capability.id}"`).join(", ")} ${all.length === 1 ? "is" : "are"} connected, but not for ${hostOf(ask.target)}.`,
+                      reason: `${all.map((capability) => `"${capability.id}"`).join(", ")} ${all.length === 1 ? "is" : "are"} connected, but not for ${hostOf(narrowed)}.`,
                   }
                 : {}),
         });
@@ -328,10 +349,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         if (subject.mode === "change") {
             return changeApplied(entry, all, subject);
         }
-        const candidates =
-            subject.mode === "reconnect"
-                ? all.filter((capability) => capability.id === subject.instance)
-                : all.filter((capability) => subject.target === undefined || servesTarget(capability, subject.target));
+        const candidates = all.filter(answers(entry, subject));
         for (const capability of candidates) {
             if ((await deps.status(capability)).state !== "active") {
                 continue;
@@ -384,11 +402,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             const instance =
                 entry === undefined
                     ? undefined
-                    : instancesOf(entry, await deps.capabilities()).find((capability) =>
-                          subject.instance === undefined
-                              ? subject.target === undefined || servesTarget(capability, subject.target)
-                              : capability.id === subject.instance,
-                      );
+                    : instancesOf(entry, await deps.capabilities()).find(answers(entry, subject));
             if (instance === undefined || (await deps.status(instance)).state !== "active") {
                 return { refused: `${subject.name} is not working yet: finish its setup first, then press again.` };
             }

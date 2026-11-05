@@ -181,8 +181,9 @@ const offerReason = (state: PopupState, offered: NonNullable<PopupState["offered
 };
 
 const offerCard = (state: PopupState, offered: NonNullable<PopupState["offered"]>): HTMLElement => {
+    // Why pressing Connect did not connect, when the worker finished it after Chrome's dialog had closed the popup.
     const error = h("div", { class: "error" });
-    show(error, false);
+    say(error, offered.failed);
     return h(
         "div",
         { class: "card ask" },
