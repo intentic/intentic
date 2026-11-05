@@ -10,4 +10,11 @@ export const privacySamples: GroupSamples<`privacy`> = () => ({
     preview: { text: `EMP-123456` },
     sources: undefined,
     forget: { source: `clients.csv (name)` },
+    leaks: undefined,
+    report: { value: `Jan Kowalski`, class: `person-name` },
+    judge: { id: `L1`, state: `dismissed` },
+    scan: {},
+    applyProposal: { id: `P1` },
+    dismissProposal: { id: `P1` },
+    hardeningSession: { conversationId: `smoke-conversation` },
 });

@@ -42,6 +42,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     // The personal data the shield masked, by token, and the pictures it painted over.
     { path: "privacy-vault.json", portability: "secret" },
     { path: "privacy-images/", portability: "secret" },
+    // Values the shield let through, with the text around them, and the hardening proposals waiting on them
+    // (privacy/leaks/leak-store.ts): personal data, so it goes where the vault goes.
+    { path: "privacy-leaks.json", portability: "secret" },
     { path: "ssh-keys/", portability: "secret" },
     // An update's pre-images of the files above; a vault's copy is a vault.
     { path: "converting/", portability: "secret" },
