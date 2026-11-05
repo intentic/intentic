@@ -172,7 +172,9 @@ export const UNWARMABLE = new Set(["@intentic/web", "@intentic/demo"]);
 
 /**
  * Which of the `missing` tasks a warm can run, and which it leaves to CI: one of UNWARMABLE's, and every one that
- * depends on one still missing, since turbo would run that dependency first (`typecheck` depends on `^typecheck`).
+ * depends on one still missing, since turbo would run that dependency first. `typecheck` itself depends only on
+ * `^typecheck:inputs`, a no-op hash that is never missing, so this blocks a check only through an edge a package's
+ * own turbo.json adds.
  * `tasks` is the whole plan, read for each task's dependencies; a dependency already in the shared cache is a hit, and
  * blocks nothing.
  */

@@ -78,7 +78,8 @@ flowchart LR
 - **Updater** (direct only, `update/`). On launch and once a day it reads
   `releases/latest/download/intentic-device.json` (`{version, url, sha256}`) from the GitHub releases. A newer build is
   downloaded and checked against its digest, then handed to PackageInstaller for the person to confirm.
-  `.github/workflows/device-android.yml` writes that manifest when release.yml publishes.
+  `.github/workflows/device-android.yml` writes that manifest beside the release's builds, and release.yml attaches it
+  once the Release is cut.
 - **Android 13 and later** keep an app installed from outside a store from turning on its accessibility service or
   notification access. The person must first allow it under App info ▸ ⋮ ▸ Allow restricted settings; the app's
   "Access on this phone" rows say so and open the right screens.

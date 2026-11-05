@@ -110,15 +110,26 @@
         // pipelines: `Cached: 0 cached, 46 total` for typecheck (~2.5 min) while `build` and `test` hit 27/56
         // and 19/42 from the same cache dir in the same job.
         //
-        // `^typecheck` is what replaces that invalidation without going stale: a check reads its dependencies'
-        // emitted .d.ts, so a change in a dependency has to re-run it, and a dependency's task hash says
-        // exactly that. It propagates through packages that have no typecheck script of their own.
+        // `^typecheck:inputs` is what replaces that invalidation without going stale: a check reads its
+        // dependencies' emitted .d.ts, so a change in a dependency has to re-run it, and a dependency's task hash
+        // says exactly that. The edge is to the HASH, not to the dependency's typecheck: no package defines a
+        // `typecheck:inputs` script, so each is a no-op whose hash is its package's files plus its own
+        // dependencies' carriers, the whole closure, and it finishes at once. No typecheck writes anything another
+        // reads (every one is --noEmit; the declarations come from the prepass), so waiting on `^typecheck` only
+        // serialized them: `@intentic/demo` (5.8 min) sat behind `@intentic/web` (7.6 min) in verify-core, which
+        // also ran web's check a second time only because demo and share-view pulled it in (verify-platform owns
+        // it). Measured on run 41948882320, 2026-11-05.
         // TSBUILDINFO_SHARE_DIR is where a CI check keeps its build info for the next one on any runner
         // (_tools/scripts/lib/seed-buildinfo.mjs): a path, so passed through rather than hashed.
         "typecheck": {
-            "dependsOn": ["^typecheck"],
+            "dependsOn": ["^typecheck:inputs"],
             "outputs": [],
             "passThroughEnv": ["INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION", "TSBUILDINFO_SHARE_DIR"]
+        },
+        // The hash carrier above: never give a package a script by this name, or it becomes a real task again.
+        "typecheck:inputs": {
+            "dependsOn": ["^typecheck:inputs"],
+            "outputs": []
         },
         "check": {
             "dependsOn": ["^build"],

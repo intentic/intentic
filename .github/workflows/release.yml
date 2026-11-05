@@ -104,7 +104,9 @@ jobs:
   # publish inside its own artifact, so what publish attaches and attests is what the installers carry.
   #
   # Its own job because the two desktop builds run beside each other and both need it. What that costs is this job
-  # on the front of the Windows chain; the five builds themselves moved here out of linux-build.
+  # on the front of the Windows chain, so it builds only the two binaries an installer carries: linux-x64 and
+  # windows-x64, about 50 s of the five builds' 2m15s. The three that only the Release attaches build in
+  # ic-build-more beside it, and publish adds them to this directory.
   ic-build:
     needs: plan
     if: ${{ needs.plan.outputs.version != '' }}
@@ -149,16 +151,55 @@ jobs:
       # Empties _sandbox/ic/dist-bin among the rest, so the artifact holds this build and nothing a previous job on
       # this runner left there.
       - uses: ./.github/actions/prepare-workspace
-      # Every platform a connect/recreate one-liner can land on: the .sh shims cover Linux + macOS, the .ps1 shims
-      # Windows. All five come off the zig/xwin toolchains baked into this image, with no Apple SDK anywhere in it
-      # (build-ic.sh header).
-      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      # The two platforms an installer carries; ic-build-more builds the rest of what a connect/recreate one-liner
+      # can land on (the .sh shims cover Linux + macOS, the .ps1 shims Windows). All five come off the zig/xwin
+      # toolchains baked into this image, with no Apple SDK anywhere in it (build-ic.sh header).
+      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 windows-x64
       - run: bash _tools/scripts/build/build-intentic-engine.sh
-      # A directory upload is rooted at the directory, so the artifact holds the five binaries by name, and a download
+      # A directory upload is rooted at the directory, so the artifact holds the binaries by name, and a download
       # into _sandbox/ic/dist-bin puts them back exactly where build-ic.sh wrote them.
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: ic-release-binaries
+          path: _sandbox/ic/dist-bin
+          if-no-files-found: error
+          retention-days: 7
+
+  # The rest of the ic CLI's platforms, which no installer carries and only the Release attaches (the .sh shims
+  # download them): beside the desktop chain instead of in front of it. Built once, as ic-build's two are, so what
+  # the Release attaches is still one set of bytes per platform.
+  #
+  # Its own cargo target directory, because ic-build and linux-build hold /ci-cache/desktop-target and this job
+  # runs while they do: two cargo processes on one directory wait on each other's lock.
+  ic-build-more:
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+      CARGO_HOME: /ci-cache/cargo
+      CARGO_TARGET_DIR: /ci-cache/ic-more-target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/prepare-workspace
+      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-arm64 darwin-x64 darwin-arm64
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: ic-release-binaries-more
           path: _sandbox/ic/dist-bin
           if-no-files-found: error
           retention-days: 7
@@ -473,8 +514,8 @@ jobs:
   # stitching (release-images.sh needs both halves, so sandbox-arm64 and images-amd64 both gate it — merging
   # without one would fail after the GitHub release already went out), and the attestations.
   publish:
-    needs: [plan, windows-verify, sandbox-arm64, images-amd64, linux-build]
-    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' && needs.images-amd64.result == 'success' && needs.linux-build.result == 'success' }}
+    needs: [plan, windows-verify, sandbox-arm64, images-amd64, linux-build, ic-build-more]
+    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' && needs.images-amd64.result == 'success' && needs.linux-build.result == 'success' && needs.ic-build-more.result == 'success' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       # Still ci-desktop rather than ci-base: the assemble step re-runs verify-desktop-bundle.sh over the
@@ -558,6 +599,19 @@ jobs:
         with:
           name: linux-release-artifacts
           path: ${{ github.workspace }}
+      # ic's other three platforms (ic-build-more), beside the two linux-build carried.
+      - uses: ./.github/actions/download-artifact-retry
+        with:
+          name: ic-release-binaries-more
+          path: _sandbox/ic/dist-bin
+      # Two jobs now build the five, so the set is counted before anything is tagged: a shim asks this Release for
+      # its platform's binary by name, and a missing one is a one-liner that 404s for everyone on that platform.
+      - name: Every platform's ic is here
+        shell: bash
+        run: |
+          for name in ic-linux-amd64 ic-linux-arm64 ic-windows-amd64.exe ic-darwin-amd64 ic-darwin-arm64; do
+            [ -f "_sandbox/ic/dist-bin/$name" ] || { echo "::error::_sandbox/ic/dist-bin/$name is missing"; exit 1; }
+          done
       - uses: ./.github/actions/ghcr-login
         with:
           username: ${{ github.actor }}
@@ -689,15 +743,34 @@ jobs:
           subject-digest: ${{ steps.digests.outputs.dind_host }}
           push-to-registry: true
 
-  # Intentic Device, the Android phone app, built at the version just published and attached to that Release
-  # (device-android.yml). After publish rather than one of its gates: a phone app that fails to build must not hold
-  # back the sandbox, and the APK only ever names a Release that exists.
+  # Intentic Device, the Android phone app, built at the planned version beside the other builds (device-android.yml)
+  # and attached to the Release below once publish has cut it. Not one of publish's gates: a phone app that fails to
+  # build must not hold back the sandbox, and the APK only ever names a Release that exists.
   device-android:
-    needs: [plan, publish]
-    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.released == 'true' && needs.plan.outputs.version != '' }}
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
     permissions:
-      contents: write
+      contents: read
     uses: ./.github/workflows/device-android.yml
     with:
       tag: v${{ needs.plan.outputs.version }}
     secrets: inherit
+
+  device-android-attach:
+    needs: [plan, publish, device-android]
+    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.released == 'true' && needs.device-android.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: intentic-device-release
+          path: device-release
+      - name: Attach the APK and its manifest to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" device-release/* --clobber --repo "$GITHUB_REPOSITORY"

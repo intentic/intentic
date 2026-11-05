@@ -135,8 +135,22 @@ case " $IMAGES " in
         # is the minimal image under `core-` prefixed tags. Composed fresh here so the published bytes always
         # come from the checked-in pack files.
         node "$root/_tools/scripts/image/compose-image-dockerfile.mjs" standard > "$root/.image-out/Dockerfile.standard"
-        ZSTD=1 publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out"
-        ZSTD=1 TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
+        #
+        # BOTH AT ONCE, on the one builder. One after the other they were 8.8 and 5.0 minutes of the release's
+        # images-amd64 (run 41948882320), and the second spent its first half re-importing the same cache manifests
+        # and re-running steps the first had just run. Concurrent builds on one BuildKit share its solver, so a
+        # step both Dockerfiles have runs once. Each build's lines carry its profile, since both number their steps
+        # from #1, and the script fails when either does, after both have finished.
+        ( ZSTD=1 publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out" 2>&1 \
+            | sed -u 's/^/[standard] /' ) &
+        standard=$!
+        ( ZSTD=1 TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out" 2>&1 \
+            | sed -u 's/^/[core] /' ) &
+        core=$!
+        failed=""
+        wait "$standard" || failed="$failed standard"
+        wait "$core" || failed="$failed core"
+        [ -z "$failed" ] || { echo "error: the sandbox image failed to publish:$failed" >&2; exit 1; }
         ;;
 esac
 case " $IMAGES " in

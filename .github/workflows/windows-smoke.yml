@@ -87,9 +87,14 @@ jobs:
       # must not fail.
       INTENTIC_AGENT_AUTH_VOLUME: ${{ vars.WINDOWS_AGENT_AUTH_VOLUME }}
     steps:
+      # KEPT BETWEEN RUNS, as the Linux fleet's checkouts are: this is one long-lived machine, and a clean checkout
+      # deleted node_modules and every turbo output, so each release paid a full install and build here (2m13s of
+      # `pnpm install` alone, every package downloaded again: run 41948882320). What a previous run left that a
+      # later one could mistake for its own is the downloaded artifact, and the step before the download removes it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          clean: false
       # Enforce the bytes WSL reads: checkout-index still left CRLF on this persistent Windows runner
       # (39960347465), despite the repository's eol=lf attribute.
       - name: Refresh the WSL worker script with LF line endings
@@ -107,23 +112,30 @@ jobs:
 
       # No pnpm-setup composite here: that action is written for the Linux container jobs (it points the store
       # and turbo cache at /ci-cache, which does not exist on this box). A plain install is what this needs.
+      #
+      # No `cache: pnpm` either. It never once saved here: its post step tars the store through Git's tar, which
+      # finds no gzip on this machine and exits 127, so every restore missed. The store lives on this disk instead.
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: package.json
-          cache: pnpm
 
       # Scoped to the smoke tier's own subtree rather than the whole workspace: this box carries Node, pnpm and
       # Git and nothing else (docs/ops/ci-runner-windows.md), while the workspace at large pulls native packages
       # that fall back to compiling on Windows — node-pty is source-compiled wherever it lands, so a full
       # install ends in node-gyp hunting for a Python and an MSVC toolchain this machine is deliberately
       # without. Nothing the tier loads lives outside the subtree.
-      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
+      #
+      # The store is named, because pnpm's default sits under the directory pnpm/action-setup installs pnpm into,
+      # which it recreates every run ("reused 0, downloaded 561"). The tool cache is on the workspace's drive, so
+      # pnpm hard-links from it, and it outlives the job.
+      - run: pnpm install --frozen-lockfile --store-dir "$env:RUNNER_TOOL_CACHE/pnpm-store" --filter=@intentic/desktop-smoke-windows...
       # The tier reads window titles through @intentic/desktop-automation, so both packages are built rather than run from
       # source — the export condition that resolves a workspace package to its TypeScript is a bun/tsgo
       # arrangement, not something plain node applies.
       # `id`, because the teardown at the bottom runs on `always()` and the harness it runs is what this step
-      # produces: `dist/` is untracked, the checkout above deletes it, and nothing else puts it back.
+      # produces: `dist/` is untracked, and a run that fails before this step must not tear down with the dist a
+      # previous commit built.
       - id: build
         run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 
@@ -153,6 +165,12 @@ jobs:
       # about the build. Downloading first made that timeout skip every step below it — including the reconcile
       # whose whole job is to hand the next run a clean machine — so a flaky minute of network left the box dirty
       # and the next run demanding a person. Nothing above this step reads the artifact.
+      #
+      # Emptied first, because the checkout keeps the workspace: a glob over this directory (ci.yml's installer, the
+      # engine tarball below) would otherwise also match what an earlier run downloaded.
+      - name: Forget the artifacts an earlier run downloaded
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue windows-artifacts
       - uses: ./.github/actions/download-artifact-retry
         with:
           name: ${{ inputs.artifact-name }}

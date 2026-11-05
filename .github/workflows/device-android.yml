@@ -5,11 +5,14 @@
 #   build    every push and pull request that touches it: the unit tests of both flavors (they read the contract's
 #            golden wire, _shared/sandbox-contract/golden/phone-wire.json, so a change there runs them too) and a
 #            debug APK of each, on a GitHub-hosted runner, touching no secret.
-#   release  called by release.yml once a release is published, with its tag: the `direct` flavor built at that
-#            version, signed with the app's key, and attached to the Release as intentic-device-<version>.apk with
-#            intentic-device.json beside it (version, url, sha256), which the app's own updater and
-#            intentic.dev/phone/apk read. A call rather than a `release: published` trigger, since the Release is
-#            published with GITHUB_TOKEN, whose events start no workflow.
+#   release  called by release.yml beside the release's other builds, with the tag it is about to cut: the `direct`
+#            flavor built at the commit that tag will name, signed with the app's key, and kept as the
+#            intentic-device-release artifact: intentic-device-<version>.apk with intentic-device.json beside it
+#            (version, url, sha256), which the app's own updater and intentic.dev/phone/apk read. release.yml's
+#            device-android-attach puts both on the Release once publish has cut it. Built beside rather than after
+#            publish, where it was three minutes at the end of every release; the tag names this same commit,
+#            since nothing in the release commits. A call rather than a `release: published` trigger, since the
+#            Release is published with GITHUB_TOKEN, whose events start no workflow.
 #
 # Gradle is the version scripts/gradle.sh pins and digest-checks; there is no wrapper jar in the repository.
 name: Intentic Device (Android)
@@ -29,7 +32,7 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: The published Release's tag (v1.2.3) to build the app at and attach it to.
+        description: The tag (v1.2.3) the release is about to cut at this commit; the app is built at its version.
         type: string
         required: true
   workflow_dispatch:
@@ -69,14 +72,12 @@ jobs:
     if: inputs.tag != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: write
     env:
       TAG: ${{ inputs.tag }}
     steps:
+      # The caller's commit: the tag does not exist yet, and when it does it names this commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
           persist-credentials: false
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -138,14 +139,19 @@ jobs:
           -Pandroid.injected.signing.store.password="$STORE_PASSWORD"
           -Pandroid.injected.signing.key.alias="$KEY_ALIAS"
           -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-      - name: Attach the APK and its manifest to the release
+      - name: Stage the APK and its manifest
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.name }}
         run: |
+          mkdir -p device-release
           apk="intentic-device-$VERSION.apk"
-          cp _devices/android/app/build/outputs/apk/direct/release/*.apk "$apk"
-          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          cp _devices/android/app/build/outputs/apk/direct/release/*.apk "device-release/$apk"
+          sha="$(sha256sum "device-release/$apk" | cut -d' ' -f1)"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${apk}"
-          printf '{"version":"%s","url":"%s","sha256":"%s"}\n' "$VERSION" "$url" "$sha" >intentic-device.json
-          gh release upload "$TAG" "$apk" intentic-device.json --clobber --repo "$GITHUB_REPOSITORY"
+          printf '{"version":"%s","url":"%s","sha256":"%s"}\n' "$VERSION" "$url" "$sha" >device-release/intentic-device.json
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: intentic-device-release
+          path: device-release
+          if-no-files-found: error
+          retention-days: 7
