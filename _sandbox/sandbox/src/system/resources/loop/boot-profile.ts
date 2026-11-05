@@ -77,9 +77,20 @@ export const startBootProfile = (logger: Logger, dir: string, options: BootProfi
         over = true;
         void end(keep).catch((error: unknown) => logger.warn({ err: error }, "boot: the start-up profile could not be taken"));
     };
-    const timer = setTimeout(() => settle(true), windowMs);
-    // The profile must never be what keeps the daemon alive.
-    timer.unref();
+    // The window counts from the first sample, not from the call: a profiler slow to start on a loaded host (2.5 s on a CI
+    // runner, 2026-11-05) otherwise spends the window before it samples anything. A start that failed settles at once,
+    // so it is logged.
+    let timer: NodeJS.Timeout | undefined;
+    void started.then(
+        () => {
+            if (!over) {
+                timer = setTimeout(() => settle(true), windowMs);
+                // The profile must never be what keeps the daemon alive.
+                timer.unref();
+            }
+        },
+        () => settle(true),
+    );
     return {
         ready: started,
         stop: () => {

@@ -326,10 +326,11 @@ const areaDirsOf = (projectRoot: string, tree: Tree): AreaDir[] => {
     if (shelf !== undefined) {
         return shelf.packages.map((entry) => ({ name: `${shelf.name}/${entry.name}`, dir: entry.dir, packages: [] }));
     }
+    // Unwrapped only when its contents split into areas: a lone `src/` of files, as in an expanded `engine/`, stays a
+    // child rather than vanishing into its own empty list.
     const [lone] = areas;
-    return areas.length === 1 && lone !== undefined
-        ? areaDirsOf(lone.dir, tree).map((area) => ({ ...area, name: `${lone.name}/${area.name}` }))
-        : areas;
+    const inner = areas.length === 1 && lone !== undefined ? areaDirsOf(lone.dir, tree) : [];
+    return lone !== undefined && inner.length >= 2 ? inner.map((area) => ({ ...area, name: `${lone.name}/${area.name}` })) : areas;
 };
 
 export interface WorkspaceMapInput {

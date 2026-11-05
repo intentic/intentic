@@ -33,7 +33,7 @@ describe(`the boot profile`, () => {
     it(`keeps a stall's profile, with the function that held the loop in it`, async () => {
         const dir = mkdtempSync(join(tmpdir(), "boot-profile-"));
         const { logger, warned } = recorder();
-        // A window wide enough that a slow profiler start on a loaded runner still leaves the stall inside it.
+        // The window counts from the first sample, so a profiler slow to start on a loaded runner cannot spend it.
         const boot = startBootProfile(logger, dir, { windowMs: 2_000, stallMs: 150 });
         // Sampling starts over three inspector round-trips; a stall before them is measured but never profiled.
         await boot.ready;
