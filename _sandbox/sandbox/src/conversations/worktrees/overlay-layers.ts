@@ -1,8 +1,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// The overlay layers an isolated turn's mirrors are mounted from (isolation.ts): how their options are spelled, and how
-// a layer is made ready to mount again, volatile where the kernel allows it.
+// The overlay layers an isolated turn's mirrors are mounted from (isolation.ts, and the fenced sandbox's bwrap overlays in
+// turn-sandbox.ts over the same dirs): how their options are spelled, and how a layer is made ready to mount again,
+// volatile where the kernel allows it.
 
 // A bind kept one st_dev, letting pnpm hardlink installs into tracked files; an overlay copies-up on first write
 // instead, and a cross-device hardlink throws EXDEV.
@@ -42,7 +43,11 @@ export const currentBoot = (): Promise<string | undefined> => readTrimmed(BOOT_I
 // wrote it, which nothing interrupted; a layer last mounted volatile in an earlier boot is thrown away and starts
 // empty, since what it holds (installs and build output over the main checkout's) is rebuilt, and half-written it would
 // be wrong without saying so.
-export const prepareLayer = async (layer: string, boot: string | undefined): Promise<"kept" | "discarded"> => {
+// `durable` readies a layer about to be mounted WITHOUT `volatile`: the fenced sandbox's bwrap overlays (turn-sandbox.ts)
+// over the same layer dirs. The kernel refuses a marked work dir however the next mount is made (2026-11-05: every turn
+// of a conversation moved into the jail failed on "Can't make overlay mount … Invalid argument"), so it is cleared the
+// same way, but no boot is recorded: a layer only ever mounted durable has nothing to lose to a crash and keeps across boots.
+export const prepareLayer = async (layer: string, boot: string | undefined, mount: "volatile" | "durable" = "volatile"): Promise<"kept" | "discarded"> => {
     const recorded = await readTrimmed(join(layer, LAYER_BOOT));
     const stale = recorded !== undefined && recorded !== boot;
     if (stale) {
@@ -54,7 +59,7 @@ export const prepareLayer = async (layer: string, boot: string | undefined): Pro
     }
     await mkdir(join(layer, "upper"), { recursive: true });
     await mkdir(join(layer, "work"), { recursive: true });
-    if (boot !== undefined && (stale || recorded !== boot)) {
+    if (mount === "volatile" && boot !== undefined && (stale || recorded !== boot)) {
         await writeFile(join(layer, LAYER_BOOT), `${boot}\n`);
     }
     return stale ? "discarded" : "kept";

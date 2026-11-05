@@ -6,7 +6,7 @@ import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { requires } from "@intentic/testing/requires";
 import { nsenterArgv } from "../../workload/namespace-entry.js";
 import { hiddenIn, type IsolationAnchor } from "./isolation.js";
-import { type FencedPlan, SANDBOX_UID, type SandboxSources, startSandboxAnchor } from "./turn-sandbox.js";
+import { type FencedPlan, layerOf, SANDBOX_UID, type SandboxSources, startSandboxAnchor } from "./turn-sandbox.js";
 
 // A real fenced sandbox around a small workspace: what a turn inside can see, what it holds, and when it ends. The argv
 // is pinned in turn-sandbox.test.ts; this is the kernel's answer to it.
@@ -138,6 +138,27 @@ test.skipIf(!sandbox.runs)(sandbox.title("a fenced turn sees its own checkout at
         // What it writes in its checkout is in the conversation's worktree, where the daemon commits it from.
         expect(inside(anchor, "echo edited > support/notes.md").code).toBe(0);
         expect(readFileSync(join(w.plan.worktree, "support", "notes.md"), "utf8")).toBe("edited\n");
+    } finally {
+        anchor.dispose();
+    }
+});
+
+// 2026-11-05: a conversation whose turns had run unfenced, its mirrors mounted volatile over these same layer dirs, moved
+// into the jail, and every turn after failed on "Can't make overlay mount … Invalid argument": the kernel's volatile
+// marker in the work dir refuses the layer however the next mount is made. The anchor clears it as the unfenced turn does.
+test.skipIf(!sandbox.runs)(sandbox.title("a layer an unfenced turn last mounted volatile in this boot mounts again, with what it holds"), async () => {
+    const w = await world();
+    const layer = layerOf(w.plan, "node_modules");
+    await mkdir(join(layer, "work", "work", "incompat", "volatile"), { recursive: true });
+    await mkdir(join(layer, "upper", "dep"), { recursive: true });
+    await writeFile(join(layer, "upper", "dep", "built.js"), "built earlier");
+    await writeFile(join(layer, "volatile-boot"), readFileSync("/proc/sys/kernel/random/boot_id", "utf8"));
+    const anchor = await startSandboxAnchor(w.plan, w.sources);
+    try {
+        expect(inside(anchor, "cat node_modules/dep/built.js")).toEqual({ code: 0, out: "built earlier" });
+        expect(existsSync(join(layer, "work", "work", "incompat"))).toBe(false);
+        // A layer only ever mounted here records no boot, so a restart of the machine does not throw its installs away.
+        expect(existsSync(join(layerOf(w.plan, ".pnpm-store"), "volatile-boot"))).toBe(false);
     } finally {
         anchor.dispose();
     }

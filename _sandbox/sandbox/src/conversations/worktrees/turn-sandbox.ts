@@ -22,6 +22,7 @@ import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/na
 import { SHARED_STATE } from "../../workload/worktree-paths.js";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolation.js";
+import { currentBoot, prepareLayer } from "./overlay-layers.js";
 
 // Fence turns with unprivileged bubblewrap (no capabilities/user namespaces), private PID/proc and an allowlisted filesystem.
 // System paths are read-only with sensitive files masked; /work is writable but .git and excluded areas are hidden.
@@ -524,9 +525,11 @@ export const startSandboxAnchor = async (plan: FencedPlan, sources: SandboxSourc
     await writeFile(layout.empty, "", { mode: 0o444 });
     // A main-tree jail reads the package store in place, as part of the main checkout, so it needs no layer for it.
     const layered = plan.fence.whole !== undefined && plan.worktree === plan.root ? plan.mirrors : [...plan.mirrors, PACKAGE_STORE];
+    // The same layer dirs an unfenced turn of this conversation mounts volatile (isolation.ts), so readied as it readies
+    // them: a work dir an earlier volatile mount marked is refused by the kernel however this one mounts it.
+    const boot = await currentBoot();
     for (const rel of layered) {
-        await mkdir(join(layerOf(plan, rel), "upper"), { recursive: true });
-        await mkdir(join(layerOf(plan, rel), "work"), { recursive: true });
+        await prepareLayer(layerOf(plan, rel), boot, "durable");
     }
     const host = readHostView(hostPathsFor(plan, sources));
     const args = [...sandboxArgs(plan, layout, host, sources), "--", "sh", "-c", ANCHOR_SCRIPT, "anchor", layout.held, layout.tmuxSocket];
