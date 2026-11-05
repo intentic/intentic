@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Docker and runner-log pruning for a native Linux CI host (setup-linux-runner.sh installs it with a 15-minute timer).
 # On omen wsl-maintenance.ps1 does this from Windows; /ci-cache, runner _temp and buildkit state are fleet-janitor.sh's.
-# Safe-while-busy work runs every pass. Image and volume pruning waits for an idle host, but no longer than
+# Safe-while-busy work runs every pass. Image, build-cache and volume pruning waits for an idle host, but no longer than
 # PRUNE_FORCE_AFTER_HOURS, and not at all once / is PRUNE_PRESSURE_PERCENT full. PRUNE_DRY_RUN=1 only reports.
 set -uo pipefail
 
@@ -41,12 +41,14 @@ if ! timeout 20 docker version >/dev/null 2>&1; then
 fi
 
 # -- every pass: nothing a running job can still be using ---------------------------------------------------------
-# A stopped container belongs to no running step; an untagged image has no name for a job to start; an unused
-# network has no container; build cache records in use by a build are never pruned.
+# A stopped container belongs to no running step; an unused network has no container. Untagged images and build
+# cache are NOT safe while a job runs on the containerd image store (z440's): an image being pulled is untagged
+# until its last blob lands, and the pass that pruned them at 2026-11-05 17:52:26 EST took a pull's lease and the
+# ingest file under it, failing release 1.398.1's core smoke ("failed commit on ref ... rename .../ingest/...: no
+# such file or directory"). They go with the full pass below; dockerd's own builder gc (daemon.json) still caps the
+# default builder's cache meanwhile.
 run docker container prune -f --filter until=24h
 run docker network prune -f --filter until=24h
-run docker image prune -f --filter until=1h
-run docker builder prune -f --max-used-space "$BUILD_CACHE_MAX"
 
 for runner in $RUNNERS_GLOB; do
     [ -d "$runner/_diag" ] || continue
@@ -80,6 +82,8 @@ if [ -z "$mode" ]; then
     log "full pass: waiting for an idle moment (last one ${since_hours}h ago, forced at ${FORCE_AFTER_HOURS}h)"
 else
     log "full pass ($mode)"
+    run docker image prune -f --filter until=1h
+    run docker builder prune -f --max-used-space "$BUILD_CACHE_MAX"
     if [ "$mode" = pressure ]; then
         run docker image prune -af
         run docker builder prune -af
