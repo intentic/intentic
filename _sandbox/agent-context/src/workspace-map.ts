@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { insideRel } from "@intentic/base/contained";
 import { parseJsonOr } from "@intentic/base/json";
 import { isRecord } from "@intentic/base/escape";
-import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace-ignore";
+import { createIgnoreScope, type IgnoreScope, isPublicPath, walkMatchers } from "@intentic/workspace-ignore";
 
 // Which areas a project has, what each is for, and where the run stands; recomputed from the filesystem every
 // conversation instead of stored, so it can't drift the way a written paragraph would. Areas, not files, since sessions
@@ -74,12 +75,49 @@ export interface WorkspaceMap {
 
 const posix = (path: string): string => path.split(sep).join("/");
 
-// A directory this workspace's conventions don't gray out. `relPath` is root-relative so refs/ and public/ are
-// recognised only at the top level; a project's own `public/` stays ordinary content.
-const isBrowsable = (name: string, relPath: string): boolean =>
-    !name.startsWith(".") && !IGNORED_DIRS.has(name) && !isReferencePath(relPath) && !isPublicPath(relPath);
+const readIfPresent = (path: string): string | undefined => {
+    try {
+        return readFileSync(path, "utf8");
+    } catch {
+        return undefined;
+    }
+};
 
-const childDirs = (dir: string, root: string): string[] => {
+// The workspace one map is drawn from: its root, and the ignore rules in force inside any directory of it, which are the
+// workspace's own (IGNORED_DIRS, refs/) plus every .gitignore from the root down. Without the .gitignore files a Rust
+// project's `target/` (3,807 build files in shinobi-society's) ranked as its second-biggest area, and a log folder
+// above it. Held for one map only, so a .gitignore edited a minute ago is read again.
+interface Tree {
+    readonly root: string;
+    readonly scopeOf: (dir: string) => IgnoreScope;
+}
+
+const treeOf = (root: string): Tree => {
+    const scopes = new Map<string, IgnoreScope>();
+    const matchers = walkMatchers();
+    const scopeOf = (dir: string): IgnoreScope => {
+        const held = scopes.get(dir);
+        if (held !== undefined) {
+            return held;
+        }
+        // The root, or a path outside it (never walked: projectRootOf floors every walk at the root), starts the layers.
+        const rel = insideRel(root, dir) ?? "";
+        const scope = (rel === "" ? createIgnoreScope(matchers) : scopeOf(dirname(dir))).layer(rel, readIfPresent(join(dir, ".gitignore")));
+        scopes.set(dir, scope);
+        return scope;
+    };
+    return { root, scopeOf };
+};
+
+// An entry the map counts: not a dot-entry, not grayed out by the workspace's conventions, not ignored by git. The path
+// is root-relative so refs/ and public/ are recognised only at the top level; a project's own `public/` stays ordinary
+// content.
+const isWalked = (tree: Tree, dir: string, name: string, isDir: boolean): boolean => {
+    const relPath = posix(relative(tree.root, join(dir, name)));
+    return !name.startsWith(".") && !isPublicPath(relPath) && !tree.scopeOf(dir).isIgnored(name, relPath, isDir);
+};
+
+const childDirs = (dir: string, tree: Tree): string[] => {
     let entries;
     try {
         entries = readdirSync(dir, { withFileTypes: true });
@@ -88,17 +126,9 @@ const childDirs = (dir: string, root: string): string[] => {
         return [];
     }
     return entries
-        .filter((entry) => entry.isDirectory() && isBrowsable(entry.name, posix(relative(root, join(dir, entry.name)))))
+        .filter((entry) => entry.isDirectory() && isWalked(tree, dir, entry.name, true))
         .map((entry) => entry.name)
         .toSorted();
-};
-
-const readIfPresent = (path: string): string | undefined => {
-    try {
-        return readFileSync(path, "utf8");
-    } catch {
-        return undefined;
-    }
 };
 
 const hasManifest = (dir: string): boolean => MANIFESTS.some((name) => readIfPresent(join(dir, name)) !== undefined);
@@ -190,7 +220,7 @@ const purposeOf = (dir: string): string => {
 
 // File count and top extensions from one bounded walk. The count is a SIGNAL, not an inventory, good enough to tell a
 // core area from a scratch folder without being exact.
-const measure = (dir: string, root: string): { files: number; kinds: string[] } => {
+const measure = (dir: string, tree: Tree): { files: number; kinds: string[] } => {
     const extensions = new Map<string, number>();
     let files = 0;
     let visited = 0;
@@ -209,14 +239,13 @@ const measure = (dir: string, root: string): { files: number; kinds: string[] } 
                 return;
             }
             visited += 1;
-            const child = join(current, entry.name);
             if (entry.isDirectory()) {
-                if (isBrowsable(entry.name, posix(relative(root, child)))) {
-                    walk(child, depth + 1);
+                if (isWalked(tree, current, entry.name, true)) {
+                    walk(join(current, entry.name), depth + 1);
                 }
                 continue;
             }
-            if (!entry.isFile() || entry.name.startsWith(".")) {
+            if (!entry.isFile() || !isWalked(tree, current, entry.name, false)) {
                 continue;
             }
             files += 1;
@@ -271,11 +300,11 @@ interface AreaDir {
 
 // Is this a shelf (packages/, apps/, crates/, …) rather than an area? Judged by shape, not name: a directory of
 // manifest-bearing children that is not itself a package, in any ecosystem.
-const packagesIn = (dir: string, root: string): { name: string; dir: string }[] => {
+const packagesIn = (dir: string, tree: Tree): { name: string; dir: string }[] => {
     if (hasManifest(dir)) {
         return [];
     }
-    const children = childDirs(dir, root);
+    const children = childDirs(dir, tree);
     const bearing = children.filter((child) => hasManifest(join(dir, child)));
     return children.length >= CONTAINER_MIN_CHILDREN && bearing.length >= CONTAINER_MIN_CHILDREN
         ? bearing.map((child) => ({ name: child, dir: join(dir, child) }))
@@ -287,11 +316,11 @@ const packagesIn = (dir: string, root: string): { name: string; dir: string }[] 
 // inside it. A lone directory is a wrapper, not an area: a repository whose whole project sits in one folder beside its
 // AGENTS.md (`integra/` with `crates/`, `games/`, … inside) has that folder's own directories as its areas. Mapped as
 // one area, that layout yielded no map at all, on every turn of a sandbox that had the map switched on (2026-11-05).
-const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
-    const names = childDirs(projectRoot, root);
+const areaDirsOf = (projectRoot: string, tree: Tree): AreaDir[] => {
+    const names = childDirs(projectRoot, tree);
     const areas = names.map((name) => {
         const dir = join(projectRoot, name);
-        return { name, dir, packages: packagesIn(dir, root) };
+        return { name, dir, packages: packagesIn(dir, tree) };
     });
     const shelf = areas.length <= 2 ? areas.find((area) => area.packages.length > 0) : undefined;
     if (shelf !== undefined) {
@@ -299,7 +328,7 @@ const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
     }
     const [lone] = areas;
     return areas.length === 1 && lone !== undefined
-        ? areaDirsOf(lone.dir, root).map((area) => ({ ...area, name: `${lone.name}/${area.name}` }))
+        ? areaDirsOf(lone.dir, tree).map((area) => ({ ...area, name: `${lone.name}/${area.name}` }))
         : areas;
 };
 
@@ -317,7 +346,8 @@ export interface WorkspaceMapInput {
 // already.
 export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap | undefined => {
     const projectRoot = projectRootOf(root, cwd);
-    const found = areaDirsOf(projectRoot, root);
+    const tree = treeOf(root);
+    const found = areaDirsOf(projectRoot, tree);
     if (found.length < 2) {
         return undefined;
     }
@@ -326,14 +356,14 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
     const isHere = (name: string): boolean => cwdRel === name || cwdRel.startsWith(`${name}/`);
     // A package inside a shelf is never itself expanded: one level of zoom is the point.
     const asArea = (name: string, dir: string, packages: number, children: readonly MapArea[]): MapArea => {
-        const { files, kinds } = measure(dir, root);
+        const { files, kinds } = measure(dir, tree);
         return { name, files, kinds, purpose: purposeOf(dir), here: isHere(name), packages, children, childrenOmitted: 0 };
     };
     // One area's children, measured and ranked like the top level. Lazy on purpose: walking every package of every
     // shelf just to print an unread number is exactly what this note argues against.
     const expand = (parent: string, entries: readonly { readonly name: string; readonly dir: string }[]): Pick<MapArea, "children" | "childrenOmitted"> => {
         const ranked = entries
-            .map((entry) => asArea(`${parent}/${entry.name}`, entry.dir, packagesIn(entry.dir, root).length, []))
+            .map((entry) => asArea(`${parent}/${entry.name}`, entry.dir, packagesIn(entry.dir, tree).length, []))
             .toSorted((left, right) => right.files - left.files || left.name.localeCompare(right.name));
         return { children: ranked.slice(0, MAX_EXPANDED), childrenOmitted: Math.max(0, ranked.length - MAX_EXPANDED) };
     };
@@ -351,7 +381,7 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
         if (isHere(name)) {
             return { ...area, ...expand(name, packages) };
         }
-        return name === dominant ? { ...area, ...expand(name, areaDirsOf(dir, root)) } : area;
+        return name === dominant ? { ...area, ...expand(name, areaDirsOf(dir, tree)) } : area;
     });
     // Biggest first: with a budget to hold, the areas most of the work is in are the ones worth the characters.
     const ranked = measured.toSorted((left, right) => right.files - left.files || left.name.localeCompare(right.name));
@@ -365,7 +395,7 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
         areas,
         omitted: ranked.length - areas.length,
         // Only meaningful when the project isn't the whole workspace: names what else is there, nothing more.
-        siblings: projectRoot === root ? [] : childDirs(root, root).filter((name) => name !== basename(projectRoot)),
+        siblings: projectRoot === root ? [] : childDirs(root, tree).filter((name) => name !== basename(projectRoot)),
     };
 };
 

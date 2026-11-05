@@ -250,6 +250,31 @@ test("build output, dependencies and the workspace's reserved directories are no
     expect(named(workspaceMapOf({ root, cwd: root })).toSorted()).toEqual(["lib", "src"]);
 });
 
+test("what a .gitignore ignores is neither an area nor counted, at whatever depth the .gitignore sits", async () => {
+    const root = await scaffold({
+        ".git/HEAD": "ref: refs/heads/main\n",
+        ".gitignore": "/logs\n",
+        "logs/a.log": "",
+        "logs/b.log": "",
+        "logs/c.log": "",
+        "game/.gitignore": "/target\n*.snap\n!keep.snap\n",
+        "game/Cargo.toml": "[workspace]\n",
+        "game/target/debug/a.o": "",
+        "game/target/debug/b.o": "",
+        "game/target/debug/c.o": "",
+        "game/crates/a.rs": "",
+        "game/crates/b.rs": "",
+        "game/crates/old.snap": "",
+        "game/crates/keep.snap": "",
+        "game/scripts/run.sh": "",
+    });
+
+    const map = workspaceMapOf({ root, cwd: root });
+
+    expect(named(map)).toEqual(["game/crates", "game/scripts"]);
+    expect(map?.areas[0]).toMatchObject({ files: 3, kinds: ["rs", "snap"] });
+});
+
 test("nothing worth saying yields no note at all", async () => {
     const bare = await scaffold({ "only/a.ts": "" });
     const empty = await scaffold({ "README.md": "# nothing here\n" });
