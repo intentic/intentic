@@ -50,8 +50,11 @@ export interface Masker {
     readonly mask: (text: string) => Promise<MaskResult>;
     // Where the personal data in a string sits and the token each value was given, the string left as it is: for text
     // that exists only as pixels (an image's words), where what changes is the picture. Counts as `mask` counts.
+    // `keep` picks the finds that count from all of them, for a text that holds some words twice (an image's wrapped
+    // lines read again joined, image-mask.ts distinctFinds): what it leaves out is neither answered nor counted.
     readonly find: (
         text: string,
+        keep?: (spans: readonly FoundSpan[]) => readonly FoundSpan[],
     ) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts; readonly found: readonly Replacement[] }>;
     readonly restore: (text: string) => string;
     // What every source would find in a string and which found it, for the owner trying the shield on a text: nothing
@@ -357,25 +360,27 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
             memo.set(key, { text: masked, generation: vault.generation() });
             return { text: masked, counts, found: replacementsIn(masked, placed) };
         },
-        find: async (text) => {
+        find: async (text, keep = (spans) => spans) => {
             if (text.length < 2 || !HAS_WORD.test(text)) {
                 return { spans: [], counts: {}, found: [] };
             }
             await vault.load();
             // Remembered as the masked strings are, under a key of its own: an image's words are re-sent with every
-            // request of a conversation, and only the vault's values can change what they hold.
+            // request of a conversation, and only the vault's values can change what they hold. Every find is kept, and
+            // `keep` asked again on the way out.
             const key = createHash("sha1").update("find\0").update(policyKey).update("\0").update(text).digest("base64url");
             const remembered = memo.get(key);
             if (remembered !== undefined && remembered.generation === vault.generation()) {
-                return { spans: parseSpans(remembered.text), counts: {}, found: [] };
+                return { spans: keep(parseSpans(remembered.text)), counts: {}, found: [] };
             }
-            const spans: FoundSpan[] = (await spansAround(text, true)).map(({ span, offset }) => ({
+            const all: FoundSpan[] = (await spansAround(text, true)).map(({ span, offset }) => ({
                 start: offset + span.start,
                 end: offset + span.end,
                 class: span.class,
                 token: tokenOfSpan(span),
             }));
-            memo.set(key, { text: JSON.stringify(spans), generation: vault.generation() });
+            memo.set(key, { text: JSON.stringify(all), generation: vault.generation() });
+            const spans = keep(all);
             // A string seen before counts nothing again, as with `mask`.
             if (remembered !== undefined) {
                 return { spans, counts: {}, found: [] };

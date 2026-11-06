@@ -10,7 +10,7 @@ import type {
     PrivacyShieldStatus,
 } from "@intentic/sandbox-contract/schemas/privacy";
 import { type PrivacyBypass, type PrivacyRefusal, type PrivacyRoute, type ShieldVerdict, shieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
-import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker } from "./masker.js";
+import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type FoundSpan, type Masker } from "./masker.js";
 import type { PrivacyImageArchive } from "./privacy-images.js";
 import { type EgressNote, noteEgress, type PrivacyLedger } from "./privacy-ledger.js";
 import type { PrivacyPolicyStore } from "./privacy-policy.js";
@@ -19,7 +19,7 @@ import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
-import { paintRegions, readingText, regionsFor } from "./image-mask.js";
+import { distinctFinds, paintRegions, readingText, regionsFor } from "./image-mask.js";
 import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
 
 // The privacy shield as the rest of the daemon sees it: the owner's policy, the one verdict on bytes bound for a
@@ -251,10 +251,13 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
         const egress = { provider, conversationId, route: "hooks" } as const;
         // A read the runtime can only allow or refuse: what `look` reads of it checked under the verdict in force and
         // logged, and the kinds that refuse it while the shield masks. `look` answers undefined for what could not be read
-        // on this machine to be checked, which refuses it as surely, since it would otherwise go unchecked.
+        // on this machine to be checked, which refuses it as surely, since it would otherwise go unchecked; its `keep`
+        // picks the finds that count where the text holds some words twice (an image's, image-mask.ts distinctFinds).
         const judge = async (
             channel: string,
-            look: (policy: PrivacyShieldPolicy) => Promise<string | undefined>,
+            look: (
+                policy: PrivacyShieldPolicy,
+            ) => Promise<{ readonly text: string; readonly keep?: (spans: readonly FoundSpan[]) => readonly FoundSpan[] } | undefined>,
             line: { readonly refused: string; readonly unreadable?: string; readonly images?: number; readonly documents?: number },
         ): Promise<readonly PersonalDataClass[] | "unreadable"> => {
             const { policy, verdict } = await decide(egress);
@@ -263,14 +266,14 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                 return [];
             }
             const counted = { images: line.images, documents: line.documents };
-            const text = await look(policy);
-            if (text === undefined) {
+            const looked = await look(policy);
+            if (looked === undefined) {
                 if (how === "mask") {
                     note({ ...egress, ...counted, verdict, action: "refused", protocol: `hooks:${channel}`, detail: line.unreadable });
                 }
                 return how === "mask" ? "unreadable" : [];
             }
-            const found = await (await masker(policy)).find(text);
+            const found = await (await masker(policy)).find(looked.text, looked.keep);
             if (found.spans.length === 0) {
                 return [];
             }
@@ -293,7 +296,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             mask: async (text, channel) => (await read(egress, text, { protocol: `hooks:${channel}`, log: "found" })).prompt,
             // A text in hand is always readable, so `judge` never answers unreadable for it.
             refuses: async (text, channel, refused) => {
-                const kinds = await judge(channel, async () => text, { refused });
+                const kinds = await judge(channel, async () => ({ text }), { refused });
                 return kinds === "unreadable" ? [] : kinds;
             },
             refusesImage: (data, channel) =>
@@ -301,10 +304,12 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                     channel,
                     async (policy) => {
                         if (policy.images === "allow") {
-                            return "";
+                            return { text: "" };
                         }
                         const image = await deps.readers.readImage(data);
-                        return image === undefined ? undefined : readingText(image.lines);
+                        return image === undefined
+                            ? undefined
+                            : { text: readingText(image.lines), keep: (spans: readonly FoundSpan[]) => distinctFinds(image.lines, spans) };
                     },
                     {
                         refused: "an image read was refused: it shows personal data",
@@ -313,11 +318,18 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                     },
                 ),
             refusesDocument: (data, channel) =>
-                judge(channel, () => deps.readers.readPdf(data), {
-                    refused: "a document read was refused: it holds personal data",
-                    unreadable: "a document read was refused: it could not be read on this machine to be checked",
-                    documents: 1,
-                }),
+                judge(
+                    channel,
+                    async () => {
+                        const text = await deps.readers.readPdf(data);
+                        return text === undefined ? undefined : { text };
+                    },
+                    {
+                        refused: "a document read was refused: it holds personal data",
+                        unreadable: "a document read was refused: it could not be read on this machine to be checked",
+                        documents: 1,
+                    },
+                ),
             // Synchronous by contract, so it reads the vault as loaded: forTurn loads it before handing the shield out.
             restore: (text) => restoreWith(text),
             masking: async () => (await decide(egress)).verdict.kind === "mask",
@@ -401,7 +413,11 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                 return undefined;
             }
             // Lettered with the kind alone: the token's own alphabet, and nothing a reader of the page could resolve.
-            const spans = ((await findings(readingText(image.lines))) ?? []).map(({ start, end, class: kind }) => ({ start, end, token: TOKEN_LABEL[kind] }));
+            const spans = distinctFinds(image.lines, (await findings(readingText(image.lines))) ?? []).map(({ start, end, class: kind }) => ({
+                start,
+                end,
+                token: TOKEN_LABEL[kind],
+            }));
             const painted = await paintRegions(data, regionsFor(image.lines, spans, image));
             return painted === undefined ? undefined : Buffer.from(painted.data, "base64");
         },

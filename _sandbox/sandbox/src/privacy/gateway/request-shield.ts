@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { BoundedMap } from "@intentic/base/held";
 import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract/schemas/privacy";
 import { readCappedBytes } from "@intentic/base/capped-read";
-import { type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
+import { distinctFinds, type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
 import type { ClassCounts, Masker, Replacement } from "../masker.js";
 import type { PrivacyImageArchive } from "../privacy-images.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
@@ -149,7 +149,8 @@ export const maskingShield = ({
             tally.images += reading.fresh ? 1 : 0;
             return { text: WITHHELD_IMAGE };
         }
-        const found = await masker.find(readingText(reading.value.lines));
+        const { lines } = reading.value;
+        const found = await masker.find(readingText(lines), (spans) => distinctFinds(lines, spans));
         addCounts(tally.counts, found.counts);
         // An animation goes as the one frame that was read, painted or not: the frames after it were never checked.
         if (found.spans.length === 0 && (reading.value.frames ?? 1) <= 1) {
