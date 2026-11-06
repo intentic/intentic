@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import type { PrivacyShield, ShieldDecision } from "../privacy-shield.js";
-import { type Json, isList, isRecord, isText, restoreStrings, toJson } from "./protocols/walk.js";
+import { type Json, type JsonObject, isList, isRecord, isText, restoreStrings, toJson } from "./protocols/walk.js";
 import { type SseEvent, sseAsyncTransform } from "./protocols/sse.js";
 import { emptyTally, maskingShield, watchingShield } from "./request-shield.js";
 import type { RequestShield, RestoreText, ShieldTally } from "./shield-types.js";
@@ -35,8 +35,30 @@ const STRUCTURAL = new Set(["type", "mimeType", "jsonrpc"]);
 const WITHHELD_BINARY =
     "[A binary result was withheld by the privacy shield: this model provider is not trusted with personal data, and it could not be read on this machine to check it.]";
 
-// Every string of a value masked, every picture through the shield's image pass, and every other binary (audio, a blob
-// that is no picture) replaced by a note, since nothing here can read it to check it.
+// A resource's blob. A picture goes through the shield's image pass. Anything else, while masking, goes through its
+// document pass: a PDF stays a PDF, its pages painted over; another document the shield reads becomes a text resource
+// holding its masked text; the rest a note.
+const shieldBlob = async (value: JsonObject, blob: string, mimeType: string | undefined, shield: RequestShield, masking: boolean): Promise<Json> => {
+    if (masking && !(mimeType?.startsWith("image/") ?? false)) {
+        const verdict = await shield.document({ mediaType: mimeType ?? "application/octet-stream", data: blob });
+        if (verdict === "keep") {
+            return value;
+        }
+        if ("document" in verdict) {
+            return { ...value, blob: verdict.document.data, mimeType: verdict.document.mediaType };
+        }
+        const { blob: _blob, ...rest } = value;
+        return { ...rest, mimeType: "text/plain", text: verdict.text };
+    }
+    const verdict = await shield.image({ mediaType: mimeType ?? "application/octet-stream", data: blob });
+    if (!masking || verdict === "keep") {
+        return value;
+    }
+    return "text" in verdict ? { type: "text", text: verdict.text } : { ...value, blob: verdict.image.data, mimeType: verdict.image.mediaType };
+};
+
+// Every string of a value masked, every picture through the shield's image pass, every other blob through its document
+// pass, and audio replaced by a note, since nothing here can read it to check it.
 const shieldValue = async (value: Json, shield: RequestShield, masking: boolean, key?: string): Promise<Json> => {
     if (isText(value)) {
         return key !== undefined && STRUCTURAL.has(key) ? value : value === "" ? value : shield.mask(value);
@@ -57,16 +79,13 @@ const shieldValue = async (value: Json, shield: RequestShield, masking: boolean,
         }
         return "text" in verdict ? { type: "text", text: verdict.text } : { ...value, data: verdict.image.data, mimeType: verdict.image.mediaType };
     }
-    // Audio, and a resource's blob that is no picture: nothing on this machine reads either.
-    if (masking && (kind === "audio" || (isText(value["blob"]) && !(mimeType?.startsWith("image/") ?? false)))) {
+    // Audio: nothing on this machine reads it.
+    if (masking && kind === "audio") {
         return { type: "text", text: WITHHELD_BINARY };
     }
-    if (isText(value["blob"]) && mimeType !== undefined) {
-        const verdict = await shield.image({ mediaType: mimeType, data: value["blob"] });
-        if (!masking || verdict === "keep") {
-            return value;
-        }
-        return "text" in verdict ? { type: "text", text: verdict.text } : { ...value, blob: verdict.image.data, mimeType: verdict.image.mediaType };
+    const blob = value["blob"];
+    if (isText(blob) && (masking || mimeType !== undefined)) {
+        return shieldBlob(value, blob, mimeType, shield, masking);
     }
     const entries = await Promise.all(
         Object.entries(value).map(async ([field, item]) => [field, await shieldValue(item, shield, masking, field)] as const),

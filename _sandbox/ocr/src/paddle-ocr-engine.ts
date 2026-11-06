@@ -6,7 +6,7 @@ import { minAreaRect, type Point, type Quad, rectCorners } from "./geometry.js";
 import { DETECTOR, RECOGNIZER, RECOGNIZER_CONFIG } from "./models.js";
 import type { OcrLine } from "./paddle-ocr.js";
 import { cropSize, type Raster, rotateCounterClockwise, rotateHalfTurn, toBgr, warpQuad } from "./raster.js";
-import { boxesFromMap, detectionInput, readingOrder } from "./text-detection.js";
+import { alreadyKnown, boxesFromMap, detectionInput, readingOrder } from "./text-detection.js";
 import { decodeCtc, RECOGNITION, recognitionBatch } from "./text-recognition.js";
 
 // The two models and everything around them, run on the thread that loads them: onnxruntime-node runs a model
@@ -14,7 +14,8 @@ import { decodeCtc, RECOGNITION, recognitionBatch } from "./text-recognition.js"
 // holds that thread for tens of seconds. paddle-ocr-worker.ts is that thread; nothing else loads this module.
 
 export interface OcrEngine {
-    readonly read: (image: Raster) => Promise<OcrLine[]>;
+    // `known`: ReadOptions.known (paddle-ocr.ts).
+    readonly read: (image: Raster, known?: readonly Quad[]) => Promise<OcrLine[]>;
     readonly release: () => Promise<void>;
 }
 
@@ -143,12 +144,13 @@ export const loadOcrEngine = async (dir: string): Promise<OcrEngine> => {
         return { text: read.text, score: read.score, corners: cropped.box, chars, column: span > 0 ? 1 / span : 1, vertical: cropped.vertical };
     };
 
-    // Every line of an upright image, in reading order.
-    const readUpright = async (image: Raster): Promise<OcrLine[]> => {
+    // Every line of an upright image, in reading order, but those the known boxes hold already.
+    const readUpright = async (image: Raster, known: readonly Quad[] = []): Promise<OcrLine[]> => {
         const bgr = toBgr(image);
         const input = detectionInput(bgr);
         const map = await run(detector, input.tensor, [1, 3, input.height, input.width]);
-        const boxes = readingOrder(boxesFromMap(floats(map), { width: map.dims[3] ?? input.width, height: map.dims[2] ?? input.height }, bgr));
+        const found = boxesFromMap(floats(map), { width: map.dims[3] ?? input.width, height: map.dims[2] ?? input.height }, bgr);
+        const boxes = readingOrder(known.length === 0 ? found : found.filter((box) => !alreadyKnown(box.corners, known)));
         const lines: OcrLine[] = [];
         for (const box of boxes) {
             const cropped = crop(bgr, box.corners);
@@ -161,9 +163,11 @@ export const loadOcrEngine = async (dir: string): Promise<OcrEngine> => {
     };
 
     return {
-        read: async (image) => {
-            const upright = await readUpright(image);
-            if (settled(upright)) {
+        read: async (image, known = []) => {
+            const upright = await readUpright(image, known);
+            // A page whose text is partly known is the right way up: what is left to read may be a few words, which
+            // would otherwise be read again on its head for want of sure characters.
+            if (known.length > 0 || settled(upright)) {
                 return upright;
             }
             const turned = (await readUpright(rotateHalfTurn(image))).map((line) => turnedBack(line, image.width, image.height));

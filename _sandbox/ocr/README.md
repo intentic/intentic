@@ -23,6 +23,9 @@ flowchart LR
   parameter departs from PaddleOCR's: a box is kept from a mean probability of 0.5, not 0.6, since at 0.6 most of a
   line on a phone photo was dropped (`text-detection.ts`).
 - Each line carries where every character sits along it, which is what lets the shield paint over a value.
+- A read can be told which boxes' text is already known (`ReadOptions.known`: a PDF page's text layer). The detector
+  still looks at the whole picture, but a line mostly inside those boxes is not read again, so what comes back is the
+  text the layer does not hold: a photo on the page, a form field, a stamp.
 - The reading runs on a worker thread of its own. onnxruntime-node runs a model synchronously on the thread that calls
   it, and the arithmetic around it is plain JavaScript: on the daemon's own thread, one 4000 x 3000 photo held its event
   loop (every conversation, the editor's sockets) for over 30 s. The caller pays for a copy of the pixels.

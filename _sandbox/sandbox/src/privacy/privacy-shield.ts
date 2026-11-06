@@ -20,6 +20,7 @@ import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
 import { distinctFinds, paintRegions, readingText, regionsFor } from "./image-mask.js";
+import { documentWords } from "./pdf-pages.js";
 import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
 
 // The privacy shield as the rest of the daemon sees it: the owner's policy, the one verdict on bytes bound for a
@@ -320,9 +321,15 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             refusesDocument: (data, channel) =>
                 judge(
                     channel,
-                    async () => {
-                        const text = await deps.readers.readPdf(data);
-                        return text === undefined ? undefined : { text };
+                    async (policy) => {
+                        const pdf = await deps.readers.readPdf(data);
+                        // Pictures on its pages that no reader checked leave it as unread as a PDF that would not open,
+                        // unless pictures may go unchecked.
+                        if (pdf === undefined || (!pdf.pixels && policy.images === "mask")) {
+                            return undefined;
+                        }
+                        const words = documentWords(pdf.pages);
+                        return { text: words.text, keep: words.keep };
                     },
                     {
                         refused: "a document read was refused: it holds personal data",

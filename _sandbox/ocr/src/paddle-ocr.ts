@@ -4,6 +4,9 @@ import { distance, lerp, type Quad } from "./geometry.js";
 import { ocrInstalled, ocrModelDir } from "./models.js";
 import type { Raster } from "./raster.js";
 
+// The order lines are read in, for a caller that places lines of its own beside the reader's (a PDF's text layer).
+export { readingOrder } from "./text-detection.js";
+
 // Reading text off an image on this machine with PaddleOCR's PP-OCRv6 (PaddleOCR 3.7), the medium detector and
 // recognizer as PaddlePaddle publishes them in ONNX, run by onnxruntime-node on a worker thread of this process
 // (paddle-ocr-engine.ts): no Python, no PaddlePaddle, nothing sent anywhere. One recognizer covers 50 languages, Polish
@@ -26,9 +29,17 @@ export interface OcrLine {
     readonly vertical: boolean;
 }
 
+// What a read is told besides the picture.
+export interface ReadOptions {
+    // Boxes, in the image's pixels, whose text is already known (a PDF page's text layer): a line the detector finds
+    // mostly inside them is left unread, and the picture is taken to be the right way up. With this, what is read is
+    // exactly the text the boxes do not account for: a picture on the page, a form field, a stamp.
+    readonly known?: readonly Quad[];
+}
+
 export interface TextReader {
     // Every line of text in an upright RGBA image, in reading order.
-    readonly read: (image: Raster) => Promise<OcrLine[]>;
+    readonly read: (image: Raster, options?: ReadOptions) => Promise<OcrLine[]>;
 }
 
 // The reader loadTextReader makes. Its two model sessions hold over a gigabyte of native memory (1.5 GiB after reading
@@ -69,7 +80,7 @@ export const pageText = (lines: readonly OcrLine[]): string =>
     lines.map((line, index) => (index === 0 ? "" : sameRow(lines[index - 1] as OcrLine, line) ? "\t" : "\n") + line.text).join("");
 
 // What the reader's thread is asked (paddle-ocr-worker.ts), and what it is started with.
-export type OcrAsk = { readonly kind: "load" } | { readonly kind: "read"; readonly image: Raster } | { readonly kind: "release" };
+export type OcrAsk = { readonly kind: "load" } | { readonly kind: "read"; readonly image: Raster; readonly known?: readonly Quad[] } | { readonly kind: "release" };
 export interface OcrThread {
     readonly dir: string;
 }
@@ -98,12 +109,13 @@ export const loadTextReader = async (
     const serially = serialLock();
     let released = false;
     return {
-        read: (image) =>
+        read: (image, options) =>
             serially(async () => {
                 if (released) {
                     throw new Error("the text reader was released");
                 }
-                return thread.call<OcrLine[]>({ kind: "read", image });
+                const ask: OcrAsk = options?.known === undefined ? { kind: "read", image } : { kind: "read", image, known: options.known };
+                return thread.call<OcrLine[]>(ask);
             }),
         release: () =>
             serially(async () => {

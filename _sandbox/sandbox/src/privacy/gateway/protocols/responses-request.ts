@@ -36,6 +36,15 @@ const fileBinary = (part: JsonObject): ShieldBinary | undefined => {
     return isText(url) ? { mediaType: "url", data: url } : undefined;
 };
 
+// The file part holding the painted PDF inline, in the form its data came in (raw base64 or a data URL; a data URL in
+// place of an address). A file sent inline is named: one that had only an address is given a name.
+const fileWith = (part: JsonObject, pdf: ShieldBinary): JsonObject => {
+    const { file_url: url, ...rest } = part;
+    const data = rest["file_data"];
+    const file = { ...rest, file_data: isText(data) && !data.startsWith("data:") ? pdf.data : dataUrl(pdf) };
+    return url === undefined || isText(rest["filename"]) ? file : { ...file, filename: "document.pdf" };
+};
+
 // `image_url` is a string here; the object form Chat Completions uses is read too, for a client that mixes them.
 const imageUrl = (part: JsonObject): string | undefined => {
     const url = part["image_url"];
@@ -64,8 +73,11 @@ export const walkPart = async (part: Json, shield: RequestShield): Promise<Json>
         case "input_file": {
             const binary = fileBinary(part);
             const verdict = binary === undefined ? "keep" : await shield.document(binary);
-            // A file name is as likely to hold a person's name as the file is.
-            return verdict === "keep" ? maskField(part, "filename", shield.mask) : { type: "input_text", text: verdict.text };
+            if (verdict === "keep") {
+                // A file name is as likely to hold a person's name as the file is.
+                return maskField(part, "filename", shield.mask);
+            }
+            return "document" in verdict ? maskField(fileWith(part, verdict.document), "filename", shield.mask) : { type: "input_text", text: verdict.text };
         }
         default:
             return part;

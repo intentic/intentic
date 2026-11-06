@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, MASKED_PDF, NOTE } from "./fake-shield.testing.js";
 
 // Chat Completions as OpenCode sends it to an OpenAI-compatible provider: every role's content and the assistant's
 // call arguments must come out masked, the provider's reasoning and the tool definitions untouched.
@@ -134,4 +134,18 @@ describe("shielding a Chat Completions request", () => {
             function_call: { name: "bash", arguments: '{"who":"⟦PERSON_1⟧"}' },
         });
     });
+});
+
+test("a PDF the shield painted over goes as that file, its name masked", async () => {
+    const body = deepFreeze({
+        model: "gpt",
+        messages: [
+            { role: "user", content: [{ type: "file", file: { file_data: `data:application/pdf;base64,${PDF}`, filename: "Jan Kowalski.pdf" } }] },
+        ],
+    });
+    const shielded = await shieldRequest("chat", body, fakeShield({ paintDocuments: true }));
+    // The note goes first, as a system message of its own.
+    expect(at(shielded, "messages", 1, "content")).toEqual([
+        { type: "file", file: { file_data: `data:application/pdf;base64,${MASKED_PDF.data}`, filename: "⟦PERSON_1⟧.pdf" } },
+    ]);
 });

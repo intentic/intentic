@@ -32,6 +32,8 @@ export const IMAGE_TEXT = "[image withheld: a photo of ⟦PERSON_1⟧]";
 // The picture an image becomes when the shield paints over what it found in it.
 export const MASKED_IMAGE: ShieldBinary = { mediaType: "image/png", data: "bWFza2VkIHBpY3R1cmU=" };
 export const DOCUMENT_TEXT = "Invoice for ⟦PERSON_1⟧, account ⟦BANK_ACCOUNT_3⟧.";
+// The PDF a PDF becomes when the shield paints over what it found on its pages.
+export const MASKED_PDF: ShieldBinary = { mediaType: "application/pdf", data: "JVBERi1tYXNrZWQ=" };
 
 export interface FakeShield extends RequestShield {
     readonly images: ShieldBinary[];
@@ -43,6 +45,8 @@ export interface FakeShieldOptions {
     readonly keep?: boolean;
     // Images come back as MASKED_IMAGE rather than as text.
     readonly paint?: boolean;
+    // Documents come back as MASKED_PDF rather than as text.
+    readonly paintDocuments?: boolean;
 }
 
 // `note: undefined` means masking runs without a note, so it must not fall back to the default.
@@ -66,7 +70,10 @@ export const fakeShield = (options: FakeShieldOptions = {}): FakeShield => {
         },
         document: async (document) => {
             documents.push(document);
-            return keep ? "keep" : { text: DOCUMENT_TEXT };
+            if (keep) {
+                return "keep";
+            }
+            return options.paintDocuments === true ? { document: MASKED_PDF } : { text: DOCUMENT_TEXT };
         },
     };
 };

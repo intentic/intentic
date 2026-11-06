@@ -2,7 +2,8 @@ import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/pri
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { createMcpRoute } from "../gateway/mcp-route.js";
-import { privacySliceFake } from "../privacy-slice.testing.js";
+import { noReaders, privacySliceFake } from "../privacy-slice.testing.js";
+import type { LocalReaders } from "../readers.js";
 import { pesel } from "@intentic/privacy-detect/testing";
 import { tokenOf } from "../tokens.js";
 
@@ -38,8 +39,8 @@ const lookup = (body: string): Response => {
     return json({ jsonrpc: "2.0", id: call.id, result: { content: [{ type: "text", text: `record for ${call.params?.arguments?.id ?? "?"}: PESEL ${NUMBER}` }] } });
 };
 
-const harness = async (policy: Partial<PrivacyShieldPolicy>, answer: (body: string) => Response = lookup) => {
-    const fake = privacySliceFake({ policy });
+const harness = async (policy: Partial<PrivacyShieldPolicy>, answer: (body: string) => Response = lookup, readers: LocalReaders = noReaders) => {
+    const fake = privacySliceFake({ policy, readers });
     const upstream = server(answer);
     const app = new Hono<AppEnv>();
     const warnings: string[] = [];
@@ -140,4 +141,36 @@ test("a session nobody signed is refused", async () => {
     const app = new Hono<AppEnv>();
     app.all("/privacy/mcp/:session", createMcpRoute({ shield: fake.privacyShield, warn: () => {}, fetch: server(lookup).fetch }));
     expect((await app.request("/privacy/mcp/forged", { method: "POST", body: "{}" })).status).toBe(404);
+});
+
+test("a resource's document is read here: text it holds goes as its masked text, a PDF nothing here can draw is held back", async () => {
+    const csv = Buffer.from(`imie,pesel\nJan,${NUMBER}\n`).toString("base64");
+    // Text reads as it is; no PDF draws.
+    const readers: LocalReaders = { ...noReaders, readDocument: async (data) => data.toString("utf8") };
+    const { send } = await harness(
+        { mode: "on" },
+        (body) =>
+            json({
+                jsonrpc: "2.0",
+                // SAFETY: the route forwards the call this test sent, which carries a numeric id.
+                id: (JSON.parse(body) as { id: number }).id,
+                result: {
+                    content: [
+                        { type: "resource", resource: { uri: "file:///clients.csv", mimeType: "text/csv", blob: csv } },
+                        { type: "resource", resource: { uri: "file:///umowa.pdf", mimeType: "application/pdf", blob: "JVBERi0xLjQ=" } },
+                    ],
+                },
+            }),
+        readers,
+    );
+    // SAFETY: the route answers the JSON-RPC message it was handed, whose shape this test wrote above.
+    const answer = (await (await send(call("x"))).json()) as {
+        result: { content: { resource: { uri: string; mimeType: string; text?: string; blob?: string } }[] };
+    };
+    const [table, pdf] = answer.result.content.map((block) => block.resource);
+    expect([table?.uri, table?.mimeType, table?.blob]).toEqual(["file:///clients.csv", "text/plain", undefined]);
+    expect(table?.text).toContain(TOKEN);
+    expect(table?.text).not.toContain(NUMBER);
+    expect(pdf?.blob).toBeUndefined();
+    expect(pdf?.text).toContain("withheld by the privacy shield");
 });

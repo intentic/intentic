@@ -9,7 +9,8 @@ export interface ShieldTally {
     readonly counts: Partial<Record<PersonalDataClass, number>>;
     // Images the shield changed: personal data painted over, or held back because they could not be read.
     images: number;
-    // Documents replaced by their masked text.
+    // Documents the shield read: a PDF sent as its pages painted over, another document as its masked text, or either
+    // held back.
     documents: number;
     // The first values replaced, one per token, for the log (PRIVACY_REPLACEMENTS_MAX of them at most).
     readonly replacements: PrivacyReplacement[];
@@ -23,6 +24,10 @@ export interface ShieldBinary {
 
 export type ImageVerdict = "keep" | { readonly text: string } | { readonly image: ShieldBinary };
 
+// What a document becomes: `keep` sends it as it is, `document` sends that PDF in its place (its pages as pictures,
+// personal data painted over), `text` sends that text instead (another format's masked text, or a note holding it back).
+export type DocumentVerdict = "keep" | { readonly text: string } | { readonly document: ShieldBinary };
+
 export interface RequestShield {
     // One string bound for the provider, masked. The same input gives the same output for as long as the vault holds,
     // which is what keeps a provider's prompt cache and a signed transcript stable across requests.
@@ -30,8 +35,8 @@ export interface RequestShield {
     // An image bound for the provider: `keep` sends it as it is, `image` sends that image in its place (the same picture
     // with its personal data painted over), `text` sends a note instead of any picture.
     readonly image: (image: ShieldBinary) => Promise<ImageVerdict>;
-    // A document (a PDF) bound for the provider: `keep` sends it as it is; otherwise the masked text that takes its place.
-    readonly document: (document: ShieldBinary) => Promise<"keep" | { readonly text: string }>;
+    // A document bound for the provider (a PDF, an office file, plain text), inline or by address (mediaType "url").
+    readonly document: (document: ShieldBinary) => Promise<DocumentVerdict>;
     // Appended once to the request's instructions while masking is on, so the model knows what a token is and to write
     // it back verbatim. Undefined: add nothing.
     readonly note: string | undefined;

@@ -29,8 +29,14 @@ const walkFile = async (part: JsonObject, shield: RequestShield): Promise<Json> 
     const binary = fileBinary(file);
     // A file named only by its id is the provider's own copy; there is nothing here to inspect.
     const verdict = binary === undefined ? "keep" : await shield.document(binary);
+    if (verdict !== "keep" && !("document" in verdict)) {
+        return { type: "text", text: verdict.text };
+    }
+    // The painted PDF in the form the file's data came in: raw base64, or a data URL.
+    const data = file["file_data"];
+    const shown = verdict === "keep" ? file : { ...file, file_data: isText(data) && !data.startsWith("data:") ? verdict.document.data : dataUrl(verdict.document) };
     // A file name is as likely to hold a person's name as the file is.
-    return verdict === "keep" ? patch(part, "file", await maskField(file, "filename", shield.mask)) : { type: "text", text: verdict.text };
+    return patch(part, "file", await maskField(shown, "filename", shield.mask));
 };
 
 const walkPart = async (part: Json, shield: RequestShield): Promise<Json> => {

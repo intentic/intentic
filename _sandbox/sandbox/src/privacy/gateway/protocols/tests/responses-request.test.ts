@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, MASKED_PDF, NOTE } from "./fake-shield.testing.js";
 
 // The Responses API request as Codex sends it. Every item that carries what the user, the model or a tool wrote must
 // come out masked; reasoning items hold the provider's encrypted state and must come out exactly as they went in.
@@ -290,4 +290,26 @@ describe("shielding a Responses request", () => {
             { type: "apply_patch_call_output", call_id: "call_10", status: "completed", output: "Patched ⟦PERSON_1⟧.md" },
         ]);
     });
+});
+
+test("a PDF the shield painted over goes as that file, in the form its data came in; one by address goes inline, named", async () => {
+    const body = deepFreeze({
+        model: "gpt",
+        input: [
+            {
+                role: "user",
+                content: [
+                    { type: "input_file", file_data: `data:application/pdf;base64,${PDF}`, filename: "umowa.pdf" },
+                    { type: "input_file", file_data: PDF, filename: "raw.pdf" },
+                    { type: "input_file", file_url: "https://example.com/umowa.pdf" },
+                ],
+            },
+        ],
+    });
+    const shielded = await shieldRequest("responses", body, fakeShield({ paintDocuments: true }));
+    expect(at(shielded, "input", 0, "content")).toEqual([
+        { type: "input_file", file_data: `data:application/pdf;base64,${MASKED_PDF.data}`, filename: "umowa.pdf" },
+        { type: "input_file", file_data: MASKED_PDF.data, filename: "raw.pdf" },
+        { type: "input_file", file_data: `data:application/pdf;base64,${MASKED_PDF.data}`, filename: "document.pdf" },
+    ]);
 });

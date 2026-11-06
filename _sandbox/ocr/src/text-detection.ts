@@ -190,6 +190,32 @@ export const boxesFromMap = (
     return boxes;
 };
 
+// Whether a found box is mostly inside boxes whose text is already known (a PDF's text layer, ReadOptions.known): half
+// its area or more, measured on upright bounding boxes. The detector grows a line's box past its ink, and a text layer's
+// box is its font's height, so a line the layer holds is well inside; a line drawn in a picture beside it is not.
+const KNOWN_SHARE = 0.5;
+const boundsOf = (corners: Quad) => ({
+    left: Math.min(...corners.map((point) => point.x)),
+    right: Math.max(...corners.map((point) => point.x)),
+    top: Math.min(...corners.map((point) => point.y)),
+    bottom: Math.max(...corners.map((point) => point.y)),
+});
+export const alreadyKnown = (corners: Quad, known: readonly Quad[]): boolean => {
+    const box = boundsOf(corners);
+    const area = (box.right - box.left) * (box.bottom - box.top);
+    if (area <= 0) {
+        return false;
+    }
+    let inside = 0;
+    for (const other of known) {
+        const bounds = boundsOf(other);
+        const width = Math.min(box.right, bounds.right) - Math.max(box.left, bounds.left);
+        const height = Math.min(box.bottom, bounds.bottom) - Math.max(box.top, bounds.top);
+        inside += width > 0 && height > 0 ? width * height : 0;
+    }
+    return inside >= KNOWN_SHARE * area;
+};
+
 // Top to bottom, then left to right among boxes whose tops are within ten pixels (PaddleOCR's sorted_boxes).
 export const readingOrder = <T extends { readonly corners: Quad }>(boxes: readonly T[]): T[] => {
     const sorted = boxes.toSorted((a, b) => a.corners[0].y - b.corners[0].y || a.corners[0].x - b.corners[0].x);

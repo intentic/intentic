@@ -23,7 +23,7 @@ serveCalls<OcrAsk & { readonly id: number }>(port, async (ask) => {
     }
     if (ask.kind === "read") {
         engine ??= await loadOcrEngine(dir);
-        return engine.read(ask.image);
+        return engine.read(ask.image, ask.known);
     }
     await engine?.release();
     engine = undefined;

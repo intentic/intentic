@@ -358,7 +358,7 @@ export const PrivacyLedgerEntrySchema = z.object({
     action: PrivacyLedgerActionSchema,
     counts: z.partialRecord(PersonalDataClassSchema, z.number().int()).describe("How many of each kind were found in what this request added."),
     images: z.number().int().describe("Images the shield changed: personal data painted over, or held back when they could not be read."),
-    documents: z.number().int().describe("Documents replaced by their masked text."),
+    documents: z.number().int().describe("Documents read here: a PDF sent as its pages painted over, another as its masked text, or either withheld."),
     protocol: z.string().describe("Which wire format the request spoke."),
     detail: z.string().optional().describe("Why it was refused, when it was."),
     replacements: z

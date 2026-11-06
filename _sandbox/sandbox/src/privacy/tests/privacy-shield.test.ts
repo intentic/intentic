@@ -7,7 +7,7 @@ import type { LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
 import { maskJsonText, restoreJsonText } from "../gateway/protocols/json-text.js";
 import { pesel } from "@intentic/privacy-detect/testing";
-import { privacySliceFake } from "../privacy-slice.testing.js";
+import { noReaders, privacySliceFake } from "../privacy-slice.testing.js";
 
 // The parts of the shield every exit shares: the masker the gateway walks a request with, the decision whether a turn
 // may run at all, and the redaction a page or a notification leaving this machine whole gets.
@@ -386,7 +386,7 @@ describe("a turn the shield reads channel by channel", () => {
         expect(await unreadable?.refusesImage(Buffer.from("png"), "read")).toBe("unreadable");
         const clean = await privacySliceFake({
             policy: { mode: "on" },
-            readers: { ocr: async () => true, readImage: async () => ({ width: 10, height: 10, lines: [] }), readPdf: async () => undefined },
+            readers: { ...noReaders, ocr: async () => true, readImage: async () => ({ width: 10, height: 10, lines: [] }) },
         }).privacyShield.forTurn("cursor", "native", "c-1");
         expect(await clean?.refusesImage(Buffer.from("png"), "read")).toEqual([]);
     });
@@ -476,6 +476,8 @@ describe("a picture leaving this machine whole", () => {
         ocr: async () => true,
         readImage: async () => ({ width: WIDTH, height: 40, lines: [line(text)] }),
         readPdf: async () => undefined,
+        drawPdf: async () => undefined,
+        readDocument: async () => undefined,
     });
     const shadeAt = async (image: Buffer, x: number, y: number): Promise<number> => {
         const { data, info } = await sharp(image).raw().toBuffer({ resolveWithObject: true });

@@ -4,6 +4,7 @@ import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker } from "../masker.js";
 import { memoryPrivacyImages } from "../privacy-images.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
+import type { PdfReading } from "../pdf-pages.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
 import { createReadingMemo, emptyTally, maskingShield, watchingShield } from "../gateway/request-shield.js";
@@ -31,6 +32,12 @@ const page = async (): Promise<string> =>
             .toBuffer()
     ).toString("base64");
 
+// page() as pdftoppm would draw it: a JPEG.
+const drawnPage = async (): Promise<Buffer> =>
+    sharp({ create: { width: WIDTH, height: HEIGHT, channels: 3, background: { r: GREY, g: GREY, b: GREY } } })
+        .jpeg()
+        .toBuffer();
+
 const lineOf = (text: string): OcrLine => {
     const chars = [...text];
     return {
@@ -48,7 +55,9 @@ const lineOf = (text: string): OcrLine => {
     };
 };
 
-const readers = (text: string | undefined): LocalReaders & { reads: number } => {
+// A reader of pages like page(): an image or a PDF of one such page holds `text`, any other document reads as it. A
+// PDF's pictures are checked unless `pixels` says the text reader is missing.
+const readers = (text: string | undefined, pixels = true): LocalReaders & { reads: number } => {
     const reader = {
         reads: 0,
         ocr: async () => text !== undefined,
@@ -56,10 +65,12 @@ const readers = (text: string | undefined): LocalReaders & { reads: number } => 
             reader.reads += 1;
             return text === undefined ? undefined : { width: WIDTH, height: HEIGHT, lines: text === "" ? [] : [lineOf(text)] };
         },
-        readPdf: async () => {
+        readPdf: async (): Promise<PdfReading | undefined> => {
             reader.reads += 1;
-            return text;
+            return text === undefined ? undefined : { pages: [{ width: WIDTH, height: HEIGHT, lines: text === "" ? [] : [lineOf(text)] }], pixels };
         },
+        drawPdf: async () => (text === undefined ? undefined : [await drawnPage()]),
+        readDocument: async (data: Buffer, mediaType: string) => (mediaType === "text/plain" ? data.toString("utf8") : undefined),
     };
     return reader;
 };
@@ -165,6 +176,8 @@ test("an animation goes as the one frame that was read, never whole, even with n
         ocr: async () => true,
         readImage: async () => ({ width: WIDTH, height: HEIGHT, lines: [], frames: 2 }),
         readPdf: async () => undefined,
+        drawPdf: async () => undefined,
+        readDocument: async () => undefined,
     };
     const { shield } = shieldWith("mask", blank);
     const out = await shield.image({ mediaType: "image/gif", data: gif.toString("base64") });
@@ -204,16 +217,46 @@ test("allowed, an image goes as it is, is never read and counts for nothing", as
     expect(tally.images).toBe(0);
 });
 
-test("a PDF goes as its masked text; one that yields none, or is not a PDF, is withheld", async () => {
+test("a PDF goes as a PDF of its pages with the value painted over, never as text", async () => {
     const { shield, tally } = shieldWith("mask", readers(`Umowa z PESEL ${PESEL}`));
     const out = await shield.document({ mediaType: "application/pdf", data: PDF });
+    if (out === "keep" || !("document" in out)) {
+        throw new Error(`the PDF did not go as a PDF: ${JSON.stringify(out)}`);
+    }
+    expect(out.document.mediaType).toBe("application/pdf");
+    const pdf = Buffer.from(out.document.data, "base64");
+    expect(pdf.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    // One page, the drawn picture painted over: not the picture as drawn.
+    expect(pdf.toString("latin1")).toContain("/Count 1");
+    expect(pdf.includes(await drawnPage())).toBe(false);
+    expect(pdf.toString("latin1")).not.toContain(PESEL);
+    expect(tally.documents).toBe(1);
+    expect(tally.counts).toEqual({ "national-id": 1 });
+    expect(tally.replacements).toEqual([{ token: NATIONAL_ID_1, class: "national-id", excerpt: `Umowa z PESEL ${NATIONAL_ID_1}` }]);
+    // With nothing found it still goes as pictures, never as the PDF it was.
+    const clean = await shieldWith("mask", readers("Umowa")).shield.document({
+        mediaType: "application/octet-stream",
+        data: Buffer.from("%PDF-1.7 fake").toString("base64"),
+    });
+    expect(clean !== "keep" && "document" in clean).toBe(true);
+});
+
+test("a PDF that cannot be read, or whose pictures no reader checked while pictures are masked, is withheld", async () => {
+    const withheld = async (reader: LocalReaders, images: "mask" | "allow") =>
+        JSON.stringify(await shieldWith(images, reader).shield.document({ mediaType: "application/pdf", data: PDF })).includes("withheld");
+    expect(await withheld(readers(undefined), "mask")).toBe(true);
+    expect(await withheld(readers(`PESEL ${PESEL}`, false), "mask")).toBe(true);
+    // Pictures may go unchecked: the text layer alone is painted over.
+    expect(await withheld(readers(`PESEL ${PESEL}`, false), "allow")).toBe(false);
+});
+
+test("another document goes as its masked text; one nothing here reads is withheld", async () => {
+    const { shield, tally } = shieldWith("mask", readers(""));
+    const out = await shield.document({ mediaType: "text/plain", data: Buffer.from(`Umowa z PESEL ${PESEL}`).toString("base64") });
     expect(JSON.stringify(out)).toContain(NATIONAL_ID_1);
     expect(JSON.stringify(out)).not.toContain(PESEL);
     expect(tally.documents).toBe(1);
-    expect(tally.replacements).toEqual([{ token: NATIONAL_ID_1, class: "national-id", excerpt: `Umowa z PESEL ${NATIONAL_ID_1}` }]);
-    const { shield: blank } = shieldWith("mask", readers(undefined));
-    expect(JSON.stringify(await blank.document({ mediaType: "application/pdf", data: PDF }))).toContain("withheld");
-    expect(JSON.stringify(await blank.document({ mediaType: "application/msword", data: PDF }))).toContain("withheld");
+    expect(JSON.stringify(await shield.document({ mediaType: "application/msword", data: PDF.replace("JVBER", "AAAA") }))).toContain("withheld");
 });
 
 test("watching counts what masking would have checked and changes nothing", async () => {

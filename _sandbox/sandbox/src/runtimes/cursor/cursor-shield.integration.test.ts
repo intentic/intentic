@@ -4,7 +4,8 @@ import { join } from "node:path";
 import type { SDKCustomTool } from "@cursor/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { pesel } from "@intentic/privacy-detect/testing";
-import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import type { PdfReading } from "../../privacy/pdf-pages.js";
+import { noReaders, privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import { tokenOf } from "../../privacy/tokens.js";
 import { createEventRestorer, cursorHookShield, instructionRefusal, restoreEdits, shieldedCustomTools } from "./cursor-shield.js";
@@ -15,6 +16,26 @@ import { createEventRestorer, cursorHookShield, instructionRefusal, restoreEdits
 
 const NUMBER = pesel(1985, 3, 14, 4562);
 const TOKEN = tokenOf("NATIONAL_ID", 1);
+
+// A one-page PDF as the readers would report it: one line across a page, its pictures checked.
+const pdfOf = async (text: string): Promise<PdfReading> => {
+    const chars = [...text];
+    const corners = [
+        { x: 0, y: 0 },
+        { x: 400, y: 0 },
+        { x: 400, y: 20 },
+        { x: 0, y: 20 },
+    ] as const;
+    const line = {
+        text,
+        score: 1,
+        corners,
+        chars: chars.map((char, index) => ({ char, from: index / chars.length, to: (index + 1) / chars.length })),
+        column: 0.01,
+        vertical: false,
+    };
+    return { pages: [{ width: 400, height: 40, lines: [line] }], pixels: true };
+};
 
 const shieldFor = async (mode: "on" | "watch" = "on"): Promise<TurnShield> => {
     const shield = await privacySliceFake({ policy: { mode } }).privacyShield.forTurn("cursor", "native", "c-1");
@@ -45,7 +66,7 @@ describe("a file Cursor's read tool opens", () => {
     test("is refused as a PDF holding personal data, one the shield can't read, or a file it can't check at all", async () => {
         const reading = await privacySliceFake({
             policy: { mode: "on" },
-            readers: { ocr: async () => false, readImage: async () => undefined, readPdf: async (data) => (data.toString() === "clean" ? "Invoice" : `PESEL ${NUMBER}`) },
+            readers: { ...noReaders, readPdf: async (data) => pdfOf(data.toString() === "clean" ? "Invoice" : `PESEL ${NUMBER}`) },
         }).privacyShield.forTurn("cursor", "native", "c-1");
         if (reading === undefined) {
             throw new Error("no shield");

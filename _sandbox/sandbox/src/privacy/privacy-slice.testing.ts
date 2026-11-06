@@ -41,7 +41,13 @@ export const memoryPrivacyLedger = (): PrivacyLedger & { readonly entries: Priva
 };
 
 // No reader installed, as on an image without the privacy pack.
-export const noReaders: LocalReaders = { ocr: async () => false, readImage: async () => undefined, readPdf: async () => undefined };
+export const noReaders: LocalReaders = {
+    ocr: async () => false,
+    readImage: async () => undefined,
+    readPdf: async () => undefined,
+    drawPdf: async () => undefined,
+    readDocument: async () => undefined,
+};
 
 export interface PrivacyFakeOptions {
     readonly policy?: Partial<PrivacyShieldPolicy>;

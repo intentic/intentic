@@ -63,6 +63,8 @@ test.skipIf(!page.runs)(page.title("a share made while the shield is on publishe
         ocr: async () => true,
         readImage: async (data) => (data.equals(scan) ? { width: WIDTH, height: 40, lines: [line(`PESEL ${VALUE}`)] } : undefined),
         readPdf: async () => undefined,
+        drawPdf: async () => undefined,
+        readDocument: async () => undefined,
     };
     const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, readers });
     const rows: TranscriptRow[] = [

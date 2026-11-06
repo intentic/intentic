@@ -4,9 +4,10 @@ import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-
 import { readCappedBytes } from "@intentic/base/capped-read";
 import { distinctFinds, type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
 import type { ClassCounts, Masker, Replacement } from "../masker.js";
+import { documentWords, paintedPdf, type PdfReading } from "../pdf-pages.js";
 import type { PrivacyImageArchive } from "../privacy-images.js";
 import type { ImageReading, LocalReaders } from "../readers.js";
-import type { RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js";
+import type { DocumentVerdict, RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js";
 
 // The shield one request is walked with: the masker for text, the local readers for images and PDFs, and the note that
 // tells the model what a token is. Masking builds the body that leaves; watching builds the same tally over a body that
@@ -15,12 +16,12 @@ import type { RequestShield, ShieldBinary, ShieldTally } from "./shield-types.js
 // Appended to the instructions of every masked request, worded the same every time so the provider's prompt cache keeps.
 // Its examples spell the number as a letter: a real one would be a token the vault may have given somebody.
 export const SHIELD_NOTE =
-    "Personal data in this conversation (names, identity and tax numbers, accounts, contact details, addresses) reaches you as tokens of the form ⟦PERSON_n⟧ or ⟦NATIONAL_ID_n⟧ (n a number), and each token is turned back into the real value on the user's machine before anything runs or is shown. In images, the personal data is painted over with its token in black on white. Treat a token as the value it stands for: write it exactly as given, brackets, label and number, wherever that value belongs, in replies, commands, code and file edits alike. Never guess, reconstruct or ask for the values behind tokens.";
+    "Personal data in this conversation (names, identity and tax numbers, accounts, contact details, addresses) reaches you as tokens of the form ⟦PERSON_n⟧ or ⟦NATIONAL_ID_n⟧ (n a number), and each token is turned back into the real value on the user's machine before anything runs or is shown. In images and PDFs, the personal data is painted over with its token in black on white. Treat a token as the value it stands for: write it exactly as given, brackets, label and number, wherever that value belongs, in replies, commands, code and file edits alike. Never guess, reconstruct or ask for the values behind tokens.";
 
 const WITHHELD_IMAGE =
     "[An image was withheld by the privacy shield: this model provider is not trusted with personal data, and the image could not be read on this machine to cover the personal data in it. If you need to see it, say so and the user can switch this conversation to a trusted model.]";
 const WITHHELD_DOCUMENT =
-    "[A document was withheld by the privacy shield: this model provider is not trusted with personal data, and the document's text could not be read on this machine to mask it. If you need it, say so and the user can switch this conversation to a trusted model.]";
+    "[A document was withheld by the privacy shield: this model provider is not trusted with personal data, and the document could not be read on this machine to mask it. If you need it, say so and the user can switch this conversation to a trusted model.]";
 const READ_DOCUMENT = "[A document, replaced by its text as read on the user's machine, with personal data masked by the privacy shield:]";
 
 const addCounts = (into: Record<string, number>, counts: ClassCounts): void => {
@@ -61,46 +62,63 @@ const createMemo = <T>(limit: number): Memo<T> => {
     };
 };
 
-// What the readers produced, kept across the requests of every conversation: documents' text, images' lines, and the
-// masked images themselves, so a re-sent image goes out as the same bytes and the provider's prompt cache keeps.
+// What the readers produced, kept across the requests of every conversation: documents' text, images' and PDF pages'
+// lines, and the masked images and PDFs themselves, so a re-sent one goes out as the same bytes and the provider's
+// prompt cache keeps.
 export interface ReadingMemo {
     readonly texts: Memo<string>;
     readonly images: Memo<ImageReading>;
     readonly painted: Memo<PaintedImage>;
+    readonly pdfs: Memo<PdfReading>;
+    // Base64.
+    readonly paintedPdfs: Memo<string>;
 }
 
-// Few and small, except the painted images: those are whole pictures, so fewer of them are kept.
+// Few and small, except the painted images and PDFs: those are whole pictures, so fewer of them are kept.
 export const createReadingMemo = (limit = 256): ReadingMemo => ({
     texts: createMemo(limit),
     images: createMemo(limit),
     painted: createMemo(Math.max(1, Math.floor(limit / 8))),
+    pdfs: createMemo(Math.max(1, Math.floor(limit / 8))),
+    paintedPdfs: createMemo(Math.max(1, Math.floor(limit / 32))),
 });
 
+// A PDF by its media type, or by its first bytes ("%PDF-") when it came as anything else.
 const PDF = /^application\/pdf\b/iu;
+const isPdf = (binary: ShieldBinary): boolean => PDF.test(binary.mediaType) || binary.data.startsWith("JVBERi0");
 
-// An image a request names by its address, fetched here so what is checked is what is sent. Bounded in size and time.
+// An image or document a request names by its address, fetched here so what is checked is what is sent. Bounded in
+// size and time; a PDF may run larger than a picture.
 const IMAGE_FETCH_LIMIT = 20 * 1024 * 1024;
-const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+const DOCUMENT_FETCH_LIMIT = 32 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 15_000;
 
-export const fetchRemoteImage = async (url: string, send: typeof fetch = fetch): Promise<ShieldBinary | undefined> => {
+const fetchRemote = async (url: string, accepts: (type: string) => boolean, limit: number, send: typeof fetch): Promise<ShieldBinary | undefined> => {
     if (!/^https?:\/\//iu.test(url)) {
         return undefined;
     }
     try {
-        const response = await send(url, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS), redirect: "follow" });
+        const response = await send(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: "follow" });
         const type = response.headers.get("content-type") ?? "";
         const length = Number(response.headers.get("content-length") ?? "0");
-        if (!response.ok || !type.toLowerCase().startsWith("image/") || length > IMAGE_FETCH_LIMIT) {
+        if (!response.ok || !accepts(type.toLowerCase()) || length > limit) {
             return undefined;
         }
         // Counted as it streams, since a chunked answer declares no length for the check above to refuse.
-        const { bytes, truncated } = await readCappedBytes(response, IMAGE_FETCH_LIMIT);
+        const { bytes, truncated } = await readCappedBytes(response, limit);
         return truncated ? undefined : { mediaType: type.split(";")[0]?.trim() ?? type, data: Buffer.from(bytes).toString("base64") };
     } catch {
-        // allow(silent-catch): an image that cannot be fetched cannot be checked, which the caller answers by holding it back.
+        // allow(silent-catch): what cannot be fetched cannot be checked, which the caller answers by holding it back.
         return undefined;
     }
 };
+
+export const fetchRemoteImage = (url: string, send: typeof fetch = fetch): Promise<ShieldBinary | undefined> =>
+    fetchRemote(url, (type) => type.startsWith("image/"), IMAGE_FETCH_LIMIT, send);
+
+// Anything but a picture: whether it reads as a document is the readers' to say.
+const fetchRemoteDocument = (url: string, send: typeof fetch = fetch): Promise<ShieldBinary | undefined> =>
+    fetchRemote(url, (type) => type !== "" && !type.startsWith("image/"), DOCUMENT_FETCH_LIMIT, send);
 
 export interface RequestShieldDeps {
     readonly masker: Masker;
@@ -110,11 +128,51 @@ export interface RequestShieldDeps {
     readonly tally: ShieldTally;
     // Where each painted image is kept beside the picture it was, for the owner to peek at; none keeps nothing.
     readonly archive?: PrivacyImageArchive;
-    // Where an image named by its address is fetched from; the network unless a test says otherwise.
+    // Where an image or a document named by its address is fetched from; the network unless a test says otherwise.
     readonly fetchImage?: (url: string) => Promise<ShieldBinary | undefined>;
+    readonly fetchDocument?: (url: string) => Promise<ShieldBinary | undefined>;
 }
 
 const keyOf = (binary: ShieldBinary): string => createHash("sha1").update(binary.mediaType).update("\0").update(binary.data).digest("base64url");
+
+// The memo's answer, or the reader's, remembered; `fresh` when the reader ran, so a re-sent image counts once.
+const remembered = async <T>(memo: Memo<T>, binary: ShieldBinary, read: (data: Buffer) => Promise<T | undefined>) => {
+    const key = keyOf(binary);
+    const hit = memo.get(key);
+    if (hit !== null) {
+        return { key, value: hit, fresh: false };
+    }
+    const value = await read(Buffer.from(binary.data, "base64"));
+    memo.set(key, value);
+    return { key, value, fresh: true };
+};
+
+// A PDF bound for the provider, never as text (pdf-pages.ts): its pages drawn and read here, the words of all of them
+// checked as one, each page painted over where its values are, and the pages bound again into a PDF of pictures. Held
+// back when it cannot be read, or when its pictures could not be checked and pictures may not go unchecked.
+const maskPdf = async (
+    { masker, readers, readings, images, tally }: Pick<RequestShieldDeps, "masker" | "readers" | "readings" | "images" | "tally">,
+    source: ShieldBinary,
+): Promise<DocumentVerdict> => {
+    const reading = await remembered(readings.pdfs, source, readers.readPdf);
+    if (reading.value === undefined || (!reading.value.pixels && images === "mask")) {
+        return { text: WITHHELD_DOCUMENT };
+    }
+    const { pages } = reading.value;
+    const words = documentWords(pages);
+    const found = await masker.find(words.text, words.keep);
+    addCounts(tally.counts, found.counts);
+    addFound(tally, found.found);
+    const regions = pages.map((page, index) => regionsFor(page.lines, words.onPage(found.spans, index), page));
+    const paintKey = createHash("sha1").update(reading.key).update("\0").update(JSON.stringify(regions)).digest("base64url");
+    let painted = readings.paintedPdfs.get(paintKey);
+    if (painted === null) {
+        const drawn = await readers.drawPdf(Buffer.from(source.data, "base64"));
+        painted = (drawn === undefined ? undefined : await paintedPdf(drawn, pages, regions))?.toString("base64");
+        readings.paintedPdfs.set(paintKey, painted);
+    }
+    return painted === undefined ? { text: WITHHELD_DOCUMENT } : { document: { mediaType: "application/pdf", data: painted } };
+};
 
 export const maskingShield = ({
     masker,
@@ -124,23 +182,13 @@ export const maskingShield = ({
     tally,
     archive,
     fetchImage = fetchRemoteImage,
+    fetchDocument = fetchRemoteDocument,
 }: RequestShieldDeps): RequestShield => {
     const mask = async (text: string): Promise<string> => {
         const result = await masker.mask(text);
         addCounts(tally.counts, result.counts);
         addFound(tally, result.found);
         return result.text;
-    };
-    // The memo's answer, or the reader's, remembered; `fresh` when the reader ran, so a re-sent image counts once.
-    const remembered = async <T>(memo: Memo<T>, binary: ShieldBinary, read: (data: Buffer) => Promise<T | undefined>) => {
-        const key = keyOf(binary);
-        const hit = memo.get(key);
-        if (hit !== null) {
-            return { key, value: hit, fresh: false };
-        }
-        const value = await read(Buffer.from(binary.data, "base64"));
-        memo.set(key, value);
-        return { key, value, fresh: true };
     };
     // The image with what the reader found painted over, or the note that holds it back when it could not be read.
     const maskImage = async (source: ShieldBinary): Promise<"keep" | { readonly text: string } | { readonly image: ShieldBinary }> => {
@@ -194,12 +242,18 @@ export const maskingShield = ({
             const verdict = await maskImage(fetched);
             return verdict === "keep" ? { image: fetched } : verdict;
         },
+        // A PDF goes as a PDF of its pages painted over; any other document the readers can read goes as its masked
+        // text; the rest, and what cannot be fetched or read, is held back. By address, it is fetched and goes inline.
         document: async (document) => {
             tally.documents += 1;
-            if (document.mediaType === "url" || !PDF.test(document.mediaType)) {
+            const source = document.mediaType === "url" ? await fetchDocument(document.data) : document;
+            if (source === undefined) {
                 return { text: WITHHELD_DOCUMENT };
             }
-            const { value: text } = await remembered(readings.texts, document, readers.readPdf);
+            if (isPdf(source)) {
+                return maskPdf({ masker, readers, readings, images, tally }, source);
+            }
+            const { value: text } = await remembered(readings.texts, source, async (data) => readers.readDocument(data, source.mediaType));
             return text === undefined ? { text: WITHHELD_DOCUMENT } : { text: `${READ_DOCUMENT}\n${await mask(text)}` };
         },
     };

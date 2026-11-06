@@ -61,19 +61,29 @@ const walkImage = async (block: JsonObject, shield: RequestShield): Promise<Json
         : textBlock(block, verdict.text);
 };
 
-// A PDF (inline or by URL) the shield replaced: the same document, now plain text, so its title, context, citations
-// setting and cache breakpoint still apply.
+// A document (inline or by URL) the shield replaced by text: the same document, now plain text, so its title, context,
+// citations setting and cache breakpoint still apply.
 const documentAsText = (block: JsonObject, text: string): JsonObject => ({
     ...block,
     source: { type: "text", media_type: "text/plain", data: text },
 });
+
+// A PDF the shield painted over: the same document block holding it inline, whatever source the original named. Its
+// pages are pictures now, with no text for a citation to quote, so citations are not asked for.
+const documentAsPdf = (block: JsonObject, pdf: ShieldBinary): JsonObject => {
+    const { citations: _citations, ...rest } = block;
+    return { ...rest, source: { type: "base64", media_type: pdf.mediaType, data: pdf.data } };
+};
 
 const walkDocumentSource = async (block: JsonObject, shield: RequestShield, walk: Walk): Promise<JsonObject> => {
     const source = block["source"];
     const binary = binaryOf(source, "application/pdf");
     if (binary !== undefined) {
         const verdict = await shield.document(binary);
-        return verdict === "keep" ? block : documentAsText(block, verdict.text);
+        if (verdict === "keep") {
+            return block;
+        }
+        return "document" in verdict ? documentAsPdf(block, verdict.document) : documentAsText(block, verdict.text);
     }
     if (!isRecord(source)) {
         return block;

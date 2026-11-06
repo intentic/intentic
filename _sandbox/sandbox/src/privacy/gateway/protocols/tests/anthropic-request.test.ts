@@ -1,6 +1,6 @@
 import { shieldRequest } from "../index.js";
 import type { Json, JsonObject } from "../walk.js";
-import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, NOTE } from "./fake-shield.testing.js";
+import { at, deepFreeze, DOCUMENT_TEXT, fakeShield, IMAGE_TEXT, MASKED_IMAGE, MASKED_PDF, NOTE } from "./fake-shield.testing.js";
 
 // The Messages API request as Claude Code sends it. Every place a person's data can sit in the conversation must come
 // out masked, and every byte the provider signs or the harness owns must come out untouched.
@@ -328,4 +328,23 @@ describe("shielding an Anthropic Messages request", () => {
             tools: TOOLS,
         });
     });
+});
+
+test("a PDF the shield painted over goes as that PDF inline, by address too, with no citations asked of its pictures", async () => {
+    const block = (source: JsonObject): JsonObject => ({ type: "document", source, title: "Umowa", citations: { enabled: true } });
+    const body = deepFreeze({
+        model: "claude",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    block({ type: "base64", media_type: "application/pdf", data: PDF }),
+                    block({ type: "url", url: "https://example.com/umowa.pdf" }),
+                ],
+            },
+        ],
+    });
+    const shielded = await shieldRequest("anthropic", body, fakeShield({ paintDocuments: true }));
+    const painted = { type: "document", source: { type: "base64", media_type: "application/pdf", data: MASKED_PDF.data }, title: "Umowa" };
+    expect(at(shielded, "messages", 0, "content")).toEqual([painted, painted]);
 });

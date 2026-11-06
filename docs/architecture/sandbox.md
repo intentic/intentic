@@ -317,7 +317,12 @@ The Changes panel stages everything and commits everything as runs, the push's s
   what it cannot read. The words are checked row by row and again with each wrapped table cell or paragraph joined, so
   a value split over two lines (an IBAN in a narrow cell, a postal code above its town) is painted over on both. One that cannot be read (no pack yet, bytes that do not decode) is held back with a note, never
   sent unchecked, and an animation goes as the one frame that was read. The reader runs on a worker thread, so the half
-  minute a phone photo takes to read no longer stalls the rest of the daemon. A PDF goes as its masked text where it can be read, and is otherwise withheld.
+  minute a phone photo takes to read no longer stalls the rest of the daemon. A PDF never goes as text: its pages are drawn here, its words placed from its text layer and read off the
+  picture wherever the layer does not account for what a page shows (a scan, a photo, a form field, a stamp), the
+  personal data painted over as in an image, and the pages bound again into a PDF of pictures alone
+  ([`pdf-pages.ts`](../../_sandbox/sandbox/src/privacy/pdf-pages.ts)), so no text layer, metadata, form or attachment
+  of the original leaves. Another document the shield can read (an office file, an e-book, a web page, plain text) goes
+  as its masked text, read by `fileq`; anything else, and a PDF that cannot be drawn or checked, is withheld.
 - (2026-10-07) A name is masked only as a name: a first name with a surname that is no ordinary word, in either order
   ([`names.ts`](../../_sandbox/privacy-detect/src/names.ts)), or what a title, a field for a part of a name
   (`lastName`, `nazwisko`) or a personal mail address vouches for. No single word is masked by the lists alone, and no
