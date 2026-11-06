@@ -60,10 +60,11 @@ const linkTexts = (line: string, opener: "![" | "[", minText: number): string =>
 };
 
 // Inline markdown to its words: links and images to their text, emphasis and code ticks dropped, paths and URLs said
-// short, and glyphs a voice would read as noise (arrows, bullets) made into pauses.
+// short, and glyphs a voice would read as noise (arrows, bullets) made into pauses. A tag ends at the next `<` as well as
+// at `>`: `<[^>]+>` rescans to the end of the line from every `<` that has no `>` after it.
 export const speakableInline = (line: string): string =>
     linkTexts(linkTexts(line, "![", 0), "[", 1)
-        .replaceAll(/<[^>]+>/gu, "")
+        .replaceAll(/<[^<>]+>/gu, "")
         .replaceAll(URL, "$1")
         .replaceAll(/`([^`]*)`/gu, "$1")
         .replaceAll(PATH, "$1")

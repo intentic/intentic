@@ -97,3 +97,10 @@ test("unclosed link and image openers are read in linear time, and a closed link
     expect(speakableInline(line).startsWith("docs ![")).toBe(true);
     expect(performance.now() - started).toBeLessThan(1000);
 });
+
+test("unclosed tag openers are read in linear time, and a closed tag after them is still dropped", () => {
+    const line = `${"<".repeat(50_000)}<b>bold</b>`;
+    const started = performance.now();
+    expect(speakableInline(line)).toBe(`${"<".repeat(50_000)}bold`);
+    expect(performance.now() - started).toBeLessThan(1000);
+});
