@@ -62,7 +62,7 @@ export { default as AppBrand } from "./components/brand/AppBrand.vue";
 export { default as Avatar } from "./components/brand/Avatar.vue";
 export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anchorPlacement.js";
 // What `v-tooltip` takes: a one- or two-word label, or a `Tip` card of headline, figures and key cap.
-export { type Tip, type TipRow, type TipTone, type TooltipValue, vTooltip } from "./lib/tooltip.js";
+export { type Tip, type TipRow, type TipTone, type TooltipValue, tipOnHover, vTooltip } from "./lib/tooltip.js";
 export { isTip, tipText } from "./lib/tipText.js";
 export { default as BarChart } from "./components/charts/BarChart.vue";
 export { type BarItem } from "./components/charts/barChart.js";

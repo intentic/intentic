@@ -87,7 +87,10 @@ const saidOf = (value: TooltipValue): Said | undefined => {
 
 const states = new WeakMap<HTMLElement, TooltipState>();
 
-const read = (binding: DirectiveBinding<TooltipValue, Modifier>): Pick<TooltipState, "said" | "key" | "side" | "overflowOnly" | "lines"> => {
+// What the directive reads of its binding, so an element no template owns can be bound the same way (`tipOnHover`).
+type Binding = Pick<DirectiveBinding<TooltipValue, Modifier>, "value" | "modifiers">;
+
+const read = (binding: Binding): Pick<TooltipState, "said" | "key" | "side" | "overflowOnly" | "lines"> => {
     const said = saidOf(binding.value);
     return {
         said,
@@ -168,89 +171,93 @@ const place = (box: HTMLElement, anchor: DOMRect, wanted: Side, view: Window): S
     return placed.side;
 };
 
+const attach = (el: HTMLElement, binding: Binding): void => {
+    const state: TooltipState = {
+        ...read(binding),
+        box: undefined,
+        show: () => {
+            state.hide();
+            const said = state.said;
+            if (said === undefined || (said.kind === `label` && state.overflowOnly && !isClipped(el))) {
+                return;
+            }
+            // Uses the anchor's own document/window, whether it's on the page or a popped-out panel.
+            const doc = el.ownerDocument;
+            const view = doc.defaultView;
+            if (view === null) {
+                return;
+            }
+            const box = doc.createElement(`div`);
+            box.className = `ui-tooltip`;
+            box.setAttribute(`role`, `tooltip`);
+            box.style.visibility = `hidden`; // measured before it is placed; revealed once it is
+            const body = doc.createElement(`div`);
+            body.className = `ui-tooltip-body`;
+            if (said.kind === `label`) {
+                body.textContent = said.text; // a text node, so a label can never inject markup
+                if (state.lines) {
+                    body.style.whiteSpace = `pre-line`;
+                }
+            } else {
+                box.classList.add(`ui-tooltip-card`);
+                drawTip(doc, body, said.tip);
+            }
+            box.appendChild(body);
+            doc.body.appendChild(box);
+            box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.side, view)}`);
+            box.style.visibility = ``;
+            state.box = box;
+            // Scroll or resize moves the anchor from under a fixed box; capture catches whichever ancestor
+            // scrolled.
+            doc.addEventListener(`scroll`, state.hide, true);
+            view.addEventListener(`resize`, state.hide);
+        },
+        hide: () => {
+            const box = state.box;
+            if (box === undefined) {
+                return;
+            }
+            state.box = undefined;
+            box.ownerDocument.removeEventListener(`scroll`, state.hide, true);
+            box.ownerDocument.defaultView?.removeEventListener(`resize`, state.hide);
+            box.remove();
+        },
+        onKeydown: (event) => {
+            if (event.key === `Escape`) {
+                state.hide();
+            }
+        },
+        // Keyboard focus shows the label too; click-focus doesn't, or every pressed button would keep its tooltip
+        // up.
+        onFocus: () => {
+            if (el.matches(`:focus-visible`)) {
+                state.show();
+            }
+        },
+        touched: false,
+        onPointerEnter: (event) => {
+            state.touched = event.pointerType === `touch`;
+        },
+        // A tap's compatibility `mouseenter` arrives after its touch `pointerenter`; a real mouse's after a mouse one.
+        onMouseEnter: () => {
+            if (!state.touched) {
+                state.show();
+            }
+        },
+    };
+    states.set(el, state);
+    el.addEventListener(`pointerenter`, state.onPointerEnter);
+    el.addEventListener(`mouseenter`, state.onMouseEnter);
+    el.addEventListener(`mouseleave`, state.hide);
+    el.addEventListener(`click`, state.hide);
+    el.addEventListener(`focus`, state.onFocus);
+    el.addEventListener(`blur`, state.hide);
+    el.addEventListener(`keydown`, state.onKeydown);
+};
+
 export const vTooltip: Directive<HTMLElement, TooltipValue, Modifier> = {
     mounted(el, binding) {
-        const state: TooltipState = {
-            ...read(binding),
-            box: undefined,
-            show: () => {
-                state.hide();
-                const said = state.said;
-                if (said === undefined || (said.kind === `label` && state.overflowOnly && !isClipped(el))) {
-                    return;
-                }
-                // Uses the anchor's own document/window, whether it's on the page or a popped-out panel.
-                const doc = el.ownerDocument;
-                const view = doc.defaultView;
-                if (view === null) {
-                    return;
-                }
-                const box = doc.createElement(`div`);
-                box.className = `ui-tooltip`;
-                box.setAttribute(`role`, `tooltip`);
-                box.style.visibility = `hidden`; // measured before it is placed; revealed once it is
-                const body = doc.createElement(`div`);
-                body.className = `ui-tooltip-body`;
-                if (said.kind === `label`) {
-                    body.textContent = said.text; // a text node, so a label can never inject markup
-                    if (state.lines) {
-                        body.style.whiteSpace = `pre-line`;
-                    }
-                } else {
-                    box.classList.add(`ui-tooltip-card`);
-                    drawTip(doc, body, said.tip);
-                }
-                box.appendChild(body);
-                doc.body.appendChild(box);
-                box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.side, view)}`);
-                box.style.visibility = ``;
-                state.box = box;
-                // Scroll or resize moves the anchor from under a fixed box; capture catches whichever ancestor
-                // scrolled.
-                doc.addEventListener(`scroll`, state.hide, true);
-                view.addEventListener(`resize`, state.hide);
-            },
-            hide: () => {
-                const box = state.box;
-                if (box === undefined) {
-                    return;
-                }
-                state.box = undefined;
-                box.ownerDocument.removeEventListener(`scroll`, state.hide, true);
-                box.ownerDocument.defaultView?.removeEventListener(`resize`, state.hide);
-                box.remove();
-            },
-            onKeydown: (event) => {
-                if (event.key === `Escape`) {
-                    state.hide();
-                }
-            },
-            // Keyboard focus shows the label too; click-focus doesn't, or every pressed button would keep its tooltip
-            // up.
-            onFocus: () => {
-                if (el.matches(`:focus-visible`)) {
-                    state.show();
-                }
-            },
-            touched: false,
-            onPointerEnter: (event) => {
-                state.touched = event.pointerType === `touch`;
-            },
-            // A tap's compatibility `mouseenter` arrives after its touch `pointerenter`; a real mouse's after a mouse one.
-            onMouseEnter: () => {
-                if (!state.touched) {
-                    state.show();
-                }
-            },
-        };
-        states.set(el, state);
-        el.addEventListener(`pointerenter`, state.onPointerEnter);
-        el.addEventListener(`mouseenter`, state.onMouseEnter);
-        el.addEventListener(`mouseleave`, state.hide);
-        el.addEventListener(`click`, state.hide);
-        el.addEventListener(`focus`, state.onFocus);
-        el.addEventListener(`blur`, state.hide);
-        el.addEventListener(`keydown`, state.onKeydown);
+        attach(el, binding);
     },
     updated(el, binding) {
         const state = states.get(el);
@@ -283,6 +290,16 @@ export const vTooltip: Directive<HTMLElement, TooltipValue, Modifier> = {
         el.removeEventListener(`keydown`, state.onKeydown);
         states.delete(el);
     },
+};
+
+/** A tip on an element no template owns (words inside rendered markdown), bound on the pointer's first visit and shown
+ *  at once; from then on it behaves as `v-tooltip` does. Call it from a delegated `mouseover` on the owning container. */
+export const tipOnHover = (el: HTMLElement, value: TooltipValue): void => {
+    if (states.has(el)) {
+        return;
+    }
+    attach(el, { value, modifiers: {} });
+    states.get(el)?.show();
 };
 
 // Every template's `v-tooltip` is type-checked against what the directive takes, so a sentence-shaped object or a

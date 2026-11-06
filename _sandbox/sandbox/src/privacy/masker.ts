@@ -57,6 +57,10 @@ export interface Masker {
     // What every source would find in a string and which found it, for the owner trying the shield on a text: nothing
     // is given a token, nothing is remembered, and the vault is only read.
     readonly inspect: (text: string) => Promise<PrivacyPreviewSpan[]>;
+    // The values the vault already holds in a string, as the gate admits them where they stand, and the token each one
+    // goes to a provider as. Only read: no detector runs, no token is given and nothing is marked seen. For a reply that
+    // was written as tokens and restored here, these are the words its model never read.
+    readonly known: (text: string) => Promise<readonly FoundSpan[]>;
 }
 
 interface Remembered {
@@ -233,6 +237,24 @@ const knownIn = (vault: PrivacyVault, gate: Gate, text: string, noting: boolean)
             return { ...knownSpan(text, start, end, payload), token: payload.token };
         });
 
+// Masker.known: the vault's values in a string around the tokens already in it, settled as the gate settles them.
+const knownSpans = async (vault: PrivacyVault, gate: Gate, text: string): Promise<FoundSpan[]> => {
+    await vault.load();
+    const out: FoundSpan[] = [];
+    let offset = 0;
+    for (const part of segmentsAroundTokens(text)) {
+        if (!part.token && HAS_WORD.test(part.text)) {
+            for (const span of gate.settle(part.text, knownIn(vault, gate, part.text, false))) {
+                if (span.token !== undefined) {
+                    out.push({ start: offset + span.start, end: offset + span.end, class: span.class, token: span.token });
+                }
+            }
+        }
+        offset += part.text.length;
+    }
+    return out;
+};
+
 // Tokens back to the values they stand for, read from the vault alone.
 const restoreFrom = (vault: PrivacyVault, text: string): string =>
     text.includes("⟦") || text.includes("[[")
@@ -275,12 +297,7 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
         for (const span of spans) {
             counts[span.class] = (counts[span.class] ?? 0) + 1;
         }
-        return placeTokens(
-            text,
-            spans.map((span) => ({ ...span, token: tokenOfSpan(span) })),
-            placed,
-            base,
-        );
+        return placeTokens(text, spans.map((span) => ({ ...span, token: tokenOfSpan(span) })), placed, base);
     };
 
     // What every source proposes in a stretch of text holding no token, through the gate.
@@ -380,5 +397,6 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
                 ...opt("rule", span.rule),
             }));
         },
+        known: (text) => knownSpans(vault, gate, text),
     };
 };

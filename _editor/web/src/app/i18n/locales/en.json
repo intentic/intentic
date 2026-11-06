@@ -3615,6 +3615,11 @@
             "continueOtherModel": "Continue with another model",
             "privacyOthersLetThrough": "The owner, Full access, or someone given the Privacy shield can let it through."
         },
+        "shieldedWords": {
+            "title": "Hidden from model",
+            "read": "Model read",
+            "note": "Restored on this machine"
+        },
         "chatPaneTurns": {
             "couldntOpen": "Couldn't open this conversation.",
             "couldntRefresh": "Couldn't refresh this conversation, showing the saved copy.",

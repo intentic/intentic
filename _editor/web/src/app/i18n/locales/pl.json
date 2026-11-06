@@ -3615,6 +3615,11 @@
             "continueOtherModel": "Kontynuuj z innym modelem",
             "privacyOthersLetThrough": "Przepuścić go może właściciel, ktoś z pełnym dostępem albo ktoś, kto zarządza Osłoną prywatności."
         },
+        "shieldedWords": {
+            "title": "Ukryte przed modelem",
+            "read": "Model widział",
+            "note": "Przywrócone na tym komputerze"
+        },
         "chatPaneTurns": {
             "couldntOpen": "Nie udało się otworzyć tej rozmowy.",
             "couldntRefresh": "Nie udało się odświeżyć tej rozmowy, pokazujemy zapisaną kopię.",

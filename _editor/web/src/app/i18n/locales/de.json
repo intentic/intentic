@@ -3615,6 +3615,11 @@
             "continueOtherModel": "Mit einem anderen Modell fortsetzen",
             "privacyOthersLetThrough": "Durchlassen können es der Eigentümer, jemand mit vollem Zugriff oder wer den Datenschutzschild verwalten darf."
         },
+        "shieldedWords": {
+            "title": "Vor Modell verborgen",
+            "read": "Modell las",
+            "note": "Auf diesem Rechner eingesetzt"
+        },
         "chatPaneTurns": {
             "couldntOpen": "Diese Unterhaltung konnte nicht geöffnet werden.",
             "couldntRefresh": "Diese Unterhaltung konnte nicht aktualisiert werden, die gespeicherte Kopie wird angezeigt.",

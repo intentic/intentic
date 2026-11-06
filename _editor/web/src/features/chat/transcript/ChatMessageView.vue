@@ -16,6 +16,7 @@ import { pinPrompt } from "./promptPins";
 import { watchClamp } from "./clampWatch";
 import { type CardAnswer, requestIdOf } from "../../../models/conversations/session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
+import { useShieldedMarks } from "../panel/privacy/useShieldedWords";
 import { openFileRefFromEvent } from "../../../models/workspace/files/openFileRef";
 import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../workbench/side/sideLinks";
 import { openLoopbackPreview } from "../../../models/terminal/portPreview";
@@ -149,6 +150,8 @@ const body = useMarkdown(
     () => props.streaming,
     () => conversation.value.scope.value,
 );
+// A finished reply's values its model only ever read as tokens, marked, with a hover saying so (useShieldedWords.ts).
+const shielded = useShieldedMarks(body, () => props.message.role === `assistant` && !props.streaming);
 
 // Delegated listener for markdown's copy buttons, file links and links a side view claims (inside v-html); bound to
 // press, since a live rerender can destroy the button before click fires.
@@ -614,8 +617,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  paint-contains (.chat-message), and opting every answer out of that is what long transcripts pay for.
                  Shown on hover, as the fork mark is (dimmed on a phone, and lit while it reads). -->
             <div v-if="message.text" class="group/reply relative w-full">
-                <div data-message-text class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
-                    <MarkdownParts :parts="body" />
+                <div data-message-text class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5" @mouseover="shielded.onHover">
+                    <MarkdownParts :parts="shielded.shown.value" />
                 </div>
                 <ChatReadAloud
                     v-if="!live"

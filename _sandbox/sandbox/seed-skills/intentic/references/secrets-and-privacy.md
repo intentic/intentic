@@ -64,6 +64,10 @@ command, a query, an edit) and it resolves before anything runs. Before working 
 `--table` or `--query`); the values go to the daemon and are never printed. Turning it off, trusting a provider or
 forgetting a dataset is the owner's.
 
+In the chat, a value in a reply that its model wrote as a token, and that was put back on this machine, has a dashed
+underline; hovering it says "Hidden from model" and shows the token the model read instead (`privacy.shielded`). So a
+reply that names a person the model was never told about is the shield at work, not a leak.
+
 A value that reached a provider unmasked is a leak. The owner reports one (Sandbox ▸ Privacy shield ▸ Leaks, or
 "Should have been masked" on text selected in a chat), or `privacy scan` suspects some in recent conversations, on
 this machine, for the owner to confirm. A confirmed leak is masked as its exact value from then on. Hardening the shield

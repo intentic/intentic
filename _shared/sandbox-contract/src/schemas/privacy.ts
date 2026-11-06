@@ -476,3 +476,14 @@ export type PrivacyPreviewSpan = z.infer<typeof PrivacyPreviewSpanSchema>;
 
 export const PrivacyPreviewSchema = z.object({ spans: z.array(PrivacyPreviewSpanSchema) });
 export type PrivacyPreview = z.infer<typeof PrivacyPreviewSchema>;
+
+// The words in a conversation's replies its model never read: values it wrote as tokens, put back on this machine before
+// anyone saw the reply. Each as the reply spells it, with the token the model wrote in its place, so a reader can tell
+// the model's words from the shield's.
+export const PRIVACY_SHIELDED_MAX = 500;
+export const PrivacyShieldedValueSchema = z.object({
+    text: z.string().describe("The value as it stands in the reply."),
+    token: z.string().describe("What the model read and wrote instead."),
+    class: PersonalDataClassSchema,
+});
+export type PrivacyShieldedValue = z.infer<typeof PrivacyShieldedValueSchema>;

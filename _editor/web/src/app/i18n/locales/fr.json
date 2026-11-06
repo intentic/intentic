@@ -3615,6 +3615,11 @@
             "continueOtherModel": "Continuer avec un autre modèle",
             "privacyOthersLetThrough": "Le propriétaire, une personne ayant l’accès complet ou une personne qui gère le Bouclier de confidentialité peuvent le laisser passer."
         },
+        "shieldedWords": {
+            "title": "Caché au modèle",
+            "read": "Le modèle a lu",
+            "note": "Rétabli sur cette machine"
+        },
         "chatPaneTurns": {
             "couldntOpen": "Impossible d'ouvrir cette conversation.",
             "couldntRefresh": "Impossible d'actualiser cette conversation, affichage de la copie enregistrée.",

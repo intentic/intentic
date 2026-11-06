@@ -11,6 +11,8 @@ import {
     PRIVACY_PREVIEW_MAX,
     PrivacyPreviewSchema,
     PrivacyRevealSchema,
+    PRIVACY_SHIELDED_MAX,
+    PrivacyShieldedValueSchema,
     PrivacyShieldPolicySchema,
     PrivacyShieldStatusSchema,
 } from "../schemas/privacy.js";
@@ -60,6 +62,16 @@ export const privacyContract = {
                 "Each model request the gateway handled: which provider, whether it was trusted, how many of each kind of personal data it found, and the tokens it gave with the masked text around them. Never the values.",
         })
         .output(z.array(PrivacyLedgerEntrySchema)),
+    shielded: procedure
+        .route({
+            method: "GET",
+            path: "/privacy/shielded",
+            summary: "Words a conversation's model never read",
+            description:
+                "The values in the conversation's replies that its model wrote as tokens, each with the token it wrote, so the chat can tell them from the model's own words. Empty while the shield does not mask the conversation's provider. Only someone who can read the conversation may ask.",
+        })
+        .input(z.object({ conversationId: z.string().min(1).max(200) }))
+        .output(z.array(PrivacyShieldedValueSchema).max(PRIVACY_SHIELDED_MAX)),
     reveal: procedure
         .route({
             method: "POST",

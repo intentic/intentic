@@ -230,6 +230,18 @@
 /* No per-block measure: .chat-turns already caps the whole column at a readable width. */
     --prose-measure: none;
 }
+/* A word the reply's model never read: it wrote a token, and the shield put the value back here (useShieldedWords.ts).
+   Dashed, so it never reads as a file link's dotted line; its hover says what the model read. */
+.chat-markdown .chat-shielded {
+    cursor: help;
+    text-decoration: underline dashed color-mix(in srgb, var(--color-info) 55%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+}
+.chat-markdown .chat-shielded:hover {
+    text-decoration-style: solid;
+    text-decoration-color: var(--color-info);
+}
 /* Reading width for the transcript. The left gutter is the spine's (below), the right one the reader's controls'. */
 .chat-turns {
     width: 100%;

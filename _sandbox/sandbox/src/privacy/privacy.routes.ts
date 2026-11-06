@@ -14,6 +14,7 @@ import type { Services } from "../composition.js";
 import { nameDictionary } from "./name-dictionary.js";
 import { detectorFor } from "./policy-detector.js";
 import { nerInstalled } from "./ner.js";
+import { shieldedInReplies } from "./shielded-replies.js";
 import { privacyPinRefusal } from "../compliance/org-pins.js";
 import { provesOwner } from "../seams/workload-stamp.js";
 import {
@@ -159,6 +160,19 @@ export const createPrivacyRoutes = (services: PrivacyServices) => {
         log: i.log.handler(async ({ context }) => {
             const reads = conversationReader(context.identity, registryProvenance(services.agents));
             return (await shield.ledger.recent()).filter((entry) => reads(entry.conversationId));
+        }),
+        // The conversation's own words, so read as the conversation is: one this caller cannot read answers as one never masked.
+        shielded: i.shielded.handler(async ({ input, context }) => {
+            const reads = conversationReader(context.identity, registryProvenance(services.agents));
+            if (!reads(input.conversationId)) {
+                return [];
+            }
+            return orFailing(
+                shieldedInReplies(
+                    { shield, provider: (id) => services.agents.entry(id)?.profile.provider, rows: (id) => services.transcripts.rows({ id }) },
+                    input.conversationId,
+                ),
+            );
         }),
         reveal: i.reveal.handler(async ({ input }) =>
             shield.reveal(input.tokens).catch((error: unknown) => {

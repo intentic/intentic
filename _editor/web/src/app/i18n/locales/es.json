@@ -3615,6 +3615,11 @@
             "continueOtherModel": "Continuar con otro modelo",
             "privacyOthersLetThrough": "Pueden dejarlo pasar el propietario, alguien con acceso total o quien gestione el Escudo de privacidad."
         },
+        "shieldedWords": {
+            "title": "Oculto al modelo",
+            "read": "El modelo leyó",
+            "note": "Restaurado en esta máquina"
+        },
         "chatPaneTurns": {
             "couldntOpen": "No se pudo abrir esta conversación.",
             "couldntRefresh": "No se pudo actualizar esta conversación; se muestra la copia guardada.",

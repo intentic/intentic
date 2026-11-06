@@ -26,6 +26,8 @@ export const privacyDoors = {
     log: () => [],
     // Nothing is logged, so there is no token to read back.
     reveal: () => ({}),
+    // Every conversation here runs with the shield off, so no reply holds a value its model never read.
+    shielded: () => [],
     image: () => refuse(`This is the demo workspace: its privacy shield has painted over no image.`),
     dictionary: ({ query }) => demoNameDictionary(query),
     preview: ({ text }) => previewText(text, shieldPolicy()),
