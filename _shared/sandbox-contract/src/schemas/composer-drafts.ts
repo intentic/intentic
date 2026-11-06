@@ -38,6 +38,10 @@ export const ComposerDraftSchema = z.object({
 });
 export type ComposerDraft = z.infer<typeof ComposerDraftSchema>;
 
+// A count of one person's drafts and marks moving, kept by the daemon for its run: what a write answers with, what a
+// list was read at, and what a `drafts` push names (system-events.ts `draftsGeneration`).
+const DraftsGenerationSchema = z.number().int().nonnegative();
+
 export const ComposerDraftsSchema = z.object({
     drafts: z.array(ComposerDraftSchema).describe("Every draft you hold in this sandbox, newest first. Only your own: another member's unsent words are theirs."),
     revision: z
@@ -48,6 +52,9 @@ export const ComposerDraftsSchema = z.object({
         .describe(
             "The newest revision handed out when this list was read. A draft you hold at a revision past it was written after the read, so its absence here says nothing about it.",
         ),
+    generation: DraftsGenerationSchema.optional().describe(
+        "How many times your drafts and marks had moved in this sandbox's run when this list was read: everything up to it is in the list. Absent from a sandbox that does not count.",
+    ),
     reactions: z
         .record(z.string(), z.array(AgentReactionSchema))
         .optional()
@@ -78,6 +85,9 @@ export const DraftWrittenSchema = z.object({
         .literal(true)
         .optional()
         .describe("Nothing was written: the draft had moved past `base`. Merge your words into this one and write again from its revision."),
+    generation: DraftsGenerationSchema.optional().describe(
+        "The count of your drafts' moves this write or clear made (the list's `generation` after it). Absent when it moved nothing.",
+    ),
 });
 export type DraftWritten = z.infer<typeof DraftWrittenSchema>;
 

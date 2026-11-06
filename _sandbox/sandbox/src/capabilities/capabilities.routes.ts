@@ -29,8 +29,9 @@ import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./offers/recommend.js";
 import { registry } from "./registry.js";
-import { createStatusCache } from "./status/status-cache.js";
-import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { createStatusCache, type StatusCache } from "./status/status-cache.js";
+import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
+import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { capabilitiesDocument } from "./capabilities-store.js";
 import { storeRefreshToken } from "./refresh-token.js";
@@ -167,6 +168,24 @@ const refuseUnusableGpu = async (entry: ResolvedEntry, probe: () => Promise<Capa
     }
 };
 
+// The announced changes that can move a connection's status between its probes: a paired peer connecting or dropping
+// (each hub's own domain), and a sign-in saved or cleared or a token stored (`capabilities`).
+const STATUS_MOVERS = ["capabilities", "hosts", "webext", "phones"] as const satisfies readonly RuntimeDomain[];
+
+// The list's held statuses, a changed one pushed on `capabilities`. Its own pushes are taken off the count of changes
+// that make a held status due (status-cache.ts), which they would otherwise feed.
+const listStatuses = (services: Services): StatusCache => {
+    let announced = 0;
+    return createStatusCache({
+        changed: () => {
+            announced += 1;
+            publishRuntimeChange("capabilities");
+        },
+        moved: () => STATUS_MOVERS.reduce((sum, domain) => sum + runtimeGeneration(domain), 0) - announced,
+        onProbeError: (error) => services.logger.warn({ err: error }, "capability status probe failed; its last answer stands"),
+    });
+};
+
 // `probeDockerGpu` is handed in: asking the host needs the device hub, and capabilities must not import hosts.
 export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (services: Services) => Promise<CapabilityProbe>) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
@@ -175,10 +194,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
     const adding = new Set<string>();
     // Generated keys waiting for the add that installs them (sshKey), in memory only.
     const stash = createSecretStash();
-    const statuses = createStatusCache(
-        () => publishRuntimeChange("capabilities"),
-        (error) => services.logger.warn({ err: error }, "capability status probe failed; its last answer stands"),
-    );
+    const statuses = listStatuses(services);
     return {
         list: i.list.handler(async () => {
             const [capabilities, connectors, dismissed] = await Promise.all([
@@ -229,6 +245,8 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
                 yield* handler.apply(ctx, entry.id, entry.config);
                 const stored = await installedEntry(ctx, entry);
                 await versionManifest(services, `connection ${entry.id}`, () => services.capabilities.upsert(stored));
+                // Applied again under the same settings is still a change: the next list probes it behind its answer.
+                statuses.due(entry.id);
                 // Stored for good: a generated key's token has done its one job and cannot install the key again.
                 spendStashed(stash, input.config);
                 // Brings the extension's declared autoStart processes up, the same post-apply seam composeEnvironment

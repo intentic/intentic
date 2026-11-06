@@ -10,20 +10,22 @@ flowchart LR
     ci["CI and nightly<br/>ci.yml · nightly.yml"] --> run
     push["CI's push check<br/>verify-push.mjs"] --> run
     manifest["manifest.mjs<br/>CHECKS"] --> run
-    run --> procs["One process per check<br/>exit 0 · 1 · 2"]
+    run --> procs["One process per check<br/>(--paths: all in run.mjs's own)<br/>exit 0 · 1 · 2"]
 ```
 
 - Checks run before `pnpm install`, so they read the tree by shape (regex, `lib/repo.mjs`) instead of importing the
-  code they judge, and each runs as its own process.
+  code they judge, and each runs as its own process, except under `--paths` (below).
 - The runner bounds concurrent checks by CPU and memory capacity, up to four. On Linux, `flock` slots in the shared
   `INTENTIC_QUEUE_DIR` (or the normal temporary queue directory) enforce that budget across invocations and worktrees;
   other hosts retain the per-invocation bound. Results stay in manifest order. A scoped entry can declare an `applies`
-  regex covering every file kind it reads; unrelated edits then skip its subprocess. Entries without it always run.
+  regex covering every file kind it reads; unrelated edits then skip it. Entries without it always run.
   (2026-10-26) Per-invocation limits alone were rejected because concurrent conversations would multiply the budget.
   Check suites under this directory run recursively in CI; `knip.json` names the same test glob as entry points.
 - To add one, write `<name>.mjs` and answer through `lib/report.mjs`: `finish` prints problems to stderr and exits
   1, or prints what it vouched for and exits 0; `cannotMeasure` exits 2 when the check could not look. Then add an
-  entry to `CHECKS` in `manifest.mjs`.
+  entry to `CHECKS` in `manifest.mjs`. A scoped check also runs inside `run.mjs`'s own process (below), where
+  `process.exit`, `process.exitCode`, its argv and its streams behave as a child's, but the modules it imports are
+  shared with the checks before and after it: it never changes what it imports (`lib/repo.mjs`'s `packages`).
 - An entry's `needs` says what it may read (`checkout`, `git` history, or `node_modules` when installed). A `code`
   gate fails every run that reads it. A `tidy` gate fails only what a pushed range adds. A new check enters as `tidy`.
 - CI asks a narrower question with `--report`: only the checks `CI_BLOCKING` in `manifest.mjs` names (a broken or
@@ -42,6 +44,14 @@ flowchart LR
   (`_tools/scripts/verify/verify-push.mjs --report`) runs them again and reports the lines the pushed range added. The
   turn check and the push check judge a change the same way (`measure-change.mjs`), so what one charges the other
   does. `pnpm verify` runs them all when asked, and the nightly with `--gate=tidy --report`.
+- A `--paths` run judges every scoped check in `run.mjs`'s own process, one after another (`lib/in-process.mjs`),
+  with each git listing asked once (`lib/repo.mjs`'s `rememberGit`), in a lane of `flock` slots of its own
+  (`lib/check-pool.mjs`'s `editLane`, under the same budget), so it waits for other edits but never for a whole-tree
+  run's checks. vue-i18n's verdict on each catalog is kept by the catalog's content between runs (`lib/kept.mjs`).
+  (2026-11-06) It ran one child per check through the shared slots: on one daemon `.ts` file, 34 node children and 146
+  git processes an edit, ~4.7 s of CPU, and with a whole-tree run holding the slots a wait as long as that run's checks,
+  up to the edit's 60 s ceiling. In one process it is 23 processes and ~1.4 s of CPU. A worker thread per check was
+  rejected: each reloads every module, and cost as much CPU as the children.
 - Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
   shrink and never grow unasked. A check run never writes one: it fails on growth and only says where the tree beats
   it. Before a conversation's work lands, the fixers in its worktree (`_tools/scripts/verify/fixers.mjs`) run each

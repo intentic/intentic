@@ -42,3 +42,40 @@ it(`answers from the element's own width before the observer has said anything`,
     expect(desk.narrow.value).toBe(false);
     desk.done();
 });
+
+it(`folds on the next frame when the observer says the pane crossed the line, never inside the observer's callback`, async () => {
+    // Folding inside the callback resized what was observed in the same frame, and the browser gave up on the rest of
+    // the frame's notifications. The observer and the frame clock are the test's own, fired by hand.
+    const observed: ResizeObserverCallback[] = [];
+    const frames: FrameRequestCallback[] = [];
+    const { ResizeObserver: realObserver, requestAnimationFrame: realFrame } = globalThis;
+    globalThis.ResizeObserver = class {
+        constructor(callback: ResizeObserverCallback) {
+            observed.push(callback);
+        }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
+    globalThis.requestAnimationFrame = (callback) => frames.push(callback);
+    try {
+        const pane = await mountAt(1_400);
+        const [report] = observed;
+        // SAFETY: useNarrow reads only `contentRect.width` off an entry, and nothing off the observer it is handed.
+        const resize = (width: number): void => report?.([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+
+        resize(412);
+        expect(pane.narrow.value).toBe(false);
+        expect(frames).toHaveLength(1);
+        frames[0]?.(0);
+        expect(pane.narrow.value).toBe(true);
+
+        // A size that leaves the answer as it was asks for no frame at all.
+        resize(500);
+        expect(frames).toHaveLength(1);
+        pane.done();
+    } finally {
+        globalThis.ResizeObserver = realObserver;
+        globalThis.requestAnimationFrame = realFrame;
+    }
+});

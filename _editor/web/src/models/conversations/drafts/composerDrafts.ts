@@ -294,6 +294,34 @@ const timers = sandboxValue(
 const inFlight = sandboxValue(() => new Set<string>());
 const again = sandboxValue(() => new Set<string>());
 
+/* WHAT THIS WINDOW HOLDS OF THE SANDBOX'S DRAFTS, as the daemon counts their moves (`generation`: per person, per daemon
+   run). A read says the count it was taken at; each write of this window's that moved them answers with the count it
+   made, which carries the window forward when it is the very next one. A `drafts` push naming no later count is the echo
+   of moves held here already: reading the whole list back for it was one GET /agents/drafts per pause in typing, in the
+   typist's own window (2026-11-06). A push heard while one of this window's writes is out waits for its answer, since
+   it is usually that write's own. Unknown until a read says, and again after every (re)connect: a restarted daemon
+   counts from zero. */
+interface Counted {
+    generation?: number;
+    // The newest count a push named while one of this window's writes was out, decided once that write is answered.
+    owed?: number;
+}
+const counted = sandboxValue<Counted>(() => ({}));
+
+// A count this window has caught up to: a read's, or one of its own writes' that came right after a count it knew. Only
+// for the count it was asked under (`asked`): an answer from before a reconnect may be a restarted daemon's old count.
+const caughtUp = (asked: Counted, generation: number | undefined, own: boolean): void => {
+    if (generation === undefined || counted.value !== asked) {
+        return;
+    }
+    const known = counted.value.generation;
+    if (!own) {
+        counted.value.generation = Math.max(generation, known ?? generation);
+    } else if (known !== undefined && generation === known + 1) {
+        counted.value.generation = generation;
+    }
+};
+
 // Whether this window writes the draft now: it edited it last, or nobody is writing it any more.
 const writesHere = (draft: HeldDraft, now: number): boolean => editedHere.value.has(draft.conversationId) || now - draft.editedAt >= ORPHANED_AFTER_MS;
 
@@ -349,6 +377,7 @@ const writeNow = async (conversationId: string): Promise<void> => {
         return;
     }
     const sandbox = held.value.sandbox;
+    const asked = counted.value;
     inFlight.value.add(conversationId);
     try {
         const answer = await call(sent);
@@ -360,6 +389,7 @@ const writeNow = async (conversationId: string): Promise<void> => {
         const current = held.value.drafts.get(conversationId) ?? { ...sent, text: ``, attachments: [], editedAt: Date.now() };
         const next = answered(current, sent, answer, typedHere(conversationId));
         put(new Map([[conversationId, next]]));
+        caughtUp(asked, answer.generation, true);
         if (next?.pending === true) {
             writeSoon(conversationId, 0);
         }
@@ -374,6 +404,11 @@ const writeNow = async (conversationId: string): Promise<void> => {
         if (again.value.delete(conversationId)) {
             writeSoon(conversationId, 0);
         }
+        const owed = counted.value.owed;
+        if (owed !== undefined && inFlight.value.size === 0) {
+            counted.value.owed = undefined;
+            draftsMoved(owed);
+        }
     }
 };
 
@@ -386,11 +421,13 @@ const pull = async (): Promise<void> => {
         return;
     }
     const sandbox = held.value.sandbox;
+    const asked = counted.value;
     try {
         const list = await sandboxRpc.agents.drafts();
         if (held.value.sandbox !== sandbox) {
             return;
         }
+        caughtUp(asked, list.generation, false);
         // A sandbox older than marks on drafts lists none, and holds none to list.
         const listed = new Map(Object.entries(list.reactions ?? {}));
         if (JSON.stringify([...listed]) !== JSON.stringify([...marks.value])) {
@@ -422,8 +459,23 @@ const pull = async (): Promise<void> => {
     }
 };
 
-/** The sandbox says drafts moved (its `drafts` push), or it was (re)connected to: read them back. One read at a time. */
-export const draftsMoved = (): void => {
+/**
+ * The sandbox says drafts moved (its `drafts` push, naming the count of moves it went out at), or it was (re)connected to
+ * (no count): read them back, unless this window made every move the count names. One read at a time.
+ */
+export const draftsMoved = (generation?: number): void => {
+    if (generation === undefined) {
+        counted.value = {};
+    } else {
+        const known = counted.value.generation;
+        if (known !== undefined && generation <= known) {
+            return;
+        }
+        if (inFlight.value.size > 0) {
+            counted.value.owed = Math.max(generation, counted.value.owed ?? generation);
+            return;
+        }
+    }
     const slot = pulling.value;
     slot.read ??= pull().finally(() => {
         slot.read = undefined;

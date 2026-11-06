@@ -23,14 +23,16 @@ export const createCursorCatalog = (store: CursorStore, persistPath: string): Cu
     // Uses the first usable account, not all: accounts can see different lists (plan, policy), and a union would
     // promise models the other can't run. A turn naming no account may run on another one (cursor-usage.ts), whose turn
     // then runs the model it asked for or that account's own refusal says why.
+    // The account first: loading the SDK compiles a large module on the main thread (0.25-0.4 s in boot profiles,
+    // 2026-11-06), which a sandbox with no Cursor account has no use for.
     const discover = async (): Promise<ModelListItem[]> => {
-        const sdk = await cursorSdk();
-        if (sdk === undefined) {
-            return [];
-        }
         const accounts = await store.credentials();
         const account = accounts.find((entry) => entry.apiKeyExpiresAtMs === undefined || entry.apiKeyExpiresAtMs > Date.now());
         if (account === undefined) {
+            return [];
+        }
+        const sdk = await cursorSdk();
+        if (sdk === undefined) {
             return [];
         }
         return sdk.Cursor.models.list({ apiKey: account.apiKey }).catch((error: unknown) => {

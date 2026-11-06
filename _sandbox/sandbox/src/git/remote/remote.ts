@@ -1,6 +1,7 @@
 import type { GitRemoteState } from "@intentic/sandbox-contract/schemas/git/git";
 import { exitCodeOf, stderrOf } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { readOnFeed } from "../feed/checkout-feed.js";
 import { upstreamOf } from "../ops/branches.js";
 import type { ActionResult } from "../changes/changes-commits.js";
 import { gitFailureReason, identity } from "../git.js";
@@ -36,23 +37,27 @@ const currentBranch = async (dir: string, git: GitRunner): Promise<string | unde
 
 // Every field is optional-or-zero and never thrown; no remote, no upstream, and detached HEAD are normal. `remote`
 // falls back to `origin` only when the branch has no upstream of its own, and only then does this spawn `git remote`.
+// Both reads are kept per change netd counts in the checkout (git/feed), as the scan's own `status --branch` is: a
+// fetch, push or commit moves a ref, which moves the count, and the age bound covers a hand-edited upstream. The
+// changes scan asks this of every repo on every poll (2026-11-05: one `for-each-ref` per repo per scan, ~21k in 13 h).
 export const remoteState = async (
     dir: string,
     known: { readonly branch?: string | undefined } = {},
     git: GitRunner = defaultGit,
 ): Promise<GitRemoteState> => {
     const branch = known.branch ?? (await currentBranch(dir, git));
+    const remotes = (): Promise<string | undefined> => readOnFeed("configured-remote", dir, git, () => configuredRemote(dir, git));
     // No branch (detached HEAD, unborn repo): report the configured remote so a sync bar still shows.
     if (branch === undefined || branch === "") {
-        const configured = await configuredRemote(dir, git);
+        const configured = await remotes();
         return { ahead: 0, behind: 0, ...(configured !== undefined ? { remote: configured } : {}) };
     }
-    const tracking = await upstreamOf(dir, branch, git).catch(() => undefined);
+    const tracking = await readOnFeed(`upstream\u0000${branch}`, dir, git, () => upstreamOf(dir, branch, git)).catch(() => undefined);
     if (tracking?.upstream !== undefined && tracking.upstream !== "" && tracking.remote !== undefined) {
         return { remote: tracking.remote, branch, upstream: tracking.upstream, ahead: tracking.ahead, behind: tracking.behind };
     }
     // No upstream: this is the only case that needs `git remote`.
-    const configured = await configuredRemote(dir, git);
+    const configured = await remotes();
     return {
         ...(configured !== undefined ? { remote: configured } : {}),
         branch,

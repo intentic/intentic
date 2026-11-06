@@ -742,7 +742,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     }
 
     if (request.verb === "hotspots") {
-        const groups = await hotspotFiles(context.db, context.root, entries, {
+        const groups = await hotspotFiles(context, entries, {
             ...(request.options.since !== undefined ? { since: request.options.since } : {}),
             ...(request.options.author !== undefined ? { author: request.options.author } : {}),
             ...(request.query !== "" ? { pattern: request.query } : {}),

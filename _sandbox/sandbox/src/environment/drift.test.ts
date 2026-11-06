@@ -1,4 +1,4 @@
-import { collapseDriftPaths, containerBornAtMs, dpkgInstallsSince, installLive } from "./drift.js";
+import { collapseDriftPaths, containerBornAtMs, dpkgInstallsSince, installLive, nextWalkLimit, WALK_LIMIT_MS } from "./drift.js";
 
 /* dpkg's log is the apt channel's whole input, so the parse is pinned to real log lines. */
 
@@ -64,6 +64,14 @@ test("the overall list is capped with an honest remainder", () => {
 });
 
 /* The birth moment: exactness matters less than the invariants every reader leans on. */
+
+test("a walk that ran out of time gets twice as long next time, up to eight minutes; one that finished goes back to one", () => {
+    expect(nextWalkLimit(WALK_LIMIT_MS, true)).toBe(120_000);
+    expect(nextWalkLimit(240_000, true)).toBe(480_000);
+    expect(nextWalkLimit(480_000, true)).toBe(480_000);
+    expect(nextWalkLimit(480_000, false)).toBe(60_000);
+    expect(nextWalkLimit(WALK_LIMIT_MS, false)).toBe(60_000);
+});
 
 test("the container's birth is a real moment in the past", async () => {
     const born = await containerBornAtMs();

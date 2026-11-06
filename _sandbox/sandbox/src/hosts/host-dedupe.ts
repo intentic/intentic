@@ -70,11 +70,15 @@ export const revokeSuperseded = async (services: Pick<Services, "hosts" | "hostH
 };
 
 // The live-identity clashes as the device list carries them; a list that cannot be read is no clash, not a failure.
-export const liveSharedIdentities = async (services: Pick<Services, "hosts" | "hostHub">): Promise<SharedIdentity[]> => {
+// `enrolled` is the enrollments a caller already reads for something else (host-peer.ts's HostFiles).
+export const liveSharedIdentities = async (
+    services: Pick<Services, "hosts" | "hostHub">,
+    enrolled?: () => Promise<readonly Enrolled[]>,
+): Promise<SharedIdentity[]> => {
     const connected = services.hostHub.connected();
     if (connected.length < 2) {
         return [];
     }
     const live = new Set(connected);
-    return sharedIdentities(await services.hosts.list(), (id) => live.has(id));
+    return sharedIdentities(await (enrolled === undefined ? services.hosts.list() : enrolled()), (id) => live.has(id));
 };

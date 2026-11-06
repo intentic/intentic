@@ -38,11 +38,11 @@ export const draftRoutes = (i: AgentsImplementer, services: Pick<Services, "agen
             return summary;
         }),
         drafts: i.drafts.handler(async ({ context }) => {
-            const { drafts, revision, reactions } = await services.drafts.list(draftOwnerOf(context));
+            const { drafts, revision, generation, reactions } = await services.drafts.list(draftOwnerOf(context));
             // Marks on a conversation that has started since are its card's to show (or about to be, once its send moves
             // them): listed here too they would draw twice. Left in the file rather than moved by a read.
             const unstarted = Object.entries(reactions).filter(([id]) => services.agents.entry(id) === undefined);
-            return { drafts: [...drafts], revision, reactions: Object.fromEntries(unstarted.map(([id, marks]) => [id, [...marks]])) };
+            return { drafts: [...drafts], revision, generation, reactions: Object.fromEntries(unstarted.map(([id, marks]) => [id, [...marks]])) };
         }),
         writeDraft: i.writeDraft.handler(async ({ input, context }) => {
             visibleIfKnown(input.id, context);

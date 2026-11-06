@@ -1,15 +1,15 @@
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
-import type { Services } from "../composition.js";
+import type { Services } from "../../composition.js";
 
 // The host as the probe finds it: whether a device runs this sandbox, and what its agent answers.
 const world = { host: undefined as string | undefined, answer: async (): Promise<{ text: string; refused: boolean }> => ({ text: "", refused: false }) };
-jest.mock("./device-reports.js", () => ({
+jest.mock("../device-reports.js", () => ({
     devices: async () => [],
     callTool: async () => world.answer(),
-    forgetPull: () => undefined,
+    stalePull: () => undefined,
     heldHostDevices: async () => [],
 }));
-jest.mock("./self-host.js", () => ({ hostRunningSelf: async () => world.host, ownSlug: () => undefined }));
+jest.mock("../self-host.js", () => ({ hostRunningSelf: async () => world.host, ownSlug: () => undefined }));
 const { gpuProbeAnswer, probeDockerGpu } = await import("./docker-gpu-probe.js");
 
 const services = { hostHub: { state: () => ({ facts: { shell: "/bin/bash" } }) } } as unknown as Services;

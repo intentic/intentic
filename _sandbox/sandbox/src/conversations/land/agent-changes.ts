@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { AddedDependencies, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
 import type { AgentSpan } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
+import { changesAgainstBase, changesBetweenRefs, feedHeadSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { scratchOf, scratchScopeOf } from "../../git/changes/scratch.js";
 import { ignoredOutputsOf, ignoredSkipOf, NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../git/changes/ignored-outputs.js";
@@ -44,7 +44,7 @@ export const checkpointOf = async (
     base: string,
     git: GitRunner = defaultGit,
 ): Promise<string> => {
-    const head = await headSha(main, git);
+    const head = await feedHeadSha(main, git);
     let merged = head === tip ? tip : "";
     if (head !== undefined && head !== tip) {
         try {
@@ -385,7 +385,7 @@ export const presenceOf = async (
                   ...(await pathSet(worktree, ["ls-files", "--others", "--exclude-standard", "-z"], git)),
               ]);
 
-    const head = await headSha(main, git);
+    const head = await feedHeadSha(main, git);
     // `--no-renames`: the rows this joins onto use rename detection and key by destination path, as these do too. A path
     // the repository derives is never told apart: no land carries it, the tree it lands in writes its own (rederive.ts).
     const [vsHead, vsWorktree] = await Promise.all([

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkPool, pooledMap } from "./check-pool.mjs";
+import { checkPool, editLane, pooledMap } from "./check-pool.mjs";
 import { CHECKS } from "../manifest.mjs";
 
 test("bounded work preserves input order across out-of-order completion", async () => {
@@ -55,6 +55,45 @@ test("separate invocations contend on the same kernel slot", { skip: process.pla
     } finally {
         a.child.stdin.end(); b.child.stdin.end();
         await Promise.all([a.ended, b.ended]);
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("an edit lane waits for other edit lanes only, never for a whole-tree run's slots", { skip: process.platform !== "linux" }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-pool-test-"));
+    const env = { ...process.env, INTENTIC_QUEUE_DIR: dir };
+    const pool = checkPool(env);
+    // Every whole-tree slot held, as a turn's full run holds them.
+    const holders = Array.from({ length: pool.size }, (_, slot) => {
+        const [file, args] = pool.command(slot, "sh", ["-c", "echo held; exec cat >/dev/null"]);
+        const child = spawn(file, args, { stdio: ["pipe", "pipe", "ignore"] });
+        return { child, held: new Promise((resolve) => child.stdout.once("data", resolve)), ended: new Promise((resolve) => child.once("exit", resolve)) };
+    });
+    const lanes = [];
+    try {
+        await Promise.all(holders.map(({ held }) => held));
+        for (let lane = 0; lane < pool.size; lane++) {
+            lanes.push(await editLane(env));
+        }
+        // The lane is full: one more waits until an edit gives its slot back, whichever slot that is.
+        let taken = false;
+        const waiting = editLane(env).then((release) => {
+            taken = true;
+            return release;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        assert.equal(taken, false);
+        lanes.pop()();
+        lanes.push(await waiting);
+        assert.equal(taken, true);
+    } finally {
+        for (const release of lanes) {
+            release();
+        }
+        for (const { child } of holders) {
+            child.stdin.end();
+        }
+        await Promise.all(holders.map(({ ended }) => ended));
         rmSync(dir, { recursive: true, force: true });
     }
 });

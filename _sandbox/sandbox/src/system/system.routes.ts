@@ -3,7 +3,7 @@ import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fenc
 import type { Hello, RosterFrames, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
 import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints, sandboxRoutePrints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, SANDBOX_ROUTE_NAMES, sandboxRouteSurface } from "@intentic/sandbox-contract";
 import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { errorMessage } from "@intentic/base/errors";
@@ -64,21 +64,26 @@ const shownProjectDir = (config: Services["config"], fence: Fence): { readonly p
 
 // The stream's first frame: workspace identity (a wipe/recreate gets a new one), the routes and prints this build serves, the
 // codings its uploads and voice sockets speak, build id, boot progress, project folder, and that turns record switches.
-const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => ({
-    kind: "hello",
-    workspaceId: await workspaceIdentity(services),
-    routes: [...SANDBOX_ROUTE_NAMES],
-    shapes: { ...sandboxRouteFingerprints() },
-    rawRoutes: [...RAW_ROUTE_NAMES],
-    rawFingerprints: { ...rawRouteFingerprints() },
-    prints: { ...sandboxRoutePrints() },
-    uploadEncodings: [...UPLOAD_ENCODINGS],
-    voiceCodecs: voiceCodecs(),
-    build: buildId(),
-    boot: services.boot.progress(),
-    ...shownProjectDir(services.config, fence),
-    recordsSwitches: true,
-});
+// The prints are worked out once, on the first hello, in slices that let the daemon serve between them (sandbox-contract).
+const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => {
+    const workspaceId = await workspaceIdentity(services);
+    const { fingerprints, rawFingerprints, prints } = await sandboxRouteSurface();
+    return {
+        kind: "hello",
+        workspaceId,
+        routes: [...SANDBOX_ROUTE_NAMES],
+        shapes: { ...fingerprints },
+        rawRoutes: [...RAW_ROUTE_NAMES],
+        rawFingerprints: { ...rawFingerprints },
+        prints: { ...prints },
+        uploadEncodings: [...UPLOAD_ENCODINGS],
+        voiceCodecs: voiceCodecs(),
+        build: buildId(),
+        boot: services.boot.progress(),
+        ...shownProjectDir(services.config, fence),
+        recordsSwitches: true,
+    };
+};
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
 // `clientId` joins the roster for this connection's lifetime, undefined observes without joining; `roster` is how progress arrives.
@@ -165,9 +170,10 @@ async function* systemEvents(
             enqueue(event);
             onWake();
         }),
-        // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click.
-        subscribeRefChanges((repos) => {
-            enqueue({ kind: "refsChanged", repos });
+        // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click. The
+        // conversations, when the moves were only theirs, keep every other review from being read again.
+        subscribeRefChanges((repos, conversations) => {
+            enqueue({ kind: "refsChanged", repos, ...opt("conversations", conversations === undefined ? undefined : [...conversations]) });
             onWake();
         }),
         // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler. A
@@ -175,7 +181,9 @@ async function* systemEvents(
         subscribeRuntimeChanges((domains, audiences) => {
             const heard = domains.filter((domain) => audiences.get(domain)?.has(reader) ?? true);
             if (heard.length > 0) {
-                enqueue({ kind: "runtimeChanged", domains: heard });
+                // Read as the frame goes out, so it names at least the move that set it off (composer-drafts.ts).
+                const draftsGeneration = heard.includes("drafts") ? services.drafts.generation(reader) : undefined;
+                enqueue({ kind: "runtimeChanged", domains: heard, ...opt("draftsGeneration", draftsGeneration) });
                 onWake();
             }
         }, services.logger),

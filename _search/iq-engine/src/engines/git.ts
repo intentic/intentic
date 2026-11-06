@@ -3,13 +3,18 @@ import { isRecord } from "@intentic/base/escape";
 import { exec, GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import type { FileEntry, RankedGroup, RankedHit } from "../types.js";
 import { isIqDenied } from "../workspace/floor.js";
+import { type ChurnHistory, type FileChurn, loadChurn, saveChurn } from "./churn-store.js";
 
 const DEFAULT_SINCE = "7d";
 
 // A query is somebody waiting at a prompt: a git read that is still going after this long is waiting on a lock or a
 // history far larger than an answer needs, and is stopped and named rather than left to hang the query. Long enough for
-// a log over a large repository's recent weeks, which is the heaviest read here.
+// a log over a large repository's recent weeks.
 const GIT_READ_TIMEOUT_MS = 30_000;
+// A history read whose fold is kept (churnHistory below) is worth finishing: stopped at the query deadline it never
+// completes under load and every later caller starts it over, 137 times in nine days on one sandbox. A full read of this
+// monorepo took 31 s CPU and 109 s wall at load 86 on 16 cores (2026-11-06); once kept, only the commits since are read.
+const HISTORY_READ_TIMEOUT_MS = 300_000;
 // `rev-parse --verify HEAD` reads one ref; a few seconds is already a stuck repository.
 const UNBORN_TIMEOUT_MS = 5_000;
 
@@ -50,16 +55,15 @@ const unborn = (cwd: string): Promise<boolean> =>
 // GIT_GLOBAL_ARGS keeps these reads off index.lock: a `git diff` here would otherwise refresh the index of a repo an
 // agent is committing to and make its commit fail. Plain `exec` rather than `defaultGit`, whose resident forker is a
 // second node process a one-shot `iq` would start for a handful of reads.
-const git = async (root: string, repo: string, args: string[]): Promise<string> => {
+const git = async (root: string, repo: string, args: string[], timeoutMs = GIT_READ_TIMEOUT_MS): Promise<string> => {
     const cwd = join(root, repo);
     try {
-        return (await exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024, timeout: GIT_READ_TIMEOUT_MS })).stdout;
+        return (await exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024, timeout: timeoutMs })).stdout;
     } catch (error) {
         // A read stopped at its deadline says so by name, rather than reading as a repository git refused.
         if (isRecord(error) && error["killed"] === true) {
-            throw new Error(`iq: git ${args[0] ?? ""} in ${repo === "" ? "the workspace root" : repo} took longer than ${GIT_READ_TIMEOUT_MS / 1000}s and was stopped`, {
-                cause: error,
-            });
+            const where = repo === "" ? "the workspace root" : repo;
+            throw new Error(`iq: git ${args[0] ?? ""} in ${where} took longer than ${timeoutMs / 1000}s and was stopped`, { cause: error });
         }
         if (await unborn(cwd)) {
             return "";
@@ -104,18 +108,7 @@ export interface ChurnOptions {
     readonly author?: string;
 }
 
-export interface FileChurn {
-    latestMs: number;
-    commits: number;
-    adds: number;
-    dels: number;
-}
-
-// All-history `--numstat` logs by repo dir and arguments, valid while HEAD stays put. The output is small (~2 MB for
-// this monorepo) but producing it diffs every blob in history: ~0.8 GB read from disk per call, and the chores rail
-// asked for it every 5-10 minutes per repo (2026-10-21: ~20 GB of a container's 145 GB of reads in 2.5 h). A
-// windowed log (`since`) moves with the clock and is never cached.
-const fullHistoryLogs = new Map<string, { head: string; stdout: Promise<string> }>();
+export type { FileChurn };
 
 const headOf = (cwd: string): Promise<string | undefined> =>
     exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"], { timeout: UNBORN_TIMEOUT_MS }).then(
@@ -123,63 +116,179 @@ const headOf = (cwd: string): Promise<string | undefined> =>
         () => undefined,
     );
 
-const fullHistoryLog = async (root: string, repo: string, args: string[]): Promise<string> => {
-    const key = `${join(root, repo)}\0${args.join("\0")}`;
-    const head = await headOf(join(root, repo));
-    const held = fullHistoryLogs.get(key);
-    if (head !== undefined && held?.head === head) {
-        return held.stdout;
+// Exit 1 is "not an ancestor"; an older head git no longer has (collected after a rewrite) cannot be one either. Only a
+// check stopped at its deadline is a failure, so a loaded machine does not turn into a full re-read.
+const isAncestor = (cwd: string, older: string, newer: string): Promise<boolean> =>
+    exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "merge-base", "--is-ancestor", older, newer], { timeout: GIT_READ_TIMEOUT_MS }).then(
+        () => true,
+        (error: unknown) => {
+            if (isRecord(error) && error["killed"] === true) {
+                throw new Error(`iq: git merge-base took longer than ${GIT_READ_TIMEOUT_MS / 1000}s and was stopped`, { cause: error });
+            }
+            return false;
+        },
+    );
+
+// Adds `git log --numstat --format=commit:%ct` output into `files`, keyed by the path as git printed it. A rename
+// prints as `dir/{a => b}`, which names no file and so never passes the sweep filter, as it never has.
+const foldNumstat = (stdout: string, files: Map<string, FileChurn>): Map<string, FileChurn> => {
+    let commitMs = 0;
+    for (const line of stdout.split("\n")) {
+        if (line.startsWith("commit:")) {
+            commitMs = Number(line.slice(7)) * 1000;
+            continue;
+        }
+        const match = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
+        if (match === null) {
+            continue;
+        }
+        const entry = files.get(match[3]!) ?? { latestMs: 0, commits: 0, adds: 0, dels: 0 };
+        entry.commits++;
+        entry.adds += match[1] === "-" ? 0 : Number(match[1]);
+        entry.dels += match[2] === "-" ? 0 : Number(match[2]);
+        entry.latestMs = Math.max(entry.latestMs, commitMs);
+        files.set(match[3]!, entry);
     }
-    // The promise is what is held, so readers arriving while the log runs share it; a failed read is not kept.
-    const stdout = git(root, repo, args);
-    if (head !== undefined) {
-        const entry = { head, stdout };
-        fullHistoryLogs.set(key, entry);
-        stdout.catch(() => fullHistoryLogs.get(key) === entry && fullHistoryLogs.delete(key));
+    return files;
+};
+
+export interface ChurnHistoryOptions {
+    // Where folds are kept between processes (churnStorePath of the index dir); absent keeps them in memory only.
+    readonly dir?: string;
+    // A history read failed and the last fold was served in its place; told once per failing streak.
+    readonly onStale?: ((error: Error) => void) | undefined;
+}
+
+interface HistoryState {
+    // The last fold read in full or brought forward; what a failed read falls back to.
+    settled?: ChurnHistory;
+    // The read under way and the head it is for: callers asking about that head share it.
+    pending?: { readonly head: string; readonly reading: Promise<ChurnHistory> };
+    // The kept fold, read from disk once per process.
+    loaded?: Promise<void>;
+    // Whether this failing streak was told; the next read that succeeds ends it.
+    told: boolean;
+}
+
+// All-history folds by repo dir and log arguments. Producing one from scratch diffs every blob in history (~0.8 GB read
+// from disk for this monorepo), and the chores rail asked for it every 5-10 minutes per repo while HEAD moved many times
+// an hour (2026-10-21: ~20 GB of a container's 145 GB of reads in 2.5 h). So a fold is brought forward instead: when the
+// old head is an ancestor of the new one, only `old..new` is read and added, since the full log of the new head is
+// exactly the old one's commits plus those. Anything else (a reset, a rewrite) reads all of history again. A windowed
+// log (`since`) moves with the clock and is never kept.
+const histories = new Map<string, HistoryState>();
+
+const readHistory = async (root: string, repo: string, args: string[], head: string, base: ChurnHistory | undefined): Promise<ChurnHistory> => {
+    // The heads are named, so the fold matches `head` exactly even if HEAD moves while git reads.
+    if (base !== undefined && (await isAncestor(join(root, repo), base.head, head))) {
+        const files = new Map([...base.files].map(([path, churn]) => [path, { ...churn }]));
+        return { head, files: foldNumstat(await git(root, repo, [...args, `${base.head}..${head}`, "--"], HISTORY_READ_TIMEOUT_MS), files) };
     }
-    return stdout;
+    return { head, files: foldNumstat(await git(root, repo, [...args, head, "--"], HISTORY_READ_TIMEOUT_MS), new Map()) };
+};
+
+const churnHistory = async (root: string, repo: string, args: string[], options: ChurnHistoryOptions): Promise<ReadonlyMap<string, FileChurn>> => {
+    const cwd = join(root, repo);
+    const key = `${cwd}\0${args.join("\0")}`;
+    const state = histories.get(key) ?? { told: false };
+    histories.set(key, state);
+    const stale = (error: Error, kept: ChurnHistory): ChurnHistory => {
+        if (!state.told) {
+            state.told = true;
+            options.onStale?.(error);
+        }
+        return kept;
+    };
+    if (options.dir !== undefined) {
+        const { dir } = options;
+        state.loaded ??= (async () => {
+            const kept = await loadChurn(dir, key);
+            if (state.settled === undefined && kept !== undefined) {
+                state.settled = kept;
+            }
+        })();
+        await state.loaded;
+    }
+    const head = await headOf(cwd);
+    if (head === undefined) {
+        // No commit to key on: an unborn repo has no history, and a HEAD that would not read falls back to the last
+        // fold, or without one to the plain read and its own error.
+        if (state.settled !== undefined && !(await unborn(cwd))) {
+            return stale(new Error(`iq: HEAD in ${repo === "" ? "the workspace root" : repo} could not be read`), state.settled).files;
+        }
+        return foldNumstat(await git(root, repo, args), new Map());
+    }
+    if (state.settled?.head === head) {
+        return state.settled.files;
+    }
+    if (state.pending?.head === head) {
+        return (await state.pending.reading).files;
+    }
+    const base = state.settled;
+    const reading = (async (): Promise<ChurnHistory> => {
+        try {
+            const history = await readHistory(root, repo, args, head, base);
+            state.settled = history;
+            state.told = false;
+            if (options.dir !== undefined) {
+                // allow(silent-catch): an unwritten fold is only a slower next process, which reads history again.
+                void saveChurn(options.dir, key, history).catch(() => undefined);
+            }
+            return history;
+        } catch (error) {
+            // Only with nothing kept may a slow or failed read fail its caller.
+            if (base === undefined) {
+                throw error;
+            }
+            return stale(error instanceof Error ? error : new Error(String(error)), base);
+        } finally {
+            // A later head's read may have taken the slot; a second read of this head never does, it joins this one.
+            if (state.pending?.head === head) {
+                delete state.pending;
+            }
+        }
+    })();
+    state.pending = { head, reading };
+    return (await reading).files;
 };
 
 // Per-file committed activity from `git log --numstat`; shared by `recent` (windowed) and `hotspots` (all history).
 // Paths outside the sweep or floor-denied are dropped here so callers need not recheck.
-export const churnOf = async (root: string, entries: readonly FileEntry[], options: ChurnOptions): Promise<Map<string, FileChurn>> => {
+export const churnOf = async (
+    root: string,
+    entries: readonly FileEntry[],
+    options: ChurnOptions,
+    history: ChurnHistoryOptions = {},
+): Promise<Map<string, FileChurn>> => {
     const allowed = new Set(entries.map((entry) => entry.path));
     const churn = new Map<string, FileChurn>();
     // One `git log` per repo, spawned concurrently, folded back in repo order.
     const repos = reposOf(entries);
-    const logs = await Promise.all(
-        repos.map((repo) => {
+    const folds = await Promise.all(
+        repos.map(async (repo) => {
             const args = ["log", "--numstat", "--format=commit:%ct"];
             if (options.author !== undefined) {
                 args.push(`--author=${options.author}`);
             }
             if (options.since === undefined) {
-                return fullHistoryLog(root, repo, args);
+                return churnHistory(root, repo, args, history);
             }
             args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
-            return git(root, repo, args);
+            return foldNumstat(await git(root, repo, args), new Map());
         }),
     );
     for (const [index, repo] of repos.entries()) {
-        let commitMs = 0;
-        for (const line of logs[index]!.split("\n")) {
-            if (line.startsWith("commit:")) {
-                commitMs = Number(line.slice(7)) * 1000;
-                continue;
-            }
-            const match = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
-            if (match === null) {
-                continue;
-            }
-            const path = toWorkspacePath(repo, match[3]!);
+        for (const [repoRel, activity] of folds[index]!) {
+            const path = toWorkspacePath(repo, repoRel);
             if (!allowed.has(path) || isIqDenied(path)) {
                 continue;
             }
+            // A copy: the kept fold is shared by every reader.
             const entry = churn.get(path) ?? { latestMs: 0, commits: 0, adds: 0, dels: 0 };
-            entry.commits++;
-            entry.adds += match[1] === "-" ? 0 : Number(match[1]);
-            entry.dels += match[2] === "-" ? 0 : Number(match[2]);
-            entry.latestMs = Math.max(entry.latestMs, commitMs);
+            entry.commits += activity.commits;
+            entry.adds += activity.adds;
+            entry.dels += activity.dels;
+            entry.latestMs = Math.max(entry.latestMs, activity.latestMs);
             churn.set(path, entry);
         }
     }

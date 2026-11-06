@@ -61,7 +61,7 @@ const procWithRunner = (dir: string): string => {
 };
 
 describe("a kept job across a restart", () => {
-    it("writes the keep to job.json, so the boot sweep spares it and the restored job is not turned into a watch", () => {
+    it("writes the keep to job.json, so the boot sweep spares it and the restored job is not turned into a watch", async () => {
         const tmp = temp("kept-tmp-");
         const history = temp("kept-history-");
         const before = freshDaemon();
@@ -72,26 +72,26 @@ describe("a kept job across a restart", () => {
         // The daemon restarts before the turn's ending hands the job over: nothing in memory survives.
         const after = freshDaemon();
         expect(keptJobDirs(tmp)).toContain(job.dir);
-        expect(restorableJobSessions(tmp)).toContain(job.session);
+        expect(await restorableJobSessions(tmp)).toContain(job.session);
         expect(restoreBackgroundJobs(after.actors, leftJobs(tmp)).map((entry) => entry.id)).toEqual([job.id]);
         expect(backgroundJobSessions(after.actors)).toContain(job.session);
         // Adoption at boot settles unjudged jobs into completion watches; a kept one waits for its resumed turn instead.
         expect(settledBackgroundJobs(after.actors, "conv-kept-restart").running).toEqual([]);
         // Kept means the person's: the six-hour ceiling does not forget it.
-        expect(restorableJobSessions(tmp, job.startedAt + JOB_MAX_MS + 1)).toContain(job.session);
+        expect(await restorableJobSessions(tmp, job.startedAt + JOB_MAX_MS + 1)).toContain(job.session);
     });
 
-    it("spares every unfinished recorded job's session at boot, and only those", () => {
+    it("spares every unfinished recorded job's session at boot, and only those", async () => {
         const tmp = temp("kept-tmp-");
         const history = temp("kept-history-");
         const before = freshDaemon();
         const building = opened(before, tmp, history, "conv-restart-build", "pnpm build");
         const done = opened(before, tmp, history, "conv-restart-done", "pnpm test");
         writeFileSync(jobStatusPath(done), "0\n");
-        const sessions = restorableJobSessions(tmp);
+        const sessions = await restorableJobSessions(tmp);
         expect(sessions).toContain(building.session);
         expect(sessions).not.toContain(done.session);
-        expect(restorableJobSessions(tmp, building.startedAt + JOB_MAX_MS + 1)).not.toContain(building.session);
+        expect(await restorableJobSessions(tmp, building.startedAt + JOB_MAX_MS + 1)).not.toContain(building.session);
         expect(restoreBackgroundJobs(freshDaemon().actors, leftJobs(tmp)).map((entry) => entry.id)).toEqual([building.id]);
     });
 
@@ -145,7 +145,7 @@ describe("a kept job across a restart", () => {
             tmux("new-session", "-d", "-s", job.session, "sleep 60");
             tmux("new-session", "-d", "-s", "agent-orphan", "sleep 60");
 
-            await killStaleManagedSessions(restorableJobSessions(tmp));
+            await killStaleManagedSessions(await restorableJobSessions(tmp));
             const alive = tmux("list-sessions", "-F", "#{session_name}").split("\n");
             expect(alive).toContain(job.session);
             expect(alive).not.toContain("agent-orphan");

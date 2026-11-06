@@ -1,5 +1,6 @@
 import { QueryClient, QueryObserver } from "@tanstack/vue-query";
 import { invalidatePushedQueries } from "./pushInvalidation";
+import { receiveDesktopShown } from "../workbench/window/onScreen";
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -144,6 +145,54 @@ test("a push during an inactive prefetch leaves its landed snapshot stale", asyn
         expect(client.getQueryState(key)?.isInvalidated).toBe(true);
         expect(queryFn).toHaveBeenCalledTimes(1);
     } finally {
+        client.clear();
+    }
+});
+
+
+/* Every push cost every open window a read, hidden ones included. Out of sight a push marks what it names stale; the
+   window reads back what is on screen once it is seen again, a read that opted out of refetch-on-focus included. */
+test("a push heard out of sight marks the read stale, and the read goes once the window is seen again", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false, refetchOnWindowFocus: false } } });
+    const key = ["hidden"];
+    client.setQueryData(key, "cached");
+    const queryFn = jest.fn(async () => "fresh");
+    const observer = new QueryObserver(client, { queryKey: key, queryFn });
+    const unsubscribe = observer.subscribe(() => undefined);
+    try {
+        receiveDesktopShown(false);
+        void invalidatePushedQueries(client, { queryKey: key });
+        void invalidatePushedQueries(client, { queryKey: key });
+        await tick();
+        expect(queryFn).toHaveBeenCalledTimes(0);
+        expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+
+        receiveDesktopShown(true);
+        await tick();
+        expect(queryFn).toHaveBeenCalledTimes(1);
+        expect(client.getQueryData<string>(key)).toBe("fresh");
+    } finally {
+        receiveDesktopShown(true);
+        unsubscribe();
+        client.clear();
+    }
+});
+
+test("a read nobody observes is only marked stale, out of sight or not, and not read when the window comes back", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    const key = ["unobserved"];
+    client.setQueryData(key, "cached");
+    const queryFn = jest.fn(async () => "fresh");
+    client.getQueryCache().build(client, { queryKey: key, queryFn });
+    try {
+        receiveDesktopShown(false);
+        void invalidatePushedQueries(client, { queryKey: key });
+        receiveDesktopShown(true);
+        await tick();
+        expect(queryFn).toHaveBeenCalledTimes(0);
+        expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally {
+        receiveDesktopShown(true);
         client.clear();
     }
 });

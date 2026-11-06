@@ -221,7 +221,7 @@ describe(`package signals`, () => {
             // A package's doc is its README; `documented` is just a stat on the package dir.
             "_libs/one/README.md": `# one`,
         });
-        expect(packageSignals(dir)).toEqual([
+        expect(await packageSignals(dir)).toEqual([
             { dir: `_libs/one`, name: `@x/one`, engines: { node: `>=22` }, dependencies: [`zod`], devDependencies: [`vitest`], documented: true },
             { dir: `_libs/two`, name: `@x/two`, dependencies: [], devDependencies: [], documented: false },
         ]);
@@ -231,7 +231,7 @@ describe(`package signals`, () => {
     // undocumented package.
     test(`a repo that is not a workspace reports no packages at all`, async () => {
         const dir = await scaffold({ "package.json": JSON.stringify({ name: `plain` }) });
-        expect(packageSignals(dir)).toEqual([]);
+        expect(await packageSignals(dir)).toEqual([]);
     });
 });
 
@@ -249,7 +249,7 @@ describe(`repo shape`, () => {
             // `docs` counts the map (docs/architecture); package READMEs are counted separately by packageSignals.
             "docs/architecture/repo.md": `# repo`,
         });
-        const found = choreShape(dir);
+        const found = await choreShape(dir);
         expect(found.lockfile).toBe(true);
         expect(found.packageManifest).toBe(true);
         expect(found.dockerfiles.toSorted()).toEqual([`Dockerfile`, `_apps/web/web.Dockerfile`]);
@@ -258,7 +258,7 @@ describe(`repo shape`, () => {
     });
 
     test(`an empty repository rules everything out rather than guessing`, async () => {
-        const found = choreShape(await scaffold({ "README.md": `# hi` }));
+        const found = await choreShape(await scaffold({ "README.md": `# hi` }));
         expect(found).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: false, deps: [] });
     });
 
@@ -266,8 +266,8 @@ describe(`repo shape`, () => {
         const dir = await scaffold({
             "package.json": JSON.stringify({ dependencies: { react: `^19.0.0` }, devDependencies: { tailwindcss: `^4.0.0`, vite: `^6.0.0` } }),
         });
-        expect(packageSignals(dir)).toEqual([]);
-        expect(choreShape(dir).deps).toEqual([`react`, `tailwindcss`, `vite`]);
+        expect(await packageSignals(dir)).toEqual([]);
+        expect((await choreShape(dir)).deps).toEqual([`react`, `tailwindcss`, `vite`]);
     });
 
     test(`a workspace unions the root manifest with every package's`, async () => {
@@ -276,7 +276,7 @@ describe(`repo shape`, () => {
             "pnpm-workspace.yaml": `packages:\n  - _apps/*\n`,
             "_apps/web/package.json": JSON.stringify({ name: `@x/web`, dependencies: { vue: `^3.4.0` } }),
         });
-        expect(choreShape(dir).deps).toEqual([`turbo`, `vue`]);
+        expect((await choreShape(dir)).deps).toEqual([`turbo`, `vue`]);
     });
 
     test(`peer and optional dependencies count, and a name is never repeated`, async () => {
@@ -286,29 +286,29 @@ describe(`repo shape`, () => {
                 peerDependencies: { react: `^19.0.0`, "@angular/core": `^19.0.0` },
             }),
         });
-        expect(choreShape(dir).deps).toEqual([`@angular/core`, `react`]);
+        expect((await choreShape(dir)).deps).toEqual([`@angular/core`, `react`]);
     });
 
     test(`a manifest that does not parse leaves the rest of the shape intact`, async () => {
-        const found = choreShape(await scaffold({ "package.json": `{ not json`, Dockerfile: `FROM node` }));
+        const found = await choreShape(await scaffold({ "package.json": `{ not json`, Dockerfile: `FROM node` }));
         expect(found.deps).toEqual([]);
         expect(found.dockerfiles).toEqual([`Dockerfile`]);
     });
 
     test(`an empty docs directory is not documentation`, async () => {
         const dir = await scaffold({ "docs/architecture/.gitkeep": `` });
-        expect(choreShape(dir).docs).toEqual([]);
+        expect((await choreShape(dir)).docs).toEqual([]);
     });
 
     test(`the single-file CI conventions count too`, async () => {
-        expect(choreShape(await scaffold({ ".gitlab-ci.yml": `stages: []` })).ci).toEqual([`.gitlab-ci.yml`]);
-        expect(choreShape(await scaffold({ Jenkinsfile: `pipeline {}` })).ci).toEqual([`Jenkinsfile`]);
+        expect((await choreShape(await scaffold({ ".gitlab-ci.yml": `stages: []` }))).ci).toEqual([`.gitlab-ci.yml`]);
+        expect((await choreShape(await scaffold({ Jenkinsfile: `pipeline {}` }))).ci).toEqual([`Jenkinsfile`]);
     });
 
     // node_modules is the ignored dir most likely to hide a Dockerfile, since many packages ship one.
     test(`the sweep does not descend into ignored directories`, async () => {
         const dir = await scaffold({ "node_modules/some-dep/Dockerfile": `FROM node`, "dist/Dockerfile": `FROM node` });
-        expect(choreShape(dir).dockerfiles).toEqual([]);
+        expect((await choreShape(dir)).dockerfiles).toEqual([]);
     });
 
     test(`workspace shape skips only the top-level reference shelf`, async () => {
@@ -316,8 +316,8 @@ describe(`repo shape`, () => {
             "refs/upstream/Dockerfile": `FROM hidden`,
             "app/refs/Dockerfile": `FROM visible`,
         });
-        expect(choreShape(dir, true).dockerfiles).toEqual([`app/refs/Dockerfile`]);
-        expect(choreShape(dir).dockerfiles.toSorted()).toEqual([`app/refs/Dockerfile`, `refs/upstream/Dockerfile`]);
+        expect((await choreShape(dir, true)).dockerfiles).toEqual([`app/refs/Dockerfile`]);
+        expect((await choreShape(dir)).dockerfiles.toSorted()).toEqual([`app/refs/Dockerfile`, `refs/upstream/Dockerfile`]);
     });
 });
 

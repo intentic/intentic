@@ -21,12 +21,15 @@ jest.mock("../../../client/sandbox/sandboxClient", () => ({
     sandboxUpload: jest.fn(),
     sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
-// The two fields this import chain reads, both only as `.value`: `streaming` here, `conversations` in useChanges' own
-// module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
+// What this import chain reads: `streaming` here, `conversations` in useChanges' own module-scope watch, and, once the
+// roster holds cards, the fleet's watches on the open conversation (`active`) and on the rail's tidy (`releaseDone`).
+// Hoisted so a case can flip `streaming` before the frame is routed.
 const streaming = { value: false };
 const conversations = { value: [] as { streaming: { value: boolean } }[] };
-jest.mock("../../../models/conversations/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
+const active = { value: { conversationId: undefined } };
+jest.mock("../../../models/conversations/run/useChat", () => ({ useChat: () => ({ streaming, conversations, active, releaseDone: () => undefined }) }));
 
+import { partialMatchKey } from "@tanstack/vue-query";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
@@ -71,12 +74,11 @@ afterEach(() => {
     streaming.value = false;
 });
 
-// Whether anything in the batch would drop this key, by whichever means it was filed under.
+// Whether anything in the batch would drop this key, by whichever means it was filed under: a predicate, or the partial
+// key match vue-query itself applies.
 const reaches = (key: readonly unknown[]): boolean =>
     filters.some(
-        (filter) =>
-            filter.predicate?.({ queryKey: key }) === true ||
-            (filter.queryKey !== undefined && filter.queryKey.every((part, index) => key[index] === part)),
+        (filter) => filter.predicate?.({ queryKey: key }) === true || (filter.queryKey !== undefined && partialMatchKey([...key], [...filter.queryKey])),
     );
 
 it(`refreshes every open agent review when a commit moves the refs`, () => {
@@ -95,6 +97,34 @@ it(`refreshes every open agent review when a commit moves the refs`, () => {
     expect(reaches(rpcKey(`git.branchLandings`, { repo: `web`, branch: `feature/annual-copy` }))).toBe(true);
     // Transcripts don't refresh: a commit says nothing about what anyone said, and rereading one is expensive.
     expect(reaches(rpcKey(`agents.transcript`, { id: `a1` }, UNPERSISTED))).toBe(false);
+});
+
+/* Every agent's commit writes its own branch in the git dir they all share. Read as "root moved", one commit re-read every
+   review on every board, each a few git processes per repo (56,925 of them in 13 hours). The daemon names the
+   conversations when only their own refs moved: theirs go stale, and the children's that land into their checkout. */
+it(`refreshes only the reviews a conversation's own commit can change, and every one when the main line moves`, () => {
+    registry.value = [
+        { ...LANDING, id: `p`, status: `running` },
+        { ...LANDING, id: `kid`, status: `running`, startedBy: `agent:p` },
+        { ...LANDING, id: `other`, status: `running` },
+    ];
+
+    // Each review as it is filed in the box that heard the frame (the active one's, rpcKey's, are the same keys).
+    applySystemEvent({ kind: `refsChanged`, repos: [`root`], conversations: [`p`] }, SANDBOX);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.diff`, { id: `p` }))).toBe(true);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.fileDiff`, { id: `p`, repo: `root`, path: `src/app.ts` }, UNPERSISTED))).toBe(true);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.history`, { id: `p` }))).toBe(true);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.diff`, { id: `kid` }))).toBe(true);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.diff`, { id: `other` }))).toBe(false);
+    expect(reaches(rpcKeyAt(`sbx-laptop`, `agents.diff`, { id: `p` }))).toBe(false);
+    // The workspace's own review still refreshes: a branch moving moves what its ahead/behind says.
+    expect(reaches(rpcKey(`git.changes`))).toBe(true);
+
+    // Inside the same throttle window a move nobody owns joins it, and the trailing read reaches every review.
+    applySystemEvent({ kind: `refsChanged`, repos: [`root`] }, SANDBOX);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.diff`, { id: `other` }))).toBe(false);
+    jest.advanceTimersByTime(CHANGES_REFRESH_MS);
+    expect(reaches(rpcKeyAt(SANDBOX, `agents.diff`, { id: `other` }))).toBe(true);
 });
 
 // A turn's writes are named, and scanning per name would spend a `git status` per repo on each one — but an unnamed

@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 
 /** The extensions `pnpm lint` reads. */
@@ -22,6 +22,16 @@ export const OXLINT_TIMEOUT_MS = 60_000;
 /** The oxlint binary for `checkout`: its own, else the one beside this script (a bare copy may not mirror node_modules). */
 export const oxlintIn = (checkout) =>
     [checkout, repoRoot(import.meta.url)].map((dir) => join(dir, `node_modules/.bin/oxlint`)).find((bin) => existsSync(bin));
+
+/**
+ * The command that runs `oxlint` with `args`: node on the package's own entry when it sits beside the `.bin` shim, else
+ * the shim. The shim is a shell script that finds node and the package (a `readlink`, a `sed`, a `uname`) only to start
+ * node on that entry, which is what this starts directly, on the node already running.
+ */
+export const oxlintCommand = (oxlint, args) => {
+    const entry = join(dirname(oxlint), `../oxlint/bin/oxlint`);
+    return existsSync(entry) ? [process.execPath, [entry, ...args]] : [oxlint, args];
+};
 
 // A message that states a measured score against a limit ("Function 'f' has Cognitive Complexity of 38. Maximum allowed
 // is 20." then a breakdown of every line that scored) is about the function it names: `head` is the rule's metric and that
@@ -95,6 +105,30 @@ export const introduced = (current, baseline) => {
     });
 };
 
+/** The flags of a JSON report under `config`, the file list aside. */
+export const reportFlags = (checkout, config) => [
+    `-c`,
+    join(checkout, config),
+    `-f`,
+    `json`,
+    `--no-error-on-unmatched-pattern`,
+    // Not --silent: it empties the JSON report too. Only the plugins config knows every rule a directive may name, so
+    // only it can call a disable comment dead; the root config would misread the anti-slop ones.
+    ...(config === PLUGINS_CONFIG ? [`--report-unused-disable-directives`] : []),
+];
+
+/** oxlint's stdout for `args`, run from `checkout`; throws as execFileSync does, with the report on `error.stdout`. */
+export const oxlintOut = (oxlint, checkout, args) => {
+    const [file, argv] = oxlintCommand(oxlint, args);
+    return execFileSync(file, argv, {
+        cwd: checkout,
+        encoding: `utf8`,
+        stdio: [`ignore`, `pipe`, `ignore`],
+        timeout: OXLINT_TIMEOUT_MS,
+        maxBuffer: 64 * 1024 * 1024,
+    });
+};
+
 /** oxlint's JSON report for `files` under `config`, or undefined when it answered with anything else. */
 export const report = (oxlint, checkout, config, ...files) => {
     const read = (stdout) => {
@@ -102,18 +136,7 @@ export const report = (oxlint, checkout, config, ...files) => {
         return { diagnostics: parsed.diagnostics ?? [], files: parsed.number_of_files ?? 0 };
     };
     try {
-        // Not --silent: it empties the JSON report too. Only the plugins config knows every rule a directive may name, so
-        // only it can call a disable comment dead; the root config would misread the anti-slop ones.
-        const deadDirectives = config === PLUGINS_CONFIG ? [`--report-unused-disable-directives`] : [];
-        return read(
-            execFileSync(oxlint, [`-c`, join(checkout, config), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...deadDirectives, ...files], {
-                cwd: checkout,
-                encoding: `utf8`,
-                stdio: [`ignore`, `pipe`, `ignore`],
-                timeout: OXLINT_TIMEOUT_MS,
-                maxBuffer: 64 * 1024 * 1024,
-            }),
-        );
+        return read(oxlintOut(oxlint, checkout, [...reportFlags(checkout, config), ...files]));
     } catch (error) {
         // A non-zero exit with findings still prints the report.
         try {

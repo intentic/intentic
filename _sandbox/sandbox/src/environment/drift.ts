@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { cachedAsync } from "@intentic/base/held";
 import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract/schemas/environment";
+import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
@@ -122,6 +123,23 @@ export const collapseDriftPaths = (paths: readonly string[], limit = MAX_PATHS):
 // container.
 const sentinelPath = (): string => join(tmpdir(), ".intentic-drift-born");
 
+/* HOW LONG THE WALK MAY TAKE (2026-11-06). It stats every file under the roots, about 150,000 on a sandbox measured, most
+   of them SDKs and installs baked into /opt, and on a machine short of memory those inodes are read from disk again
+   each time. A fixed minute killed it on three nights running (daemon.log: "drift sweep failed", find SIGTERM), and
+   each tick started it over from nothing, so it never finished and all its I/O was spent for no answer. So a walk that
+   runs out of its time gets twice as long the next time, up to WALK_LIMIT_MAX_MS, and one that finishes puts it back
+   to the minute: what a finished walk reports is unchanged. */
+export const WALK_LIMIT_MS = 60_000;
+const WALK_LIMIT_MAX_MS = 8 * WALK_LIMIT_MS;
+
+/** The next walk's time limit, after a walk under `limitMs` that finished or was stopped for running out of it. */
+export const nextWalkLimit = (limitMs: number, ranOut: boolean): number => (ranOut ? Math.min(limitMs * 2, WALK_LIMIT_MAX_MS) : WALK_LIMIT_MS);
+
+let walkLimitMs = WALK_LIMIT_MS;
+
+// What execFile's error carries when it stopped the child for running past its timeout, rather than it failing on its own.
+const RanOutSchema = z.object({ killed: z.literal(true) });
+
 const pathDrift = async (bornAtMs: number): Promise<string[]> => {
     const sentinel = sentinelPath();
     await writeFile(sentinel, "");
@@ -132,7 +150,11 @@ const pathDrift = async (bornAtMs: number): Promise<string[]> => {
     }
     // Through sh so one bad path doesn't blank the output; roots are fixed constants, not user input.
     const command = `find ${roots.join(" ")} -xdev -newer ${sentinel} -not -type d -print 2>/dev/null || true`;
-    const { stdout } = await execFileAsync("sh", ["-c", command], { timeout: 60_000, maxBuffer: 32 * 1024 * 1024 });
+    const { stdout } = await execFileAsync("sh", ["-c", command], { timeout: walkLimitMs, maxBuffer: 32 * 1024 * 1024 }).catch((error: Error) => {
+        walkLimitMs = nextWalkLimit(walkLimitMs, RanOutSchema.safeParse(error).success);
+        throw error;
+    });
+    walkLimitMs = nextWalkLimit(walkLimitMs, false);
     const paths = stdout.split("\n").filter((line) => line !== "" && !DRIFT_IGNORES.some((ignore) => line.includes(ignore)));
     return collapseDriftPaths(paths);
 };

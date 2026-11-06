@@ -96,9 +96,11 @@ const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDe
     publicUrl: services.config.sandbox.publicUrl,
     platformId: publicAddressOf(services.config).sandboxId,
     pairingsOf: async (host) => await reportedPairings(services, host),
+    // A machine connecting or dropping (`hosts`), or a reading of one landing with news (`devices`): the folders it pairs
+    // are read off its reading.
     hostsChanged: (listener) =>
         onRuntimeChange((domains) => {
-            if (domains.includes("hosts")) {
+            if (domains.includes("hosts") || domains.includes("devices")) {
                 listener();
             }
         }),

@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import { z } from "zod";
 import type { RouteMeta } from "./route-meta.js";
 import { fillRoutePath } from "./raw/route-path.js";
@@ -186,30 +187,67 @@ interface RawRouteSchemas {
     readonly output?: unknown;
 }
 
-// One side of a route as JSON for the prints. SAFETY: wireShape is z.toJSONSchema's output (or a `{ stream }` wrapper
-// around it, or undefined for a side with no schema), which is JSON by construction; undefined becomes null so the
-// side still counts.
-const sideOf = (route: RawRouteSchemas, side: keyof RawRouteSchemas, io: "input" | "output"): Json => (wireShape(route[side], io) ?? null) as Json;
+// The schema one side of a route declares, as oRPC or a raw table carries it (read structurally, like `~orpc` above).
+type SideSchema = RawRouteSchemas["input"];
+// One side of a route as JSON for the prints, or undefined for a side with no schema.
+type SideJson = Json | undefined;
+// How a walk turns a side into its JSON: each time afresh, or once per route (convertingOnce).
+type SideConverter = (schema: SideSchema, io: "input" | "output") => SideJson;
+
+// SAFETY: wireShape is z.toJSONSchema's output (or a `{ stream }` wrapper around it, or undefined for a side with no
+// schema), which is JSON by construction.
+const convertEach: SideConverter = (schema, io) => wireShape(schema, io) as SideJson;
+
+// convertEach remembering its answers, made for one route and dropped with it. The prints read that route's input as
+// input three times and its output as output twice, and a hand-written route is printed into two maps; z.toJSONSchema
+// is nearly all of a print's cost (measured 2026-11-06: 0.4-0.9 s of a daemon's main thread on its first hello), and
+// every reader here only reads what it returns. A conversion that throws is not remembered, so it throws again for every
+// print that asks, as it did before.
+const convertingOnce = (): SideConverter => {
+    const known = new Map<SideSchema, Map<"input" | "output", SideJson>>();
+    return (schema, io) => {
+        const sides = known.get(schema) ?? new Map<"input" | "output", SideJson>();
+        known.set(schema, sides);
+        if (!sides.has(io)) {
+            sides.set(io, convertEach(schema, io));
+        }
+        return sides.get(io);
+    };
+};
+
+// One side of a route as JSON for the prints; undefined becomes null so the side still counts.
+const sideOf = (route: RawRouteSchemas, side: keyof RawRouteSchemas, io: "input" | "output", convert: SideConverter): Json => convert(route[side], io) ?? null;
 
 // Both prints of one route's two sides. The wire reads each side as the first print does (a `.default()` field is
 // optional in, required out); the core reads both as a parser does.
-const printsOf = (route: RawRouteSchemas): RoutePrints => [
-    fingerprint(pruned({ in: sideOf(route, "input", "input"), out: sideOf(route, "output", "output") }, false)),
-    fingerprint(pruned({ in: sideOf(route, "input", "input"), out: sideOf(route, "output", "input") }, true)),
+const printsOf = (route: RawRouteSchemas, convert: SideConverter = convertingOnce()): RoutePrints => [
+    fingerprint(pruned({ in: sideOf(route, "input", "input", convert), out: sideOf(route, "output", "output", convert) }, false)),
+    fingerprint(pruned({ in: sideOf(route, "input", "input", convert), out: sideOf(route, "output", "input", convert) }, true)),
 ];
 
-// One route's wire shape, or undefined if it can't be expressed at all.
-const procedureShape = (value: unknown): string | undefined => {
-    if (typeof value !== "object" || value === null || !("~orpc" in value)) {
-        return undefined;
-    }
-    const { inputSchema, outputSchema } = (value as ContractSchemasLike)["~orpc"];
+// Both prints, or undefined if the route's shape can't be expressed at all.
+const printsOrNone = (route: RawRouteSchemas, convert?: SideConverter): RoutePrints | undefined => {
     try {
-        return fingerprint({ in: wireShape(inputSchema, "input"), out: wireShape(outputSchema, "output") });
+        return printsOf(route, convert);
     } catch {
+        // allow(silent-catch): a schema z.toJSONSchema cannot express (z.custom, oRPC's bare eventIterator) leaves its route unprinted, never the walk failed.
         return undefined;
     }
 };
+
+// The first print of a route's two sides, or undefined if they can't be expressed at all. A `text` or `bytes` raw route
+// declares no input schema; its body is the document or the bytes, and the print is its answer alone.
+const firstPrintOf = (route: RawRouteSchemas, convert: SideConverter = convertEach): string | undefined => {
+    try {
+        return fingerprint({ in: convert(route.input, "input"), out: convert(route.output, "output") });
+    } catch {
+        // allow(silent-catch): as printsOrNone, a route whose schema cannot be expressed keeps its name and loses only its print.
+        return undefined;
+    }
+};
+
+// A procedure's two schemas, as oRPC hangs them off it.
+const schemasOf = (procedure: ContractSchemasLike): RawRouteSchemas => ({ input: procedure["~orpc"].inputSchema, output: procedure["~orpc"].outputSchema });
 
 // Every procedure of a contract that has a route, as `group.name` → procedure; the one walk every print shares.
 function* routedProcedures(contract: Record<string, unknown>): Generator<readonly [string, ContractSchemasLike]> {
@@ -231,7 +269,7 @@ function* routedProcedures(contract: Record<string, unknown>): Generator<readonl
 export const routeShapes = (contract: Record<string, unknown>): Record<string, string> => {
     const shapes: Record<string, string> = {};
     for (const [name, procedure] of routedProcedures(contract)) {
-        const shape = procedureShape(procedure);
+        const shape = firstPrintOf(schemasOf(procedure));
         if (shape !== undefined) {
             shapes[name] = shape;
         }
@@ -244,15 +282,11 @@ export const routeShapes = (contract: Record<string, unknown>): Record<string, s
 // above.
 export const routePrintsOf = (contract: Record<string, unknown>, raw: Readonly<Record<string, RawRouteSchemas>>) => {
     const prints: Record<string, RoutePrints> = {};
-    const sides: (readonly [string, RawRouteSchemas])[] = [
-        ...[...routedProcedures(contract)].map(([name, procedure]) => [name, { input: procedure["~orpc"].inputSchema, output: procedure["~orpc"].outputSchema }] as const),
-        ...Object.entries(raw),
-    ];
+    const sides: (readonly [string, RawRouteSchemas])[] = [...[...routedProcedures(contract)].map(([name, procedure]) => [name, schemasOf(procedure)] as const), ...Object.entries(raw)];
     for (const [name, route] of sides) {
-        try {
-            prints[name] = printsOf(route);
-        } catch {
-            continue;
+        const both = printsOrNone(route);
+        if (both !== undefined) {
+            prints[name] = both;
         }
     }
     return prints;
@@ -262,18 +296,77 @@ export const routePrintsOf = (contract: Record<string, unknown>, raw: Readonly<R
 // rather than through oRPC, so they need their own walk — and without one they were the half of the surface no version
 // check could see: a browser calling a raw route an older daemon predates got a bare 404 with nothing to say about it.
 // The table is passed in rather than imported, so this file stays free of the raw tables that read its types.
-export const rawRouteFingerprintsOf = (table: Record<string, { readonly input?: unknown; readonly output?: unknown }>) => {
+export const rawRouteFingerprintsOf = (table: Record<string, RawRouteSchemas>) => {
     const prints: Record<string, string> = {};
     for (const [name, route] of Object.entries(table)) {
-        try {
-            // A `text` or `bytes` route declares no input schema; its body is the document or the bytes, and the
-            // fingerprint is its answer alone.
-            prints[name] = fingerprint({ in: wireShape(route.input, "input"), out: wireShape(route.output, "output") });
-        } catch {
-            continue;
+        const print = firstPrintOf(route);
+        if (print !== undefined) {
+            prints[name] = print;
         }
     }
     return prints;
+};
+
+// All three maps above at once, what a daemon's hello carries: `fingerprints` is routeShapes, `rawFingerprints`
+// rawRouteFingerprintsOf and `prints` routePrintsOf, entry for entry and in the same order.
+export interface RouteSurface {
+    readonly fingerprints: Readonly<Record<string, string>>;
+    readonly rawFingerprints: Readonly<Record<string, string>>;
+    readonly prints: Readonly<Record<string, RoutePrints>>;
+}
+
+// The surface worked out one route per step, each route's schemas converted once for all its prints; whoever drives it
+// decides when to hand the thread back between steps (routeSurfaceOf).
+function* surfaceSteps(contract: Readonly<Record<string, object>>, raw: Readonly<Record<string, RawRouteSchemas>>): Generator<undefined, RouteSurface> {
+    const fingerprints: Record<string, string> = {};
+    const rawFingerprints: Record<string, string> = {};
+    const prints: Record<string, RoutePrints> = {};
+    for (const [name, procedure] of routedProcedures(contract)) {
+        const route = schemasOf(procedure);
+        const convert = convertingOnce();
+        const first = firstPrintOf(route, convert);
+        if (first !== undefined) {
+            fingerprints[name] = first;
+        }
+        const both = printsOrNone(route, convert);
+        if (both !== undefined) {
+            prints[name] = both;
+        }
+        yield undefined;
+    }
+    for (const [name, route] of Object.entries(raw)) {
+        const convert = convertingOnce();
+        const both = printsOrNone(route, convert);
+        if (both !== undefined) {
+            prints[name] = both;
+        }
+        const print = firstPrintOf(route, convert);
+        if (print !== undefined) {
+            rawFingerprints[name] = print;
+        }
+        yield undefined;
+    }
+    return { fingerprints, rawFingerprints, prints };
+}
+
+// How long the surface keeps the thread before handing it back: a few routes' worth, so a daemon's first hello is many
+// short tasks between its other work rather than one block of half a second or more.
+const SURFACE_SLICE_MS = 8;
+
+// The surface, worked out in slices of `sliceMs` with a timer's turn between them, so I/O and timers run while it is.
+export const routeSurfaceOf = async (contract: Readonly<Record<string, object>>, raw: Readonly<Record<string, RawRouteSchemas>>, sliceMs = SURFACE_SLICE_MS): Promise<RouteSurface> => {
+    const steps = surfaceSteps(contract, raw);
+    let sliceStart = performance.now();
+    for (;;) {
+        const step = steps.next();
+        if (step.done === true) {
+            return step.value;
+        }
+        if (performance.now() - sliceStart >= sliceMs) {
+            await sleep(0);
+            sliceStart = performance.now();
+        }
+    }
 };
 
 // A template split once: a literal segment, or undefined for a `{param}`; `tail` for a raw route's trailing `/*`.

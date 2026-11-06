@@ -245,7 +245,9 @@ flowchart LR
   per sandbox (`models/conversations/drafts/composerDrafts.ts`): composers write it at once and bind to it
   (`composerBinding.ts`), the other windows hear each change over the chat channel, and it is written to the sandbox
   once typing pauses, naming the revision it was edited from. When that revision has moved on, both sets of words are
-  kept rather than one written over the other (`heldDraft.ts`). A send names the revision its words came from, and the
+  kept rather than one written over the other (`heldDraft.ts`). The window that wrote does not read the drafts back for
+  the push its own write set off: the write's answer and the push both carry the sandbox's count of that person's draft
+  moves, and a window that made every move up to the push's count holds them already (2026-11-06). A send names the revision its words came from, and the
   sandbox clears that draft as it takes the message, so the words go exactly once. Closing a chat moves nothing: its
   words stay its draft. Against a sandbox older than drafts, and while one cannot be reached, the copy is all there is,
   and it is written once the sandbox is back. (2026-10-20) Before, the words lived in each window's tab snapshot, moved

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { type Dirent, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { oneLine } from "@intentic/base/one-line";
@@ -469,52 +470,46 @@ const recordOf = (dir: string): JobRecord | undefined => {
 // servers were forgotten after six hours, and with them the session the reaper spared for them).
 const expired = (record: JobRecord, now: number): boolean => record.fate !== "handed" && record.kept === undefined && now - record.job.startedAt > JOB_MAX_MS;
 
-/**
- * The capture dirs of jobs left running for the person and still running, read from their own files: the boot sweep
- * spares their sessions (bootstrap/boot-chain.ts) and the tmp sweep their dirs (system/boot/reaper.ts), before any
- * daemon has taken them back. Never throws.
- */
-export const keptJobDirs = (root: string = tmpdir()): readonly string[] => {
+// Each job capture dir among a listing of `root`, with the record its own file holds; a dir with none is left out.
+const jobRecordsIn = (root: string, entries: readonly Dirent[]): readonly JobRecord[] =>
+    entries.flatMap((entry) => (entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX) ? (recordOf(join(root, entry.name)) ?? []) : []));
+
+// A job left running for the person, and still running.
+const keptRunning = (record: JobRecord): boolean => (record.fate === "handed" || record.kept !== undefined) && !jobFinished(record.job);
+
+// The records of every job left running for the person; none where tmp cannot be listed.
+const keptRecords = (root: string): readonly JobRecord[] => {
     try {
-        return readdirSync(root, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX))
-            .map((entry) => join(root, entry.name))
-            .filter((dir) => {
-                const record = recordOf(dir);
-                return record !== undefined && (record.fate === "handed" || record.kept !== undefined) && !jobFinished(record.job);
-            });
+        return jobRecordsIn(root, readdirSync(root, { withFileTypes: true })).filter(keptRunning);
     } catch {
         // allow(silent-catch): a tmp that cannot be listed holds no job dir the sweeps could spare, and this runs at boot, where it must not throw.
         return [];
     }
 };
 
-/** The tmux sessions holding a job left running for the person, by its own file. */
-export const keptJobSessions = (root: string = tmpdir()): readonly string[] => [
-    ...new Set(keptJobDirs(root).flatMap((dir) => recordOf(dir)?.job.session ?? [])),
-];
+/**
+ * The capture dirs of jobs left running for the person and still running, read from their own files: the boot sweep
+ * spares their sessions (bootstrap/boot-chain.ts) and the tmp sweep their dirs (system/boot/reaper.ts), before any
+ * daemon has taken them back. Never throws.
+ */
+export const keptJobDirs = (root: string = tmpdir()): readonly string[] => keptRecords(root).map((record) => record.job.dir);
 
-/** Unfinished recorded jobs are adopted after the boot sweep; only sessions with no live record are orphans. */
-export const restorableJobSessions = (root: string = tmpdir(), now = Date.now()): readonly string[] => {
-    const sessions = new Set(keptJobSessions(root));
-    try {
-        for (const entry of readdirSync(root, { withFileTypes: true })) {
-            if (entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX)) {
-                const record = recordOf(join(root, entry.name));
-                if (record !== undefined && jobStarted(record.job) && !jobFinished(record.job) && !expired(record, now)) {
-                    sessions.add(record.job.session);
-                }
-            }
-        }
-    } catch {
-        // allow(silent-catch): an unlistable tmp holds no record to spare by; keptJobSessions already logged nothing either, and boot must not throw.
-    }
-    return [...sessions];
+/** The tmux sessions holding a job left running for the person, by its own file. */
+export const keptJobSessions = (root: string = tmpdir()): readonly string[] => [...new Set(keptRecords(root).map((record) => record.job.session))];
+
+/**
+ * Unfinished recorded jobs are adopted after the boot sweep; only sessions with no live record are orphans. Kept jobs
+ * first. Tmp is listed once and off the main thread: listed synchronously three times over, it held boot 0.3-0.4 s.
+ */
+export const restorableJobSessions = async (root: string = tmpdir(), now = Date.now()): Promise<readonly string[]> => {
+    // allow(silent-catch): an unlistable tmp holds no record to spare by, and boot must not throw.
+    const records = jobRecordsIn(root, await readdir(root, { withFileTypes: true }).catch(() => []));
+    const unfinished = records.filter((record) => jobStarted(record.job) && !jobFinished(record.job) && !expired(record, now));
+    return [...new Set([...records.filter(keptRunning), ...unfinished].map((record) => record.job.session))];
 };
 
 /** Every job's record as its capture dir holds it, read before the gate opens: what a daemon before this one left. */
-export const leftJobs = (root: string = tmpdir()): readonly JobRecord[] =>
-    readdirSync(root, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX) ? (recordOf(join(root, entry.name)) ?? []) : []));
+export const leftJobs = (root: string = tmpdir()): readonly JobRecord[] => jobRecordsIn(root, readdirSync(root, { withFileTypes: true }));
 
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
 export const restoreBackgroundJobs = (actors: Actors, left: readonly JobRecord[], now: number = Date.now()): readonly BackgroundJob[] => {

@@ -27,6 +27,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     // A connecting machine fires attach, hello, and describe as three publishes for one arrival; the window folds that
     // burst, and a flapping connection's own reconnect backoff into one frame.
     hosts: 250,
+    // Each machine's reading lands on its own; machines read together land within moments of each other.
+    devices: 250,
     webext: 250,
     phones: 250,
     // A list's worth of background probes settles within moments of each other; one frame says all of it.

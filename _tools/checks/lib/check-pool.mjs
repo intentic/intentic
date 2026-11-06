@@ -1,11 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, mkdirSync } from "node:fs";
 import { availableParallelism, tmpdir, totalmem } from "node:os";
 import { join } from "node:path";
 
 // A fixed machine budget, shared by invocations in every worktree. flock owns the lifetime: a crash cannot
 // strand a slot. Platforms without flock still bound each invocation rather than starting every check at once.
-export const checkPool = (env = process.env) => {
+const budget = (env) => {
     let memory = totalmem();
     try {
         const limit = Number(readFileSync("/sys/fs/cgroup/memory.max", "utf8").trim());
@@ -25,7 +25,43 @@ export const checkPool = (env = process.env) => {
             shared = false;
         }
     }
+    return { size, dir, shared };
+};
+
+export const checkPool = (env = process.env) => {
+    const { size, dir, shared } = budget(env);
     return { size, command: (slot, file, args) => shared ? ["flock", ["--exclusive", join(dir, `slot-${slot}`), file, ...args]] : [file, args] };
+};
+
+// Takes the first free slot of the lane; when every one is taken, waits on each in turn a moment at a time, so the
+// first slot given back is the one taken. `exec cat` then holds the lock until its stdin closes.
+const HOLD = `dir=$1; size=$2; i=0; tries=0
+while :; do
+    exec 9>"$dir/edit-$i"
+    if [ "$tries" -lt "$size" ]; then wait=--nonblock; else wait="--timeout 0.2"; fi
+    if flock $wait 9; then echo held; exec cat >/dev/null; fi
+    i=$(((i + 1) % size)); tries=$((tries + 1))
+done`;
+
+// THE LANE OF A RUN THAT JUDGES A FEW FILES (run.mjs --paths, after every edit): slots of its own beside the whole-tree
+// ones, under the same budget. In the shared slots one edit's checks waited out whatever check a turn's or a CI-like
+// whole-tree run held each slot with, up to the edit's 60s ceiling; here it waits only for other edits, about a second
+// each. Resolves once a slot is held, to the function that gives it back. The holder is a shell whose stdin is this
+// process, so a crash or a kill gives the slot back too. Without flock, or when the holder cannot start, it runs unbounded.
+export const editLane = (env = process.env) => {
+    const { size, dir, shared } = budget(env);
+    if (!shared) {
+        return Promise.resolve(() => {});
+    }
+    return new Promise((resolve) => {
+        const holder = spawn("sh", ["-c", HOLD, "sh", dir, String(size)], { stdio: ["pipe", "pipe", "ignore"] });
+        const release = () => holder.stdin.end();
+        holder.on("error", () => resolve(() => {}));
+        holder.on("exit", () => resolve(() => {}));
+        // A holder already gone has given its slot back; closing its stdin then has nothing left to say.
+        holder.stdin.on("error", () => resolve(() => {}));
+        holder.stdout.once("data", () => resolve(release));
+    });
 };
 
 // Results keep manifest order even when checks finish out of order. A worker holds at most one child at once.

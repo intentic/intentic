@@ -198,3 +198,30 @@ test("every batch from a burst of commits names the repo that moved, and nothing
     await settle();
     expect(batches.every((batch) => batch.length === 1 && batch[0] === "root")).toBe(true);
 });
+
+// An agent commits in its own linked worktree of the shared repo: the only thing in the git dir the watch sees move is its
+// branch, so the batch names that conversation and every other conversation's review is left alone.
+test("a commit on an agent's branch in its own worktree names that conversation alone", async () => {
+    const root = await workspace();
+    const copy = await mkdtemp(join(tmpdir(), "refwatch-agent-"));
+    roots.push(copy);
+    await rm(copy, { recursive: true });
+    await git(root, ["worktree", "add", "-b", "agent/c1", copy]);
+    const batches: string[][] = [];
+    const owners: (readonly string[] | undefined)[] = [];
+    const watch = createRefWatch(root, () => () => undefined);
+    closers.push(watch.close);
+    watch.subscribe((repos, conversations) => {
+        batches.push(repos);
+        owners.push(conversations);
+    });
+    await attached(batches, probeBranch(root));
+    owners.length = 0;
+
+    await writeFile(join(copy, "a.txt"), "the agent's\n");
+    await git(copy, ["commit", "-am", "agent work"]);
+
+    await waitFor(() => owners.length > 0);
+    await settle();
+    expect(owners.every((named) => named?.length === 1 && named[0] === "c1")).toBe(true);
+});

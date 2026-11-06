@@ -6,7 +6,7 @@ import type { IndexStatus, QueryOutcome, QueryRequest } from "../types.js";
 // has a case on both ends. Sent via node's structured-clone IPC, not JSON, since QueryRequest.features is a Set and
 // exactOptionalPropertyTypes makes absent-vs-undefined meaningful.
 
-// Constructor arguments minus the three callbacks, which can't cross a process boundary; the child turns each into a
+// Constructor arguments minus the callbacks, which can't cross a process boundary; the child turns each into a
 // pushed event instead.
 export interface EngineInit {
     readonly root: string;
@@ -49,7 +49,9 @@ export type EngineEvent =
     // Errors travel as message/stack, not Error instances: structured clone drops whatever a subclass added.
     | { readonly type: "failed"; readonly id: number; readonly message: string; readonly stack?: string }
     | { readonly type: "metrics"; readonly metrics: EngineMetricsSnapshot }
-    // The three constructor callbacks as events: indexError logs a stalled index, queryError a semantic fallback.
+    // The constructor callbacks as events: indexError logs a stalled index, queryError a semantic fallback.
     | { readonly type: "indexError"; readonly message: string; readonly stack?: string }
     | { readonly type: "queryError"; readonly message: string; readonly stack?: string }
+    // A health read served the last kept churn because a fresh history read failed.
+    | { readonly type: "staleHistory"; readonly message: string; readonly stack?: string }
     | { readonly type: "indexProgress"; readonly remaining: number };

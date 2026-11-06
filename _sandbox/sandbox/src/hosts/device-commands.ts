@@ -20,7 +20,7 @@ import { HOST_NATIVE_ENVIRONMENT, hostConnectionKey } from "@intentic/sandbox-co
 import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import { callTool, forgetPull, heldHostDevices } from "./device-reports.js";
+import { callTool, heldHostDevices, stalePull } from "./device-reports.js";
 import { hostConnectionOf } from "./host-connection.js";
 import { ownSlug } from "./self-host.js";
 
@@ -109,6 +109,8 @@ interface DeviceCommandSpec {
     readonly timeoutMs?: number;
     /** Mints a single-use desktop-sync pairing for this call; only the enrolling command asks. */
     readonly mints?: boolean;
+    /** Only reads, so the machine's held reading still stands after it (every other command makes it due again). */
+    readonly readsOnly?: boolean;
     // The path on the device this line is written for, when it has one. Only the environment holding that path can
     // run the line, and a PC answers for its containers through every door on it, so the door that reports this
     // sandbox is not yet the door that can `cd` into its checkout.
@@ -360,6 +362,8 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
                   `tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
         needs: "this sandbox does not know its own name, so it cannot name the log to read",
         timeoutMs: UNDER_LOAD_TIMEOUT_MS,
+        // Polled every 4 s while a rebuild runs, and it changes nothing a reading shows.
+        readsOnly: true,
         // The log, not the checkout: this is the one dev command that needs no checkout, and the log lives in the home
         // of whichever environment ran the build.
         path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
@@ -577,7 +581,9 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
                     : `"${input.id}" could not be reached: the device is asleep, offline, or its agent isn't running.`,
         });
     } finally {
-        // Forget timed-out pulls so the next read cannot use stale state.
-        forgetPull(input.id);
+        // A command that ran, or may have, changed the machine: the next read asks it again (device-reports.ts).
+        if (spec.readsOnly !== true) {
+            stalePull(input.id);
+        }
     }
 };

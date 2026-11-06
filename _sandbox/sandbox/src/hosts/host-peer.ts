@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { HOST_HEARTBEAT_MS, type HostHello, HostHelloSchema } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
 import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
-import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Capability, DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { opt } from "../opt.js";
@@ -25,6 +25,7 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
+import { warmPull } from "./device-reports.js";
 import { revokeSuperseded } from "./host-dedupe.js";
 import { hostCallGate } from "./host-call-gate.js";
 import { hostCallRoute } from "./host-call-route.js";
@@ -121,16 +122,30 @@ const environmentsOf = (
         .toSorted(byEnvironment);
 };
 
+// The two files every read of the machines starts from: the cards, one per computer, and the enrollments, one per OS
+// install on one. Read once for a request that reads the machines several ways and handed to each (GET /system/devices
+// read the card manifest three times, 2026-11-06). The enrollments are read when first asked for, then shared.
+export interface HostFiles {
+    readonly cards: readonly Capability[];
+    readonly enrolled: () => Promise<Awaited<ReturnType<HostStore["list"]>>>;
+}
+
+export const readHostFiles = async (services: Pick<Services, "capabilities" | "hosts">): Promise<HostFiles> => {
+    const cards = await services.capabilities.list();
+    let enrolled: ReturnType<HostStore["list"]> | undefined;
+    return { cards, enrolled: () => (enrolled ??= services.hosts.list()) };
+};
+
 // The owner's view of their machines: each host capability plus whatever the hub currently knows. Enrollment state must
 // distinguish "added but never connected" from "connected but asleep".
-export const hostSummaries = async (services: Services): Promise<HostSummary[]> => {
-    const cards = await services.capabilities.list();
+export const hostSummaries = async (services: Services, files?: HostFiles): Promise<HostSummary[]> => {
+    const cards = files?.cards ?? (await services.capabilities.list());
     // A card is what makes a machine a machine, so with none there is nothing for an enrollment to be an environment
     // OF, and the store is not read at all — the ordinary state of a sandbox nobody has connected a computer to.
     if (!cards.some((capability) => capability.kind === "device")) {
         return [];
     }
-    const enrolled = await services.hosts.list();
+    const enrolled = await (files === undefined ? services.hosts.list() : files.enrolled());
     return cards.flatMap((capability): HostSummary[] => {
         if (capability.kind !== "device") {
             return [];
@@ -218,12 +233,12 @@ const hostEnrollment = (services: Services) => ({
 // Every device enrollment no card holds, for the Devices screen to list beside a Withdraw button (2026-10-15): a key into
 // this sandbox that no board draws, since a machine is drawn from its card. Not withdrawn here, nor at boot: the cards
 // live in a workspace file a land can rewrite for a moment, and a key withdrawn on that is a real device unpaired.
-export const cardlessHosts = async (services: Pick<Services, "capabilities" | "hosts">): Promise<CardlessHost[]> => {
-    const enrolled = await services.hosts.list();
+export const cardlessHosts = async (services: Pick<Services, "capabilities" | "hosts">, files?: HostFiles): Promise<CardlessHost[]> => {
+    const enrolled = await (files === undefined ? services.hosts.list() : files.enrolled());
     if (enrolled.length === 0) {
         return [];
     }
-    const cards = new Set((await services.capabilities.list()).flatMap((capability) => (capability.kind === "device" ? [capability.id] : [])));
+    const cards = new Set((files?.cards ?? (await services.capabilities.list())).flatMap((capability) => (capability.kind === "device" ? [capability.id] : [])));
     return enrolled.filter((entry) => !cards.has(entry.card)).map(({ id, card, environment }) => ({ id, card, environment }));
 };
 
@@ -260,6 +275,8 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
                     services.logger.warn({ err, id }, "hosts: could not record which machine connected, or drop the keys it held before"),
                 );
             bootstrapEnvironments(services, id, facts);
+            // Its first reading, asked for now rather than by the first reader, who would wait out the whole of it.
+            warmPull(services, id);
             // The skill was written when the card was applied, before the machine said what it is (an Intentic OS box).
             void refreshDeviceSkill(capabilityCtx(services), id).catch((err: Error) =>
                 services.logger.warn({ err, id }, "hosts: could not bring the device's skill up to date with what it said as it connected"),

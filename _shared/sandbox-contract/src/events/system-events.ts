@@ -134,12 +134,27 @@ export type CheckoutChanged = z.infer<typeof CheckoutChangedSchema>;
 
 // Repos whose refs moved (commit, checkout, branch, rebase); a repo's git dir lives outside /work and the watcher
 // ignores `.git`, so no workspace path can say this. Diff, not snapshot: an absent repo didn't move, it didn't vanish.
-export const RefsChangedSchema = z.object({ kind: z.literal("refsChanged"), repos: z.array(z.string()) });
+// `conversations` is present only when every ref that moved was some conversation's own (its branch `agent/<id>`, the
+// shelf an archive parks it on, the pins its carry and drop leave, a runner's delivery of its turn): those
+// conversations, whose reviews (and their children's) are all such a move can change. Absent when anything else moved
+// (the main line, a named branch, a tag, a fetch) or the daemon cannot say, which reaches every review.
+export const RefsChangedSchema = z.object({
+    kind: z.literal("refsChanged"),
+    repos: z.array(z.string()),
+    conversations: z.array(z.string()).optional(),
+});
 export type RefsChanged = z.infer<typeof RefsChangedSchema>;
 
 // Which running-thing domain just moved (a session, a port, a browser, a subagent); none of it lives on disk, so
 // `workspaceChanged` can't name it. Carries only the domain, never the roster, so an uninvolved tab pays no request.
-export const RuntimeChangedSchema = z.object({ kind: z.literal("runtimeChanged"), domains: z.array(z.string()) });
+// `draftsGeneration`, beside a `drafts` domain: how many times the reader's own drafts and marks had moved in this
+// daemon's run as the frame went out (a write or a clear answers with the count it made), so a window that made every
+// one of those moves itself holds them already and has nothing to read back.
+export const RuntimeChangedSchema = z.object({
+    kind: z.literal("runtimeChanged"),
+    domains: z.array(z.string()),
+    draftsGeneration: z.number().int().nonnegative().optional(),
+});
 export type RuntimeChanged = z.infer<typeof RuntimeChangedSchema>;
 
 // One connected browser tab of a sandbox member; identity from the verified Google ID token, activity from the tab's

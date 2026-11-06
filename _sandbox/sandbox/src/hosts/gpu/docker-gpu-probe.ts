@@ -2,10 +2,10 @@ import { errorMessage } from "@intentic/base/errors";
 import { gpuProbeArgv, gpuProbePassed } from "@intentic/sandbox-run";
 import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import type { CapabilityProbe } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { Services } from "../composition.js";
-import { succeeded } from "./device-commands.js";
-import { callTool, devices } from "./device-reports.js";
-import { hostRunningSelf } from "./self-host.js";
+import type { Services } from "../../composition.js";
+import { succeeded } from "../device-commands.js";
+import { callTool, devices } from "../device-reports.js";
+import { hostRunningSelf } from "../self-host.js";
 
 // Not being able to ask is not a refusal (CapabilityProbeSchema: `checked: false` is "no test from here"). A host not read
 // yet, an agent that refused the command, or a check that never finished leaves the GPU to the launch's own preflight,

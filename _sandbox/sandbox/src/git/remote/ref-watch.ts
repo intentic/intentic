@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
 import { Coalescer } from "@intentic/base/async";
+import { insideRel } from "@intentic/base/contained";
 import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 
 // A third change feed (beside the file watcher and repo-set differ): the git dir is often relocated off /work and the
@@ -15,13 +16,36 @@ import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 // Time after the first move before a batch fires, coalescing a burst; matches the file watcher's debounce.
 export const BATCH_MS = 250;
 
-// Coalesces names into one sorted, deduped batch per window, factored out so tests use owned timers, not real inotify
+// The conversation a ref is the own of: its branch `agent/<id>`, the shelf an archive parks it on, its push to a remote,
+// the pins its carry and its drop leave (git/agent-refs.ts), a runner's delivery of its turn. Undefined for everything
+// else (the main line, a named branch, a tag, HEAD, a rebase's markers, packed-refs, a ref directory), which any review
+// may read. A lock file stands for the ref it locks.
+const OWN_REF = /^refs\/(?:heads\/agent|agent|remotes\/[^/]+\/agent|intentic\/(?:carried|dropped)|runner-(?:incoming|delivered))\/([^/]+)$/;
+export const conversationOfRef = (name: string): string | undefined => OWN_REF.exec(name.replace(/\.lock$/, ""))?.[1];
+
+/** One write the watch saw: the repo, and whose own ref it moved, when it was a conversation's (conversationOfRef). */
+export interface RefMove {
+    readonly repo: string;
+    readonly conversation?: string | undefined;
+}
+
+/**
+ * What a batch says: the repos that moved, sorted, and the conversations whose own refs were all that moved, when they
+ * were (otherwise undefined, as for anything that moved the main line).
+ */
+export type RefListener = (repos: string[], conversations?: readonly string[]) => void;
+
+// Coalesces moves into one sorted, deduped batch per window, factored out so tests use owned timers, not real inotify
 // timing. A Coalescer: the window opens on the first move; later ones join it, not reset it.
-export const createRepoBatcher = (emit: (repos: string[]) => void): Coalescer<string> =>
-    new Coalescer<string>(BATCH_MS, (batch) => emit([...new Set(batch)].toSorted()));
+export const createRepoBatcher = (emit: RefListener): Coalescer<RefMove> =>
+    new Coalescer<RefMove>(BATCH_MS, (batch) => {
+        const owners = batch.map((move) => move.conversation);
+        const repos = [...new Set(batch.map((move) => move.repo))].toSorted();
+        emit(repos, owners.every((owner) => owner !== undefined) ? [...new Set(owners)].toSorted() : undefined);
+    });
 
 export interface RefWatch {
-    subscribe(listener: (repos: string[]) => void): () => void;
+    subscribe(listener: RefListener): () => void;
 }
 
 // A repo's git dir and common dir, absolute; read off the filesystem (store/git/git-dir.ts) rather than guessed, so a
@@ -31,6 +55,10 @@ const gitDirsOf = async (dir: string): Promise<{ gitDir: string; commonDir: stri
     const gitDir = await gitDirOf(dir);
     return gitDir === undefined ? undefined : { gitDir, commonDir: await commonDirOf(gitDir) };
 };
+
+// A watched path as git names it: from the worktree's own git dir (HEAD, a rebase's markers) or the common one (refs/**).
+const refNameOf = ({ gitDir, commonDir }: { gitDir: string; commonDir: string }, path: string): string =>
+    insideRel(gitDir, path) ?? insideRel(commonDir, path) ?? path;
 
 const watchPaths = ({ gitDir, commonDir }: { gitDir: string; commonDir: string }): string[] => [
     join(commonDir, "refs"),
@@ -50,11 +78,11 @@ export const createRefWatch = (
     repos: (listener: (repos: string[]) => void) => () => void,
     logger?: Logger,
 ): RefWatch & { close: () => void } => {
-    const listeners = new Set<(repos: string[]) => void>();
+    const listeners = new Set<RefListener>();
     const watchers = new Map<string, FSWatcher>();
-    const batcher = createRepoBatcher((batch) => {
+    const batcher = createRepoBatcher((batch, conversations) => {
         for (const listener of listeners) {
-            listener(batch);
+            listener(batch, conversations);
         }
     });
 
@@ -74,7 +102,7 @@ export const createRefWatch = (
         // name may hold any number of slashes (`refs/remotes/origin/agent/<name>`, `dependabot/npm_and_yarn/…`), and a
         // refs tree is small.
         const watcher = watch(watchPaths(dirs), { ignoreInitial: true });
-        watcher.on("all", () => batcher.add(repo));
+        watcher.on("all", (_event, path) => batcher.add({ repo, conversation: conversationOfRef(refNameOf(dirs, path)) }));
         watcher.on("error", (error) => logger?.warn({ err: error, repo }, "ref watch error"));
         watchers.set(repo, watcher);
     };
@@ -115,15 +143,15 @@ export const createRefWatch = (
 
 // Boot-time singleton the /events handler subscribes to, as repo-watch's is: subscribers register into a set that
 // outlives the start, so one taken while boot is still under way hears every ref move once the watch is up.
-const subscribers = new Set<(repos: string[]) => void>();
+const subscribers = new Set<RefListener>();
 let instance: (RefWatch & { close: () => void }) | undefined;
 // Returns the stop, for the daemon's shutdown.
 export const startRefWatch = (root: string, repos: (listener: (repos: string[]) => void) => () => void, logger: Logger): (() => void) => {
     if (instance === undefined) {
         const refWatch = createRefWatch(root, repos, logger);
-        refWatch.subscribe((moved) => {
+        refWatch.subscribe((moved, conversations) => {
             for (const listener of subscribers) {
-                listener(moved);
+                listener(moved, conversations);
             }
         });
         instance = refWatch;
@@ -133,7 +161,7 @@ export const startRefWatch = (root: string, repos: (listener: (repos: string[]) 
         instance = undefined;
     };
 };
-export const subscribeRefChanges = (listener: (repos: string[]) => void): (() => void) => {
+export const subscribeRefChanges = (listener: RefListener): (() => void) => {
     subscribers.add(listener);
     return () => subscribers.delete(listener);
 };

@@ -21,6 +21,7 @@ import {
     rowHeight,
     sharedCaller,
     STATUS_LINE,
+    textsAsked,
 } from "./cardSize";
 import { useGraphLayout } from "./graphLayout";
 import { READABLE_ZOOM, ROW_GAP, spreadColumns, spreadRows } from "./spread";
@@ -94,6 +95,7 @@ const graph = ref<{ fitAll: () => void }>();
 const containerWidth = ref<number>(0);
 const containerHeight = ref<number>(0);
 let resizeObserver: ResizeObserver | undefined;
+let sizeFrame = 0;
 
 // Measures with a hidden probe wearing the rows' own classes, so weight, size and tabular figures are whatever the
 // stylesheet says rather than a copy of it; remembered per string, and redone once webfonts land, since a fallback face
@@ -112,49 +114,84 @@ const fontLoaded = (): void => {
 // to measure in, and every name would come back as nothing wide: it is estimated until its frame has a width, then
 // measured for real.
 const laidOut = computed(() => containerWidth.value > 0);
-const measure = computed<MeasureText>(() => {
+interface Measurer {
+    readonly text: MeasureText;
+    // Measures every string given that is not known yet, all in one layout.
+    readonly prime: (texts: readonly (readonly [string, Parameters<MeasureText>[1]])[]) => void;
+}
+const ESTIMATED: Measurer = { text: estimateText, prime: () => undefined };
+const measure = computed<Measurer>(() => {
     void fontsLoaded.value;
     const element = root.value;
     if (element === undefined || !laidOut.value) {
-        return estimateText;
+        return ESTIMATED;
     }
-    const probe = document.createElement(`span`);
     const known = new Map<string, number>();
-    // A dialog opening scales its content for a moment, and a string measured then comes back that much short, enough
-    // to cut a name that fits: the scale is read off the root's own box and taken back out.
-    const scaleOf = (): number => {
+    // Measured as nothing wide (hidden after all): not remembered, so it is estimated now and measured by the next
+    // batch, and not measured again one at a time in between.
+    const unmeasured = new Set<string>();
+    const keyOf = (text: string, size: Parameters<MeasureText>[1]): string => `${size}:${text}`;
+    // ONE LAYOUT FOR EVERY STRING. A probe each, put in together and read together: one probe at a time, put in, read
+    // and taken out, laid the page out again for every string, and a long run's first draw (in a ResizeObserver
+    // callback, or as its jobs' answer landed) spent up to a second in that forced layout.
+    const prime: Measurer[`prime`] = (texts) => {
+        const missing = texts.filter(([text, size]) => !known.has(keyOf(text, size)));
+        if (missing.length === 0) {
+            return;
+        }
+        const batch = document.createElement(`div`);
+        batch.className = `pointer-events-none invisible absolute left-0 top-0`;
+        const probes = missing.map(([text, size]) => {
+            const probe = document.createElement(`span`);
+            probe.className = `absolute left-0 top-0 whitespace-nowrap ${PROBE_CLASS[size]}`;
+            probe.textContent = text;
+            return probe;
+        });
+        batch.append(...probes);
+        element.append(batch);
+        // A dialog opening scales its content for a moment, and a string measured then comes back that much short,
+        // enough to cut a name that fits: the scale is read off the root's own box and taken back out.
         const drawn = element.getBoundingClientRect().width;
-        return drawn > 0 && element.offsetWidth > 0 ? drawn / element.offsetWidth : 1;
-    };
-    return (text, size) => {
-        const key = `${size}:${text}`;
-        const cached = known.get(key);
-        if (cached !== undefined) {
-            return cached;
+        const scale = drawn > 0 && element.offsetWidth > 0 ? drawn / element.offsetWidth : 1;
+        const measured = probes.map((probe) => probe.getBoundingClientRect().width / scale);
+        batch.remove();
+        for (const [at, [text, size]] of missing.entries()) {
+            const key = keyOf(text, size);
+            const width = measured[at] ?? 0;
+            if (width > 0 || text === ``) {
+                known.set(key, width);
+                unmeasured.delete(key);
+            } else {
+                unmeasured.add(key);
+            }
         }
-        probe.className = `pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap ${PROBE_CLASS[size]}`;
-        probe.textContent = text;
-        element.append(probe);
-        const width = probe.getBoundingClientRect().width / scaleOf();
-        probe.remove();
-        // Hidden after all: estimated, and not remembered, so the next layout measures it.
-        if (width === 0 && text !== ``) {
-            return estimateText(text, size);
-        }
-        known.set(key, width);
-        return width;
     };
+    const one: MeasureText = (text, size) => {
+        const key = keyOf(text, size);
+        if (!known.has(key) && !unmeasured.has(key)) {
+            prime([[text, size]]);
+        }
+        return known.get(key) ?? estimateText(text, size);
+    };
+    return { text: one, prime };
 });
+// A sizing pass run once on estimates to learn the strings it measures, which are then measured together, and once
+// for real.
+const sized = <T>(pass: (text: MeasureText) => T): T => {
+    const measurer = measure.value;
+    measurer.prime(textsAsked(pass));
+    return pass(measurer.text);
+};
 
 // Recomputed when a hover rebuilds the dag, to the same sizes, so the layout signature holds and nothing reflows.
 // Columns share one width per column, so the gutter between two is one straight band; a row's cards each fit their own.
-const widths = computed(() => columnWidths(dag.value.nodes, recurring, measure.value));
-const rowWidths = computed(() => rowCardWidths(dag.value.nodes, recurring, measure.value));
+const widths = computed(() => sized((text) => columnWidths(dag.value.nodes, recurring, text)));
+const rowWidths = computed(() => sized((text) => rowCardWidths(dag.value.nodes, recurring, text)));
 const widthOf = (nodeId: string): number =>
     rows.value ? (rowWidths.value.get(nodeId) ?? ROW_CARD_MAX_WIDTH) : (widths.value.get(stageOfNode(nodeId)) ?? CARD_MAX_WIDTH);
 // A job's height in its card, which the template sets too, so the box the layout places is the box the rows fill.
 const heightOf = (node: DagNode<PipelineJobCluster>, job: PipelineJob): number =>
-    rows.value ? jobLineHeight(job, node.data) : rowHeight(job, widthOf(node.id), measure.value);
+    rows.value ? jobLineHeight(job, node.data) : rowHeight(job, widthOf(node.id), measure.value.text);
 // A card is its rows: the layout is told this per node rather than being handed one size for all of them.
 const cardHeight = (node: DagNode<PipelineJobCluster>): number =>
     rows.value ? CARD_PADDING_Y + rowCardRows(node.data) : node.data.jobs.reduce((sum, member) => sum + heightOf(node, member.job), CARD_PADDING_Y);
@@ -225,10 +262,23 @@ onMounted(() => {
         containerWidth.value = frame.value.clientWidth;
         containerHeight.value = frame.value.clientHeight;
         if (typeof ResizeObserver !== `undefined`) {
+            // The entry's own box in whole pixels, written on the next frame. The band's height follows its width
+            // (bandHeight), so a size written inside the callback resized the very box observed, in the same frame, and
+            // the browser gave up on the rest of that frame's notifications ("ResizeObserver loop completed with
+            // undelivered notifications"), after laying the page out again under every observer still to run.
+            let seen = { width: containerWidth.value, height: containerHeight.value };
             resizeObserver = new ResizeObserver(([entry]) => {
-                if (entry) {
-                    containerWidth.value = entry.contentRect.width;
-                    containerHeight.value = entry.contentRect.height;
+                if (entry === undefined) {
+                    return;
+                }
+                seen = { width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) };
+                if (sizeFrame === 0) {
+                    sizeFrame = requestAnimationFrame(() => {
+                        sizeFrame = 0;
+                        // An unchanged number is no change to Vue: nothing recomputes.
+                        containerWidth.value = seen.width;
+                        containerHeight.value = seen.height;
+                    });
                 }
             });
             resizeObserver.observe(frame.value);
@@ -238,6 +288,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     resizeObserver?.disconnect();
+    if (sizeFrame !== 0) {
+        cancelAnimationFrame(sizeFrame);
+    }
     document.fonts?.removeEventListener(`loadingdone`, fontLoaded);
 });
 
@@ -432,7 +485,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                                     draggable="false"
                                     class="shrink-0 rounded-xs text-2xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
                                     :class="[
-                                        nameLines(member.job, widthOf(node.id), measure) === 1 ? `truncate` : `line-clamp-2 break-words`,
+                                        nameLines(member.job, widthOf(node.id), measure.text) === 1 ? `truncate` : `line-clamp-2 break-words`,
                                         member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`,
                                     ]"
                                     :style="{ lineHeight: `${NAME_LINE}px` }"
@@ -446,7 +499,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                                     v-else
                                     class="shrink-0 text-2xs font-medium"
                                     :class="[
-                                        nameLines(member.job, widthOf(node.id), measure) === 1 ? `truncate` : `line-clamp-2 break-words`,
+                                        nameLines(member.job, widthOf(node.id), measure.text) === 1 ? `truncate` : `line-clamp-2 break-words`,
                                         member.job.status === `failed` ? `text-danger` : `text-content`,
                                     ]"
                                     :style="{ lineHeight: `${NAME_LINE}px` }"

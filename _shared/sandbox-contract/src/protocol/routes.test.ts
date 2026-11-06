@@ -1,9 +1,9 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { RAW_JSON_ROUTES } from "./raw/raw-json-routes.js";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints, sandboxRoutePrints } from "../index.js";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxContract, sandboxRouteFingerprints, sandboxRouteName, sandboxRoutePrints, sandboxRouteSurface } from "../index.js";
 import { procedure } from "./route-meta.js";
-import { contractRoutes, routeNameForRequest, routePrintsOf, routeShapes, servedRoute, streamOf } from "./routes.js";
+import { contractRoutes, rawRouteFingerprintsOf, routeNameForRequest, routePrintsOf, routeShapes, routeSurfaceOf, servedRoute, streamOf } from "./routes.js";
 
 const fixture = {
     vpn: {
@@ -292,6 +292,42 @@ describe(`routePrintsOf`, () => {
     it(`prints the hand-written routes in the same map`, () => {
         const prints = routePrintsOf({}, { "GET /x": { output: z.object({ a: z.string() }) } });
         expect(Object.keys(prints)).toEqual([`GET /x`]);
+    });
+});
+
+describe(`routeSurfaceOf`, () => {
+    // A streamed route, a route oRPC's bare eventIterator leaves inexpressible, and raw routes beside them.
+    const contract = {
+        vpn: {
+            list: oc.route({ method: "GET", path: "/vpn" }).input(z.object({ q: z.string().default(`x`) })).output(z.object({ a: z.string() })),
+            watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(streamOf(z.object({ a: z.string() }))),
+            hidden: oc.route({ method: "GET", path: "/vpn/hidden" }).output(eventIterator(z.object({ a: z.string() }))),
+        },
+    };
+    const raw = { "GET /x": { output: z.object({ a: z.string() }) }, "POST /y": { input: z.object({ b: z.number() }), output: z.object({}) } };
+
+    it(`is the three maps it stands for, entry for entry and in their order`, async () => {
+        const surface = await routeSurfaceOf(contract, raw);
+        expect(Object.entries(surface.fingerprints)).toEqual(Object.entries(routeShapes(contract)));
+        expect(Object.entries(surface.rawFingerprints)).toEqual(Object.entries(rawRouteFingerprintsOf(raw)));
+        expect(Object.entries(surface.prints)).toEqual(Object.entries(routePrintsOf(contract, raw)));
+        expect(Object.keys(surface.fingerprints)).toEqual([`vpn.list`, `vpn.watch`]);
+        expect(Object.keys(surface.prints)).toEqual([`vpn.list`, `vpn.watch`, `GET /x`, `POST /y`]);
+    });
+
+    it(`hands the thread back between slices, so a timer set before it runs before it ends`, async () => {
+        const order: string[] = [];
+        setTimeout(() => order.push(`timer`), 0);
+        await routeSurfaceOf(contract, raw, 0).then(() => order.push(`surface`));
+        expect(order).toEqual([`timer`, `surface`]);
+    });
+
+    // The daemon's hello reads the sliced surface and a browser the three maps one by one: one print each, or a
+    // browser would read its own daemon as drifted.
+    it(`prints the real contract exactly as the three maps do`, async () => {
+        const surface = await routeSurfaceOf(sandboxContract, RAW_JSON_ROUTES);
+        expect(surface).toEqual({ fingerprints: routeShapes(sandboxContract), rawFingerprints: rawRouteFingerprintsOf(RAW_JSON_ROUTES), prints: routePrintsOf(sandboxContract, RAW_JSON_ROUTES) });
+        expect(await sandboxRouteSurface()).toEqual({ fingerprints: sandboxRouteFingerprints(), rawFingerprints: rawRouteFingerprints(), prints: sandboxRoutePrints() });
     });
 });
 

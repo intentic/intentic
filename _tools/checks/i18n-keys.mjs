@@ -4,9 +4,11 @@
 // This is the gate the compiler cannot be: vue-i18n's `t` takes any string whatever `DefineLocaleMessage` says, so a
 // typo'd key is not a build error — it is a dotted path drawn in front of a reader. A message the compiler refuses
 // (`@` is its link syntax, `|` its plural separator, `{` its placeholder) throws at the first render instead.
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { parseCatalog } from "./lib/catalog.mjs";
+import { keptAnswer } from "./lib/kept.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
 import { installedModule, root, subjectFiles, subjectScope, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
@@ -103,19 +105,27 @@ const dead =
         ? catalogs.flatMap((catalog) => [...catalog.keys].filter((key) => !asked.has(key) && !askedDynamically(key)).map((key) => `${catalog.dir}/en.json: ${key.slice(catalog.prefix.length)}`))
         : [];
 
-// The message compiler is vue-i18n's own, so what this accepts is exactly what a render accepts.
+// The message compiler is vue-i18n's own, so what this accepts is exactly what a render accepts. What it makes of a
+// catalog depends on that catalog and that install alone, and compiling every message (~12k) is most of what this check
+// costs after an edit, so each catalog's answer is kept by both (lib/kept.mjs) until either changes.
 const uncompilable = [];
-const compiler = installedModule(join(root, "_editor/web"), "vue-i18n");
+const compilerHost = join(root, "_editor/web");
+const compiler = installedModule(compilerHost, "vue-i18n");
 if (compiler !== undefined) {
+    const install = realpathSync(createRequire(join(compilerHost, "package.json")).resolve("vue-i18n"));
     for (const { dir, tree } of catalogs) {
-        const i18n = compiler.createI18n({ legacy: false, locale: "en", fallbackLocale: "en", messages: { en: tree }, missingWarn: false, fallbackWarn: false });
-        for (const key of leaves(tree)) {
-            try {
-                i18n.global.t(key);
-            } catch (error) {
-                uncompilable.push(`${dir}/en.json: ${key}: ${String(error.message).split("\n")[0]}`);
-            }
-        }
+        const refused = keptAnswer("i18n-compiled", [install, JSON.stringify(tree)], () => {
+            const i18n = compiler.createI18n({ legacy: false, locale: "en", fallbackLocale: "en", messages: { en: tree }, missingWarn: false, fallbackWarn: false });
+            return leaves(tree).flatMap((key) => {
+                try {
+                    i18n.global.t(key);
+                    return [];
+                } catch (error) {
+                    return [[key, String(error.message).split("\n")[0]]];
+                }
+            });
+        });
+        uncompilable.push(...refused.map(([key, why]) => `${dir}/en.json: ${key}: ${why}`));
     }
 }
 

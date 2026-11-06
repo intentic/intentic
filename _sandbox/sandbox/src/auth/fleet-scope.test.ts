@@ -141,6 +141,18 @@ describe("framedEvent", () => {
         });
     });
 
+    // The names say whose branch moved; telling a guest one of someone else's would say that conversation exists.
+    test("a ref frame names the conversations whose refs moved only to a reader shown every one of them", () => {
+        const moved = { kind: "refsChanged" as const, repos: ["support"], conversations: ["c-mine", "c-theirs"] };
+        const agentOf = (id: string): Provenance | undefined =>
+            id === "c-mine" ? { owner: { email: "dee@example.com" } } : id === "c-theirs" ? { owner: { email: "ada@example.com" } } : undefined;
+        expect(framedEvent(viewer, undefined, moved, agentOf)).toEqual(moved);
+        expect(framedEvent(guest, ["support"], moved, agentOf)).toEqual({ kind: "refsChanged", repos: ["support"] });
+        expect(framedEvent(guest, ["support"], { ...moved, conversations: ["c-mine"] }, agentOf)).toEqual({ ...moved, conversations: ["c-mine"] });
+        // One the registry no longer holds is named to nobody fenced: they read every review instead.
+        expect(framedEvent(guest, ["support"], { ...moved, conversations: ["c-gone"] }, agentOf)).toEqual({ kind: "refsChanged", repos: ["support"] });
+    });
+
     // The same cut the tree route makes: an admitted folder whole, one on the way down only toward what is admitted.
     test("tree changes keep what the fence admits and the way down to it, and nothing else", () => {
         const entry = (path: string) => ({ name: path.slice(path.lastIndexOf("/") + 1), path, type: "file" as const });

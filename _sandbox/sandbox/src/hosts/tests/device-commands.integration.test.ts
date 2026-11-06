@@ -153,6 +153,12 @@ test("gives the rebuild log read longer than the default to reach a busy machine
     expect(DEVICE_COMMANDS["dev-rebuild-log"].timeoutMs ?? 0).toBeGreaterThan(COMMAND_TIMEOUT_MS);
 });
 
+// Every command but a read ages the machine's held reading, so the next Devices read asks it again. The log read is
+// polled every 4 s while a rebuild runs, and aging the reading on each made every Devices read wait out a whole pull.
+test("leaves the machine's held reading standing only after the one command that just reads", () => {
+    expect(Object.entries(DEVICE_COMMANDS).flatMap(([name, spec]) => (spec.readsOnly === true ? [name] : []))).toEqual(["dev-rebuild-log"]);
+});
+
 test("reports a failed command in the machine's words, stderr first", () => {
     const result = outcomeOf("mirror-off", answer("Exit code 127 (failed).", undefined, "intentic-machine: command not found"));
     expect(result.ok).toBe(false);

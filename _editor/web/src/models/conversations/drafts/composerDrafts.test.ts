@@ -12,6 +12,8 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // The sandbox's side: its drafts, and every write and clear it was asked for.
 let sandbox: ComposerDraft[] = [];
 let revision = 0;
+// How many times the reader's drafts have moved in the fake daemon's run, as a `drafts` push names it.
+let generation = 0;
 const writes: DraftWrite[] = [];
 let refuseAll = false;
 // Set to hold every write until it resolves, as a sandbox slow to answer does.
@@ -29,7 +31,7 @@ const refusing = (): never => {
 const agents = {
     drafts: async () => {
         reads += 1;
-        return refuseAll ? refusing() : { drafts: [...sandbox], revision, reactions: Object.fromEntries(marks) };
+        return refuseAll ? refusing() : { drafts: [...sandbox], revision, generation, reactions: Object.fromEntries(marks) };
     },
     reactDraft: async (press: { id: string; emoji: string; on: boolean }) => {
         presses.push(press);
@@ -54,15 +56,20 @@ const agents = {
         revision += 1;
         const draft: ComposerDraft = { conversationId: write.id, text: write.text, attachments: write.attachments, since: current?.since ?? write.since ?? 1, revision };
         sandbox = [draft, ...sandbox.filter((entry) => entry.conversationId !== write.id)];
-        return { draft };
+        generation += 1;
+        return { draft, generation };
     },
     clearDraft: async ({ id, revision: only }: { id: string; revision?: number }) => {
         const current = sandbox.find((draft) => draft.conversationId === id);
         if (current !== undefined && only !== undefined && current.revision !== only) {
             return { draft: current, conflict: true as const };
         }
+        if (current === undefined) {
+            return {};
+        }
         sandbox = sandbox.filter((draft) => draft.conversationId !== id);
-        return {};
+        generation += 1;
+        return { generation };
     },
 };
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents }) }));
@@ -98,6 +105,7 @@ const words = (text: string) => ({ text, attachments: [] });
 beforeEach(() => {
     sandbox = [];
     revision = 0;
+    generation = 0;
     writes.length = 0;
     refuseAll = false;
     gate = undefined;
@@ -326,4 +334,70 @@ test(`holds the marks the sandbox lists and a press answers, keeps them through 
     expect(draftReactions.value.has(`c1`)).toBe(false);
     await waitFor(() => expect(presses.filter((press) => !press.on).map((press) => press.emoji)).toEqual([`🎉`, `👍`]));
     expect(marks.get(`c1`)).toEqual([]);
+});
+
+// Long enough for a read the code under test had decided on to have been asked for.
+const quiet = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 30));
+
+/* The sandbox tells every window of the typist that their drafts moved, the typist's own included, and that window read
+   the whole list back for words it had just written itself: one GET per pause in typing. A push naming no move past the
+   ones this window made is their echo; one naming a move made elsewhere is still read. */
+test(`does not read back the push its own write set off, and still reads one for words from another device`, async () => {
+    draftsMoved();
+    await waitFor(() => expect(reads).toBe(1));
+    writeDraft(`c1`, words(`fix the login`));
+    await waitFor(() => expect(draftOf(`c1`)?.pending).toBe(false));
+
+    draftsMoved(generation);
+    await quiet();
+    expect(reads).toBe(1);
+
+    // The phone writes another conversation's words.
+    revision += 1;
+    generation += 1;
+    sandbox = [{ conversationId: `c2`, text: `from the phone`, since: 1_000, revision }, ...sandbox];
+    draftsMoved(generation);
+    await waitFor(() => expect(draftOf(`c2`)?.text).toBe(`from the phone`));
+    expect(reads).toBe(2);
+});
+
+// The push for a write usually races that write's own answer; heard first, it waits for the answer to say whose it was.
+test(`decides a push heard while its own write is out once the write is answered`, async () => {
+    draftsMoved();
+    await waitFor(() => expect(reads).toBe(1));
+    let release = (): void => undefined;
+    gate = new Promise((resolve) => (release = resolve));
+    writeDraft(`c1`, words(`fix the login`));
+    await waitFor(() => expect(writes).toHaveLength(1));
+
+    draftsMoved(1);
+    release();
+    await waitFor(() => expect(draftOf(`c1`)?.pending).toBe(false));
+    await quiet();
+    expect(reads).toBe(1);
+
+    // A count past this window's own write, heard while the next one is out: something else moved too, so it reads.
+    gate = new Promise((resolve) => (release = resolve));
+    writeDraft(`c1`, words(`fix the login and the logout`));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    draftsMoved(3);
+    release();
+    await waitFor(() => expect(reads).toBe(2));
+});
+
+// A restarted daemon counts from zero: the count a window held from before would wave every new move through unread.
+test(`forgets the count on a reconnect, so a restarted sandbox's first moves are read`, async () => {
+    generation = 7;
+    draftsMoved();
+    await waitFor(() => expect(reads).toBe(1));
+
+    generation = 0;
+    draftsMoved();
+    await waitFor(() => expect(reads).toBe(2));
+    revision += 1;
+    generation += 1;
+    sandbox = [{ conversationId: `c2`, text: `from the phone`, since: 1_000, revision }];
+    draftsMoved(generation);
+    await waitFor(() => expect(draftOf(`c2`)?.text).toBe(`from the phone`));
+    expect(reads).toBe(3);
 });

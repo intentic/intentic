@@ -5,6 +5,7 @@ import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract/schema
 import { type Embedder, loadEmbedder, VECTOR_SPACE } from "./embed/embedder.js";
 import { loadReranker, type Reranker } from "./embed/reranker.js";
 import { openVectorCache, type VectorCache, vectorCachePath } from "./embed/vector-cache.js";
+import { churnStorePath } from "./engines/churn-store.js";
 import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
 import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
@@ -86,6 +87,9 @@ export interface ResidentEngineOptions extends EngineOptions {
     readonly onQueryError?: (error: Error) => void;
     // Embedding backlog remaining after each slice; without it a long cold embed looks like a hung, busy machine.
     readonly onIndexProgress?: (remaining: number) => void;
+    // A history read behind health failed or ran out of time and the last kept churn was served instead; told once per
+    // failing streak, so a stale ranking has a name in the host's log.
+    readonly onStaleHistory?: (error: Error) => void;
 }
 
 export interface ResidentEngineMetrics {
@@ -267,6 +271,19 @@ export const createEngine = (options: EngineOptions): Engine => {
     };
 };
 
+// What a cached health reading depends on: the scope and the churn window, never `limit`.
+const healthKeyOf = (request: HealthRequest): string =>
+    JSON.stringify({
+        paths: request.scope.paths,
+        repo: request.scope.repo,
+        langs: request.scope.langs,
+        globs: request.scope.globs,
+        notGlobs: request.scope.notGlobs,
+        only: request.scope.only,
+        ignored: request.scope.ignored,
+        since: request.since,
+    });
+
 // Always the built JS in dist/, since a raw worker thread has no TypeScript loader.
 const WORKER_URL = new URL("../dist/indexer/index-worker.js", import.meta.url);
 
@@ -299,18 +316,9 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     let embedBacklog = 0;
     // Keyed by scope + churn window, not `limit`; the Promise value single-flights concurrent callers too.
     const healthCache = new Map<string, Promise<CodebaseHealth>>();
-    const healthKeyOf = (request: HealthRequest): string =>
-        JSON.stringify({
-            paths: request.scope.paths,
-            repo: request.scope.repo,
-            langs: request.scope.langs,
-            globs: request.scope.globs,
-            notGlobs: request.scope.notGlobs,
-            only: request.scope.only,
-            ignored: request.scope.ignored,
-            since: request.since,
-        });
     const invalidateHealth = (): void => healthCache.clear();
+    // Churn folds kept beside the index, so a restarted engine reads only the commits since its last one.
+    const history = { dir: churnStorePath(indexDir), onStale: options.onStaleHistory };
 
     // Sweep publishes before revalidation finishes; the first query waits only for the file walk.
     let publishFirstSweep!: () => void;
@@ -424,7 +432,11 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
             const key = healthKeyOf(request);
             let pending = healthCache.get(key);
             if (pending === undefined) {
-                pending = codebaseHealth({ db, root: options.root, freshness: freshness() }, { ...request, limit: Number.MAX_SAFE_INTEGER }, entries);
+                pending = codebaseHealth(
+                    { db, root: options.root, freshness: freshness(), history },
+                    { ...request, limit: Number.MAX_SAFE_INTEGER },
+                    entries,
+                );
                 healthCache.set(key, pending);
                 void pending.catch(() => {
                     if (healthCache.get(key) === pending) {

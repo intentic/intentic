@@ -92,7 +92,7 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
     }
     // Taken back as jobs once the conversations load (agent/tools/jobs/jobs-in-flight.ts), which spares them from
     // then on.
-    const kept = restorableJobSessions();
+    const kept = await restorableJobSessions();
     if (kept.length > 0) {
         logger.info({ sessions: kept }, "boot: terminals with unfinished background job records are adopted, not swept");
     }

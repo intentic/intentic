@@ -132,10 +132,45 @@ export const isLinkedWorktree = () => {
     return gitDir !== undefined && commonDir !== undefined && gitDir !== commonDir;
 };
 
-// A git question answered from the checkout, or undefined when git says no.
-export const git = (...args) => {
+const asked = (args) => {
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return result.status === 0 ? result.stdout : undefined;
+};
+
+// A pathspec that names a path and nothing more (no glob, no magic, no `.`, `..` or trailing slash): it matches that
+// file and everything under it, which the whole listing answers without git.
+const PLAIN_PATH = /^(?![-.:/])(?!.*(?:\/\/|\/\.{1,2}(?:\/|$)|\/$))[^*?[\]\\]+$/;
+
+// The answers given so far, kept only once `rememberGit()` asks: one process judging one edit with every scoped
+// check (run.mjs --paths) asks each listing once per check, and the extension checks list about a hundred manifests
+// one at a time. Off by default, since a check that changes the tree (a `--fix`) must not read its old listing back.
+let remembered;
+export const rememberGit = () => {
+    remembered ??= new Map();
+};
+
+// A git question answered from the checkout, or undefined when git says no.
+export const git = (...args) => {
+    if (remembered === undefined) {
+        return asked(args);
+    }
+    const key = args.join("\0");
+    if (!remembered.has(key)) {
+        const [verb, flag, ...specs] = args;
+        const plain = verb === "ls-files" && flag === "-z" && specs.length > 0 && specs.every((spec) => PLAIN_PATH.test(spec));
+        const whole = plain ? git("ls-files", "-z") : undefined;
+        remembered.set(
+            key,
+            whole === undefined
+                ? asked(args)
+                : whole
+                      .split("\0")
+                      .filter((path) => path !== "" && specs.some((spec) => path === spec || path.startsWith(`${spec}/`)))
+                      .map((path) => `${path}\0`)
+                      .join(""),
+        );
+    }
+    return remembered.get(key);
 };
 
 // Every tracked path that still exists on disk; the index can list a file whose deletion is unstaged.

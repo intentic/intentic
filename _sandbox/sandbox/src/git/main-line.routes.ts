@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { gitImplementer } from "./index.routes.js";
-import { lockedBranchOf, mainLineRefusal, mainLineStanding, staysOnMainLine } from "./main-line-lock.js";
+import { latchedMainBranch, lockedBranchOf, mainLineRefusal, mainLineStanding, staysOnMainLine } from "./main-line-lock.js";
 import { liveBranchStarts } from "../conversations/land/branch/branch-repos.js";
 
 // The routes that move a shared checkout's HEAD, which stays on its main line (main-line-lock.ts): a checkout or a new
@@ -21,23 +21,15 @@ export interface MainLineRouteDeps {
     readonly fixedCheckout?: boolean;
 }
 
-// How long a latched main line is reused by the changes scan, which asks it of every repo on every poll: the config
-// changes only when a person edits it by hand.
-const LOCKED_TTL_MS = 30_000;
-
-/** The scan's question, cached per checkout: the branch it belongs on when it stands anywhere else, else undefined. */
-export const createOffMainLine = () => {
-    const cache = new Map<string, { readonly locked: string | undefined; readonly at: number }>();
-    return async (dir: string, branch: string | undefined): Promise<string | undefined> => {
-        const hit = cache.get(dir);
+/** The scan's question, asked of every repo on every poll: the branch it belongs on when it stands anywhere else, else
+ *  undefined. The latch is kept while the repo's config file is unchanged (main-line-lock.ts latchedMainBranch). */
+export const createOffMainLine =
+    () =>
+    async (dir: string, branch: string | undefined): Promise<string | undefined> => {
         // allow(silent-catch): a repo git cannot read locks nothing; the scan reports that repo's own error on its row.
-        const locked = hit !== undefined && Date.now() - hit.at < LOCKED_TTL_MS ? hit.locked : await lockedBranchOf(dir).catch(() => undefined);
-        if (hit === undefined || hit.locked !== locked) {
-            cache.set(dir, { locked, at: Date.now() });
-        }
+        const locked = await latchedMainBranch(dir).catch(() => undefined);
         return locked === undefined || branch === locked ? undefined : locked;
     };
-};
 
 export const mainLineRoutes = (i: GitImplementer, deps: MainLineRouteDeps) => {
     const { services, onRepo, invalidateScan } = deps;

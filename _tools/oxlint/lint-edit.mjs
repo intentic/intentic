@@ -3,10 +3,11 @@
 // version did not have, under the root rules and the plugin tier (.oxlintrc.plugins.json, added.mjs), less complexity,
 // which the code-shape check reports. Exit 2 with the report, else 0, including whenever it cannot measure (no binary, no git).
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, extname, join, relative } from "node:path";
+import { keptAnswer } from "../checks/lib/kept.mjs";
 import { repoRoot } from "../constants/src/node.mjs";
-import { diagnosticsOf, introduced, LINTABLE, OXLINT_TIMEOUT_MS, oxlintIn, PLUGINS_CONFIG, report as lintReport, ROOT_CONFIG } from "./added.mjs";
+import { diagnosticsOf, introduced, LINTABLE, oxlintIn, oxlintOut, PLUGINS_CONFIG, report as lintReport, reportFlags, ROOT_CONFIG } from "./added.mjs";
 
 // Rules a half-written file trips honestly, which `pnpm lint` still reads in CI's push check.
 const DEFERRED = new Set([`eslint(no-unused-vars)`]);
@@ -35,51 +36,56 @@ const checkoutOf = (file) => {
 };
 
 // The rules judged: the root set plus the plugin tier, whose backlog is why only what the edit adds is reported. A file
-// the root config ignores is not judged at all, as `pnpm lint` does not judge it: the fixing pass, under the root config,
-// says whether it judged the file (`judged`), so that takes no run of its own.
+// the root config ignores is not judged at all, as `pnpm lint` does not judge it; the plugin tier repeats the root's
+// ignores (a test in _tools/scripts/verify/measure-change.test.mjs holds them equal).
 const configOf = (checkout) => (existsSync(join(checkout, PLUGINS_CONFIG)) ? PLUGINS_CONFIG : ROOT_CONFIG);
 const lint = (oxlint, checkout, file, judged) => (judged === false ? [] : lintReport(oxlint, checkout, configOf(checkout), file)?.diagnostics);
 
-// How many files a JSON report says it linted; undefined for output that is not one (a crash, a timeout).
-const filesLinted = (stdout) => {
+// A JSON report's files linted and diagnostics; undefined for output that is not one (a crash, a timeout).
+const parsedReport = (stdout) => {
     try {
-        const files = JSON.parse(stdout).number_of_files;
-        return Number.isInteger(files) ? files : undefined;
+        const parsed = JSON.parse(stdout);
+        return Number.isInteger(parsed.number_of_files) ? { files: parsed.number_of_files, diagnostics: parsed.diagnostics ?? [] } : undefined;
     } catch {
         // allow(silent-catch): output that is not oxlint's JSON leaves the question to the plugin tier's own report
         return undefined;
     }
 };
 
-// Fixes until a pass changes nothing, answering whether the root config judged the file at all (false for one it
-// ignores), or undefined when the last pass did not say. Each pass reports as JSON, so the settled one doubles as the
-// root config's verdict on the file instead of a third oxlint run (measured: 537 ms an edit, of which that run was 126).
-const fixUntilSettled = (oxlint, checkout, file) => {
+// Fixes under `config` until a pass changes nothing, answering whether it judged the file at all (`judged`, false for one
+// it ignores, undefined when the last pass did not say) and, once a pass changed nothing, that pass's report as the
+// file's diagnostics (undefined when no pass settled or the last said nothing).
+const fixUntilSettled = (oxlint, checkout, file, config) => {
     let previous = readFileSync(file, `utf8`);
     let judged;
     for (let pass = 0; pass < FIX_PASSES; pass++) {
         let stdout;
         try {
-            stdout = execFileSync(oxlint, [`--fix`, `-c`, join(checkout, ROOT_CONFIG), `-f`, `json`, `--no-error-on-unmatched-pattern`, file], {
-                cwd: checkout,
-                encoding: `utf8`,
-                stdio: [`ignore`, `pipe`, `ignore`],
-                timeout: OXLINT_TIMEOUT_MS,
-                maxBuffer: 64 * 1024 * 1024,
-            });
+            stdout = oxlintOut(oxlint, checkout, [`--fix`, ...reportFlags(checkout, config), file]);
         } catch (error) {
             // Non-zero means problems remain, which is the normal state between passes; the report is still printed.
             stdout = String(error?.stdout ?? ``);
         }
-        const files = filesLinted(stdout);
-        judged = files === undefined ? undefined : files > 0;
+        const report = parsedReport(stdout);
+        judged = report === undefined ? undefined : report.files > 0;
         const now = readFileSync(file, `utf8`);
         if (now === previous) {
-            return judged;
+            return { judged, diagnostics: report?.diagnostics };
         }
         previous = now;
     }
-    return judged;
+    return { judged, diagnostics: undefined };
+};
+
+// The file fixed, and its diagnostics under the judged config when the fixing already read them. The passes run the
+// plugin tier itself: none of the rules it adds has a fix, so its fixes are the root's, and the pass that changed nothing
+// reported the file as it stands, with the flags the report takes. Fixing under the root config and then reporting under
+// the plugin tier were two oxlint runs an edit; this is one. A plugin tier that cannot run at all (a JS plugin that no
+// longer loads) says nothing, and the root config fixes the file as before.
+const fixed = (oxlint, checkout, file) => {
+    const config = configOf(checkout);
+    const settled = fixUntilSettled(oxlint, checkout, file, config);
+    return settled.judged === undefined && config !== ROOT_CONFIG ? { judged: fixUntilSettled(oxlint, checkout, file, ROOT_CONFIG).judged } : settled;
 };
 
 const gitIn = (checkout, ...args) => execFileSync(`git`, args, { cwd: checkout, encoding: `buffer`, stdio: [`ignore`, `pipe`, `ignore`] });
@@ -103,6 +109,28 @@ const renamedFrom = (checkout, rel) => {
     return undefined;
 };
 
+// What the HEAD version's diagnostics depend on, besides its bytes: the basename it is linted under (filename-shaped
+// overrides), both configs, the anti-slop plugin's source and the installed oxlint, @oxlint/plugins and complexity
+// plugin. Every edit of a file until the next commit is measured against the same HEAD blob, and linting it is a whole
+// plugin-tier oxlint run, so the answer is kept (../checks/lib/kept.mjs) rather than measured again each edit.
+const filesUnder = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? filesUnder(join(dir, entry.name)) : [join(dir, entry.name)]));
+
+const baselineInputs = (checkout, config, rel, head) => {
+    const plugin = join(checkout, `_tools/oxlint/anti-slop`);
+    return [
+        config,
+        basename(rel),
+        head,
+        ...[ROOT_CONFIG, PLUGINS_CONFIG].flatMap((name) => [name, existsSync(join(checkout, name)) ? readFileSync(join(checkout, name)) : ``]),
+        ...(existsSync(plugin) ? filesUnder(plugin).toSorted() : []).flatMap((path) => [relative(plugin, path), readFileSync(path)]),
+        ...[`oxlint`, `@oxlint/plugins`, `oxlint-plugin-complexity`].map((name) => {
+            const path = join(checkout, `node_modules`, name);
+            return existsSync(path) ? realpathSync(path) : `absent ${name}`;
+        }),
+    ];
+};
+
 // Diagnostics of the file as HEAD holds it, under its own path or the one it was moved from: none when HEAD lacks it
 // (all of it is this edit's), undefined when git cannot answer.
 const baselineOf = (oxlint, checkout, rel) => {
@@ -117,7 +145,8 @@ const baselineOf = (oxlint, checkout, rel) => {
             return undefined;
         }
     }
-    return diagnosticsOf(oxlint, checkout, configOf(checkout), rel, head) ?? [];
+    const config = configOf(checkout);
+    return keptAnswer(`lint-edit-head`, baselineInputs(checkout, config, rel, head), () => diagnosticsOf(oxlint, checkout, config, rel, head)) ?? [];
 };
 
 // `:line:column` for a byte offset into `text`; oxlint's JSON reports spans as offsets.
@@ -155,8 +184,8 @@ const main = () => {
         return 0;
     }
 
-    const judged = fixUntilSettled(oxlint, checkout, file);
-    const current = (lint(oxlint, checkout, file, judged) ?? []).filter((d) => !DEFERRED.has(d.code) && !heldElsewhere(d));
+    const settled = fixed(oxlint, checkout, file);
+    const current = (settled.diagnostics ?? lint(oxlint, checkout, file, settled.judged) ?? []).filter((d) => !DEFERRED.has(d.code) && !heldElsewhere(d));
     if (current.length === 0) {
         return 0;
     }

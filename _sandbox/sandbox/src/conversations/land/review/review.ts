@@ -11,7 +11,7 @@ import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit } from "@intentic/base/git";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import { headSha } from "../../../git/changes/changes.js";
+import { feedHeadSha } from "../../../git/changes/changes.js";
 import { materializedPaths } from "../../../git/changes/changes-porcelain.js";
 import type { IsolatedAgent, RepoRecord } from "../../registry/agents-store.js";
 import { branchOf } from "../branch/branch-repos.js";
@@ -95,7 +95,7 @@ const takenByLastLand = async (
     }
     try {
         const main = deps.agentWorktrees.mainDir(composed.repo);
-        const head = await headSha(main);
+        const head = await feedHeadSha(main);
         if (head === undefined) {
             return NONE;
         }
@@ -230,7 +230,7 @@ export const historyOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise
                 continue;
             }
             const main = deps.agentWorktrees.mainDir(composed.repo);
-            const head = await headSha(main);
+            const head = await feedHeadSha(main);
             if (head === undefined) {
                 unaccounted += absorbed.length;
                 continue;

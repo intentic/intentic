@@ -11,7 +11,7 @@ import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listFiles, vueScript } from "../nav/lib/files.mjs";
-import { OXLINT_TIMEOUT_MS, oxlintIn, PLUGINS_CONFIG } from "../oxlint/added.mjs";
+import { OXLINT_TIMEOUT_MS, oxlintCommand, oxlintIn, PLUGINS_CONFIG } from "../oxlint/added.mjs";
 import { ADOPTING, allowanceOf, ratchet } from "./lib/ratchet.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
 import { root, subjectScope } from "./lib/repo.mjs";
@@ -75,7 +75,8 @@ const startMeter = (paths) => {
     writeFileSync(join(scratch, `oxlintrc.json`), JSON.stringify(meter));
     const out = openSync(join(scratch, `out.json`), `w`);
     return new Promise((resolve) => {
-        const child = spawn(oxlint, [`-c`, join(scratch, `oxlintrc.json`), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...paths], {
+        const [command, args] = oxlintCommand(oxlint, [`-c`, join(scratch, `oxlintrc.json`), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...paths]);
+        const child = spawn(command, args, {
             cwd: root,
             stdio: [`ignore`, out, `ignore`],
             timeout: OXLINT_TIMEOUT_MS,
@@ -128,7 +129,10 @@ const unparsed = new Set();
 // Every measurement over its cap in `paths`.
 const measure = async (paths) => {
     const pending = startMeter(paths);
-    await loadParser();
+    // Nothing to parse (an edit to a file that is not source) loads no parser: typescript is most of this check's cost.
+    if (paths.length > 0) {
+        await loadParser();
+    }
     const items = [];
     for (const path of paths) {
         const lines = lineCount(textOf(path));

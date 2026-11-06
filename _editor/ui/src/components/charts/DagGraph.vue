@@ -245,15 +245,32 @@ const onReady = async (store: VueFlowStore): Promise<void> => {
     refit();
 };
 
-// Also refits on resize: a fit is valid only for its measured frame, and the store already has the new size.
+// Also refits on resize: a fit is valid only for its measured frame. On the next frame rather than inside the observer's
+// callback: by then Vue Flow's own observer has put the new size in the store, whichever of the two ran first, and the
+// viewport is written with the next frame instead of laying the page out again under the observers still to run.
 let observer: ResizeObserver | undefined;
-onBeforeUnmount(() => observer?.disconnect());
-watch(root, (element) => {
+let refitFrame = 0;
+const stopObserving = (): void => {
     observer?.disconnect();
+    if (refitFrame !== 0) {
+        cancelAnimationFrame(refitFrame);
+        refitFrame = 0;
+    }
+};
+onBeforeUnmount(stopObserving);
+watch(root, (element) => {
+    stopObserving();
     if (element === undefined) {
         return;
     }
-    observer = new ResizeObserver(() => refit());
+    observer = new ResizeObserver(() => {
+        if (refitFrame === 0) {
+            refitFrame = requestAnimationFrame(() => {
+                refitFrame = 0;
+                refit();
+            });
+        }
+    });
     observer.observe(element);
 });
 

@@ -28,13 +28,14 @@ import { StreamEndedError, StreamFailedError, untilResult } from "../../../lib/i
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useSyncStatus } from "./useSyncStatus";
 
-// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Pushed on the `hosts` domain
-// when a machine's reading actually moves. The poll stays beside the push because the reading is a snapshot the daemon
-// caches between polls and the rows age it against `readAt`, so it is also what re-reads a machine that went quiet
-// without a socket event: the daemon pulls a machine's reading on read, so the timer is what starts a refresh, not a
-// stand-in for a push that exists (2026-10-20).
+// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Pushed on the `devices` domain
+// when a machine's reading actually moves, and on `hosts` when a machine connects or drops. The poll stays beside the
+// push because the reading is a snapshot the daemon caches between polls and the rows age it against `readAt`, so it is
+// also what re-reads a machine that went quiet without a socket event: the daemon pulls a machine's reading on read, so
+// the timer is what starts a refresh, not a stand-in for a push that exists (2026-10-20). Thirty seconds, the age at
+// which the daemon asks a machine again (2026-11-06): a ten-second poll was answered from its cache twice in three.
 
-const POLL_MS = 10_000;
+const POLL_MS = 30_000;
 
 // Callers opt into polling; a non-polling reader still gets the shared cache, refreshed once on mount.
 export function useDevices({ poll = true }: { poll?: boolean } = {}): {

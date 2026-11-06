@@ -1,8 +1,11 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { CodebaseHealth } from "@intentic/iq-engine";
+import { within } from "@intentic/base/async";
+import { pathExists } from "@intentic/base/fs";
 import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract/schemas/maintenance";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
+import { readWorkspaceManifestsAsync, type WorkspaceManifest } from "../workspace/deps/package-graph.js";
 import type { Services } from "../composition.js";
 import { generationMemo } from "../git/feed/generation-memo.js";
 
@@ -32,19 +35,21 @@ const enginesOf = (manifest: Record<string, unknown>): Record<string, string> | 
 
 // A repo with no pnpm workspace has no packages; that's a true answer, not a gap. The root manifest is deliberately not
 // folded in as a pseudo-package.
-export const packageSignals = (repoDir: string, manifests = readWorkspaceManifests(repoDir)): ChorePackage[] =>
-    manifests.map(({ dir, name, manifest }) => {
-        const entry: ChorePackage = {
-            dir,
-            name,
-            dependencies: dependencyNames(manifest, "dependencies"),
-            devDependencies: dependencyNames(manifest, "devDependencies"),
-            documented: existsSync(docPath(repoDir, dir)),
-        };
-        // `engines` is omitted, not undefined, when absent; exactOptionalPropertyTypes treats them differently.
-        const engines = enginesOf(manifest);
-        return engines === undefined ? entry : Object.assign(entry, { engines });
-    });
+export const packageSignals = async (repoDir: string, manifests?: readonly WorkspaceManifest[]): Promise<ChorePackage[]> =>
+    await Promise.all(
+        (manifests ?? (await readWorkspaceManifestsAsync(repoDir))).map(async ({ dir, name, manifest }) => {
+            const entry: ChorePackage = {
+                dir,
+                name,
+                dependencies: dependencyNames(manifest, "dependencies"),
+                devDependencies: dependencyNames(manifest, "devDependencies"),
+                documented: await pathExists(docPath(repoDir, dir)),
+            };
+            // `engines` is omitted, not undefined, when absent; exactOptionalPropertyTypes treats them differently.
+            const engines = enginesOf(manifest);
+            return engines === undefined ? entry : Object.assign(entry, { engines });
+        }),
+    );
 
 // Bounds the Dockerfile/doc walk's depth and count; a route the rail badge polls must not walk a whole tree.
 const SHAPE_DEPTH = 3;
@@ -54,32 +59,24 @@ const SHAPE_LIMIT = 20;
 const CI_FILES = [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "Jenkinsfile", ".drone.yml", "bitbucket-pipelines.yml"];
 const WORKFLOWS_DIR = join(".github", "workflows");
 
-const listDir = (dir: string): string[] => {
-    try {
-        return readdirSync(dir, { withFileTypes: true })
-            .filter((entry) => entry.isFile())
-            .map((entry) => entry.name);
-    } catch {
-        return [];
-    }
-};
+// Every read here is async: the route the rail badge polls must not hold the daemon's event loop for a repo's walk.
+const entriesOf = async (dir: string) => await readdir(dir, { withFileTypes: true }).catch(() => []);
+
+const listDir = async (dir: string): Promise<string[]> => (await entriesOf(dir)).filter((entry) => entry.isFile()).map((entry) => entry.name);
 
 // Not a glob library, not unbounded recursion: a bounded walk may miss a file, which beats an unbounded poll.
 const IGNORED = new Set(["node_modules", ".git", "dist", "build", ".cache", "coverage", ".venv", "target", "vendor"]);
 
-const findFiles = (root: string, matches: (name: string) => boolean, skipRootReference = false): string[] => {
+const findFiles = async (root: string, matches: (name: string) => boolean, skipRootReference = false): Promise<string[]> => {
     const found: string[] = [];
     let frontier = [""];
     for (let depth = 0; depth <= SHAPE_DEPTH && frontier.length > 0 && found.length < SHAPE_LIMIT; depth++) {
         const next: string[] = [];
-        for (const relative of frontier) {
-            let entries;
-            try {
-                entries = readdirSync(join(root, relative), { withFileTypes: true });
-            } catch {
-                continue;
-            }
-            for (const entry of entries) {
+        // One level read at once, then folded in frontier order, so what is found (and where the limit cuts) is the
+        // same as reading each directory in turn.
+        const levels = await Promise.all(frontier.map((relative) => entriesOf(join(root, relative))));
+        for (const [index, relative] of frontier.entries()) {
+            for (const entry of levels[index]!) {
                 const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
                 const rootReference = skipRootReference && relative === "" && entry.name === REFERENCE_DIR;
                 if (entry.isDirectory() && !rootReference && !IGNORED.has(entry.name) && !entry.name.startsWith(".")) {
@@ -101,7 +98,7 @@ const DEP_BLOCKS = ["dependencies", "devDependencies", "peerDependencies", "opti
 
 // Reads the root manifest directly, since a single-package repo has no workspace packages to read otherwise. All four
 // dependency blocks count, since peerDependencies is how a UI framework or component library is declared.
-const declaredDeps = (repoDir: string, manifests: ReturnType<typeof readWorkspaceManifests>): string[] => {
+const declaredDeps = async (repoDir: string, manifests: readonly WorkspaceManifest[]): Promise<string[]> => {
     const names = new Set<string>();
     const collect = (manifest: Record<string, unknown>): void => {
         for (const block of DEP_BLOCKS) {
@@ -111,7 +108,7 @@ const declaredDeps = (repoDir: string, manifests: ReturnType<typeof readWorkspac
         }
     };
     try {
-        collect(JSON.parse(readFileSync(join(repoDir, "package.json"), "utf8")) as Record<string, unknown>);
+        collect(JSON.parse(await readFile(join(repoDir, "package.json"), "utf8")) as Record<string, unknown>);
     } catch {
         // No root manifest, or one that fails to parse; workspace packages below are still read.
     }
@@ -121,29 +118,67 @@ const declaredDeps = (repoDir: string, manifests: ReturnType<typeof readWorkspac
     return [...names].toSorted();
 };
 
+const LOCKFILES = ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"];
+const present = async (repoDir: string, files: readonly string[]): Promise<string[]> => {
+    const found = await Promise.all(files.map((file) => pathExists(join(repoDir, file))));
+    return files.filter((_file, index) => found[index]);
+};
+
 // Every check is a stat or shallow readdir, cheap enough for a route the rail badge polls. `docs` looks for the
 // repository map itself, not just the directory, since an empty `docs/architecture/` has nothing to gate on.
-export const choreShape = (repoDir: string, workspaceRoot = false, manifests = readWorkspaceManifests(repoDir)): ChoreShape => ({
-    docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
-    dockerfiles: findFiles(repoDir, isDockerfile, workspaceRoot),
-    ci: [
-        ...listDir(join(repoDir, WORKFLOWS_DIR))
-            .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
-            .map((name) => `${WORKFLOWS_DIR}/${name}`),
-        ...CI_FILES.filter((file) => existsSync(join(repoDir, file))),
-    ],
-    lockfile: ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"].some((file) => existsSync(join(repoDir, file))),
-    packageManifest: existsSync(join(repoDir, "package.json")),
-    deps: declaredDeps(repoDir, manifests),
-});
-
-const choreSignals = async (services: Pick<Services, "iq" | "workspace">, repo: string): Promise<ChoreSignals> => {
-    const health = await services.iq.health({ scope: { repo }, limit: RANKING_LIMIT });
-    const repoDir = join(services.workspace.root, repo);
-    const manifests = readWorkspaceManifests(repoDir);
+export const choreShape = async (repoDir: string, workspaceRoot = false, manifests?: readonly WorkspaceManifest[]): Promise<ChoreShape> => {
+    const listed = manifests ?? (await readWorkspaceManifestsAsync(repoDir));
+    const [docs, dockerfiles, workflows, ciFiles, lockfiles, packageManifest, deps] = await Promise.all([
+        findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
+        findFiles(repoDir, isDockerfile, workspaceRoot),
+        listDir(join(repoDir, WORKFLOWS_DIR)),
+        present(repoDir, CI_FILES),
+        present(repoDir, LOCKFILES),
+        pathExists(join(repoDir, "package.json")),
+        declaredDeps(repoDir, listed),
+    ]);
     return {
-        packages: packageSignals(repoDir, manifests),
-        shape: choreShape(repoDir, repo === "", manifests),
+        docs,
+        dockerfiles,
+        ci: [...workflows.filter((name) => name.endsWith(".yml") || name.endsWith(".yaml")).map((name) => `${WORKFLOWS_DIR}/${name}`), ...ciFiles],
+        lockfile: lockfiles.length > 0,
+        packageManifest,
+        deps,
+    };
+};
+
+// How long the polled list waits on one repo's rankings, under the 30 s the editor calls a stalled query. The history
+// read behind them can take minutes when it has to start over (no kept fold, a rewritten branch); it goes on in the
+// engine, which keeps it, and a later poll finds it done.
+const HEALTH_WAIT_MS = 20_000;
+
+// Rankings that say nothing: `indexed: false` keeps every chore that reads them from acting, as a half-built index does,
+// and keeps the reading out of the generation memo so the next ask tries again.
+const NO_RANKINGS: CodebaseHealth = {
+    hotspots: [],
+    modules: [],
+    totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+    freshness: { state: "building" },
+};
+
+// One repo's rankings, or none: an engine that fails or is slow costs the list its rankings, never the whole answer
+// (Oct 28-Nov 6: 137 list calls answered 500 on one history read that ran out of time).
+const rankingsOf = async (services: Pick<Services, "iq" | "logger">, repo: string): Promise<CodebaseHealth> => {
+    try {
+        return await within(services.iq.health({ scope: { repo }, limit: RANKING_LIMIT }), HEALTH_WAIT_MS, NO_RANKINGS);
+    } catch (error) {
+        services.logger.warn({ err: error, repo }, "chores: code health unavailable, listing without rankings");
+        return NO_RANKINGS;
+    }
+};
+
+const choreSignals = async (services: Pick<Services, "iq" | "workspace" | "logger">, repo: string): Promise<ChoreSignals> => {
+    const repoDir = join(services.workspace.root, repo);
+    const [health, manifests] = await Promise.all([rankingsOf(services, repo), readWorkspaceManifestsAsync(repoDir)]);
+    const [packages, shape] = await Promise.all([packageSignals(repoDir, manifests), choreShape(repoDir, repo === "", manifests)]);
+    return {
+        packages,
+        shape,
         hotspots: health.hotspots,
         keyModules: health.modules,
         totals: health.totals,
@@ -171,7 +206,7 @@ export interface SharedChoreSignals {
 // so the second paid for every reading the first had just taken. A reading is shared only with callers that asked before
 // it began when no generation can vouch for freshness. A generation-validated completed reading can serve the next
 // caller too, avoiding another index request and another synchronous manifest/shape scan.
-export const sharedChoreSignals = (services: Pick<Services, "iq" | "workspace">): SharedChoreSignals => {
+export const sharedChoreSignals = (services: Pick<Services, "iq" | "workspace" | "logger">): SharedChoreSignals => {
     let clock = 0;
     const flights = new Map<string, Flight>();
     const memo = generationMemo<ChoreSignals>({ maxAgeMs: 10_000, cacheable: (signals) => signals.indexed });

@@ -1,5 +1,5 @@
 import { type Fence, fenceAllows, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
-import type { PresenceUser, SystemEvent, TreeChanged } from "@intentic/sandbox-contract/events/system-events";
+import type { PresenceUser, RefsChanged, SystemEvent, TreeChanged } from "@intentic/sandbox-contract/events/system-events";
 import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { ORPCError } from "@orpc/server";
@@ -174,6 +174,19 @@ const framedPaths = <T extends { readonly paths: readonly string[] }>(fence: Fen
 const framedRepos = <T extends { readonly repos: readonly string[] }>(fence: Fence, event: T): T =>
     fence === undefined ? event : { ...event, repos: event.repos.filter((repo) => fenceReaches(fence, repo)) };
 
+// Ref moves cut as framedRepos cuts them, still naming whose own refs they were only when the reader is shown every one
+// of those conversations: naming one they are not would say it exists. Without the names the reader reads every review
+// again, which is never wrong.
+const framedRefs = (caller: Caller, fence: Fence, event: RefsChanged, agentOf: (id: string) => Provenance | undefined): RefsChanged => {
+    const { conversations, ...framed } = framedRepos(fence, event);
+    const shown =
+        conversations?.every((id) => {
+            const agent = agentOf(id);
+            return agent !== undefined && listedTo(caller, agent);
+        }) === true;
+    return shown ? { ...framed, conversations } : framed;
+};
+
 // The tree's changes cut as the tree route cuts the tree itself (workspace-fence.ts): a folder the fence admits keeps
 // every entry, one on the way down keeps only the entries leading somewhere, and any other folder is not news.
 const framedTree = (fence: Fence, event: TreeChanged): TreeChanged => {
@@ -243,9 +256,11 @@ export const framedEvent = (
             const agent = agentOf(event.agent);
             return agent !== undefined && visibleTo(caller, agent) ? framedPaths(fence, event) : undefined;
         }
-        case "reposChanged":
-        case "refsChanged": {
+        case "reposChanged": {
             return framedRepos(fence, event);
+        }
+        case "refsChanged": {
+            return framedRefs(caller, fence, event, agentOf);
         }
         default: {
             return event;

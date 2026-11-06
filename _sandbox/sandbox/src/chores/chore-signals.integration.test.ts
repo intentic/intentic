@@ -1,9 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CodebaseHealth, HealthRequest } from "@intentic/iq-engine";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
+import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { sharedChoreSignals } from "./chore-signals.js";
 import { useCheckoutFeed } from "../git/feed/checkout-feed.js";
 
@@ -19,7 +20,7 @@ const heldIq = () => {
         await new Promise<void>((resolve) => releases.push(resolve));
         return { hotspots: [], modules: [], totals: { files: begun.length, symbols: 0, complexity: 0, hotspots: 0 }, freshness: { state: "fresh" } };
     };
-    const services = unstubbed<Pick<Services, "iq" | "workspace">>("services", {
+    const services = unstubbed<Pick<Services, "iq" | "workspace" | "logger">>("services", {
         iq: unstubbed<Services["iq"]>("iq", { health }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "chores-shared-")) }),
     });
@@ -98,4 +99,40 @@ test("everyone who asked while a reading was under way shares the one that follo
     release();
     await after;
     expect(begun).toEqual(["a", "a", "a"]);
+});
+
+// The engine's history read failing (Oct 28-Nov 6: a `git log` past its deadline, 137 times) costs the list that repo's
+// rankings, never the list: the files are still read, nothing acts on the empty rankings, and the next ask tries again.
+test("a failing code-health read lists the repo without rankings, and is not kept", async () => {
+    useCheckoutFeed({ generation: async () => 1 });
+    const root = mkdtempSync(join(tmpdir(), "chores-degraded-"));
+    writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { vue: "^3.0.0" } }));
+    writeFileSync(join(root, "pnpm-workspace.yaml"), "packages:\n  - libs/*\n");
+    mkdirSync(join(root, "libs/one"), { recursive: true });
+    writeFileSync(join(root, "libs/one/package.json"), JSON.stringify({ name: "@x/one", dependencies: { zod: "^4.0.0" } }));
+    let asked = 0;
+    const health = async (): Promise<CodebaseHealth> => {
+        asked += 1;
+        throw new Error("iq: git log in intentic took longer than 30s and was stopped");
+    };
+    const { lines, logger } = recordingLogger();
+    const services = unstubbed<Pick<Services, "iq" | "workspace" | "logger">>("services", {
+        iq: unstubbed<Services["iq"]>("iq", { health }),
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        logger,
+    });
+    const shared = sharedChoreSignals(services);
+
+    const reading = await shared.of("", shared.asked());
+    expect(reading.packages).toEqual([{ dir: "libs/one", name: "@x/one", dependencies: ["zod"], devDependencies: [], documented: false }]);
+    expect(reading.shape).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: true, deps: ["vue", "zod"] });
+    expect([reading.hotspots, reading.keyModules]).toEqual([[], []]);
+    expect(reading.totals).toEqual({ files: 0, symbols: 0, complexity: 0, hotspots: 0 });
+    expect(reading.indexed).toBe(false);
+    expect(lines.filter((line) => line["level"] === "warn").map((line) => line["message"])).toEqual([
+        "chores: code health unavailable, listing without rankings",
+    ]);
+
+    await shared.of("", shared.asked());
+    expect(asked).toBe(2);
 });

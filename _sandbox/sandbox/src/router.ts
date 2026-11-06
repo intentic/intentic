@@ -14,7 +14,7 @@ import { reattributeHandedPorts } from "./agent/tools/jobs/handed-ports.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
-import { probeDockerGpu } from "./hosts/docker-gpu-probe.js";
+import { probeDockerGpu } from "./hosts/gpu/docker-gpu-probe.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";

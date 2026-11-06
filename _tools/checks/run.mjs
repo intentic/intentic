@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Runs the checks manifest.mjs lists as concurrent child processes, needing only node and git, no install. Exit code
+// Runs the checks manifest.mjs lists as concurrent child processes (a `--paths` run: in this one process, below),
+// needing only node and git, no install. Exit code
 // follows each check's `gate`: a `code` failure always fails the run; a `tidy` one does too unless `--tidy=warn`, used
 // where many hands are moving the tree at once.
 //
@@ -8,13 +9,13 @@
 // step summary (lib/ci-report.mjs), so a style or wording finding stays visible without failing main.
 //
 // `--paths a,b,c` narrows the run to those files and to the checks that can honestly judge a file on its own
-// (`scoped` in the manifest). That is what the per-edit moment runs: one file, ~100ms, a verdict the model that just
-// wrote the line can still act on. It is a NARROWER question, not a cheaper one — a scoped run vouches for nothing it
+// (`scoped` in the manifest). That is what the per-edit moment runs: one file, a verdict the model that just wrote the
+// line can still act on. It is a NARROWER question, not a cheaper one — a scoped run vouches for nothing it
 // did not read, and no scoped check may write a baseline, since it knows nothing about the files it skipped.
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { blocksCi, CHECKS, CI_REPORTED } from "./manifest.mjs";
-import { checkPool, pooledMap } from "./lib/check-pool.mjs";
+import { checkPool, editLane, pooledMap } from "./lib/check-pool.mjs";
 import { createReporter } from "./lib/ci-report.mjs";
 
 const here = dirname(new URL(import.meta.url).pathname);
@@ -64,11 +65,25 @@ if (paths !== undefined && (paths.length === 0 || selected.length === 0)) {
     process.exit(0);
 }
 
-const pool = checkPool();
+// `measured: false` is exit 2 (lib/report.mjs's cannotMeasure) or a process that never started: the check did not
+// judge the tree, so nothing it printed is a finding about the tree and no caller may treat it as one.
+const resultOf = (check, started, { code, stdout, stderr }) => ({
+    id: check.id,
+    file: check.file,
+    gate: check.gate,
+    ok: code === 0,
+    measured: code !== 2,
+    stdout,
+    stderr,
+    ms: Date.now() - started,
+});
+
+// The whole-tree runs' slots; a `--paths` run takes its own lane instead (`scoped`, below).
+const pool = paths === undefined ? checkPool() : undefined;
 const run = (check, slot) =>
     new Promise((resolve) => {
         const started = Date.now();
-        const [command, argv] = pool.command(slot, process.execPath, [join(here, check.file), ...(paths === undefined ? [] : ["--paths", paths.join(",")])]);
+        const [command, argv] = pool.command(slot, process.execPath, [join(here, check.file)]);
         const child = spawn(command, argv, {
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -76,16 +91,31 @@ const run = (check, slot) =>
         let stderr = "";
         child.stdout.on("data", (chunk) => (stdout += chunk));
         child.stderr.on("data", (chunk) => (stderr += chunk));
-        // `measured: false` is exit 2 (lib/report.mjs's cannotMeasure) or a process that never started: the check did not
-        // judge the tree, so nothing it printed is a finding about the tree and no caller may treat it as one.
-        const settle = (ok, extra = "", measured = true) =>
-            resolve({ id: check.id, file: check.file, gate: check.gate, ok, measured, stdout, stderr: `${stderr}${extra}`, ms: Date.now() - started });
-        child.on("error", (error) => settle(false, `${error.message}\n`, false));
-        child.on("close", (code) => settle(code === 0, "", code !== 2));
+        child.on("error", (error) => resolve(resultOf(check, started, { code: 2, stdout, stderr: `${stderr}${error.message}\n` })));
+        child.on("close", (code) => resolve(resultOf(check, started, { code, stdout, stderr })));
     });
 
+// A `--paths` run judges a file or a few, after every edit: every scoped check in this one process, one after another
+// (lib/in-process.mjs), with git's listings asked once (`rememberGit`), in a lane of its own rather than behind the
+// whole-tree runs' slots (`editLane`). Measured on one daemon file: 34 node children and 146 git processes an edit, ~4.7s
+// of CPU, against 23 processes and ~1.4s.
+const scoped = async () => {
+    const [{ runInProcess }, { rememberGit }, release] = await Promise.all([import("./lib/in-process.mjs"), import("./lib/repo.mjs"), editLane()]);
+    rememberGit();
+    try {
+        const results = [];
+        for (const check of selected) {
+            const started = Date.now();
+            results.push(resultOf(check, started, await runInProcess(join(here, check.file), ["--paths", paths.join(",")])));
+        }
+        return results;
+    } finally {
+        release();
+    }
+};
+
 const started = Date.now();
-const results = await pooledMap(selected, pool.size, run);
+const results = paths === undefined ? await pooledMap(selected, pool.size, run) : await scoped();
 // A failure that refuses rather than merely reports: every code failure, and a tidy one unless `--tidy=warn`. A check
 // that could not measure refuses where a tidy one does and nowhere else — it is not evidence the tree is broken, so it
 // must not stop a push or a turn, but it cannot be silent either, or the gate quietly stops testing what it was for.

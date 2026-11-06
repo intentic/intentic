@@ -14,7 +14,7 @@ import { egressOwnerKeys } from "./egress/owner-keys.js";
 import { egressSuggestions } from "./egress/suggestions.js";
 import { isOwnerBearer, requireMaintainer } from "../auth/owner-gates.js";
 import { liveSharedIdentities } from "./host-dedupe.js";
-import { cardlessHosts } from "./host-peer.js";
+import { cardlessHosts, readHostFiles } from "./host-peer.js";
 
 // The ops that end by restarting the container they name, so a `resumeTurns` ask is about their restart.
 const RESTARTING: ReadonlySet<DeviceSandboxOp> = new Set(["restart", "update", "rebuild", "rollback"]);
@@ -79,17 +79,19 @@ export const createDeviceSystemRoutes = (services: Services) => {
         // the doors it leads to carry their own. Beside it, the device keys no card holds, which no row can show and
         // the Devices screen lists for the owner to withdraw (DELETE /system/hosts/{id}, maintainer-gated).
         devices: i.devices.handler(async () => {
+            // The cards and enrollments all three reads below start from, read once for them.
+            const files = await readHostFiles(services);
             // The keys are an aside: one that cannot be read never costs the fleet view it rides beside.
-            const keys = cardlessHosts(services).catch((error: Error) => {
+            const keys = cardlessHosts(services, files).catch((error: Error) => {
                 services.logger.warn({ err: error }, "devices: could not read which device keys no card holds");
                 return [];
             });
             // As is a clash of identities: two live computers this sandbox cannot tell apart (host-dedupe.ts).
-            const clashes = liveSharedIdentities(services).catch((error: Error) => {
+            const clashes = liveSharedIdentities(services, files.enrolled).catch((error: Error) => {
                 services.logger.warn({ err: error }, "devices: could not read which connected devices share an identity");
                 return [];
             });
-            const [listed, cardless, shared] = await Promise.all([devices(services), keys, clashes]);
+            const [listed, cardless, shared] = await Promise.all([devices(services, files), keys, clashes]);
             return {
                 devices: listed,
                 ...opt("cardlessHosts", cardless.length === 0 ? undefined : cardless),

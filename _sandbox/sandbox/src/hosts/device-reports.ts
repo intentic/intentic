@@ -1,4 +1,4 @@
-import { sleep, within } from "@intentic/base/async";
+import { within } from "@intentic/base/async";
 import {
     type Device,
     type DeviceAgentFlow,
@@ -26,8 +26,9 @@ import { opt } from "../opt.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
+import { type HostClient, type HostFiles, hostConnections, hostSummaries, readHostFiles } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
+import { factsDue, refreshFactsBeside, refreshFactsOnceSettled } from "./device-facts-refresh.js";
 import { sandboxesFromTool, unreadFromTool,type AnswerMemory,gapOf,keepLastAnswer,type LateHalves,lateReason,noteReading,type Reading } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
@@ -80,13 +81,34 @@ interface PullEntry {
     took: number;
     /** Each half's last real answer, what a late half is read as. */
     answered: AnswerMemory;
+    /** Moved by `stalePull`: a refresh sent under an older count read the machine before it changed, and lands nowhere. */
+    epoch: number;
 }
 
 const pulled = new Map<string, PullEntry>();
 
-// Drops the cached reading for a machine that just changed; deleted rather than aged out, so the next read blocks on a
-// fresh answer.
-export const forgetPull = (id: string): void => void pulled.delete(id);
+const entryOf = (id: string): PullEntry => {
+    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined, sentAt: 0, took: 0, answered: {}, epoch: 0 };
+    pulled.set(id, entry);
+    return entry;
+};
+
+// A machine that just changed: its held reading is aged past every window, so the next read asks again and waits for
+// the answer only as long as a quiet copy would (PULL_SETTLE_MS), and the refresh's landing is announced. A refresh
+// already on the wire may have read the machine before the change, so it lands nowhere, and a half that comes back late
+// is no longer read as what the machine said before it. Kept rather than deleted (2026-11-06): a deleted reading made
+// the next reader wait out the whole pull, 6-8 s on a loaded host, and the Rebuild card's log poll deleted it every 4 s.
+export const stalePull = (id: string): void => {
+    const entry = pulled.get(id);
+    if (entry === undefined) {
+        return;
+    }
+    entry.at = 0;
+    entry.inflight = undefined;
+    entry.answered = {};
+    entry.epoch += 1;
+    factsDue(id);
+};
 
 // Text of an MCP tool result, plus whether the machine refused it; a refusal is a value on this path, not a throw.
 const toolText = (answer: unknown): { text: string; refused: boolean } => {
@@ -128,28 +150,6 @@ const describeMachine = async (client: HostClient, signal: AbortSignal): Promise
     }
 };
 
-// The hub's facts are the machine's answer to `describe` at hello, and a hello comes only with a new socket. What a
-// row shows from them that can change under a live connection (the link count behind "Forget them") would otherwise
-// hold until the next reconnect, so every pull re-asks too. A change is announced itself: the pull's own announcement
-// only fires on a change of gap.
-const refreshFacts = async (services: Services, id: string): Promise<void> => {
-    const before = JSON.stringify(services.hostHub.state(id).facts?.links);
-    // Never costs the reading it rides beside: the last answer stands, as at hello.
-    try {
-        await services.hostHub.refresh(id, PULL_TIMEOUT_MS);
-    } catch {
-        // allow(silent-catch): a machine that did not re-describe itself keeps its facts from hello, which the row shows
-        return;
-    }
-    if (JSON.stringify(services.hostHub.state(id).facts?.links) !== before) {
-        publishRuntimeChange("hosts");
-    }
-};
-
-// How long after a drop of dead links the machine's own stamp has caught up: it rewrites it every 5s
-// (LINK_STAMP_MS in the machine's device/config.ts), and the agent closes the dropped links on its next pass first.
-const LINKS_SETTLE_MS = 12_000;
-
 // Every failure reads as a named gap, not an absence. Report and fleet go out together under one deadline and settle
 // apart: the report alone decides the gap, and the fleet answer survives either verdict, a late report included — a
 // card granting sandbox management and nothing else lists its containers while refusing to describe the machine, and
@@ -162,6 +162,7 @@ const pull = async (services: Services, id: string): Promise<Reading> => {
     // One deadline over both calls: the reading is what has a budget, not either half of it.
     const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
     const late: LateHalves = {};
+    refreshFactsBeside(services, id);
     const [described, fleet] = await Promise.all([
         describeMachine(client, signal).catch((error: Error) => {
             late.report = lateReason(error, PULL_TIMEOUT_MS);
@@ -171,7 +172,6 @@ const pull = async (services: Services, id: string): Promise<Reading> => {
             late.sandboxes = lateReason(error, PULL_TIMEOUT_MS);
             return { text: "", refused: true };
         }),
-        refreshFacts(services, id),
     ]);
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
@@ -207,6 +207,7 @@ const worthAnnouncing = (before: { at: number; result: PullResult | undefined },
 const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
     const had = { at: entry.at, result: entry.result };
     const sentAt = Date.now();
+    const epoch = entry.epoch;
     const inflight = services.perf
         .track("devices.pull", { id }, () => pull(services, id))
         // Never rejects (an abandoned caller leaves nothing unhandled); a pull that threw whole got no answer at all.
@@ -215,6 +216,10 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
             return { result: { gap: "offline" }, late: { report: reason, sandboxes: reason } };
         })
         .then((reading) => {
+            // Read before the machine changed under it (stalePull): its reader is answered, the memory is not touched.
+            if (entry.epoch !== epoch) {
+                return reading.result;
+            }
             entry.at = Date.now();
             const result = keepLastAnswer(entry.answered, reading, entry.at);
             entry.result = result;
@@ -223,10 +228,10 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
             }
-            // Pushed on the existing /events stream, which maps `hosts` to the Devices read: a machine that answers
-            // after the reader gave up waiting is on screen in a second, not at the browser's next poll.
+            // Pushed on the /events stream as `devices`, which re-reads the Devices read and nothing else: a machine that
+            // answers after the reader was served the copy it held is on screen in a second, not at the browser's next poll.
             if (worthAnnouncing(had, result, entry.at)) {
-                publishRuntimeChange("hosts");
+                publishRuntimeChange("devices");
             }
             return result;
         });
@@ -236,11 +241,12 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
 };
 
 // Answers from memory while a refresh runs behind it. Two readings block: a machine never read before (bounded by
-// PULL_TIMEOUT_MS) and one held long enough to read as quiet (what is left of the refresh's PULL_SETTLE_MS, and only
-// when the machine's last reading landed inside it; then served anyway).
+// PULL_TIMEOUT_MS, and asked for as it connects, so a reader rarely meets one: `warmPull`) and one held long enough to
+// read as quiet (what is left of the refresh's PULL_SETTLE_MS, and only when the machine's last reading landed inside
+// it; then served anyway). The first has nothing else to serve: a row carries no "being read" mark, and the gap it would
+// read as instead ("unreported") tells the owner to update the agent and takes every container button away.
 const pullCached = async (services: Services, id: string): Promise<PullResult> => {
-    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined, sentAt: 0, took: 0, answered: {} };
-    pulled.set(id, entry);
+    const entry = entryOf(id);
     const held = entry.result;
     if (held !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
         return held;
@@ -258,6 +264,15 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
         return held;
     }
     return (await within(inflight, settle, undefined, { unref: true })) ?? held;
+};
+
+// A machine's first reading, asked for as it connects rather than by the first reader, who would otherwise wait out the
+// whole pull with nothing held to serve meanwhile. A machine already read is left to its readers.
+export const warmPull = (services: Services, id: string): void => {
+    const entry = entryOf(id);
+    if (entry.result === undefined && entry.inflight === undefined) {
+        void refresh(services, id, entry);
+    }
 };
 
 // Maps os.platform()'s spelling (win32, darwin) to capability-card slugs; unknown tokens pass through as-is.
@@ -428,12 +443,14 @@ export const mergeDevices = (
 };
 
 // IO half: reads both doors and every up host, feeding mergeDevices. Timed as its own perf span (devices.read vs
-// devices.pull) so a slow tab is attributable to the daemon or to a machine.
-export const devices = async (services: Services): Promise<Device[]> =>
+// devices.pull) so a slow tab is attributable to the daemon or to a machine. `given` is the cards and enrollments a
+// caller already read for the same request.
+export const devices = async (services: Services, given?: HostFiles): Promise<Device[]> =>
     services.perf.track("devices.read", {}, async () => {
+        const files = given ?? (await readHostFiles(services));
         // Per environment, not per card: Windows and each distro on it run their own agent, so each is read through its
         // own connection and lands as its own row with its own door.
-        const hosts = hostConnections(await hostSummaries(services));
+        const hosts = hostConnections(await hostSummaries(services, files));
         const answered = await Promise.all(
             hosts.map(async (host) => ({
                 host,
@@ -442,10 +459,10 @@ export const devices = async (services: Services): Promise<Device[]> =>
                 result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
             })),
         );
-        const [fleet, cards] = await Promise.all([services.syncFleet(), services.capabilities.list()]);
+        const fleet = await services.syncFleet();
         // Whether this sandbox runs commands on its own machine, which only this daemon knows (egress/host-shell.ts).
         const merged = mergeDevices(fleet.machines, fleet.reports, answered, setupHostCard(services.config));
-        return withHostShell(merged, sandboxSlugOf(services.config.sandbox.name), commandingCards(cards));
+        return withHostShell(merged, sandboxSlugOf(services.config.sandbox.name), commandingCards(files.cards));
     });
 
 // The host-capability devices as the readings ALREADY IN HAND describe them: `devices` without the asking, for callers
@@ -540,8 +557,8 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
             yield line;
         }
     } finally {
-        // In `finally`: a failed or abandoned run still changed the machine; deletion forces a fresh next read.
-        pulled.delete(id);
+        // In `finally`: a failed or abandoned run still changed the machine, so the next read asks it again.
+        stalePull(id);
     }
 }
 
@@ -568,15 +585,11 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
         // to the RPC layer, not to anyone reading this page.
         yield { kind: "line", text: `Lost contact with ${id} — that is what restarting its agent does to this connection.` };
     } finally {
-        // Clears the cache: the agent may be a different build now, and the version change is this flow's answer.
-        pulled.delete(id);
-        // A drop leaves the agent running on the same socket, so no hello re-describes it. The read the view makes
-        // right after this lands before the machine's stamp catches up; this one lands after it.
+        // The agent may be a different build now, and the version change is this flow's answer: the next read asks again.
+        stalePull(id);
+        // A drop leaves the agent running on the same socket, so no hello re-describes it (device-facts-refresh.ts).
         if (input.op === "forget-unreachable") {
-            void sleep(LINKS_SETTLE_MS, { unref: true })
-                .then(async () => await refreshFacts(services, id))
-                // allow(silent-catch): detached once the flow has ended; refreshFacts already keeps the last facts on a failed ask
-                .catch(() => undefined);
+            refreshFactsOnceSettled(services, id);
         }
     }
 }

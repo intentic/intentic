@@ -1,6 +1,7 @@
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { FileEntry, RankedGroup } from "../types.js";
-import { churnOf, type ChurnOptions } from "./git.js";
+import { churnStorePath } from "./churn-store.js";
+import { type ChurnHistoryOptions, churnOf, type ChurnOptions } from "./git.js";
 
 // `iq hotspots`: files both frequently changed and structurally complex, ranked by commits × complexity. Churn is git
 // history (or the --since window); complexity comes from index time; a file needs both to place.
@@ -22,11 +23,17 @@ export interface HotspotFile {
     readonly latestMs: number;
 }
 
-export const rankHotspots = async (db: SqliteDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<HotspotFile[]> => {
+export const rankHotspots = async (
+    db: SqliteDb,
+    root: string,
+    entries: readonly FileEntry[],
+    options: HotspotOptions,
+    history: ChurnHistoryOptions = {},
+): Promise<HotspotFile[]> => {
     const complexity = new Map(
         db.all("SELECT path, complexity FROM files WHERE complexity > 0").map((row) => [row["path"] as string, Number(row["complexity"])]),
     );
-    const churn = await churnOf(root, entries, options);
+    const churn = await churnOf(root, entries, options, history);
     const pattern = options.pattern !== undefined && options.pattern !== "" ? options.pattern.toLowerCase() : undefined;
     return [...churn.entries()]
         .flatMap(([path, activity]) => {
@@ -50,8 +57,13 @@ export const rankHotspots = async (db: SqliteDb, root: string, entries: readonly
         .toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));
 };
 
-export const hotspotFiles = async (db: SqliteDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<RankedGroup[]> =>
-    (await rankHotspots(db, root, entries, options)).map((file, rank) => {
+// The verb's text. Its fold of history is kept beside the index, so a one-shot `iq hotspots` reads only new commits.
+export const hotspotFiles = async (
+    index: { readonly db: SqliteDb; readonly root: string; readonly indexDir: string },
+    entries: readonly FileEntry[],
+    options: HotspotOptions,
+): Promise<RankedGroup[]> =>
+    (await rankHotspots(index.db, index.root, entries, options, { dir: churnStorePath(index.indexDir) })).map((file, rank) => {
         const score = 1 / (rank + 1);
         const summary = `${file.commits} commit${file.commits === 1 ? "" : "s"}   +${file.adds} -${file.dels}   cx ${file.complexity}   score ${file.score}`;
         return { path: file.path, score, hits: [{ path: file.path, line: 1, text: summary, tags: [], score }] };

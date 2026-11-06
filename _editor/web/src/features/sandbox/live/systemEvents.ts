@@ -2,14 +2,15 @@ import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, isUnversionedStatePath, staleQueryKeys } from "@intentic/sandbox-contract/state/workspace-state";
 import { staleRuntimeQueryKeys } from "@intentic/sandbox-contract/state/runtime-state";
-import { refusalsOf, type SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import { type RefsChanged, refusalsOf, type SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { adoptProjectScope } from "../../../app/projectScope";
 import { contributedFileBindings } from "../../../workbench/workspace-events/fileBindings";
 import { emitFilesChanged } from "../../../workbench/workspace-events/fileEvents";
 import { emitRefsChanged, emitReposChanged } from "../../../workbench/workspace-events/repoEvents";
 import { dropEditBuffers } from "../../../models/workspace/files/useEditBuffers";
 import { desyncAgents } from "../../../models/fleet/useAgents";
-import { applyRosterChanges, auditRoster, refreshAgents, setAgents } from "../../../models/fleet/useAgents-registry";
+import { agentReviewKeys, applyRosterChanges, auditRoster, refreshAgents, registry, setAgents } from "../../../models/fleet/useAgents-registry";
+import { parentOf } from "../../../models/agent-status/ownership";
 import { providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { draftsMoved } from "../../../models/conversations/drafts/composerDrafts";
@@ -36,21 +37,62 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 // Throttle for review refetches; each one walks every repo and runs `git status` per repo.
 export const CHANGES_REFRESH_MS = 1000;
 
-const refreshChanges = throttleTrailing(() => {
+// Which agents' reviews the next rescan reads again: all of them in every box, or only the conversations a ref move
+// named, in the box that heard it. Gathered across the throttle's window, so its trailing run reads what every call
+// in it asked for.
+let reviewsDue: `every` | { readonly sandboxId: string; readonly ids: Set<string> } | undefined;
+
+const rescan = throttleTrailing(() => {
+    const due = reviewsDue;
+    reviewsDue = undefined;
     // Nothing worth reading while a land is applying: the patch is half in the tree, and the scan would take the git
-    // subprocesses the land is waiting on. useChanges refetches once the lease clears.
+    // subprocesses the land is waiting on. useChanges refetches once the lease clears, every review included.
     if (landingNow.value) {
         return;
     }
     for (const key of pushedKeys([`git`, `changes`])) {
         void invalidatePushedQueries(queryClient, { queryKey: key });
     }
-    // A review compares the agent's branch against this tree, not just its own commits, so tree changes invalidate it
-    // too, whole.
-    for (const key of agentReviewPrefixes) {
-        void invalidatePushedQueries(queryClient, { queryKey: key });
+    const reviews = due === `every` ? agentReviewPrefixes : [...(due?.ids ?? [])].flatMap((id) => agentReviewKeys(id, due?.sandboxId));
+    for (const queryKey of reviews) {
+        void invalidatePushedQueries(queryClient, { queryKey });
     }
 }, CHANGES_REFRESH_MS);
+
+// A review compares the agent's branch against this tree, not just its own commits, so a tree change reads every one
+// again, whole (`ids` undefined); a move of some conversations' own refs reads only theirs.
+const refreshChanges = (scope?: { readonly sandboxId: string; readonly ids: ReadonlySet<string> }): void => {
+    if (scope === undefined || reviewsDue === `every` || (reviewsDue !== undefined && reviewsDue.sandboxId !== scope.sandboxId)) {
+        reviewsDue = `every`;
+    } else {
+        reviewsDue ??= { sandboxId: scope.sandboxId, ids: new Set() };
+        for (const id of scope.ids) {
+            reviewsDue.ids.add(id);
+        }
+    }
+    rescan();
+};
+
+/* WHOSE REVIEWS A REF MOVE REACHES. Every agent's commit writes its own branch in the git dir every agent shares, and
+   reading every review again for it re-read up to forty of them per commit, each a few git processes per repo
+   (2026-11-06: 56,925 git processes in 13 hours on review reads). The daemon names the conversations when their own refs
+   were all that moved: their reviews go stale, and those of the children that land into their checkout, which measure
+   against it (the sandbox's land-target.ts). Anything else (the main line, a named branch, a fetch), or a daemon that does
+   not say, reaches every review. */
+const reviewsReachedBy = (event: RefsChanged): ReadonlySet<string> | undefined => {
+    if (event.conversations === undefined) {
+        return undefined;
+    }
+    const moved = new Set(event.conversations);
+    const reached = new Set(moved);
+    for (const agent of registry.value) {
+        const parent = parentOf(agent.startedBy);
+        if (parent !== undefined && moved.has(parent)) {
+            reached.add(agent.id);
+        }
+    }
+    return reached;
+};
 
 // Whether a replaced workspace is the one in view, whose scope starts over; the storage sweep runs for any sandbox.
 const { activeSandboxId } = useSandbox();
@@ -197,9 +239,10 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays
             // nothing.
             for (const key of staleRuntimeQueryKeys(event.domains).flatMap(pushedKeys)) {
-                // Drafts are no cached query: the store this browser keeps them in reads its own back (composerDrafts.ts).
+                // Drafts are no cached query: the store this browser keeps them in reads its own back (composerDrafts.ts),
+                // unless every move the frame counts is one this window made.
                 if (key.join(`/`) === `drafts`) {
-                    draftsMoved();
+                    draftsMoved(event.draftsGeneration);
                     continue;
                 }
                 void invalidatePushedQueries(queryClient, { queryKey: key });
@@ -215,10 +258,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `refsChanged`: {
             // Refs moved (commit, checkout, branch, tag, rebase) outside this tab; three things go stale:
-            // - the Changes review, since ahead/behind and staged files move with refs
+            // - the Changes review, since ahead/behind and staged files move with refs, and the agents' reviews it reaches
             // - the Checkpoints timeline
             // - open editor buffers, only if the worktree itself moved
-            refreshChanges();
+            const reached = reviewsReachedBy(event);
+            refreshChanges(reached === undefined ? undefined : { sandboxId, ids: reached });
             void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`history.list`) });
             void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`git.remoteRepos`) });
             if (worktreeMovedRecently()) {

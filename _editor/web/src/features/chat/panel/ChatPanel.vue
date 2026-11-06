@@ -112,9 +112,17 @@ watch(
 // Measured off the panel's real width, watched; zero until measured so it can't flash on before the first read.
 const panelWidth = ref(0);
 let panelObserver: ResizeObserver | undefined;
+// The width is written on the next frame, in whole pixels, not inside the observer's callback: the rail it decides on
+// lays the panel out anew, which inside the observers' turn made the browser lay the page out again under every
+// observer still to run and abandon the rest of the frame's notifications.
+let widthFrame = 0;
 const stopMeasuring = (): void => {
     panelObserver?.disconnect();
     panelObserver = undefined;
+    if (widthFrame !== 0) {
+        cancelAnimationFrame(widthFrame);
+        widthFrame = 0;
+    }
 };
 watch(
     root,
@@ -124,8 +132,15 @@ watch(
         if (el === undefined || typeof ResizeObserver === `undefined`) {
             return;
         }
+        let seen = 0;
         panelObserver = new ResizeObserver(([entry]) => {
-            panelWidth.value = toAppPx(entry?.contentRect.width ?? 0);
+            seen = Math.round(toAppPx(entry?.contentRect.width ?? 0));
+            if (widthFrame === 0) {
+                widthFrame = requestAnimationFrame(() => {
+                    widthFrame = 0;
+                    panelWidth.value = seen;
+                });
+            }
         });
         panelObserver.observe(el);
     },

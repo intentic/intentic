@@ -26,8 +26,8 @@ import {
     clearLoadNotice,
     drawsListings,
     failedListing,
-    followedByDeltas,
     forgetFollowed,
+    keepUnnamedListings,
     lazyChildren,
     lazyHidden,
     lazyLoading,
@@ -69,6 +69,9 @@ watch(expanded, (dirs) => {
         writeExpandedDirs(scopedSandboxId.value, [...dirs]);
     }
 });
+
+// The shared tree's on-screen folders no batch names (node_modules and the like) are read on a slow clock instead.
+keepUnnamedListings(onScreen);
 // Cut/copy clipboard; module-level so it survives the tree component unmounting on sidebar/search switches.
 const clipboard = sandboxRef<{ readonly mode: "copy" | "cut"; readonly paths: readonly string[] } | undefined>(() => undefined);
 // Collapses every open directory; no-op when already empty.
@@ -492,16 +495,18 @@ export function useWorkspaceTree() {
         }
     });
 
-    // Lazy subtrees sit outside the tree query; refetch the ones being looked at whenever the tree data changes, or new
-    // files never appear. Keyed on `query.data`, stable via structural sharing when unchanged, not `dataUpdatedAt`.
-    // Only the ones on screen: a listing kept for a collapsed folder is re-read when it opens again, and a workspace
-    // under a working agent invalidates this about once a second — re-listing every folder ever opened, each a readdir
-    // and a stat per file, is how one open folder of several thousand files became a second of daemon time per second.
+    // Lazy subtrees sit outside the tree query. A conversation's own checkout has no batch naming its folders, so the
+    // ones being looked at there are read again whenever its tree changes, or new files never appear. Keyed on
+    // `query.data`, stable via structural sharing when unchanged, not `dataUpdatedAt`. Only the ones on screen: a listing
+    // kept for a collapsed folder is re-read when it opens again. The shared tree's are read by the watch below, which
+    // knows which folders a batch touched, and by the slow clock (lazyListings.ts keepUnnamedListings).
     watch(query.data, () => {
+        if (isShared(workspaceView.value)) {
+            return;
+        }
         // Iterating the live keys is safe: a read only writes this map after its first await.
-        // One the deltas keep is current already: its own changes arrive in them (lazyListings.ts, patchListing).
         for (const path of lazyChildren.value.keys()) {
-            if (onScreen(path) && !followedByDeltas(path)) {
+            if (onScreen(path)) {
                 relistWhenSeen(path);
             }
         }

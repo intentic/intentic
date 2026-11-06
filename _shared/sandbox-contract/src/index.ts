@@ -2,7 +2,7 @@ import { getEventIteratorSchemaDetails, isContractProcedure } from "@orpc/contra
 import type { z } from "zod";
 import { RAW_JSON_ROUTES } from "./protocol/raw/raw-json-routes.js";
 import { RAW_ROUTE_LIST } from "./protocol/raw/raw-routes.js";
-import { type ContractRoute,contractRoutes,rawRouteFingerprintsOf,requestPathFor,routeForProcedure,routeNameForRequest,routePrintsOf,type RoutePrints,routeShapes,servedRoute } from "./protocol/routes.js";
+import { type ContractRoute,contractRoutes,rawRouteFingerprintsOf,requestPathFor,routeForProcedure,routeNameForRequest,routePrintsOf,type RoutePrints,routeShapes,routeSurfaceOf,type RouteSurface,servedRoute } from "./protocol/routes.js";
 import { accessProfilesContract } from "./contracts/access-profiles.contract.js";
 import { accountsContract } from "./contracts/accounts.contract.js";
 import { activityContract } from "./contracts/activity.contract.js";
@@ -199,7 +199,20 @@ export const rawRouteFingerprints = (): Readonly<Record<string, string>> => (raw
 // memoised like the first, for the same startup reason.
 let routePrints: Readonly<Record<string, RoutePrints>> | undefined;
 export const sandboxRoutePrints = (): Readonly<Record<string, RoutePrints>> => (routePrints ??= routePrintsOf(sandboxContract, RAW_JSON_ROUTES));
-export type { RoutePrints };
+export type { RoutePrints, RouteSurface };
+
+// All three of the above for the daemon, whose every /events connection opens with them (the hello frame): worked out
+// together in short slices with the thread handed back between them, and kept in the same three memos. Measured
+// 2026-11-06: worked out one map after another, they held the daemon's main thread for 0.4-0.9 s on its first hello
+// after each boot, while every other request waited; together, each route's schemas are converted once, not up to six
+// times.
+let surface: Promise<RouteSurface> | undefined;
+export const sandboxRouteSurface = (): Promise<RouteSurface> =>
+    (surface ??= routeSurfaceOf(sandboxContract, RAW_JSON_ROUTES).then((worked) => ({
+        fingerprints: (fingerprints ??= worked.fingerprints),
+        rawFingerprints: (rawFingerprints ??= worked.rawFingerprints),
+        prints: (routePrints ??= worked.prints),
+    })));
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>

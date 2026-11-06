@@ -1,4 +1,7 @@
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { commonDirOf, gitDirOf } from "../store/git/git-dir.js";
 import { mainBranchOf } from "./agent-refs.js";
 import { trackedDefaultBranchOf } from "./ops/publish-file.js";
 
@@ -64,6 +67,40 @@ export const lockedBranchOf = async (dir: string, git: GitRunner = defaultGit): 
         await git(dir, ["config", MAIN_BRANCH_CONFIG, resolved]).catch(() => undefined);
     }
     return resolved;
+};
+
+// The answer above per checkout, reused while the repo's config file is the one it was read from: the latch moves only
+// when config is written (by hand, or by the latch itself), and a stat is no spawn. The identity is taken BEFORE the
+// read, so a write that lands meanwhile changes it and the next ask reads again rather than keeping a stale name. "No
+// main line" is kept only UNLOCKED_TTL_MS: it hangs on branches existing, which no config write announces. Every
+// change scan and every tool call's catch-up asked this of each repo (2026-11-06: ~16.5k `config --get` in 13 h).
+const UNLOCKED_TTL_MS = 30_000;
+const latchedReads = new Map<string, { readonly config: string; readonly locked: string | undefined; readonly at: number }>();
+
+const configIdentity = async (dir: string): Promise<string | undefined> => {
+    const gitDir = await gitDirOf(dir);
+    if (gitDir === undefined) {
+        return undefined;
+    }
+    // allow(silent-catch): a config that cannot be looked at has no identity, so every ask goes to git as before.
+    const stats = await stat(join(await commonDirOf(gitDir), "config")).catch(() => undefined);
+    return stats === undefined ? undefined : `${stats.dev}:${stats.ino}:${stats.mtimeMs}:${stats.size}`;
+};
+
+/** lockedBranchOf, kept per checkout while its config file is unchanged. */
+export const latchedMainBranch = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
+    const config = await configIdentity(dir);
+    const hit = latchedReads.get(dir);
+    if (config !== undefined && hit?.config === config && (hit.locked !== undefined || Date.now() - hit.at < UNLOCKED_TTL_MS)) {
+        return hit.locked;
+    }
+    const locked = await lockedBranchOf(dir, git);
+    if (config === undefined) {
+        latchedReads.delete(dir);
+    } else {
+        latchedReads.set(dir, { config, locked, at: Date.now() });
+    }
+    return locked;
 };
 
 /** Where one shared checkout stands against its main line: `current` undefined is a detached HEAD. */

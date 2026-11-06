@@ -6,7 +6,7 @@ import { del, get, keys, set } from "idb-keyval";
 import { accountPartition } from "@intentic/ui/storage";
 import { buildId } from "../app/buildEpoch";
 import { reportClient } from "../app/clientDiagnostics";
-import { trackPerf } from "../app/perf/perf";
+import { recordPerf } from "../app/perf/perf";
 import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
 import { markBoot } from "../app/perf/boot";
@@ -84,18 +84,60 @@ export const queryClient = new QueryClient({
 
 let uninstall: (() => void) | undefined;
 
-// Every settle structured-clones and writes the whole cache; throttled to one write per window (latest wins). Dropped
-// on tab close costs nothing, the cache is only a stale-while-revalidate paint.
+// A change is snapshotted once the cache has settled this long and the page is idle (`snapshot`, below).
 const PERSIST_WINDOW_MS = 2000;
+// AT MOST ONE WRITE IN THIS LONG. A write clones the whole mirror and stores it as one value, so it costs what everything
+// mirrored weighs rather than how many queries there are: ~41 queries took 1.0 s a write at the median and 12.6 s at worst
+// (`query.persist`, 2026-11-01..06), and at one write per settle a busy agents board kept IndexedDB writing nearly back to
+// back. The mirror only paints a reload before the live reads answer, so a snapshot this much older costs nothing; the
+// first change after a quiet spell is still written as soon as it settles. Dropped on tab close costs nothing either.
+const MIRROR_EVERY_MS = 15_000;
 // One write in flight at a time, and only the newest cache after it. Writes that each started on their own piled up
 // behind a frozen page's IndexedDB, and on wake-up all finished at once: 942 slow-write warnings in one second.
 let latestClient: PersistedClient | undefined;
 let persisting: Promise<void> | undefined;
-// Bumped by clearPersistedQueries, so a write already queued for the account signing out stops there.
-let generation = 0;
 // The write is timed at most once a minute: enough to show the mirror has grown too big, without a warning per write.
 const TIMED_EVERY_MS = 60_000;
 let lastTimedAt = Number.NEGATIVE_INFINITY;
+
+// WHAT THE DISK HOLDS: each mirrored query's data, by reference, in the snapshot last sent to be written (or restored).
+// Vue-query keeps a refetched answer that equals the cached one as the very same object (structural sharing), so a
+// snapshot whose every query still holds the object last written has nothing new for the disk, whatever its timestamps
+// say: a reconnect's refetch of everything, or a poll answering the same, rewrote the whole mirror for nothing.
+interface Mirrored {
+    readonly key: string;
+    readonly client: PersistedClient;
+    readonly data: ReadonlyMap<string, unknown>;
+}
+let mirrored: Mirrored | undefined;
+// Written again this long after anyway, so a window whose data never changes does not let its snapshot age out (maxAge).
+const REWRITE_AFTER_MS = 6 * 60 * 60 * 1000;
+const mirrorOf = (client: PersistedClient, key: string): Mirrored => ({
+    key,
+    client,
+    data: new Map(client.clientState.queries.map((query) => [query.queryHash, query.state.data])),
+});
+const alreadyMirrored = (client: PersistedClient, key: string): boolean => {
+    const last = mirrored;
+    if (last === undefined || last.key !== key || client.timestamp - last.client.timestamp > REWRITE_AFTER_MS || client.clientState.mutations.length > 0) {
+        return false;
+    }
+    const { queries } = client.clientState;
+    return queries.length === last.data.size && queries.every((query) => last.data.has(query.queryHash) && last.data.get(query.queryHash) === query.state.data);
+};
+
+// The heaviest few entries, by procedure: what a slow write's report names, so whoever reads it knows which entry to
+// keep out of the mirror (UNPERSISTED) rather than guessing. Weighed only past query.persist's own slow budget (perf.ts),
+// and once the page is idle: serializing everything mirrored once more is not free either.
+const WEIGH_PAST_MS = 500;
+const heaviest = (client: PersistedClient): string =>
+    client.clientState.queries
+        // Its length as JSON: a rough weight, enough to rank by. Every answer here arrived as JSON.
+        .map((query) => ({ name: String(query.queryKey[0]), weight: JSON.stringify(query.state.data)?.length ?? 0 }))
+        .toSorted((one, other) => other.weight - one.weight)
+        .slice(0, 3)
+        .map(({ name, weight }) => `${name} ${Math.round(weight / 1024)}kB`)
+        .join(`, `);
 
 const write = async (client: PersistedClient): Promise<void> => {
     const now = Date.now();
@@ -104,35 +146,42 @@ const write = async (client: PersistedClient): Promise<void> => {
         return;
     }
     lastTimedAt = now;
-    // Timed since this write scales with everything cached; `queries` shows if the mirror has grown too big.
-    await trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(idbKey(), client));
+    // Timed since this write scales with everything cached; `queries` shows if the mirror has grown too big, and a slow
+    // one names its heaviest entries.
+    const from = performance.now();
+    await set(idbKey(), client);
+    const ms = performance.now() - from;
+    const queries = client.clientState.queries.length;
+    if (ms < WEIGH_PAST_MS) {
+        recordPerf(`query.persist`, ms, { queries });
+        return;
+    }
+    whenIdle(() => recordPerf(`query.persist`, ms, { queries, heaviest: heaviest(client) }));
 };
 
 const drainPersist = (): void => {
-    if (persisting !== undefined || latestClient === undefined) {
+    const client = latestClient;
+    if (persisting !== undefined || client === undefined) {
         return;
     }
-    const started = generation;
-    persisting = (async () => {
-        while (latestClient !== undefined) {
-            if (started !== generation) {
-                break;
+    latestClient = undefined;
+    persisting = write(client)
+        .catch(() => {
+            // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint; the next snapshot
+            // tries again rather than taking the disk to hold this one.
+            if (mirrored?.client === client) {
+                mirrored = undefined;
             }
-            const client = latestClient;
-            latestClient = undefined;
-            // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint.
-            // allow(silent-catch): Refused IndexedDB writes lose only the next reload's cached paint.
-            await write(client).catch(() => undefined);
-        }
-    })().finally(() => {
-        persisting = undefined;
-        // A cache that arrived after the loop's last look, while this write was still counted as in flight.
-        if (started === generation) {
-            drainPersist();
-        }
-    });
+        })
+        .finally(() => {
+            persisting = undefined;
+            // A cache that arrived while this write was in flight waits for the next interval, not straight after it.
+            if (latestClient !== undefined) {
+                flushPersist();
+            }
+        });
 };
-const flushPersist = throttleTrailing(drainPersist, PERSIST_WINDOW_MS);
+const flushPersist = throttleTrailing(drainPersist, MIRROR_EVERY_MS);
 
 // THE DISK READ, STARTED AT BOOT. Reading the snapshot back is a structured clone of megabytes out of IndexedDB, and it
 // used to begin only once the platform had answered the session check, one after the other on the first page's path.
@@ -194,11 +243,25 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
         queryClient,
         persister: {
             persistClient: (client: PersistedClient) => {
+                const key = idbKey();
+                if (alreadyMirrored(client, key)) {
+                    return;
+                }
+                mirrored = mirrorOf(client, key);
                 latestClient = client;
                 flushPersist();
             },
-            restoreClient: takeEarlyRead,
-            removeClient: () => del(idbKey()),
+            // What came back is what the disk holds: the restored queries keep these very objects until an answer
+            // differs, so the reconnect's refetch of everything rewrites only what came back changed.
+            restoreClient: async () => {
+                const restored = await takeEarlyRead();
+                mirrored = restored === undefined ? undefined : mirrorOf(restored, idbKey());
+                return restored;
+            },
+            removeClient: () => {
+                mirrored = undefined;
+                return del(idbKey());
+            },
         },
         buster: `${userId}:${buildId()}`,
         // A Monday-morning open after Friday still paints; anything older restores as empty.
@@ -263,8 +326,8 @@ export const clearPersistedQueries = async (which: { readonly account?: string }
     uninstall?.();
     uninstall = undefined;
     earlyRead = undefined;
-    generation += 1;
     latestClient = undefined;
+    mirrored = undefined;
     await persisting;
     queryClient.clear();
     try {

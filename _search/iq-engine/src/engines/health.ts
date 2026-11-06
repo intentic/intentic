@@ -2,6 +2,7 @@ import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract/schema
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { FileEntry, Scope } from "../types.js";
 import { filterScope } from "../workspace/scan.js";
+import type { ChurnHistoryOptions } from "./git.js";
 import { type HotspotFile, rankHotspots } from "./hotspots.js";
 import { repoMap } from "./map.js";
 
@@ -47,6 +48,8 @@ export interface HealthContext {
     readonly db: SqliteDb;
     readonly root: string;
     readonly freshness: WorkspaceSearchFreshness;
+    // Where the all-history churn is kept between processes, and who hears that a stale one was served.
+    readonly history?: ChurnHistoryOptions;
 }
 
 // Per-file symbol counts and branch points in one pass over the index; filtering happens in memory against the scoped
@@ -69,7 +72,13 @@ const fileStats = (db: SqliteDb, allowed: ReadonlySet<string>): { symbols: numbe
 export const codebaseHealth = async (context: HealthContext, request: HealthRequest, entries: readonly FileEntry[]): Promise<CodebaseHealth> => {
     const scoped = filterScope(entries, request.scope);
     const allowed = new Set(scoped.map((entry) => entry.path));
-    const hotspots = await rankHotspots(context.db, context.root, scoped, request.since !== undefined ? { since: request.since } : {});
+    const hotspots = await rankHotspots(
+        context.db,
+        context.root,
+        scoped,
+        request.since !== undefined ? { since: request.since } : {},
+        context.history,
+    );
     return {
         totals: { files: scoped.length, ...fileStats(context.db, allowed), hotspots: hotspots.length },
         hotspots: hotspots.slice(0, request.limit),

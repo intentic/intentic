@@ -79,6 +79,7 @@ process.on("message", (message: EngineRequest) => {
                 ...message.options,
                 onIndexError: (error) => emit({ type: "indexError", ...describe(error) }),
                 onQueryError: (error) => emit({ type: "queryError", ...describe(error) }),
+                onStaleHistory: (error) => emit({ type: "staleHistory", ...describe(error) }),
                 // Fires on every backlog slice, so metrics ride the same beat as progress instead of waiting for the
                 // timer.
                 onIndexProgress: (remaining) => {

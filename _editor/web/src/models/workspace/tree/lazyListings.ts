@@ -211,7 +211,6 @@ export const patchListing = (path: string, entries: readonly WorkspaceTreeEntry[
 };
 
 /** Whether deltas keep this loaded folder current, so a change elsewhere in the tree need not read it again. */
-export const followedByDeltas = (path: string): boolean => followed.value.has(path);
 
 /** A batch named this loaded folder: wait for the delta that keeps it, or read it again where deltas do not. */
 export const relistUnlessPushed = (path: string): void => {
@@ -237,4 +236,47 @@ export const forgetFollowed = (): void => {
     followed.value.clear();
     awaitingDelta.value.forEach((timer) => clearTimeout(timer));
     awaitingDelta.value.clear();
+};
+
+/* SHARED-TREE LISTINGS NO BATCH NAMES. A batch names the folders it wrote into (useWorkspaceTree's changedDirs watch) and a
+   delta carries the folders the daemon holds; a folder its watcher never sees (node_modules, .git, a build's output: the
+   watch's ignore list) is named by neither. The ones looked at that no delta keeps are read again on a slow clock while a
+   listing is seen, and the moment one is seen again. They used to be read on every change anywhere in the tree, about
+   once a second under a working agent: /workspace/children was the editor's most frequent daemon call, 51.7k reads over
+   five days of reports (2026-11-06). A conversation's own checkout is read on each change of its tree instead. */
+export const UNNAMED_RELIST_MS = 30_000;
+
+// allow(module-state): the one clock for every tree surface in this window, running only while a listing is seen
+let unnamedClock: ReturnType<typeof setInterval> | undefined;
+
+/** Reads the shared tree's loaded folders `lookedAt` names, and no delta keeps, on the slow clock: called once. */
+export const keepUnnamedListings = (lookedAt: (path: string) => boolean): void => {
+    const relistUnnamed = (): void => {
+        if (!isShared(workspaceView.value)) {
+            return;
+        }
+        for (const path of lazyChildren.value.keys()) {
+            if (lookedAt(path) && !followed.value.has(path)) {
+                relist(path);
+            }
+        }
+    };
+    const stop = (): void => {
+        clearInterval(unnamedClock);
+        unnamedClock = undefined;
+    };
+    watch(
+        listingsSeen,
+        (seen) => {
+            stop();
+            if (seen) {
+                relistUnnamed();
+                unnamedClock = setInterval(relistUnnamed, UNNAMED_RELIST_MS);
+            }
+        },
+        { immediate: true },
+    );
+    if (getCurrentScope() !== undefined) {
+        onScopeDispose(stop);
+    }
 };

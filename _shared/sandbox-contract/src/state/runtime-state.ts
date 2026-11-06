@@ -40,9 +40,12 @@ const RUNTIME_DOMAINS = [
     // Machines on the other end of a socket (devices, browsers, phones, runners); "online" is the socket itself, never
     // sampled. hosts/webext/phones land on capabilities since a pairing card's state is literally the hub's online answer,
     // and each on the roster its dialogs and rows read (`hosts`, `webext`, `phones`; the editor's PAIRED_* families).
-    // `hosts` also carries a device reading that landed too late for the reader waiting on it (hosts/device-reports.ts),
-    // and a desktop-sync enrollment made or revoked, which is what moves `sync-health` (GET /system/sync).
+    // `hosts` also carries a desktop-sync enrollment made or revoked, which is what moves `sync-health` (GET /system/sync).
     { domain: "hosts", invalidates: [["capabilities"], ["devices"], ["hosts"], ["sync-health"]] },
+    // A machine's reading landing with news: its first, a change in whether it answers or in the containers it holds, or
+    // one replacing a copy old enough to read as quiet (hosts/device-reports.ts). Only the Devices read moves with it: it
+    // rode `hosts` until 2026-11-06, which re-read the capability list, the rosters and the sync state in every window too.
+    { domain: "devices", invalidates: [["devices"]] },
     { domain: "webext", invalidates: [["capabilities"], ["webext"]] },
     { domain: "phones", invalidates: [["capabilities"], ["phones"]] },
     { domain: "runners", invalidates: [["runners"]] },

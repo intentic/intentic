@@ -19,6 +19,7 @@ import {
     rowCardWidths,
     rowHeight,
     sharedCaller,
+    textsAsked,
 } from "./cardSize";
 import { pipelineDag, pipelineStages } from "./pipelineDag";
 
@@ -135,5 +136,31 @@ describe(`row cards`, () => {
         const [card] = cardsOf([job(`lint`, [])]);
         expect(card && sharedCaller(card.data)).toBeUndefined();
         expect(card && rowCardRows(card.data)).toBe(JOB_LINE);
+    });
+});
+
+describe(`textsAsked`, () => {
+    const nodes = pipelineDag(pipelineStages([job(`release / build`, []), job(`release / verify`, [`release / build`]), job(`lint`, [`release / build`])])).nodes;
+    const recurring = new Map([[`lint`, 3]]);
+
+    // Column index or card id to its width.
+    type Pass = (measure: MeasureText) => ReadonlyMap<number | string, number>;
+    test.each<[string, Pass]>([
+        [`columns`, (measure) => columnWidths(nodes, recurring, measure)],
+        [`rows`, (measure) => rowCardWidths(nodes, recurring, measure)],
+    ])(`names every string the %s pass measures, each once`, (_layout, pass) => {
+        const asked = textsAsked(pass);
+        const known = new Map(asked.map(([text, size]) => [`${size}:${text}`, text.length]));
+        // Measures only what was named, so a string the pass asks for and the list missed fails here by name.
+        const onlyAsked: MeasureText = (text, size) => {
+            const width = known.get(`${size}:${text}`);
+            if (width === undefined) {
+                throw new Error(`not named: ${size}:${text}`);
+            }
+            return width;
+        };
+        expect(pass(onlyAsked)).toEqual(pass(perChar));
+        expect(known.size).toBe(asked.length);
+        expect(asked).toContainEqual([`×3`, `badge`]);
     });
 });

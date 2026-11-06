@@ -292,7 +292,14 @@ const draw = (): void => {
     }
     const trunk = `M ${x} ${top.bottom - box.top + GAP} V ${last.y - ELBOW}`;
     const elbows = nodes.map(({ y, end }) => `M ${x} ${y - ELBOW} Q ${x} ${y} ${x + ELBOW} ${y} H ${end}`);
-    lane.value = { width: box.width, height: box.height, d: [trunk, ...elbows].join(` `) };
+    const d = [trunk, ...elbows].join(` `);
+    // Written only when it moved. A write re-renders this block, and every render asks for a frame to measure in
+    // (onUpdated), so a lane written afresh each time was measured and drawn again every frame for as long as the block
+    // was mounted: the pipelines view's steady stream of long frames.
+    const drawn = lane.value;
+    if (drawn?.d !== d || drawn.width !== box.width || drawn.height !== box.height) {
+        lane.value = { width: box.width, height: box.height, d };
+    }
 };
 
 let frame = 0;

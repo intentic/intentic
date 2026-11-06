@@ -56,6 +56,8 @@ export const createCodeSearchEngine = (
         },
         // The query worker owns the semantic scan and cross-encoder; losing it narrows a search to keyword matching.
         onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed, search fell back to keyword matching"),
+        // Said once per failing streak: hotspots and the chores rail keep their last ranking until a history read succeeds.
+        onStaleHistory: (error) => logger.warn({ err: error }, "iq history read failed, hotspots served from the last reading"),
         // Well clear of the working set: the child holds the index and the ML models, and was measured at 1.64 GB
         // having grown from 691 MB in half an hour. The point is to bound memory that is not coming back, not to
         // ration what the engine legitimately needs — a ceiling low enough to fire in normal use announces itself

@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { openSqlite } from "@intentic/base/sqlite";
@@ -9,6 +8,7 @@ import { idCatalog } from "../../agent/models/model-discovery.js";
 import { cacheFile } from "../../store/open-document.js";
 import { discoverXaiModels, isChatModel, SEED_XAI_MODELS, xaiEffortsOf } from "./xai-models.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // What OpenCode holds for a provider's sign-in, read where OpenCode keeps it, without asking its server: whether Grok is
 // connected is asked by health checks and the provider list all day, and a question must not boot a 300 MB runtime, nor
@@ -35,13 +35,13 @@ const asCredential = (value: unknown): StoredCredential | undefined =>
 const SqliteFailureSchema = z.object({ errcode: z.number().int() });
 const BUSY_CODES = new Set([5, 6]);
 
+// The answer for a database this daemon cannot read: no credentials, and never kept (openCodeCredentials).
+const UNREADABLE: readonly StoredCredential[] = [];
+
 // The table's rows for one integration, or undefined where there is no table yet (no OpenCode 2 boot has migrated this
 // directory), so the caller knows to read auth.json instead. An integration with several accounts lists the active one
-// first; OpenCode leaves `active` unset on a lone credential.
-const credentialsInDatabase = (database: string, integrationID: string): StoredCredential[] | undefined => {
-    if (!existsSync(database)) {
-        return undefined;
-    }
+// first; OpenCode leaves `active` unset on a lone credential. Synchronous, as node:sqlite is, on the daemon's main thread.
+const credentialsInDatabase = (database: string, integrationID: string): readonly StoredCredential[] | undefined => {
     let db: DatabaseSync | undefined;
     try {
         // Read-only, so nothing of OpenCode's is changed (no journal mode set), with a busy timeout: a read that meets
@@ -66,15 +66,58 @@ const credentialsInDatabase = (database: string, integrationID: string): StoredC
         if (failure.success && BUSY_CODES.has(failure.data.errcode % 256)) {
             throw error;
         }
-        return [];
+        return UNREADABLE;
     } finally {
         db?.close();
     }
 };
 
+/* THE LAST ANSWER, KEPT WHILE THE DATABASE IS UNCHANGED (2026-11-06). Every ask opened OpenCode's database on the
+   daemon's main thread, and that database is OpenCode's whole store: sessions, messages, snapshots, 5.7 GB on the sandbox
+   measured, its schema read afresh on each open. Boot profiles caught the open holding the main thread 0.7-0.85 s under
+   I/O pressure (grok-provider's packs, through the overlay composer, and the health checks), with 25-50 ms of it spent
+   computing even when the disk answered. So an answer is kept with what stat said of the database and its write-ahead
+   log before it was read: inode, size, and modification and change times. Any write OpenCode makes moves one of them, a
+   row appended to the log or a checkpoint into the file, so the next ask reads afresh; and an answer is never kept past
+   KEPT_MS, which bounds the one blind spot, two writes in one clock tick leaving a log of the same size. Only a read
+   that succeeded is kept: a locked or failing one is asked again next time, as before. */
+const KEPT_MS = 5 * 60_000;
+
+// What stat says of one file, as one comparable string; undefined for a file not there.
+const stampOf = async (path: string): Promise<string | undefined> => {
+    const info = await stat(path, { bigint: true }).catch(undefinedIfMissing);
+    return info === undefined ? undefined : `${String(info.ino)}:${String(info.size)}:${String(info.mtimeNs)}:${String(info.ctimeNs)}`;
+};
+
+interface KeptAnswer {
+    readonly stamp: string;
+    readonly at: number;
+    readonly rows: readonly StoredCredential[] | undefined;
+}
+
 export const openCodeCredentials = (opencodeDir: string) => {
     const authPath = join(opencodeDir, "auth.json");
     const databasePath = join(opencodeDir, "opencode.db");
+    // By integration: the last rows read from the database, and what the database looked like just before.
+    const kept = new Map<string, KeptAnswer>();
+    // The rows for one integration as the database holds them now; undefined when it holds no table or is not there.
+    const databaseRows = async (integrationID: string): Promise<readonly StoredCredential[] | undefined> => {
+        const database = await stampOf(databasePath);
+        if (database === undefined) {
+            return undefined;
+        }
+        const stamp = `${database}|${(await stampOf(`${databasePath}-wal`)) ?? "no log"}`;
+        const last = kept.get(integrationID);
+        if (last !== undefined && last.stamp === stamp && Date.now() - last.at < KEPT_MS) {
+            return last.rows;
+        }
+        const at = Date.now();
+        const rows = credentialsInDatabase(databasePath, integrationID);
+        if (rows !== UNREADABLE) {
+            kept.set(integrationID, { stamp, at, rows });
+        }
+        return rows;
+    };
     const legacy = async (providerID: string): Promise<StoredCredential | undefined> => {
         try {
             return asCredential((JSON.parse(await readFile(authPath, "utf8")) as Record<string, unknown>)[providerID]);
@@ -84,7 +127,7 @@ export const openCodeCredentials = (opencodeDir: string) => {
         }
     };
     const stored = async (providerID: string): Promise<StoredCredential | undefined> => {
-        const rows = credentialsInDatabase(databasePath, providerID);
+        const rows = await databaseRows(providerID);
         return rows === undefined ? legacy(providerID) : rows[0];
     };
     return {

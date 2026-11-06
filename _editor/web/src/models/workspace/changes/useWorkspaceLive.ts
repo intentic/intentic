@@ -51,8 +51,10 @@ export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
         }
         const patched = patchedTree(tree, delta);
         if (patched === undefined) {
-            // A generation was skipped: what the folders read on their own missed may be anything, so none is trusted.
+            // A generation was skipped: what the folders read on their own missed may be anything, so none is trusted,
+            // and each is read again as for a batch that could not name what it touched.
             forgetFollowed();
+            changedDirs.value = { stamp: changedDirs.value.stamp + 1, dirs: new Set() };
             void invalidatePushedQueries(queryClient, { queryKey: query.queryKey, exact: true });
             continue;
         }

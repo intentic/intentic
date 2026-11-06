@@ -11,7 +11,7 @@ import { ORPCError } from "@orpc/server";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../../peers/desktop-sync.js";
-import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow } from "../device-reports.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, stalePull, warmPull } from "../device-reports.js";
 import { sandboxesFromTool, unreadFromTool } from "../device-listing.js";
 import { HOST_CARD_RULE } from "../host-peer.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
@@ -362,11 +362,13 @@ const answer = (text: string, isError = false): unknown => ({ result: { content:
 const readLog = recordingLogger();
 
 // Both doors of one machine, every call recorded: `report` on its connection, `list_sandboxes` on its MCP door.
-// `card` is the rest of the machine's card config, past its platform: the switches the owner set on it.
+// `card` is the rest of the machine's card config, past its platform: the switches the owner set on it. `describe` is
+// the machine re-describing itself when asked (the hub's `refresh`); absent, the ask fails and the facts from hello stand.
 const fakeServices = (
     id: string,
     respond: (call: FakeCall) => Promise<unknown>,
     card: Record<string, string> = {},
+    describe?: () => Promise<void>,
 ): { services: Services; calls: FakeCall[] } => {
     const calls: FakeCall[] = [];
     const ask = async (call: FakeCall): Promise<unknown> => {
@@ -392,6 +394,7 @@ const fakeServices = (
             }),
             mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) =>
                 await ask({ id: asked, tool: (payload as { params?: { name?: string } }).params?.name ?? "", signal: options?.signal }),
+            ...(describe === undefined ? {} : { refresh: describe }),
         },
     } as unknown as Services;
     return { services, calls };
@@ -462,7 +465,7 @@ test("serves a quiet reading at once from a machine whose last reading took long
     // Fake timers: a reader that waited on the settle would never return here.
     expect((await devices(services))[0]?.report?.hostname).toBe("before");
     release();
-    await waitFor(() => expect(published).toEqual(["hosts"]));
+    await waitFor(() => expect(published).toEqual(["devices"]));
     expect((await devices(services))[0]?.report?.hostname).toBe("after");
 });
 
@@ -520,8 +523,8 @@ test("a listing that misses the deadline keeps the containers the machine last l
     expect(readLog.lines.some((line) => line["device"] === "late-pc" && String(line["message"]).includes("answered late"))).toBe(true);
 });
 
-// The browser maps `hosts` to its Devices read, so a machine that answers after the reader stopped waiting is on
-// screen in a second instead of at the next ten-second poll. Silent on a routine refresh: news it already has.
+// The browser maps `devices` to its Devices read and to nothing else, so a machine that answers after the reader stopped
+// waiting is on screen in a second instead of at the next poll. Silent on a routine refresh: news it already has.
 test("announces only a landing that changes what the view says", async () => {
     jest.useFakeTimers();
     const { services, calls } = fakeServices("push-pc", async (call) =>
@@ -530,7 +533,7 @@ test("announces only a landing that changes what the view says", async () => {
 
     // The machine's first reading: nothing was known about it before, so watchers are told.
     await devices(services);
-    expect(published).toEqual(["hosts"]);
+    expect(published).toEqual(["devices"]);
     published.length = 0;
 
     // A refresh of a reading still young enough to serve: same answer, no frame.
@@ -542,7 +545,7 @@ test("announces only a landing that changes what the view says", async () => {
     // A reading that had gone quiet, replaced: the frame is the whole point of the wait ending early.
     jest.setSystemTime(Date.now() + 61_000);
     await devices(services);
-    expect(published).toEqual(["hosts"]);
+    expect(published).toEqual(["devices"]);
 });
 
 // The switcher's remove dialog offers a button instead of a command only when a connected machine lists the sandbox,
@@ -563,7 +566,7 @@ test("announces a refresh that finds a container appear, stop or go", async () =
 
     fleet = JSON.stringify([box("sandbox-new", true)]);
     await refreshed(2);
-    expect(published).toEqual(["hosts"]);
+    expect(published).toEqual(["devices"]);
     published.length = 0;
 
     // The same containers in the same state: a routine refresh, said nowhere.
@@ -572,35 +575,58 @@ test("announces a refresh that finds a container appear, stop or go", async () =
 
     fleet = JSON.stringify([box("sandbox-new", false)]);
     await refreshed(4);
-    expect(published).toEqual(["hosts"]);
+    expect(published).toEqual(["devices"]);
     published.length = 0;
 
     fleet = "[]";
     await refreshed(5);
-    expect(published).toEqual(["hosts"]);
+    expect(published).toEqual(["devices"]);
 });
 
-// The link count behind "Forget them" is a fact told at hello, and a drop happens on a socket that stays up: unless the
-// pull re-asks, the strip offering the drop outlives the drop until the machine next reconnects.
-test("re-reads a live machine's facts with each pull, and announces a changed link count", async () => {
+// The link count behind "Forget them" is a fact told at hello, and a drop happens on a socket that stays up: unless a
+// pull re-asks, the strip offering the drop outlives the drop until the machine next reconnects. Asked beside the
+// reading, at most every two minutes: the reading does not read the facts, and a third call only delayed it.
+test("re-reads a live machine's facts beside a pull every two minutes, and announces a changed link count", async () => {
     jest.useFakeTimers();
-    const { services } = fakeServices("drop-pc", async (call) => (call.tool === "report" ? report("drop", { capturedAt: Date.now() }) : answer("[]")));
+    const { services, calls } = fakeServices("drop-pc", async (call) => (call.tool === "report" ? report("drop", { capturedAt: Date.now() }) : answer("[]")));
     let facts = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
     let described = { links: { total: 2, unreachable: 1, unreachableSince: 1 } };
+    let describes = 0;
     const hub = services.hostHub as unknown as { state: () => unknown; refresh: () => Promise<void> };
     hub.state = () => ({ online: true, version: "0.1.0", facts });
     hub.refresh = async () => {
+        describes += 1;
         facts = described;
     };
 
     expect((await devices(services))[0]?.facts?.links?.unreachable).toBe(1);
+    expect(describes).toBe(1);
     published.length = 0;
 
     described = { links: { total: 1, unreachable: 0 } } as typeof described;
+    // A pull inside the two minutes asks for the reading alone.
     jest.setSystemTime(Date.now() + 31_000);
     await devices(services);
-    await waitFor(() => expect(published).toEqual(["hosts"]));
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(describes).toBe(1);
+    expect(published).toEqual([]);
+
+    jest.setSystemTime(Date.now() + 2 * 60_000);
+    await devices(services);
+    await waitFor(() => expect(published.toSorted()).toEqual(["devices", "hosts"]));
+    expect(describes).toBe(2);
     expect((await devices(services))[0]?.facts?.links).toEqual({ total: 1, unreachable: 0 });
+});
+
+// A machine slow to describe itself no longer holds the reading back: the facts are asked beside it, not waited on.
+test("lands a reading without waiting for the machine to describe itself", async () => {
+    const { services } = fakeServices(
+        "mute-pc",
+        async (call) => (call.tool === "report" ? report("mute") : answer("[]")),
+        {},
+        async () => await new Promise<void>(() => undefined),
+    );
+    expect((await devices(services))[0]?.report?.hostname).toBe("mute");
 });
 
 test("coalesces concurrent readers into a single round trip", async () => {
@@ -617,6 +643,81 @@ test("coalesces concurrent readers into a single round trip", async () => {
 
     expect(answers.every((rows) => rows[0]?.report?.hostname === "busy")).toBe(true);
     expect(calls.filter((call) => call.tool === "report")).toHaveLength(1);
+});
+
+// A command or a flow just changed the machine. Its held reading used to be deleted, so the next reader waited out a
+// whole pull (6-8 s on a loaded host) and the Rebuild card's log poll deleted it every 4 s. It is now aged instead: a
+// slow machine's reader is served the copy at once, and the fresh reading arrives as news.
+test("asks a machine that just changed again, serving a slow one's held reading meanwhile and announcing the new one", async () => {
+    jest.useFakeTimers();
+    let hostname = "before";
+    let held: Promise<void> = Promise.resolve();
+    let release = (): void => undefined;
+    const { services, calls } = fakeServices("changed-pc", async (call) => {
+        if (call.tool === "report") {
+            jest.setSystemTime(Date.now() + 3_000);
+        }
+        await held;
+        return call.tool === "report" ? report(hostname, { capturedAt: Date.now() }) : answer("[]");
+    });
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+    published.length = 0;
+
+    hostname = "after";
+    held = new Promise((resolve) => (release = resolve));
+    stalePull("changed-pc");
+    // Fake timers: a reader that waited on the settle would never return here.
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+    expect(calls).toHaveLength(4);
+    release();
+    await waitFor(() => expect(published).toEqual(["devices"]));
+    expect((await devices(services))[0]?.report?.hostname).toBe("after");
+});
+
+// The refresh on the wire when the machine changed may have read it before the change: its answer is not the reading.
+test("lands nowhere a refresh that was on the wire when the machine changed", async () => {
+    jest.useFakeTimers();
+    let hostname = "one";
+    let held: Promise<void> = Promise.resolve();
+    let release = (): void => undefined;
+    const { services, calls } = fakeServices("raced-pc", async (call) => {
+        const said = hostname;
+        await held;
+        return call.tool === "report" ? report(said, { capturedAt: Date.now() }) : answer("[]");
+    });
+    expect((await devices(services))[0]?.report?.hostname).toBe("one");
+
+    hostname = "two";
+    held = new Promise((resolve) => (release = resolve));
+    jest.setSystemTime(Date.now() + 31_000);
+    expect((await devices(services))[0]?.report?.hostname).toBe("one");
+    await waitFor(() => expect(calls).toHaveLength(4));
+
+    stalePull("raced-pc");
+    hostname = "three";
+    held = Promise.resolve();
+    expect((await devices(services))[0]?.report?.hostname).toBe("three");
+    release();
+    await waitFor(() => expect(calls).toHaveLength(6));
+    expect((await devices(services))[0]?.report?.hostname).toBe("three");
+});
+
+// The one reading a reader has to wait for whole is a machine's first, with nothing held to serve meanwhile; asked as
+// the machine connects, the first reader finds it on the wire or already landed.
+test("asks a machine for its first reading as it connects, which the first reader joins, and never again", async () => {
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { services, calls } = fakeServices("warm-pc", async (call) => {
+        await held;
+        return call.tool === "report" ? report("warm") : answer("[]");
+    });
+    warmPull(services, "warm-pc");
+    await waitFor(() => expect(calls).toHaveLength(2));
+    const reader = devices(services);
+    release();
+    expect((await reader)[0]?.report?.hostname).toBe("warm");
+    warmPull(services, "warm-pc");
+    expect(calls).toHaveLength(2);
 });
 
 // An agent without the call answers through its RPC layer; the fleet call must still fire beside it, not after it.

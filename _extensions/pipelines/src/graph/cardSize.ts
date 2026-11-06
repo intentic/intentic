@@ -91,6 +91,18 @@ export const rowHeight = (job: PipelineJob, cardWidth: number, measure: MeasureT
 // Where nothing can be laid out (a test, a server render): an average glyph is a little over half the font size wide.
 export const estimateText: MeasureText = (text, size) => text.length * (size === `label` ? 11 : 10) * 0.56;
 
+// Every string a sizing pass asks to have measured, each once, found by running the pass on estimates: a host measuring
+// on the live page then measures the lot in one layout before running the pass for real. The sizing passes here ask for
+// the same strings whatever widths come back, so the estimates cannot hide one.
+export const textsAsked = <T>(pass: (measure: MeasureText) => T): (readonly [string, Parameters<MeasureText>[1]])[] => {
+    const asked = new Map<string, readonly [string, Parameters<MeasureText>[1]]>();
+    pass((text, size) => {
+        asked.set(`${size}:${text}`, [text, size]);
+        return estimateText(text, size);
+    });
+    return [...asked.values()];
+};
+
 // Top to bottom the run is long in height, which the page scrolls, and short of nothing else: a row of cards has the
 // width a column lacks, so each job is one line, as a list of jobs reads:
 //   release                          the call every job in the card came through, once, above them

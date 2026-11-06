@@ -55,6 +55,22 @@ test("a member reads back only their own drafts, never a colleague's words for t
     expect((await client.agents.drafts()).drafts.map((draft) => draft.text)).toEqual(["ada's words"]);
 });
 
+// The window that typed is told how far its own moves took the count, and a push names the count as it goes out: a
+// window that made every move up to it has nothing to read back. One person's typing moves only their own count.
+test("each person's draft moves are counted for them alone, and a write or a clear answers with the count it made", async () => {
+    const { client, actAs } = board();
+    expect((await client.agents.drafts()).generation).toBe(0);
+    expect((await client.agents.writeDraft({ id: "conv-1", text: "fix the login" })).generation).toBe(1);
+    // Edited from a revision long gone: nothing moved, so the answer counts nothing.
+    const stale = await client.agents.writeDraft({ id: "conv-1", text: "stale words", base: 999 });
+    expect(Object.keys(stale).toSorted()).toEqual(["conflict", "draft"]);
+    expect((await client.agents.clearDraft({ id: "conv-1" })).generation).toBe(2);
+    actAs(`bob@example.com`, `collaborator`);
+    expect((await client.agents.drafts()).generation).toBe(0);
+    actAs(`ada@example.com`);
+    expect((await client.agents.drafts()).generation).toBe(2);
+});
+
 test("sending clears the draft the words were sent from, and words written since in another window survive the send", async () => {
     const { client } = board();
     const first = (await client.agents.writeDraft({ id: "conv-1", text: "fix the login" })).draft;

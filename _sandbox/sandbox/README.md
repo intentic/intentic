@@ -332,7 +332,11 @@ flowchart LR
   message. Every change pushes the `drafts` domain to the writer's own `/events` connections only (it carries no
   words, and nobody else's windows read that person's drafts back), and sets the card's `unsentAt`, so the idle
   archive leaves a conversation somebody is still writing to. 2026-10-27: until then the push went to every window,
-  so each member's typing made every member's every window re-read drafts that had not moved. A draft never goes by itself
+  so each member's typing made every member's every window re-read drafts that had not moved. Each change is also
+  counted per person for the daemon's run (`generation`): a write or a clear answers with the count it made, a list with
+  the count it was read at, and the push with the count as it went out, so a window that made every move since its last
+  read reads nothing back. 2026-11-06: until then the typist's own window re-read the list after every pause in typing.
+  A draft never goes by itself
   (`next` never names one), and no model reads it until it is sent, when the privacy shield judges it as the message.
 - A conversation no turn has started has no registry entry for `agents.react` to mark, so `agents.reactDraft` keeps
   the caller's marks on it in the same file, beside the words but never in them (`conversations/drafts/draft-marks.ts`):

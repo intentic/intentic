@@ -219,8 +219,11 @@ export interface ComposerDrafts {
     readonly list: (person: string) => Promise<{
         readonly drafts: readonly ComposerDraft[];
         readonly revision: number;
+        readonly generation: number;
         readonly reactions: Readonly<Record<string, readonly AgentReaction[]>>;
     }>;
+    /** How many times the person's drafts and marks have moved in this run: what a `drafts` push names. */
+    readonly generation: (person: string) => number;
     readonly write: (person: string, write: DraftWrite) => Promise<DraftWritten>;
     readonly clear: (person: string, conversationId: string, revision?: number) => Promise<DraftWritten>;
     /** Since when anybody has held a draft for the conversation. */
@@ -245,6 +248,12 @@ export interface ComposerDrafts {
  * The store, telling `moved` each conversation whose drafts changed and whose they are, after the write is on disk: the
  * card's `unsentAt` and the `drafts` push both follow from that one call. A change to someone's marks tells `marked`,
  * which only pushes: marks say nothing about unsent words.
+ *
+ * Every move is also counted per person (`generation`), before it is told, so the push it sets off names at least it. A
+ * write or a clear answers with the count it made, and a list says the count it was read at, so the window that typed
+ * holds every move a push names when it made each of them itself, and has nothing to read back: each pause in typing
+ * used to cost the typist's own window a read of the whole list (2026-11-06). In memory: a restart counts from zero,
+ * and every window reads the list again on the reconnect that follows it.
  */
 const fileComposerDrafts = (
     path: string,
@@ -253,6 +262,12 @@ const fileComposerDrafts = (
     now: () => number = Date.now,
 ): ComposerDrafts => {
     const file = openDocument(composerDraftsDocument, path, { fallback: (): DraftsFile => ({ revision: 0, people: {} }), mode: 0o600 });
+    const generations = new Map<string, number>();
+    const counted = (person: string): number => {
+        const next = (generations.get(person) ?? 0) + 1;
+        generations.set(person, next);
+        return next;
+    };
     const apply = async (conversationId: string, person: string, step: (current: DraftsFile) => DraftStep): Promise<DraftWritten> => {
         let change: DraftChange = { answer: {}, changed: false };
         await file.update((current) => {
@@ -260,16 +275,21 @@ const fileComposerDrafts = (
             change = next.change;
             return next.file;
         });
-        if (change.changed) {
-            moved(conversationId, person);
+        if (!change.changed) {
+            return change.answer;
         }
-        return change.answer;
+        const generation = counted(person);
+        moved(conversationId, person);
+        return { ...change.answer, generation };
     };
     return {
+        // The count is taken before the file is read, so the list holds at least every move it names.
         list: async (person) => {
+            const generation = generations.get(person) ?? 0;
             const current = await file.read();
-            return { drafts: draftsOf(current, person), revision: current.revision, reactions: markedBy(current, person) };
+            return { drafts: draftsOf(current, person), revision: current.revision, generation, reactions: markedBy(current, person) };
         },
+        generation: (person) => generations.get(person) ?? 0,
         write: (person, write) => apply(write.id, person, (current) => writeIn(current, person, write, now())),
         clear: (person, conversationId, revision) => apply(conversationId, person, (current) => clearIn(current, person, conversationId, revision)),
         heldSince: async (conversationId) => heldSinceIn(await file.read(), conversationId),
@@ -287,6 +307,7 @@ const fileComposerDrafts = (
                 return step.file;
             });
             if (changed) {
+                counted(person);
                 marked(person);
             }
             return full ? "full" : reactionsOf(person, marks);
@@ -300,6 +321,7 @@ const fileComposerDrafts = (
                 return next;
             });
             if (changed) {
+                counted(person);
                 marked(person);
             }
         },

@@ -134,37 +134,77 @@ const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
 // Asked of nothing else, since a refusal is the one verdict here nothing but a land re-judges: on 2026-10-20 a parent
 // applied a held child's diff with `git apply -3`, landed, and the child read `conflict` (its parent's card with it)
 // for good.
-const deltaOf = async (
+const repoOutstanding = async (
     worktrees: AgentWorktrees,
     placement: { readonly parent?: string | undefined },
-    repos: readonly RepoShas[],
+    { composed, head }: RepoShas,
+    tip: string,
     git: GitRunner,
     refused: boolean,
+): Promise<boolean> => {
+    const main = worktrees.mainDir(composed.repo);
+    // Both halves matter: a rebase can leave a branch ahead of an anchor that already holds all of it.
+    const anchor = await anchorOf(placement, main, main, tip, composed.landedTip, composed.base, git);
+    if (anchor === tip || !(await carriesContent(main, anchor, tip, git))) {
+        return false;
+    }
+    // Rewriting main (a rebase, a force-push) drags the anchor back behind content main already holds, which would
+    // re-offer the whole delta; measured against main's own tree instead, a tip main already holds has nothing left.
+    // The review keeps listing those paths as absorbed, which is why this reading lives here and not in the anchor.
+    if (head !== undefined && !(await carriesContent(main, head, tip, git))) {
+        return false;
+    }
+    return !(refused && head !== undefined && (await absorbedIn(main, anchor, head, tip, git)));
+};
+
+// One repo's half of the verdict is a function of shas alone (the anchor, tree comparisons and the merge read immutable
+// objects), so it is kept by them across passes: the agent's key above spans all its repos, and a main line moving in
+// one repo used to re-read every repo of every agent composed over it (2026-11-05: `agents.standings` spawned 40k git
+// processes in 13 h). Only a parent's presence matters to the anchor, not who it is. Bounded, oldest first out.
+const REPO_DELTAS_KEPT = 4_096;
+
+type RepoOutstanding = (placement: { readonly parent?: string | undefined }, shas: RepoShas, tip: string, refused: boolean) => Promise<boolean>;
+
+const keptRepoOutstanding = (worktrees: AgentWorktrees, git: GitRunner): RepoOutstanding => {
+    const kept = new Map<string, Promise<boolean>>();
+    return (placement, shas, tip, refused) => {
+        const { composed, head } = shas;
+        const key = [composed.repo, placement.parent === undefined ? "line" : "child", head ?? "-", tip, composed.landedTip ?? "-", composed.base, refused ? "refused" : "-"].join("\u0000");
+        const held = kept.get(key);
+        if (held !== undefined) {
+            return held;
+        }
+        const reading = repoOutstanding(worktrees, placement, shas, tip, git, refused);
+        kept.set(key, reading);
+        // A failed read is not kept: the next pass asks git again.
+        reading.catch(() => kept.get(key) === reading && kept.delete(key));
+        for (const [oldest] of kept) {
+            if (kept.size <= REPO_DELTAS_KEPT) {
+                break;
+            }
+            kept.delete(oldest);
+        }
+        return reading;
+    };
+};
+
+const deltaOf = async (
+    placement: { readonly parent?: string | undefined },
+    repos: readonly RepoShas[],
+    refused: boolean,
+    outstandingIn: RepoOutstanding,
 ): Promise<{ outstanding: boolean; produced: boolean }> => {
     let outstanding = false;
     let produced = false;
-    for (const { composed, head, tip } of repos) {
+    for (const shas of repos) {
+        const { composed, tip } = shas;
         if (tip === undefined) {
             continue; // The branch is gone: nothing of this agent's is left in this repo.
         }
         // Asked of the branch: hand-merged work shows here though it never landed via `landedTip`.
         produced ||= tip !== composed.base;
-        const main = worktrees.mainDir(composed.repo);
-        // Both halves matter: a rebase can leave a branch ahead of an anchor that already holds all of it.
-        const anchor = await anchorOf(placement, main, main, tip, composed.landedTip, composed.base, git);
-        if (anchor === tip || !(await carriesContent(main, anchor, tip, git))) {
-            continue;
-        }
-        // Rewriting main (a rebase, a force-push) drags the anchor back behind content main already holds, which would
-        // re-offer the whole delta; measured against main's own tree instead, a tip main already holds has nothing left.
-        // The review keeps listing those paths as absorbed, which is why this reading lives here and not in the anchor.
-        if (head !== undefined && !(await carriesContent(main, head, tip, git))) {
-            continue;
-        }
-        if (refused && head !== undefined && (await absorbedIn(main, anchor, head, tip, git))) {
-            continue;
-        }
-        outstanding = true;
+        // One outstanding repo settles it; the rest are not read.
+        outstanding ||= await outstandingIn(placement, shas, tip, refused);
     }
     return { outstanding, produced };
 };
@@ -181,6 +221,7 @@ const PROBES = 8;
 
 export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = defaultGit): LandStandings => {
     const cache = new Map<string, { key: string; standing: LandStanding; causes: readonly LandConflictReason[] }>();
+    const outstandingIn = keptRepoOutstanding(worktrees, git);
     return {
         of: (id) => cache.get(id)?.standing ?? "idle",
         causesOf: (id) => cache.get(id)?.causes ?? [],
@@ -208,7 +249,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 if (cached?.key === key) {
                     return;
                 }
-                const delta = await deltaOf(worktrees, entry.placement, shas, git, refusal.stands);
+                const delta = await deltaOf(entry.placement, shas, refusal.stands, outstandingIn);
                 const outstanding = delta.outstanding || awayRefused(refusal, away);
                 // The report explains a refusal, it does not create one: nothing outstanding, nothing to be about.
                 const standing: LandStanding = outstanding ? (refusal.stands ? "conflict" : "ready") : delta.produced ? "landed" : "idle";

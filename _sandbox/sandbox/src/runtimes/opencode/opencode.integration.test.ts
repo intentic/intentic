@@ -189,6 +189,47 @@ describe("whether a provider is connected", () => {
         expect(await openCodeCredentials(dir).connected("xai")).toBe(true);
     }, 20_000);
 
+    // OpenCode's database is its whole store (5.7 GB on a sandbox measured 2026-11-06), opened on the daemon's main
+    // thread: an ask while nothing in it changed is answered from the last read. Held exclusively, as above, so a read
+    // that opened it again would wait out its busy timeout and fail.
+    test("an unchanged database is answered from the last read, without opening it again", async () => {
+        const { dir } = await scratch();
+        const db = new DatabaseSync(join(dir, "opencode.db"));
+        databases.push(db);
+        db.exec(CREDENTIAL_TABLE);
+        db.prepare(
+            "INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred', 'xai', 'OAuth', ?, 1, 1, 1)",
+        ).run(JSON.stringify(oauth("tok", Date.now() + HOUR)));
+        const credentials = openCodeCredentials(dir);
+        expect(await credentials.connected("xai")).toBe(true);
+
+        db.exec("BEGIN EXCLUSIVE");
+        try {
+            expect(await credentials.connected("xai")).toBe(true);
+        } finally {
+            db.exec("ROLLBACK");
+        }
+    });
+
+    // A locked read is not an answer: it is asked again, not kept as "signed out".
+    test("a read that failed on the lock is not kept: the next ask reads the database", async () => {
+        const { dir } = await scratch();
+        const db = new DatabaseSync(join(dir, "opencode.db"));
+        databases.push(db);
+        db.exec(CREDENTIAL_TABLE);
+        db.prepare(
+            "INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred', 'xai', 'OAuth', ?, 1, 1, 1)",
+        ).run(JSON.stringify(oauth("tok", Date.now() + HOUR)));
+        const credentials = openCodeCredentials(dir);
+        db.exec("BEGIN EXCLUSIVE");
+        try {
+            await expect(credentials.connected("xai")).rejects.toMatchObject({ errcode: 5 });
+        } finally {
+            db.exec("ROLLBACK");
+        }
+        expect(await credentials.connected("xai")).toBe(true);
+    }, 20_000);
+
     // The first OpenCode 2 boot moves auth.json's entries into the table and leaves the file: a sign-out after that
     // empties the table, and the stale file must not sign the account back in.
     test("once the table exists, auth.json is ignored, even with the table empty", async () => {

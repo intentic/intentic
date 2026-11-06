@@ -19,7 +19,8 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     }),
 }));
 
-const { drawsListings, forgetFollowed, lazyChildren, listingsSeen, patchListing, relist, relistUnlessPushed, relistWhenSeen } = await import("./lazyListings");
+const { drawsListings, forgetFollowed, keepUnnamedListings, lazyChildren, listingsSeen, patchListing, relist, relistUnlessPushed, relistWhenSeen, UNNAMED_RELIST_MS } =
+    await import("./lazyListings");
 const { receiveDesktopShown } = await import("../../../workbench/window/onScreen");
 
 const listing = (...names: string[]): WorkspaceChildren => ({ entries: names.map((name) => ({ name, path: `src/${name}`, type: `file` })), hidden: 0 });
@@ -139,4 +140,51 @@ describe(`a folder the pushed deltas keep`, () => {
         drawing.stop();
         jest.useRealTimers();
     });
+});
+
+/* node_modules and the rest of the watcher's ignore list are never named by a batch, so they used to be read again on
+   every change anywhere in the tree: once a second under a working agent, the editor's most frequent daemon call. Now a
+   slow clock reads the ones looked at, while a listing is seen, and the window's return reads them at once. */
+it(`reads a looked-at folder no batch names on a slow clock while a listing is seen, and at once when one is seen again`, async () => {
+    jest.useFakeTimers();
+    const tree = effectScope();
+    try {
+        lazyChildren.value.set(`node_modules`, []);
+        lazyChildren.value.set(`src`, []);
+        lazyChildren.value.set(`closed`, []);
+        // A delta keeps src current: it is never read on the clock.
+        patchListing(`src`, []);
+        tree.run(() => {
+            drawsListings();
+            keepUnnamedListings((path) => path !== `closed`);
+        });
+        await settle();
+        expect(reads.map((read) => read.path)).toEqual([`node_modules`]);
+        reads[0]?.answer(listing());
+        await settle();
+
+        jest.advanceTimersByTime(UNNAMED_RELIST_MS - 1);
+        await settle();
+        expect(reads).toHaveLength(1);
+        jest.advanceTimersByTime(1);
+        await settle();
+        expect(reads.map((read) => read.path)).toEqual([`node_modules`, `node_modules`]);
+        reads[1]?.answer(listing());
+        await settle();
+
+        // Out of sight the clock stops; back on screen the folder is read at once.
+        receiveDesktopShown(false);
+        await settle();
+        jest.advanceTimersByTime(UNNAMED_RELIST_MS * 3);
+        await settle();
+        expect(reads).toHaveLength(2);
+        receiveDesktopShown(true);
+        await settle();
+        expect(reads.map((read) => read.path)).toEqual([`node_modules`, `node_modules`, `node_modules`]);
+    } finally {
+        tree.stop();
+        receiveDesktopShown(true);
+        forgetFollowed();
+        jest.useRealTimers();
+    }
 });

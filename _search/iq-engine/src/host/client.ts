@@ -91,6 +91,7 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
         onIndexError,
         onQueryError,
         onIndexProgress,
+        onStaleHistory,
         memoryCeilingBytes,
         memoryCheckIntervalMs,
         onRecycle,
@@ -130,12 +131,10 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
             onIndexProgress?.(event.remaining);
             return;
         }
-        if (event.type === "indexError") {
-            onIndexError?.(rebuild(event.message, event.stack));
-            return;
-        }
-        if (event.type === "queryError") {
-            onQueryError?.(rebuild(event.message, event.stack));
+        // The constructor callbacks the child turned into events, each handed its error back.
+        if (event.type === "indexError" || event.type === "queryError" || event.type === "staleHistory") {
+            const told = { indexError: onIndexError, queryError: onQueryError, staleHistory: onStaleHistory }[event.type];
+            told?.(rebuild(event.message, event.stack));
             return;
         }
         const waiting = pending.get(event.id);

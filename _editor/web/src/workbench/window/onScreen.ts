@@ -1,5 +1,6 @@
 import { computed, type ComputedRef, ref } from "vue";
 import { DESKTOP_SHOWN_EVENT, type DesktopShownEvent } from "../../app/environments/desktop";
+import { followPushVisibility } from "../../lib/pushInvalidation";
 
 // Whether this window's document is visible (document.visibilityState), gating the chat's "Updated" badge and idle
 // reporting to the sandbox; each window answers for itself. An occluded but not minimized window still counts as
@@ -15,6 +16,10 @@ const visible = ref(true);
 const shown = ref(true);
 
 export const onScreen: ComputedRef<boolean> = computed(() => visible.value && shown.value);
+
+// A push reads nothing while the window is out of sight (lib/pushInvalidation.ts); told from here, since lib may not
+// import the workbench.
+followPushVisibility(onScreen);
 
 /** The app's word on whether this window is shown; exported for tests, which have no app to say it. */
 export const receiveDesktopShown = (said: boolean): void => {

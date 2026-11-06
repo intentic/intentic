@@ -321,6 +321,37 @@ test("a pass over a main checkout whose count stood still reads no git of its ow
     expect(probeReads.length).toBeGreaterThan(read);
 });
 
+// A repo's half of the verdict is kept by its shas: an agent re-derived for any other reason (here, forgotten) answers
+// that repo from memory, so a main line moving in one repo no longer re-reads every other repo it composes.
+test("re-deriving an agent whose repo shas stood still reads no anchor or trees again", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const entry = isolatedAgent(conversation.repos);
+    const standings = createLandStandings(worktrees);
+    await standings.refresh([entry]);
+    expect(standings.of(entry.id)).toBe("ready");
+
+    const reads: string[] = [];
+    observeGitCommands(({ dir, args }) => {
+        if (dir === work) {
+            reads.push(args.join(" "));
+        }
+    });
+    standings.forget([entry.id]);
+    await standings.refresh([entry]);
+    expect(standings.of(entry.id)).toBe("ready");
+    expect(reads.filter((read) => read.startsWith("merge-base") || read.includes("^{tree}"))).toEqual([]);
+
+    // The main line moves: that repo's half is read again.
+    await writeFile(join(work, "other.ts"), "new\n");
+    await sh(work, "add", "-A");
+    await commit(work, "main moves");
+    await standings.refresh([entry]);
+    expect(reads.some((read) => read.startsWith("merge-base"))).toBe(true);
+});
+
 // The conservative half of the same reading: a tidy tree is evidence about `workspace` blockers and nothing else, so a
 // committed divergence keeps refusing until a land re-judges it.
 test("a refusal the workspace never caused survives a tidy tree", async () => {
