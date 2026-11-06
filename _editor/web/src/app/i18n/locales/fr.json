@@ -8945,7 +8945,6 @@
             "neverCameUpNotOn": "Il n'a jamais démarré, et aucun de vos ordinateurs ({machines}) ne le contient : il n'y a rien à supprimer là-bas.",
             "startedElsewhere": "Vous avez commencé sa configuration sur un autre ordinateur ? Exécutez ceci dessus :",
             "thisComputer": "Cet ordinateur",
-            "thisComputerNote": "Vos fichiers, sans besoin de sandbox",
             "notOnAccount": "Ce sandbox ne figure plus sur votre compte",
             "notOnAccountDetail": "C'est le sandbox que vous aviez ouvert en dernier.",
             "switchToThisComputer": "Passer à Cet ordinateur",

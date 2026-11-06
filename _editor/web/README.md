@@ -376,9 +376,10 @@ flowchart LR
   foot of the window says what the sandbox is doing while it is doing it, or what it waits for ("Waiting for Docker",
   "Sign in to continue"), and its press shows the page, where that is done (`setup/setupView.ts` `folderButtonOf`,
   `setupAction.ts`). The place chip names the
-  window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
-  lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
-  this computer, Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
+  window's folder and lists the account's sandboxes, the only other places the window goes, in the order the reader
+  arranged them on Home (the workspace's, as it last told the app: the window's own storage never saw that drag, so
+  rows are not dragged there), with the same digits for the same places as the workspace's switcher: Alt+0 this
+  computer (in the workspace offered by the account menu, not a switcher row), Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
   account, who is signed in and the sandboxes as the workspace last told it, its Devices view, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
   the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local

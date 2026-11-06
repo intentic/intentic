@@ -27,6 +27,8 @@ export const sandboxOrder: Ref<readonly string[]> = definePreference<readonly st
 /**
  * The sandboxes a reader can switch to (roster.ts `switchableSandboxes`), in their own order: the one list Home's rail,
  * the switcher, its Alt+1…9 and the phone's menu all draw, so a sandbox dragged into place is in that place everywhere.
+ * `order` is this browser's arrangement unless the caller holds the workspace's from elsewhere (a desktop app's local
+ * window, switcherPlace.ts).
  */
-export const arrangedSandboxes = (rows: readonly SandboxSummary[]): SandboxSummary[] =>
-    orderedSandboxes(switchableSandboxes(rows), sandboxOrder.value);
+export const arrangedSandboxes = (rows: readonly SandboxSummary[], order: readonly string[] = sandboxOrder.value): SandboxSummary[] =>
+    orderedSandboxes(switchableSandboxes(rows), order);

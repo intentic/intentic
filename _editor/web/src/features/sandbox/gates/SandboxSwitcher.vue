@@ -4,7 +4,6 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { AnchoredOverlay, Notice, SandboxLogo, SectionHeader, StatusBadge, type Tip, useHoverMenu } from "@intentic/ui";
 import { computed, type ComputedRef, onMounted, onUnmounted, ref, TransitionGroup, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
 import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
@@ -98,6 +97,7 @@ const {
     signingIn,
     signIn,
     addSandbox: addFromFolder,
+    arranged,
 } = useFolderPlace(open);
 
 // Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
@@ -127,10 +127,13 @@ onUnmounted(() => {
 // resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
 // A local window's own folder is in the list too (it is the "sandbox" that window shows) and is not a place to switch to.
 // Both rules are roster.ts `switchableSandboxes`, in the reader's own order (sandboxOrder.ts `arrangedSandboxes`), the
-// one list Home's rail and the phone's menu draw as well, so a row's place and its Alt digit match the tile's.
-const switchable = computed(() => arrangedSandboxes(sandbox.sandboxes.value));
+// one list Home's rail and the phone's menu draw as well, so a row's place and its Alt digit match the tile's. A local
+// window keeps no order of its own (its page is another origin, whose storage never saw Home's drag): it wears the
+// order the workspace last told the app (switcherPlace.ts `arranged`).
+const switchable = computed(() => arrangedSandboxes(sandbox.sandboxes.value, local ? arranged.value : sandboxOrder.value));
 // A row dragged up or down the list arranges them, as a tile dragged along Home's rail does, into the same one order:
-// it lifts and follows the pointer, its place an empty dashed slot the other rows make way for (sortableDrag.ts).
+// it lifts and follows the pointer, its place an empty dashed slot the other rows make way for (sortableDrag.ts). Not in
+// a local window, which can only wear the workspace's order and has no way to hand one back.
 const drag = useSortableDrag({
     list: () => panel.value,
     ids: () => switchable.value.map((option) => option.id),
@@ -235,7 +238,8 @@ const openSettings = (option: SandboxSummary): void => {
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
 // (the app's local shell). The app swaps the two in one frame. An app older than the local shell opens its
-// own card for the same link, which is this computer too.
+// own card for the same link, which is this computer too. Not a row here: the account menu offers it (AccountPanel.vue),
+// and Alt+0 goes there from the keyboard.
 const inDesktopApp = desktopApp() !== undefined && !local;
 const toThisComputer = (): void => {
     open.value = false;
@@ -334,35 +338,10 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
          to the logo only when a press opened it: a panel the pointer raised never took the keyboard's place. -->
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="pressed" menu>
         <div ref="panel" class="flex min-h-0 w-80 max-w-[calc(100vw-5rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1" v-on="menu.panel">
-            <!-- The app's other face, a place of the same rank as the sandboxes and first, as the local window's switcher
-                 lists it: this computer's own folder, no sandbox needed. Always there and always one row, so the
-                 sandboxes growing under it never move it. No arrow: the app shows it in this window's own frame, as
-                 picking a sandbox does. -->
-            <template v-if="inDesktopApp">
-                <button
-                    type="button"
-                    data-menu-row
-                    class="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="toThisComputer"
-                >
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-muted">
-                        <Icon name="desktop" class="text-sm" />
-                    </span>
-                    <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate font-medium text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
-                        <span class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxSwitcher.thisComputerNote`) }}</span>
-                    </span>
-                    <kbd
-                        v-if="commandShortcut(`sandbox.thisComputer`)"
-                        class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle"
-                        >{{ commandShortcut(`sandbox.thisComputer`) }}</kbd
-                    >
-                </button>
-                <div class="my-1 border-t border-line-subtle"></div>
-            </template>
-            <!-- In a local window, the same place heads the panel as where this window already is: the folder it shows
-                 and its path. Not a row to pick, being the place on screen. -->
-            <template v-else-if="folder">
+            <!-- In a local window, the place this window already is heads the panel: the folder it shows and its path.
+                 Not a row to pick, being the place on screen. In the workspace, This computer is in the account menu
+                 (shell/AccountPanel.vue) and on Alt+0, so this list holds only the sandboxes. -->
+            <template v-if="folder">
                 <div class="ui-row-select-on ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs" aria-current="true">
                     <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-link">
                         <Icon name="desktop" class="text-sm" />
@@ -438,7 +417,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                                 :aria-current="isActive(option) || undefined"
                                 class="ui-row-select ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
                                 :class="drag.carried.value === option.id ? 'invisible' : { 'ui-row-select-on': isActive(option) }"
-                                @pointerdown="drag.press($event, option.id)"
+                                @pointerdown="local || drag.press($event, option.id)"
                                 @click="pick(option)"
                             >
                                 <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />

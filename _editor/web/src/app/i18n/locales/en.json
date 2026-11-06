@@ -8945,7 +8945,6 @@
             "neverCameUpNotOn": "It never started, and none of your computers ({machines}) holds it: there is nothing to delete out there.",
             "startedElsewhere": "Started its setup on another computer? Run this there:",
             "thisComputer": "This computer",
-            "thisComputerNote": "Your files, no sandbox needed",
             "notOnAccount": "That sandbox isn't on your account any more",
             "notOnAccountDetail": "This is the sandbox you had open last.",
             "switchToThisComputer": "Switch to This computer",

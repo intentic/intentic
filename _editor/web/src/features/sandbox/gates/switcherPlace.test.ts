@@ -24,6 +24,7 @@ jest.mock(`../../../client/auth/useAccount`, () => ({ useAccount: () => ({ user 
 const opened: string[] = [];
 let refuse: string | undefined;
 let held: readonly string[] = [];
+let rosterIds: readonly string[] = [];
 const removed: string[] = [];
 const host: LocalHost = {
     ...LINK_HOST,
@@ -35,6 +36,7 @@ const host: LocalHost = {
         return Promise.resolve();
     },
     signIn: () => Promise.resolve(),
+    roster: () => Promise.resolve({ account: null, sandboxes: rosterIds.map((id) => ({ id, name: id, place: `cloud`, shared: false })) }),
     machine: {
         holds: (slug: string) => Promise.resolve(held.includes(slug)),
         remove: (slug: string) => {
@@ -80,6 +82,7 @@ beforeEach(() => {
     removed.length = 0;
     refuse = undefined;
     held = [];
+    rosterIds = [];
     user.value = { email: `ada@example.com` };
     window.__INTENTIC_LOCAL_HOST__ = host;
 });
@@ -110,6 +113,20 @@ describe(`in the workspace`, () => {
 describe(`in a local window`, () => {
     beforeEach(() => {
         window.__INTENTIC_LOCAL__ = FACE;
+    });
+
+    it(`wears the order the workspace last told the app, read again each time the panel opens`, async () => {
+        rosterIds = [`b`, `a`];
+        const open = ref(false);
+        const mounted = mount(() => useFolderPlace(open));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const first = mounted.value.arranged.value;
+        rosterIds = [`a`, `b`, `c`];
+        open.value = true;
+        await nextTick();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect({ first, reopened: mounted.value.arranged.value }).toEqual({ first: [`b`, `a`], reopened: [`a`, `b`, `c`] });
+        mounted.unmount();
     });
 
     it(`stands on its folder and asks for the account's sandboxes once up and each time the panel opens`, async () => {

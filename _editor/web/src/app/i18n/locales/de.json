@@ -8945,7 +8945,6 @@
             "neverCameUpNotOn": "Sie ist nie gestartet, und keiner Ihrer Computer ({machines}) hat sie: Dort gibt es nichts zu löschen.",
             "startedElsewhere": "Die Einrichtung auf einem anderen Computer begonnen? Führen Sie dort Folgendes aus:",
             "thisComputer": "Dieser Computer",
-            "thisComputerNote": "Ihre Dateien, keine Sandbox nötig",
             "notOnAccount": "Diese Sandbox ist nicht mehr in Ihrem Konto",
             "notOnAccountDetail": "Das ist die Sandbox, die Sie zuletzt geöffnet hatten.",
             "switchToThisComputer": "Zu „Dieser Computer“ wechseln",

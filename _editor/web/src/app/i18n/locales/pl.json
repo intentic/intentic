@@ -8473,7 +8473,6 @@
             "neverCameUpNotOn": "Nigdy nie wystartowała, a żaden z podłączonych komputerów ({machines}) nie ma jej kontenera, więc nie ma tam czego usuwać.",
             "startedElsewhere": "Konfigurację zaczęto na innym komputerze? Uruchom to tam:",
             "thisComputer": "Ten komputer",
-            "thisComputerNote": "Twoje pliki, bez sandboxa",
             "notOnAccount": "Tego sandboxa nie ma już na Twoim koncie",
             "notOnAccountDetail": "To sandbox, który był otwarty ostatnio.",
             "switchToThisComputer": "Przełącz na Ten komputer",

@@ -56,6 +56,11 @@ export interface FolderPlace {
     readonly signingIn: ComputedRef<boolean>;
     readonly signIn: () => Promise<void>;
     readonly addSandbox: (event: MouseEvent) => void;
+    /**
+     * The reader's order of their sandboxes, as the workspace last told the app (localHost.ts `roster`, in the switcher's
+     * order): a local window's storage is its own origin's, which never saw Home's drag. Empty in the workspace.
+     */
+    readonly arranged: Ref<readonly string[]>;
 }
 
 export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
@@ -67,6 +72,14 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
     const failure = ref<{ readonly id: string; readonly message: string } | undefined>(undefined);
     const busy = ref<string | undefined>(undefined);
     const signingIn = computed(() => busy.value === `:sign-in`);
+    const arranged = ref<readonly string[]>([]);
+    const readArranged = async (): Promise<void> => {
+        try {
+            arranged.value = (await localHost().roster()).sandboxes.map((entry) => entry.id);
+        } catch (error) {
+            console.warn(`[local] the workspace's order of the sandboxes could not be read:`, error);
+        }
+    };
 
     // One errand at a time; the panel closes on its success, and its failure is said by the row it is about.
     const attempt = async (id: string, act: () => Promise<void>): Promise<void> => {
@@ -87,12 +100,17 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
 
     // The window boots on its folder alone (the app keeps the first list off the network), so the account's sandboxes are
     // asked for once it is up, for Alt+1…9, and again each time the panel opens, since nothing else here keeps them fresh.
+    // The workspace's order of them comes with them, from the app's record of what the workspace last said.
     if (local) {
-        onMounted(() => void sandbox.refresh());
+        onMounted(() => {
+            void sandbox.refresh();
+            void readArranged();
+        });
         watch(open, (isOpen) => {
             if (isOpen) {
                 failure.value = undefined;
                 void sandbox.refresh();
+                void readArranged();
             }
         });
     }
@@ -101,6 +119,7 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         folder,
         local,
         failure,
+        arranged,
         openFromFolder: (sandboxId) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId)),
         openSettingsFromFolder: (sandboxId, path) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId, path)),
         openHome: async (event) => {
