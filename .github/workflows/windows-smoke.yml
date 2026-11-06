@@ -295,7 +295,17 @@ jobs:
         shell: pwsh
         run: |
           if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) { exit 0 }
-          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh resume
+          # The resume is idempotent, and a WSL service busy after the tiers answers Wsl/Service/WSAETIMEDOUT without
+          # reaching the distro (release run 42300501208), so it is made again. One that never gets through still
+          # fails the step: the pause's failsafe timer gives the workers back, but only an hour later.
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh resume
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Output "resume attempt $attempt exited $LASTEXITCODE"
+            if ($attempt -lt 4) { Start-Sleep -Seconds 15 }
+          }
+          Write-Output "::warning::the fleet's workers were not resumed; the pause's failsafe timer resumes them"
+          exit 1
         env:
           FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
 
