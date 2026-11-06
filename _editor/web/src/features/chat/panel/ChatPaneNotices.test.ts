@@ -23,7 +23,7 @@ const accounts = ref<OauthAccount[]>([]);
 const servingAccount = ref<ServingAccount | undefined>(undefined);
 
 // The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
-jest.mock(`../../../models/conversations/accounts/useChat-catalog`, () => ({ loadTrialStatus }));
+jest.mock(`../../../models/conversations/accounts/useChat-catalog`, () => ({ loadTrialStatus, loadProviderModels: jest.fn(async () => {}) }));
 jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         // Shallow, as the conversation list holds them (sandboxShallowRef): a deep ref would unwrap the selection's refs.
@@ -41,7 +41,7 @@ jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ id: string; hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, active, activeSandboxId: ref<string | undefined>(undefined) }) }));
 // The plan state as the strip reads it: settable, so what counts as low is hostedHours.ts's own rule.
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);

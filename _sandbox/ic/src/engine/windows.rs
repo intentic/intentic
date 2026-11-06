@@ -796,6 +796,11 @@ const KEEPER_REFUSED: i32 = 3;
 /// The keeper exited on purpose: one already runs in the distro (two starts at once, or a start while the first keeper
 /// still brings dockerd up), and the engine is on its way rather than broken.
 const KEEPER_ALREADY_RUNNING: i32 = 4;
+/// wsl.exe's own exit when it could not run the keeper at all, rather than a code of the keeper's: nothing reached the
+/// distro, and its log says nothing. A fresh import's first start answered it once with the distro up a moment before
+/// (the nightly Windows smoke, 2026-11-06, right after `--set-sparse` found the new disk still held), and the same start
+/// made again comes up, so it is made once more before the install is called failed.
+const WSL_COULD_NOT_RUN: i32 = -1;
 
 fn wait_for_engine(
     record: &EngineRecord,
@@ -804,16 +809,23 @@ fn wait_for_engine(
 ) -> Result<(), String> {
     let deadline = Instant::now() + limit;
     let mut another_keeper = false;
+    let mut relaunched = false;
     while Instant::now() < deadline {
         if engine_answers(record) {
             return Ok(());
         }
         // A keeper that has ended will not bring the engine up however long this waits: say why now. One that ended
-        // because another keeper runs leaves the wait to that one.
+        // because another keeper runs leaves the wait to that one; one wsl.exe could not run at all is started once more.
         if !another_keeper {
             if let Ok(Some(status)) = keeper.try_wait() {
                 if engine_answers(record) {
                     return Ok(());
+                }
+                if status.code() == Some(WSL_COULD_NOT_RUN) && !relaunched {
+                    relaunched = true;
+                    std::thread::sleep(Duration::from_secs(2));
+                    *keeper = spawn_keeper(&record.distro, port_from_host(&record.host))?;
+                    continue;
                 }
                 if status.code() != Some(KEEPER_ALREADY_RUNNING) {
                     return Err(keeper_ended(record, status.code()));
