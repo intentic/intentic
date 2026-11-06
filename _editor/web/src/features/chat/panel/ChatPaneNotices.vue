@@ -11,7 +11,10 @@ import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import ChatTrialStrip from "./ChatTrialStrip.vue";
 import ChatLandStrip from "./landing/ChatLandStrip.vue";
+import ChatShipStrip from "./landing/ChatShipStrip.vue";
 import { landStripOf } from "./landing/landStrip";
+import { shipsFrom } from "./landing/shipStrip";
+import { useAudience } from "../../../app/useAudience";
 import { useRole } from "../../../client/sandbox/useRole";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import SealAsks from "./seal/SealAsks.vue";
@@ -68,6 +71,15 @@ const landStrip = computed(() => {
     return agent === undefined || strip === undefined ? undefined : { agent, strip };
 });
 
+// Once that work is in the tree, the two presses that take it the rest of the way, commit then push (shipStrip.ts):
+// for a maintainer reading in a developer's words, since a maker's save is never one chat's files alone.
+const { maker } = useAudience();
+const shipAgent = computed(() => {
+    const agent = agentById(conversation.value.conversationId);
+    const reader = { canShip: canShip.value, maker: maker.value, streaming: streaming.value, elsewhere: conversation.value.box.value !== undefined };
+    return shipsFrom(agent, reader) ? agent : undefined;
+});
+
 // The credential the next turn runs on can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
 // Asked of the account the turn will actually run on (servingAccount), never the first listed: on auto, an expired
 // first account is one the turn skips.
@@ -98,6 +110,7 @@ const activeAccountReauth = computed(() => {
         </Button>
     </div>
     <ChatLandStrip v-else-if="landStrip !== undefined" :agent="landStrip.agent" :strip="landStrip.strip" />
+    <ChatShipStrip v-else-if="shipAgent !== undefined" :agent="shipAgent" />
     <ChatAccountPanel />
     <!-- Whether the privacy shield lets this conversation's provider run, said before the send rather than after it. -->
     <ChatPrivacyStrip />

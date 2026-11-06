@@ -3208,6 +3208,31 @@
         "chatLandStrip": {
             "files": "{count} plik | {count} pliki | {count} plików"
         },
+        "chatShipStrip": {
+            "commit": "Commituj",
+            "commitFiles": "Commituj {count} plik | Commituj {count} pliki | Commituj {count} plików",
+            "onlyThisChat": "Trafiają tam tylko pliki tego czatu. Nic innego w drzewie nie zostanie zacommitowane.",
+            "changes": "Zmiany",
+            "openChanges": "Otwórz Zmiany",
+            "writing": "Trwa pisanie wiadomości commita",
+            "modelWriting": "{model} pisze wiadomość commita",
+            "noMessage": "Nie napisano wiadomości. Wpisz ją, aby zacommitować.",
+            "commitFailed": "Commit nie powiódł się",
+            "nothingCommitted": "Nic nie zostało zacommitowane.",
+            "inChanges": "Zacommituj to w Zmianach",
+            "blockConflicts": "Repozytorium, które zmienił, ma najpierw konflikty do rozwiązania.",
+            "blockShared": "Inny czat wprowadził niektóre z tych samych plików.",
+            "blockStaged": "Inna przygotowana praca trafiłaby do tego samego commita.",
+            "committing": "Trwa commitowanie",
+            "answerInChanges": "Czeka na twoją odpowiedź w Zmianach",
+            "committed": "Zacommitowano",
+            "toPush": "{count} commit do wypchnięcia | {count} commity do wypchnięcia | {count} commitów do wypchnięcia",
+            "unpublished": "Gałąź jeszcze nieopublikowana",
+            "others": "w tym {count} spoza tego czatu",
+            "othersHint": "Git wypycha całą gałąź, więc commity zrobione gdzie indziej pójdą razem z commitami tego czatu.",
+            "pushRefused": "Push odrzucony",
+            "seeWhy": "Dlaczego?"
+        },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
             "stopped": "Zatrzymano.",

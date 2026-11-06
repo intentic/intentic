@@ -4,7 +4,7 @@ import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agen
 import { commitDraftPaceKey, storedJson, storeJson } from "../../../../app/storage/browserStorage";
 import { type Progress, progressAt } from "../../../../components/progress/progress";
 import { useAgents } from "../../../../models/fleet/useAgents";
-import { draftRunning } from "../changeOrigins";
+import { draftRunning } from "../../../../models/changes/landedDraft";
 
 // How long a commit message usually takes to draft, so the field's mark can fill a ring against it instead of spinning
 // with no end in sight (CommitField.vue). This file only learns the expected length; the ring is the one progress model's. Learned from drafts that were written: the roster carries every live agent's,

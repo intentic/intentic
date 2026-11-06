@@ -68,8 +68,10 @@ jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name
 jest.mock(`./seal/SealAsks.vue`, () => ({ default: defineComponent({ name: `SealAsks`, setup: () => () => undefined }) }));
 // The privacy shield's strip reads the shield's own status, and has its own test (privacy/ChatPrivacyStrip.test.ts).
 jest.mock(`./privacy/ChatPrivacyStrip.vue`, () => ({ default: defineComponent({ name: `ChatPrivacyStrip`, setup: () => () => undefined }) }));
-// The land strip has its own tests (landing/); its presses would pull in the fleet's whole action layer here.
+// The land and ship strips have their own tests (landing/); their presses would pull in the fleet's whole action layer
+// and the git review here.
 jest.mock(`./landing/ChatLandStrip.vue`, () => ({ default: defineComponent({ name: `ChatLandStrip`, setup: () => () => undefined }) }));
+jest.mock(`./landing/ChatShipStrip.vue`, () => ({ default: defineComponent({ name: `ChatShipStrip`, setup: () => () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     RouterLink: RouterLinkStub as never,

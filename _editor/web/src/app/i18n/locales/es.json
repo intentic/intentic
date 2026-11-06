@@ -3208,6 +3208,31 @@
         "chatLandStrip": {
             "files": "{count} archivo | {count} archivos"
         },
+        "chatShipStrip": {
+            "commit": "Hacer commit",
+            "commitFiles": "Hacer commit de {count} archivo | Hacer commit de {count} archivos",
+            "onlyThisChat": "Solo entran los archivos de este chat. Nada más del árbol se incluye en el commit.",
+            "changes": "Cambios",
+            "openChanges": "Abrir Cambios",
+            "writing": "Escribiendo el mensaje del commit",
+            "modelWriting": "{model} está escribiendo el mensaje del commit",
+            "noMessage": "No se escribió ningún mensaje. Escribe uno para hacer commit.",
+            "commitFailed": "El commit falló",
+            "nothingCommitted": "No se hizo commit de nada.",
+            "inChanges": "Haz el commit en Cambios",
+            "blockConflicts": "Un repositorio que cambió tiene conflictos que resolver primero.",
+            "blockShared": "Otro chat integró algunos de los mismos archivos.",
+            "blockStaged": "Otro trabajo preparado entraría en el mismo commit.",
+            "committing": "Haciendo commit",
+            "answerInChanges": "Esperando tu respuesta en Cambios",
+            "committed": "Commit hecho",
+            "toPush": "{count} commit por enviar | {count} commits por enviar",
+            "unpublished": "Rama aún sin publicar",
+            "others": "incluidos {count} que no son de este chat",
+            "othersHint": "Git envía la rama entera, así que los commits hechos en otro sitio van con los de este chat.",
+            "pushRefused": "Push rechazado",
+            "seeWhy": "Ver por qué"
+        },
         "sandboxNotice": {
             "compacted": "Contexto compactado para liberar espacio.",
             "stopped": "Detenido.",

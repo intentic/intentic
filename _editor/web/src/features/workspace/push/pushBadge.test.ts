@@ -1,5 +1,5 @@
 import { pushBadge } from "./pushBadge";
-import type { PushQuestion, StandingVerdict } from "./usePushFlow";
+import type { PushQuestion, StandingVerdict } from "../../../models/changes/usePushFlow";
 
 // What the rails' Workspace tile says about a push, from anywhere in the app.
 

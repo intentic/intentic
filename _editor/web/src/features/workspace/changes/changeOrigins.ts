@@ -5,6 +5,7 @@ import type { LandedMessage, LandedMessageDraft, LandedMessageStep } from "@inte
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
+import { askingModel, draftRunning } from "../../../models/changes/landedDraft";
 
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
 // Only agents are ever named — an unlanded change carries no origin, and absence is the signal, not a "you" badge.
@@ -102,9 +103,6 @@ export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): Lan
 
 // The commit message a landed message makes (landedCommitMessage), or undefined when nothing is written yet.
 export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => (landed === undefined ? undefined : landedCommitMessage(landed));
-
-// True while a draft has no outcome yet — the state every wait-related surface keys on.
-export const draftRunning = (draft: LandedMessageDraft | undefined): boolean => draft !== undefined && draft.outcome === undefined;
 
 // Formats milliseconds as seconds, or `Xm Ys` once past a minute.
 const seconds = (ms: number): string => {
@@ -210,13 +208,6 @@ export interface ChipMessageState {
     // Box holds user-typed text (commitMessage's `boxIsYours`); the chip's message won't overwrite it.
     readonly boxIsYours: boolean;
 }
-
-// The model the draft is waiting on right now: its newest step, while that step is still out. Undefined while the diff is
-// still being read, and between a refusal and the next ask.
-export const askingModel = (draft: LandedMessageDraft | undefined): string | undefined => {
-    const step = draft?.steps.at(-1);
-    return step?.status === `asking` ? modelLabelFor(step.provider, step.model) : undefined;
-};
 
 // The model whose answer became the message, once one has.
 const answeredModel = (draft: LandedMessageDraft | undefined): string | undefined => {

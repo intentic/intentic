@@ -3208,6 +3208,31 @@
         "chatLandStrip": {
             "files": "{count} fichier | {count} fichiers"
         },
+        "chatShipStrip": {
+            "commit": "Commiter",
+            "commitFiles": "Commiter {count} fichier | Commiter {count} fichiers",
+            "onlyThisChat": "Seuls les fichiers de ce chat y entrent. Rien d'autre de l'arborescence n'est commité.",
+            "changes": "Modifications",
+            "openChanges": "Ouvrir Modifications",
+            "writing": "Rédaction du message de commit",
+            "modelWriting": "{model} rédige le message de commit",
+            "noMessage": "Aucun message n'a été rédigé. Saisissez-en un pour commiter.",
+            "commitFailed": "Échec du commit",
+            "nothingCommitted": "Rien n'a été commité.",
+            "inChanges": "Commiter ceci dans Modifications",
+            "blockConflicts": "Un dépôt qu'il a modifié a d'abord des conflits à résoudre.",
+            "blockShared": "Un autre chat a intégré certains des mêmes fichiers.",
+            "blockStaged": "D'autres modifications indexées entreraient dans le même commit.",
+            "committing": "Commit en cours",
+            "answerInChanges": "En attente de votre réponse dans Modifications",
+            "committed": "Commité",
+            "toPush": "{count} commit à pousser | {count} commits à pousser",
+            "unpublished": "Branche pas encore publiée",
+            "others": "dont {count} hors de ce chat",
+            "othersHint": "Git pousse toute la branche, donc les commits faits ailleurs partent avec ceux de ce chat.",
+            "pushRefused": "Push refusé",
+            "seeWhy": "Pourquoi ?"
+        },
         "sandboxNotice": {
             "compacted": "Contexte compacté pour libérer de la place.",
             "stopped": "Arrêté.",

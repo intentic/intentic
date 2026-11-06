@@ -45,7 +45,6 @@ import {
     ALL_SIDES,
     chipMessageNotice,
     commitMessageOf,
-    draftRunning,
     isFrom,
     landedMessage,
     originHue,
@@ -53,6 +52,7 @@ import {
     summarizeOrigins,
     YOURS,
 } from "./changeOrigins";
+import { draftRunning } from "../../../models/changes/landedDraft";
 import { unfinishedMark } from "../../../models/agent-status/agentStatus-chips";
 import { currentAction } from "../../../models/agent-status/agentStatus-meta";
 import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
@@ -63,7 +63,7 @@ import { type ActionFailure, COMMIT_SCOPE, type PressFace, useChanges } from "..
 import { operationFix, unreadableFix } from "../../../models/changes/gitFixes";
 import FixWithAgent from "../../../parts/fleet/FixWithAgent.vue";
 import GitFailureNotice from "./GitFailureNotice.vue";
-import { usePushFlow } from "../push/usePushFlow";
+import { usePushFlow } from "../../../models/changes/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../../models/workspace/changes/changeModules";

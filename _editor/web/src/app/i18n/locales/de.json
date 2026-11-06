@@ -3208,6 +3208,31 @@
         "chatLandStrip": {
             "files": "{count} Datei | {count} Dateien"
         },
+        "chatShipStrip": {
+            "commit": "Committen",
+            "commitFiles": "{count} Datei committen | {count} Dateien committen",
+            "onlyThisChat": "Nur die Dateien dieses Chats gehen hinein. Sonst wird nichts im Baum committet.",
+            "changes": "Änderungen",
+            "openChanges": "Änderungen öffnen",
+            "writing": "Commit-Nachricht wird geschrieben",
+            "modelWriting": "{model} schreibt die Commit-Nachricht",
+            "noMessage": "Es wurde keine Nachricht geschrieben. Gib eine ein, um zu committen.",
+            "commitFailed": "Commit fehlgeschlagen",
+            "nothingCommitted": "Es wurde nichts committet.",
+            "inChanges": "In Änderungen committen",
+            "blockConflicts": "Ein betroffenes Repository hat zuerst Konflikte zu lösen.",
+            "blockShared": "Ein anderer Chat hat einige derselben Dateien übernommen.",
+            "blockStaged": "Andere vorgemerkte Arbeit käme in denselben Commit.",
+            "committing": "Wird committet",
+            "answerInChanges": "Wartet auf deine Antwort in Änderungen",
+            "committed": "Committet",
+            "toPush": "{count} Commit zu pushen | {count} Commits zu pushen",
+            "unpublished": "Branch noch nicht veröffentlicht",
+            "others": "davon {count} nicht aus diesem Chat",
+            "othersHint": "Git pusht den ganzen Branch, also gehen anderswo erstellte Commits mit denen dieses Chats.",
+            "pushRefused": "Push abgelehnt",
+            "seeWhy": "Warum?"
+        },
         "sandboxNotice": {
             "compacted": "Kontext verdichtet, um Platz zu schaffen.",
             "stopped": "Gestoppt.",

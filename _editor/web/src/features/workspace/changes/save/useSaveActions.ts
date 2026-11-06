@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { ahead, behind, syncable, unpublished } from "../../../../models/workspace/push/outgoingWork";
-import { usePushFlow } from "../../push/usePushFlow";
+import { usePushFlow } from "../../../../models/changes/usePushFlow";
 import { discardTargets, fileRows, type ChangedFile } from "./changedFiles";
 import { truncatedTotal } from "../../../../models/workspace/changes/truncation";
 import { useChanges } from "../../../../models/changes/useChanges";

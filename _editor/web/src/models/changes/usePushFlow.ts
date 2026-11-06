@@ -1,15 +1,15 @@
-import { SHARED_SCOPE, sameScope, workspaceView, type ViewScope } from "../../../app/workspaceScope";
+import { SHARED_SCOPE, sameScope, workspaceView, type ViewScope } from "../../app/workspaceScope";
 import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
 import type { PushRun, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
-import { type SyncTarget, useChanges } from "../../../models/changes/useChanges";
-import { workspaceChangedSince, workspaceChangeMark } from "../../../models/workspace/changes/useWorkspaceLive";
-import { usePushRun } from "../../../models/workspace/push/usePushRun";
-import { ahead, behind, unpublished } from "../../../models/workspace/push/outgoingWork";
-import { credentialHostOf, pushNeedsPull } from "../../../models/workspace/push/refusalSummary";
+import { type SyncTarget, useChanges } from "./useChanges";
+import { workspaceChangedSince, workspaceChangeMark } from "../workspace/changes/useWorkspaceLive";
+import { usePushRun } from "../workspace/push/usePushRun";
+import { ahead, behind, unpublished } from "../workspace/push/outgoingWork";
+import { credentialHostOf, pushNeedsPull } from "../workspace/push/refusalSummary";
 import { t } from "@intentic/ui/i18n";
-import { type AgentFix, combinedFix } from "../../../models/fixes/agentFix";
+import { type AgentFix, combinedFix } from "../fixes/agentFix";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
 // that started it: any view calling this gets the same instance. `askSync` is the one door every push goes
@@ -263,12 +263,13 @@ export function usePushFlow() {
         void send({ ...push, targets });
     };
 
-    // The one door every Push, Sync and Publish arrives at, so every refusal is asked about the same way.
-    const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
+    // The one door every Push, Sync and Publish arrives at, so every refusal is asked about the same way. Sent from the
+    // copy the Changes panel is reading unless the press names its own (a chat pushes what it committed in the shared tree).
+    const askSync = (verb: string, what: string, targets: readonly SyncTarget[], view: ViewScope = workspaceView.value): void => {
         if (sending.value) {
             return;
         }
-        void send({ verb, what, targets, view: workspaceView.value });
+        void send({ verb, what, targets, view });
     };
 
     // The same push again, hook and all.

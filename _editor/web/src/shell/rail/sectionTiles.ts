@@ -8,7 +8,7 @@ import { extensionsLoaded } from "../../extension-host/loader";
 import { devicesWorking } from "../../features/sandbox/devices/runners/deviceWork";
 import { pushBadge } from "../../features/workspace/push/pushBadge";
 import { here, page } from "../../lib/routes/links";
-import { usePushFlow } from "../../features/workspace/push/usePushFlow";
+import { usePushFlow } from "../../models/changes/usePushFlow";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useChanges } from "../../models/changes/useChanges";
 import { usePanels } from "../../models/extensions/usePanels";

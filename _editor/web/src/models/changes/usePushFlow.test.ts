@@ -1,9 +1,9 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { PushRun, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
-import { workspaceView, type ViewScope } from "../../../app/workspaceScope";
+import { workspaceView, type ViewScope } from "../../app/workspaceScope";
 import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
-import { refusalSummary } from "../../../models/workspace/push/refusalSummary";
+import { refusalSummary } from "../workspace/push/refusalSummary";
 
 // No case here mounts a component: a push must finish, send, and raise its question even after the panel that
 // started it is gone. Each mock owns its state and resets it below, and the flow itself is evaluated afresh, so
@@ -12,7 +12,7 @@ import { refusalSummary } from "../../../models/workspace/push/refusalSummary";
 
 /* The watcher's count of change batches, which decides whether a verdict is still about the tree in front of the user.
    A count, not a clock: a write in the same millisecond as the verdict is still a write since it. */
-jest.mock(`../../../models/workspace/changes/useWorkspaceLive`, () => {
+jest.mock(`../workspace/changes/useWorkspaceLive`, () => {
     let changes = 1;
     return {
         workspaceChangeMark: () => changes,
@@ -23,7 +23,7 @@ jest.mock(`../../../models/workspace/changes/useWorkspaceLive`, () => {
     };
 });
 
-jest.mock(`../../../models/changes/useChanges`, () => {
+jest.mock(`./useChanges`, () => {
     // One of each, shared like the real module's singletons; a fresh spy per call would give the flow a different
     // `syncAll` than the one under assertion.
     const actionBusy = ref(false);
@@ -45,7 +45,7 @@ jest.mock(`../../../models/changes/useChanges`, () => {
 
 // Push runs live behind useChanges (mocked above); this seam only tracks the terminal a refused push ran in,
 // one per repo, like the daemon.
-jest.mock(`../../../models/workspace/push/usePushRun`, () => {
+jest.mock(`../workspace/push/usePushRun`, () => {
     const sessions = new Map<string, string>();
     return {
         usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: jest.fn() }),
@@ -67,13 +67,13 @@ const load = async () => {
     jest.clearAllMocks();
     workspaceView.value = {};
     // Seams before the flow: each is asked for its state and put back to the start before the flow captures it.
-    const changes = await import(`../../../models/changes/useChanges`);
-    const pushRuns = (await import(`../../../models/workspace/push/usePushRun`)) as unknown as {
+    const changes = await import(`./useChanges`);
+    const pushRuns = (await import(`../workspace/push/usePushRun`)) as unknown as {
         pushTerminal: (repo: string, session: string | undefined) => void;
         clearPushTerminals: () => void;
     };
     pushRuns.clearPushTerminals();
-    const live = (await import(`../../../models/workspace/changes/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
+    const live = (await import(`../workspace/changes/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
     // As with the seams above: the stamp is the mock's own, so each case opens on a tree nobody has written to.
     live.quietTree();
     const module = await freshImport<typeof import("./usePushFlow")>("./usePushFlow", import.meta.url);

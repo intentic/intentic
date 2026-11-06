@@ -1,5 +1,5 @@
 import type { ViewBadge } from "@intentic/extension-api";
-import type { PushQuestion, StandingVerdict } from "./usePushFlow";
+import type { PushQuestion, StandingVerdict } from "../../../models/changes/usePushFlow";
 import { t } from "@intentic/ui/i18n";
 
 // What a push in flight says on the Workspace tile of either rail, the desktop's and the phone's, from one place so the

@@ -3,7 +3,7 @@ import { Button, Code, CopyButton, Icon, timeAgo } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { usePushFlow } from "../../features/workspace/push/usePushFlow";
+import { usePushFlow } from "../../models/changes/usePushFlow";
 import { here, page } from "../../lib/routes/links";
 import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useT } from "@intentic/ui/i18n";

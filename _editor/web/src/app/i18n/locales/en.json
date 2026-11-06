@@ -3208,6 +3208,31 @@
         "chatLandStrip": {
             "files": "{count} file | {count} files"
         },
+        "chatShipStrip": {
+            "commit": "Commit",
+            "commitFiles": "Commit {count} file | Commit {count} files",
+            "onlyThisChat": "Only this chat's files go in. Nothing else in the tree is committed.",
+            "changes": "Changes",
+            "openChanges": "Open Changes",
+            "writing": "Writing the commit message",
+            "modelWriting": "{model} is writing the commit message",
+            "noMessage": "No message was written. Type one to commit.",
+            "commitFailed": "Commit failed",
+            "nothingCommitted": "Nothing was committed.",
+            "inChanges": "Commit this in Changes",
+            "blockConflicts": "A repository it changed has conflicts to resolve first.",
+            "blockShared": "Another chat landed some of the same files.",
+            "blockStaged": "Other staged work would go into the same commit.",
+            "committing": "Committing",
+            "answerInChanges": "Waiting on your answer in Changes",
+            "committed": "Committed",
+            "toPush": "{count} commit to push | {count} commits to push",
+            "unpublished": "Branch not published yet",
+            "others": "including {count} not from this chat",
+            "othersHint": "Git pushes the whole branch, so commits made elsewhere go with this chat's.",
+            "pushRefused": "Push refused",
+            "seeWhy": "See why"
+        },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
             "stopped": "Stopped.",
