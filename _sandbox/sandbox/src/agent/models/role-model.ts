@@ -13,6 +13,7 @@ import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "../../engines
 import { rungCapacity, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";
+import { SealedDeadlineError } from "../run/sealed/sealed-deadline.js";
 import { opt } from "../../opt.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, type AgentExecutionContext } from "../../workload/agent-execution.js";
 import { createRepeatGate } from "../../logs/repeat-gate.js";
@@ -110,9 +111,15 @@ export type RoleModelProgress = (attempts: readonly RoleModelAttempt[]) => void;
 // "[object Object]" in the report.
 const refusalText = (error: unknown): string => errorMessage(error);
 
-// In-memory memo: a spent allowance lasts REFUSED_FOR_MS; any other refusal lasts OTHER_REFUSED_FOR_MS.
+// In-memory memo: a spent allowance lasts REFUSED_FOR_MS; any other refusal lasts OTHER_REFUSED_FOR_MS, except a
+// BAD_SAMPLE, which earns none.
 export const REFUSED_FOR_MS = 2 * 60 * 60 * 1000;
 export const OTHER_REFUSED_FOR_MS = 10 * 60 * 1000;
+
+// An unusable reply or a missed deadline: one bad sample, not a lasting condition, so the next ask asks the rung again.
+// A deadline memo held Devin, whose answers run 3–20s against the 20s deadline, off every helper job for ten minutes
+// after one slow commit subject, with its accounts free (2026-11-06).
+const BAD_SAMPLES = [UnusableAnswerError, SealedDeadlineError] as const;
 
 interface Memo {
     readonly at: number;
@@ -335,8 +342,7 @@ export const askRoleModel = async <T>(
                     throw error;
                 }
                 services.perf.record("role.model", spent(), { role, provider: choice.provider, model: choice.model }, true);
-                // An unusable reply earns no memo: a bad sample, not a lasting condition, unlike other refusals.
-                if (!(error instanceof UnusableAnswerError)) {
+                if (!BAD_SAMPLES.some((kind) => error instanceof kind)) {
                     remember(key, refusalText(error), Date.now());
                 }
                 services.logger.debug({ err: error, role, model: choice.model }, "role model: refused, trying the next in the chain");

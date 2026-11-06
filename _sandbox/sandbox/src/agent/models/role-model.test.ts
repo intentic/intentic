@@ -4,6 +4,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { type SetupLadder, setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import { unstubbed } from "@intentic/testing";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../system/resources/perf.js";
 import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
@@ -22,11 +23,13 @@ const readiness = async (): Promise<Record<NativeProvider, boolean>> => {
 
 // Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took. Each stands for the model's
 // answer to one sealed request: its words, or the failure its loop reports as an error frame. It is handed what the
-// request carried: the model, and the issued execution context and the directory it runs in.
+// request carried: the model, and the issued execution context and the directory it runs in, and the signal that stops
+// it (its deadline, a cancel).
 interface SealedRun {
     readonly model: string;
     readonly execution: AgentExecutionContext;
     readonly cwd: string;
+    readonly stop: AbortSignal;
 }
 const oneShot = jest.fn<(ask: SealedRun) => Promise<string>>();
 const geminiOneShot = jest.fn<(ask: SealedRun) => Promise<string>>();
@@ -69,7 +72,7 @@ const adapterFor = (provider: AgentProvider, harness: AgentHarness): Adapter => 
             return {
                 ok: true,
                 request,
-                run: (spec) => framesOf(run, { model: input.model ?? ``, execution: request.execution, cwd: spec.cwd }),
+                run: (spec) => framesOf(run, { model: input.model ?? ``, execution: request.execution, cwd: spec.cwd, stop: context.base.signal }),
             };
         },
         health: unasked.health,
@@ -410,6 +413,29 @@ test("an unusable reply leaves no memo: the same rung is asked again on the next
     const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
     oneShot.mockResolvedValueOnce(`[tool_call: glob for pattern '**']`);
     await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+
+    oneShot.mockClear();
+    const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+
+    expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
+    expect(oneShot).toHaveBeenCalledTimes(1);
+    expect(answer.skipped).toEqual([]);
+});
+
+test("a rung that misses the deadline leaves no memo: the same rung is asked again on the next call", async () => {
+    const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(clock));
+    // The first rung never answers: only the sealed request's own deadline stops it, and its loop then gives up.
+    oneShot.mockImplementationOnce(
+        (ask) => new Promise<string>((_answer, fail) => ask.stop.addEventListener(`abort`, () => fail(new Error(`stopped`)), { once: true })),
+    );
+    const first = askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());
+    await waitFor(() => expect(oneShot).toHaveBeenCalledTimes(1), SETTLES);
+    await advanceTimersByTimeAsync(20_000);
+    const fellBack = await first;
+    expect(fellBack.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
+    expect(fellBack.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: `the model did not answer within 20s` }]);
 
     oneShot.mockClear();
     const answer = await askRoleModel(fakeServices(pinned), execution, ROLE, DRAFT, signal());

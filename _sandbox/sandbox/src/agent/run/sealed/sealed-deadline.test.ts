@@ -1,4 +1,4 @@
-import { sealedDeadline } from "./sealed-deadline.js";
+import { SealedDeadlineError, sealedDeadline } from "./sealed-deadline.js";
 
 // The clock every sealed request runs under: deadline and cancel stop the call alike, and only the deadline names itself.
 
@@ -30,6 +30,9 @@ test("a deadline that passes stops the call and names itself in every failure", 
     expect(deadline.unanswered().message).toBe("the model did not answer within 0.01s");
     expect(claimed.message).toBe("the model did not answer within 0.01s");
     expect(claimed.cause).toBe(torn);
+    // Typed, so a helper's chain can tell a slow answer from a model that cannot serve (role-model.ts).
+    expect(claimed).toBeInstanceOf(SealedDeadlineError);
+    expect(deadline.unanswered()).toBeInstanceOf(SealedDeadlineError);
 });
 
 test("the caller's cancel stops the call without the deadline claiming what it threw", async () => {
@@ -43,6 +46,7 @@ test("the caller's cancel stops the call without the deadline claiming what it t
     const torn = new Error("aborted");
     expect(deadline.expired()).toBe(false);
     expect(deadline.unanswered().message).toBe("the model did not answer");
+    expect(deadline.unanswered()).not.toBeInstanceOf(SealedDeadlineError);
     expect(deadline.claim(torn)).toBe(torn);
 });
 

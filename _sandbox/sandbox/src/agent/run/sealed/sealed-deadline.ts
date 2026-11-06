@@ -4,6 +4,10 @@ import { whenAborted } from "@intentic/base/async";
 // A helper is waited on by something with a person behind it (a commit box, a card), so a model that will not answer is
 // stepped over after seconds rather than ridden out the way a turn rides out a slow provider.
 
+// The clock ran out, as a type rather than a sentence: a helper's chain (agent/models/role-model.ts) reads it as one slow
+// answer, not as a model that cannot serve, and keeps asking it.
+export class SealedDeadlineError extends Error {}
+
 export interface SealedDeadline {
     // Whether the clock, rather than the caller, is what ended the call.
     readonly expired: () => boolean;
@@ -25,7 +29,7 @@ export const sealedDeadline = (caller: AbortSignal, ms: number, stop: () => void
         stop();
     }, ms);
     const overdue = (cause?: unknown): Error =>
-        new Error(`the model did not answer within ${namedMs / 1_000}s`, cause === undefined ? undefined : { cause });
+        new SealedDeadlineError(`the model did not answer within ${namedMs / 1_000}s`, cause === undefined ? undefined : { cause });
     return {
         expired: () => expired,
         unanswered: () => (expired ? overdue() : new Error("the model did not answer")),
