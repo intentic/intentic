@@ -5092,6 +5092,16 @@
         "leakSelectionReport": {
             "action": "Powinno być zamaskowane",
             "note": "Od teraz ta dokładna wartość będzie maskowana we wszystkich rozmowach."
+        },
+        "keyBalance": {
+            "left": "Zostało {amount}",
+            "leftOf": "Zostało {amount} z {limit}",
+            "title": "Środki: {key}",
+            "remaining": "Zostało",
+            "limit": "Limit",
+            "resets": "Odnawia się",
+            "measured": "Odczytano",
+            "note": "Odczytane u dostawcy tym kluczem i odczytywane ponownie po każdej turze."
         }
     },
     "common": {

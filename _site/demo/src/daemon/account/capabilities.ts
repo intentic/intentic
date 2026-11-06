@@ -319,6 +319,20 @@ export const endpointModels = (id: string): SandboxHandlerOutput<`endpoints`, `m
     return { models, default: listed[0] ?? `` };
 };
 
+// What a key's vendor tells it about its credit, as the daemon reads it (endpoints/key-balance.ts): Moonshot its account's
+// balance, an OpenRouter key its own cap, every other vendor and any server of the shop's nothing.
+export const endpointBalance = (id: string): SandboxHandlerOutput<`endpoints`, `balance`> => {
+    const endpoint = existing(id);
+    const vendor = endpoint.kind === `endpoint` ? keyProviderFor(String(endpoint.config[`baseUrl`] ?? ``))?.id : undefined;
+    if (vendor === `moonshot`) {
+        return { balance: { remaining: 18.42, currency: `USD`, measuredAt: Date.now() } };
+    }
+    if (vendor === `openrouter`) {
+        return { balance: { remaining: 2.1, currency: `USD`, limit: 25, measuredAt: Date.now() } };
+    }
+    return {};
+};
+
 /** The endpoints a chat may be addressed to, as the daemon's providers list names them: a vendor's key filed beside the
  *  sign-in it is the alternative to. */
 export const runnableEndpoints = () =>

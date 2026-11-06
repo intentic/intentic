@@ -5092,6 +5092,16 @@
         "leakSelectionReport": {
             "action": "Debería haberse enmascarado",
             "note": "Este valor exacto se enmascara desde ahora en todas las conversaciones."
+        },
+        "keyBalance": {
+            "left": "Quedan {amount}",
+            "leftOf": "Quedan {amount} de {limit}",
+            "title": "Saldo: {key}",
+            "remaining": "Queda",
+            "limit": "Tope",
+            "resets": "Se reinicia",
+            "measured": "Leído",
+            "note": "Leído del proveedor con esta clave, y de nuevo al terminar cada turno."
         }
     },
     "common": {

@@ -6,6 +6,7 @@ import { findHostServers } from "./host-servers.js";
 import { localModelFit } from "./local-model-fit.js";
 import { deleteLocalModelWeights, localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
 import { endpointConfigOf } from "./local-model.js";
+import { createKeyBalances, type KeyBalances } from "./key-balance.js";
 import { opt } from "../opt.js";
 
 export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial" | "workspace">;
@@ -16,16 +17,26 @@ const TRIAL_READ_WAIT_MS = 3_000;
 
 // The picker catalog for one endpoint-minting capability; unlike the four fixed provider routes it resolves its subject
 // first, so an id naming no capability is NOT_FOUND rather than an empty list.
-export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
+export const createEndpointsRoutes = (services: EndpointsRoutesDeps, balances: KeyBalances = createKeyBalances()) => {
     const i = implement(endpointsContract).$context<OrpcContext>();
+    // The endpoint an id names, with its config; NOT_FOUND for an id naming none.
+    const endpointOf = async (id: string) => {
+        const capability = await services.capabilities.get(id);
+        const config = capability === undefined ? undefined : endpointConfigOf(capability);
+        if (capability === undefined || config === undefined) {
+            throw new ORPCError("NOT_FOUND", { message: "no endpoint with that id" });
+        }
+        return { id: capability.id, config };
+    };
     return {
         models: i.models.handler(async ({ input }) => {
-            const capability = await services.capabilities.get(input.id);
-            const config = capability === undefined ? undefined : endpointConfigOf(capability);
-            if (capability === undefined || config === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "no endpoint with that id" });
-            }
-            return services.endpointModels.models(capability.id, config);
+            const endpoint = await endpointOf(input.id);
+            return services.endpointModels.models(endpoint.id, endpoint.config);
+        }),
+        // A vendor that tells its keys nothing answers without being asked (key-balance.ts).
+        balance: i.balance.handler(async ({ input }) => {
+            const endpoint = await endpointOf(input.id);
+            return { ...opt("balance", await balances.read(endpoint.id, endpoint.config)) };
         }),
         // Re-probed on every read rather than cached, so the number reflects the message just sent; a probe that fails
         // or outlasts the wait falls back to the last known figures. No trial returns `available: false` with zeroes,

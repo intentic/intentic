@@ -5092,6 +5092,16 @@
         "leakSelectionReport": {
             "action": "Hätte maskiert werden sollen",
             "note": "Genau dieser Wert wird ab jetzt in allen Unterhaltungen maskiert."
+        },
+        "keyBalance": {
+            "left": "{amount} übrig",
+            "leftOf": "{amount} von {limit} übrig",
+            "title": "Guthaben: {key}",
+            "remaining": "Übrig",
+            "limit": "Obergrenze",
+            "resets": "Setzt zurück",
+            "measured": "Gelesen",
+            "note": "Mit diesem Schlüssel beim Anbieter gelesen, und nach jedem Zug erneut."
         }
     },
     "common": {

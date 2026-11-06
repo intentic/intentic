@@ -5092,6 +5092,16 @@
         "leakSelectionReport": {
             "action": "Should have been masked",
             "note": "Its exact value is masked from now on, in every conversation."
+        },
+        "keyBalance": {
+            "left": "{amount} left",
+            "leftOf": "{amount} of {limit} left",
+            "title": "Credit on {key}",
+            "remaining": "Left",
+            "limit": "Cap",
+            "resets": "Resets",
+            "measured": "Read",
+            "note": "Read from the vendor with this key, and read again as each turn ends."
         }
     },
     "common": {

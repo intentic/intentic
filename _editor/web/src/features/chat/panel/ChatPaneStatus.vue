@@ -4,7 +4,7 @@ import type { KeepWarmEnd } from "@intentic/sandbox-contract/schemas/keep-warm";
 import { formatElapsed, formatTokens, Icon, ProgressRing, ResponsiveOverlay, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import KeepWarmPanel from "../../../parts/fleet/KeepWarmPanel.vue";
 import { contextPct } from "../../../models/agent-status/agentStatus-meta";
@@ -12,6 +12,7 @@ import { turnInFlight } from "../../../models/agent-status/agentStatus-standing"
 import { cacheAlive, cacheCooling, keptWarm } from "../../../models/fleet/promptCache";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../../../models/providers/usageStatus";
+import { balanceLabel, balanceLow, balanceTip, useKeyBalance } from "../../../models/conversations/accounts/keyBalance";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
 import { useRole } from "../../../client/sandbox/useRole";
@@ -185,6 +186,22 @@ const usageChip = computed(() => {
         : formatRemaining(headroom.percent, headroom.stale);
     return { headroom, label: `${left}${reset}` };
 });
+
+// What is left on the API key this chat runs on, where its vendor tells the key (models/conversations/accounts/keyBalance.ts): a key's
+// counterpart of the headroom chip above, which a key never has. Read again as each turn ends, since every turn spends it.
+const { balance: keyBalance, refetch: rereadBalance } = useKeyBalance(provider);
+watch(
+    () => conversation.value.turn.streaming.value,
+    (streaming, was) => {
+        if (was === true && !streaming) {
+            rereadBalance();
+        }
+    },
+);
+const balanceChip = computed(() => {
+    const balance = keyBalance.value;
+    return balance === undefined ? undefined : { label: balanceLabel(balance), tip: balanceTip(provider.value, balance), low: balanceLow(balance) };
+});
 </script>
 
 <template>
@@ -248,6 +265,16 @@ const usageChip = computed(() => {
             <UsageMeter v-else-if="usageChip && !isGuest" :headroom="usageChip.headroom"
                 ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
             >
+            <!-- An API key's credit, where its vendor says: the same question as the ring, "how long can I keep going", in money. -->
+            <span
+                v-if="balanceChip && !isGuest"
+                class="inline-flex items-center gap-1"
+                :class="{ 'text-warning': balanceChip.low }"
+                v-tooltip.top="balanceChip.tip"
+            >
+                <Icon name="credit-card" class="text-2xs" />
+                <span class="tabular-nums @max-xs:hidden">{{ balanceChip.label }}</span>
+            </span>
         </div>
     </div>
 </template>

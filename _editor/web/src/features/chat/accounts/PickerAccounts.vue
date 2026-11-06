@@ -4,6 +4,7 @@ import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { TurnPick } from "../../../models/conversations/run/turnDefaults";
 import UsageMeter from "../session/UsageMeter.vue";
+import KeyBalanceFigure from "./KeyBalanceFigure.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, sameModelOn, usePickerAccounts } from "./pickerAccounts";
 import { servingAccount } from "../../../models/conversations/accounts/servingAccount";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
@@ -258,6 +259,7 @@ const pickProvider = (target: AgentProvider): void => {
                     <span class="truncate text-content">{{ k.label }}</span>
                     <span v-if="k.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ k.subtitle }}</span>
                 </span>
+                <KeyBalanceFigure :provider="k.provider" />
             </button>
         </div>
 

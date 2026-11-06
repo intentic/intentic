@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type CatalogOption, effortAllowed, EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
-import { providerModels } from "./providerCatalog";
+import { keyedBeside, providerModels } from "./providerCatalog";
 import { t } from "@intentic/ui/i18n";
 
 // Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
@@ -25,15 +25,29 @@ const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
 const CLAUDE_EFFORTS: readonly string[] = [...STATIC_EFFORTS, `max`];
 const floorFor = (provider: AgentProvider): readonly string[] => (provider === `claude` ? CLAUDE_EFFORTS : STATIC_EFFORTS);
 
-// Reasoning levels for a provider+model: live catalog tiers when reported, else the floor. `thinking` undefined is a
-// third state (unpinned, not off); empty only for an ACP provider.
+// The sign-in whose ladder a provider's models climb: a native provider's own, and for a vendor's API key the sign-in it
+// is sold beside, since the key reaches the same models (an Anthropic key runs Claude's, so it climbs Claude's ladder,
+// Max and the thinking-off rule included). Undefined for anything else: an ACP agent owns its reasoning settings, and a
+// gateway's or a local server's models say nothing about what they take.
+const ladderOwner = (provider: AgentProvider): NativeProvider | undefined =>
+    NATIVE_PROVIDERS.find((native) => native === provider) ?? keyedBeside(provider);
+
+// The tiers a catalog publishes for one model, when it publishes any.
+const publishedEfforts = (provider: AgentProvider, modelId: string | undefined): readonly string[] | undefined => {
+    const efforts = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
+    return efforts !== undefined && efforts.length > 0 ? efforts : undefined;
+};
+
+// Reasoning levels for a provider+model: live catalog tiers when reported, else the floor. A key's model reads its own
+// endpoint's catalog first, then the same model's row on the sign-in it sits beside, then that sign-in's floor.
+// `thinking` undefined is a third state (unpinned, not off); empty for an ACP agent and for an endpoint no vendor owns.
 export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean | undefined): CatalogOption[] => {
-    if (!NATIVE_PROVIDERS.includes(provider as NativeProvider)) {
+    const owner = ladderOwner(provider);
+    if (owner === undefined) {
         return [];
     }
-    const published = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
-    const scale = published !== undefined && published.length > 0 ? published : floorFor(provider);
-    return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value]?.() ?? value, value }));
+    const scale = publishedEfforts(provider, modelId) ?? publishedEfforts(owner, modelId) ?? floorFor(owner);
+    return scale.filter((value) => effortAllowed(value, owner, thinking)).map((value) => ({ label: EFFORT_LABELS[value]?.() ?? value, value }));
 };
 
 // The tier a selection actually runs at: the pick itself if offered, else the strongest weaker tier the model has (or

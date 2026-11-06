@@ -5092,6 +5092,16 @@
         "leakSelectionReport": {
             "action": "Aurait dû être masqué",
             "note": "Cette valeur exacte est masquée dès maintenant, dans toutes les conversations."
+        },
+        "keyBalance": {
+            "left": "{amount} restants",
+            "leftOf": "{amount} restants sur {limit}",
+            "title": "Crédit : {key}",
+            "remaining": "Restant",
+            "limit": "Plafond",
+            "resets": "Réinitialisation",
+            "measured": "Lu",
+            "note": "Lu auprès du fournisseur avec cette clé, et relu à la fin de chaque tour."
         }
     },
     "common": {

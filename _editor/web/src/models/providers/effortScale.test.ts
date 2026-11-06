@@ -1,6 +1,6 @@
 import { Conversation } from "../conversations/session/conversation";
 import { clampEffort, effortsFor } from "./effortScale";
-import { providerModels } from "./providerCatalog";
+import { endpointProviders, providerModels } from "./providerCatalog";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client. Any call it
@@ -71,6 +71,32 @@ describe(`the effort scale`, () => {
     it(`offers an ACP provider no scale, and leaves its effort alone`, () => {
         expect(effortsFor(`my-acp-agent`, `whatever`, true)).toEqual([]);
         expect(clampEffort(`xhigh`, `my-acp-agent`, `whatever`, true)).toBe(`xhigh`);
+    });
+
+    // A vendor's API key reaches the same models as the sign-in it is sold beside, so it climbs that sign-in's ladder; an
+    // endpoint no vendor owns (a gateway, a local server) still offers none.
+    describe(`on an API key`, () => {
+        afterEach(() => {
+            endpointProviders.value = [];
+        });
+
+        it(`climbs the ladder of the sign-in it sits beside`, () => {
+            endpointProviders.value = [
+                { id: `endpoint/anthropic`, label: `anthropic`, kind: `endpoint`, beside: `claude` },
+                { id: `endpoint/ollama`, label: `Ollama`, kind: `localmodel` },
+            ];
+
+            // The same model's row on Claude's catalog, Max and the thinking-off rule with it.
+            expect(values(effortsFor(`endpoint/anthropic`, `claude-opus-5`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`, `max`]);
+            expect(values(effortsFor(`endpoint/anthropic`, `claude-opus-5`, false))).not.toContain(`max`);
+            // A model Claude's catalog does not list falls to Claude's floor; the key's own catalog wins where it publishes.
+            expect(values(effortsFor(`endpoint/anthropic`, `claude-unlisted-model`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`, `max`]);
+            providerModels.value = { ...providerModels.value, "endpoint/anthropic": [{ label: `Opus 5`, value: `claude-opus-5`, efforts: [`low`, `high`] }] };
+            expect(values(effortsFor(`endpoint/anthropic`, `claude-opus-5`, undefined))).toEqual([`low`, `high`]);
+            expect(clampEffort(`xhigh`, `endpoint/anthropic`, `claude-opus-5`, undefined)).toBe(`high`);
+
+            expect(effortsFor(`endpoint/ollama`, `qwen3`, undefined)).toEqual([]);
+        });
     });
 
     it(`drops a pick to the strongest tier the model actually offers`, () => {

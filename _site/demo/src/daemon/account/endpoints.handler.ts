@@ -1,7 +1,7 @@
 import type { TrialStatusResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { demoLocalModelFit, demoStartPrefetch } from "../../fixture/sandbox";
 import { freshEdition, noModels } from "../../mode";
-import { endpointModels } from "./capabilities";
+import { endpointBalance, endpointModels } from "./capabilities";
 import type { Doors } from "../doors";
 
 // A fresh sandbox has signed nothing in: the daemon-provisioned free trial is the one thing a chat can run on, with
@@ -14,6 +14,8 @@ export const endpointsDoors = {
     trial: () => DEMO_TRIAL,
     // A connected model server's catalog, asked of the endpoint connection the Capabilities page holds.
     models: ({ id }) => endpointModels(id),
+    // What a pasted key's vendor says is left on it, where it says anything.
+    balance: ({ id }) => endpointBalance(id),
     // What the connect view's local lane draws: a 32 GB laptop with nothing downloaded yet.
     localModelFit: () => demoLocalModelFit(),
     // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say

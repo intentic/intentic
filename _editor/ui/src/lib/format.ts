@@ -384,6 +384,15 @@ export const formatMoney = (usd: number, { compact = false }: { compact?: boolea
     return shapedFormat(`usd`, { style: `currency`, currency: `USD`, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd);
 };
 
+/**
+ * An amount in the currency someone else counts it in (a vendor's balance in yuan): dollars exactly as formatMoney says
+ * them, any other currency to the cent in the reader's own style for it ("¥110.00", "110,00 CN¥").
+ */
+export const formatAmount = (amount: number, currency: string): string =>
+    currency === `USD`
+        ? formatMoney(amount)
+        : shapedFormat(`currency:${currency}`, { style: `currency`, currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
 // --- A span of time --------------------------------------------------------------------------------------------------
 
 const SPAN_UNITS = [

@@ -30,6 +30,30 @@ export const TrialStatusSchema = z.object({
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 
+// What is left to spend on a vendor's API key: the per-token counterpart of a sign-in's plan limits. Only some vendors
+// tell an ordinary key (Moonshot, DeepSeek, an OpenRouter key with a cap); the rest keep billing behind an admin key, and
+// the sandbox never asks for one.
+export const KeyBalanceSchema = z.object({
+    remaining: z.number().describe("What is left to spend, in `currency`. Zero or below is where the vendor refuses the next request."),
+    currency: z.string().describe("The ISO 4217 code the vendor counts in: USD, CNY."),
+    limit: z
+        .number()
+        .optional()
+        .describe(
+            "The cap `remaining` counts down from, where it is a cap set on the key (an OpenRouter key's credit limit, or a budget its organisation set) rather than the account's whole credit, which no vendor states a ceiling for.",
+        ),
+    resetsAt: z.number().optional().describe("When the cap starts over, in epoch seconds, for a cap that does; absent for a balance that only a top-up refills."),
+    measuredAt: z.number().describe("When the vendor was asked, in milliseconds."),
+});
+export type KeyBalance = z.infer<typeof KeyBalanceSchema>;
+
+export const EndpointBalanceSchema = z.object({
+    balance: KeyBalanceSchema.optional().describe(
+        "Absent when the endpoint's vendor tells an ordinary key nothing about its credit (Anthropic, OpenAI, Gemini, xAI and any server of the owner's), when an OpenRouter key has no cap of its own, and when the vendor could not be read just now.",
+    ),
+});
+export type EndpointBalance = z.infer<typeof EndpointBalanceSchema>;
+
 // A model server found running on the computer that hosts the sandbox.
 export const HostModelServerSchema = z.object({
     kind: z.enum(["ollama", "lmstudio", "llamacpp", "vllm"]).describe("Which program usually listens on the port it answered on."),
@@ -111,6 +135,18 @@ export const endpointsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ModelsSchema),
+    // Read from the vendor with the key itself, held a short while: it moves with every turn, and the composer asks
+    // again as each one ends.
+    balance: procedure
+        .route({
+            method: "GET",
+            path: "/endpoints/{id}/balance",
+            summary: "What is left to spend on a connected API key",
+            description:
+                "Asks the vendor of one connected API key how much credit is left on it, the per-token counterpart of a sign-in's plan limits. Only some vendors tell an ordinary key (Moonshot, DeepSeek, and OpenRouter for a key with a cap of its own); for the rest, and for any server of your own, the answer is that nothing is known, never a zero. Held for half a minute, so asking again right away reads the same figure.",
+        })
+        .input(CapabilityIdParamSchema)
+        .output(EndpointBalanceSchema),
     trial: procedure
         .route({
             method: "GET",
