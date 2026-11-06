@@ -144,12 +144,17 @@ export interface JobRecord {
     // turn died on a usage limit outlived the clean re-run that finished the work, and would have woken a done
     // conversation four hours later.
     cut: boolean;
+    // Its end is written down (noteEnded). Kept on the record, not read off ENDINGS, which keeps only a conversation's
+    // newest few: read off ENDINGS, every ended job past those few still held here was published as running again.
+    // On 2026-11-06 marcin.milczarek's card listed eighteen dev servers as "Stopping…", restarted turn after turn and
+    // long gone, with no button left to stop them, and each end poll re-noted a few, pushing out others in turn.
+    ended: boolean;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
 export const JOBS: Holding<JobRecord> = { name: "background jobs" };
-// How its recent jobs ended, by job id, newest last: apart from JOBS, which forgets a job the moment nothing depends on
-// it.
+// How its recent jobs ended, by job id, newest last, for its card only: apart from JOBS, which forgets a job the moment
+// nothing depends on it. Whether a job ended is its record's to say (JobRecord.ended), never whether it is still here.
 const ENDINGS: Holding<AgentJob> = { name: "job endings" };
 // The one poll that notices every conversation's exits; the fleet's, so held by none of them.
 const END_POLL: Holding<NodeJS.Timeout> = { name: "job end poll" };
@@ -223,14 +228,13 @@ const endOf = (record: JobRecord): AgentJob => {
     }
 };
 
-const ended = (actors: Actors, job: BackgroundJob): boolean => actors.holdings(ENDINGS).has(job.id);
-
 // Once per job; answers whether this call was the one that wrote it down.
 const noteEnded = (actors: Actors, record: JobRecord): boolean => {
     const { job } = record;
-    if (ended(actors, job)) {
+    if (record.ended) {
         return false;
     }
+    record.ended = true;
     forgetKeptJob(record.historyRoot, job.id);
     const endings = actors.holdings(ENDINGS);
     endings.hold(job.conversationId, job.id, endOf(record));
@@ -249,7 +253,7 @@ const publish = (actors: Actors, conversationId: string): void => {
     const running = actors
         .holdings(JOBS)
         .of(conversationId)
-        .filter((record) => !ended(actors, record.job))
+        .filter((record) => !record.ended)
         .map(cardOf);
     actors.send(conversationId, { kind: "jobs-shown", jobs: [...running, ...actors.holdings(ENDINGS).of(conversationId)] });
 };
@@ -258,7 +262,7 @@ const sweepEnds = (actors: Actors): void => {
     const jobs = actors.holdings(JOBS).entries();
     const moved = new Set<string>();
     for (const [, record] of jobs) {
-        if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record)) {
+        if (!record.ended && jobFinished(record.job) && noteEnded(actors, record)) {
             record.unwatch?.();
             record.unwatch = undefined;
             record.unfollow?.();
@@ -271,7 +275,7 @@ const sweepEnds = (actors: Actors): void => {
     }
     const poll = actors.holdings(END_POLL);
     const timer = poll.get(END_POLL_ID);
-    if (timer !== undefined && !jobs.some(([, record]) => !ended(actors, record.job))) {
+    if (timer !== undefined && !jobs.some(([, record]) => !record.ended)) {
         clearInterval(timer);
         poll.drop(END_POLL_ID);
     }
@@ -438,6 +442,7 @@ const UNJUDGED = {
     kept: undefined,
     overran: false,
     cut: false,
+    ended: false,
 } as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
 
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.

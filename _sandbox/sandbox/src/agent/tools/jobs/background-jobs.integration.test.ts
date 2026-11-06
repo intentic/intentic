@@ -10,6 +10,7 @@ import {
     type BackgroundJob,
     backgroundJobOf,
     backgroundJobSessions,
+    ENDINGS_KEPT,
     jobCommandLine,
     jobHandle,
     jobLabel,
@@ -24,6 +25,7 @@ import {
     leftJobs,
     restoreBackgroundJobs,
     settledBackgroundJobs,
+    stopBackgroundJob,
     sweepJobEnds,
 } from "./background-jobs.js";
 import { jobReport } from "./job-report.js";
@@ -295,6 +297,19 @@ describe("background job registry", () => {
         finish(job, "0");
         settledBackgroundJobs(actors, "conv-card-late");
         expect(listed("conv-card-late")).toMatchObject([{ id: job.id, exitCode: 0 }]);
+    });
+
+    // 2026-11-06: past the card's last few endings, a stopped job's record still held here read as running again, and its
+    // row said "Stopping…" for good.
+    it("never lists an ended job as running again once newer endings push its own off the card", async () => {
+        const jobs = Array.from({ length: ENDINGS_KEPT + 3 }, (_, index) => opened("conv-card-many", `pnpm dev --port ${String(4000 + index)}`));
+        for (const job of jobs) {
+            await stopBackgroundJob(actors, job, "turn");
+        }
+        sweepJobEnds(actors);
+        const card = listed("conv-card-many") ?? [];
+        expect(card.filter((entry) => entry.endedAt === undefined)).toEqual([]);
+        expect(card.map((entry) => entry.id)).toEqual(jobs.slice(-ENDINGS_KEPT).map((job) => job.id));
     });
 
     it("drops a job that outran its ceiling from the card without inventing an ending", () => {
