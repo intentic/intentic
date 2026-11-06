@@ -31,7 +31,8 @@ flowchart LR
   `dist/editor/editor.js`) is served by the backend's listener and framed by the viewer.
 - The listener sits outside the daemon's bearer auth on a forwarded port and takes the same port again after a
   restart. Its editor page and its `/file` route take a session token; the bundle's files are public and served under
-  their pin, compressed.
+  their pin and a serving revision (`servedIdOf` in `src/server/browser-engine.ts`), compressed. The revision moves when
+  how the files are served changes and the pinned tree does not, since every file goes out cacheable for a year.
 
 ## The browser engine
 
@@ -41,6 +42,10 @@ flowchart LR
   ignores. Every file is hashed on the way in, and the tree is served only once all of it matched the pin; a stalled,
   interrupted or altered download leaves nothing behind, and the next open tries again. `autoStart` downloads it at
   boot instead.
+- Each interface translation in the bundle is served with English filled in under it (`src/server/locale-fallback.ts`):
+  the editors keep no English in their code, and the pinned build's `pl.json` lacks about a third of every editor's
+  strings. _(2026-11-06) A presentation opened with the app in Polish never opened: the animation pane laid out its
+  missing title as text and threw, so the card waited for good._
 - The page opens the document from `/file` and saves by asking the editor for its document in its own format and
   writing it back with `PUT /file`, naming the version it last saw. It saves on Ctrl+S, when the viewer leaves the
   document, when the browser tab is hidden, and once the reader has paused with unsaved edits.

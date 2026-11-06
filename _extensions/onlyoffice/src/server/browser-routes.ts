@@ -1,7 +1,9 @@
 import type http from "node:http";
 import { Transform, type Readable } from "node:stream";
 import type { Session, Sessions } from "./sessions.js";
-import { serveStatic, type StaticRoot } from "./static-files.js";
+import { isSafeRelative } from "./bundle.js";
+import { filledLocale } from "./locale-fallback.js";
+import { serveMade, serveStatic, type StaticRoot } from "./static-files.js";
 
 // The browser engine's routes on the listener: its static files (the verified bundle, and this extension's editor page)
 // and the one document a session is for, read and written by the page editing it. The file routes take the session
@@ -85,16 +87,29 @@ const writeOf = (url: URL, req: http.IncomingMessage): FileWrite | undefined => 
     return asked === null && expected !== undefined ? { kind: "save", expected } : undefined;
 };
 
-export const createBrowserRoutes = (deps: BrowserRouteDeps, limit = MAX_SAVE_BYTES): BrowserRoutes => {
-    const staticRoute = async (req: http.IncomingMessage, res: http.ServerResponse, found: { id: string; root: StaticRoot } | undefined, rest: string): Promise<void> => {
-        const slash = rest.indexOf("/");
-        if (found === undefined || slash === -1 || rest.slice(0, slash) !== found.id) {
-            json(res, 404, { error: "not found" });
-            return;
-        }
-        await serveStatic(req, res, found.root, rest.slice(slash + 1));
-    };
+// `fillsLocales`: the bundle's translations go out with English under them (locale-fallback.ts).
+const staticRoute = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    found: { id: string; root: StaticRoot } | undefined,
+    rest: string,
+    fillsLocales: boolean,
+): Promise<void> => {
+    const slash = rest.indexOf("/");
+    if (found === undefined || slash === -1 || rest.slice(0, slash) !== found.id) {
+        json(res, 404, { error: "not found" });
+        return;
+    }
+    const relative = rest.slice(slash + 1);
+    const filled = fillsLocales && isSafeRelative(relative) ? await filledLocale(found.root.dir, relative) : undefined;
+    if (filled !== undefined) {
+        serveMade(req, res, relative, filled);
+        return;
+    }
+    await serveStatic(req, res, found.root, relative);
+};
 
+export const createBrowserRoutes = (deps: BrowserRouteDeps, limit = MAX_SAVE_BYTES): BrowserRoutes => {
     const readFile = async (req: http.IncomingMessage, res: http.ServerResponse, session: Session): Promise<void> => {
         const opened = await deps.openFile(session);
         if (opened === undefined) {
@@ -156,11 +171,11 @@ export const createBrowserRoutes = (deps: BrowserRouteDeps, limit = MAX_SAVE_BYT
         const method = req.method ?? "GET";
         const readOnly = method === "GET" || method === "HEAD";
         if (url.pathname.startsWith("/bundle/") && readOnly) {
-            await staticRoute(req, res, deps.bundle(), url.pathname.slice("/bundle/".length));
+            await staticRoute(req, res, deps.bundle(), url.pathname.slice("/bundle/".length), true);
             return true;
         }
         if (url.pathname.startsWith("/page/") && readOnly) {
-            await staticRoute(req, res, deps.page(), url.pathname.slice("/page/".length));
+            await staticRoute(req, res, deps.page(), url.pathname.slice("/page/".length), false);
             return true;
         }
         if (url.pathname !== "/file") {

@@ -24,6 +24,10 @@ beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), `oo-routes-`));
     await mkdir(join(dir, `bundle`, `web-apps`), { recursive: true });
     await writeFile(join(dir, `bundle`, `web-apps`, `api.js`), `api`);
+    const locale = join(dir, `bundle`, `web-apps`, `apps`, `presentationeditor`, `main`, `locale`);
+    await mkdir(locale, { recursive: true });
+    await writeFile(join(locale, `en.json`), JSON.stringify({ "PE.txtAnimationPane": `Animation Pane`, "PE.txtZoom": `Zoom` }));
+    await writeFile(join(locale, `pl.json`), JSON.stringify({ "PE.txtZoom": `Powiększenie`, "PE.txtExtra": `Tylko po polsku` }));
     await mkdir(join(dir, `page`), { recursive: true });
     await writeFile(join(dir, `page`, `editor.js`), `page`);
     const routes = createBrowserRoutes(
@@ -177,6 +181,15 @@ describe(`the static trees`, () => {
         expect((await call(`/bundle/pin-0/web-apps/api.js`)).status).toBe(404);
         expect((await call(`/page/old/editor.js`)).status).toBe(404);
         expect((await call(`/bundle/pin-1`)).status).toBe(404);
+    });
+
+    it(`serve a translation with every key it lacks taken from English`, async () => {
+        const translated = await call(`/bundle/pin-1/web-apps/apps/presentationeditor/main/locale/pl.json`);
+        expect(translated.headers.get(`cache-control`)).toContain(`immutable`);
+        expect(await translated.json()).toEqual({ "PE.txtAnimationPane": `Animation Pane`, "PE.txtZoom": `Powiększenie`, "PE.txtExtra": `Tylko po polsku` });
+        const english = await call(`/bundle/pin-1/web-apps/apps/presentationeditor/main/locale/en.json`);
+        expect(await english.json()).toEqual({ "PE.txtAnimationPane": `Animation Pane`, "PE.txtZoom": `Zoom` });
+        expect((await call(`/bundle/pin-1/web-apps/apps/presentationeditor/main/locale/xx.json`)).status).toBe(404);
     });
 
     it(`404 the bundle while it is not on disk yet`, async () => {

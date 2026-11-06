@@ -21,7 +21,7 @@ sequenceDiagram
 ```
 
 - The backend serves the page at `/editor?s=<token>` with its config as JSON (`EditorPageConfig` in
-  [../src/protocol.ts](../src/protocol.ts)), the bundle's `api.js` from `/bundle/<pin>/`, and this build from
+  [../src/protocol.ts](../src/protocol.ts)), the bundle's `api.js` from `/bundle/<pin>.<revision>/`, and this build from
   `/page/<hash>/editor.js`.
 - Saves happen on Ctrl+S or the Save button, when the viewer leaves the document or the browser tab is hidden, and
   once the reader has paused for 10 s with unsaved edits (at most every 30 s). An export blocks the editor while x2t

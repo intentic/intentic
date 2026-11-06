@@ -61,6 +61,14 @@ export const scratchBeside = (target: string): string => join(dirname(target), `
 // Why a copy is not written beside a document opened on its own: the window may write that document and nothing else.
 export const NO_COPY_HERE = "Only the document itself can be saved from this window, so a copy can't be kept beside it.";
 
+// How the listener serves the bundle, which can change while the pinned tree does not: each revision is a new URL, since
+// every file goes out cacheable for a year. 2: translations filled from English (locale-fallback.ts), where the
+// browser kept the files as they were under the pin's own segment.
+const SERVED_REVISION = 2;
+
+// The /bundle/<id>/ segment a pin's tree is served under.
+export const servedIdOf = (pinId: string): string => `${pinId}.${SERVED_REVISION}`;
+
 // Where a verified bundle's tree is served from, with its gzip copies kept beside the files inside it.
 const staticRootOf = (dir: string): StaticRoot => ({ dir, gzipCache: join(dir, ".gz") });
 
@@ -172,7 +180,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
     };
     const readyBundle = (): { id: string; root: StaticRoot } | undefined => {
         const state = bundle.state();
-        return state.state === "ready" ? { id: bundle.pinId, root: staticRootOf(state.dir) } : undefined;
+        return state.state === "ready" ? { id: servedIdOf(bundle.pinId), root: staticRootOf(state.dir) } : undefined;
     };
 
     const openFile = async (session: Session): Promise<OpenedFile | undefined> => {
@@ -303,7 +311,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
             saveable: session.mode === "edit" && session.agent === undefined && !READ_ONLY_IN_BROWSER.includes(extension),
             parentOrigin: session.origin,
         };
-        return browserPage({ config, bundlePath: `/bundle/${bundle.pinId}/`, pagePath: `/page/${build?.id ?? "missing"}/` });
+        return browserPage({ config, bundlePath: `/bundle/${servedIdOf(bundle.pinId)}/`, pagePath: `/page/${build?.id ?? "missing"}/` });
     };
 
     return {

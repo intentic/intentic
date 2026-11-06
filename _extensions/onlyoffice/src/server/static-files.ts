@@ -143,6 +143,19 @@ const send = async (req: http.IncomingMessage, res: http.ServerResponse, headers
     await pipeline([...body(), res]);
 };
 
+// Answers `relative` with bytes made from the tree rather than read off it (a translation filled from English), as
+// cacheable as the file itself and compressed to a browser that takes it.
+export const serveMade = (req: http.IncomingMessage, res: http.ServerResponse, relative: string, made: { readonly body: Buffer; readonly gzipped: Buffer }): void => {
+    const gzip = accepts(req, "gzip");
+    const body = gzip ? made.gzipped : made.body;
+    const headers: http.OutgoingHttpHeaders = { ...headersFor(relative, undefined), vary: "accept-encoding", "content-length": body.length };
+    if (gzip) {
+        headers["content-encoding"] = "gzip";
+    }
+    res.writeHead(200, headers);
+    res.end(req.method === "HEAD" ? undefined : body);
+};
+
 // Answers `relative` under `root`: 404 for anything that is not a file inside it. Resolves once the response is sent;
 // a client that goes away midway rejects, which the caller treats as the end of that request.
 export const serveStatic = async (req: http.IncomingMessage, res: http.ServerResponse, root: StaticRoot, relative: string): Promise<void> => {

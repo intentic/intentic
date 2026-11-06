@@ -6,7 +6,7 @@ import { CONFIG_ELEMENT_ID, type EditorPageConfig } from "../../protocol.js";
 import type { OpenRequest } from "../../contract.js";
 import type { BundlePin } from "../bundle-pin.js";
 import { BundleStore } from "../bundle.js";
-import { copyNameFor, createBrowserEngine, originOf, versionOfStat, type BrowserEngine, type BrowserEngineDeps } from "../browser-engine.js";
+import { copyNameFor, createBrowserEngine, originOf, servedIdOf, versionOfStat, type BrowserEngine, type BrowserEngineDeps } from "../browser-engine.js";
 import { Sessions, type FileStat } from "../sessions.js";
 
 // The browser engine's backend against a temp workspace, a bundle already verified on disk, and a real HTTP server in
@@ -197,7 +197,7 @@ describe(`the page a session is framed with`, () => {
             throw new Error(`no session`);
         }
         const page = await engine.page(session);
-        expect(page).toContain(`<script src="/bundle/test-pin/web-apps/apps/api/documents/api.js"></script>`);
+        expect(page).toContain(`<script src="/bundle/${servedIdOf(`test-pin`)}/web-apps/apps/api/documents/api.js"></script>`);
         expect(page).toMatch(/<script src="\/page\/[0-9a-f]{16}\/editor\.js"><\/script>/);
         const config = configIn(page);
         expect(config).toMatchObject({

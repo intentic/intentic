@@ -87,6 +87,13 @@ Intentic's modifications to the bundle, applied after verification
     the editor page that asked for it, addressed to that page's own origin,
     instead of to the page and the top window with any origin.
 
+Intentic's modification to the bundle as it is served, leaving the files on
+disk as they were verified (src/server/locale-fallback.ts):
+
+  * web-apps/apps/*/*/locale/<lang>.json -- each translation goes out with
+    every string it lacks taken from en.json beside it, since the editors keep
+    no English in their code and show a missing string as nothing.
+
 
 3. The editor page (this directory)
 -----------------------------------
