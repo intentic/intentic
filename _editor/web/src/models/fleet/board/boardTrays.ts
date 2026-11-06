@@ -20,7 +20,8 @@ import {
 // The children riding under the board's cards (childFold), as the lanes read them: whose tray a child is in, what a tray
 // draws against the board's filter, ring and folds, what a card says for the children calling the reader through it,
 // and the archive's own fold, whose filed children ride under their filed parent exactly as live ones do on the board.
-// A tray holds the subagents a card's runtime ran in-process too, from the roster, beside the conversations it spawned.
+// A tray holds the subagents a card's runtime ran in-process too, from the roster, beside the conversations it spawned,
+// and a spawned child whose first turn has not begun yet, which is only a roster row until then (subagentRoster.rowsOf).
 
 export interface TraysHost {
     // What the scope folded (boardScope): the children under each card, the card each child is under, and the children
@@ -40,8 +41,8 @@ export interface TraysHost {
         readonly matchCase: Readonly<Ref<boolean>>;
         readonly matches: (agent: FleetAgent) => boolean;
     };
-    // The sandbox's subagent roster: the ones a conversation's runtime ran in-process, by conversation.
-    readonly roster: Pick<SubagentRoster, "inProcessOf">;
+    // The sandbox's subagent roster: the rows each conversation's card carries from it (rowsOf).
+    readonly roster: Pick<SubagentRoster, "rowsOf">;
     // The card wearing the ring.
     readonly selected: Readonly<Ref<string | undefined>>;
 }
@@ -77,10 +78,10 @@ export const useBoardTrays = (host: TraysHost) => {
         return chips;
     });
     const callOf = (card: FleetAgent): FamilyChip | undefined => (card.archivedAt === undefined ? callChips.value.get(cardKey(card)) : undefined);
-    // What a card's runtime ran in-process, which the roster holds for this sandbox's cards alone: another box's card has
-    // its own daemon's roster, which this board does not read.
+    // What a card's runtime ran in-process, and what it spawned that has no conversation yet, which the roster holds for
+    // this sandbox's cards alone: another box's card has its own daemon's roster, which this board does not read.
     const subagentsOf = (card: FleetAgent): readonly SubagentSession[] =>
-        card.sandboxId === undefined ? host.roster.inProcessOf(card.id) : NO_SUBAGENTS;
+        card.sandboxId === undefined ? host.roster.rowsOf(card.id) : NO_SUBAGENTS;
     // Only its title can answer a query, having no transcript the filter's index reads, under the filter's own case rule.
     const subagentMatches = (session: SubagentSession): boolean => {
         if (!filter.active.value) {

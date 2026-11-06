@@ -318,6 +318,11 @@ export type TrayChild = FleetAgent | SubagentSession;
 // conversation that started it.
 export const inProcess = (child: TrayChild): child is SubagentSession => `conversationId` in child;
 
+// A spawned child the roster holds before the fleet does (subagentRoster.rowsOf): its start waits on the owner, on its
+// lane's first child, on a seat or on memory, or its first turn is about to begin. Not an agent yet, so its row stands in
+// for the one that will arrive (ChildStartingRow), with nothing to open.
+export const startingChild = (child: TrayChild): child is SubagentSession => inProcess(child) && child.kind === `spawned`;
+
 // What an in-process subagent is called on its row: the one-line ask, else the kind of subagent it ran as.
 export const subagentTitle = (session: Pick<SubagentSession, "description" | "agentType">): string | undefined =>
     [session.description, session.agentType].find((part) => part !== undefined && part.trim() !== ``);

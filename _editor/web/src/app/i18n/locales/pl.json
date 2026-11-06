@@ -658,6 +658,8 @@
             "conflictGroup": "Z konfliktem przy scalaniu: {count}",
             "otherGroup": "{reason}: {count}",
             "queued": "W kolejce",
+            "starting": "Uruchamianie",
+            "startingTip": "Czeka, aż piaskownica uruchomi jego pierwszą turę",
             "needsInput": "Potrzebuje odpowiedzi",
             "paused": "Wstrzymany",
             "completed": "Ukończony",

@@ -728,6 +728,8 @@
             "conflictGroup": "{count} with a land conflict",
             "otherGroup": "{count}: {reason}",
             "queued": "Queued",
+            "starting": "Starting",
+            "startingTip": "Waiting for the sandbox to start its first turn",
             "needsInput": "Needs input",
             "paused": "Paused",
             "completed": "Completed",

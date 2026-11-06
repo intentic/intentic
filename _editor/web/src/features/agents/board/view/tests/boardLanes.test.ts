@@ -91,7 +91,7 @@ const boardOf = (
     const agents = { fleet: shallowRef(fleet), lanes: shallowRef(laneGroups(fleet)), archived: shallowRef(over.archived ?? []) };
     const selected = ref<string | undefined>(undefined);
     // Nothing ran in-process here: the trays those join are childFold.test.ts's.
-    const roster = { inProcessOf: (): readonly SubagentSession[] => [] };
+    const roster = { rowsOf: (): readonly SubagentSession[] => [] };
     const effects = effectScope();
     running.push(effects);
     const lanes = effects.run(() => useBoardLanes({ view, scope, filter, drag, agents, roster, selected }))!;

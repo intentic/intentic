@@ -728,6 +728,8 @@
             "conflictGroup": "{count} mit Landekonflikt",
             "otherGroup": "{count}: {reason}",
             "queued": "In der Warteschlange",
+            "starting": "Startet",
+            "startingTip": "Wartet darauf, dass die Sandbox seinen ersten Zug startet",
             "needsInput": "Braucht eine Eingabe",
             "paused": "Pausiert",
             "completed": "Abgeschlossen",

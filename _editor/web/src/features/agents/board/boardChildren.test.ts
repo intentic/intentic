@@ -264,6 +264,42 @@ it(`rings the subagent's row alone, and lets it go when the chat moves to anothe
     expect(card(`other work`).closest(`.session-card-on`)).not.toBeNull();
 });
 
+// The daemon files a spawned child the moment its parent asks for it, but the fleet holds it only once its first turn
+// begins, and a start can wait minutes before that (behind its lane's first child, for a seat, for memory, on the
+// owner). Until then a dashed stand-in holds its place in the tray, with nothing to press, and the card counts it.
+it(`stands in for a spawned child whose first turn has not begun, and gives way to its own row once the fleet holds it`, async () => {
+    setAgents([lead], 100);
+    const starting = (id: string, description: string, over: Partial<SubagentSession> = {}): SubagentSession => ({
+        id,
+        kind: `spawned`,
+        conversationId: `lead`,
+        agentType: `Claude`,
+        description,
+        status: `pending`,
+        startedAt: 2,
+        activityAt: 2,
+        ...over,
+    });
+    roster([
+        starting(`sub-ws2`, `WS2 near-field veil`, { status: `running` }),
+        starting(`sub-ws3`, `WS3 cook models offline`, { summary: `Held: it waits for \`sub-ws2\` to be answered.`, startedAt: 3, activityAt: 3 }),
+    ]);
+    const board = await mountBoard();
+    const standIns = (): (string | null)[] => [...(tray(board)?.querySelectorAll(`[data-starting-child]`) ?? [])].map((row) => row.getAttribute(`aria-label`));
+
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2/2`);
+    await focus(board, `ship the release`);
+    // Newest asked for first, as working rows are; held ones say so, the rest are starting.
+    expect(standIns()).toEqual([`WS3 cook models offline: ${t(`agents.childRows.queued`)}`, `WS2 near-field veil: ${t(`agents.childRows.starting`)}`]);
+    expect(rows(board)).toEqual([]);
+
+    setAgents([lead, helper(`sub-ws2`, { title: `WS2 near-field veil`, status: `running`, startedAt: 4 })], 101);
+    await settle();
+    expect(standIns()).toEqual([`WS3 cook models offline: ${t(`agents.childRows.queued`)}`]);
+    expect(rows(board)).toEqual([expect.stringMatching(/^WS2 near-field veil/)]);
+    expect(count(board, t(`agents.childRows.workingCount`, { running: 2, total: 2 }))).toBe(`2/2`);
+});
+
 it(`draws no tray for a card that started nothing`, async () => {
     setAgents([agent(`alone`)], 100);
     const board = await mountBoard();

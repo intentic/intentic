@@ -111,8 +111,9 @@ export interface LanesHost {
         readonly lanes: Readonly<Ref<Record<FleetLane, FleetAgent[]>>>;
         readonly archived: Readonly<Ref<readonly FleetAgent[]>>;
     };
-    // The subagents each conversation's runtime ran in-process, which ride in its card's tray too.
-    readonly roster: Pick<SubagentRoster, "inProcessOf">;
+    // The roster rows each conversation's card carries in its tray too: its runtime's in-process subagents, and the
+    // children it spawned that are not conversations yet (subagentRoster.rowsOf).
+    readonly roster: Pick<SubagentRoster, "rowsOf">;
     // The card wearing the ring, which the Finished window keeps wherever it sits, and a folded group of Active's too.
     readonly selected: Readonly<Ref<string | undefined>>;
     // Active's folded groups (laneGroups.ts); this browser's own when absent.

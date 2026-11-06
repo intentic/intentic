@@ -728,6 +728,8 @@
             "conflictGroup": "Con conflicto de integración: {count}",
             "otherGroup": "{reason}: {count}",
             "queued": "En cola",
+            "starting": "Iniciando",
+            "startingTip": "Esperando a que el sandbox inicie su primer turno",
             "needsInput": "Necesita una respuesta",
             "paused": "En pausa",
             "completed": "Completado",

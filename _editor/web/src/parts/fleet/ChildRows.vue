@@ -4,13 +4,15 @@ import { useT } from "@intentic/ui/i18n";
 import { type ComponentPublicInstance, computed, inject } from "vue";
 import { agentDisplayTitle } from "../../models/agent-status/agentStatus-meta";
 import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
-import { FINISHED_FOLD, inProcess, stackedRuns, type TrayChild, trayOf } from "../../models/fleet/board/childFold";
+import { FINISHED_FOLD, inProcess, stackedRuns, startingChild, type TrayChild, trayOf } from "../../models/fleet/board/childFold";
 import { trayFold } from "@intentic/ui/motion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
+import ChildStartingRow from "./ChildStartingRow.vue";
 import { CHILD_ROWS } from "../../models/fleet/board/childRows";
 
 // Show spawned conversations and runtime subagents in a card's unboxed tray: reader asks, active work, grouped stopped reasons, then folded history.
+// Active work includes spawned children still starting (no conversation yet), each a dashed stand-in (ChildStartingRow).
 // Require CHILD_ROWS and actual children. Open trays for focused cards, visible children or active filters; otherwise show stable ChildCount.
 // Reader-only asks remain visible even under unfocused cards because chat cards have no other place to show that news.
 
@@ -110,20 +112,29 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
         <Transition :css="false" @enter="trayFold.enter" @leave="trayFold.leave">
             <div v-if="shown">
                 <div class="flex flex-col" :class="tray.asks.length === 0 ? `pt-1` : ``">
-                    <ChildRow
-                        v-for="child in tray.lead"
-                        :key="child.id"
-                        :ref="(el) => setRow(child, el)"
-                        :child="child"
-                        :selected="selected(child)"
-                        :provider="agent.provider"
-                        :needle="board.needle.value"
-                        :match-case="board.matchCase.value"
-                        :menus="board.menu !== undefined"
-                        @open="(event) => open(child, event)"
-                        @review="review(child)"
-                        @menu="(event) => menu(child, event)"
-                    />
+                    <template v-for="child in tray.lead" :key="child.id">
+                        <!-- A spawned child whose first turn has not begun: a stand-in where its row will arrive, nothing to press. -->
+                        <ChildStartingRow
+                            v-if="startingChild(child)"
+                            :child="child"
+                            :provider="agent.provider"
+                            :needle="board.needle.value"
+                            :match-case="board.matchCase.value"
+                        />
+                        <ChildRow
+                            v-else
+                            :ref="(el) => setRow(child, el)"
+                            :child="child"
+                            :selected="selected(child)"
+                            :provider="agent.provider"
+                            :needle="board.needle.value"
+                            :match-case="board.matchCase.value"
+                            :menus="board.menu !== undefined"
+                            @open="(event) => open(child, event)"
+                            @review="review(child)"
+                            @menu="(event) => menu(child, event)"
+                        />
+                    </template>
                     <template v-for="group in tray.groups" :key="group.key">
                         <!-- One child alone is its own row: a fold of one would be a press to read a single line. -->
                         <ChildGroupRow v-if="group.members.length > 1" :group="group" :parent="title" @toggle="board?.toggle(agent, group.key)" />

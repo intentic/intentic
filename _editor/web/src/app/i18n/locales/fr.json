@@ -728,6 +728,8 @@
             "conflictGroup": "En conflit d'intégration : {count}",
             "otherGroup": "{reason} : {count}",
             "queued": "En file d'attente",
+            "starting": "Démarrage",
+            "startingTip": "En attente du premier tour lancé par le sandbox",
             "needsInput": "Attend une réponse",
             "paused": "En pause",
             "completed": "Terminé",
