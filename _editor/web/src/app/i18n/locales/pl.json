@@ -370,7 +370,15 @@
             "stopKeepingWarm": "Przestań utrzymywać pamięć podręczną",
             "stopKeepingWarmHint": "Utrzymywana ciepła do {time}",
             "tryLandAgain": "Spróbuj scalić ponownie",
-            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły"
+            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły",
+            "notifyLabel": "Powiadamiaj mnie",
+            "notifyAll": "O wszystkim",
+            "notifyAllHint": "Każda zakończona tura i każda karta, która na ciebie czeka",
+            "notifyAsks": "Tylko gdy mnie potrzebuje",
+            "notifyAsksHint": "Pytania, uprawnienia i zgody, które na ciebie czekają",
+            "notifyNone": "Nigdy",
+            "notifyNoneHint": "Nic z tej rozmowy, na żadnym urządzeniu",
+            "notifyFailed": "Nie udało się zmienić, co do ciebie dociera"
         },
         "agentStatus": {
             "landDetails": "Szczegóły błędu",

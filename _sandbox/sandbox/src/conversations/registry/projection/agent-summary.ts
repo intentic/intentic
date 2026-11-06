@@ -118,6 +118,9 @@ export const describedBy = ({ placement, identity, profile, social, sessionId, a
     ...opt("account", profile.account),
     ...opt("landRequested", social.landRequested),
     ...opt("reactions", groupedReactions(social.reactions)),
+    // Every person's answer rides out of the registry; auth/fleet-scope.ts framedSummary leaves each reader only their own.
+    ...opt("participants", social.participants?.length === 0 ? undefined : social.participants),
+    ...opt("notify", social.notify?.length === 0 ? undefined : social.notify),
     ...opt("seenAt", social.seenAt),
     ...opt("unsentAt", social.unsentAt),
     ...opt("archivedAt", archivedAt),

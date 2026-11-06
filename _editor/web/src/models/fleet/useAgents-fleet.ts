@@ -3,7 +3,11 @@ import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentReaction, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
-import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
+import { type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
+import { cardsFor } from "../agent-status/notifyAudience";
+import { useAuth } from "../../client/auth/useAuth";
+import { useAccess } from "../../client/sandbox/access/useAccess";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import {
     awaitingUser,
     blocked,
@@ -321,8 +325,13 @@ export const blocking = computed(() => fleet.value.filter(blocked).length);
 export const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
 // The rail badge names the Attention lane, as the board draws it (agentStatus.attentionCards): unread updates in Active
 // or Finished keep their card chip but do not claim the reader is needed, a child agent counts only through its
-// family's one card, and a held wake has no agent card yet and leads that lane on its own.
-export const attention = computed(() => attentionCards(fleet.value) + heldWakes.value.length);
+// family's one card, and a held wake has no agent card yet and leads that lane on its own. Narrowed to what waits on the
+// reader (notifyAudience.ts): a card in a conversation they took no part in is somebody else's to answer, and a held wake
+// is for whoever runs the sandbox.
+export const attention = computed(() => {
+    const reader = { email: useAuth().user.value?.email, operates: roleAtLeast(useAccess().role.value ?? `owner`, `maintainer`) };
+    return cardsFor(fleet.value, reader) + (reader.email === undefined || reader.operates ? heldWakes.value.length : 0);
+});
 
 // Marks the focused conversation seen the moment it updates, but only while this window is on screen and watching
 // it; otherwise it stays unread for the badge.

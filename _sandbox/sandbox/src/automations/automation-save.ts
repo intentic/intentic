@@ -156,8 +156,12 @@ export const refuseInvalidAutomation = async (services: Services, automation: Au
 };
 
 // Saves an automation already checked, and brings into being what it needs: its door's credential, the Visitor chat's
-// persona, its listener's gateway process.
-export const saveAutomation = async (services: Services, automation: Automation): Promise<void> => {
+// persona, its listener's gateway process. `by` is who is saving it (a member's email, or agent:<id> for a proposal a
+// person approved); who it is for is kept from its first save, never taken from what a request sent.
+export const saveAutomation = async (services: Services, sent: Automation, by: string | undefined): Promise<void> => {
+    const { createdBy: _claimed, ...rest } = sent;
+    const createdBy = (await services.automations.get(sent.id))?.createdBy ?? by;
+    const automation: Automation = createdBy === undefined ? rest : { ...rest, createdBy };
     await services.automations.upsert(automation);
     // The door's credential is minted with the door, never stored in the manifest; a re-post of the same record
     // keeps it, so an edit can't rotate a live credential out from under a shipped caller.

@@ -8,6 +8,7 @@ import { framedSummary, listedTo, provenanceOf } from "../../auth/fleet-scope.js
 import { holdsSeal } from "../../auth/seal-scope.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
+import { peopleAudience } from "../../push/push-audience.js";
 import { conversationUrl } from "../../push/notifications.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { freshSeal, sealRootOf, writeFamilySeal } from "./seal-family.js";
@@ -79,7 +80,7 @@ export const sealKit = (services: Services, replaceShells: () => void) => {
         return shown;
     };
     const tell = async (to: string, title: string, conversationId: string, body: string): Promise<void> => {
-        await services.pushSender.notifyIfAway({ title, body, url: conversationUrl(conversationId), tag: `seal-${conversationId}` }, to);
+        await services.pushSender.notifyIfAway({ title, body, url: conversationUrl(conversationId), tag: `seal-${conversationId}` }, peopleAudience([to]));
     };
     const record = (caller: Caller, action: string, target: string, details?: AuditEvent["details"]): void => {
         services.audit.record({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role }, action, target, ...opt("details", details) });

@@ -370,7 +370,15 @@
             "stopKeepingWarm": "Ne plus garder le cache chaud",
             "stopKeepingWarmHint": "Gardé chaud jusqu'à {time}",
             "tryLandAgain": "Réessayer l'intégration",
-            "landsIfConflictsGone": "Intègre si les conflits ont disparu"
+            "landsIfConflictsGone": "Intègre si les conflits ont disparu",
+            "notifyLabel": "Me prévenir",
+            "notifyAll": "De tout",
+            "notifyAllHint": "Chaque tour terminé et chaque carte qui vous attend",
+            "notifyAsks": "Seulement quand elle a besoin de moi",
+            "notifyAsksHint": "Questions, autorisations et validations qui vous attendent",
+            "notifyNone": "Jamais",
+            "notifyNoneHint": "Rien de cette conversation, sur aucun appareil",
+            "notifyFailed": "Impossible de changer ce qui vous parvient"
         },
         "agentStatus": {
             "landDetails": "Détails de l’erreur",

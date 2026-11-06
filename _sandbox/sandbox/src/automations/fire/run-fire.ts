@@ -22,6 +22,7 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import { refusalOf, type WakeRefusal, wakeEnding, wakePostures } from "../wake/wake-fallback.js";
 import { mintConversationId, ownOrigin, sessionsGate } from "./fire-sessions.js";
 import type { TurnStream, FireOptions, FireOutcome } from "./fire-options.js";
+import { automationAudience, OPERATORS } from "../../push/push-audience.js";
 
 // The automation's allowlist as it stands now, falling back to the record the fire was handed when it is gone.
 const currentAllowedTools = async (services: Pick<Services, "automations">, automation: AutomationRecord): Promise<readonly string[] | undefined> =>
@@ -134,7 +135,8 @@ const wakeModel = async (
 const isWatch = (automation: Pick<AutomationRecord, "source" | "fireOn" | "until">): boolean =>
     automation.source !== undefined || automation.fireOn === "change" || automation.until === "first-fire";
 
-// Tells the owner a one-time wake or a watch is done, the two whose whole purpose is to reach a person. Every other kind
+// Tells whoever made it (push-audience.ts automationAudience) a one-time wake or a watch is done, the two whose whole
+// purpose is to reach a person. Every other kind
 // is already answering somebody listening (a visitor, a channel, a webhook's caller) or is a chore nobody asked to hear
 // each run of, and a push per fire would make a five-minute poll unbearable. A watch fires only when something
 // happened, so it never is one. `notifyIfAway` still holds it if they're here to see the card themselves.
@@ -143,7 +145,8 @@ const notifyWakeSettled = (services: Services, automation: AutomationRecord, con
         return;
     }
     const outcome = failure === undefined ? { ok: true } : { ok: false, error: failure };
-    void services.pushSender.notifyIfAway(turnFinished(conversationId, automation.note ?? automation.prompt, outcome));
+    const to = automationAudience((id) => services.agents.entry(id), automation.createdBy);
+    void services.pushSender.notifyIfAway(turnFinished(conversationId, automation.note ?? automation.prompt, outcome), to);
 };
 
 // What a held wake keeps of the fire that was stopped, so an approved run replays it: the payload and origin, the
@@ -380,8 +383,8 @@ export const runFire = async (
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
                 announceHeld(stream);
-                // A held wake needs the owner to act; notifyIfAway pings them only if they're away.
-                void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
+                // A held wake waits on whoever can release it, the sandbox's owner and maintainers, while they are away.
+                void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt), OPERATORS);
                 return {};
             }
         }

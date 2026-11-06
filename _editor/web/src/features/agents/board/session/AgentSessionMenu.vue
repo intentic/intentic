@@ -12,9 +12,12 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { agentWork, assignAgent } from "../../../../models/fleet/agentActions";
-import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
+import { agentWork, assignAgent, notifyFromAgent } from "../../../../models/fleet/agentActions";
+import { notifyLevelOf, tookPart } from "@intentic/sandbox-contract/schemas/agent-people";
+import type { NotifyLevel } from "@intentic/sandbox-contract/schemas/agents";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { startOperation } from "../../../../workbench/operations/operations";
+import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
 import { mayAssign, ownedBy } from "../../../../models/agent-status/ownership";
 import { landsByDefault } from "../../../../models/sandbox/environment/rules";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -127,6 +130,33 @@ const chooseWall = async (policy: TurnBreakPolicy): Promise<void> => {
     }
     emit(`selected`);
     await setBreakPolicy(agentId, wall, policy === sandboxPolicy(wall, sandboxSettings.value) ? null : policy);
+};
+
+// How much of this session reaches the reader (sandbox-contract schemas/agent-people.ts): their own answer, else
+// everything for a session they took part in and nothing for one they did not. Three rows, the current one marked, as the
+// wall's answers above; choosing the default clears the answer rather than freezing a copy of it. Only for a signed-in
+// reader of a session the daemon knows, on a daemon that keeps the answer.
+const NOTIFY_ROWS: readonly { readonly level: NotifyLevel; readonly icon: `volume-up` | `question-circle` | `volume-off`; readonly label: string; readonly note: string }[] = [
+    { level: `all`, icon: `volume-up`, label: t(`agents.agentSessionMenu.notifyAll`), note: t(`agents.agentSessionMenu.notifyAllHint`) },
+    { level: `asks`, icon: `question-circle`, label: t(`agents.agentSessionMenu.notifyAsks`), note: t(`agents.agentSessionMenu.notifyAsksHint`) },
+    { level: `none`, icon: `volume-off`, label: t(`agents.agentSessionMenu.notifyNone`), note: t(`agents.agentSessionMenu.notifyNoneHint`) },
+];
+const notifyLevel = computed(() => (marked.value === undefined || me.value === undefined ? undefined : notifyLevelOf(marked.value, me.value)));
+const chooseNotify = (level: NotifyLevel): void => {
+    const agent = marked.value;
+    const reader = me.value;
+    emit(`selected`);
+    if (agent === undefined || reader === undefined || level === notifyLevel.value) {
+        return;
+    }
+    const fallback: NotifyLevel = tookPart(agent, reader) ? `all` : `none`;
+    void startOperation(`${agentWork(agentId)}/notify`, {
+        what: t(`agents.agentSessionMenu.notifyLabel`),
+        // The check moving to the row is the answer; only a refusal says anything.
+        quiet: true,
+        failed: t(`agents.agentSessionMenu.notifyFailed`),
+        task: () => notifyFromAgent(agentId, level === fallback ? null : level, agent.sandboxId),
+    });
 };
 
 // The sandbox's own length, not a choice here: the chat's status bar and the card's corner offer the finer one.
@@ -328,6 +358,24 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 />
                 <span class="flex min-w-0 flex-col">
                     <span class="text-sm md:text-xs" :class="wallAnswer === row.value ? 'text-link' : 'text-content'">{{ row.label }}</span>
+                    <span class="text-2xs text-subtle">{{ row.note }}</span>
+                </span>
+            </button>
+        </template>
+        <!-- What of this session reaches the reader's devices, tab and sounds: one answer of three, the current one marked. -->
+        <template v-if="notifyLevel !== undefined && supportsRoute(`agents.notify`)">
+            <span class="px-2.5 pt-2 pb-1 text-2xs text-subtle">{{ t(`agents.agentSessionMenu.notifyLabel`) }}</span>
+            <button
+                v-for="row in NOTIFY_ROWS"
+                :key="row.level"
+                type="button"
+                :class="ITEM"
+                :aria-pressed="notifyLevel === row.level"
+                @click="chooseNotify(row.level)"
+            >
+                <Icon :name="notifyLevel === row.level ? 'check' : row.icon" class="text-xs" :class="notifyLevel === row.level ? 'text-link' : 'text-subtle'" />
+                <span class="flex min-w-0 flex-col">
+                    <span class="text-sm md:text-xs" :class="notifyLevel === row.level ? 'text-link' : 'text-content'">{{ row.label }}</span>
                     <span class="text-2xs text-subtle">{{ row.note }}</span>
                 </span>
             </button>

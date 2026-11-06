@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { askedOf } from "../push/push-audience.js";
+import { askedAudience } from "../push/push-audience.js";
+import { childActor } from "../auth/principal.js";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -203,7 +204,8 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             }),
             automation: automationNeed({
                 refuse: (automation) => refuseInvalidAutomation(whole(), automation),
-                save: (automation) => saveAutomation(whole(), automation),
+                // Made by the conversation that proposed it: its people hear what the automation finds.
+                save: (automation, conversationId) => saveAutomation(whole(), automation, childActor(conversationId)),
                 exists: async (id) => (await whole().automations.get(id)) !== undefined,
                 firstCheck: async (automation) => {
                     if (automation.source === undefined) {
@@ -231,8 +233,8 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
         notify: (need) => {
             const services = whole();
             const entry = services.agents.entry(need.conversationId);
-            // In a home's family, its owner's devices alone (push/push-audience.ts).
-            void services.pushSender.notifyIfAway(needRaised(need, entry?.social.title?.text), askedOf((id) => services.agents.entry(id), need.conversationId));
+            // The people the conversation's asks wait on (push/push-audience.ts).
+            void services.pushSender.notifyIfAway(needRaised(need, entry?.social.title?.text), askedAudience((id) => services.agents.entry(id), need.conversationId));
             // Said in the channel the conversation came from too, where its person may be the only place it reaches them.
             const channel = needChannelOf(entry?.identity.origin);
             if (channel !== undefined) {

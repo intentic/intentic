@@ -14,10 +14,29 @@ import { StrandedCloneSchema } from "./stranded-clone.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
 import { ReviewTallySchema, TurnProofSchema } from "./work-assurance.js";
-import { AgentReactionSchema, SessionOwnerSchema } from "./agent-people.js";
+import { AgentReactionSchema, NotifyChoiceSchema, ParticipantSchema, SessionOwnerSchema } from "./agent-people.js";
 import { SEAL_VIEW_DESCRIPTION, SealViewSchema } from "./seal.js";
 import { LandConflictReasonSchema } from "./agent-land.js";
-export { AgentReactionSchema, ReactorSchema, SessionOwnerSchema, type AgentReaction, type Reactor, type SessionOwner } from "./agent-people.js";
+export {
+    AgentNotifySchema,
+    AgentReactionSchema,
+    NOTIFY_LEVELS,
+    NotifyChoiceSchema,
+    NotifyLevelSchema,
+    PARTICIPATIONS,
+    ParticipantSchema,
+    ParticipationSchema,
+    ReactorSchema,
+    SessionOwnerSchema,
+    type AgentNotify,
+    type AgentReaction,
+    type NotifyChoice,
+    type NotifyLevel,
+    type Participant,
+    type Participation,
+    type Reactor,
+    type SessionOwner,
+} from "./agent-people.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
 
@@ -401,6 +420,19 @@ export const AgentSummarySchema = z.object({
     owner: SessionOwnerSchema.optional().describe(
         "The member answerable for this conversation: set from whoever started it, inherited from the parent by a spawned child, moved by handing it over. Absent means nobody has claimed it yet.",
     ),
+    // Who hears its news beside its owner and starter, and how much each asked to (schemas/agent-people.ts).
+    participants: z
+        .array(ParticipantSchema)
+        .optional()
+        .describe(
+            "The people who took part in it besides whoever started it: sent it a message, answered its cards, asked to land it, or were named in a message. They hear its news by default. Absent means nobody beyond its starter and owner has.",
+        ),
+    notify: z
+        .array(NotifyChoiceSchema)
+        .optional()
+        .describe(
+            "Your own answer to how much of this conversation's news reaches you, when you gave one; nobody else's answer is shown to you. Absent means you follow the default: everything if you took part in it, else nothing.",
+        ),
     // Recorded once on the fork's first turn and never cleared; rides the summary so the link survives closing and
     // reopening either tab.
     forkedFrom: ForkedFromSchema.optional().describe(

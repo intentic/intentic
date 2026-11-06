@@ -2,7 +2,7 @@ import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import { AgentTranscriptSchema } from "../events/agent-transcript.js";
-import { AgentAssignSchema, AgentAutoLandSchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
+import { AgentAssignSchema, AgentAutoLandSchema, AgentNotifySchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
 import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
 import { AgentsAttentionSchema, AgentsListSchema, HomeConversationSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
@@ -457,6 +457,18 @@ export const agentsContract = {
         })
         .meta({ floor: "viewer", guest: true })
         .input(AgentReactSchema)
+        .output(AgentSummarySchema),
+    // Floored like `react`: what reaches a person's own devices is their own business, not operating authority.
+    notify: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/notify",
+            summary: "Choose how much of a conversation reaches you",
+            description:
+                "Sets how much of this conversation's news reaches your devices, your browser tab and the app's sounds: every finished turn and every card, only the cards that wait on you, or nothing. Clearing it goes back to the default, which is everything for a conversation you took part in and nothing for one you did not. Only you see your answer.",
+        })
+        .meta({ floor: "viewer", guest: true })
+        .input(AgentNotifySchema)
         .output(AgentSummarySchema),
     discard: procedure
         .route({

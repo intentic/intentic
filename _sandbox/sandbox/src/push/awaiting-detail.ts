@@ -1,4 +1,4 @@
-import { askedOf } from "./push-audience.js";
+import { askedAudience } from "./push-audience.js";
 import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { planParts } from "@intentic/sandbox-contract/text/title";
@@ -50,6 +50,10 @@ const LINES = {
     page_ask: (row) => waiting(row.pageAsk, (card) => card.page.title),
 } satisfies Record<ParkKind, (row: TranscriptRow) => AwaitingCard | undefined>;
 
+// Who may release a credential card: the people named on it, the only ones whose press it takes.
+const approversOf = (rows: readonly TranscriptRow[], requestId: string): readonly string[] | undefined =>
+    rows.findLast((row) => row.credentialOffer?.requestId === requestId)?.credentialOffer?.offer.approvers;
+
 // The newest card of this kind still waiting on its answer; undefined when the rows hold none, as when it was answered
 // before its notification went out.
 export const awaitingCard = (rows: readonly TranscriptRow[], kind: ParkKind): AwaitingCard | undefined => {
@@ -67,8 +71,8 @@ export interface ParkedOn {
     readonly insist?: boolean;
 }
 
-// Tells the devices of whoever is away that a card waits, named after the conversation and in the card's own words; an
-// insistent card tells them whether they are away or not.
+// Tells the devices of the people a card waits on, while they are away, that it waits, named after the conversation and
+// in the card's own words; an insistent card tells them whether they are away or not.
 export const notifyAwaiting = async (
     services: Pick<Services, "agents" | "pushSender"> & Partial<Pick<Services, "logger" | "cards">>,
     parked: ParkedOn,
@@ -85,9 +89,10 @@ export const notifyAwaiting = async (
     }
     const title = services.agents.entry(parked.conversationId)?.social.title?.text;
     const notification = turnAwaiting(parked.conversationId, parked.kind, card, title);
-    // In a home's family, its owner's devices alone (push-audience.ts).
-    const to = askedOf((id) => services.agents.entry(id), parked.conversationId);
-    const delivery = await (parked.insist === true ? services.pushSender.notify(notification) : services.pushSender.notifyIfAway(notification, to));
+    // The people the conversation's cards wait on (push-audience.ts); a credential's, the people named on it.
+    const approvers = parked.kind === "credential_offer" && card !== undefined && parked.run !== undefined ? approversOf(parked.run.rows, card.requestId) : undefined;
+    const to = askedAudience((id) => services.agents.entry(id), parked.conversationId, approvers);
+    const delivery = await (parked.insist === true ? services.pushSender.notify(notification, to) : services.pushSender.notifyIfAway(notification, to));
     // Whether the owner's devices were told is half of "did the card reach anyone"; the other half is the card's own
     // line (parked-cards.ts).
     services.logger?.info(

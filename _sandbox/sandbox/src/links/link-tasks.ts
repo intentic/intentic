@@ -23,6 +23,7 @@ import { fileStartWindow, type StartWindow, turnStartsDocument } from "../store/
 import type { DomainEventMap } from "../seams/domain-events.js";
 import type { TurnInput, TurnStarter } from "../seams/turn-starter.js";
 import { spokenBy } from "../seams/turn-speaker.js";
+import { OPERATORS } from "../push/push-audience.js";
 import type { InboundLinks, ResolvedLink, StoredLinkTask } from "./inbound-links.js";
 import { linkTaskStatusMark, waitForLinkTaskStatus, wakeLinkTaskStatus } from "./link-task-status-wait.js";
 
@@ -67,7 +68,8 @@ export const linkTaskDepsOf = (services: LinkServices): LinkTaskDeps => ({
     turns: services.turns,
     conversations: services.conversations,
     starts: fileStartWindow(join(services.config.historyRoot, turnStartsDocument.path)),
-    notify: (notification) => void services.pushSender.notifyIfAway(notification),
+    // A held task waits on whoever can allow it: the sandbox's owner and maintainers.
+    notify: (notification) => void services.pushSender.notifyIfAway(notification, OPERATORS),
     logger: services.logger,
     ...opt("standing", standingOf(services)),
 });

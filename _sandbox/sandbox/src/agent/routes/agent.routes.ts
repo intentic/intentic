@@ -28,6 +28,7 @@ import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
 import { refuseFromBranch, withBranchFolder } from "./branch-start.js";
 import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
+import { takePart } from "../../conversations/people/take-part.js";
 import { type HomeOpening, homeOpening, refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
@@ -258,8 +259,9 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("FORBIDDEN", { message: applied.refused });
             }
             if (applied === "settled") {
-                // What waited behind the card goes into the turn it un-parked, for every window alike.
+                // What waited behind the card goes into the turn it un-parked, for every window alike; who answered took part.
                 void (held === undefined ? undefined : services.turns.drain(held));
+                void takePart(services, held, context.identity, "answer");
                 return { ok: true } as const;
             }
             // Remote: nothing held here is unusual, the question was minted on the runner instead.
@@ -292,6 +294,7 @@ export const createAgentRoutes = (services: Services) => {
             if ("why" in steered) {
                 throw new ORPCError("NOT_FOUND", { message: steered.why });
             }
+            void takePart(services, conversationId, context.identity, { steer: steer.text });
             return steered;
         }),
         // Hard-cancels the conversation's running turn daemon-side; the browser's own fetch abort can't. Answers, rather

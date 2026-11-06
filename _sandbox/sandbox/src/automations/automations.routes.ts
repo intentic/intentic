@@ -71,9 +71,9 @@ export const createAutomationsRoutes = (services: Services) => {
         }),
         // Who has written to a source, admitted or not; the picker offers these by name and stores the id.
         senders: i.senders.handler(async ({ input }) => ({ senders: await services.senders.list(input.provider) })),
-        upsert: i.upsert.handler(async ({ input }) => {
+        upsert: i.upsert.handler(async ({ input, context }) => {
             await refuseInvalidAutomation(services, input);
-            await saveAutomation(services, input);
+            await saveAutomation(services, input, context.identity?.email);
             return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {

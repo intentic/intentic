@@ -8,6 +8,7 @@ import { conversationEntry } from "../conversations/registry/agents-store.testin
 import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { awaitingCard, notifyAwaiting } from "./awaiting-detail.js";
 import { turnAwaiting } from "./notifications.js";
+import type { Audience } from "./push-audience.js";
 
 /* A notification for a waiting card says who waits (the conversation's title) and on what (the card's own line),
  * read off the conversation's live run, since every raiser announces only the card's kind. */
@@ -196,6 +197,8 @@ describe("telling the devices", () => {
         const sent: PushNotification[] = [];
         // What went out whether or not anyone was away.
         const insisted: PushNotification[] = [];
+        // Who each send was for, in order.
+        const audiences: Audience[] = [];
         const services: Pick<Services, "agents" | "pushSender"> = {
             agents: unstubbed<Services["agents"]>("agents", {
                 entry: (id) =>
@@ -207,17 +210,19 @@ describe("telling the devices", () => {
                           }),
             }),
             pushSender: unstubbed<Services["pushSender"]>("pushSender", {
-                notifyIfAway: async (notification) => {
+                notifyIfAway: async (notification, to) => {
                     sent.push(notification);
+                    audiences.push(to);
                     return { delivered: 1, failed: 0 };
                 },
-                notify: async (notification) => {
+                notify: async (notification, to) => {
                     insisted.push(notification);
+                    audiences.push(to);
                     return { delivered: 1, failed: 0 };
                 },
             }),
         };
-        return { services, sent, insisted };
+        return { services, sent, insisted, audiences };
     };
 
     test("a card the turn raised is read though it folds into the run only after it was announced", async () => {
@@ -275,14 +280,27 @@ describe("telling the devices", () => {
         ]);
     });
 
-    test("an insistent card is sent whether or not its person is away", async () => {
-        const { services, sent, insisted } = wired("Clean the podman store");
+    test("an insistent card is sent whether or not its person is away, still only to whoever it waits on", async () => {
+        const { services, sent, insisted, audiences } = wired("Clean the podman store");
         const fold = liveFold();
         fold.apply(permission("p1", { title: "Run this on omen?" }));
         await notifyAwaiting(services, { conversationId: "conv-1", kind: "permission", run: { rows: fold.rows }, insist: true });
 
         expect(sent).toEqual([]);
         expect(insisted.map((notification) => [notification.tag, notification.body])).toEqual([["awaiting-p1", "Run this on omen?"]]);
+        // Nobody took part in conv-1, so its card waits on the sandbox's operators, about the conversation it is in.
+        expect(audiences).toEqual([{ kind: "operators", about: expect.objectContaining({}) }]);
+    });
+
+    test("a credential card is told to the people named on it, and only them", async () => {
+        const { services, audiences } = wired("Migrate the database");
+        const fold = liveFold({
+            kind: "credential_offer",
+            requestId: "k1",
+            offer: { subject: "DATABASE_URL", kind: "secret", lane: "shell", approvers: ["Max@Example.com"], scope: "use" },
+        });
+        await notifyAwaiting(services, { conversationId: "conv-1", kind: "credential_offer", run: { rows: fold.rows } });
+        expect(audiences).toEqual([expect.objectContaining({ kind: "people", emails: ["max@example.com"] })]);
     });
 
     // Whether the devices were told is half of "did the card reach anyone": each announcement says how many it reached,

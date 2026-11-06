@@ -370,7 +370,15 @@
             "stopKeepingWarm": "Cache nicht mehr warm halten",
             "stopKeepingWarmHint": "Warm gehalten bis {time}",
             "tryLandAgain": "Erneut landen",
-            "landsIfConflictsGone": "Landet, wenn die Konflikte weg sind"
+            "landsIfConflictsGone": "Landet, wenn die Konflikte weg sind",
+            "notifyLabel": "Benachrichtigen",
+            "notifyAll": "Über alles",
+            "notifyAllHint": "Jeder beendete Zug und jede Karte, die auf dich wartet",
+            "notifyAsks": "Nur wenn sie mich braucht",
+            "notifyAsksHint": "Fragen, Berechtigungen und Freigaben, die auf dich warten",
+            "notifyNone": "Nie",
+            "notifyNoneHint": "Nichts aus dieser Unterhaltung, auf keinem Gerät",
+            "notifyFailed": "Konnte nicht ändern, was dich erreicht"
         },
         "agentStatus": {
             "landDetails": "Fehlerdetails",

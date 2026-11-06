@@ -1,7 +1,7 @@
 import { useAudience } from "../../app/useAudience";
 import type { AgentChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { AgentReaction, AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentReaction, AgentSpan, AgentSummary, LandMode, LandResult, NotifyLevel } from "@intentic/sandbox-contract/schemas/agents";
 import { type AgentRunChoice, useDevice } from "@intentic/ui";
 import type { Conversation } from "../conversations/session/conversation";
 import type { ChatAttachment } from "../conversations/transcript/transcript";
@@ -230,6 +230,11 @@ export const assignAgent = (id: string, to: string, at: AgentReach = undefined):
 // says who. `on` states which, rather than flipping what's stored, so a double press lands where one did.
 export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<AgentSummary> =>
     sandboxRpc.agents.react({ id, emoji, on }, { context: { at } });
+
+// How much of a conversation reaches the caller's devices, tab and sounds (sandbox-contract schemas/agent-people.ts);
+// the daemon keeps it as the verified caller's own, and `null` goes back to the default. The card comes back with it.
+export const notifyFromAgent = (id: string, level: NotifyLevel | null, at: AgentReach = undefined): Promise<AgentSummary> =>
+    sandboxRpc.agents.notify({ id, level }, { context: { at } });
 
 // The same press on a card no turn has started yet (a draft, an open new chat), which has no registry entry for `react`
 // to mark: the sandbox keeps the caller's marks beside their draft until the first turn carries them onto the card.

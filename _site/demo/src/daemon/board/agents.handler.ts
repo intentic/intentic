@@ -22,7 +22,7 @@ import {
 import { conflictsOf, deleteScratch, historyOf, includeScratch, reviewOf } from "./review";
 import { clearHomeHistory, editedTranscript, placeLine, startFreshHome, toolChildren } from "./transcriptEdits";
 import { draftDoors } from "./drafts";
-import { agentAnswer, amendAgent, boardAgents, heldApprovals, homeDoors, patchAgent, roster } from "./roster";
+import { agentAnswer, amendAgent, boardAgents, heldApprovals, homeDoors, OWNER, patchAgent, roster } from "./roster";
 import { DEMO_SYSTEM_PROMPT } from "../account/settings";
 import { type Doors, okAfter } from "../doors";
 
@@ -62,6 +62,15 @@ export const agentsDoors = {
     // As the daemon does for a client keeping its words to itself: records since when a composer held them.
     unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
     react: reactToAgent,
+    // As the registry does for the reader: their own answer to how much of it reaches them, `null` back to the default.
+    notify: ({ id, level }) =>
+        agentAnswer(
+            amendAgent(id, ({ notify: held, ...card }) => {
+                const others = (held ?? []).filter((choice) => choice.email !== OWNER.email);
+                const notify = level === null ? others : [...others, { email: OWNER.email, level, at: Date.now() }];
+                return notify.length === 0 ? card : { ...card, notify };
+            }),
+        ),
     assign: assignAgent,
     // As the registry does: `null` clears the conversation's own answer back to the sandbox's.
     autoLand: ({ id, autoLand }) =>

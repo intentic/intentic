@@ -946,7 +946,7 @@ flowchart LR
 - The disk-pressure watch (`system/resources/storage/disk-pressure.ts`, 2026-11-03) reads the history volume once a
   minute. Under the settings' `diskReapBelowPercent` free (15% by default) it removes settled checkouts' build output
   at once, landed ones first and then the longest idle, until the volume is back over it. Under 10% and under 5% it
-  tells the owner once per level, whatever the threshold, with a push
+  tells the sandbox's owner and maintainers once per level, whatever the threshold, with a push
   (`notifyIfAway` at 10%, `notify` at 5%) and a "disk is nearly full" row at the head of the sandbox's attention
   list, saying what is left, what it removed and what holds the most, with a Clean press; it says so again only after
   the disk has been back over the threshold. `GET /system/disk-pressure` answers from its last reading, and the `disk` runtime
@@ -1033,6 +1033,20 @@ flowchart LR
   own session from `GET /push/notification?tag=`, which answers only a member the notification was sent to. They are
   kept in memory (`push/sent-notifications.ts`), the newest 200 tags for a day, so after a restart the route answers
   not found and the app draws its own words.
+  Every send names who it is for (`push/push-audience.ts`), and nothing goes to the whole sandbox. A conversation's
+  news goes to the people who took part in it: its owner, its starter, and everyone who sent it a message, answered
+  one of its cards, asked to land it or was named in a message with `@` and their address
+  (`conversations/people/`). Each person can choose how much reaches them: everything, only the cards waiting on them,
+  or nothing (`agents.notify`). The rule lives in sandbox-contract `schemas/agent-people.ts`, which the editor's
+  tab, chime and Agents badge read too. A card in a subagent waits on the people of the conversation at the top of its
+  family. A card nobody took part in, or that everyone turned off, goes to the sandbox's operators (owner and
+  maintainers). A credential card goes to the approvers it names. A finished subagent, and a conversation an outside
+  message opened, push nothing. The sandbox's own news (disk, another copy of the sandbox holding its address, held
+  wakes and link tasks) goes to the operators. A refused Back up goes to whoever pressed it. An automation's notices
+  go to whoever made it (`createdBy`). Before sending, the sender checks each device's person against the roster as it
+  stands, and against the conversation's visibility (`auth/fleet-scope.ts visibleTo`), so a guest, a fenced member, a
+  reader a seal keeps out or someone taken off the roster hears nothing about it. A device registered before devices
+  named their person hears only the sandbox's own news, until a signed-in editor that asks after it claims it.
 
 - Speech runs on this machine in both directions ([`@intentic/speech`](../speech), its routes in `speech/`), each in a
   child process of its own over `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native

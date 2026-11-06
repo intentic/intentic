@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { mocked } from "@intentic/testing/bun";
 import webpush, { WebPushError } from "web-push";
 import { createPushSender } from "./push.js";
+import { OPERATORS } from "./push-audience.js";
 import { filePushStore } from "./push-store.js";
 import { turnAwaiting, turnFinished } from "./notifications.js";
 
@@ -153,6 +154,8 @@ const stubSends = (refusals: Record<string, number>): void => {
 };
 
 const sample = { title: "intentic", body: "done", tag: "t" };
+// These devices name no member, so they are the owner's own tools' and hear the sandbox's own news (push.ts).
+const ownersTools = async () => ({ callerOf: (email: string) => ({ email, role: "owner" as const }) });
 
 test("a 403 drops the subscription: a recreated sandbox's stale endpoints must not be retried forever", async () => {
     const path = await storePath();
@@ -161,7 +164,7 @@ test("a 403 drops the subscription: a recreated sandbox's stale endpoints must n
     await store.add(subscription("https://push.example/live"));
     stubSends({ "https://push.example/stale": 403 });
 
-    await createPushSender(store, silentLogger).notify(sample);
+    await createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS);
 
     expect(idsOf(await store.list())).toEqual(["https://push.example/live"]);
 });
@@ -172,7 +175,7 @@ test("a transient 500 keeps the subscription and does not fail the caller", asyn
     await store.add(subscription("https://push.example/flaky"));
     stubSends({ "https://push.example/flaky": 500 });
 
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
 
@@ -181,7 +184,7 @@ test("a send to nobody is reported as such: the test button's whole job is to ca
     const store = filePushStore(path);
     stubSends({});
 
-    expect(await createPushSender(store, silentLogger).notify(sample)).toEqual({ delivered: 0, failed: 0, skipped: "no device registered" });
+    expect(await createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).toEqual({ delivered: 0, failed: 0, skipped: "no device registered" });
 });
 
 test("one dead endpoint does not stop the others being notified", async () => {
@@ -191,7 +194,7 @@ test("one dead endpoint does not stop the others being notified", async () => {
     await store.add(subscription("https://push.example/live"));
     stubSends({ "https://push.example/gone": 410 });
 
-    await createPushSender(store, silentLogger).notify(sample);
+    await createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS);
 
     expect(mocked(webpush.sendNotification)).toHaveBeenCalledTimes(2);
     expect(idsOf(await store.list())).toEqual(["https://push.example/live"]);
@@ -210,7 +213,7 @@ test("a relay channel is posted to its recorded url with the send capability and
     await store.add(relayChannel("device-1"));
     const fetchSpy = stubRelay({});
 
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 1, failed: 0 });
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 1, failed: 0 });
 
     // Relay calls carry the recorded url, the {deviceId, secret} capability, and the notification verbatim.
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -226,7 +229,7 @@ test("a relay 410 drops the channel: an uninstalled app must not be retried fore
     await store.add(relayChannel("live"));
     stubRelay({ gone: 410 });
 
-    await createPushSender(store, silentLogger).notify(sample);
+    await createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS);
 
     expect(idsOf(await store.list())).toEqual(["live"]);
 });
@@ -237,7 +240,7 @@ test("a relay 500 keeps the channel and does not fail the caller", async () => {
     await store.add(relayChannel("flaky"));
     stubRelay({ flaky: 500 });
 
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
 
@@ -248,7 +251,7 @@ test("a relay that cannot be reached at all is a transient, not a prune", async 
     jest.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     // Unlike a 410, an unreachable relay says nothing about the device, so the row survives.
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
 
@@ -260,7 +263,7 @@ test("browsers and native installs are fanned out together, each over its own tr
     stubSends({});
     const fetchSpy = stubRelay({});
 
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 2, failed: 0 });
+    await expect(createPushSender(store, silentLogger, ownersTools).notify(sample, OPERATORS)).resolves.toEqual({ delivered: 2, failed: 0 });
     expect(mocked(webpush.sendNotification)).toHaveBeenCalledTimes(1);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 });

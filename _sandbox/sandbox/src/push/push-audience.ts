@@ -1,71 +1,103 @@
+import { audienceOf, recordFacts } from "@intentic/sandbox-contract/schemas/agent-people";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
-import { supervisorOf } from "../auth/principal.js";
+import { provenanceOf, type Provenance } from "../auth/fleet-scope.js";
+import { parentOfActor, supervisorOf } from "../auth/principal.js";
+import { opt } from "../opt.js";
 import { turnFinished } from "./notifications.js";
 import type { PushSender } from "./push.js";
 
-// WHO A CONVERSATION'S PUSHES ARE FOR. Every member who is away, for an ordinary conversation, as before. A home
-// conversation (conversations/home/) is one person's chat with the sandbox, so its news and its family's go to that person
-// alone; and a subagent of a home finishing is the home's news, not a person's: the home is woken with its report and
-// judges it, so its owner is told only what the home itself ends with, or what only a person can answer (a card, a need).
+// WHO A PUSH IS FOR. Every send names its people; nothing goes to "everyone in the sandbox" any more (until 2026-11-06 a
+// shared conversation's news went to every member who was away, guests and fenced members included, its prompt with it).
+// - A conversation's news is for the people who took part in it and have not turned it off (sandbox-contract
+//   schemas/agent-people.ts), and `about` names the conversation so the sender drops anyone it is hidden from
+//   (push.ts, auth/fleet-scope.ts visibleTo): a guest, a fenced member, a reader a seal keeps out.
+// - The sandbox's own news (its disk, its address, a held wake or link task) is for its operators: its owner and
+//   maintainers, the people who can act on it.
 
-export type PushAudience = { readonly kind: "everyone" } | { readonly kind: "member"; readonly email: string } | { readonly kind: "nobody" };
+export type Audience =
+    | { readonly kind: "people"; readonly emails: readonly string[]; readonly about?: Provenance | undefined }
+    | { readonly kind: "operators"; readonly about?: Provenance | undefined };
 
-const EVERYONE: PushAudience = { kind: "everyone" };
+export const OPERATORS: Audience = { kind: "operators" };
+
+/** These people, each once, about this conversation when it names one. */
+export const peopleAudience = (emails: readonly string[], about?: Provenance): Audience => ({
+    kind: "people",
+    emails: [...new Set(emails.map((email) => email.toLowerCase()))],
+    ...opt("about", about),
+});
+
 // Deeper than any family spawn depth allows; a cycle in a corrupt record must not spin.
 const MOST_ANCESTORS = 16;
 
-// The home this conversation is, or descends from, by who supervises whom (agents-store.ts supervisorOf).
-const homeAbove = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): { readonly home: PersistedAgent; readonly self: boolean } | undefined => {
-    let id: string | undefined = conversationId;
-    for (let step = 0; id !== undefined && step < MOST_ANCESTORS; step += 1) {
-        const entry = entryOf(id);
-        if (entry === undefined) {
-            return undefined;
+// The conversation a person opened that this one reports to: itself, or the top of the chain of supervisors above a
+// subagent or a fresh review (principal.ts supervisorOf). Its people are the ones a card down the family waits on.
+const reportsTo = (entryOf: (id: string) => PersistedAgent | undefined, entry: PersistedAgent): PersistedAgent => {
+    let top = entry;
+    for (let step = 0; step < MOST_ANCESTORS; step += 1) {
+        const above = supervisorOf(top.identity);
+        const next = above === undefined ? undefined : entryOf(above);
+        if (next === undefined) {
+            return top;
         }
-        if (entry.identity.home === true) {
-            return { home: entry, self: step === 0 };
-        }
-        id = supervisorOf(entry.identity);
+        top = next;
     }
-    return undefined;
+    return top;
 };
 
-/** Who hears that a turn finished: a home's owner for the home, nobody for its subagents, everyone else as ever. */
-export const finishedAudience = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): PushAudience => {
-    // A private conversation's news is its author's alone, whatever family it is in: a push carries its words.
-    const author = sealAuthorOf(entryOf, conversationId);
-    if (author !== undefined) {
-        return { kind: "member", email: author };
+/**
+ * Who hears that a turn finished: the people who took part, asking for everything of it. Nobody for a subagent or a
+ * fresh review, whose ending wakes the conversation it reports to, which judges it and says what it ends with; nobody for
+ * a conversation an outside message opened, which answers whoever wrote in. Undefined when nobody hears it.
+ */
+export const finishedAudience = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): Audience | undefined => {
+    const entry = entryOf(conversationId);
+    if (entry === undefined || supervisorOf(entry.identity) !== undefined || entry.identity.origin !== undefined) {
+        return undefined;
     }
-    const above = homeAbove(entryOf, conversationId);
-    const owner = above?.home.social.owner?.email;
-    if (above === undefined || owner === undefined) {
-        return EVERYONE;
-    }
-    return above.self ? { kind: "member", email: owner } : { kind: "nobody" };
+    const emails = audienceOf(recordFacts(entry), "finished");
+    return emails.length === 0 ? undefined : peopleAudience(emails, provenanceOf(entry));
 };
 
-/** Who hears that a card or a need waits on a person: in a home's family, its owner alone (undefined: everyone away). */
-export const askedOf = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): string | undefined =>
-    sealAuthorOf(entryOf, conversationId) ?? homeAbove(entryOf, conversationId)?.home.social.owner?.email;
+/**
+ * Who hears that a card or a need waits on a person: the people of the conversation it reports to who did not turn it
+ * off; the sandbox's operators when that is nobody, since a card nobody hears is an agent stopped for good. A credential
+ * to release goes to the people named on it alone, whoever they are. Always about the conversation that asks.
+ */
+export const askedAudience = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string, approvers?: readonly string[]): Audience => {
+    const entry = entryOf(conversationId);
+    const about = entry === undefined ? undefined : provenanceOf(entry);
+    if (approvers !== undefined && approvers.length > 0) {
+        return peopleAudience(approvers, about);
+    }
+    const emails = entry === undefined ? [] : audienceOf(recordFacts(reportsTo(entryOf, entry)), "asks");
+    return emails.length === 0 ? { kind: "operators", ...opt("about", about) } : peopleAudience(emails, about);
+};
 
-// The author of a private conversation (schemas/seal.ts), the first of its readers; undefined for a shared one.
-const sealAuthorOf = (entryOf: (id: string) => PersistedAgent | undefined, conversationId: string): string | undefined =>
-    entryOf(conversationId)?.seal?.readers[0]?.email;
+/**
+ * Who an automation's own notices are for (a watch firing or ending, a one-time wake done): whoever made it, a person or
+ * the people of the conversation that proposed it; the sandbox's operators for one made before that was kept, or whose
+ * maker no longer has anybody to tell.
+ */
+export const automationAudience = (entryOf: (id: string) => PersistedAgent | undefined, createdBy: string | undefined): Audience => {
+    const proposedIn = parentOfActor(createdBy);
+    if (proposedIn !== undefined) {
+        const entry = entryOf(proposedIn);
+        const emails = entry === undefined ? [] : audienceOf(recordFacts(entry), "finished");
+        return entry === undefined || emails.length === 0 ? OPERATORS : peopleAudience(emails, provenanceOf(entry));
+    }
+    return createdBy !== undefined && createdBy.includes("@") ? peopleAudience([createdBy]) : OPERATORS;
+};
 
-/** The member a send is narrowed to, or `false` for one nobody should get. */
-const audienceTo = (audience: PushAudience): string | undefined | false =>
-    audience.kind === "nobody" ? false : audience.kind === "member" ? audience.email : undefined;
-
-/** A finished turn's push, to whoever `finishedAudience` names; nothing at all for a home's subagent. */
+/** A finished turn's push, to whoever `finishedAudience` names, and to nobody when that is nobody. */
 export const notifyTurnFinished = async (
     services: { readonly agents: { readonly entry: (id: string) => PersistedAgent | undefined }; readonly pushSender: Pick<PushSender, "notifyIfAway"> },
     conversationId: string,
     prompt: string,
     outcome: { ok: boolean; error?: string },
 ): Promise<void> => {
-    const to = audienceTo(finishedAudience(services.agents.entry, conversationId));
-    if (to !== false) {
+    const to = finishedAudience(services.agents.entry, conversationId);
+    if (to !== undefined) {
         await services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome), to);
     }
 };

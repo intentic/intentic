@@ -1,4 +1,5 @@
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
+import { type Audience, OPERATORS, peopleAudience } from "../../push/push-audience.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
@@ -30,6 +31,9 @@ export interface PushStartOptions {
     // While one is already running for the repo, push once more after it settles instead of joining it: the commit that
     // asked for this push may have been made after the running one read the branch. Several asks fold into one.
     readonly again?: boolean;
+    // Who pressed Back up, the person a refusal is told to; absent, the sandbox's owner and maintainers hear it, as for a
+    // push the back-up rule started.
+    readonly by?: { readonly email: string };
 }
 
 export interface PushRuns {
@@ -64,9 +68,9 @@ const feedLine = (settled: PushRun): string =>
         ? `\`${settled.command}\` in ${settled.repo} hit its time limit and was killed, the push did not go.`
         : `\`${settled.command}\` in ${settled.repo} was refused${settled.refusedBy === undefined ? "" : ` by the ${settled.refusedBy}`}: ${settled.reason ?? "it could not run"}.`;
 
-// A settled run as the log, the owner's devices and the feed hear it. A verdict reached while the owner is away travels
-// to their devices; a cancel sends nothing, since the Stop button was their own hand.
-const announceSettled = (services: PushRunDeps, settled: PushRun): void => {
+// A settled run as the log, the devices of whoever it is for and the feed hear it. A verdict reached while they are away
+// travels to their devices; a cancel sends nothing, since the Stop button was their own hand.
+const announceSettled = (services: PushRunDeps, settled: PushRun, tell: Audience): void => {
     services.logger.info(
         {
             repo: settled.repo,
@@ -79,7 +83,7 @@ const announceSettled = (services: PushRunDeps, settled: PushRun): void => {
         "push: settled",
     );
     if (settled.status === "failed" || settled.status === "error") {
-        void services.pushSender.notifyIfAway(pushRefused(settled));
+        void services.pushSender.notifyIfAway(pushRefused(settled), tell);
         void services.activity
             .append({ direction: "system", type: "git.push_refused", content: feedLine(settled), outcome: "error" })
             .catch((error: unknown) => services.logger.warn({ err: error, repo: settled.repo }, "push: activity append failed"));
@@ -108,7 +112,8 @@ export const createPushRuns = (
     const timeoutMs = ceiling.timeoutMs ?? PUSH_TIMEOUT_MS;
     const runs = new Map<string, PushRun>();
     const controllers = new Map<string, AbortController>();
-    const inFlight = new Set<string>();
+    // Each repository with a push going, and who hears it end badly (PushStartOptions.by).
+    const inFlight = new Map<string, Audience>();
     // Repos owed one more push once the running one settles, with where and how to run it.
     const owed = new Map<string, { readonly dir: string; readonly options: PushStartOptions }>();
     const listeners = new Set<(run: PushRun) => void>();
@@ -120,7 +125,7 @@ export const createPushRuns = (
     // What a settled run means to everyone but the poller; one path whether the push ran or never started.
     const report = (settled: PushRun): PushRun => {
         publish(settled);
-        announceSettled(services, settled);
+        announceSettled(services, settled, inFlight.get(settled.repo) ?? OPERATORS);
         if (settled.status === "passed") {
             // A push only moves ahead/behind locally; invalidating the scan is how the Changes response picks it up.
             onPushed(settled.repo);
@@ -176,7 +181,7 @@ export const createPushRuns = (
             }
             return;
         }
-        inFlight.add(repo);
+        inFlight.set(repo, options.by === undefined ? OPERATORS : peopleAudience([options.by.email]));
         // The owed push, started once this one is over; a failure to start it is the log's, never the settle's.
         const settleOwed = (): void => {
             const next = owed.get(repo);

@@ -1,7 +1,11 @@
 import { insidePath, isSandboxPage, legacyTarget, topPath } from "@intentic/sandbox-contract/app-routes";
 import { channelId, type PushNotification, type PushSentNotification } from "@intentic/sandbox-contract/schemas/push";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Logger } from "pino";
+import type { Caller } from "../auth/auth.js";
+import { visibleTo } from "../auth/fleet-scope.js";
 import { idleEverywhere, presentMembers } from "../system/presence.js";
+import type { Audience } from "./push-audience.js";
 import type { PushStore, StoredChannel } from "./push-store.js";
 import { createSentNotifications } from "./sent-notifications.js";
 import { sendRelay } from "./senders/relay.js";
@@ -10,10 +14,12 @@ import { sendWebPush } from "./senders/webpush.js";
 
 // Fans out a notification to the registered devices (browsers over web push, native installs through the relay);
 // transports live in senders/ behind one outcome shape.
-// 1. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream): a device is skipped
+// 1. Only the devices of the people it is for (push-audience.ts): each device's person as the roster admits them now, so
+//    a person taken off the roster hears nothing more, and never a person the conversation it is about is hidden from.
+// 2. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream): a device is skipped
 //    while the member who registered it has a tab in use, and one that names no member while anybody does.
-// 2. A push failure never touches the caller: every send is fire-and-forget.
-// 3. What each tagged notification said is kept for the members it was sent to (sent-notifications.ts), for a native app
+// 3. A push failure never touches the caller: every send is fire-and-forget.
+// 4. What each tagged notification said is kept for the members it was sent to (sent-notifications.ts), for a native app
 //    whose push carried only the tag.
 
 // How many devices a send reached; the turn lifecycle ignores it, but the test button needs it to catch a silent zero.
@@ -22,15 +28,23 @@ export interface PushDelivery {
     readonly failed: number;
     // Why nothing was sent, when nothing was: no device registered, or every device's person is at a screen.
     // Or a card night hours answered as it was raised, which waits on nobody (agent/night).
-    readonly skipped?: "no device registered" | "everyone is watching" | "it never showed" | "night hours answered it";
+    readonly skipped?: "no device registered" | "nobody it is for has a device" | "everyone is watching" | "it never showed" | "night hours answered it";
+}
+
+// Who each device's person is as the roster admits them now (auth/members/member-caller.ts rosterCaller), read per send.
+export interface PushRoster {
+    readonly callerOf: (email: string) => Caller | undefined;
 }
 
 export interface PushSender {
-    // Resolves once every send settles; never rejects, a failing device is only a logged warning.
-    readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // Skips the devices of whoever is watching a screen; `notify` remains for the settings page's explicit test send. `to`
-    // narrows it to one member's devices: a home conversation's news is its owner's alone (push-audience.ts).
-    readonly notifyIfAway: (notification: PushNotification, to?: string) => Promise<PushDelivery>;
+    // To the devices of the people `to` names whether or not they are at a screen: a card that insists, a watch whose
+    // whole answer is this push, a disk about to fill. Resolves once every send settles; never rejects, a failing device
+    // is only a logged warning.
+    readonly notify: (notification: PushNotification, to: Audience) => Promise<PushDelivery>;
+    // The same, skipping the devices of whoever is watching a screen.
+    readonly notifyIfAway: (notification: PushNotification, to: Audience) => Promise<PushDelivery>;
+    // The settings page's test: this person's own devices (a device naming no one, for a caller with no identity).
+    readonly test: (notification: PushNotification, member: string | undefined) => Promise<PushDelivery>;
     // Replaces an ask that stopped waiting (answered here or elsewhere, stopped) under its tag, on exactly the devices
     // its persistent notification reached: none at all when it never showed, so a settled ask never pushes on its own.
     readonly withdraw: (replacement: PushNotification & { readonly tag: string }) => Promise<PushDelivery>;
@@ -41,20 +55,31 @@ export interface PushSender {
 
 const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
 
-// Whether a device is one whose person is away, as presence stands now. Its member decides for it; a device naming none
-// cannot be matched to a tab, so it keeps the sandbox-wide rule and waits until every tab is idle. Named for one member,
-// only that member's own devices count, and one naming nobody is nobody's in particular.
-const awayNow = (to?: string): ((channel: StoredChannel) => boolean) => {
-    const present = presentMembers();
-    const nobodyWatching = idleEverywhere();
-    const only = to?.toLowerCase();
+// Whether a device belongs to somebody `to` is for. A device naming no member (registered before devices named theirs,
+// or by the owner's own tool on loopback) is nobody's in particular: it hears the sandbox's own news, which is its
+// owner's, and nothing about a conversation. A named one is its person's, as the roster admits them now, and only when
+// the conversation it is about is shown to them.
+const reachedBy = (to: Audience, roster: PushRoster): ((channel: StoredChannel) => boolean) => {
+    const named = to.kind === "people" ? new Set(to.emails) : undefined;
     return (channel) => {
-        const member = channel.member?.toLowerCase();
-        if (only !== undefined && member !== only) {
+        if (channel.member === undefined) {
+            return to.kind === "operators";
+        }
+        const caller = roster.callerOf(channel.member);
+        if (caller === undefined) {
             return false;
         }
-        return member === undefined ? nobodyWatching : !present.has(member);
+        const theirs = named === undefined ? roleAtLeast(caller.role, "maintainer") : named.has(channel.member.toLowerCase());
+        return theirs && (to.about === undefined || visibleTo(caller, to.about));
     };
+};
+
+// Whether a device's person is away, as presence stands now. Its member decides for it; a device naming none cannot be
+// matched to a tab, so it waits until every tab is idle.
+const awayNow = (): ((channel: StoredChannel) => boolean) => {
+    const present = presentMembers();
+    const nobodyWatching = idleEverywhere();
+    return (channel) => (channel.member === undefined ? nobodyWatching : !present.has(channel.member.toLowerCase()));
 };
 
 // What a native install's notification may say: the relay hands its title and body to Apple in plain text, through the
@@ -103,7 +128,13 @@ const platformIdOf = async (sandbox: (() => Promise<string | undefined>) | undef
     }
 };
 
-export const createPushSender = (store: PushStore, logger: Logger, redact?: PushRedaction, sandbox?: () => Promise<string | undefined>): PushSender => {
+export const createPushSender = (
+    store: PushStore,
+    logger: Logger,
+    roster: () => Promise<PushRoster>,
+    redact?: PushRedaction,
+    sandbox?: () => Promise<string | undefined>,
+): PushSender => {
     const forRelay = async (notification: PushNotification): Promise<PushNotification> => {
         if (redact === undefined) {
             return notification;
@@ -121,13 +152,15 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
     // stays until it is tapped, which is how every ask behaved before withdrawal existed.
     const shown = new Map<string, Set<string>>();
     const sentWords = createSentNotifications();
-    // Sends to every registered device `wanted` keeps.
-    const send = async (asked: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
+    // Sends to every registered device `meant` keeps that `away` also keeps (presence, read as the send is asked for).
+    const send = async (asked: PushNotification, meant: (channel: StoredChannel) => boolean, away: (channel: StoredChannel) => boolean = () => true): Promise<PushDelivery> => {
         const notification = placedIn(await platformIdOf(sandbox, logger))(asked);
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
-        const channels = registered.filter(wanted);
+        const theirs = registered.filter(meant);
+        const channels = theirs.filter(away);
         if (channels.length === 0) {
-            return { ...NOTHING_SENT, skipped: registered.length === 0 ? "no device registered" : "everyone is watching" };
+            const skipped = registered.length === 0 ? "no device registered" : theirs.length === 0 ? "nobody it is for has a device" : "everyone is watching";
+            return { ...NOTHING_SENT, skipped };
         }
         if (notification.tag !== undefined) {
             // The words as written, never the relay's redacted copy: they are read back over the member's own session.
@@ -166,10 +199,15 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
         return { delivered, failed: outcomes.length - delivered };
     };
 
+    const meantFor = async (to: Audience): Promise<(channel: StoredChannel) => boolean> => reachedBy(to, await roster());
     return {
-        notify: (notification) => send(notification, () => true),
+        notify: async (notification, to) => send(notification, await meantFor(to)),
         // Presence is read as the notification is asked for, not once the store answers.
-        notifyIfAway: (notification, to) => send(notification, awayNow(to)),
+        notifyIfAway: async (notification, to) => {
+            const away = awayNow();
+            return send(notification, await meantFor(to), away);
+        },
+        test: (notification, member) => send(notification, (channel) => (member === undefined ? channel.member === undefined : channel.member?.toLowerCase() === member.toLowerCase())),
         withdraw: async (replacement) => {
             const reached = shown.get(replacement.tag);
             if (reached === undefined) {

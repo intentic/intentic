@@ -13,6 +13,8 @@ import {
     HomeCommitSchema,
     LandConflictSchema,
     LandedMessageSchema,
+    NotifyChoiceSchema,
+    ParticipantSchema,
     ReviewTallySchema,
     SessionOwnerSchema,
     TurnProofSchema,
@@ -228,6 +230,11 @@ const SocialSchema = z.object({
     seenAt: z.number().optional(),
     // Since when a browser's composer has held unsent words for it (the words stay there); keeps the idle sweep off it.
     unsentAt: z.number().optional(),
+    // Who took part beyond its starter and owner, and each person's own answer to how much of its news reaches them
+    // (sandbox-contract schemas/agent-people.ts). Added 2026-11-06, optional: a row from before them has had
+    // nobody take part but its starter, and nobody answer.
+    participants: z.array(ParticipantSchema).optional(),
+    notify: z.array(NotifyChoiceSchema).optional(),
 });
 export type Social = z.infer<typeof SocialSchema>;
 

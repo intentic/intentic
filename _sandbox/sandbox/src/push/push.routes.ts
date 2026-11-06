@@ -12,8 +12,14 @@ export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
 export const createPushRoutes = (services: PushRoutesDeps) => {
     const i = implement(pushContract).$context<OrpcContext>();
     return {
-        config: i.config.handler(async ({ input }) => {
+        config: i.config.handler(async ({ input, context }) => {
             const [keys, channels] = await Promise.all([services.push.keys(), services.push.list()]);
+            // A device registered before devices named their person hears only the sandbox's own news (push.ts): the
+            // person whose editor asks after it, signed in, is whose it is, and from now on it hears what they do.
+            const unnamed = channels.find((entry) => channelId(entry) === input.id && entry.member === undefined);
+            if (unnamed !== undefined && context.identity !== undefined) {
+                await services.push.add(unnamed, context.identity.email);
+            }
             return {
                 publicKey: keys.publicKey,
                 // Answered for the asking device specifically, so the toggle can tell "no row" apart from "granted but
@@ -40,15 +46,14 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
             }
             return sent;
         }),
-        // Named `notify`, not `notifyIfAway`: pressing this test always sends, so a silent no-op would prove nothing.
-        // Reports the delivered count and refuses OK on zero, since "no row" and "every send refused" look identical
-        // otherwise.
-        test: i.test.handler(async () => {
-            const { delivered, failed } = await services.pushSender.notify({
-                title: "intentic",
-                body: "Notifications are working.",
-                tag: "intentic-test",
-            });
+        // To the presser's own devices whether or not they are at a screen, since pressing this test always sends and a
+        // silent no-op would prove nothing; never anyone else's phone. Reports the delivered count and refuses OK on zero,
+        // since "no row" and "every send refused" look identical otherwise.
+        test: i.test.handler(async ({ context }) => {
+            const { delivered, failed } = await services.pushSender.test(
+                { title: "intentic", body: "Notifications are working.", tag: "intentic-test" },
+                context.identity?.email,
+            );
             if (delivered === 0) {
                 throw new ORPCError("PRECONDITION_FAILED", {
                     message:

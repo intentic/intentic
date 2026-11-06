@@ -39,7 +39,7 @@ test("a device is filed under the verified caller, whatever member the device it
     ]);
 });
 
-test("a caller with no member identity files a device under nobody, which keeps the sandbox-wide rule", async () => {
+test("a caller with no member identity files a device under nobody, which hears only the sandbox's own news", async () => {
     const { push, filed } = routes();
     await call(push.subscribe, laptop, { context: anonymous });
     expect(filed).toEqual([{ channel: laptop, member: undefined }]);
@@ -69,4 +69,40 @@ test("a notification's words are read back only by a member it was sent to", asy
         { tag: "turn-c1", member: "bob@example.com" },
         { tag: "turn-c2", member: "ada@example.com" },
     ]);
+});
+
+// The test press reaches the presser's own devices and nobody else's: before 2026-11-06 it buzzed every phone registered here.
+test("the test send goes to the presser's own devices", async () => {
+    const tested: (string | undefined)[] = [];
+    const push = createPushRoutes({
+        push: unstubbed<Services["push"]>("push", {}),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", {
+            test: async (_notification, member) => {
+                tested.push(member);
+                return member === undefined ? { delivered: 0, failed: 0, skipped: "no device registered" } : { delivered: 1, failed: 0 };
+            },
+        }),
+    });
+    await expect(call(push.test, undefined, { context: signedIn("ada@example.com") })).resolves.toEqual({ delivered: 1 });
+    await expect(call(push.test, undefined, { context: anonymous })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(tested).toEqual(["ada@example.com", undefined]);
+});
+
+// A device registered before devices named their member hears only the sandbox's own news (push.ts) until somebody claims it.
+test("a device that names nobody becomes the member's whose signed-in editor asks after it", async () => {
+    const filed: { readonly channel: PushChannel; readonly member: string | undefined }[] = [];
+    const push = createPushRoutes({
+        push: unstubbed<Services["push"]>("push", {
+            keys: async () => ({ publicKey: "public-key", privateKey: "private-key" }),
+            list: async () => [laptop],
+            add: async (channel, member) => {
+                filed.push({ channel, member });
+            },
+        }),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", {}),
+    });
+    await call(push.config, { id: laptop.endpoint }, { context: anonymous });
+    expect(filed).toEqual([]);
+    await expect(call(push.config, { id: laptop.endpoint }, { context: signedIn("ada@example.com") })).resolves.toMatchObject({ subscribed: true });
+    expect(filed).toEqual([{ channel: laptop, member: "ada@example.com" }]);
 });

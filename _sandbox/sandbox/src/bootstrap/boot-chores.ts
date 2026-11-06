@@ -27,6 +27,7 @@ import { diskLow } from "../push/notifications.js";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
+import { OPERATORS } from "../push/push-audience.js";
 
 // Persist housekeeping cadence in chore-clock.ts across restarts: git maintenance, storage/trash, dockerd and retention sweeps.
 // Log results; git upkeep waits for no running turn, build output is swept per checkout (archive.ts) and dockerd cleanup never starts an idle engine.
@@ -212,7 +213,8 @@ const startDiskPressure = (phase: BootPhase): (() => void) => {
         lastScan: () => readLastStorageScan(config.historyRoot),
         tell: async (level, state) => {
             const notice = diskLow(level, state);
-            await (level === "critical" ? services.pushSender.notify(notice) : services.pushSender.notifyIfAway(notice));
+            // The sandbox's own news, for the people who can make room: its owner and maintainers.
+            await (level === "critical" ? services.pushSender.notify(notice, OPERATORS) : services.pushSender.notifyIfAway(notice, OPERATORS));
         },
         changed: () => publishRuntimeChange("disk"),
         logger,

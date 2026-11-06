@@ -370,7 +370,15 @@
             "stopKeepingWarm": "Stop keeping cache warm",
             "stopKeepingWarmHint": "Kept warm until {time}",
             "tryLandAgain": "Try landing again",
-            "landsIfConflictsGone": "Lands if the conflicts are gone"
+            "landsIfConflictsGone": "Lands if the conflicts are gone",
+            "notifyLabel": "Notify me",
+            "notifyAll": "About everything",
+            "notifyAllHint": "Every finished turn and every card it waits on",
+            "notifyAsks": "Only when it needs me",
+            "notifyAsksHint": "Questions, permissions and approvals waiting on you",
+            "notifyNone": "Never",
+            "notifyNoneHint": "Nothing from this conversation, on any device",
+            "notifyFailed": "Couldn't change what reaches you"
         },
         "agentStatus": {
             "landDetails": "Error details",

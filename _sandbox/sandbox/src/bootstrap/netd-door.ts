@@ -35,6 +35,7 @@ import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
 import { visitWorkspaceApp } from "../scaffold/app-rest.js";
 import { allowedOriginsOf } from "../auth/browser-origins.js";
 import type { BootPhase } from "./boot-phase.js";
+import { OPERATORS } from "../push/push-audience.js";
 
 // The daemon behind intentic-netd (_sandbox/netd): HTTP on a Unix socket only netd dials, and every port, the
 // loopback certificate and the ingress tunnel handed to netd over its control socket. Node decides; netd
@@ -150,7 +151,7 @@ export const tunnelReports = (
                 { host: refused.host },
                 `another copy of this sandbox is running on ${machineNamed(refused.host)} and holds its address; this one dials the ingress every 15 minutes until it stops`,
             );
-            void push.notifyIfAway(elsewhereNotice(refused.host));
+            void push.notifyIfAway(elsewhereNotice(refused.host), OPERATORS);
         }
         if (refused?.refusal === "deleted" && !deleted) {
             deleted = true;

@@ -96,11 +96,23 @@ export const framedSummary = (caller: Caller | undefined, summary: AgentSummary,
     if (!listedTo(caller, summary)) {
         return undefined;
     }
-    if (summary.seal === undefined) {
+    const own = ownNotify(caller, summary);
+    if (own.seal === undefined) {
+        return own;
+    }
+    const via = readVia(caller?.email, own.seal, now);
+    return via === undefined ? sealedCard(own, caller) : readerView(own, via);
+};
+
+// How much of a conversation reaches a person is their own business: each reader is shown their own answer alone. The
+// owner's own tools (no identity) are shown every answer, as they are shown everything.
+const ownNotify = (caller: Caller | undefined, summary: AgentSummary): AgentSummary => {
+    if (caller === undefined || summary.notify === undefined) {
         return summary;
     }
-    const via = readVia(caller?.email, summary.seal, now);
-    return via === undefined ? sealedCard(summary, caller) : readerView(summary, via);
+    const { notify, ...rest } = summary;
+    const mine = notify.filter((choice) => sameEmail(choice.email, caller.email));
+    return mine.length === 0 ? rest : { ...rest, notify: mine };
 };
 
 // The refusal a guest meets on someone else's conversation. Unnamed on purpose: whose it is would say what the guest

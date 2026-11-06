@@ -438,6 +438,13 @@ export const AutomationSchema = z.object({
             "Which shelf of the Automations panel it is filed on, like 'Marketing' or 'Releases'. Automations naming the same group are listed together. Absent files it under its persona, or with the code chores.",
         ),
     enabled: z.boolean().describe("Whether it fires at all."),
+    // Stamped by the sandbox on its first save (automation-save.ts), whatever a request sends: who its notices are for.
+    createdBy: z
+        .string()
+        .optional()
+        .describe(
+            "Who made it, as the sandbox recorded it: a member's email, or agent:<conversation id> for one an agent proposed and a person approved. Its notices (a watch firing or ending, a one-time wake done) go to them. Set by the sandbox; a value sent with a save is ignored. Absent on one made before it was kept, whose notices go to the sandbox's owner and maintainers.",
+        ),
 });
 export type Automation = z.infer<typeof AutomationSchema>;
 // A wake held for owner approval (automation-holds/<id>.json on the history volume); snapshots the trigger payload so an approved

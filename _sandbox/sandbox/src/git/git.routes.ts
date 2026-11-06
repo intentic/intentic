@@ -563,8 +563,8 @@ export const routesInView = (services: Services, view?: GitView) => {
             }),
         ),
         // A push run (git/ops/push-run.ts), watched in its terminal and polled below; outside the repo lock, writing no file.
-        push: i.push.handler(async ({ input }) => {
-            await pushRuns.start(input.repo, await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
+        push: i.push.handler(async ({ input, context }) => {
+            await pushRuns.start(input.repo, await repoDir(input.repo), { ...opt("branch", input.branch), ...opt("by", context.identity) });
             return { ok: true as const };
         }),
         pushState: i.pushState.handler(({ input }) => pushRuns.state(input.repo)),

@@ -6,12 +6,14 @@ import webpush from "web-push";
 import { opt } from "../opt.js";
 import { registerPresence, updatePresence } from "../system/presence.js";
 import { automationFired, diskLow, needRaised, pushRefused, turnAwaiting, turnFinished } from "./notifications.js";
-import { createPushSender, placedIn } from "./push.js";
+import { type Audience, OPERATORS, peopleAudience } from "./push-audience.js";
+import { createPushSender, placedIn, type PushRoster } from "./push.js";
 import type { PushStore, StoredChannel } from "./push-store.js";
 
-/* Who a notification for someone away reaches. Each device belongs to the member who registered it, so it goes quiet
- * only while THAT member has a tab in use; a device registered before devices named their member cannot be matched to
- * a tab, and keeps the old rule of waiting until every tab is idle. The store's file is push.integration.test.ts's. */
+/* Who a notification reaches. Only the devices of the people it is for, as the roster admits them now and only when the
+ * conversation it is about is shown to them; of those, each device goes quiet only while ITS member has a tab in use. A
+ * device registered before devices named their member is nobody's in particular: it hears only the sandbox's own news,
+ * and waits until every tab is idle. The store's file is push.integration.test.ts's. */
 
 // Tabs this test opened, closed after it: the presence registry is the process's own.
 const leaving: (() => void)[] = [];
@@ -52,7 +54,11 @@ const stubSends = (): { readonly endpoint: string; readonly payload: string }[] 
     return reached;
 };
 
-const sender = (store: PushStore) => createPushSender(store, pino({ level: "silent" }));
+// Everyone a test names is on the roster, unfenced, `own…` as the sandbox's owner; a test about who is narrows it.
+const EVERYONE_ON_IT: PushRoster = { callerOf: (email) => ({ email, role: email.startsWith("own") ? "owner" : "collaborator" }) };
+const sender = (store: PushStore, roster: PushRoster = EVERYONE_ON_IT) => createPushSender(store, pino({ level: "silent" }), async () => roster);
+const ADA_AND_BOB: Audience = peopleAudience(["ada@example.com", "bob@example.com"]);
+const BOB: Audience = peopleAudience(["bob@example.com"]);
 
 const waiting: PushNotification = turnAwaiting("conv-1", "permission", { requestId: "p1", detail: "Allow npm install?" }, "Fix the login redirect");
 
@@ -65,7 +71,7 @@ test("a member who is looking is skipped on their own devices, while a member wh
         device("https://push.example/bob", "bob@example.com"),
     );
 
-    await expect(sender(store).notifyIfAway(waiting)).resolves.toEqual({ delivered: 1, failed: 0 });
+    await expect(sender(store).notifyIfAway(waiting, ADA_AND_BOB)).resolves.toEqual({ delivered: 1, failed: 0 });
     expect(reached).toEqual([{ endpoint: "https://push.example/bob", payload: JSON.stringify(waiting) }]);
 });
 
@@ -76,52 +82,98 @@ test("a member whose every tab has gone idle is away; one tab still in use keeps
     tab("bob-busy", "bob@example.com");
     const store = storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"));
 
-    await sender(store).notifyIfAway(waiting);
+    await sender(store).notifyIfAway(waiting, ADA_AND_BOB);
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/ada"]);
 });
 
 test("a device's member is matched to a tab whatever the case of either address", async () => {
     const reached = stubSends();
     tab("ada-tab", "ada@example.com");
-    await sender(storeOf(device("https://push.example/ada", "Ada@Example.COM"))).notifyIfAway(waiting);
+    await sender(storeOf(device("https://push.example/ada", "Ada@Example.COM"))).notifyIfAway(waiting, peopleAudience(["ada@example.com"]));
     expect(reached).toEqual([]);
 });
 
-test("a device registered before devices named their member keeps the old rule: quiet while anyone at all is looking", async () => {
+test("a device that names no member hears only the sandbox's own news, and that only while nobody at all is looking", async () => {
     const reached = stubSends();
     const store = storeOf(device("https://push.example/unnamed"), device("https://push.example/bob", "bob@example.com"));
 
-    // Carol owns no device here; her open tab still silences the one nobody can be matched to, and not Bob's.
-    tab("carol-tab", "carol@example.com");
-    await expect(sender(store).notifyIfAway(waiting)).resolves.toEqual({ delivered: 1, failed: 0 });
+    // A conversation's news is somebody's: the device nobody can be matched to is not theirs.
+    await expect(sender(store).notifyIfAway(waiting, ADA_AND_BOB)).resolves.toEqual({ delivered: 1, failed: 0 });
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/bob"]);
 
-    // Once every tab is idle, it hears it too.
-    updatePresence({ email: "carol@example.com" }, { clientId: "carol-tab", idle: true });
+    // The sandbox's own news is its operators', which Bob is not; Carol's open tab silences the unnamed one.
+    const disk = diskLow("low", { level: "low", freeBytes: 1, totalBytes: 10, measuredAt: 0, using: [] });
+    tab("carol-tab", "carol@example.com");
     reached.splice(0);
-    await expect(sender(store).notifyIfAway(waiting)).resolves.toEqual({ delivered: 2, failed: 0 });
-    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/unnamed", "https://push.example/bob"]);
+    await expect(sender(store).notifyIfAway(disk, OPERATORS)).resolves.toEqual({ delivered: 0, failed: 0, skipped: "everyone is watching" });
+
+    // Once every tab is idle, it hears it.
+    updatePresence({ email: "carol@example.com" }, { clientId: "carol-tab", idle: true });
+    await expect(sender(store).notifyIfAway(disk, OPERATORS)).resolves.toEqual({ delivered: 1, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/unnamed"]);
 });
 
-test("narrowed to one member, only that member's own devices hear it, and only while they are away", async () => {
+// Until 2026-11-06 a shared conversation's news went to every member who was away, its prompt with it.
+test("a conversation's news never reaches a guest, a member fenced away from it, or someone taken off the roster", async () => {
+    const reached = stubSends();
+    const roster: PushRoster = {
+        callerOf: (email) =>
+            ({
+                "ada@example.com": { email, role: "collaborator" as const },
+                "guest@example.com": { email, role: "guest" as const, areas: ["support"] },
+                "fenced@example.com": { email, role: "writer" as const, areas: ["finance"] },
+            })[email],
+    };
+    const store = storeOf(
+        device("https://push.example/ada", "ada@example.com"),
+        device("https://push.example/guest", "guest@example.com"),
+        device("https://push.example/fenced", "fenced@example.com"),
+        device("https://push.example/gone", "gone@example.com"),
+    );
+    const about = { startedBy: "ada@example.com", owner: { email: "ada@example.com" } };
+    const everyone = peopleAudience(["ada@example.com", "guest@example.com", "fenced@example.com", "gone@example.com"], about);
+
+    await expect(sender(store, roster).notifyIfAway(waiting, everyone)).resolves.toEqual({ delivered: 1, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/ada"]);
+});
+
+test("the sandbox's own news reaches its owner and maintainers, never a collaborator, and says why when nobody has a device", async () => {
+    const reached = stubSends();
+    const roster: PushRoster = {
+        callerOf: (email) => (email === "own@example.com" ? { email, role: "owner" } : email === "max@example.com" ? { email, role: "maintainer" } : { email, role: "collaborator" }),
+    };
+    const store = storeOf(device("https://push.example/own", "own@example.com"), device("https://push.example/max", "max@example.com"), device("https://push.example/bob", "bob@example.com"));
+    const disk = diskLow("critical", { level: "critical", freeBytes: 1, totalBytes: 100, measuredAt: 0, using: [] });
+
+    await expect(sender(store, roster).notify(disk, OPERATORS)).resolves.toEqual({ delivered: 2, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/own", "https://push.example/max"]);
+    await expect(sender(store, roster).notify(disk, peopleAudience(["carol@example.com"]))).resolves.toEqual({
+        delivered: 0,
+        failed: 0,
+        skipped: "nobody it is for has a device",
+    });
+});
+
+test("named for one member, only that member's own devices hear it, and only while they are away", async () => {
     const reached = stubSends();
     const store = storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"), device("https://push.example/unnamed"));
 
-    await expect(sender(store).notifyIfAway(waiting, "Ada@Example.com")).resolves.toEqual({ delivered: 1, failed: 0 });
+    await expect(sender(store).notifyIfAway(waiting, peopleAudience(["Ada@Example.com"]))).resolves.toEqual({ delivered: 1, failed: 0 });
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/ada"]);
     tab("ada-tab", "ada@example.com");
     reached.splice(0);
-    await sender(store).notifyIfAway(waiting, "ada@example.com");
+    await sender(store).notifyIfAway(waiting, peopleAudience(["ada@example.com"]));
     expect(reached).toEqual([]);
 });
 
-test("a raised need goes out the same way, verbatim, to the devices of whoever is away", async () => {
+test("a raised need goes out the same way, verbatim, to the devices of whoever it is for who is away", async () => {
     const reached = stubSends();
     tab("ada-tab", "ada@example.com");
     const need = needRaised({ id: "n1", conversationId: "conv-1", title: "a GitHub token" }, "Fix the login redirect");
 
     await sender(storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"))).notifyIfAway(
         need,
+        ADA_AND_BOB,
     );
     expect(reached).toEqual([{ endpoint: "https://push.example/bob", payload: JSON.stringify(need) }]);
     expect(need.url).toBe("/?conversation=conv-1&need=n1");
@@ -161,8 +213,8 @@ describe("where a tap opens", () => {
     test("the sender sends, and remembers, the placed address", async () => {
         const reached = stubSends();
         const store = storeOf(device("https://push.example/bob", "bob@example.com"));
-        const pushed = createPushSender(store, pino({ level: "silent" }), undefined, async () => ROW);
-        await pushed.notify(fired);
+        const pushed = createPushSender(store, pino({ level: "silent" }), async () => EVERYONE_ON_IT, undefined, async () => ROW);
+        await pushed.notify(fired, BOB);
         expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual([`/s/${ROW}/ext/automations`]);
         expect(pushed.sent(fired.tag ?? "", "bob@example.com")?.url).toBe(`/s/${ROW}/ext/automations`);
     });
@@ -170,23 +222,25 @@ describe("where a tap opens", () => {
     test("a sender whose platform id is not known yet, or cannot be read, sends each page as it was written", async () => {
         const reached = stubSends();
         const store = storeOf(device("https://push.example/bob", "bob@example.com"));
-        await createPushSender(store, pino({ level: "silent" }), undefined, async () => undefined).notify(fired);
-        await createPushSender(store, pino({ level: "silent" }), undefined, async () => {
+        await createPushSender(store, pino({ level: "silent" }), async () => EVERYONE_ON_IT, undefined, async () => undefined).notify(fired, BOB);
+        await createPushSender(store, pino({ level: "silent" }), async () => EVERYONE_ON_IT, undefined, async () => {
             throw new Error("unreadable platform-row.json");
-        }).notify(fired);
+        }).notify(fired, BOB);
         expect(reached.map(({ payload }) => JSON.parse(payload).url)).toEqual(["/ext/automations", "/ext/automations"]);
     });
 });
 
-test("nobody is looking with no tab open at all, and the settings page's test send reaches a device whoever is looking", async () => {
+test("nobody is looking with no tab open at all, and the settings page's test send reaches the presser's own devices whoever is looking", async () => {
     const reached = stubSends();
-    const store = storeOf(device("https://push.example/unnamed"), device("https://push.example/ada", "ada@example.com"));
-    await expect(sender(store).notifyIfAway(waiting)).resolves.toEqual({ delivered: 2, failed: 0 });
+    const store = storeOf(device("https://push.example/unnamed"), device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"));
+    await expect(sender(store).notifyIfAway(waiting, ADA_AND_BOB)).resolves.toEqual({ delivered: 2, failed: 0 });
 
     reached.splice(0);
     tab("ada-tab", "ada@example.com");
-    await expect(sender(store).notify(waiting)).resolves.toEqual({ delivered: 2, failed: 0 });
-    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/unnamed", "https://push.example/ada"]);
+    await expect(sender(store).test(waiting, "Ada@example.com")).resolves.toEqual({ delivered: 1, failed: 0 });
+    // The owner's own tool on loopback names nobody: it tests the devices that name nobody.
+    await expect(sender(store).test(waiting, undefined)).resolves.toEqual({ delivered: 1, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/ada", "https://push.example/unnamed"]);
 });
 
 // A native install's words reach Apple in plain text through the platform, so they pass the privacy shield's redaction on
@@ -200,11 +254,11 @@ test("the privacy shield's redaction reaches a native install's notification and
     };
     jest.spyOn(globalThis, "fetch").mockImplementation(Object.assign(relay, { preconnect: globalThis.fetch.preconnect }));
     const native: StoredChannel = { kind: "relay", url: "https://platform.example/push", deviceId: "phone", secret: "s" };
-    const redacting = createPushSender(storeOf(device("https://push.example/a"), native), pino({ level: "silent" }), async (text) =>
+    const redacting = createPushSender(storeOf(device("https://push.example/a"), native), pino({ level: "silent" }), async () => EVERYONE_ON_IT, async (text) =>
         text.replace("Jan Kowalski", "‹person›"),
     );
 
-    await redacting.notify({ title: "Jan Kowalski wrote", body: "about Jan Kowalski's invoice" });
+    await redacting.notify({ title: "Jan Kowalski wrote", body: "about Jan Kowalski's invoice" }, OPERATORS);
 
     expect(JSON.parse(relayed[0] ?? "{}").notification).toMatchObject({ title: "‹person› wrote", body: "about ‹person›'s invoice" });
     expect(reached[0]?.payload).toContain("Jan Kowalski");
@@ -217,7 +271,7 @@ test("a withdrawn ask is replaced on exactly the devices it reached, once, and n
     const reached = stubSends();
     tab("ada-tab", "ada@example.com");
     const push = sender(storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com")));
-    await push.notifyIfAway(waiting);
+    await push.notifyIfAway(waiting, ADA_AND_BOB);
     reached.splice(0);
 
     const replacement = { title: "No longer waiting", body: "The agent is not waiting on you anymore.", tag: waiting.tag ?? "" };
@@ -245,7 +299,7 @@ test("the words of a tagged notification are kept for the members it was sent to
         return { statusCode: 201, body: "", headers: {} };
     });
     tab("ada-tab", "ada@example.com");
-    await push.notifyIfAway(first);
+    await push.notifyIfAway(first, ADA_AND_BOB);
     expect(keptAsItWent).toEqual(["Which branch?"]);
     expect(push.sent(tag, "bob@example.com")).toMatchObject({ ...first, tag, sentAt: expect.any(String) });
     // Ada was looking, so nothing under this tag reached her devices; nor anyone's who has no device here.
@@ -259,7 +313,7 @@ test("the words of a tagged notification are kept for the members it was sent to
     }
     tab("bob-tab", "bob@example.com");
     const second = { ...first, body: "Which branch, main or next?" };
-    await push.notifyIfAway(second);
+    await push.notifyIfAway(second, ADA_AND_BOB);
     expect(push.sent(tag, "ADA@example.com")?.body).toBe("Which branch, main or next?");
     expect(push.sent(tag, "bob@example.com")?.body).toBe("Which branch?");
     expect(reached).toEqual([]);
@@ -268,7 +322,7 @@ test("the words of a tagged notification are kept for the members it was sent to
 test("a withdrawal replaces the kept words of the members it reached, silent", async () => {
     stubSends();
     const push = sender(storeOf(device("https://push.example/bob", "bob@example.com")));
-    await push.notifyIfAway(waiting);
+    await push.notifyIfAway(waiting, BOB);
     const tag = waiting.tag ?? "";
     await push.withdraw({ title: "No longer waiting", body: "The agent is not waiting on you anymore.", tag });
     expect(push.sent(tag, "bob@example.com")).toMatchObject({ title: "No longer waiting", tag, requireInteraction: false, silent: true });
@@ -280,16 +334,16 @@ test("the words are kept as written, not as the privacy shield redacted them for
         Object.assign(async () => new Response(null, { status: 200 }), { preconnect: globalThis.fetch.preconnect }),
     );
     const native: StoredChannel = { kind: "relay", url: "https://platform.example/push", deviceId: "phone", secret: "s", member: "bob@example.com" };
-    const push = createPushSender(storeOf(native), pino({ level: "silent" }), async (text) => text.replace("Jan Kowalski", "‹person›"));
-    await push.notify({ title: "Jan Kowalski wrote", body: "about the invoice", tag: "turn-c1" });
+    const push = createPushSender(storeOf(native), pino({ level: "silent" }), async () => EVERYONE_ON_IT, async (text) => text.replace("Jan Kowalski", "‹person›"));
+    await push.notify({ title: "Jan Kowalski wrote", body: "about the invoice", tag: "turn-c1" }, BOB);
     expect(push.sent("turn-c1", "bob@example.com")?.title).toBe("Jan Kowalski wrote");
 });
 
 test("kept words are forgotten after a day, and nothing untagged or sent to no member is kept", async () => {
     stubSends();
     const push = sender(storeOf(device("https://push.example/bob", "bob@example.com"), device("https://push.example/unnamed")));
-    await push.notify({ title: "intentic", body: "no tag" });
-    await push.notify({ title: "Turn finished", body: "done", tag: "turn-c1" });
+    await push.notify({ title: "intentic", body: "no tag" }, BOB);
+    await push.notify({ title: "Turn finished", body: "done", tag: "turn-c1" }, BOB);
     expect(push.sent("turn-c1", "bob@example.com")?.body).toBe("done");
     jest.setSystemTime(Date.now() + 24 * 60 * 60_000 + 1);
     expect(push.sent("turn-c1", "bob@example.com")).toBeUndefined();

@@ -370,7 +370,15 @@
             "stopKeepingWarm": "Dejar de mantener la caché caliente",
             "stopKeepingWarmHint": "Mantenida caliente hasta las {time}",
             "tryLandAgain": "Volver a integrar",
-            "landsIfConflictsGone": "Integra si ya no hay conflictos"
+            "landsIfConflictsGone": "Integra si ya no hay conflictos",
+            "notifyLabel": "Avisarme",
+            "notifyAll": "De todo",
+            "notifyAllHint": "Cada turno terminado y cada tarjeta que espera por ti",
+            "notifyAsks": "Solo cuando me necesite",
+            "notifyAsksHint": "Preguntas, permisos y aprobaciones que esperan por ti",
+            "notifyNone": "Nunca",
+            "notifyNoneHint": "Nada de esta conversación, en ningún dispositivo",
+            "notifyFailed": "No se pudo cambiar lo que te llega"
         },
         "agentStatus": {
             "landDetails": "Detalles del error",

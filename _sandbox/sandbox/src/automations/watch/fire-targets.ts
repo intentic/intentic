@@ -5,6 +5,7 @@ import { deliverWake } from "../../seams/wake-delivery.js";
 import { automationExpired, automationFired } from "../../push/notifications.js";
 import type { AutomationRecord } from "../automations-store.js";
 import { conditionLabel, sinceLabel } from "./watch-condition.js";
+import { automationAudience } from "../../push/push-audience.js";
 
 // Where a passing check goes when it is not a new agent (AutomationTargetSchema): back into a conversation that is
 // already there, or to the owner's phone with no model at all. Also what a watch says when it reaches its end date.
@@ -77,10 +78,10 @@ export const continueConversation = async (
     return { ok: true, conversationId, detail: `Woke ${conversationId} (${receipt.delivered}).` };
 };
 
-// No model: the owner's phone hears what the check saw, and the run's history keeps it. `notify` rather than
+// No model: the phone of whoever made it hears what the check saw, and the run's history keeps it. `notify` rather than
 // `notifyIfAway`, because this push is the whole of what the automation does; there is no card to see instead.
 export const notifyOwner = async (services: Services, automation: AutomationRecord, value: string | undefined): Promise<TargetOutcome> => {
-    const delivery = await services.pushSender.notify(automationFired(automation, value));
+    const delivery = await services.pushSender.notify(automationFired(automation, value), automationAudience((id) => services.agents.entry(id), automation.createdBy));
     const saw = value === undefined || value === "" ? "" : `Saw: ${value.split("\n")[0]?.slice(0, 300) ?? ""}. `;
     return {
         ok: true,
@@ -114,7 +115,8 @@ export const expireAutomation = async (services: Services, automation: Automatio
         return true;
     }
     const notice = automationExpired(automation, fired);
-    void (target.kind === "notify" ? services.pushSender.notify(notice) : services.pushSender.notifyIfAway(notice));
+    const to = automationAudience((id) => services.agents.entry(id), automation.createdBy);
+    void (target.kind === "notify" ? services.pushSender.notify(notice, to) : services.pushSender.notifyIfAway(notice, to));
     return true;
 };
 

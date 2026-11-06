@@ -1,6 +1,9 @@
 import { useTheme } from "@intentic/ui/theme";
 import { computed, onScopeDispose, ref, watch } from "vue";
-import { attentionCalls, type CallerStanding, laneOf } from "../../models/agent-status/agentStatus-lanes";
+import { laneOf } from "../../models/agent-status/agentStatus-lanes";
+import { callsFor, heardBy, type Reader } from "../../models/agent-status/notifyAudience";
+import { useAuth } from "../../client/auth/useAuth";
+import { useRole } from "../../client/sandbox/useRole";
 import { type AgentStanding, turnWorking } from "../../models/agent-status/agentStatus-standing";
 import { agentsAttention } from "../../models/fleet/board/agentsTile";
 import { parentOf } from "../../models/agent-status/ownership";
@@ -29,10 +32,11 @@ import { countPlate } from "./tabIcon";
 // A Stop the reader pressed files its card in Attention, which is no news to them.
 const endedByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `stopped`;
 
-const askKeys = (agents: readonly CallerStanding[]): ReadonlySet<string> => {
+// Only the calls that wait on the reader (notifyAudience.ts): a card in somebody else's conversation is theirs to hear.
+const askKeys = (agents: readonly FleetAgent[], reader: Reader): ReadonlySet<string> => {
     const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
     return new Set(
-        attentionCalls(agents)
+        callsFor(agents, reader)
             .filter((call) => {
                 const agent = byId.get(call.id);
                 return agent !== undefined && !endedByHand(agent);
@@ -41,17 +45,17 @@ const askKeys = (agents: readonly CallerStanding[]): ReadonlySet<string> => {
     );
 };
 
-// A turn somebody is waiting on: one a person started, not an automation's or a workflow step's, and not a subagent
-// whose parent is on the board to hear how it went.
-const awaited = (agent: FleetAgent, ids: ReadonlySet<string>): boolean => {
+// A turn the reader is waiting on: one a person started, not an automation's or a workflow step's, not a subagent whose
+// parent is on the board to hear how it went, and one they took part in or follow (notifyAudience.ts).
+const awaited = (agent: FleetAgent, ids: ReadonlySet<string>, reader: Reader): boolean => {
     const parent = parentOf(agent.startedBy);
-    return agent.origin === undefined && agent.workflow === undefined && (parent === undefined || !ids.has(parent));
+    return agent.origin === undefined && agent.workflow === undefined && (parent === undefined || !ids.has(parent)) && heardBy(agent, reader, `finished`);
 };
 
 // The turns awaited in this sandbox, split into those running and those settled in Finished.
-const turnsOf = (sandbox: string, agents: readonly FleetAgent[]): Pick<TabFrame, `working` | `settled`> => {
+const turnsOf = (sandbox: string, agents: readonly FleetAgent[], reader: Reader): Pick<TabFrame, `working` | `settled`> => {
     const ids = new Set(agents.map((agent) => agent.id));
-    const awaitedHere = agents.filter((agent) => awaited(agent, ids));
+    const awaitedHere = agents.filter((agent) => awaited(agent, ids, reader));
     return {
         working: new Set(awaitedHere.filter(turnWorking).map((agent) => `${sandbox}/${agent.id}`)),
         settled: new Set(awaitedHere.filter((agent) => !turnWorking(agent) && laneOf(agent) === `finished`).map((agent) => `${sandbox}/${agent.id}`)),
@@ -59,7 +63,7 @@ const turnsOf = (sandbox: string, agents: readonly FleetAgent[]): Pick<TabFrame,
 };
 
 // Only the sandbox in front of the reader rings: what other sandboxes need is Home's to show.
-const frameOf = (): TabFrame => {
+const frameOf = (reader: Reader): TabFrame => {
     const sandbox = activeSandboxId.value;
     const asks = new Map<string, ReadonlySet<string>>();
     if (sandbox === undefined) {
@@ -71,8 +75,8 @@ const frameOf = (): TabFrame => {
     if (!rosterHeard.value) {
         return { asks, working: new Set(), settled: new Set() };
     }
-    asks.set(sandbox, askKeys(fleet.value));
-    return { asks, ...turnsOf(sandbox, fleet.value) };
+    asks.set(sandbox, askKeys(fleet.value, reader));
+    return { asks, ...turnsOf(sandbox, fleet.value, reader) };
 };
 
 /**
@@ -103,7 +107,9 @@ export const startBrowserTab = (): void => {
         { immediate: true },
     );
 
-    const frame = computed(frameOf);
+    const { user } = useAuth();
+    const { canShip } = useRole();
+    const frame = computed(() => frameOf({ email: user.value?.email, operates: canShip.value }));
     watch(frame, (after, before) => {
         // An ask answered from the phone takes its notification down wherever the reader is.
         settleDesktop(after);

@@ -38,6 +38,8 @@ export interface DomainEventMap {
     readonly "run.started": {
         readonly conversationId: string;
         readonly speaker: TurnSpeaker | undefined;
+        // Its words, for what reads who they name (conversations/people/take-part.ts).
+        readonly prompt: string;
         // Which re-run this is, when the sandbox sent the turn again by itself.
         readonly resume: ResumeReason | undefined;
         // What composed words are for, when the sandbox composed them.

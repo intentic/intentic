@@ -68,7 +68,7 @@ const AWAITING: Record<ParkKind, { readonly title: string; readonly named: strin
         named: "a page to answer",
         body: "It showed you a page to answer on and is waiting for what you choose.",
     },
-    // Reaches every member who is away, not only the approvers the card names.
+    // Reaches the approvers the card names (awaiting-detail.ts), the only people whose press it takes.
     credential_offer: {
         title: "A credential needs a named approver",
         named: "a credential to release",
@@ -107,6 +107,16 @@ export const needRaised = (need: { readonly id: string; readonly conversationId:
     url: conversationUrl(need.conversationId, { need: need.id }),
     tag: `need-${need.id}`,
     requireInteraction: true,
+});
+
+// A person named another with @ in a message to a conversation (conversations/people/take-part.ts): they take part in it
+// from now on, and this says who brought them in and with what words. One tag per conversation, so a second mention there
+// replaces the first rather than stacking.
+export const mentionedYou = (conversationId: string, by: string, conversationTitle: string | undefined, text: string): PushNotification => ({
+    title: conversationTitle === undefined || conversationTitle === "" ? `${by} mentioned you` : `${by} mentioned you in ${summarize(conversationTitle, 40)}`,
+    body: summarize(text),
+    url: conversationUrl(conversationId),
+    tag: `mention-${conversationId}`,
 });
 
 // Sent when a push does not go through while the user is elsewhere.

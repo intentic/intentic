@@ -1,6 +1,7 @@
 import { inheritedSeal } from "../seal/seal-birth.js";
 import type { Seal } from "@intentic/sandbox-contract/schemas/seal";
-import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type SessionOwner, type TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type NotifyLevel, type Participation, type SessionOwner, type TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import { joinedEntry, notifiedEntry, type Person, personAsking } from "../people/participation.js";
 import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { planParts } from "@intentic/sandbox-contract/text/title";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
@@ -102,11 +103,12 @@ const ownerOf = (
 
 // An authored title, a browser derivation, or a mid-turn rename all stand as written; a turn naming none is titled the
 // way the browser would derive it. A held title keeps its source and action with it.
-const socialOf = (held: PersistedAgent, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): Social => ({
-    ...held.social,
-    ...opt("title", held.social.title ?? openingTitle(turn)),
-    ...ownerOf(held, turn, entryOf, now),
-});
+// A person who asks it for a turn takes part in it (people/participation.ts), whoever started it.
+const socialOf = (held: PersistedAgent, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): Social => {
+    const social = { ...held.social, ...opt("title", held.social.title ?? openingTitle(turn)), ...ownerOf(held, turn, entryOf, now) };
+    const asker = personAsking(turn.startedBy, turn.owner);
+    return asker === undefined ? social : (joinedEntry({ ...held, social }, asker, "prompt", now)?.social ?? social);
+};
 
 // What a conversation's first turn starts from. Placement latches with identity from here on: a later turn keeps its
 // workspace or worktree, and its runner, whatever a stale request says; a runner implies a worktree, since a remote
@@ -337,6 +339,10 @@ export interface AgentsRegistry {
     // Adds or takes back one person's mark. `on` is the intent, not a flip, so a retried request settles where the
     // first one did. Leaves `updatedAt` alone: somebody reacting is not the conversation doing something.
     readonly react: (id: string, emoji: string, by: { email: string; name?: string }, on: boolean, at: number) => Promise<AgentSummary | undefined>;
+    // Counts a person among those who took part (people/participation.ts), and sets one person's answer to how much of its
+    // news reaches them (null clears it). Neither writes when nothing changes; both leave `updatedAt` alone.
+    readonly join: (id: string, person: Person, via: Participation, at: number) => Promise<AgentSummary | undefined>;
+    readonly setNotify: (id: string, email: string, level: NotifyLevel | null, at: number) => Promise<AgentSummary | undefined>;
     // Stamps every card's read marker at once, the board's one escape hatch for unread badges.
     readonly markAllSeen: (now: number) => Promise<void>;
     // Persists a land's outcome (advanced landedTips, diffstat, conflict report) as one write, so the report cannot
@@ -874,6 +880,12 @@ export const createFleet = (
         broadcast();
         return summaryOf(next);
     };
+    // `amend` for a change that may be none: undefined from `change` writes nothing and answers the card as it stands.
+    const amendIf = async (id: string, change: (entry: PersistedAgent) => PersistedAgent | undefined): Promise<AgentSummary | undefined> => {
+        const entry = entryOf(id);
+        const next = entry === undefined ? undefined : change(entry);
+        return next === undefined ? (entry === undefined ? undefined : summaryOf(entry)) : amend(id, () => next);
+    };
 
     const agents: AgentsRegistry = {
         init: async () => {
@@ -1054,7 +1066,12 @@ export const createFleet = (
             return moving.length;
         },
         requestLand: (id, by, at) =>
-            amend(id, (entry) => ({ ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } })),
+            amend(id, (entry) => {
+                const asked = { ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } };
+                return joinedEntry(asked, by, "land", at) ?? asked;
+            }),
+        join: (id, person, via, at) => amendIf(id, (entry) => joinedEntry(entry, person, via, at)),
+        setNotify: (id, email, level, at) => amendIf(id, (entry) => notifiedEntry(entry, email, level, at)),
         assign: (id, to, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),
         setSeal: (id, seal) =>

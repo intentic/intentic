@@ -24,6 +24,7 @@ import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { tokenEquals } from "./token-equals.js";
 import { memberRow } from "./members/member-row.js";
+import { memberCaller } from "./members/member-caller.js";
 import type { Listener } from "./proofs/listener.js";
 import { assertChannel, meetsPasskeyPolicy } from "./proofs/proof-methods.js";
 import { spentOnce } from "./proofs/spent-once.js";
@@ -442,6 +443,7 @@ export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string
 // Compare emails case-insensitively because roster writes normalize them.
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
 
+
 // Whether this person holds the operating tier right now: the bound owner, or a maintainer on the roster. Read fresh on
 // every ask, like authorize, so a removal or a re-grade answers no on the very next one.
 export const operatesSandbox =
@@ -532,18 +534,8 @@ export const createAuthorizer = (deps: {
         if (vouchedOnly(proof) && member.emailSignIn !== true) {
             throw new ForbiddenError("email sign-in is not on for you on this sandbox: ask its owner to allow it", EMAIL_SIGN_IN_OFF);
         }
-        // A maintainer holds the owner's operating authority and reads every credential, so a fence over the tier would
-        // enforce nothing (areas/invariant.ts `no-maintainer-is-fenced`), and the grant route refuses one. A row that
-        // carries areas anyway, hand-edited or written before that refusal, used to hide most of the tree and every
-        // conversation outside them from that person all the same: it is read as the whole workspace instead
-        // (`memberAccess` answers a maintainer with no fence).
-        // The tier is the one the access makes, never the row's own word for it: every floor reads it.
-        const access = memberAccess(member);
-        const areas = access.see === undefined ? {} : { areas: access.see };
-        const assistants = member.assistants === undefined ? {} : { assistants: member.assistants };
-        const manages = access.manages === undefined ? {} : { manages: access.manages };
-        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants, ...manages };
-        return access.lands === true ? { ...caller, lands: true } : caller;
+        // The address as the claim carries it, whatever case the roster row was written in.
+        return { ...memberCaller(member), ...proof };
     };
     // The require-passkey policy, read per request like the roster (proof-methods.ts says which proofs pass it).
     const requirePasskey = async (caller: ProvenCaller, enrolment: boolean): Promise<void> => {

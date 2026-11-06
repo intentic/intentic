@@ -11,7 +11,8 @@ import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.j
 export interface AutomationNeedDeps {
     // Throws the refusal the Automations page would show, as a BAD_REQUEST; resolves when it could be saved as it is.
     readonly refuse: (automation: Automation) => Promise<void>;
-    readonly save: (automation: Automation) => Promise<void>;
+    // `conversationId`: the conversation that proposed it, whose people its notices are for.
+    readonly save: (automation: Automation, conversationId: string) => Promise<void>;
     readonly exists: (id: string) => Promise<boolean>;
     // A ready-made source checked once, for the card; undefined for a guard command, which is never run before approval.
     readonly firstCheck: (automation: Automation) => Promise<AutomationFirstCheck | undefined>;
@@ -77,7 +78,7 @@ export const automationNeed = (deps: AutomationNeedDeps): NeedKindHandler => {
             try {
                 // Checked again: the world moved since it was proposed (a conversation archived, a moment passed).
                 await deps.refuse(subject.automation);
-                await deps.save(subject.automation);
+                await deps.save(subject.automation, need.conversationId);
             } catch (error) {
                 const refusal = refusalOf(error);
                 if (refusal === undefined) {
