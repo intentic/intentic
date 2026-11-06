@@ -1797,7 +1797,7 @@ describe("a turn the child did not get from its parent", () => {
         await settled(result.id);
         expect(services.turns.run({ conversationId: result.id, prompt: "Port the parser (sent again)" })).not.toBe("busy");
 
-        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, resume: "limit", errand: undefined });
+        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, prompt: "Port the parser (sent again)", resume: "limit", errand: undefined });
 
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
             status: "running",
@@ -1837,6 +1837,7 @@ describe("a turn the child did not get from its parent", () => {
         adoptChildTurn(services, {
             conversationId: result.id,
             speaker: { kind: "person", email: "owner@example.com" },
+            prompt: "Let me look at this myself",
             resume: undefined,
             errand: undefined,
         });
@@ -1899,7 +1900,7 @@ describe("a turn the child did not get from its parent", () => {
             matched: { status: "paused" },
         });
         expect(services.turns.run({ conversationId: result.id, prompt: "go (sent again)" })).not.toBe("busy");
-        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, resume: "stopped", errand: undefined });
+        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, prompt: "go (sent again)", resume: "stopped", errand: undefined });
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
             status: "running",
             description: "Port the parser",

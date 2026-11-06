@@ -4,6 +4,7 @@ export const privacySamples: GroupSamples<`privacy`> = () => ({
     status: undefined,
     setPolicy: { mode: `on`, trusted: [], classes: [`person-name`], images: `mask`, names: `dictionary`, allow: [] },
     log: undefined,
+    shielded: { conversationId: `smoke-conversation` },
     reveal: { tokens: [] },
     image: { id: `smoke-image-0000000` },
     dictionary: { query: `kow` },

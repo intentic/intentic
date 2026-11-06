@@ -14,6 +14,10 @@ jest.mock("../../client/sandbox/useSandbox", () => ({
 jest.mock("../../app/storage/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: daemon }) }));
 jest.mock("../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+// The rail's Attention count asks whether the reader runs the sandbox (useAgents-fleet.ts); an owner hears every card.
+jest.mock("../../client/sandbox/access/useAccess", () => ({
+    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+}));
 jest.mock("../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";

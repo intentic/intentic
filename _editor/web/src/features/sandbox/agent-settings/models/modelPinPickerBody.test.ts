@@ -41,6 +41,8 @@ jest.mock(`../../../../models/providers/providerCatalog`, () => ({
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
     // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.
     providerGlyph: () => `cpu`,
+    // <ProviderLogo> and the effort ladder ask which sign-in a key is filed under; none of these providers is a key.
+    keyedBeside: () => undefined,
 }));
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");

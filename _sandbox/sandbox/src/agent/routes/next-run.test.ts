@@ -48,7 +48,7 @@ describe(`the run after one a reader saw end`, () => {
         // A wait far past the test's own: only the announcement can answer it in time.
         const next = nextRunAfter(deps, `c-next`, first.id, undefined, { waitMs: 60_000, pollMs: 60_000 });
         const second = started(startTurnRun(deps, runs, { prompt: `two`, conversationId: `c-next` }));
-        deps.events.publish(`run.started`, { conversationId: `c-next`, speaker: undefined, resume: undefined, errand: undefined });
+        deps.events.publish(`run.started`, { conversationId: `c-next`, speaker: undefined, prompt: `two`, resume: undefined, errand: undefined });
         expect(await next).toBe(second);
     });
 
