@@ -300,10 +300,13 @@ const boardRows = (): string =>
 const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
 </script>
 <!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
+<!-- `overflow-x-clip`: nothing the board holds outside its scroller (the header row, what is positioned against this box)
+     may scroll the section around it sideways either. A clip, not a scroller, so it costs the sticky headers nothing, and
+     the fixed ghost and drop target, placed against the window, are not cut by it. -->
 <!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
-    <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col">
+    <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
         <!-- Size the groups by their controls so the header wraps before they overlap the search field. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
@@ -365,8 +368,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <div class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
             <!-- A phone's board ends with room for the floating New agent, so its last card never sits under the press. -->
+            <!-- NEVER SIDEWAYS (`overflow-x-clip`). The lanes are fractions of this width, so anything wider is something spilling
+                 past its card, and from the right-hand lane that handed the board a horizontal scrollbar. Cut at the edge the
+                 scroller already cut it at; a clip rather than a scroller, so the sticky headers still pin to the board's. -->
             <div
-                class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
+                class="grid gap-3.5 overflow-x-clip p-3.5 sm:gap-4 sm:p-4"
                 :class="[laneGrid, noMatches ? '' : paired ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']"
             >
                 <section

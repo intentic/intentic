@@ -27,9 +27,11 @@ const { shown, goesTip, warm, warmTip, cooling, coolingTip, watch, prompt, stops
 
 <template>
     <!-- Takes the date's slot: "resends 02:00", "sends in 12m", "back in 27m" tell the reader something to plan around, unlike "last active". -->
+    <!-- Capped, since the row floors its reading at its whole width (AgentCard's `min-w-max`): "sends after <a title> lands"
+         ran past the card's edge, and from the right-hand lane that scrolled the whole board sideways. The hover says it whole. -->
     <span v-if="shown !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="goesTip">
         <Icon name="clock" class="shrink-0 text-2xs" />
-        <span class="tabular-nums">{{ shown.text }}</span>
+        <span class="max-w-60 truncate tabular-nums">{{ shown.text }}</span>
     </span>
     <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
     <button

@@ -903,11 +903,11 @@ const grab = (event: PointerEvent): void => {
                     @land="emit('land')"
                 />
 
-                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and a reading held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave. -->
+                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and a reading held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave. A dense row's 8rem is its basis, not its floor: its reading is floored at its whole width (`min-w-max` below), so a floor of 8rem sat it beside the model and hung the reading past the card's edge (from the right-hand lane, a sideways scroll); at `min-width: auto` it wraps onto a line of its own instead. -->
                 <div
                     v-if="summary" data-shares
-                    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
-                    :class="dense ? 'min-w-32 flex-1' : 'grow has-[>[data-stat]]:basis-full'"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
+                    :class="dense ? 'flex-[1_1_8rem]' : 'min-w-0 grow has-[>[data-stat]]:basis-full'"
                 >
                     <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
