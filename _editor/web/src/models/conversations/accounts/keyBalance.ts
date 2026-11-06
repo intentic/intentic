@@ -6,6 +6,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { rpcKey } from "../../../lib/queryKeys";
 import { endpointProviders, providerDisplayLabel } from "../../providers/providerCatalog";
 import { formatAge, formatReset } from "../../providers/usageStatus";
@@ -48,15 +49,27 @@ export const balanceTip = (provider: AgentProvider, balance: KeyBalance, now: nu
 });
 
 /** The balance on a key provider, read on mount and again whenever `refetch` is pressed (the composer, as a turn ends). */
+// Asked only of a key that is still here, on a sandbox that has the route: a sandbox older than this app answers 404,
+// read as "too old for this part of the app", and a removed key's id answers the same 404. `refetch` keeps to the same
+// rule, since a query's own refetch runs whether or not it is enabled: every turn's end asked an older sandbox again,
+// and reported it again (2026-11-06).
 export const useKeyBalance = (provider: MaybeRefOrGetter<AgentProvider>) => {
     const id = computed(() => endpointIdOf(toValue(provider)));
+    const enabled = computed(() => id.value !== undefined && readsBalance(toValue(provider)) && supportsRoute(`endpoints.balance`));
     const { query } = useSandboxQuery({
         queryKey: computed(() => rpcKey(`endpoints.balance`, { id: id.value })),
         queryFn: () => sandboxRpc.endpoints.balance({ id: id.value ?? `` }),
-        enabled: computed(() => id.value !== undefined && readsBalance(toValue(provider))),
+        enabled,
         staleTime: 30_000,
         retry: false,
     });
-    const balance = computed<KeyBalance | undefined>(() => (id.value !== undefined && readsBalance(toValue(provider)) ? query.data.value?.balance : undefined));
-    return { balance, refetch: () => void query.refetch() };
+    const balance = computed<KeyBalance | undefined>(() => (enabled.value ? query.data.value?.balance : undefined));
+    return {
+        balance,
+        refetch: () => {
+            if (enabled.value) {
+                void query.refetch();
+            }
+        },
+    };
 };

@@ -12,10 +12,12 @@ const t = useT();
 
 // A notice may name the press for its own moment ("Continue with another model" on a spent trial) and make it the
 // card's filled press, or one of its alternatives beside that press (`boring`); the account gate keeps the plain
-// "Choose a model".
-const props = defineProps<{ label?: string; tier?: `accent` | `boring` }>();
+// "Choose a model". `stopsTurn`: the turn still running here cannot succeed (its provider is gone), so a pick onto
+// another provider stops it rather than waiting for it to fail (paneModelPick.ts).
+const props = defineProps<{ label?: string; tier?: `accent` | `boring`; stopsTurn?: boolean }>();
 
-const pick = usePaneModelPick();
+// The props themselves, read at the press, so a door that changes its mind between renders is read as it stands.
+const pick = usePaneModelPick(props);
 
 // Button is a component; the ref is its instance, `$el` is the actual <button> element used as anchor.
 const listButton = ref<{ $el?: unknown }>();

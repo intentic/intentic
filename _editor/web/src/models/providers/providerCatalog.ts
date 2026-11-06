@@ -11,7 +11,7 @@ import {
     providerLabel,
     TRIAL_LABEL,
 } from "@intentic/sandbox-contract/models/agent-catalog";
-import { keyBeside } from "@intentic/sandbox-contract/models/key-providers";
+import { KEY_PROVIDERS, keyBeside } from "@intentic/sandbox-contract/models/key-providers";
 import { compareModelIds, familyOf } from "@intentic/sandbox-contract/models/model-order";
 import type { HelperOnly, ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
@@ -175,10 +175,22 @@ const endpointLabel = (provider: AgentProvider): string | undefined => {
     return label === TRIAL_LABEL && isTrialProvider(provider) ? t(`chat.providerCatalog.freeTrial`) : label;
 };
 
-// Display label for any provider, falling back through ACP/endpoint name, a gone endpoint's raw id,
-// then the static label. The raw-id rung exists for the spend ledger, which outlives a deleted card.
+// A gone endpoint stored under a vendor's own id ("anthropic"), named as the key it was, as it was named while it was
+// here: a chat left on a removed key said "anthropic isn't connected in this sandbox", the id where the vendor belongs.
+const goneKeyLabel = (provider: AgentProvider): string | undefined => {
+    const id = endpointIdOf(provider);
+    const vendor = id === undefined ? undefined : KEY_PROVIDERS.find((entry) => entry.id === id && entry.beside !== undefined)?.label;
+    return vendor === undefined ? undefined : t(`chat.providerCatalog.apiKey`, { vendor });
+};
+
+// Display label for any provider, falling back through ACP/endpoint name, a gone vendor key's name, a gone endpoint's raw
+// id, then the static label. The raw-id rung exists for the spend ledger, which outlives a deleted card.
 export const providerDisplayLabel = (provider: AgentProvider): string =>
-    acpProviders.value.find((agent) => agent.id === provider)?.label ?? endpointLabel(provider) ?? endpointIdOf(provider) ?? providerLabel(provider);
+    acpProviders.value.find((agent) => agent.id === provider)?.label ??
+    endpointLabel(provider) ??
+    goneKeyLabel(provider) ??
+    endpointIdOf(provider) ??
+    providerLabel(provider);
 
 // All locally-run weights read as one provider (used by the picker's rail and the Usage tab's
 // legend), including a card that's since been deleted. The trial is excluded: it's a

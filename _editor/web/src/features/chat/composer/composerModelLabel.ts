@@ -41,8 +41,11 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
     if (accessKnown.value && !chat.auto && providerWithheld(chat.provider) && (turnDefaults.provider.value === chat.provider || anyProviderReady())) {
         return { label: modelLabelFor(chat.provider, chat.model), unset: true, locked: true, withheld: true };
     }
+    // Named too where something else here can run: a chat then only sits on an unconnected provider because somebody
+    // chose it or it ran there (a fresh chat on the app's floor is moved onto what runs, useChat-accounts.ts). A chat whose
+    // key was removed under it read "No model" over a turn still running on Opus (2026-11-06).
     if (accessKnown.value && !providerReadyOn(chat.provider, chat.harness)) {
-        const picked = !chat.auto && turnDefaults.provider.value === chat.provider;
+        const picked = !chat.auto && (turnDefaults.provider.value === chat.provider || anyProviderReady());
         return picked ? { label: modelLabelFor(chat.provider, chat.model), unset: true, locked: true } : { label: t(`chat.composerModelPill.noModel`), unset: true };
     }
     // On Auto the control says Auto, not the model underneath: that model is only the fallback if the reading never

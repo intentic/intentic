@@ -2958,6 +2958,8 @@
             "didntConnect": "{provider} no se conectó.",
             "finishSignIn": "Terminar el inicio de sesión",
             "isntConnectedInSandbox": "{providerName} no está conectado en este sandbox.",
+            "goneMidTurn": "{providerName} ya no está conectado en este sandbox. El turno que sigue en marcha con él fallará en su siguiente paso.",
+            "stopAndSwitch": "Detener y cambiar de modelo",
             "noModelYet": "Todavía no hay ningún modelo conectado en este sandbox.",
             "signInWaiting": "Tu inicio de sesión en {provider} aún no ha terminado.",
             "connectProvider": "Conectar {providerName}",

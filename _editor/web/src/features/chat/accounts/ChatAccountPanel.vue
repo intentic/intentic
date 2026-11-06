@@ -78,6 +78,13 @@ const connectLabel = computed(() =>
 // asking the owner.
 const withheld = computed(() => providerWithheld(provider.value));
 
+// A turn still live on a provider that is no longer here: its key was removed (or its account disconnected) while the
+// turn waited on something, and it fails at its next model call, which can be hours away (a subagent wait). The line
+// says so, and its press stops that turn on the way to another model: a pick onto another provider is otherwise held
+// until the turn ends (paneModelPick.ts), and for eight minutes on 2026-11-06 every pick here seemed to do nothing.
+const { turnStoppable } = view;
+const stranded = computed(() => turnStoppable.value && others.value);
+
 // Each press on a composer that cannot send shakes the way on, keyed so a second press shakes it again.
 const nudge = inject(ACCOUNT_NUDGE, ref(0));
 </script>
@@ -162,7 +169,11 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
     >
         <Icon name="th-large" class="shrink-0 text-subtle" />
         <span class="min-w-[12rem] flex-1 text-left">{{
-            named ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) : t(`chat.chatAccountPanel.noModelYet`)
+            stranded
+                ? t(`chat.chatAccountPanel.goneMidTurn`, { providerName })
+                : named
+                  ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName })
+                  : t(`chat.chatAccountPanel.noModelYet`)
         }}</span>
         <span class="flex shrink-0 items-center gap-3">
             <template v-if="others">
@@ -171,7 +182,8 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
                 </RouterLink>
                 <ChatChooseModelButton
                     :key="`choose-${nudge}`"
-                    :label="t(`chat.chatAccountPanel.chooseAnother`)"
+                    :label="stranded ? t(`chat.chatAccountPanel.stopAndSwitch`) : t(`chat.chatAccountPanel.chooseAnother`)"
+                    :stops-turn="stranded"
                     tier="accent"
                     :class="{ 'ui-shake': nudge > 0 }"
                 />

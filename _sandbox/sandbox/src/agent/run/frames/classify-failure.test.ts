@@ -538,6 +538,17 @@ test.each(unavailable)("a model the plan does not cover: %s", async (_case, mode
     expect(plan.log.level).toBe("warn");
 });
 
+// A key the vendor refuses refuses every model behind it: hiding the one the turn named for a day kept it off the list
+// after a working key replaced the dead one (2026-11-06).
+test("a refused API key files no model refusal", async () => {
+    const plan = await classifyFailure(
+        { kind: "error", code: "model-unavailable", message: "invalid x-api-key: the vendor refused the API key this chat runs on." },
+        context({ model: "opus" }),
+        answering(),
+    );
+    expect(plan.writes).toStrictEqual([]);
+});
+
 describe("an uncoded death", () => {
     test("after an answer is held as stopped, offered when the conversation waits", async () => {
         const queries = answering();

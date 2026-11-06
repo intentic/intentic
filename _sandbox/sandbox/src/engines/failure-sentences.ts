@@ -21,6 +21,14 @@ const AUTH_FAILURE_PREFIX = "Failed to authenticate";
 
 export const isAuthFailureText = (text: string): boolean => text.startsWith(AUTH_FAILURE_PREFIX);
 
+// A vendor refusing the API key itself, in the words the vendors' APIs use for a key that is wrong, revoked or deleted
+// (Anthropic's `invalid x-api-key`, OpenAI's `Incorrect API key provided`, `invalid_api_key`). Every model behind that
+// key is refused alike, so it says nothing about the model a turn named: it must not be filed as that model being off
+// the plan, which hid the model for a day, and worded the dead key as "until the plan covers it" (2026-11-06).
+const DEAD_KEY = /invalid[ _-]?x-api-key|invalid[ _-]api[ _-]key|incorrect api key|api key (?:is )?(?:invalid|expired|revoked|not valid)/i;
+
+export const isDeadKeyText = (text: string): boolean => DEAD_KEY.test(text);
+
 // Engine too old for the model: the 400 carries both version numbers, but the CLI's "run claude update" advice is for a
 // human at a terminal — engines/engines.ts performs the install instead. Matched on the floor clause, not the product
 // name, which Anthropic is free to reword; the running version is useful for the card but never load-bearing.

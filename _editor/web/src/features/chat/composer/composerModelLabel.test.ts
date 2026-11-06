@@ -58,6 +58,17 @@ it(`names a model somebody picked, locked, until its provider is connected`, () 
     expect(composerModelReading(CHAT)).toEqual({ label: `Claude Opus 5`, unset: false });
 });
 
+// A chat whose key was removed under it, while something else here can run, sat on that key because it ran there: the
+// pill read "No model" over a turn still running on Opus (2026-11-06). Its model is named, locked, as a pick would be.
+it(`names a started chat's model, locked, when its provider is gone and another can run`, () => {
+    accountsLoaded.value = true;
+    endpointsLoaded.value = true;
+    translatorAccounts.value = { ...translatorAccounts.value, codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev` }] };
+    providerModels.value = { ...providerModels.value, "endpoint/anthropic": [{ value: `claude-opus-5`, label: `Claude Opus 5` }] };
+
+    expect(composerModelReading({ ...CHAT, provider: `endpoint/anthropic` })).toEqual({ label: `Claude Opus 5`, unset: true, locked: true });
+});
+
 // A chat sitting on a connected model the reader may not run is named whoever picked it, locked, and said so: the pill
 // used to read as sendable there, and Send found out.
 it(`names a model on a provider not shared with the reader, locked, and says so`, () => {

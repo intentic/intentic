@@ -8,7 +8,7 @@ import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/provide
 import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { LimitWay, limitWayOf } from "../../models/limit-way.js";
-import { isAdminGrantedAllowanceText, mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
+import { isAdminGrantedAllowanceText, isDeadKeyText, mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
 import { latestOf, namedPeriod, namedReset } from "../../../usage/reset-sentences.js";
 import { OUTAGE_MAX_ATTEMPTS, type OutageState } from "../../providers/provider-health.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
@@ -204,8 +204,10 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
 // The records a frame files by its code alone, before anything is asked.
 const filedWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
     const model = named(context.model);
+    // Not a dead key: it refuses every model behind it alike, and hiding this one for a day kept it off the list after a
+    // working key replaced the dead one (isDeadKeyText).
     const modelRefusal: FailureWrite[] =
-        event.code === "model-unavailable" && model !== undefined
+        event.code === "model-unavailable" && model !== undefined && !isDeadKeyText(event.message)
             ? [{ kind: "model-refusal", provider: context.provider, model, refusal: { at: context.now, message: event.message } }]
             : [];
     const seatRefusal: FailureWrite[] =

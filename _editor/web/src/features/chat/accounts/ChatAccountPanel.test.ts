@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -33,7 +33,16 @@ const dismissSignInFailure = jest.fn(() => {
     signInFailure.value = undefined;
 });
 const provider = ref<AgentProvider>(`claude`);
-const selectModel = jest.fn();
+// The pane's conversation as a pick reaches it (paneModelPick.ts): its selection, and the stream a provider switch waits on.
+const apply = jest.fn();
+const streaming = ref(false);
+const conversation = shallowRef({ selection: { provider, apply }, turn: { streaming } });
+// A turn live here that a Stop ends, and the Stop itself, which ends this window's stream as the real one does.
+const turnStoppable = ref(false);
+const stop = jest.fn(() => {
+    streaming.value = false;
+    turnStoppable.value = false;
+});
 const startConnect = jest.fn();
 const connectTranslator = jest.fn();
 
@@ -75,9 +84,11 @@ jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         connected,
         provider,
+        conversation,
+        turnStoppable,
+        stop,
         harness: ref(`claude-code`),
         model: ref(`claude-opus-4-6`),
-        selectModel,
         selectHarness: () => {},
         selectAccount: () => {},
     }),
@@ -139,7 +150,10 @@ beforeEach(() => {
     canShip.value = true;
     cancelSignIn.mockClear();
     dismissSignInFailure.mockClear();
-    selectModel.mockClear();
+    apply.mockClear();
+    stop.mockClear();
+    streaming.value = false;
+    turnStoppable.value = false;
     startConnect.mockClear();
     connectTranslator.mockClear();
     settleModelPick(undefined);
@@ -218,12 +232,55 @@ it(`leads with another model where something else here can run, and opens the li
     await nextTick();
 
     expect(modelRequest.value?.anchor).toBe(press);
-    expect(modelRequest.value?.provider).toBe(`claude`);
+    // Nothing staged: the chat's own pair is the one that cannot run, and "Use this model" pressed on it changed nothing.
+    expect(modelRequest.value?.provider).toBe(``);
+    expect(modelRequest.value?.model).toBe(``);
 
     // A picked row applies to this pane's own conversation.
     settleModelPick({ provider: `gemini`, model: `gemini-3-pro`, label: `Gemini 3 Pro` });
     await nextTick();
-    expect(selectModel).toHaveBeenCalledWith({ provider: `gemini`, value: `gemini-3-pro` });
+    expect(apply).toHaveBeenCalledWith({ kind: `selectModel`, pick: { provider: `gemini`, value: `gemini-3-pro` } });
+});
+
+// The reported dead end (2026-11-06): the key a chat ran on was removed while its turn sat in a long wait. The turn fails
+// at its next model call, and a pick onto another provider is refused while it streams, so every pick did nothing for
+// as long as it ran. The line says so, and its press stops that turn on the way to the model picked.
+it(`stops a turn still running on a provider that is gone, then applies the pick`, async () => {
+    endpointProviders.value = [{ id: `openrouter`, label: `OpenRouter`, kind: `endpoint` }];
+    provider.value = `endpoint/anthropic`;
+    streaming.value = true;
+    turnStoppable.value = true;
+    const element = mount();
+
+    expect(element.textContent).toContain(`Anthropic API key isn't connected in this sandbox any more`);
+    buttonNamed(element, `Stop and switch model`)!.click();
+    await nextTick();
+
+    settleModelPick({ provider: `claude`, model: `claude-opus-4-6`, label: `Opus 4.6` });
+    await nextTick();
+    await nextTick();
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
+});
+
+// A turn live on a provider that is still here (the withheld line's, somebody else's) is not stopped by a pick: the pick
+// waits for the turn to end, where it used to be dropped.
+it(`holds a pick onto another provider until a running turn ends, rather than dropping it`, async () => {
+    endpointProviders.value = [{ id: `openrouter`, label: `OpenRouter`, kind: `endpoint` }];
+    withheld.value = [`claude`];
+    streaming.value = true;
+    const element = mount();
+
+    buttonNamed(element, `Choose another model`)!.click();
+    await nextTick();
+    settleModelPick({ provider: `gemini`, model: `gemini-3-pro`, label: `Gemini 3 Pro` });
+    await nextTick();
+    expect(apply).not.toHaveBeenCalled();
+    expect(stop).not.toHaveBeenCalled();
+
+    streaming.value = false;
+    await nextTick();
+    expect(apply).toHaveBeenCalledWith({ kind: `selectModel`, pick: { provider: `gemini`, value: `gemini-3-pro` } });
 });
 
 // Enter on a composer with nothing to send with sends nothing and opens nothing: it shakes this press, the one way on,

@@ -5,6 +5,7 @@ import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools
 import {
     isAuthFailureText,
     isContextOverflowText,
+    isDeadKeyText,
     isEntitlementRefusalText,
     isRateLimited,
     isUnsentParameterRefusalText,
@@ -96,14 +97,25 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
 // authenticate. API Error: 403 You've reached your 5-hour usage limit"), and filed as the model being off the plan it hid
 // that model for a day while the window reopened in two hours, where a sibling refused by the same limit was held for the
 // reset (2026-10-17): the allowance's wording is read first, and it goes out as the spent allowance it is.
-export const modelUnavailableFrame = (model: string, refusal: string): ErrorEvent =>
-    mentionsSpentAllowance(refusal)
-        ? { kind: "error", code: "rate_limit", message: refusal }
-        : {
-              kind: "error",
-              code: "model-unavailable",
-              message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
-          };
+// A key the vendor refuses outright (isDeadKeyText) is still a way on through another model, so it keeps the code, but it
+// is said as the key it is: "until the plan covers it" sent a reader whose key had been deleted looking at their plan.
+export const modelUnavailableFrame = (model: string, refusal: string): ErrorEvent => {
+    if (mentionsSpentAllowance(refusal)) {
+        return { kind: "error", code: "rate_limit", message: refusal };
+    }
+    if (isDeadKeyText(refusal)) {
+        return {
+            kind: "error",
+            code: "model-unavailable",
+            message: `${refusal}: the vendor refused the API key this chat runs on (revoked, deleted or mistyped). Nothing here can retry past that: connect a working key, or pick another model for this chat.`,
+        };
+    }
+    return {
+        kind: "error",
+        code: "model-unavailable",
+        message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
+    };
+};
 
 // A session past the model's window, in the provider's own words; coded so the daemon re-runs the turn in a fresh
 // session, since resuming this one only overflows again (classify-failure.ts).

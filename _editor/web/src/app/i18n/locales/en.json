@@ -2958,6 +2958,8 @@
             "didntConnect": "{provider} didn't connect.",
             "finishSignIn": "Finish sign-in",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
+            "goneMidTurn": "{providerName} isn't connected in this sandbox any more. The turn still running on it fails at its next step.",
+            "stopAndSwitch": "Stop and switch model",
             "noModelYet": "No model is connected in this sandbox yet.",
             "signInWaiting": "Your {provider} sign-in isn't finished yet.",
             "connectProvider": "Connect {providerName}",
