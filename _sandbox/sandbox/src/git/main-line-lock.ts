@@ -71,11 +71,12 @@ export const lockedBranchOf = async (dir: string, git: GitRunner = defaultGit): 
 
 // The answer above per checkout, reused while the repo's config file is the one it was read from: the latch moves only
 // when config is written (by hand, or by the latch itself), and a stat is no spawn. The identity is taken BEFORE the
-// read, so a write that lands meanwhile changes it and the next ask reads again rather than keeping a stale name. "No
-// main line" is kept only UNLOCKED_TTL_MS: it hangs on branches existing, which no config write announces. Every
+// read, so a write that lands meanwhile changes it and the next ask reads again rather than keeping a stale name. An answer
+// not read from config (nothing latched yet, or a config the latch could not write) is kept only UNLATCHED_TTL_MS: it is
+// worked out from branches and HEAD, which no config write announces. Every
 // change scan and every tool call's catch-up asked this of each repo (2026-11-06: ~16.5k `config --get` in 13 h).
-const UNLOCKED_TTL_MS = 30_000;
-const latchedReads = new Map<string, { readonly config: string; readonly locked: string | undefined; readonly at: number }>();
+const UNLATCHED_TTL_MS = 30_000;
+const latchedReads = new Map<string, { readonly config: string; readonly locked: string | undefined; readonly latched: boolean; readonly at: number }>();
 
 const configIdentity = async (dir: string): Promise<string | undefined> => {
     const gitDir = await gitDirOf(dir);
@@ -91,14 +92,15 @@ const configIdentity = async (dir: string): Promise<string | undefined> => {
 export const latchedMainBranch = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
     const config = await configIdentity(dir);
     const hit = latchedReads.get(dir);
-    if (config !== undefined && hit?.config === config && (hit.locked !== undefined || Date.now() - hit.at < UNLOCKED_TTL_MS)) {
+    if (config !== undefined && hit?.config === config && (hit.latched || Date.now() - hit.at < UNLATCHED_TTL_MS)) {
         return hit.locked;
     }
-    const locked = await lockedBranchOf(dir, git);
+    const read = await configured(dir, git);
+    const locked = read ?? (await lockedBranchOf(dir, git));
     if (config === undefined) {
         latchedReads.delete(dir);
     } else {
-        latchedReads.set(dir, { config, locked, at: Date.now() });
+        latchedReads.set(dir, { config, locked, latched: read !== undefined, at: Date.now() });
     }
     return locked;
 };

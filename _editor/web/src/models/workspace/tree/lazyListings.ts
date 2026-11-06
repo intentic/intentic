@@ -210,8 +210,6 @@ export const patchListing = (path: string, entries: readonly WorkspaceTreeEntry[
     return true;
 };
 
-/** Whether deltas keep this loaded folder current, so a change elsewhere in the tree need not read it again. */
-
 /** A batch named this loaded folder: wait for the delta that keeps it, or read it again where deltas do not. */
 export const relistUnlessPushed = (path: string): void => {
     if (!followed.value.has(path)) {

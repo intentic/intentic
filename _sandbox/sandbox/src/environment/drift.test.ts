@@ -71,6 +71,10 @@ test("a walk that ran out of time gets twice as long next time, up to eight minu
     expect(nextWalkLimit(480_000, true)).toBe(480_000);
     expect(nextWalkLimit(480_000, false)).toBe(60_000);
     expect(nextWalkLimit(WALK_LIMIT_MS, false)).toBe(60_000);
+    // A finished walk keeps room for itself: twice what it took, never under the minute or over the cap.
+    expect(nextWalkLimit(240_000, false, 90_000)).toBe(180_000);
+    expect(nextWalkLimit(WALK_LIMIT_MS, false, 20_000)).toBe(60_000);
+    expect(nextWalkLimit(480_000, false, 400_000)).toBe(480_000);
 });
 
 test("the container's birth is a real moment in the past", async () => {

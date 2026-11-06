@@ -47,6 +47,9 @@ export const refreshFactsBeside = (services: Services, id: string): void => {
     );
 };
 
+/** A machine that just said hello described itself in it: its first reading need not ask again for FACTS_EVERY_MS. */
+export const factsTakenAtHello = (id: string): void => void askedAt.set(id, Date.now());
+
 /** The next reading of a machine that just changed asks for its facts too, however recently one did. */
 export const factsDue = (id: string): void => void askedAt.delete(id);
 

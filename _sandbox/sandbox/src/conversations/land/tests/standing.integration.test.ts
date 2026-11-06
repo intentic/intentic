@@ -321,17 +321,17 @@ test("a pass over a main checkout whose count stood still reads no git of its ow
     expect(probeReads.length).toBeGreaterThan(read);
 });
 
-// A repo's half of the verdict is kept by its shas: an agent re-derived for any other reason (here, forgotten) answers
-// that repo from memory, so a main line moving in one repo no longer re-reads every other repo it composes.
+// A repo with nothing outstanding is kept by its shas: an agent re-derived for any other reason (here, forgotten)
+// answers that repo from memory, so a main line moving in one repo no longer re-reads every other repo it composes.
+// Only the "nothing" is kept: a yes may be a git read that failed, so it is asked again.
 test("re-deriving an agent whose repo shas stood still reads no anchor or trees again", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
-    await sh(conversation.cwd, "add", "-A");
-    await commit(conversation.cwd, "agent work");
-    const entry = isolatedAgent(conversation.repos);
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const entry = isolatedAgent(landed.repos);
     const standings = createLandStandings(worktrees);
     await standings.refresh([entry]);
-    expect(standings.of(entry.id)).toBe("ready");
+    expect(standings.of(entry.id)).toBe("landed");
 
     const reads: string[] = [];
     observeGitCommands(({ dir, args }) => {
@@ -341,7 +341,7 @@ test("re-deriving an agent whose repo shas stood still reads no anchor or trees 
     });
     standings.forget([entry.id]);
     await standings.refresh([entry]);
-    expect(standings.of(entry.id)).toBe("ready");
+    expect(standings.of(entry.id)).toBe("landed");
     expect(reads.filter((read) => read.startsWith("merge-base") || read.includes("^{tree}"))).toEqual([]);
 
     // The main line moves: that repo's half is read again.

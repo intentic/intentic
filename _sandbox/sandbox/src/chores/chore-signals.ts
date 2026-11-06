@@ -165,7 +165,11 @@ const NO_RANKINGS: CodebaseHealth = {
 // (Oct 28-Nov 6: 137 list calls answered 500 on one history read that ran out of time).
 const rankingsOf = async (services: Pick<Services, "iq" | "logger">, repo: string): Promise<CodebaseHealth> => {
     try {
-        return await within(services.iq.health({ scope: { repo }, limit: RANKING_LIMIT }), HEALTH_WAIT_MS, NO_RANKINGS);
+        const health = await within(services.iq.health({ scope: { repo }, limit: RANKING_LIMIT }), HEALTH_WAIT_MS, NO_RANKINGS);
+        if (health === NO_RANKINGS) {
+            services.logger.warn({ repo, waitedMs: HEALTH_WAIT_MS }, "chores: code health still reading, listing without rankings until it is done");
+        }
+        return health;
     } catch (error) {
         services.logger.warn({ err: error, repo }, "chores: code health unavailable, listing without rankings");
         return NO_RANKINGS;

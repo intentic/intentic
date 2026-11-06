@@ -28,7 +28,7 @@ import { emitDefinitionToml, settingsDefinition } from "../definition/definition
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, type HostFiles, hostConnections, hostSummaries, readHostFiles } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
-import { factsDue, refreshFactsBeside, refreshFactsOnceSettled } from "./device-facts-refresh.js";
+import { factsDue, factsTakenAtHello, refreshFactsBeside, refreshFactsOnceSettled } from "./device-facts-refresh.js";
 import { sandboxesFromTool, unreadFromTool,type AnswerMemory,gapOf,keepLastAnswer,type LateHalves,lateReason,noteReading,type Reading } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
@@ -271,6 +271,8 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
 export const warmPull = (services: Services, id: string): void => {
     const entry = entryOf(id);
     if (entry.result === undefined && entry.inflight === undefined) {
+        // The hello this is warmed from carried the machine's own description; asking again would repeat it.
+        factsTakenAtHello(id);
         void refresh(services, id, entry);
     }
 };

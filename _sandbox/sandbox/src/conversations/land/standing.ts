@@ -158,7 +158,7 @@ const repoOutstanding = async (
 };
 
 // One repo's half of the verdict is a function of shas alone (the anchor, tree comparisons and the merge read immutable
-// objects), so it is kept by them across passes: the agent's key above spans all its repos, and a main line moving in
+// objects), so a repo found with nothing outstanding is kept by them across passes: the agent's key above spans all its repos, and a main line moving in
 // one repo used to re-read every repo of every agent composed over it (2026-11-05: `agents.standings` spawned 40k git
 // processes in 13 h). Only a parent's presence matters to the anchor, not who it is. Bounded, oldest first out.
 const REPO_DELTAS_KEPT = 4_096;
@@ -176,8 +176,15 @@ const keptRepoOutstanding = (worktrees: AgentWorktrees, git: GitRunner): RepoOut
         }
         const reading = repoOutstanding(worktrees, placement, shas, tip, git, refused);
         kept.set(key, reading);
-        // A failed read is not kept: the next pass asks git again.
-        reading.catch(() => kept.get(key) === reading && kept.delete(key));
+        // Only "nothing outstanding" is kept. A git read that failed under load answers as content still there
+        // (carriesContent, absorbedIn), so a kept yes could hold a card at ready for work that has landed until a sha
+        // moved, where the next pass used to correct it; the repos this saves re-reading are the idle ones anyway.
+        const forget = (): void => void (kept.get(key) === reading && kept.delete(key));
+        void reading.then((outstanding) => {
+            if (outstanding) {
+                forget();
+            }
+        }, forget);
         for (const [oldest] of kept) {
             if (kept.size <= REPO_DELTAS_KEPT) {
                 break;

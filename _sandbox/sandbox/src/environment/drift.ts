@@ -127,18 +127,24 @@ const sentinelPath = (): string => join(tmpdir(), ".intentic-drift-born");
    of them SDKs and installs baked into /opt, and on a machine short of memory those inodes are read from disk again
    each time. A fixed minute killed it on three nights running (daemon.log: "drift sweep failed", find SIGTERM), and
    each tick started it over from nothing, so it never finished and all its I/O was spent for no answer. So a walk that
-   runs out of its time gets twice as long the next time, up to WALK_LIMIT_MAX_MS, and one that finishes puts it back
-   to the minute: what a finished walk reports is unchanged. */
+   runs out of its time gets twice as long the next time, up to WALK_LIMIT_MAX_MS, and one that finishes sets the next
+   limit to twice what it took, never under the minute: a walk that needs 90 s keeps three minutes rather than dropping
+   back to one and being killed every other tick. `find` is the child itself, not a shell around it, so running out of
+   time stops the walk; under `sh -c` the timeout killed the shell and left find reading the disk. What a finished walk
+   reports is unchanged. */
 export const WALK_LIMIT_MS = 60_000;
 const WALK_LIMIT_MAX_MS = 8 * WALK_LIMIT_MS;
 
 /** The next walk's time limit, after a walk under `limitMs` that finished or was stopped for running out of it. */
-export const nextWalkLimit = (limitMs: number, ranOut: boolean): number => (ranOut ? Math.min(limitMs * 2, WALK_LIMIT_MAX_MS) : WALK_LIMIT_MS);
+export const nextWalkLimit = (limitMs: number, ranOut: boolean, tookMs = 0): number =>
+    Math.min(ranOut ? limitMs * 2 : Math.max(WALK_LIMIT_MS, tookMs * 2), WALK_LIMIT_MAX_MS);
 
 let walkLimitMs = WALK_LIMIT_MS;
 
 // What execFile's error carries when it stopped the child for running past its timeout, rather than it failing on its own.
 const RanOutSchema = z.object({ killed: z.literal(true) });
+// What it carries when find exited non-zero on its own: a path it could not read, with the rest of its answer.
+const PartialWalkSchema = z.object({ code: z.number(), stdout: z.string() });
 
 const pathDrift = async (bornAtMs: number): Promise<string[]> => {
     const sentinel = sentinelPath();
@@ -148,13 +154,26 @@ const pathDrift = async (bornAtMs: number): Promise<string[]> => {
     if (roots.length === 0) {
         return [];
     }
-    // Through sh so one bad path doesn't blank the output; roots are fixed constants, not user input.
-    const command = `find ${roots.join(" ")} -xdev -newer ${sentinel} -not -type d -print 2>/dev/null || true`;
-    const { stdout } = await execFileAsync("sh", ["-c", command], { timeout: walkLimitMs, maxBuffer: 32 * 1024 * 1024 }).catch((error: Error) => {
-        walkLimitMs = nextWalkLimit(walkLimitMs, RanOutSchema.safeParse(error).success);
-        throw error;
-    });
-    walkLimitMs = nextWalkLimit(walkLimitMs, false);
+    const started = Date.now();
+    const stdout = await execFileAsync("find", [...roots, "-xdev", "-newer", sentinel, "-not", "-type", "d", "-print"], {
+        timeout: walkLimitMs,
+        maxBuffer: 32 * 1024 * 1024,
+    }).then(
+        (walked) => walked.stdout,
+        (error: Error) => {
+            if (RanOutSchema.safeParse(error).success) {
+                walkLimitMs = nextWalkLimit(walkLimitMs, true);
+                throw error;
+            }
+            // One bad path doesn't blank the output, as the shell's `|| true` kept it.
+            const partial = PartialWalkSchema.safeParse(error);
+            if (!partial.success) {
+                throw error;
+            }
+            return partial.data.stdout;
+        },
+    );
+    walkLimitMs = nextWalkLimit(walkLimitMs, false, Date.now() - started);
     const paths = stdout.split("\n").filter((line) => line !== "" && !DRIFT_IGNORES.some((ignore) => line.includes(ignore)));
     return collapseDriftPaths(paths);
 };
