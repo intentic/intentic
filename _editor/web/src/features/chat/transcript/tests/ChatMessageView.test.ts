@@ -204,6 +204,12 @@ jest.mock("../../../../models/workspace/files/openFileRef", () => ({ openFileRef
 jest.mock("../../../../models/terminal/portPreview", () => ({ openLoopbackPreview }));
 jest.mock("../../../../models/changes/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
+// The shield's marks read the privacy settings and a daemon query per pane; which words they mark is shieldedWords'
+// own suite, so a reply here is drawn as written.
+jest.mock("../../panel/privacy/useShieldedWords", async () => {
+    const vue = await import("vue");
+    return { useShieldedMarks: (body: unknown) => ({ shown: vue.computed(() => vue.toValue(body)), onHover: () => {} }) };
+});
 jest.mock("../../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));

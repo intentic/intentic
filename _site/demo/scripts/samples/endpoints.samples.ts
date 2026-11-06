@@ -8,4 +8,6 @@ export const endpointsSamples: GroupSamples<`endpoints`> = () => ({
     hostServers: undefined,
     // The whole recording's office GPU box (daemon/capabilities.ts).
     models: { id: `office-gpu` },
+    // A server of the shop's own, whose vendor tells nothing of its credit.
+    balance: { id: `office-gpu` },
 });

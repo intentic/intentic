@@ -32,9 +32,9 @@ test("the owner's own tools, signed in as nobody, hear everything", () => {
 });
 
 test("asking only for what waits on you keeps the cards and drops the finished turns", () => {
-    const quiet = { owner: { email: `ada@example.com`, since: 1 }, notify: [{ email: `ada@example.com`, level: `asks` as const, at: 1 }] };
+    const quiet = { owner: { email: `ada@example.com`, since: 1 }, notify: [{ email: `ada@example.com`, level: `asks` as const }] };
     expect(heardBy(quiet, ADA, `asks`)).toBe(true);
     expect(heardBy(quiet, ADA, `finished`)).toBe(false);
     // Following a conversation one took no part in hears all of it.
-    expect(heardBy({ notify: [{ email: `ada@example.com`, level: `all`, at: 1 }] }, ADA, `finished`)).toBe(true);
+    expect(heardBy({ notify: [{ email: `ada@example.com`, level: `all` }] }, ADA, `finished`)).toBe(true);
 });

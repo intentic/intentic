@@ -132,6 +132,10 @@ jest.mock("../../client/sandbox/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
+// The rail's Attention count asks whether the reader runs the sandbox (useAgents-fleet.ts); an owner hears every card.
+jest.mock("../../client/sandbox/access/useAccess", () => ({
+    useAccess: () => ({ known: { value: true }, role: { value: `owner` }, can: () => true, refusal: () => undefined, holds: () => true }),
+}));
 jest.mock("../../client/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
