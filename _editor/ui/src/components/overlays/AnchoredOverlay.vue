@@ -39,13 +39,36 @@ const nest = useOverlayNest(() => box.value);
 // Undefined until measured; parked off-screen via one :style binding, never written to imperatively.
 const placement = ref<Placement>();
 
+/* THE LAYER IT PAINTS ON: one above whatever layer its anchor sits in. The panel goes to <body>, out of its anchor's
+   stacking, so a fixed tier loses to any layer above it: a modal's mask (PrimeVue stacks those from 1101) covered a
+   caret's model picker opened from inside the Run dialog. The overlay tier (1000) stays the floor, so a modal raised
+   from a page-level panel still lands above it, and inside one modal the panel stays under the tooltips (1200). */
+const OVERLAY_TIER = 1000;
+const layer = ref(OVERLAY_TIER);
+
+const layerAbove = (from: HTMLElement): number => {
+    const view = from.ownerDocument.defaultView;
+    let top = OVERLAY_TIER - 1;
+    if (view === null) {
+        return OVERLAY_TIER;
+    }
+    for (let el = from.parentElement; el !== null; el = el.parentElement) {
+        const z = Number.parseInt(view.getComputedStyle(el).zIndex, 10);
+        if (Number.isFinite(z) && z > top) {
+            top = z;
+        }
+    }
+    return top + 1;
+};
+
 const style = computed<CSSProperties>(() =>
     placement.value === undefined
-        ? { transform: `translate(-200vw, -200vh)`, pointerEvents: `none` }
+        ? { transform: `translate(-200vw, -200vh)`, pointerEvents: `none`, zIndex: layer.value }
         : {
               left: `${Math.round(placement.value.left)}px`,
               top: `${Math.round(placement.value.top)}px`,
               maxHeight: `${Math.round(placement.value.maxHeight)}px`,
+              zIndex: layer.value,
               "--ui-anchored-arrow": `${Math.round(placement.value.arrow)}px`,
           },
 );
@@ -93,6 +116,17 @@ const onKeydown = (event: KeyboardEvent): void => {
     if (event.key === `Escape` && !nest.covered()) {
         open.value = false;
     }
+};
+
+// An Escape pressed INSIDE the panel ends here, before it reaches the document: a modal the panel was opened from
+// listens there too, registered first, so it heard the key before `onKeydown` did and closed under the panel (the Run
+// dialog went with its model picker).
+const onOwnEscape = (event: KeyboardEvent): void => {
+    if (nest.covered()) {
+        return;
+    }
+    event.stopPropagation();
+    open.value = false;
 };
 
 // A window that loses focus closes its menus: the one dismissal a listener inside this window can't see (e.g. a
@@ -152,6 +186,9 @@ watch(
             }
             return;
         }
+        if (anchor !== undefined) {
+            layer.value = layerAbove(anchor);
+        }
         await nextTick(); // The box exists, and has a size, only after this render.
         reposition();
         arm();
@@ -164,7 +201,7 @@ onBeforeUnmount(disarm);
 
 <template>
     <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
-        <div ref="box" class="ui-anchored" :class="[`ui-anchored-${placement?.side ?? side}`, menu && `ui-anchored-menu`]" :style="style" role="dialog" aria-modal="false">
+        <div ref="box" class="ui-anchored" :class="[`ui-anchored-${placement?.side ?? side}`, menu && `ui-anchored-menu`]" :style="style" role="dialog" aria-modal="false" @keydown.esc="onOwnEscape">
             <!-- This div is the surface that paints and clips; the frame around it must not, or it would cut off its own arrow. -->
             <div class="ui-anchored-surface">
                 <slot />

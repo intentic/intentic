@@ -28,12 +28,13 @@ const open = ref(false);
 const anchor = ref<HTMLElement>();
 let app: ReturnType<typeof createApp> | undefined;
 
-const mountPicker = (props: { restoreFocus?: boolean } = {}): void => {
+// `layer`: the z-index of a layer the pill sits in, a modal's mask as PrimeVue stacks one (1101).
+const mountPicker = ({ layer, ...props }: { restoreFocus?: boolean; layer?: number } = {}): void => {
     jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
     app = createApp(
         defineComponent({
             setup: () => () =>
-                h(`div`, [
+                h(`div`, { style: layer === undefined ? undefined : { position: `fixed`, zIndex: String(layer) } }, [
                     h(`button`, { ref: anchor }, `gpt-5`),
                     h(
                         AnchoredOverlay,
@@ -127,4 +128,42 @@ it(`leaves focus where it was when its anchor arrives with the panel shut`, asyn
     await settle();
     expect(anchor.value).toBeInstanceOf(HTMLElement);
     expect(document.activeElement).toBe(document.body);
+});
+
+// The panel goes to <body>, out of its anchor's stacking, so a fixed tier lost to a modal's mask: the Run dialog's
+// Fix with agent caret opened its model picker under the dialog, out of reach.
+it(`paints one above the layer its anchor sits in, and on the overlay tier otherwise`, async () => {
+    mountPicker();
+    open.value = true;
+    await settle();
+    expect(boxStyle().zIndex).toBe(`1000`);
+    open.value = false;
+    await settle();
+
+    app?.unmount();
+    document.body.replaceChildren();
+    mountPicker({ layer: 1101 });
+    open.value = true;
+    await settle();
+    expect(boxStyle().zIndex).toBe(`1102`);
+});
+
+// A modal listens for Escape on the document, registered before the panel opened from it, so a key that reached the
+// document closed the modal along with the panel.
+it(`keeps an Escape pressed inside it from reaching the modal it was opened from`, async () => {
+    const modalHeard = jest.fn();
+    document.addEventListener(`keydown`, modalHeard);
+    try {
+        mountPicker({ layer: 1101 });
+        open.value = true;
+        await settle();
+        const inside = document.body.querySelector<HTMLElement>(`.ui-anchored-surface > *`)!;
+        inside.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
+        await settle();
+
+        expect(open.value).toBe(false);
+        expect(modalHeard).not.toHaveBeenCalled();
+    } finally {
+        document.removeEventListener(`keydown`, modalHeard);
+    }
 });

@@ -2,7 +2,7 @@
 @layer components {
     .ui-anchored {
         position: fixed;
-        z-index: 1000; /* PrimeVue's own overlay tier; tooltips (1200) still win, which is right */
+        z-index: 1000; /* PrimeVue's own overlay tier, the floor: AnchoredOverlay raises it above its anchor's own layer (a modal) */
         display: flex;
         flex-direction: column;
         animation: ui-fade-in 0.12s ease-out both;
