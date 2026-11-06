@@ -39,11 +39,11 @@ afterEach(() => {
     remove.mutateAsync.mockClear();
 });
 
-const mount = async (provider: string, onAdded?: (endpoint: string, label: string) => void): Promise<HTMLElement> => {
+const mount = async (provider: string, onAdded?: (endpoint: string, label: string) => void, another = false): Promise<HTMLElement> => {
     const { default: ApiKeyOption } = await import(`./ApiKeyOption.vue`);
     const host = document.createElement(`div`);
     document.body.append(host);
-    app = createApp(defineComponent({ render: () => h(ApiKeyOption, { provider, onAdded }) }));
+    app = createApp(defineComponent({ render: () => h(ApiKeyOption, { provider, onAdded, another }) }));
     app.component(`Icon`, IconStub);
     installI18n(app);
     app.mount(host);
@@ -111,4 +111,19 @@ it(`takes back a key the vendor lists no models for, and says so at the field`, 
     expect(added).not.toHaveBeenCalled();
     expect(host.querySelector(`[role="alert"]`)?.textContent).toContain(`Anthropic didn't accept this key`);
     expect(host.querySelector<HTMLInputElement>(`input[name="providerApiKey"]`)?.value, `the key to correct was cleared`).toBe(`sk-ant-wrong`);
+});
+
+it(`offers one more key on a card that holds one, and numbers the endpoint it becomes`, async () => {
+    held.value = [{ id: `anthropic`, status: { state: `active` } }];
+    const host = await mount(`claude`, undefined, true);
+    expect(host.textContent?.trim()).toBe(`Add another Anthropic API key`);
+    press(host, `Add another Anthropic API key`);
+    await nextTick();
+    const field = host.querySelector<HTMLInputElement>(`input[name="providerApiKey"]`)!;
+    field.value = `sk-ant-second`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    press(host, `Add key`);
+    await flush();
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ id: `anthropic-2`, config: expect.objectContaining({ apiKey: `sk-ant-second` }) }));
 });

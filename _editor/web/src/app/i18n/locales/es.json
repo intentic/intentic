@@ -5419,6 +5419,7 @@
         },
         "apiKey": {
             "offer": "Usar una clave de API de {vendor}",
+            "offerAnother": "Añadir otra clave de API de {vendor}",
             "title": "Clave de API de {vendor}",
             "cost": "{vendor} cobra por token, aparte de tu plan. Los agentes gastan rápido: pon un límite de gasto.",
             "prices": "Precios",

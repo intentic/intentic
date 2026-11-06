@@ -5419,6 +5419,7 @@
         },
         "apiKey": {
             "offer": "Stattdessen einen {vendor}-API-Schlüssel verwenden",
+            "offerAnother": "Weiteren {vendor}-API-Schlüssel hinzufügen",
             "title": "{vendor}-API-Schlüssel",
             "cost": "Pro Token von {vendor} berechnet, getrennt vom Abo. Agenten verbrauchen viel: Ausgabenlimit setzen.",
             "prices": "Preise",

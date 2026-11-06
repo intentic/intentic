@@ -16,8 +16,8 @@ import { keyRows } from "./providerKeys";
 // THE API KEYS A PROVIDER'S CARD HOLDS, as rows after its accounts (ProviderPanel.vue): a key pasted under the sign-in
 // (ApiKeyOption) or copied from the owner's computer is one more way to pay for the same models, so it lives where they
 // do rather than under Local models (the owner, 2026-11-05). Taking one off removes the endpoint it became, as the
-// Capabilities page would; only a reader who may change connections gets the press. A card holding no key offers one
-// instead, as its last quiet line, and a card holding one offers no second.
+// Capabilities page would; only a reader who may change connections gets the press. The card's last quiet line offers a
+// key, and once it holds one, another (a second account's, a team's), each its own row.
 
 const t = useT();
 
@@ -86,5 +86,5 @@ const disconnect = async (capability: string): Promise<void> => {
             />
         </template>
     </ConnectionRow>
-    <ApiKeyOption v-if="offer && rows.length === 0" :provider="provider" @added="(endpoint, label) => emit(`added`, endpoint, label)" />
+    <ApiKeyOption v-if="offer" :provider="provider" :another="rows.length > 0" @added="(endpoint, label) => emit(`added`, endpoint, label)" />
 </template>

@@ -17,7 +17,11 @@ import { useCapabilities } from "../../../../models/capabilities/useCapabilities
 
 const t = useT();
 
-const { provider } = defineProps<{ provider: AgentProvider }>();
+const { provider, another = false } = defineProps<{
+    provider: AgentProvider;
+    // The card already holds a key, so the line offers one more rather than the key "instead" of the sign-in.
+    another?: boolean;
+}>();
 // The endpoint the key became, and the vendor's name for it, for the page's own "connected" answer.
 const emit = defineEmits<{ added: [endpoint: AgentProvider, label: string] }>();
 
@@ -88,7 +92,7 @@ const submit = async (): Promise<void> => {
     <RowNote v-if="vendor" variant="block">
         <!-- Folded: one quiet line, so the sign-in above stays the way in. -->
         <button v-if="!open" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="show">
-            <Icon name="key" class="text-2xs" />{{ t(`connect.apiKey.offer`, { vendor: vendor.label }) }}
+            <Icon name="key" class="text-2xs" />{{ another ? t(`connect.apiKey.offerAnother`, { vendor: vendor.label }) : t(`connect.apiKey.offer`, { vendor: vendor.label }) }}
         </button>
 
         <!-- Opened: what it costs first, then the field. -->

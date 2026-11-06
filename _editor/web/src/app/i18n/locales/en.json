@@ -5419,6 +5419,7 @@
         },
         "apiKey": {
             "offer": "Use an API key from {vendor} instead",
+            "offerAnother": "Add another {vendor} API key",
             "title": "{vendor} API key",
             "cost": "Paid per token to {vendor}, apart from any plan. Agents spend fast: set a spending limit.",
             "prices": "Prices",

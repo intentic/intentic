@@ -5419,6 +5419,7 @@
         },
         "apiKey": {
             "offer": "Użyj zamiast tego klucza API {vendor}",
+            "offerAnother": "Dodaj kolejny klucz API {vendor}",
             "title": "Klucz API {vendor}",
             "cost": "Płatne za token u {vendor}, poza subskrypcją. Agenci zużywają dużo: ustaw limit wydatków.",
             "prices": "Cennik",
