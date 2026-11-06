@@ -5,20 +5,17 @@ What a coding agent is told as a session opens, and the per-session readings tha
 ```mermaid
 flowchart LR
     tree["Project tree<br/>and its git history"] --> map(["workspace-map"])
-    notes["field-notes file"] --> reader(["field-notes"])
     map --> daemon["Sandbox daemon<br/>turn composition"]
-    reader --> daemon
     map --> plugin["Claude Code plugin<br/>SessionStart hook"]
-    reader --> plugin
     frames["Daemon frames"] --> metrics(["turn-metrics"])
-    transcripts["Claude Code transcripts"] --> reader2(["claude-transcript"]) --> metrics
+    transcripts["Claude Code transcripts"] --> reader(["claude-transcript"]) --> metrics
     metrics --> stats(["arm-stats"])
     stats --> savings["Savings route"]
     stats --> report["/intentic:stats"]
 ```
 
 - Runtime-neutral on purpose: nothing here knows the daemon's event shapes, settings or state paths. The daemon adapts
-  its frames onto `createTurnMetrics` and passes its own notes path; the plugin does the same from hook payloads and
+  its frames onto `createTurnMetrics`; the plugin does the same from hook payloads and
   `~/.claude/projects`.
 - `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling): every area
   by size with its languages, the biggest opened up, and each one's purpose (a README's or manifest's first sentence,
@@ -38,8 +35,10 @@ flowchart LR
     brief that already named file paths, and 60 had drawn the other arm from their parent), and the headline is the
     share of opening turns that listed directories, where the mean count read "0.4 against 0.3". The comparison
     restarted under a new cohort for it.
-- `field-notes` slices a ranked TOON brief to a budget, and `field-notes-prompt` is the brief both writers of that
-  file are given, so the writer and the reader cannot drift apart.
+- 2026-11-06: `field-notes`, a ranked brief on this place's traps sent with every turn, was removed. Against a held-out
+  half it moved nothing measurable across two revisions of the brief (failed calls 1.1 against 1.2 ±23% on 139 against
+  161 conversations, 1.9 against 1.7 ±16% on 251 against 259; calls before the edited file and cost per turn level too),
+  while every model call carried its ~950 tokens.
 - `experiments` draws a conversation's arm from a salted hash of its id, `turn-metrics` scores one turn's tool calls
   (searches, orientation listings, calls before the edited file, failures) off the main agent's calls, counting a
   subagent's toward the turn and reading nothing off them, and `arm-stats` compares the two arms of each mechanism with
@@ -63,7 +62,6 @@ flowchart LR
 ## Key files
 
 - [src/workspace-map.ts](src/workspace-map.ts) — the project map: area discovery, purposes, and the budgeted render.
-- [src/field-notes.ts](src/field-notes.ts) — reads a field-notes file by rank, never re-encoding it.
 - [src/turn-metrics.ts](src/turn-metrics.ts) — the per-turn call ledger every reading is taken from.
 - [src/arm-stats.ts](src/arm-stats.ts) — which readings judge which mechanism, and the two-arm arithmetic.
 - [src/claude-transcript.ts](src/claude-transcript.ts) — Claude Code session files as turns of tool calls.

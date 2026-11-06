@@ -1,11 +1,8 @@
-import { fieldNotesPrompt } from "@intentic/agent-context/field-notes-prompt";
-import { FIELD_NOTES_FILE, HISTORY_ROOT } from "@intentic/constants";
 import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
 import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
 import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 import type { ExtensionHost, InstalledExtension } from "../capabilities/extension-inventory/installed-extensions.js";
-import { conversationsRoot } from "../store/conversation-units.js";
 
 // Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates
 // against, drawn from one list.
@@ -163,35 +160,6 @@ const DREAMING_PROMPT =
     `a short note: what the sessions showed, in numbers; what you changed or asked for; and what you considered and ` +
     `rejected, so the next one of these does not spend its night re-proposing it.`;
 
-// The other half of the field-notes setting (schemas/settings.ts, agent/prompt/field-notes.ts): the switch composes the
-// file into every turn, this rewrites it. Monthly rather than nightly because the brief is a STANDING description of
-// how work goes here — rewriting it more often than the sandbox changes would churn the prompt prefix, and every
-// rewrite costs the measurement its cohort.
-export const FIELD_NOTES_AUTOMATION_ID = "field-notes";
-// 04:00 on the 1st. The composer renders this as "Monthly 1st 04:00" (cronSchedule.ts) rather than as a raw expression.
-// Deliberately carries no `tz`, like every other preset here: "04:00" means 04:00 on the owner's own clock, which is
-// what the sandbox's `timezone` setting answers. Baking a zone in would pin an overnight chore to one place on earth
-// and run it during the working day for everybody else.
-const FIELD_NOTES_CRON = "0 4 1 * *";
-
-// The brief is @intentic/agent-context's, shared with the Claude Code plugin's /intentic:field-notes so both writers
-// produce the shape field-notes.ts reads; what is said here is only where this sandbox keeps its sessions.
-const FIELD_NOTES_PROMPT = fieldNotesPrompt({
-    owner: "this sandbox's",
-    place: "this sandbox",
-    file: FIELD_NOTES_FILE,
-    reader: "the daemon",
-    evidence:
-        `The evidence is the session corpus. \`agents ls\` and \`agents show <id> --transcript\` read conversations back, ` +
-        `\`agents find '<text>'\` finds the ones that said a thing, and each conversation's record is ` +
-        `\`${conversationsRoot(HISTORY_ROOT)}/<id>/transcript.jsonl.zst\`, read with \`zstdcat\` (one JSON object per line: ` +
-        `role, text, and a tools array carrying each call's name, status, target and output). Date a conversation, and ` +
-        `count it into a period, from \`${HISTORY_ROOT}/usage.jsonl\` (one row per turn: day, conversationId, model, ` +
-        `failedCalls, and which arm of each experiment it drew), never from file times.`,
-    period: "this month's",
-    quietSpan: "a month's sessions",
-});
-
 export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     {
         id: "visitor-chat",
@@ -268,21 +236,6 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         description: "Look back over the sessions this sandbox has run, and change one thing about how the next ones will go.",
         prompt: DREAMING_PROMPT,
         note: `nightly · wakes once ${DREAMING_SESSIONS_FLOOR} new sessions have run`,
-        offer: "create",
-        chore: true,
-    },
-    // Its sibling above changes ONE THING about the sandbox each night; this one changes what every turn KNOWS about it,
-    // once a month. No `afterSessions` floor: a quiet month is itself a finding, and the brief going a month unexamined
-    // is the thing this is here to stop.
-    {
-        id: FIELD_NOTES_AUTOMATION_ID,
-        title: "Field notes",
-        icon: "book",
-        requires: [],
-        trigger: { kind: "schedule", cron: FIELD_NOTES_CRON },
-        description: "Read back the sessions this sandbox has run and rewrite the brief every turn opens with.",
-        prompt: FIELD_NOTES_PROMPT,
-        note: "monthly · rewrites the brief the agent settings compose into every turn",
         offer: "create",
         chore: true,
     },

@@ -364,8 +364,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims _sandbox/sandbox/bin/guard-shi
 # bundles; plain node-builtin .mjs, so they are copied as written rather than built.
 COPY --chmod=755 _sandbox/output-cleaners/src/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin), and
-# the modules it imports in turn: one layer, since they share a mode and a directory.
-COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs /usr/local/bin/
+# the modules it imports in turn: one layer, since they share a mode and a directory. A module missing here fails the
+# filter at load and every command falls back to raw output unnoticed (path-runs.mjs, 2026-10-20 to 11-06); the
+# output-cleaners test agent-output-filter.test.mjs holds this list to the import graph.
+COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/path-runs.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs /usr/local/bin/
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/output-cleaners/src/retrieve-output.mjs /usr/local/bin/retrieve-output
 # These CLIs relay through daemon routes so shell and UI actions share policy; optional clients such as VPN, netdisk and rtk live in overlays.

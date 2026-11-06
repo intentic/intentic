@@ -25,6 +25,8 @@ export const usageLedgerDocument = defineDocument({
         ...dropAll(["guidanceArm", "guidanceCohort"]),
         // The tool-result clearing experiment's stamp (2026-10-12): clearing lost, and the experiment went with it.
         ...dropAll(["clearingArm"]),
+        // The field-notes experiment's stamps (2026-11-06): the brief moved nothing, and the experiment went with it.
+        ...dropAll(["notesArm", "notesChars", "notesCohort"]),
     ],
 });
 

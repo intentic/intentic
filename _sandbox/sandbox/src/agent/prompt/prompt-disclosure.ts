@@ -3,7 +3,6 @@ import type { PromptBase, PromptSection, PromptSectionSource, SystemPromptDisclo
 import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
-import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
 import { GUIDANCE_HEADER, GUIDANCE_TITLE } from "./guidance.js";
@@ -16,7 +15,6 @@ import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "../../sessions/vocabulary
 const APPENDED: readonly { readonly header: string; readonly title: string; readonly source: PromptSectionSource }[] = [
     { header: GUIDANCE_HEADER, title: GUIDANCE_TITLE, source: "guidance" },
     { header: PERSONA_NOTE_HEADER, title: PERSONA_NOTE_TITLE, source: "persona" },
-    { header: FIELD_NOTES_NOTE_HEADER, title: FIELD_NOTES_NOTE_TITLE, source: "field-notes" },
     { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE, source: "memory" },
 ];
 

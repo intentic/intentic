@@ -1,4 +1,6 @@
 import { describe, it, expect } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { filterOutput, maskedFailure } from "./agent-output-filter.mjs";
 
 // A retain that keeps nothing on disk and answers with `log`: the path the footer should then name.
@@ -168,5 +170,53 @@ describe("filterOutput", () => {
         expect(out).toBe(raw);
         expect(stages.reduce((sum, stage) => sum + stage.saved, 0)).toBe(0);
         expect(stages.map((stage) => stage.id)).toContain("guard");
+    });
+});
+
+// The sandbox image copies the filter and the modules it imports into /usr/local/bin one file at a time
+// (_sandbox/sandbox/Dockerfile). A module left off that list does not fail the build: the filter dies at load and
+// tmux-run hands every command's output back raw, so trimming, redaction and the savings ledger all stop without a
+// sound. That happened with path-runs.mjs from 2026-10-20 to 11-06. This holds the list to the import graph.
+describe("the image's copy of the filter", () => {
+    const here = import.meta.dirname;
+    const SOURCE_PREFIX = "_sandbox/output-cleaners/src/";
+
+    // Every output-cleaners source a COPY instruction puts into /usr/local/bin, by file name.
+    const copiedToBin = () => {
+        const copied = new Set();
+        for (const line of readFileSync(join(here, "../../sandbox/Dockerfile"), "utf8").split("\n")) {
+            const parts = line.trim().split(/\s+/);
+            if (parts[0] !== "COPY" || !parts.at(-1)?.startsWith("/usr/local/bin")) {
+                continue;
+            }
+            for (const part of parts.slice(1, -1)) {
+                if (part.startsWith(SOURCE_PREFIX)) {
+                    copied.add(part.slice(SOURCE_PREFIX.length));
+                }
+            }
+        }
+        return copied;
+    };
+
+    // The relative modules a file reaches, itself included, following static imports (single- and multi-line alike).
+    const reached = (entry) => {
+        const seen = new Set();
+        const visit = (file) => {
+            if (seen.has(file)) {
+                return;
+            }
+            seen.add(file);
+            for (const match of readFileSync(join(here, file), "utf8").matchAll(/\bfrom\s+"\.\/([^"]+\.mjs)"/g)) {
+                visit(match[1]);
+            }
+        };
+        visit(entry);
+        return seen;
+    };
+
+    it.each(["agent-output-filter.mjs", "retrieve-output.mjs"])("copies every module %s imports", (entry) => {
+        const copied = copiedToBin();
+        expect(copied.has(entry)).toBe(true);
+        expect([...reached(entry)].filter((file) => !copied.has(file))).toEqual([]);
     });
 });

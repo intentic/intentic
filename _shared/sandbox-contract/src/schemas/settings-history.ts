@@ -174,4 +174,7 @@ export const SETTINGS_HISTORY = [
     // every point and where the settings page had saved the old default, which no reading could tell apart: the key is
     // retired, a positive choice carries over, and a stored zero takes the new default.
     at("retention", restorePointsKept),
+    // The field notes (2026-11-06): a ranked brief on this place's traps sent with every turn moved neither failed calls
+    // nor calls before the edited file against a held-out half, across two revisions of it, while every call carried it.
+    ...dropAll(["fieldNotes", "fieldNotesBudget", "fieldNotesHoldout"]),
 ] as const;

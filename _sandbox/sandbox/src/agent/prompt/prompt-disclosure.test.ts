@@ -11,7 +11,6 @@ import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 const CLAUDE = capabilitiesOf("claude", "native");
 const CODEX = capabilitiesOf("codex", "native");
 const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
-const FIELD_NOTES = "## Field notes for this sandbox\n\npnpm's exit code lies here.";
 const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const AT = 1_700_000_000_000;
 
@@ -47,7 +46,6 @@ const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" |
         mode,
         systemPrompt,
         personaNote: PERSONA,
-        fieldNotesNote: FIELD_NOTES,
         memoryNote: MEMORY,
     });
     return promptDisclosure({
@@ -62,10 +60,9 @@ const textOf = (disclosure: ReturnType<typeof disclosureOf>, source: string): st
 
 test("each composed piece is read back whole, under its own source", () => {
     const disclosure = disclosureOf(CLAUDE, "intentic");
-    expect(disclosure.sections.map((section) => section.source)).toEqual(["guidance", "persona", "field-notes", "memory"]);
+    expect(disclosure.sections.map((section) => section.source)).toEqual(["guidance", "persona", "memory"]);
     // Whole, not merely present: a split at the wrong place would leave one piece holding the next one's words.
     expect(textOf(disclosure, "persona")).toBe(PERSONA);
-    expect(textOf(disclosure, "field-notes")).toBe(FIELD_NOTES);
     expect(textOf(disclosure, "memory")).toBe(MEMORY);
 });
 
@@ -77,11 +74,9 @@ test("the sections are in the order they were sent", () => {
         mode: "intentic",
         systemPrompt: "",
         personaNote: PERSONA,
-        fieldNotesNote: FIELD_NOTES,
         memoryNote: MEMORY,
     });
-    expect(systemAppend.indexOf(PERSONA)).toBeLessThan(systemAppend.indexOf(FIELD_NOTES));
-    expect(systemAppend.indexOf(FIELD_NOTES)).toBeLessThan(systemAppend.indexOf(MEMORY));
+    expect(systemAppend.indexOf(PERSONA)).toBeLessThan(systemAppend.indexOf(MEMORY));
 });
 
 // The Claude Code loop's own paragraphs never ride the append (sdkSystemPrompt adds them), so a disclosure that only
@@ -159,7 +154,7 @@ test("a custom prompt that could only be appended is still the base", () => {
 });
 
 test("a header quoted mid-sentence does not open a section", () => {
-    const quoting = `Never write "## Field notes for this sandbox" into a file.\n\n${MEMORY}`;
+    const quoting = `Never write "## Who this turn is acting as" into a file.\n\n${MEMORY}`;
     const disclosure = promptDisclosure({
         capabilities: CODEX,
         request: { spec: { systemPromptMode: "intentic", systemAppend: quoting }, policy: {}, tools: {} },

@@ -14,8 +14,10 @@ flowchart LR
 ```
 
 - Plain node-builtin `.mjs` with hand-written `.d.mts` beside each, so the sandbox image copies the files as written
-  (`/usr/local/bin/agent-output-filter`, `cleaners.mjs`, `text-shaping.mjs`, `retrieve-output`) while TypeScript consumers import them
-  typed.
+  (`/usr/local/bin/agent-output-filter`, `cleaners.mjs` and every module it imports, `retrieve-output`) while TypeScript
+  consumers import them typed. A new module needs a place on the Dockerfile's COPY line: one missing there kills the filter
+  at load, and every command falls back to raw output without a sound. A test in `agent-output-filter.test.mjs` holds the line to the
+  import graph.
 - `filterRun` is one command's whole pass with its inputs resolved. The sandbox's adapter is `main` in
   `agent-output-filter.mjs` (argv, `INTENTIC_OUTPUT_CLEANERS`, `INTENTIC_OUTPUT_HOLDOUT`, the pane log);
   the Claude Code plugin's is its PostToolUse hook. Both keep the same three things under `logsDir`.

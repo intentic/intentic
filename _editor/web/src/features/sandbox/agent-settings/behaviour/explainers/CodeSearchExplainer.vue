@@ -5,9 +5,8 @@ import Explainer from "./Explainer.vue";
 import { ARROW, BOX, BOX_FADED, BOX_GOOD, LANE } from "../../../../../components/explainerAtoms";
 
 // Code search, drawn: the hunt without iq against the one ranked search with it, then what each turn actually sends.
-// A request is the whole conversation so far, so the stack grows turn by turn: the field notes sit in the instructions
-// at its front (pinned per conversation, sandbox/agent/prompt/field-notes-pins.ts), the map in the opening message, and
-// both ride every request after it, read back from the prompt cache like the rest of the history. Only the tail is new.
+// A request is the whole conversation so far, so the stack grows turn by turn: the map rides in the opening message and
+// every request after it, read back from the prompt cache like the rest of the history. Only the tail is new.
 
 const t = useT();
 // Command names, which no language translates: the hunt without iq, then the one search with it.
@@ -29,12 +28,11 @@ const SWATCH = `inline-block h-2.5 w-4 rounded-sm`;
 // The conversation's own exchange in a quiet ground, so the two pieces this section adds stand out against it.
 const EXCHANGE = `border border-line-subtle bg-card text-muted`;
 
-// One request's stack, front first: the instructions with the notes in them, then each turn's message (the map in front of
+// One request's stack, front first: the instructions, then each turn's message (the map in front of
 // the first, where the wire puts it) and, for turns already answered, the reply that is now history.
 const stackOf = (turn: number): Block[] => {
     const fixed: Block[] = [
         { key: `instructions`, label: t(`sandbox.explainers.codeSearch.instructions`), tone: EXCHANGE, cached: turn > 1 },
-        { key: `notes`, label: t(`sandbox.agentCodeSearch.fieldNotes`), tone: `bg-primary-tint text-content`, cached: turn > 1 },
     ];
     const exchange = Array.from({ length: turn }, (_, index): Block[] => {
         const at = index + 1;

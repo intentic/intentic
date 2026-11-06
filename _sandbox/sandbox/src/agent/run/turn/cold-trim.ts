@@ -6,9 +6,11 @@ import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/setting
 import { opt } from "../../../opt.js";
 import type { Services } from "../../../composition.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { estimateCopy, readSessionChain } from "../../providers/claude/claude-session-copy.js";
+import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
+import { chainContext, contextOf, estimateCopy, readSessionChain, type SessionLine } from "../../providers/claude/claude-session-copy.js";
 import { trimmedTurn } from "../../providers/limit-handoff.js";
 import { armOf, EXPERIMENTS } from "../decide/experiments.js";
+import { PROMPT_CACHE_1H_MS, ttlFromCacheCreation } from "./prompt-cache.js";
 
 export interface ColdTrimBasis {
     readonly promptCache: { readonly at: number; readonly ttlMs: number } | undefined;
@@ -21,15 +23,8 @@ interface TrimOutcome<T> {
     readonly stamps: TurnExperimentStamps;
 }
 
-// Keep-warm refreshes this same clock. Unknown timing never means cold; the extra 30s keeps an expiry edge whole.
-export const coldTrimEligible = (
-    turn: TurnInput,
-    cache: { readonly at: number; readonly ttlMs: number } | undefined,
-    tokens: number | undefined,
-    threshold: number,
-    held: boolean,
-    now: number,
-): boolean => {
+// The turns a trim can reach, whatever the clock says: an ordinary follow-up of a native Claude session on its own loop.
+const coldTrimReaches = (turn: TurnInput, held: boolean): boolean => {
     const { agent, harness } = withRuntimeDefaults(turn);
     return (
         agent === "claude" &&
@@ -39,15 +34,72 @@ export const coldTrimEligible = (
         turn.forkOf === undefined &&
         turn.resumeAt === undefined &&
         turn.resume === undefined &&
-        !held &&
-        tokens !== undefined &&
-        tokens > threshold &&
-        cache !== undefined &&
-        Number.isFinite(cache.at) &&
-        Number.isFinite(cache.ttlMs) &&
-        cache.ttlMs > 0 &&
-        now > cache.at + cache.ttlMs + 30_000
+        !held
     );
+};
+
+// Keep-warm refreshes this same clock. Unknown timing never means cold; the extra 30s keeps an expiry edge whole.
+export const coldTrimEligible = (
+    turn: TurnInput,
+    cache: { readonly at: number; readonly ttlMs: number } | undefined,
+    tokens: number | undefined,
+    threshold: number,
+    held: boolean,
+    now: number,
+): boolean =>
+    coldTrimReaches(turn, held) &&
+    tokens !== undefined &&
+    tokens > threshold &&
+    cache !== undefined &&
+    Number.isFinite(cache.at) &&
+    Number.isFinite(cache.ttlMs) &&
+    cache.ttlMs > 0 &&
+    now > cache.at + cache.ttlMs + 30_000;
+
+// A basis this process measured itself, off the live turn's context frames. A boot starts every conversation's turn
+// readings fresh (conversation-state.ts idleConversation), so the first follow-up after a restart has none: without the
+// session file below, every cold resume after a restart carried its whole history (26 of 48 cold resumes over 100k
+// tokens, 2026-10-19 to 11-06, all of them after a restart).
+const measuredLive = (state: ColdTrimBasis | undefined): state is { promptCache: { at: number; ttlMs: number }; contextTokens: number } =>
+    state?.promptCache !== undefined && state.contextTokens !== undefined;
+
+// The same basis read back off the session file the trim reads anyway: the clock runs from the chain's last request
+// (a read refreshes the entry as a write does), under the lifetime the newest write in the chain went in under, or the
+// longer of Anthropic's two where no write names one, so a guess can only call a cold cache warm. Undefined when the
+// chain carries no stamped request to run it from.
+export const sessionBasis = (chain: readonly SessionLine[]): ColdTrimBasis | undefined => {
+    let at: number | undefined;
+    let ttlMs: number | undefined;
+    for (let index = chain.length - 1; index >= 0 && (at === undefined || ttlMs === undefined); index -= 1) {
+        const entry = chain[index]?.entry;
+        if (contextOf(entry) === undefined) {
+            continue;
+        }
+        if (at === undefined) {
+            const stamped = Date.parse(String(entry?.["timestamp"] ?? ""));
+            if (!Number.isFinite(stamped)) {
+                return undefined;
+            }
+            at = stamped;
+        }
+        ttlMs ??= ttlFromCacheCreation(entry?.message?.usage?.cache_creation ?? undefined);
+    }
+    return at === undefined ? undefined : { promptCache: { at, ttlMs: ttlMs ?? PROMPT_CACHE_1H_MS }, contextTokens: chainContext(chain) };
+};
+
+// A keep-warm refresh forks the session, so the session file never shows it, and one sent before the restart may still
+// hold the cache open: the ledger row it left (cache-keepwarm.ts recordRefresh) moves the clock forward.
+const refreshedSince = async (services: Services, conversationId: string, basis: ColdTrimBasis): Promise<ColdTrimBasis> => {
+    const cache = basis.promptCache;
+    if (cache === undefined) {
+        return basis;
+    }
+    const rows = await services.usage.turns({ from: utcDayOf(cache.at) });
+    const latest = rows.reduce(
+        (newest, row) => (row.purpose === "keep-warm" && row.conversationId === conversationId && row.outcome === "ok" ? Math.max(newest, row.at) : newest),
+        cache.at,
+    );
+    return { ...basis, promptCache: { ...cache, at: latest } };
 };
 
 // Both arms inspect the same session before assignment is stamped. Compacted transcripts stay whole until their
@@ -59,7 +111,12 @@ export const coldTrimTurn = async <T extends TurnInput>(
     held: boolean,
     state: ColdTrimBasis | undefined,
 ): Promise<TrimOutcome<T> | undefined> => {
-    if (!settings.coldTrim || !coldTrimEligible(turn, state?.promptCache, state?.contextTokens, settings.coldTrimMinTokens, held, Date.now())) {
+    const live = measuredLive(state);
+    // The whole check before any file is read when this process measured the clock; the rest of it once the session
+    // file has given it back.
+    const cold = (basis: ColdTrimBasis | undefined): boolean =>
+        coldTrimEligible(turn, basis?.promptCache, basis?.contextTokens, settings.coldTrimMinTokens, held, Date.now());
+    if (!settings.coldTrim || !(live ? cold(state) : coldTrimReaches(turn, held))) {
         return undefined;
     }
     try {
@@ -69,14 +126,20 @@ export const coldTrimTurn = async <T extends TurnInput>(
         }
         const store = services.agentWorktrees.sessionStore(entry);
         const read = await readSessionChain(store, turn.sessionId!, false);
-        if (read === undefined || read.compacted || (estimateCopy(read.chain, state?.contextTokens)?.cleared ?? 0) === 0) {
+        if (read === undefined || read.compacted) {
+            return undefined;
+        }
+        // A refresh can only make a cold clock warm, so the ledger is read only for a session that reads cold on its own.
+        const fromFile = live ? state : sessionBasis(read.chain);
+        const basis = live || fromFile === undefined || !cold(fromFile) ? fromFile : await refreshedSince(services, turn.conversationId!, fromFile);
+        if (!cold(basis) || (estimateCopy(read.chain, basis?.contextTokens)?.cleared ?? 0) === 0) {
             return undefined;
         }
         const arm = armOf(EXPERIMENTS.coldTrim, settings, turn.conversationId);
         if (arm === false) {
             return { turn, event: undefined, stamps: EXPERIMENTS.coldTrim.stamps({ arm }) };
         }
-        const trimmed = await trimmedTurn(services, turn, state, { dropUnanswered: false });
+        const trimmed = await trimmedTurn(services, turn, basis, { dropUnanswered: false });
         return {
             ...trimmed,
             stamps: EXPERIMENTS.coldTrim.stamps({ arm, ...opt("cleared", trimmed.event.fellBack ? undefined : trimmed.event.cleared) }),

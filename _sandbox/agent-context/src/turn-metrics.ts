@@ -5,7 +5,7 @@ import { isFileWorkCall, isIqSearch, isRootListing, isSearchCall, searchPrecedes
 // Runtime-neutral: the sandbox daemon feeds it the frames of a live turn, the Claude Code plugin the tool_use blocks of a
 // transcript, and both get the same numbers for the same calls. A subagent's calls count toward `calls()` and toward no
 // reading: they interleave with the main agent's, so "before the first file" has no order across the two, and none of
-// the treatments the readings judge (the map, the search teaching, the field notes) reaches a subagent. Counted as the
+// the treatments the readings judge (the map, the search teaching) reaches a subagent. Counted as the
 // turn's own, a first turn that sent three researchers out read 999 calls before its file where its own agent took 97.
 
 // A tool call as the readings see it: what kind of act it was and what it aimed at. The daemon's `tool_call` frame and a
@@ -36,8 +36,8 @@ export interface TurnMetricsReading {
     // Calls before the first touch of an edited file; absent (not zero) when nothing was edited or the edit had no
     // located call.
     readonly callsBeforeTarget?: number;
-    // Calls that ended in error, counted once each: what a brief about this place's traps either prevents or does
-    // not (field-notes.ts).
+    // Calls that ended in error, counted once each: the price a mechanism that takes something out of the prompt could
+    // charge (arm-stats.ts).
     readonly failedCalls: number;
 }
 

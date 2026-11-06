@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fieldNotesSkill, fileqSkillText, outputStyle, portableIqNudge, statsSkill } from "./generated.js";
+import { fileqSkillText, outputStyle, portableIqNudge, statsSkill } from "./generated.js";
 import { manifest } from "./manifest.js";
 
 // The build's writer (build.mjs bundles this and runs it): generated/ from the texts other packages own, and the
@@ -23,7 +23,6 @@ export const emit = (root: string): void => {
     write(join(generated, "skills", "iq", "SKILL.md"), packageFile("@intentic/iq/skill"));
     // fileq's skill and bundled code carry rules adapted from SurfSense under Apache-2.0, whose notice travels with them.
     write(join(generated, "fileq-NOTICE"), packageFile("@intentic/fileq/NOTICE"));
-    write(join(generated, "skills", "field-notes", "SKILL.md"), fieldNotesSkill());
     write(join(generated, "skills", "stats", "SKILL.md"), statsSkill());
     write(join(generated, "output-styles", "intentic.md"), outputStyle());
     write(join(generated, "iq-nudge.txt"), portableIqNudge(packageFile("@intentic/iq/nudge")));

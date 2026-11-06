@@ -55,7 +55,7 @@ describe(`codeLangForPath`, () => {
     });
 
     it(`reads a .toon file with the local TOON grammar`, () => {
-        expect(codeLangForPath(`.intentic/config/field-notes.toon`)).toBe(`toon`);
+        expect(codeLangForPath(`data/brief.toon`)).toBe(`toon`);
     });
 
     it(`returns undefined for an extension we ship no grammar for`, () => {

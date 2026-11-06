@@ -6,7 +6,6 @@
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
-import { fieldNotesPinsDocument } from "../agent/prompt/field-notes-pins.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { burnRatesDocument } from "../agent/run/spend/burn-rates.js";
 import { readingsLogDocument } from "../agent/run/spend/readings-log.js";
@@ -104,6 +103,7 @@ import { settingsDocument } from "../settings/settings-store.js";
 import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
 import { conversionsDocument } from "../store/evolution/state-convergence.js";
+import { fieldNotesLeftoversStep } from "../store/evolution/steps/field-notes-leftovers.js";
 import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "../store/evolution/steps/projects-host-leftovers.js";
 import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-leftovers.js";
@@ -137,7 +137,6 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 
 const documentsPart1 = (): readonly DocumentSpec[] => [
     activityLogDocument,
-    fieldNotesPinsDocument,
     claudeSeatsDocument,
     burnRatesDocument,
     readingsLogDocument,
@@ -183,10 +182,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ciDocument,
     composerDraftsDocument,
     projectDeliveriesDocument,
+    conversationRecordDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -233,10 +232,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
+    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
@@ -302,6 +301,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         safetyCardLinesStep,
         earlierDefaultsStep,
         conversationsSchemaStep,
+        fieldNotesLeftoversStep,
         landCheckLeftoversStep,
         projectsHostLeftoversStep,
         pushChecksLeftoversStep,

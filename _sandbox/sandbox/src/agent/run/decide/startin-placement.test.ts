@@ -48,7 +48,6 @@ const FACTS: AdmittedTurnFacts = {
     reach: REACH_ALL,
     ceiling: undefined,
     iqTeaching: undefined,
-    fieldNotes: undefined,
     personaPrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,

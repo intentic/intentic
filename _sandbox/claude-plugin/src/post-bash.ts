@@ -14,7 +14,7 @@ export const outputDir = (data: string): string => join(data, "output");
 
 // The plugin's own reports are already budgeted for Claude to read whole; trimming them would cut the answer to the
 // question the person just asked.
-const OWN_REPORTS = /(?:^|[\s/])intentic-(?:stats|notes-evidence)(?:\s|$)/;
+const OWN_REPORTS = /(?:^|[\s/])intentic-stats(?:\s|$)/;
 
 interface BashResponse {
     readonly stdout?: unknown;

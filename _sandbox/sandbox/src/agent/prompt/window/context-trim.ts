@@ -2,7 +2,6 @@ import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-
 import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-trim";
 import { LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { GUIDANCE_TITLE } from "../guidance.js";
 import type { PromptTrim } from "../system-prompt.js";
 import { BRIEFING_NOTE_TITLES } from "../turn-briefing.js";
@@ -15,7 +14,7 @@ const FULL_TURN_WINDOW = Number(LOCAL_MODEL_WINDOW_DEFAULT);
 // Below this rung the base prompt itself is swapped, where the runtime lets it be replaced.
 const LEAN_WINDOW = Number(LOCAL_MODEL_WINDOWS[1]);
 
-// Every trim sheds the guidance, the field notes and each note a persona card may drop; only the base swap is by size.
+// Every trim sheds the guidance and each note a persona card may drop; only the base swap is by size.
 export interface TurnTrim {
     readonly window: number;
     // Below the lean rung, and only where the runtime's instructions are `replace`: an appending runtime's is not ours.
@@ -36,8 +35,8 @@ const SHED_TITLES: ReadonlySet<string> = new Set(Object.values(BRIEFING_NOTE_TIT
 // Carried from planning to the route that adds late notes, so both face the same window and the reader gets one list.
 export interface TurnTrimState {
     readonly trim: TurnTrim;
-    // Whether guidance and a field-notes brief rode at all; a window cannot take what a custom prompt already dropped.
-    readonly system: { readonly guidance: boolean; readonly fieldNotes: boolean };
+    // Whether guidance rode at all; a window cannot take what a custom prompt already dropped.
+    readonly system: { readonly guidance: boolean };
     // Titles taken so far, in the order a full turn would have read them.
     readonly omitted: readonly string[];
 }
@@ -65,6 +64,6 @@ export const trimFrame = (state: TurnTrimState | undefined): ContextTrim | undef
         return undefined;
     }
     const { trim, system } = state;
-    const omitted = [...state.omitted, ...(system.guidance ? [GUIDANCE_TITLE] : []), ...(system.fieldNotes ? [FIELD_NOTES_NOTE_TITLE] : [])];
+    const omitted = [...state.omitted, ...(system.guidance ? [GUIDANCE_TITLE] : [])];
     return omitted.length === 0 && !trim.base ? undefined : { window: trim.window, omitted, base: trim.base };
 };

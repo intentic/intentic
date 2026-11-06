@@ -10,7 +10,6 @@ import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { REACH_ALL } from "../../../secrets/credential-reach.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
-import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { MAP_COMPARISON } from "./experiments.js";
@@ -48,7 +47,6 @@ const FACTS: AdmittedTurnFacts = {
     reach: REACH_ALL,
     ceiling: undefined,
     iqTeaching: undefined,
-    fieldNotes: undefined,
     personaPrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,
@@ -493,30 +491,18 @@ test.each([
 
 // the experiments' arms: one per salt, the same on every turn of a conversation
 
-const BRIEF: FieldNotes = {
-    text: "## Field notes for this sandbox\n\nThe box has 16 GiB.",
-    chars: 52,
-    revision: "rev-1",
-    unlisted: [],
-    ranksSent: 1,
-    ranksTotal: 1,
-    writtenAt: 0,
-};
 const ALL_MEASURED = SandboxSettingsSchema.parse({
     iqSearch: true,
     iqSearchHoldout: 0.5,
     workspaceMap: true,
     workspaceMapHoldout: 0.5,
-    fieldNotes: true,
-    fieldNotesHoldout: 0.5,
     ...TOOLS_UNMEASURED,
 });
-const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iqTeaching: TEACHING, mapNote: MAP, fieldNotes: BRIEF };
+const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iqTeaching: TEACHING, mapNote: MAP };
 
 test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s draws one arm per salt, the same on every turn", (conversationId) => {
     const search = experimentArm("iq-search", conversationId, 0.5);
     const map = experimentArm("workspace-map-or-none", conversationId, 0.5);
-    const notes = experimentArm("field-notes", conversationId, 0.5);
 
     const first = decided(MEASURED_FACTS, turn({ conversationId }));
 
@@ -528,31 +514,12 @@ test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s 
         mapCohort: MAP_COMPARISON,
         // What the opening message paid, so only on a conversation that was sent the map.
         ...opt("mapChars", map ? MAP.length : undefined),
-        notesArm: notes,
-        // What the prompt paid, so only on a turn that was sent the brief; the cohort on both arms, to pair them.
-        ...(notes ? { notesChars: BRIEF.chars } : {}),
-        notesCohort: BRIEF.revision,
     });
     expect(decided(MEASURED_FACTS, turn({ conversationId })).experiments).toEqual(first.experiments);
 });
 
 test("a turn with no conversation is in no experiment, and still stamps what its prompt paid", () => {
-    expect(decided(MEASURED_FACTS).experiments).toEqual({ mapChars: MAP.length, notesChars: BRIEF.chars, notesCohort: BRIEF.revision });
-});
-
-// Whether the brief reached anything the turn sends: the system prompt, its append, or a note.
-const briefSent = (decision: TurnDecision): boolean => {
-    const { systemPrompt, systemAppend, notes } = decision.context.base.spec;
-    return [systemPrompt, systemAppend, ...(notes ?? []).map((note) => note.text)].some((text) => text?.includes(BRIEF.text) === true);
-};
-
-test("a window too small for the field notes withholds them, so the ledger records no cost", () => {
-    const facts = { ...FACTS, settings: SandboxSettingsSchema.parse({ fieldNotes: true }), fieldNotes: BRIEF };
-    const decision = decided({ ...facts, declared: { window: 40_000, onACard: true } }, turn({ agent: "endpoint/tiny" }));
-
-    expect(briefSent(decided(facts, turn({ agent: "endpoint/tiny" })))).toBe(true);
-    expect(briefSent(decision)).toBe(false);
-    expect(decision.experiments).toEqual({ notesCohort: BRIEF.revision });
+    expect(decided(MEASURED_FACTS).experiments).toEqual({ mapChars: MAP.length });
 });
 
 // The system prompt names the tool the conversation was taught, so its guidance and the iq teaching never disagree; the

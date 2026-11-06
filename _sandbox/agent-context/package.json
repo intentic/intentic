@@ -22,28 +22,6 @@
                 "default": "./dist/workspace-map.js"
             }
         },
-        "./field-notes": {
-            "types": "./dist/field-notes.d.ts",
-            "import": {
-                "@intentic/src": "./src/field-notes.ts",
-                "default": "./dist/field-notes.js"
-            },
-            "require": {
-                "@intentic/src": "./src/field-notes.ts",
-                "default": "./dist/field-notes.js"
-            }
-        },
-        "./field-notes-prompt": {
-            "types": "./dist/field-notes-prompt.d.ts",
-            "import": {
-                "@intentic/src": "./src/field-notes-prompt.ts",
-                "default": "./dist/field-notes-prompt.js"
-            },
-            "require": {
-                "@intentic/src": "./src/field-notes-prompt.ts",
-                "default": "./dist/field-notes-prompt.js"
-            }
-        },
         "./experiments": {
             "types": "./dist/experiments.d.ts",
             "import": {

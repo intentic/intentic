@@ -1,7 +1,9 @@
 import type { TurnInput } from "../../../../seams/turn-starter.js";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { experimentArm } from "@intentic/agent-context/experiments";
-import { coldTrimEligible, trimDelivery } from "../cold-trim.js";
+import { coldTrimEligible, sessionBasis, trimDelivery } from "../cold-trim.js";
+import { parseSession } from "../../../providers/claude/claude-session-copy.js";
+import { PROMPT_CACHE_1H_MS, PROMPT_CACHE_5M_MS } from "../prompt-cache.js";
 import { armOf, EXPERIMENTS } from "../../decide/experiments.js";
 
 const turn: TurnInput = { prompt: "continue", agent: "claude", harness: "native", conversationId: "c", sessionId: "s" };
@@ -60,4 +62,36 @@ test("delivery counts cleared results only when the runtime resumes the cold cop
     expect(trimDelivery(trim, undefined)).toEqual({ turn, stamps: { coldTrimArm: true }, event: { mode: "trim", fellBack: true } });
     const held = { ...trim, cold: false };
     expect(trimDelivery(held, undefined)).toEqual(held);
+});
+
+// One main-chain request as the CLI files it: when it ran, what it read, and what it wrote under which lifetime.
+const request = (uuid: string, parentUuid: string | null, timestamp: string | undefined, write?: { m5?: number; h1?: number }) =>
+    JSON.stringify({
+        type: "assistant",
+        uuid,
+        parentUuid,
+        ...(timestamp === undefined ? {} : { timestamp }),
+        message: {
+            content: [{ type: "text", text: "ok" }],
+            usage: {
+                input_tokens: 2,
+                cache_read_input_tokens: 120_000,
+                cache_creation_input_tokens: (write?.m5 ?? 0) + (write?.h1 ?? 0),
+                output_tokens: 10,
+                ...(write === undefined ? {} : { cache_creation: { ephemeral_5m_input_tokens: write.m5 ?? 0, ephemeral_1h_input_tokens: write.h1 ?? 0 } }),
+            },
+        },
+    });
+const chainOf = (...lines: string[]) => parseSession(lines.join("\n"));
+
+test("a session file gives back the clock and context a restart wiped", () => {
+    const basis = sessionBasis(chainOf(request("a", null, "2026-11-01T10:00:00.000Z", { m5: 500 }), request("b", "a", "2026-11-01T10:02:00.000Z")));
+    expect(basis).toEqual({ promptCache: { at: Date.parse("2026-11-01T10:02:00.000Z"), ttlMs: PROMPT_CACHE_5M_MS }, contextTokens: 120_002 });
+    expect(sessionBasis(chainOf(request("a", null, "2026-11-01T10:00:00.000Z", { h1: 500 })))?.promptCache?.ttlMs).toBe(PROMPT_CACHE_1H_MS);
+});
+
+test("a session that never names its lifetime runs under the longer one, and an unstamped request names no clock", () => {
+    expect(sessionBasis(chainOf(request("a", null, "2026-11-01T10:00:00.000Z")))?.promptCache?.ttlMs).toBe(PROMPT_CACHE_1H_MS);
+    expect(sessionBasis(chainOf(request("a", null, "2026-11-01T10:00:00.000Z", { m5: 1 }), request("b", "a", undefined)))).toBeUndefined();
+    expect(sessionBasis(chainOf(JSON.stringify({ type: "user", uuid: "u", parentUuid: null, message: { content: "hi" } })))).toBeUndefined();
 });

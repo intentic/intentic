@@ -79,10 +79,9 @@ const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPerso
     };
 };
 
-// Composed by planning but not read off the facts: the teaching for a shell-only spawn door, and the sandbox's brief.
+// Composed by planning but not read off the facts: the teaching for a shell-only spawn door.
 export interface PlannedNotes {
     readonly spawn: string | undefined;
-    readonly fieldNotes: string | undefined;
 }
 
 // Where the turn's own install would write: a namespace gives it its own copy, a cwd-only runtime's dependency
@@ -198,7 +197,6 @@ export const honoured = (
         ...prompt,
         ...opt("personaNote", personaNote(persona)),
         ...opt("memoryNote", facts.memoryNote),
-        ...opt("fieldNotesNote", planned.fieldNotes),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
         search: searchToolOf(premise),

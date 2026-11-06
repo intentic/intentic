@@ -56,7 +56,6 @@ export interface TurnPremise {
     readonly arms: {
         readonly search: boolean | undefined;
         readonly map: boolean | undefined;
-        readonly notes: boolean | undefined;
         readonly toolSearch: boolean | undefined;
         readonly stablePrompt: boolean | undefined;
     };
@@ -139,7 +138,6 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         arms: {
             search,
             map,
-            notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId),
             toolSearch: toolSearchArm,
             stablePrompt: stableArm,
         },

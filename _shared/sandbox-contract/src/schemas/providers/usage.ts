@@ -93,12 +93,6 @@ export const UsageTurnSchema = z.object({
     // 10-12, when the arm was the compact map and the holdout the full one; "map-vs-none" for 2026-10-12 to 10-13, the map
     // against none; "map-vs-none-2" since, the same with readings off the main agent's calls and spawned children out.
     mapCohort: z.string().optional(),
-    // Arm of the field-notes experiment, stable per conversation; notesChars is what the budget let through.
-    notesArm: z.boolean().optional(),
-    notesChars: z.number().optional(),
-    // Hash of the brief that was sent, recorded on control turns too. Load-bearing rather than decorative: the file is
-    // rewritten monthly, so a 30-day window holds two different treatments and pooling them would measure neither.
-    notesCohort: z.string().optional(),
     // Arm of the tool-search experiment, stable per conversation: true loads connected tools' schemas on demand, false
     // sends them all with every request. Absent where the turn was not a native Claude one on the Claude Code loop.
     toolSearchArm: z.boolean().optional(),

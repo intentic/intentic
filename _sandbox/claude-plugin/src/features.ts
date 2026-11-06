@@ -62,13 +62,6 @@ export const OPTIONS = {
             "Open each session with a map of the project it starts in: its areas, what each is for, and where Claude is standing. Worked out from the tree every time, never stored, so it cannot go stale.",
         default: true,
     },
-    field_notes: {
-        type: "boolean",
-        title: "Field notes",
-        description:
-            "Open each session with this project's field notes: the traps past sessions hit and the commands that really verify. Written by `/intentic:field-notes` from your own sessions here; nothing is sent until you run it once.",
-        default: true,
-    },
     iq: {
         type: "boolean",
         title: "iq search",
@@ -87,7 +80,7 @@ export const OPTIONS = {
         type: "number",
         title: "Measured share",
         description:
-            "Share of sessions opened without the map, the field notes and the iq teaching, so `/intentic:stats` can show what each changed. 0 sends them to every session and measures nothing.",
+            "Share of sessions opened without the map and the iq teaching, so `/intentic:stats` can show what each changed. 0 sends them to every session and measures nothing.",
         default: 0.1,
         min: 0,
         max: 0.5,

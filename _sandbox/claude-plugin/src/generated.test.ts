@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { BACKGROUND_WAIT_GUIDANCE, BATCHING_GUIDANCE, CONTEXT_REUSE_GUIDANCE } from "@intentic/agent-context/guidance";
-import { fieldNotesSkill, fileqSkillText, outputStyle, portableIqNudge, statsSkill } from "./generated.js";
+import { fileqSkillText, outputStyle, portableIqNudge, statsSkill } from "./generated.js";
 
 // The generated files carry other packages' words; these pin that the plugin's framing around them is what Claude Code
 // needs (frontmatter, pre-approved commands, substitutions) and that nothing sandbox-only leaks through.
@@ -29,14 +29,6 @@ test("the stats skill runs only its own pre-approved report, with nothing the pe
     expect(command).toBe('!`intentic-stats --data "${CLAUDE_PLUGIN_DATA}" --project "${CLAUDE_PROJECT_DIR}" $ARGUMENTS`');
     // An option nobody set stays `${user_config.KEY}` in the text, and Claude Code refuses to run the line at all.
     expect(skill).not.toContain("user_config");
-});
-
-test("the field-notes skill is the shared brief, for this project's file, over the evidence digest", () => {
-    const skill = fieldNotesSkill();
-    expect(frontmatter(skill)).toContain("allowed-tools: Bash(intentic-notes-evidence *)");
-    expect(skill).toContain("Rewrite this project's field notes: `${CLAUDE_PROJECT_DIR}/.claude/intentic/field-notes.toon`");
-    expect(skill).toContain("VERIFY EVERY FACT AGAINST THIS PROJECT");
-    expect(skill.trimEnd().endsWith('!`intentic-notes-evidence --project "${CLAUDE_PROJECT_DIR}"`')).toBe(true);
 });
 
 test("fileq's skill is the standalone one: no textconv the install never wired", () => {

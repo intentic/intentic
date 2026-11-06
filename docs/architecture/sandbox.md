@@ -456,7 +456,11 @@ conversation-stable `coldTrimHoldout` (half held out). Only native Claude Code s
 `coldTrimMinTokens` (100,000 by default) qualify. Cold means strictly later than the last measured cache instant plus
 its known TTL plus 30 seconds. The clock is captured before the new turn resets its readings, and includes keep-warm
 refreshes. Unknown timing stays whole. Forks, bounded resumes, interrupted-request retries, held-turn hand-offs, missing sessions and transcripts
-with compaction boundaries stay whole too. A daemon restart loses the clock, so it cannot claim a cold resume.
+with compaction boundaries stay whole too. A daemon restart loses the live clock, so the first follow-up after one
+reads it back off the session file the trim reads anyway: the last request's timestamp and context, under the lifetime
+its newest cache write names (one hour where none does), moved forward by any keep-warm refresh the usage ledger holds
+for the conversation, since a refresh forks the session and never reaches its file. Before 2026-11-06 a restart left
+every cold resume whole, which was 26 of the 48 over 100,000 tokens from 10-19 to 11-06.
 
 Both eligible arms inspect the same session and stamp `coldTrimArm`; treatment additionally records the number of
 cleared results in `coldTrimmed` when a copy is made. A trim uses the existing transcript hand-off notice, leaves the

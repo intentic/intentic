@@ -12,7 +12,7 @@
                                      environment.custom.Dockerfile (the owner-approved part of the overlay;
                                      environment.d/ and environment.Dockerfile hold steps proposed and not yet
                                      approved), skills/ (their own), approvals/ (items waiting for the owner's
-                                     yes), extension-enablement.json, field-notes.toon. TRACKED: in an isolated
+                                     yes), extension-enablement.json. TRACKED: in an isolated
                                      turn this is your branch's checkout, and a file you write here (an approval,
                                      an environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/

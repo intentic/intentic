@@ -70,12 +70,3 @@ export const dataDir = (env: Env = process.env): string =>
 // The project a session belongs to: the directory Claude Code was started in, which is also where transcripts are filed.
 export const projectDir = (input: HookInput, env: Env = process.env): string =>
     env["CLAUDE_PROJECT_DIR"] ?? input.cwd ?? process.cwd();
-
-// This project's field notes. Inside the project so a session reads them without a permission prompt, and so a team can
-// choose to commit them; `/intentic:field-notes` writes them, the SessionStart hook reads them.
-export const fieldNotesFile = (project: string): string => join(project, ".claude", "intentic", "field-notes.toon");
-
-// Claude Code files a project's transcripts under its path with every character that is not a letter or a digit
-// turned into a dash (`/work/my_app` is `-work-my-app`).
-export const transcriptDir = (project: string, env: Env = process.env): string =>
-    join(env["CLAUDE_CONFIG_DIR"] ?? join(homedir(), ".claude"), "projects", project.replace(/[^a-zA-Z0-9]/g, "-"));

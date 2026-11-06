@@ -20,7 +20,6 @@ const ENTRIES = {
     "post-bash": "src/post-bash.ts",
     "prompt-submit": "src/prompt-submit.ts",
     stats: "src/stats.ts",
-    "notes-evidence": "src/notes-evidence.ts",
     emit: "src/emit.ts",
     fileq: "../fileq/src/cli.ts",
     "retrieve-output": "../output-cleaners/src/retrieve-output.mjs",

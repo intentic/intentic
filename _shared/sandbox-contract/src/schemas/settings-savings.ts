@@ -35,7 +35,7 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // openingSearches: same, narrowed to before the turn first touched a file.
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
-// failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
+// failedCalls: tool calls that ended in error (the price tool search, the stable prompt and cold trim could charge).
 // openingPrompt: tokens a turn's first request sent (cache reads plus cache writes), which is what every later call of
 // the turn reads again (tool search, which moves the tool schemas out of it).
 // openingWrite: tokens a follow-up turn's first request wrote to the cache instead of reading them (the stable prompt).
@@ -88,36 +88,11 @@ export const TurnExperimentSchema = z.object({
     uptake: z.object({ on: z.number(), off: z.number(), turns: z.number() }).optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
-// What the settings row can say about the brief without opening it: whether there is one, how much of it this budget
-// reaches, and whether anything is scheduled to rewrite it. Read off the file and the automation store, never stored.
-export const FieldNotesStatusSchema = z.object({
-    // False means the automation has never run (or was never set up) — the ordinary state before the first month.
-    present: z.boolean(),
-    // Epoch ms the file was last written. Absent when there is no file.
-    writtenAt: z.number().optional(),
-    // How many ranked sections the current budget reaches, out of how many the file holds. The pair is the point: "5"
-    // alone cannot tell a generous budget from a short file.
-    ranksSent: z.number().optional(),
-    ranksTotal: z.number().optional(),
-    // What the brief costs the prompt, in characters, at the current budget.
-    chars: z.number().optional(),
-    // The monthly rewrite: absent until the owner creates it from the offered template, since an automation names the
-    // models it spends and nothing chooses those for them.
-    automation: z.enum(["missing", "enabled", "disabled"]),
-    // When it next runs, epoch ms; absent when there is nothing scheduled.
-    nextRunAt: z.number().optional(),
-    // Said out loud rather than shown as "no file": a brief that exists and cannot be read is a broken automation.
-    unreadable: z.string().optional(),
-    // Blocks of the file its priority table does not rank, so no limit ever sends them. Absent when there are none.
-    unlisted: z.array(z.string()).optional(),
-});
-export type FieldNotesStatus = z.infer<typeof FieldNotesStatusSchema>;
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     search: TurnExperimentSchema.optional(),
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
-    notes: TurnExperimentSchema.optional(),
     toolSearch: TurnExperimentSchema.optional(),
     stablePrompt: TurnExperimentSchema.optional(),
     coldTrim: TurnExperimentSchema.optional(),

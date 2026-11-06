@@ -8,7 +8,7 @@ import type { ToolCallFacts } from "./turn-metrics.js";
 
 // A Claude Code session transcript (`~/.claude/projects/<project>/<session>.jsonl`), read back as turns of tool calls:
 // the shape the turn readings score. One reader for everything that measures Claude Code sessions after the fact, the
-// sandbox's benches and the Claude Code plugin's stats and field-notes evidence alike, so they count the same calls.
+// sandbox's benches and the Claude Code plugin's stats alike, so they count the same calls.
 // A transcript is somebody else's file: every field is optional, and a line that does not parse is skipped rather than
 // allowed to cost the whole session.
 

@@ -26,13 +26,13 @@ export const manifest = (version: string): PluginManifest => ({
     displayName: "Intentic",
     version,
     description:
-        "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
+        "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map at session start, iq code search and fileq document reading taught, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
     author: { name: "intentic" },
     homepage: "https://github.com/intentic/intentic/tree/main/_sandbox/claude-plugin",
     repository: "https://github.com/intentic/intentic",
     license: "MIT",
     keywords: ["context", "token-savings", "output-filter", "code-search", "documents", "measurement"],
-    // Built from the texts other packages own (fileq's skill, iq's skill, the field-notes brief), so the build writes them
+    // Built from the texts other packages own (fileq's skill, iq's skill, the stats report), so the build writes them
     // and git ignores them; the plugin's own `skills/` holds only what is written here.
     skills: "./generated/skills",
     outputStyles: "./generated/output-styles",

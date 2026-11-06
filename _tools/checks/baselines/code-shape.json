@@ -1123,10 +1123,6 @@
         "count": 30,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/claude-plugin/src/notes-evidence.ts#digestOf#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/claude-plugin/src/session-start.ts#compose#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"

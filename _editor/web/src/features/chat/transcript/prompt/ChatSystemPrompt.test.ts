@@ -18,7 +18,7 @@ const PROMPT: ConversationPrompt = {
         base: { kind: `intentic`, text: `You are an Intentic agent.` },
         sections: [
             { source: `guidance`, title: `Working in this sandbox`, text: `## Working in this sandbox\n\nSearch code with rg.` },
-            { source: `field-notes`, title: `Field notes for this sandbox`, text: `## Field notes for this sandbox\n\npnpm's exit code lies here.` },
+            { source: `persona`, title: `Who this turn is acting as`, text: `## Who this turn is acting as\n\nYou are acting as Studio.` },
             {
                 source: `memory`,
                 title: `Standing instructions for this workspace`,
@@ -88,15 +88,15 @@ test("a section's own heading is dropped from the reading and kept in what is co
     mount();
     document.querySelector<HTMLButtonElement>(`button`)?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const notes = [...document.querySelectorAll<HTMLButtonElement>(`[role="dialog"] button[aria-expanded]`)].find((row) =>
-        row.textContent?.includes(`Field notes for this sandbox`),
+    const persona = [...document.querySelectorAll<HTMLButtonElement>(`[role="dialog"] button[aria-expanded]`)].find((row) =>
+        row.textContent?.includes(`Who this turn is acting as`),
     );
-    notes?.click();
+    persona?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const opened = document.querySelector(`[role="dialog"]`)?.textContent ?? ``;
     // The title is drawn once, by the row; the words under it are the section's own.
-    expect(opened).toContain(`pnpm's exit code lies here.`);
-    expect(opened.match(/Field notes for this sandbox/g)).toHaveLength(1);
+    expect(opened).toContain(`You are acting as Studio.`);
+    expect(opened.match(/Who this turn is acting as/g)).toHaveLength(1);
 });
 
 test("the first message's context follows the prompt as its own group, read without waiting on the fetch", async () => {

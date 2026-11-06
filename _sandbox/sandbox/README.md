@@ -1113,8 +1113,8 @@ When a turn ends, open tool calls, including nested helper calls, become `interr
 for cards recovered from the run log.
 
 Cold Claude Code follow-ups can resume a trimmed session copy under the `coldTrim` experiment; both eligible arms
-are measured on opening prompt size and failed calls. The cache clock includes keep-warm refreshes; unknown clocks
-leave sessions whole. [The cache and hand-off rules](../../docs/architecture/sandbox.md) describe the boundaries.
+are measured on opening prompt size and failed calls. The cache clock includes keep-warm refreshes, and after a
+daemon restart it is read back off the session file and the usage ledger; unknown clocks leave sessions whole. [The cache and hand-off rules](../../docs/architecture/sandbox.md) describe the boundaries.
 
 New conversation checkouts reserve room on the history filesystem before any repository is written. The free-space
 floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Free space is what

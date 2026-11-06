@@ -6,7 +6,6 @@ import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
-import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { claudeCodeRuntime, GUIDANCE_TITLE, guidanceBlock, type SearchTool } from "./guidance.js";
 import { ANONYMOUS_BROWSER_SERVER } from "../../browser/tools/browser-servers.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
@@ -44,10 +43,6 @@ export interface TurnPromptInput {
     // discovery. Same seams as the persona note, and the one thing a custom prompt does NOT drop: "nothing added" is
     // about this product's guidance, and these are the owner's own rules.
     readonly memoryNote?: string;
-    // What past sessions here had to learn the hard way (field-notes.ts). Rides the same seams as the two above, and is
-    // dropped by a custom prompt like the rest of this product's guidance: it is something Intentic worked out about
-    // the sandbox, not something the owner wrote.
-    readonly fieldNotesNote?: string;
     // What the model's declared window will not pay for (context-trim.ts). Structural rather than that module's own
     // type, so the prompt keeps no dependency on the decision that produced it — and so the decision can keep naming
     // its titles from here without the two importing each other.
@@ -57,8 +52,7 @@ export interface TurnPromptInput {
 }
 
 // The prompt-side pieces a small window takes, as booleans rather than a tier: this module applies a decision, it does
-// not re-make one. The field notes are not here because they are withheld a step earlier, where the turn decides
-// whether to read them at all (decide/turn-facts.ts fieldNotesFor) — a brief that was never read cannot be placed.
+// not re-make one.
 export interface PromptTrim {
     // This product's own guidance paragraphs, both where the harness composes them and where they ride the append.
     readonly guidance: boolean;
@@ -87,11 +81,10 @@ const titled = (entries: readonly (readonly [string, string | undefined])[]): Tu
 // A runtime with no system seam at all (ACP): the owner's prompt is not applied and the composer discloses that
 // (limitationsOf), rather than quietly pasting it into the user message. The persona note and the workspace's standing
 // instructions still have to arrive, so they go through the user message instead.
-const messageNotes = (personaNote: string | undefined, fieldNotes: string | undefined, memoryNote: string | undefined): TurnPromptPlacement => {
+const messageNotes = (personaNote: string | undefined, memoryNote: string | undefined): TurnPromptPlacement => {
     const userNotes = titled([
         // Who the turn is acting as comes first, as it does in the preamble: it decides what the rest is for.
         [PERSONA_NOTE_TITLE, personaNote],
-        [FIELD_NOTES_NOTE_TITLE, fieldNotes],
         [MEMORY_NOTE_TITLE, memoryNote],
     ]);
     return userNotes.length === 0 ? {} : { userNotes };
@@ -103,8 +96,8 @@ const TAKES_NOTHING: PromptTrim = { guidance: false, base: false };
 
 // The whole prompt, where something replaces the composed one: the owner's own text under `custom`, or the one
 // paragraph a window too small for the loop's instructions leaves room for. `custom` is tested first and wins over a
-// trim, because the owner's words are not this product's to shorten — a small window still takes the guidance, the
-// field notes and the optional notes around them, just never the text the owner typed.
+// trim, because the owner's words are not this product's to shorten — a small window still takes the guidance and the
+// optional notes around it, just never the text the owner typed.
 //
 // The two pieces riding on the trimmed prompt, and why they survive a trim that takes everything else: the persona
 // decides what the turn may DO, and the owner's rules are the owner's own words.
@@ -119,12 +112,12 @@ const replacing = (own: string, instructions: AgentCapabilities["instructions"])
 // Decides where each composed piece goes. One function because the destinations are one decision: a note on the user
 // message must not also ride the append, and a custom prompt removes both choices at once.
 export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement => {
-    const { capabilities, mode, personaNote, memoryNote, fieldNotesNote } = input;
+    const { capabilities, mode, personaNote, memoryNote } = input;
     const { instructions } = capabilities;
     const trim = input.trim ?? TAKES_NOTHING;
 
     if (instructions === "none") {
-        return messageNotes(personaNote, fieldNotesNote, memoryNote);
+        return messageNotes(personaNote, memoryNote);
     }
 
     // `trim.base` is only ever set for a replacing runtime, since on one that can only append there is no base to
@@ -138,9 +131,6 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
         // only exists once an arm has mounted it (sdkSystemPrompt for the Claude Code loop, withRuntimeGuidance below for
         // every other, called from planTurn).
         personaNote,
-        // Before the owner's rules and after this product's: what the sandbox learned about itself is context for the
-        // rules, not a rule, and anything claiming to outrank the owner's own words would be reading its own promotion.
-        fieldNotesNote,
         // Last, so the owner's rules sit closest to the conversation. Editing them mid-session mints a new prefix, the
         // same cost as changing the persona, which is why neither is held back by a stable prompt.
         memoryNote,

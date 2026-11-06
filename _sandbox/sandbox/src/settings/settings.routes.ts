@@ -12,7 +12,6 @@ import { readInputSavings } from "../logs/filter-stats.js";
 import { declaredRepoChecks, earlierDeclarations, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
-import { fieldNotesStatus } from "./field-notes-status.js";
 import { createAiLiteracyRoutes } from "./ai-literacy.routes.js";
 import { createAudienceRoutes } from "./audience.routes.js";
 import { memberOf } from "./member-of.js";
@@ -79,7 +78,6 @@ export const createSettingsRoutes = (services: Services) => {
             await services.audit.adoptSettings(input.audit);
             return { ok: true } as const;
         }),
-        fieldNotes: i.fieldNotes.handler(() => fieldNotesStatus(services)),
         // Take-if-empty, never overwrite: this is called by every browser that opens the workspace, and the second one
         // must not move the first one's chores onto its own clock. An owner changing their mind goes through `set`.
         adoptTimezone: i.adoptTimezone.handler(async ({ input }) => {

@@ -18,7 +18,7 @@ The acp-bridge in the diagram runs on the user's device, so it lives in [_device
 
 | Package | Role |
 | --- | --- |
-| [agent-context](agent-context) | What an agent is told as a session opens (project map, field notes) and the readings that measure it |
+| [agent-context](agent-context) | What an agent is told as a session opens (the project map) and the readings that measure it |
 | [claude-plugin](claude-plugin) | The `intentic` Claude Code plugin: trimmed Bash output, session context, fileq and iq, measured savings |
 | [fileq](fileq) | Agent CLI reading binary files (docx, pdf, images, archives) as budgeted markdown |
 | [netd](netd) | Rust network daemon: owns every port and the tunnel, supervises the daemon |

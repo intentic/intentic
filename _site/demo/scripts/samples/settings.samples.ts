@@ -9,7 +9,6 @@ export const settingsSamples: GroupSamples<`settings`> = () => ({
     gettingStarted: undefined,
     setGettingStarted: { hidden: false },
     savings: {},
-    fieldNotes: undefined,
     firings: undefined,
     repoChecks: undefined,
     adoptRepoChecks: { repo: `web`, on: true },

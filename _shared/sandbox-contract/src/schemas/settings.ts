@@ -366,34 +366,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "What share of conversations to open without the map, so the two can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
         ),
-    // The one composed piece that is WRITTEN rather than derived: a monthly automation rewrites it off the session
-    // corpus, so it carries what no scan of the tree can (which commands really work here, what the box can take, how
-    // the owner asks for things) and the map keeps carrying what a scan can.
-    fieldNotes: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Open every turn with a brief on how work actually goes in this sandbox: the traps that cost past sessions calls, the commands that really verify, what the machine can take. Written once a month by an automation that reads back the sessions run here, rather than worked out per turn, because it is drawn from history rather than from the tree. Off by default, since it rides every turn of every conversation.",
-        ),
-    // Characters, not sections: the file's own ranking decides WHICH sections, this decides HOW MANY fit. Same unit as
-    // the project map's ceiling so the two costs read on one scale.
-    fieldNotesBudget: z
-        .number()
-        .int()
-        .min(500)
-        .max(20000)
-        .default(4000)
-        .describe(
-            "How much of that brief to send. Its sections are ranked, most costly-to-not-know first, and they are taken whole in that order until this runs out — so raising it buys more of the tail, never a fuller version of the same thing.",
-        ),
-    fieldNotesHoldout: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0)
-        .describe(
-            "What share of conversations to run without the brief, so the two can be compared. Whole conversations rather than individual turns, because the brief sits in the prompt for the whole session and withholding it from one turn would not take it back.",
-        ),
     outputCleaners: z
         .string()
         .default("")

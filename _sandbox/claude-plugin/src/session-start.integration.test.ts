@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { loadOptions } from "./features.js";
-import { fieldNotesFile } from "./hook-io.js";
 import { readSessions, SALTS } from "./sessions.js";
 import { sessionStart } from "./session-start.js";
 
@@ -23,7 +22,7 @@ afterEach(() => {
     }
 });
 
-// A project with areas worth mapping, and field notes to send.
+// A project with areas worth mapping.
 const project = (): string => {
     const root = tempDir();
     for (const [path, content] of Object.entries({
@@ -36,11 +35,6 @@ const project = (): string => {
         mkdirSync(join(root, path, ".."), { recursive: true });
         writeFileSync(join(root, path), content);
     }
-    mkdirSync(join(fieldNotesFile(root), ".."), { recursive: true });
-    writeFileSync(
-        fieldNotesFile(root),
-        ["meta:", "  title: Field notes", "priority[1]{rank,id,title,cost}:", "  1,verify,What verifies,a passing run that proved nothing", "verify:", "  tests: run pnpm test:int for the API", ""].join("\n"),
-    );
     return root;
 };
 
@@ -49,7 +43,7 @@ const baseEnv = (data: string, root: string): Record<string, string> => ({ CLAUD
 
 type Answer = { systemMessage?: string; hookSpecificOutput: { additionalContext?: string } } | undefined;
 
-test("a new session is told the map and the field notes, and its arms are recorded for the stats", () => {
+test("a new session is told the map, and its arms are recorded for the stats", () => {
     const root = project();
     const data = tempDir();
     const answer = sessionStart({ session_id: "s-1", source: "startup", cwd: root, transcript_path: "/t/s-1.jsonl" }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0" }) as Answer;
@@ -57,36 +51,29 @@ test("a new session is told the map and the field notes, and its arms are record
     expect(context).toContain("## Map of this project");
     expect(context).toContain("use Glob or Read for exact paths");
     expect(context).toContain("The browser app");
-    expect(context).toContain("## Field notes for this project");
-    expect(context).toContain("tests: run pnpm test:int for the API");
     const [row] = readSessions(data);
     expect(row).toMatchObject({ session: "s-1", project: root, transcript: "/t/s-1.jsonl", arms: {} });
-    expect(row?.sent.map).toBe(context.indexOf("## Field notes") - 2);
+    expect(row?.sent.map).toBe(context.length);
 });
 
 test("a held-out session is told nothing it was drawn out of, and says so in its row", () => {
     const root = project();
     const data = tempDir();
     // An id every experiment holds out at this share, found rather than transcribed.
-    const held = Array.from({ length: 400 }, (_, index) => `s-${index}`).find(
-        (id) => !experimentArm(SALTS.map, id, 0.5) && !experimentArm(SALTS.notes, id, 0.5),
-    );
+    const held = Array.from({ length: 400 }, (_, index) => `s-${index}`).find((id) => !experimentArm(SALTS.map, id, 0.5));
     expect(held).toBeString();
     const answer = sessionStart({ session_id: held ?? "none", source: "startup", cwd: root }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.5" }) as Answer;
     expect(answer?.hookSpecificOutput.additionalContext).toBeUndefined();
     const [row] = readSessions(data);
-    expect(row?.arms).toMatchObject({ map: false, notes: false });
-    // The control still names the revision it was withheld from, so its turns pair with the treated ones.
-    expect(row?.notesRevision).toMatch(/^[0-9a-f]{8}$/);
+    expect(row?.arms).toMatchObject({ map: false });
 });
 
-test("a mechanism with nothing to give is not measured: no notes written, no iq installed", () => {
+test("a mechanism with nothing to give is not measured: no iq installed", () => {
     const root = project();
-    rmSync(fieldNotesFile(root));
     const data = tempDir();
     sessionStart({ session_id: "s-6", source: "startup", cwd: root }, { ...baseEnv(data, root), CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.5" });
     const [row] = readSessions(data);
-    // The map had areas to show, so it is measured on whichever arm this id drew; the notes and iq had nothing.
+    // The map had areas to show, so it is measured on whichever arm this id drew; iq had nothing.
     expect(Object.keys(row?.arms ?? {})).toEqual(["map"]);
 });
 

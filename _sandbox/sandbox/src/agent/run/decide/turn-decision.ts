@@ -23,7 +23,7 @@ import type { TurnBase } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
 import { privacyTurnRefusal, type TurnContext, type TurnRefusal } from "../../providers/adapter.js";
 import type { TurnExperimentStamps } from "../turn/turn-plan.js";
-import { experimentStamps, type TurnFieldNotes } from "./experiments.js";
+import { experimentStamps } from "./experiments.js";
 import { honoured } from "./honoured.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
 import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
@@ -123,19 +123,10 @@ export const spawnNoteFor = (spawn: boolean, runtime: Pick<TurnRuntime, "capabil
     return spawn && mcp !== "full" && mcp !== "tools" && runtime.conversationTurns === 0 ? spawnNote() : undefined;
 };
 
-// Sent unless the arm withholds it or the window cannot pay for it; `?? true`, since no arm means no experiment rather
-// than control. Withheld here rather than at placement, so `notesChars` never counts a brief that stayed home.
-const fieldNotesOf = (facts: AdmittedTurnFacts, arm: boolean | undefined, trim: TurnTrim | undefined): TurnFieldNotes => ({
-    arm,
-    brief: facts.fieldNotes,
-    note: (arm ?? true) && trim === undefined ? facts.fieldNotes?.text : undefined,
-});
-
 // What the SYSTEM prompt would have carried had the window paid for it. A custom prompt already dropped the guidance and
-// a runtime with no system seam never had it; the field notes reach that runtime through the message instead.
-const systemPieces = (capabilities: AgentCapabilities, mode: SystemPromptMode, notes: TurnFieldNotes): TurnTrimState["system"] => ({
+// a runtime with no system seam never had it.
+const systemPieces = (capabilities: AgentCapabilities, mode: SystemPromptMode): TurnTrimState["system"] => ({
     guidance: mode !== "custom" && capabilities.instructions !== "none",
-    fieldNotes: notes.brief !== undefined && (notes.arm ?? true),
 });
 
 // The window's filter applied to what the card composed. The request carries both prompt-side decisions on, so the
@@ -181,13 +172,11 @@ const experimentsOf = (
     input: AgentTurn,
     runtime: TurnRuntime,
     premise: TurnPremise,
-    notes: TurnFieldNotes,
     sent: readonly TurnNote[] | undefined,
 ): TurnExperimentStamps =>
     experimentStamps(input.conversationId === undefined ? undefined : runtime.conversationTurns, {
         iqSearch: { arm: premise.arms.search, cohort: facts.iqTeaching?.cohort },
         workspaceMap: { arm: premise.arms.map, notes: sent },
-        fieldNotes: notes,
         turnContext: facts.turnContext,
         toolSearch: { arm: premise.arms.toolSearch },
         stablePrompt: { arm: premise.arms.stablePrompt },
@@ -270,12 +259,11 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     const mounts = gatedCapabilities(reached, facts.gates, facts.releases, input.conversationId);
     // A child is a whole agent holding shell and write, so spawning needs the delegate shelf and full agency.
     const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
-    const notes = fieldNotesOf(facts, premise.arms.notes, trim);
     const prompt = personaPrompt(persona.persona, facts.personaPrompt, facts.settings);
     const shared = sharedContext(context, facts, settings, premise, runtime, trim);
     // The card's briefing, then the window's filter: what a small window left out is named by building what it would send.
-    const system = systemPieces(capabilities, prompt.mode, notes);
-    const written = { spawn: spawnNoteFor(spawn, runtime), fieldNotes: notes.note };
+    const system = systemPieces(capabilities, prompt.mode);
+    const written = { spawn: spawnNoteFor(spawn, runtime) };
     const composed = trimmed(trim, honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld, written), system);
     const planned: TurnContext = { ...shared, base: composed.request, persona };
     // The last gate, and the only one that reads the prompt as it will be sent: notes and all, trimmed where trimmed.
@@ -305,7 +293,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         spawn,
         briefing: premise.briefing,
         ...opt("contextTrim", composed.contextTrim),
-        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes),
+        experiments: experimentsOf(facts, input, runtime, premise, planned.base.spec.notes),
         warnings,
     };
 };

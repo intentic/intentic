@@ -128,6 +128,13 @@ test(`a stored tool-result clearing switch is dropped, and the rest of the file 
     expect(SandboxSettingsSchema.parse(converted.value).iqSearch).toBe(true);
 });
 
+// The field notes were removed (2026-11-06); a file that still switches them on reads, without them.
+test(`stored field-notes settings are dropped, and the rest of the file kept`, () => {
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, { iqSearch: true, fieldNotes: true, fieldNotesBudget: 4000, fieldNotesHoldout: 0.5 }, true);
+    expect(converted.value).toEqual({ iqSearch: true });
+    expect(SandboxSettingsSchema.parse(converted.value).iqSearch).toBe(true);
+});
+
 // What a job runs on, read the way every reader reads it, over a sandbox with nothing connected: the setups a stored
 // file converts into are judged by what they make each job run on, not by their shape.
 const runsOn = (stored: unknown, role: ModelRole): readonly unknown[] => {

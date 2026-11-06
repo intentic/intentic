@@ -252,57 +252,20 @@ test("only turns inside the window count", async () => {
     expect(seen).toEqual({ from: "2026-07-01", to: "2026-07-29" });
 });
 
-// The field notes' own design: every turn is evidence (the brief sits in the prompt all session), the headline is
-// failed calls, and a monthly rewrite is a NEW treatment rather than more of the old one.
-const notesArms = (revision: string, onFailures: number, offFailures: number, count = MIN_ARM_TURNS): UsageTurn[] => [
-    ...Array.from({ length: count }, (_, index) =>
-        turn({ conversationId: `${revision}-on-${index}`, notesArm: true, notesCohort: revision, failedCalls: onFailures }),
-    ),
-    ...Array.from({ length: count }, (_, index) =>
-        turn({ conversationId: `${revision}-off-${index}`, notesArm: false, notesCohort: revision, failedCalls: offFailures }),
-    ),
-];
-
-test("field notes are judged on failed calls, per conversation rather than per opening turn", async () => {
-    const { notes } = await readTurnExperiments(storeOf(notesArms("rev1", 1, 3)), {});
-    expect(notes?.metrics[0].metric).toBe("failedCalls");
-    expect(notes?.sampleUnit).toBe("conversations");
-    expect(notes?.metrics[0].on.mean).toBe(1);
-    expect(notes?.metrics[0].off.mean).toBe(3);
-    expect(notes?.metrics[0].deltaPct).toBeLessThan(0);
-});
-
-test("a later turn of a treated conversation counts too, unlike the map's opening-turn sample", async () => {
-    // Same conversations, all their evidence on turn 7: a design sampling opening turns alone would see nothing here.
-    const later = notesArms("rev1", 1, 3).map((row) => ({ ...row, turnIndex: 7 }));
-    expect((await readTurnExperiments(storeOf(later), {})).notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
-    expect((await readTurnExperiments(storeOf(later), {})).map).toBeUndefined();
-});
-
-test("a monthly rewrite is a new treatment: only the latest revision's turns are pooled", async () => {
-    const old = notesArms("rev1", 9, 9);
-    const fresh = notesArms("rev2", 1, 3).map((row) => ({ ...row, at: 2 }));
-    const { notes } = await readTurnExperiments(storeOf([...old, ...fresh]), {});
-    expect(notes?.cohort).toBe("rev2");
-    // The old revision's turns are excluded outright rather than averaged in, which would have pulled both arms to 9.
-    expect(notes?.metrics[0].on.mean).toBe(1);
-    expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
-});
-
 // Codex counts about twelve failed calls a turn to Claude Code's two: pooled, a comparison reads the two loops' mix.
 test("a comparison is read within the loop that ran most of its conversations", async () => {
-    const claude = notesArms("rev1", 1, 3);
-    const codex = notesArms("rev1", 12, 12, 5).map((row) => ({ ...row, conversationId: `codex-${row.conversationId}`, provider: "codex", runtime: "codex" }));
-    const { notes } = await readTurnExperiments(storeOf([...claude, ...codex]), {});
-    expect(notes?.metrics[0].on).toEqual({ turns: MIN_ARM_TURNS, mean: 1 });
-    expect(notes?.metrics[0].off).toEqual({ turns: MIN_ARM_TURNS, mean: 3 });
+    const claude = searchArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 1, 3);
+    const codex = searchArms(5, 5, 12, 12).map((row) => ({ ...row, conversationId: `codex-${row.conversationId}`, provider: "codex", runtime: "codex" }));
+    const { search } = await readTurnExperiments(storeOf([...claude, ...codex]), {});
+    expect(search?.metrics[0].on).toEqual({ turns: MIN_ARM_TURNS, mean: 1 });
+    expect(search?.metrics[0].off).toEqual({ turns: MIN_ARM_TURNS, mean: 3 });
 });
 
 test("a row from before the loop was recorded is placed by its provider and harness", async () => {
     // Rows of 2026-10-12 and earlier carry no `runtime`; Claude on its own loop is Claude Code, as a recorded one says.
-    const old = notesArms("rev1", 1, 3, 20);
-    const recent = notesArms("rev1", 1, 3, 20).map((row) => ({ ...row, conversationId: `recent-${row.conversationId}`, runtime: "claude-code" }));
-    expect((await readTurnExperiments(storeOf([...old, ...recent]), {})).notes?.metrics[0].on.turns).toBe(40);
+    const old = searchArms(20, 20, 1, 3);
+    const recent = searchArms(20, 20, 1, 3).map((row) => ({ ...row, conversationId: `recent-${row.conversationId}`, runtime: "claude-code" }));
+    expect((await readTurnExperiments(storeOf([...old, ...recent]), {})).search?.metrics[0].on.turns).toBe(40);
 });
 
 const uptakeArms = (count: number, onIq: number): UsageTurn[] => [
@@ -320,18 +283,6 @@ test("the search reading says what share of each group's searches ran iq, once t
     // Rows from before the count was recorded say nothing either way.
     const unrecorded = uptakeArms(MIN_ARM_TURNS, 2).map(({ iqSearches: _, ...row }) => row);
     expect((await readTurnExperiments(storeOf(unrecorded), {})).search?.uptake).toBeUndefined();
-});
-
-test("one brief under three hashes is one treatment, its turns pooled under the current name", async () => {
-    const rows = [
-        ...notesArms("8ce12338", 1, 3, 10),
-        ...notesArms("3b657c47", 1, 3, 10).map((row) => ({ ...row, at: 2 })),
-        ...notesArms("2eba3285", 1, 3, 10).map((row) => ({ ...row, at: 3 })),
-    ];
-    const { notes } = await readTurnExperiments(storeOf(rows), {});
-    expect(notes?.cohort).toBe("2eba3285");
-    expect(notes?.metrics[0].on.turns).toBe(30);
-    expect(notes?.previous).toBeUndefined();
 });
 
 const toolArms = (on: number, off: number, onPrompt: number, offPrompt: number): UsageTurn[] => [

@@ -9,7 +9,7 @@ import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
 // THE ONE PART OF A TURN THE TRANSCRIPT CANNOT SHOW. A preamble note rides the message and is drawn beside it; the
-// system prompt — this product's guidance, the persona, the sandbox's field notes, the workspace's standing rules —
+// system prompt — this product's guidance, the persona, the workspace's standing rules —
 // reaches the model and leaves no trace in the chat, so without this an arriving AGENTS.md and a dropped one look
 // alike.
 //
@@ -58,11 +58,9 @@ interface Row {
 const whenceOf = (source: PromptSection["source"]): string =>
     source === `persona`
         ? t(`chat.chatSystemPrompt.whencePersona`)
-        : source === `field-notes`
-          ? t(`chat.chatSystemPrompt.whenceFieldNotes`)
-          : source === `memory`
-            ? t(`chat.chatSystemPrompt.whenceMemory`)
-            : t(`chat.chatSystemPrompt.whenceGuidance`);
+        : source === `memory`
+          ? t(`chat.chatSystemPrompt.whenceMemory`)
+          : t(`chat.chatSystemPrompt.whenceGuidance`);
 
 const baseTitle = (base: NonNullable<ConversationPrompt["prompt"]>): string =>
     base.base.kind === `runtime`

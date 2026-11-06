@@ -8,7 +8,7 @@ import { isMissing } from "./runtime.js";
 // transcript says what the session then did; this says what it was given, and /intentic:stats joins the two.
 
 // The salts the sandbox draws with (the daemon's decide/experiments.ts), so one id draws the same arm in both.
-export const SALTS = { map: "workspace-map", notes: "field-notes", iq: "iq-search" } as const;
+export const SALTS = { map: "workspace-map", iq: "iq-search" } as const;
 
 export type Mechanism = keyof typeof SALTS;
 
@@ -21,14 +21,12 @@ export interface SessionRow {
     readonly project: string;
     readonly transcript?: string;
     readonly arms: Arms;
-    // What rode in: characters of the map and notes, whether the iq teaching went, and which notes revision.
-    readonly sent: { readonly map?: number; readonly notes?: number; readonly iq?: boolean };
-    readonly notesRevision?: string;
+    // What rode in: characters of the map, and whether the iq teaching went.
+    readonly sent: { readonly map?: number; readonly iq?: boolean };
 }
 
 const MECHANISM_ON: { readonly [K in Mechanism]: (options: Options) => boolean } = {
     map: (options) => options.project_map,
-    notes: (options) => options.field_notes,
     iq: (options) => options.iq,
 };
 
@@ -46,8 +44,8 @@ export const armsOf = (options: Options, session: string | undefined): Arms => {
 // Whether a mechanism goes to this session: on, and not drawn into the control.
 export const sends = (options: Options, arms: Arms, mechanism: Mechanism): boolean => MECHANISM_ON[mechanism](options) && arms[mechanism] !== false;
 
-// The arms worth recording: only for a mechanism that had something to give this session. With no areas to map, no
-// notes written yet, or no iq installed, both arms were sent the same nothing, and counting that session would compare
+// The arms worth recording: only for a mechanism that had something to give this session. With no areas to map, or no
+// iq installed, both arms were sent the same nothing, and counting that session would compare
 // it against itself.
 export const measuredArms = (arms: Arms, offered: { readonly [K in Mechanism]?: boolean }): Arms =>
     Object.fromEntries(Object.entries(arms).filter(([mechanism]) => offered[mechanism as Mechanism] === true));

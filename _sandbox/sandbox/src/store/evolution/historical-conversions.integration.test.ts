@@ -14,6 +14,7 @@ import { commitState, convergeState, resetStateStatus, type StateRoots } from ".
 import type { StructuralStep } from "./state-steps.js";
 import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
 import { projectsHostLeftoversStep } from "./steps/projects-host-leftovers.js";
+import { fieldNotesLeftoversStep } from "./steps/field-notes-leftovers.js";
 import { pushChecksLeftoversStep } from "./steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "./steps/state-regroup.js";
 import { earlierDefaultsStep } from "../../settings/earlier-defaults-step.js";
@@ -225,6 +226,24 @@ test("what the retired push checks kept is deleted, and nothing else is touched"
     await commitState(roots);
     clearNewestRun();
     expect((await converge(roots, [], [pushChecksLeftoversStep])).plan?.steps ?? []).toEqual([]);
+});
+
+test("what the retired field notes kept is deleted, and nothing else is touched", async () => {
+    const roots = await volumes();
+    const pins = join(roots.workspace, STATE_DIR, "local", "cache", "field-notes-pins.json");
+    const kept = join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"));
+    await put(pins, { briefs: {}, pins: {} });
+    await put(kept, { nightly: [] });
+
+    const outcome = await converge(roots, [], [fieldNotesLeftoversStep]);
+
+    expect(outcome.plan?.steps).toEqual([{ document: "field-notes-leftovers", change: "deletes the pins the retired field notes left behind" }]);
+    // The cache folder went with its last file.
+    expect(await readdir(join(roots.workspace, STATE_DIR, "local"))).not.toContain("cache");
+    expect(await json(kept)).toEqual({ nightly: [] });
+    await commitState(roots);
+    clearNewestRun();
+    expect((await converge(roots, [], [fieldNotesLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });
 
 // The folder registry of the retired one sandbox per computer (2026-10-21): deleted, and the folders it named, their

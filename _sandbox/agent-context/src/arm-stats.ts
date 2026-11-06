@@ -1,4 +1,4 @@
-// Measures the context mechanisms (the search teaching, the project map, the field notes) off rows of
+// Measures the context mechanisms (the search teaching, the project map) off rows of
 // turns rather than asserting their value: each mechanism holds a share of conversations out as a control, and this
 // compares the two arms. The teaching applies every turn, so a conversation's sample averages over its turns; the map
 // applies once, so its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the
@@ -16,7 +16,7 @@ const Z_95 = 1.96;
 // openingSearches: same, narrowed to before the turn first touched a file.
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
-// failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
+// failedCalls: tool calls that ended in error (the price tool search, the stable prompt and cold trim could charge).
 // openingPrompt: tokens the turn's first request sent, which every later call of the turn reads again (tool search).
 // openingWrite: tokens a follow-up turn's first request wrote to the cache rather than read from it (the stable prompt).
 export type MetricName =
@@ -117,8 +117,7 @@ const OPENED_WITH_LISTING: Metric = {
     uncapped: true,
 };
 const CALLS_BEFORE_TARGET: Metric = { name: "callsBeforeTarget", of: (turn) => turn.callsBeforeTarget, round: round1 };
-// The field notes' headline: the brief's largest section is a taxonomy of what fails, so calls that ended in error is
-// the reading it either moves or does not.
+// The price a context mechanism could charge: a model reaching for something the prompt no longer carries fails a call.
 const FAILED_CALLS: Metric = { name: "failedCalls", of: (turn) => turn.failedCalls, round: round1 };
 // Tool search's headline: what it takes out of the prompt is what every call of the turn stops re-reading. Both halves
 // or neither: a turn that reports only one of them measured half a request.
@@ -227,8 +226,6 @@ export const MECHANISMS = {
     search: { metrics: [SEARCH_CALLS, OPENING_SEARCHES], sampleUnit: "conversations", sample: meanOfTurns },
     // The map is sent once and judged on the turn it was sent to; `callsBeforeTarget` exists only on turns that edited.
     map: { metrics: [OPENED_WITH_LISTING, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
-    // The brief rides the whole session, so turn 40 is as much evidence as turn 1.
-    notes: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET], sampleUnit: "conversations", sample: meanOfTurns },
     // Deferred schemas leave every request of the session, so every turn is evidence; failed calls are the price it
     // could charge, a model reaching for a tool it has not looked up yet.
     toolSearch: { metrics: [OPENING_PROMPT, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },

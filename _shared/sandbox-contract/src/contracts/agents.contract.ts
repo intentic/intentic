@@ -136,7 +136,7 @@ export const agentsContract = {
             path: "/agents/{id}/system-prompt",
             summary: "What this conversation is told before it is asked anything",
             description:
-                "The system prompt the most recent turn of this conversation actually ran on: which base it was, and every piece the sandbox added to it — this product's guidance, the persona, the field notes, the workspace's own standing rules — each with the exact words the model received. None of this appears in the transcript, so this is the only way to read it.",
+                "The system prompt the most recent turn of this conversation actually ran on: which base it was, and every piece the sandbox added to it — this product's guidance, the persona, the workspace's own standing rules — each with the exact words the model received. None of this appears in the transcript, so this is the only way to read it.",
         })
         .input(AgentIdSchema)
         .output(ConversationPromptSchema),

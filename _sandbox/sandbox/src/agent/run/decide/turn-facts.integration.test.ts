@@ -1,7 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
@@ -290,61 +287,3 @@ test.each(["claude", "codex", "grok"] as const)("%s is read the note on its open
     expect(facts.landingChecksNote?.text).toContain("Nothing else checks your work when you finish");
 });
 
-// The brief is daemon-kept config that git does not track, so an isolated turn's worktree never has a copy: read from the
-// turn's own tree it reached no conversation at all, while the settings row, reading the shared root, said it was sent.
-test("the field notes are read from the shared workspace root, not the turn's own tree", async () => {
-    const root = await mkdtemp(join(tmpdir(), "notes-root-"));
-    const worktree = await mkdtemp(join(tmpdir(), "notes-worktree-"));
-    try {
-        await mkdir(join(root, FIELD_NOTES_FILE, ".."), { recursive: true });
-        await writeFile(
-            join(root, FIELD_NOTES_FILE),
-            ["priority[1]{rank,id,title,cost}:", "  1,ground,Which tree you are in,edits land outside the branch", "ground:", "  check: git branch", ""].join("\n"),
-        );
-        const services = servicesWith({
-            workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-            sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ fieldNotes: true })),
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
-        });
-
-        const facts = admitted(await gatherTurnFacts(services, turn({ conversationId: "c-notes" }), { ...context, localCwd: worktree, effectiveCwd: worktree }));
-
-        expect(facts.fieldNotes?.text).toContain("check: git branch");
-    } finally {
-        await Promise.all([root, worktree].map((dir) => rm(dir, { recursive: true, force: true })));
-    }
-});
-
-// The brief rides the front of the cached prefix: a rewrite reaching a live conversation would re-write its whole cache.
-// So a conversation keeps what it was first sent, a fork keeps its parent's, and only a compaction (whose cache is gone
-// anyway) or a new conversation reads the rewrite.
-test("a conversation keeps the field notes it was first sent until a compaction", async () => {
-    const root = await mkdtemp(join(tmpdir(), "notes-pin-"));
-    const notes = (check: string): string =>
-        ["priority[1]{rank,id,title,cost}:", "  1,ground,Which tree you are in,edits land outside the branch", "ground:", `  check: ${check}`, ""].join("\n");
-    try {
-        await mkdir(join(root, FIELD_NOTES_FILE, ".."), { recursive: true });
-        await writeFile(join(root, FIELD_NOTES_FILE), notes("first"));
-        const read = async (sent: Parameters<typeof turn>[0], entry: ReturnType<typeof conversationAfter>): Promise<string | undefined> => {
-            const services = servicesWith({
-                workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-                sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ fieldNotes: true })),
-                agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
-            });
-            return admitted(await gatherTurnFacts(services, turn(sent), { ...context, localCwd: root, effectiveCwd: root })).fieldNotes?.text;
-        };
-
-        expect(await read({ conversationId: "c-pin" }, conversationAfter(0, { id: "c-pin" }))).toContain("check: first");
-        await writeFile(join(root, FIELD_NOTES_FILE), notes("second"));
-
-        expect(await read({ conversationId: "c-pin" }, conversationAfter(3, { id: "c-pin" }))).toContain("check: first");
-        expect(await read({ conversationId: "c-fork", forkOf: { conversationId: "c-pin", keep: 2, files: "now" } }, conversationAfter(0, { id: "c-fork" }))).toContain(
-            "check: first",
-        );
-        expect(await read({ conversationId: "c-new" }, conversationAfter(0, { id: "c-new" }))).toContain("check: second");
-        expect(await read({ conversationId: "c-pin" }, conversationAfter(4, { id: "c-pin", compactedTurn: 3 }))).toContain("check: second");
-        expect(await read({ conversationId: "c-pin" }, conversationAfter(6, { id: "c-pin", compactedTurn: 3 }))).toContain("check: second");
-    } finally {
-        await rm(root, { recursive: true, force: true });
-    }
-});

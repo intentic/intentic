@@ -17,9 +17,8 @@ const get = jest.fn<SandboxRpc[`settings`][`get`]>();
 const set = jest.fn<SandboxRpc[`settings`][`set`]>();
 jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
-// The group's two other reads, which say nothing about a save.
+// The group's other read, which says nothing about a save.
 jest.mock(`../../usage/useSavings`, () => ({ useSavings: () => ({ savings: ref(undefined) }) }));
-jest.mock(`./useFieldNotes`, () => ({ useFieldNotes: () => ({ status: ref(undefined) }) }));
 
 const { queryClient } = await import(`../../../../lib/queryPersistence`);
 const { default: AgentCodeSearch } = await import(`./AgentCodeSearch.vue`);

@@ -91,9 +91,7 @@ const cleanerLines = (summary: SavingsSummary, options: Options): string[] => {
 
 interface PluginTurn extends MeasuredTurn {
     readonly mapArm?: boolean | undefined;
-    readonly notesArm?: boolean | undefined;
     readonly iqArm?: boolean | undefined;
-    readonly notesCohort?: string | undefined;
 }
 
 // A recorded session's turns, scored by the same ledger the sandbox scores a live turn with.
@@ -120,9 +118,7 @@ export const turnsOf = (row: SessionRow): PluginTurn[] => {
             turnIndex: turn.index,
             ...metrics.reading(edited),
             mapArm: row.arms.map,
-            notesArm: row.arms.notes,
             iqArm: row.arms.iq,
-            notesCohort: row.notesRevision,
         };
     });
 };
@@ -133,12 +129,6 @@ const DESIGNS: readonly { readonly title: string; readonly option: keyof Options
         option: "project_map",
         design: { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: () => undefined },
         reads: "opening turns that listed directories",
-    },
-    {
-        title: "Field notes",
-        option: "field_notes",
-        design: { ...MECHANISMS.notes, arm: (turn) => turn.notesArm, cohort: (turn) => turn.notesCohort },
-        reads: "failed tool calls per turn",
     },
     { title: "iq teaching", option: "iq", design: { ...MECHANISMS.search, arm: (turn) => turn.iqArm, cohort: () => undefined }, reads: "search calls per turn" },
 ];

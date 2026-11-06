@@ -1,31 +1,27 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { fieldNotes } from "@intentic/agent-context/field-notes";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { readOptions, saveOptions, type Options } from "./features.js";
-import { dataDir, type Env, fieldNotesFile, type HookInput, projectDir, runHook } from "./hook-io.js";
+import { dataDir, type Env, type HookInput, projectDir, runHook } from "./hook-io.js";
 import { claimIfDue, onPath, pluginFile, projectSlug, startDetached } from "./runtime.js";
 import { armsOf, type Mechanism, measuredArms, recordSession, sends, type SessionRow } from "./sessions.js";
 
-// SessionStart: what a session is told as it opens (the project map, this project's field notes, the iq teaching), which
+// SessionStart: what a session is told as it opens (the project map and the iq teaching), which
 // arm it drew for each, and the background work a session starts (iq's transcript ingest). The same notes the sandbox
 // composes into its turns, from the same code, delivered as this hook's additional context.
 
-// The field-notes budget the sandbox defaults to, in characters: the ranked brief is cut to whole sections under it.
-const NOTES_BUDGET = 4_000;
-
-// A notice about the setup (iq missing, a notes file that cannot be read) is said once a day, not on every session.
+// A notice about the setup (iq missing) is said once a day, not on every session.
 const NOTICE_EVERY_MS = 24 * 60 * 60_000;
 
-// A new conversation (a launch or a /clear) opens with the notes and is measured; a compaction keeps the session but
+// A new conversation (a launch or a /clear) opens with the context and is measured; a compaction keeps the session but
 // loses what rode in, so it is told again without being counted twice; a resume or a fork already carries them.
 const TOLD_ON = new Set(["startup", "clear", "compact"]);
 const COUNTED_ON = new Set(["startup", "clear"]);
 
 interface Composed {
     readonly context: string[];
-    readonly row: Pick<SessionRow, "arms" | "sent" | "notesRevision">;
+    readonly row: Pick<SessionRow, "arms" | "sent">;
     readonly notices: string[];
 }
 
@@ -38,32 +34,16 @@ const compose = (options: Options, input: HookInput, project: string, arms: Sess
         }
     };
     const iq = options.iq && onPath("iq", env);
-    const sent: { map?: number; notes?: number; iq?: boolean } = {};
+    const sent: { map?: number; iq?: boolean } = {};
     // What each measured mechanism had to give, worked out on both arms, so a control session is only counted as one
     // when there was something to withhold from it.
     const offered: { [K in Mechanism]?: boolean } = {};
-    let notesRevision: string | undefined;
     if (options.project_map) {
         const note = workspaceMapNote({ root: project, cwd: input.cwd ?? project, exactPaths: iq ? "`iq files` or Read" : "Glob or Read" });
         offered.map = note !== undefined;
         if (note !== undefined && sends(options, arms, "map")) {
             context.push(note);
             sent.map = note.length;
-        }
-    }
-    if (options.field_notes) {
-        // Read on both arms, so a control session still names the revision it was withheld from.
-        const brief = fieldNotes({
-            file: fieldNotesFile(project),
-            title: "Field notes for this project",
-            budget: NOTES_BUDGET,
-            onUnreadable: (why) => notice(`notes-${projectSlug(project)}`, `intentic: this project's field notes were not sent: ${why}. Run /intentic:field-notes to rewrite them.`),
-        });
-        notesRevision = brief?.revision;
-        offered.notes = brief !== undefined;
-        if (brief !== undefined && sends(options, arms, "notes")) {
-            context.push(brief.text);
-            sent.notes = brief.chars;
         }
     }
     if (options.iq) {
@@ -80,7 +60,7 @@ const compose = (options: Options, input: HookInput, project: string, arms: Sess
             notice("iq-missing", "intentic: iq search is on but the `iq` CLI is not installed (`npm i -g @intentic/iq`), so nothing was taught.");
         }
     }
-    return { context, row: { arms: measuredArms(arms, offered), sent, ...(notesRevision === undefined ? {} : { notesRevision }) }, notices };
+    return { context, row: { arms: measuredArms(arms, offered), sent }, notices };
 };
 
 // Values for every Bash command this session runs: where the project is (the bundled fileq keys its cache by it) and

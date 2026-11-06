@@ -1,6 +1,5 @@
 import type { GettingStarted } from "@intentic/sandbox-contract/schemas/settings";
 import { freshEdition } from "../../mode";
-import { STARTED_AT } from "../board/roster";
 import {
     adoptRepoChecks,
     adoptTimezone,
@@ -43,17 +42,6 @@ export const settingsDoors = {
         return gettingStarted;
     },
     savings: () => DEMO_SAVINGS,
-    // A brief that exists, is maintained, and does not entirely fit the budget: the state the row has the most to say
-    // about, and the only one where "ranks 1-5 of 12" means anything.
-    fieldNotes: () => ({
-        present: true,
-        writtenAt: STARTED_AT - 19 * 24 * 60 * 60_000,
-        ranksSent: 5,
-        ranksTotal: 12,
-        chars: 2_784,
-        automation: `enabled`,
-        nextRunAt: STARTED_AT + 11 * 24 * 60 * 60_000,
-    }),
     // No rule has ever fired in a recorded demo; an empty table is the honest answer.
     firings: () => ({}),
     // What the two repositories in this workspace declare for themselves, in the three states the group has to be

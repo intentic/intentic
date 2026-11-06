@@ -45,6 +45,11 @@ export interface SessionEntry {
             readonly cache_read_input_tokens?: number;
             readonly cache_creation_input_tokens?: number;
             readonly output_tokens?: number;
+            // The request's cache write split by the lifetime it went in under (prompt-cache.ts ttlFromCacheCreation).
+            readonly cache_creation?: {
+                readonly ephemeral_5m_input_tokens?: number | null;
+                readonly ephemeral_1h_input_tokens?: number | null;
+            } | null;
         };
     };
     readonly [key: string]: unknown;

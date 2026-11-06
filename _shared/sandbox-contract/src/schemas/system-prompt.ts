@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SystemPromptModeSchema } from "./settings.js";
 
 // Every section names its mechanism: the reader asks "did my AGENTS.md arrive", not "what does paragraph nine say".
-export const PromptSectionSourceSchema = z.enum(["guidance", "persona", "field-notes", "memory"]);
+export const PromptSectionSourceSchema = z.enum(["guidance", "persona", "memory"]);
 export type PromptSectionSource = z.infer<typeof PromptSectionSourceSchema>;
 
 export const PromptSectionSchema = z.object({

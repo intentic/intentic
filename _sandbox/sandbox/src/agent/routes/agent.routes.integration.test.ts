@@ -1779,8 +1779,8 @@ test("a turn that succeeds is recorded as such, with the experiment metrics it e
     expect("errorMessage" in (ledger[0] ?? {})).toBe(false);
 });
 
-// What cost the field-notes experiment every sample it had drawn: planning stamped an arm per turn and the append
-// copied the stamps it knew by name, so a stamp added to planning alone was measured and then dropped on the floor.
+// What once cost an experiment every sample it had drawn: planning stamped an arm per turn and the append copied the
+// stamps it knew by name, so a stamp added to planning alone was measured and then dropped on the floor.
 test("an arm planning drew rides the ledger row without the append naming the field", async () => {
     const ledger: Record<string, unknown>[] = [];
     const client = clientFor(
@@ -1792,16 +1792,16 @@ test("an arm planning drew rides the ledger row without the append naming the fi
                     yield { kind: "done" };
                 },
                 usage: { record: async (turn) => void ledger.push(turn) },
-                sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ fieldNotes: true, fieldNotesHoldout: 0.5 }) },
+                sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ iqSearch: true, iqSearchHoldout: 0.5 }) },
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "go", conversationId: "conv-notes" });
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-arm" });
 
     await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     // The arm this id draws, from the same function planning draws it with: a transcribed `true` would also pass
     // against a row carrying the opposite arm.
-    expect(ledger[0]).toMatchObject({ notesArm: experimentArm("field-notes", "conv-notes", 0.5), turnIndex: 0 });
+    expect(ledger[0]).toMatchObject({ iqSearchArm: experimentArm("iq-search", "conv-arm", 0.5), turnIndex: 0 });
 });
 
 // Whether the work was checked, folded off the generic frame stream, so a Codex or Cursor turn is judged the same way a

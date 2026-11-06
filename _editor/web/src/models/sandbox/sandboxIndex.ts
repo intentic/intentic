@@ -187,7 +187,6 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [
             t(`sandbox.agentCodeSearch.iqCodeSearch`),
             t(`sandbox.agentCodeSearch.projectMap`),
-            t(`sandbox.agentCodeSearch.fieldNotes`),
             t(`sandbox.search.agentCodeSearch`),
         ],
     },

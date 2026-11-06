@@ -76,18 +76,18 @@ test("the cleaners' saving, and a measured mechanism's effect with its margin", 
 
 test("a mechanism that is off, or measured by nobody, says which", () => {
     const data = tempDir();
-    const report = statsReport({ data, project: PROJECT, options: readOptions({ CLAUDE_PLUGIN_OPTION_FIELD_NOTES: "false", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0" }) });
+    const report = statsReport({ data, project: PROJECT, options: readOptions({ CLAUDE_PLUGIN_OPTION_IQ: "false", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0" }) });
     expect(report).toContain("No commands have been trimmed yet.");
-    expect(report).toContain("Field notes: switched off.");
+    expect(report).toContain("iq teaching: switched off.");
     expect(report).toContain("Project map: on for every session; nothing is held out (`holdout` is 0), so there is nothing to compare.");
 });
 
 test("the report's switches are the ones the last session opened with, and a flag overrides one", () => {
     const data = tempDir();
     expect(parseStatsArgs(["--data", data, "--project", "/p"]).options).toEqual(readOptions({}));
-    saveOptions(data, readOptions({ CLAUDE_PLUGIN_OPTION_FIELD_NOTES: "false", CLAUDE_PLUGIN_OPTION_CLEANERS: "-cap,-wide", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.2" }));
+    saveOptions(data, readOptions({ CLAUDE_PLUGIN_OPTION_PROJECT_MAP: "false", CLAUDE_PLUGIN_OPTION_CLEANERS: "-cap,-wide", CLAUDE_PLUGIN_OPTION_HOLDOUT: "0.2" }));
     const args = parseStatsArgs(["--data", data, "--project", "/p", "--option", "holdout=0.3"]);
     expect(args).toMatchObject({ data, project: "/p" });
-    expect(args.options).toMatchObject({ field_notes: false, cleaners: "-cap,-wide", holdout: 0.3, iq: true });
+    expect(args.options).toMatchObject({ project_map: false, cleaners: "-cap,-wide", holdout: 0.3, iq: true });
     expect(parseStatsArgs(["--data", data, "--project", "/p", "all"]).project).toBeUndefined();
 });

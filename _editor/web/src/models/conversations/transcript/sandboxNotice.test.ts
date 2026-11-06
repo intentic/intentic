@@ -61,7 +61,7 @@ const FOLDED: readonly TranscriptRow[] = [
     ]),
     ...turn([{ kind: `prompt_cache`, readTokens: 305_000, writtenTokens: 2_000, kept: { forMs: 125 * 60_000, refreshes: 1 } }]),
     ...turn([{ kind: `prompt_cache`, readTokens: 0, writtenTokens: 310_000, kept: { forMs: 7 * 60_000, refreshes: 3 } }]),
-    ...turn([{ kind: `context_trim`, window: 16_384, omitted: [`Field notes`, `Skills`], base: true }]),
+    ...turn([{ kind: `context_trim`, window: 16_384, omitted: [`Working in this sandbox`, `Skills`], base: true }]),
     ...turn([{ kind: `context_trim`, window: 32_768, omitted: [], base: false }]),
     ...turn([{ kind: `install`, reach: `own-copy`, projects: [`video`] }]),
     ...turn([{ kind: `install`, reach: `own-copy`, projects: [] }]),
@@ -252,7 +252,7 @@ describe(`a sandbox notice, as the chat says it`, () => {
             `Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez 7m (3 odświeżenia): 310k tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej.`,
         );
         expect(line(coded(`contextTrim`))).toBe(
-            `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Field notes, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane.`,
+            `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Working in this sandbox, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane.`,
         );
         await setLocale(`en`);
     });

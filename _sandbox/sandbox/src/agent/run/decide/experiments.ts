@@ -1,7 +1,6 @@
 import { experimentArm } from "@intentic/agent-context/experiments";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { opt } from "../../../opt.js";
 import type { TurnContextOutcome, TurnContextSkip } from "../turn/turn-context.js";
@@ -12,20 +11,11 @@ import type { TurnExperimentStamps } from "../turn/turn-plan.js";
 // The draw itself (experimentArm) is @intentic/agent-context's, the same one the Claude Code plugin draws its sessions
 // with.
 
-// The field notes as one turn sees them: the arm it drew, the brief it read, and what (if anything) it was sent. Read on
-// both arms, so a control turn can name the revision it was withheld from.
-export interface TurnFieldNotes {
-    readonly arm: boolean | undefined;
-    readonly brief: FieldNotes | undefined;
-    readonly note: string | undefined;
-}
-
 // What one turn measured of each experiment: the only input its stamps are written from.
 export interface ExperimentReadings {
     readonly iqSearch: { readonly arm: boolean | undefined; readonly cohort: string | undefined };
     // The notes as the turn sends them, trimmed: the map's size is read off what was composed, not the decision to send.
     readonly workspaceMap: { readonly arm: boolean | undefined; readonly notes: readonly TurnNote[] | undefined };
-    readonly fieldNotes: TurnFieldNotes;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
     // Undefined where the turn is not one the switch reaches (decide/turn-premise.ts toolSearchReaches).
@@ -73,17 +63,6 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
             ...opt("mapArm", arm),
             ...opt("mapCohort", arm === undefined ? undefined : MAP_COMPARISON),
             ...opt("mapChars", notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length),
-        }),
-    },
-    fieldNotes: {
-        salt: "field-notes",
-        on: (settings) => settings.fieldNotes,
-        holdout: (settings) => settings.fieldNotesHoldout,
-        // Chars only when sent, since a brief read but withheld cost nothing; the cohort even on control turns, to pair them.
-        stamps: ({ arm, brief, note }) => ({
-            ...opt("notesArm", arm),
-            ...opt("notesChars", note === undefined ? undefined : brief?.chars),
-            ...opt("notesCohort", brief?.revision),
         }),
     },
     // Also behind env.config.ts iqTurnContext, and holding nobody out until re-measured, so it stamps delivery, not assignment.

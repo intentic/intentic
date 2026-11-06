@@ -6,7 +6,7 @@ import type { SavingsReport, TurnExperiment } from "@intentic/sandbox-contract/s
 import { opt } from "../opt.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The mechanism experiments (iq search teaching, project map, field notes, tool search, stable prompt, cold trim)
+// The mechanism experiments (iq search teaching, project map, tool search, stable prompt, cold trim)
 // measured off the usage ledger.
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
@@ -30,22 +30,6 @@ const MAP_DESIGN: Design<UsageTurn> = {
     arm: (turn) => turn.mapArm,
     cohort: (turn) => turn.mapCohort,
     comparable: (cohort) => !OTHER_MAP_COMPARISONS.has(cohort),
-};
-
-// Cohorted, unlike the map, because the file is rewritten monthly and a window wide enough to reach MIN_ARM_TURNS is
-// wide enough to hold two revisions.
-// One brief under three hashes, read as the current one. `8ce12338` hashed the whole file of 2026-10-06; `3b657c47` the
-// same file plus a block the index never ranked (2026-10-12), which no turn was sent; `2eba3285` is how the revision
-// hashes that brief since it covers only what can be sent (field-notes.ts). Split, the comparison restarted over an edit
-// nobody received and set its first answer aside.
-const SAME_NOTES_BRIEF: ReadonlyMap<string, string> = new Map([
-    ["8ce12338", "2eba3285"],
-    ["3b657c47", "2eba3285"],
-]);
-const NOTES_DESIGN: Design<UsageTurn> = {
-    ...MECHANISMS.notes,
-    arm: (turn) => turn.notesArm,
-    cohort: (turn) => (turn.notesCohort === undefined ? undefined : (SAME_NOTES_BRIEF.get(turn.notesCohort) ?? turn.notesCohort)),
 };
 
 // No revisions to keep apart: the switch is the CLI's own, and the tool set it defers is whatever the turn mounted.
@@ -106,12 +90,11 @@ const searchExperiment = (turns: readonly UsageTurn[]): TurnExperiment | undefin
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "toolSearch" | "stablePrompt" | "coldTrim">> => {
+): Promise<Pick<SavingsReport, "search" | "map" | "toolSearch" | "stablePrompt" | "coldTrim">> => {
     const turns = (await usage.turns(window)).filter(measurable);
     return {
         ...opt("search", searchExperiment(withinOneLoop(turns, SEARCH_DESIGN))),
         ...opt("map", measureExperiment(withinOneLoop(turns, MAP_DESIGN), MAP_DESIGN)),
-        ...opt("notes", measureExperiment(withinOneLoop(turns, NOTES_DESIGN), NOTES_DESIGN)),
         ...opt("toolSearch", measureExperiment(turns, TOOL_SEARCH_DESIGN)),
         ...opt("stablePrompt", measureExperiment(turns, STABLE_PROMPT_DESIGN)),
         ...opt("coldTrim", measureExperiment(turns, COLD_TRIM_DESIGN)),

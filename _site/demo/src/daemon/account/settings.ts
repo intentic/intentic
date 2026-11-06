@@ -2,7 +2,6 @@ import type { ConversationPrompt } from "@intentic/sandbox-contract/schemas/syst
 import { REPO_CHECKS_FILE, type RepoChecksList, type SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
 import { RUN_TARGETS_FILE, RunTargetsFileSchema, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import { ROOT_RUN_JSON, WEB_RUN_JSON } from "../../fixture/workspace";
 import { STARTED_AT } from "../board/roster";
 
@@ -38,16 +37,13 @@ export const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     iqSearchHoldout: 0.1,
     workspaceMap: true,
     workspaceMapHoldout: 0.1,
-    fieldNotes: true,
-    fieldNotesBudget: 4000,
-    fieldNotesHoldout: 0.2,
     toolSearch: true,
     toolSearchHoldout: 0.5,
     stableSystemPromptHoldout: 0.5,
 };
 
 // What a conversation was told before its first word. Every source at once, because the chip's whole job is to let a
-// reader tell an arriving AGENTS.md from a dropped one, and a fixture with three of the four could not show that.
+// reader tell an arriving AGENTS.md from a dropped one, and a fixture missing one of them could not show that.
 export const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
     prompt: {
         at: STARTED_AT - 6 * 60_000,
@@ -67,15 +63,6 @@ export const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
                 source: `persona`,
                 title: `Who this turn is acting as`,
                 text: "## Who this turn is acting as\n\nYou are acting as **Studio**, which may read and write files and run commands, and reaches the `github` account alone.",
-            },
-            {
-                source: `field-notes`,
-                title: `Field notes for this sandbox`,
-                text:
-                    `## Field notes for this sandbox\n\nWritten 19 days ago from this sandbox's own record; ranks 1-5 of 12 are below.\n\n` +
-                    `### Which tree you are standing in\n\n\`${WORKSPACE_ROOT}\` is the shared checkout every other agent is editing; your branch ` +
-                    `is the worktree you were started in.\n\n### Toolchain\n\n\`pnpm\`'s exit code lies after a successful build here: ` +
-                    `\`node_modules\` is an overlay mount and the hardlink sync fails across the device boundary. Read the build's own output, not the code.`,
             },
             {
                 source: `memory`,
@@ -190,26 +177,5 @@ export const DEMO_SAVINGS: SavingsReport = {
             },
             { metric: `callsBeforeTarget`, on: { turns: 355, mean: 5.2 }, off: { turns: 100, mean: 5.4 }, marginPct: 17.8, controlTurnsNeeded: 640 },
         ],
-    },
-    // The field notes in their third state, the one neither block above shows: not enough control conversations yet, so
-    // each row says how far along it is and no claim is made. `cohort` is the revision in play, which is what a monthly
-    // rewrite moves; the revision before it had an answer, which stands under the new one until that has its own.
-    notes: {
-        minTurns: 30,
-        sampleUnit: `conversations`,
-        cohort: `a41f9c2e`,
-        metrics: [
-            { metric: `failedCalls`, on: { turns: 84, mean: 1.3 }, off: { turns: 21, mean: 2.1 } },
-            { metric: `callsBeforeTarget`, on: { turns: 84, mean: 4.9 }, off: { turns: 21, mean: 5.1 } },
-        ],
-        previous: {
-            from: Date.UTC(2026, 8, 1, 9),
-            to: Date.UTC(2026, 8, 30, 18),
-            cohort: `7c03be51`,
-            metrics: [
-                { metric: `failedCalls`, on: { turns: 212, mean: 1.1 }, off: { turns: 64, mean: 1.6 }, marginPct: 22.4, deltaPct: -31.3 },
-                { metric: `callsBeforeTarget`, on: { turns: 212, mean: 5 }, off: { turns: 64, mean: 5.2 }, marginPct: 14.9 },
-            ],
-        },
     },
 };

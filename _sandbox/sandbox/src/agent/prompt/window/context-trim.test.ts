@@ -43,7 +43,7 @@ test("a runtime that cannot replace its base keeps it whatever the window says",
 });
 
 // The state a turn starts from, with nothing taken from the system prompt unless a case says so.
-const started = (trim: TurnTrim | undefined, system = { guidance: false, fieldNotes: false }) =>
+const started = (trim: TurnTrim | undefined, system = { guidance: false }) =>
     trim === undefined ? undefined : trimState(trim, system);
 
 // The set a small window may take is exactly the set a persona card may take. Anything outside it either keeps the
@@ -86,7 +86,7 @@ test("notes added after planning face the same window, and land in the same list
 test("the notice names only what was actually removed", () => {
     const trim = turnTrim(16_384, "replace")!;
 
-    const { state } = applyTrim(trimState(trim, { guidance: true, fieldNotes: false }), [note(WORKSPACE_MAP_NOTE_TITLE)]);
+    const { state } = applyTrim(trimState(trim, { guidance: true }), [note(WORKSPACE_MAP_NOTE_TITLE)]);
     const frame = trimFrame(state);
 
     expect(frame?.omitted).toEqual([WORKSPACE_MAP_NOTE_TITLE, GUIDANCE_TITLE]);

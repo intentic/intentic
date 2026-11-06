@@ -18,7 +18,7 @@ settings.json):
 - **Claude**: Claude Code's own prompt, read from the CLI installed in the sandbox.
 - **Custom**: the owner's text (`systemPrompt`, at most 20,000 characters) is the whole prompt. Both built-in bases
   go, and so does the product's own guidance, including what drives the chat's question cards, checklist panel
-  and browser tools, the field notes and the note naming the persona a turn acts as. The owner's `AGENTS.md`
+  and browser tools, and the note naming the persona a turn acts as. The owner's `AGENTS.md`
   still rides with it.
 
 Runtimes take it differently: Claude Code, Codex and OpenCode (Grok, Gemini) replace their base prompt with it;
@@ -35,10 +35,6 @@ exactly as a custom sandbox prompt does; empty or missing falls back to the sand
 Sandbox ▸ Agent ▸ Instructions, **Skills**. A persona's own are in its kit, `personas/<id>/skills/`. The
 image-baked ones, this skill among them, are in `/root/.claude/skills/`, which only the Claude Code loop loads.
 
-**Field notes**: `.intentic/config/field-notes.toon`, a brief on how work goes in this sandbox, rewritten monthly by
-an automation from past sessions. Sent only with the **Field notes** switch on (Sandbox ▸ Agent ▸ Tools;
-`fieldNotes`, off by default), up to `fieldNotesBudget` characters (default 4,000).
-
 ## When a change reaches agents
 
 No restart is needed for any of these. Each is read when a turn is planned, so a change applies from the NEXT turn
@@ -49,9 +45,9 @@ of every conversation, including ones already open; a turn already running keeps
   picked, and to jobs that name no model, so an open chat keeps the model its pill shows.
 - Areas and grants: a grant given to or taken from one conversation applies from its next turn.
 - The checks each repository declares (`.intentic/checks.json`), read every turn.
-- `AGENTS.md` and field notes, with one catch below.
+- `AGENTS.md`, with one catch below.
 
-The catch: `AGENTS.md` and field notes are read from the turn's own tree. An isolated conversation (the default)
+The catch: `AGENTS.md` is read from the turn's own tree. An isolated conversation (the default)
 works in a worktree rebased onto the main tree's last COMMIT before each turn, so an edit the owner has not
 committed yet does not reach isolated conversations until it is committed (**Save changes** / **Commit**). With
 **Save a version of accepted work** on, the owner's uncommitted edits are committed as "Your edits" before each
@@ -63,7 +59,7 @@ map (`workspaceMap`; on for a sandbox made from November 2026, off for an older 
 `iqSearch` is), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
 skills folder themselves). The map lists every area of the project with its size and purpose;
 `workspaceMapHoldout` is the share of conversations that open without it. The comparison shares
-(`workspaceMapHoldout`, `iqSearchHoldout`, `fieldNotesHoldout`, `toolSearchHoldout`, `stableSystemPromptHoldout`,
+(`workspaceMapHoldout`, `iqSearchHoldout`, `toolSearchHoldout`, `stableSystemPromptHoldout`,
 `coldTrimHoldout`) assign whole conversations, not turns.
 
 `toolSearch` (on by default) keeps the descriptions of connected tools (browsers, devices, accounts, phones) out of
