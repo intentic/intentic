@@ -17,9 +17,11 @@ import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-wa
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { closeCheckoutFollow } from "../workspace/watch/checkout-follow.js";
 import type { BootPhase } from "./boot-phase.js";
+import { inBackground } from "../system/background-git.js";
 
 // Three watchers, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs.
-// Nothing polls. (netd's per-checkout change counts are a fourth feed, but one that answers status reads,
+// Nothing polls. Each starts under its own name, so the git its reactions run is counted as that watch's
+// (`bg ref-watch › agents.standings`, system/background-git.ts). (netd's per-checkout change counts are a fourth feed, but one that answers status reads,
 // git/feed/checkout-feed.ts, and moves none of the reactions here.)
 
 // Every workspace path an installed extension's code or switches live under, in the watcher's own relative spelling,
@@ -52,7 +54,7 @@ const startShadowKeeper = ({ logger, services, shutdown }: Pick<BootPhase, "logg
             }
         }),
     );
-    const first = setTimeout(() => void keeper.sweep(), SHADOW_SWEEP_DELAY_MS);
+    const first = inBackground("shadow-keeper", () => setTimeout(() => void keeper.sweep(), SHADOW_SWEEP_DELAY_MS));
     first.unref();
     shutdown.push(() => clearTimeout(first));
 };
@@ -60,7 +62,7 @@ const startShadowKeeper = ({ logger, services, shutdown }: Pick<BootPhase, "logg
 export const startChangeReactions = ({ logger, role, services, shutdown, traits }: BootPhase): void => {
     // Built once, not per change batch.
     const extensionSource = extensionSourceOf(services.workspace.root);
-    shutdown.push(startWorkspaceWatch(services.workspace.root, logger));
+    shutdown.push(inBackground("workspace-watch", () => startWorkspaceWatch(services.workspace.root, logger)));
     // The folders readers follow in conversations' own copies (workspace.followCheckout), let go with the shared watch.
     shutdown.push(closeCheckoutFollow);
     shutdown.push(
@@ -93,8 +95,8 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     if (role.container) {
         startShadowKeeper({ logger, services, shutdown });
     }
-    shutdown.push(startRepoWatch(services.workspace.root, logger));
-    shutdown.push(startRefWatch(services.workspace.root, subscribeRepoChanges, logger));
+    shutdown.push(inBackground("repo-watch", () => startRepoWatch(services.workspace.root, logger)));
+    shutdown.push(inBackground("ref-watch", () => startRefWatch(services.workspace.root, subscribeRepoChanges, logger)));
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     // Everything a land standing is measured against outside the registry: refs (main's HEAD, agent tips) and the main
@@ -118,7 +120,7 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
             };
         }),
     );
-    shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
+    shutdown.push(inBackground("vanished-repos", () => startVanishedRepoSweep(services, subscribeRepoChanges)));
     // A repo cloned mid-session gets the file-mode rule boot gave the rest, not a boot later.
     if (traits.relocateGitDirs) {
         shutdown.push(
@@ -135,5 +137,7 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     shutdown.push(onListenerStatusMoved(() => publishRuntimeChange("activity")));
 
     // Incremental, so a valid on-disk index survives a boot.
-    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"));
+    void inBackground("iq-warm", () => services.iq.warm()).catch((error: unknown) =>
+        logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"),
+    );
 };

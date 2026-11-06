@@ -30,7 +30,8 @@ owns the layout and prunes by size, age and count.
 | File | What it records | Keys to read | Tool that reads it |
 | --- | --- | --- | --- |
 | `daemon.log` (+ `daemon.log.1`) | The daemon's pino lines | `time`, `level` (a label), `message` (not `msg`), `ctx.conversationId`, `ctx.requestId`, `err` | `errors`, `timeline` |
-| `perf.jsonl` (+ `.1`) | Only the spans slower than their budget, never every request; every 10 minutes, the ranked summary of every op since the daemon started | `perf` (the op), `ms`, `load1`, and the op's subject: `path`, `git`, `tool`; the summary line carries `perfSummary`, `since`, `everyMs` instead | `slow` (spans only) |
+| `perf.jsonl` (+ `.1`, `perf.jsonl.<time>.gz`) | Only the spans slower than their budget, never every request; every 10 minutes, the ranked summary of every op since the daemon started | `perf` (the op), `ms`, `load1`, and the op's subject: `path`, `git`, `tool`; the summary line carries `perfSummary`, `since`, `everyMs` instead | `slow` (spans only) |
+| `perf-rollups.jsonl` (+ `.1`, `.<time>.gz`) | Every span, slow or not: per 10-minute window on the clock, one row per op and subject (a request's route, a git subcommand, a hook's tool; an op's 24 costliest, the rest as `(other)`) with a log-scale histogram that adds across windows and boots | `at` (the window's start), `op`, `subject`, `count`, `totalMs`, `failed`, `p50`/`p90`/`p99`, `minMs`/`maxMs`, `b0`+`b` (the histogram, `v` its version); `from`/`to` only on a window counted in part | `slow` with `source: "rollups"` |
 | `client.jsonl` (+ `.1`) | Errors, stalls and recoveries browsers reported | `event`, `message`, `report.route` | `errors` with `source: "browser"` |
 | `resource-metrics.jsonl` | One sample a minute, about a week of them | `at`, `uptimeSeconds`, `system.*`, `window.*`, `daemon.*`, `processes.byRole`, `processes.top` | `resources` |
 | `restarts.jsonl` | One line per boot: the boot, and how and why the run before it ended | `at`, `boot.version`, `previous.ended`, `previous.intent.by`, `previous.intent.reason` | `restarts` |
@@ -44,9 +45,11 @@ Outside the logs directory, `/history/activity.jsonl` holds the audit trail (tur
 dependency checks, CI repairs, refused pushes; keys `at`, `type`, `conversationId`, `turnId`, `content`), read by
 `timeline`, and `/history/usage.jsonl` holds one row per turn, read by `turns` and `timeline`.
 
-Retention: a line log past 5 MB is cut to its newest megabyte, and `daemon.log`, `perf.jsonl` and `client.jsonl` keep
-what the cut dropped as one older segment (`daemon.log.1`), which the tools read on into when a window reaches back that
-far. A file that is one JSON document (a CPU profile, a fatal-error report) is never cut. `terminals/`, `raw-output/`
+Retention: a line log past 5 MB is cut to its newest megabyte, and `daemon.log`, `perf.jsonl`, `perf-rollups.jsonl` and
+`client.jsonl` keep what the cut dropped as one older segment (`daemon.log.1`), which the tools read on into when a window
+reaches back that far. The two perf logs gzip the segment a cut replaces instead of dropping it (`perf.jsonl.<time>.gz`;
+`zcat` reads one) and keep those archives by age: eight days of slow spans, fifteen of rollups, under 32 MB and 16 MB.
+The tools read on into them too. A file that is one JSON document (a CPU profile, a fatal-error report) is never cut. `terminals/`, `raw-output/`
 and `output-cache/` each hold their own newest files, so pane captures never push out the files beside them; the restart
 record's files are never pruned.
 

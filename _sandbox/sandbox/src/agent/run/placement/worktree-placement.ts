@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
-import { defaultGit, settleIndex } from "@intentic/base/git";
+import { defaultGit, inGitCallerPart, settleIndex, withGitCallerPart } from "@intentic/base/git";
 import { type RepoSync, type SyncGate, syncConversation, syncMoved } from "../../../conversations/land/sync.js";
 import { mainLineSha } from "../../../git/main-line-tip.js";
 import type { MainCatchUp } from "../main-catch-up.js";
@@ -327,7 +327,7 @@ export const worktreePlacement = (
             );
             yield worktreeFrame(worktree, onto, enforced, synced);
             // Recorded after the rebase: "before this message" means the branch the agent is about to read.
-            yield* anchorIsolatedTurn(deps, conversationId, worktree.repos, turn.snapshot);
+            yield* inGitCallerPart("turn.checkpoint", anchorIsolatedTurn(deps, conversationId, worktree.repos, turn.snapshot));
             // A fresh checkout, the rebase and the anchor leave racy entries; settled, statuses stop re-reading them.
             for (const { repo } of worktree.repos) {
                 settleIndex(deps.agentWorktrees.worktreeDir(conversationId, repo)).catch((error: unknown) =>
@@ -338,7 +338,7 @@ export const worktreePlacement = (
             // computed against the old tree. Must never cost the user their answer: best-effort and logged.
             const resync = async (): Promise<AgentEvent | undefined> => {
                 try {
-                    const moved = await rebaseLeased();
+                    const moved = await withGitCallerPart("turn.resync", rebaseLeased);
                     return moved.length === 0 ? undefined : worktreeFrame(worktree, onto, enforced, moved);
                 } catch (error) {
                     deps.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");

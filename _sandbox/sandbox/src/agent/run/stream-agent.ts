@@ -2,6 +2,7 @@ import { continueCappedTurn } from "./frames/cap-continuation.js";
 import { recordSurroundingsSaid } from "../prompt/surroundings.js";
 import { randomUUID } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
+import { inGitCallerPart, withGitCallerPart } from "@intentic/base/git";
 import { readableProviderText } from "../../engines/provider-error-text.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
@@ -107,7 +108,9 @@ const withDocuments = (
         return frames;
     }
     const localCwd = place.worktree?.cwd ?? services.workspace.root;
-    return withProducedDocuments(frames, scanProducedDocuments({ localCwd, effectiveCwd: place.effectiveCwd }, checkoutDirtyPaths(localCwd)));
+    const scan = scanProducedDocuments({ localCwd, effectiveCwd: place.effectiveCwd }, checkoutDirtyPaths(localCwd));
+    // A status after every command: counted as the scan's, not as the turn's own.
+    return withProducedDocuments(frames, (since, named) => withGitCallerPart("turn.produced-documents", () => scan(since, named)));
 };
 
 // What the turn was told before the user's own words, filed for the chat to show. The preamble's notes ride the
@@ -777,7 +780,7 @@ async function* prepareTurn(
     recordSurroundingsSaid(services.conversations, input.conversationId, { notes: wire.request.spec.notes, fresh: wire.request.spec.sessionId === undefined });
     // An isolated turn takes no history capture: history covers only the main tree, which it never touches.
     if (worktree === undefined) {
-        yield* mainTreeCheckpoint(services, turn);
+        yield* inGitCallerPart("turn.checkpoint", mainTreeCheckpoint(services, turn));
     }
     clock.mark("snapshot");
     clock.report(services.logger);
@@ -920,7 +923,7 @@ async function* runTurn(
 ): AsyncGenerator<AgentEvent> {
     const executionScope = agentExecutionScope(services.agentExecution, admission);
     try {
-        const prepared = yield* prepareTurn(services, input, executionScope, signal, worktree, steering, turn, coldTrimBasis);
+        const prepared = yield* inGitCallerPart("turn.preflight", prepareTurn(services, input, executionScope, signal, worktree, steering, turn, coldTrimBasis));
         if (prepared === undefined) {
             return;
         }
@@ -1016,7 +1019,7 @@ async function* runPreparedTurn(
             experiments: plan.experiments,
             startedAt,
         });
-        performSettlement(services, settlement, { record, flush: sniffer.flush, ...opt("reach", reach?.framed) });
+        withGitCallerPart("turn.settle", () => performSettlement(services, settlement, { record, flush: sniffer.flush, ...opt("reach", reach?.framed) }));
     }
 }
 

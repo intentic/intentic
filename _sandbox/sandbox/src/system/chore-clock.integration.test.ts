@@ -1,6 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { defaultGit, gitRunCallers, UNLABELLED_GIT_CALLER } from "@intentic/base/git";
 import { type Chore, choreDue, HOUR_MS, startChoreClock } from "./chore-clock.js";
 
 // What makes a chore the right home for an hourly pass: when it last started is kept on the history volume, so a daemon
@@ -68,4 +71,20 @@ test("a chore that throws waits out its interval like one that finished, and the
     await clock.tick();
     clock.stop();
     expect(ran.toSorted()).toEqual(["log-retention", "state-aged"]);
+});
+
+// A chore's git is counted under its own name (gitRunCallers), not under the phase that started the clock nor as
+// unlabelled, however long after boot its tick comes round.
+test("a chore's git is counted under the chore", async () => {
+    const historyRoot = mkdtempSync(join(tmpdir(), "chore-clock-"));
+    const repo = mkdtempSync(join(tmpdir(), "chore-clock-repo-"));
+    await promisify(execFile)("git", ["-C", repo, "init", "-q"]);
+    const before = gitRunCallers();
+    const delta = (caller: string): number => (gitRunCallers()[caller] ?? 0) - (before[caller] ?? 0);
+    const chore: Chore = { name: "state-aged", everyMs: HOUR_MS, run: async () => void (await defaultGit(repo, ["rev-parse", "--git-dir"])) };
+    const clock = clockAt(historyRoot, [chore], { now: START });
+    await clock.tick();
+    clock.stop();
+    expect(delta("bg chore.state-aged")).toBe(1);
+    expect(delta(UNLABELLED_GIT_CALLER)).toBe(0);
 });

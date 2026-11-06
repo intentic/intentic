@@ -171,6 +171,24 @@ test("many slow spans come back as one row per operation with percentiles and th
     expect(await call(deps, "slow", { op: "git.run", groupBy: "none", limit: 100 })).not.toContain("git.run.wait");
 });
 
+test("slow with source rollups answers from every span's histograms, and names the file it read", async () => {
+    const window = (minutesAgo: number): string => new Date(Math.floor((NOW - minutesAgo * 60_000) / 600_000) * 600_000).toISOString();
+    const deps = await setup({
+        "perf-rollups.jsonl": [
+            // bucket 36 holds 5 ms, bucket 67 holds 1 s; the reader trusts the stored histogram, not p50/p90/p99.
+            JSON.stringify({ at: window(40), op: "git.run", subject: "status", count: 99, totalMs: 495, p50: 5, p90: 5, p99: 5, minMs: 5, maxMs: 5, v: 1, b0: 36, b: [99] }),
+            JSON.stringify({ at: window(20), op: "git.run", subject: "status", count: 1, totalMs: 1_000, p50: 1_000, p90: 1_000, p99: 1_000, minMs: 1_000, maxMs: 1_000, v: 1, b0: 67, b: [1] }),
+        ],
+    });
+
+    const text = await call(deps, "slow", { source: "rollups", groupBy: "op+path" });
+    expect(text).toContain("Source: perf-rollups.jsonl, every span the daemon timed, slow or not, in 10-minute windows: 100 spans over 2 windows in everything kept");
+    expect(text).toContain("within 9.1% of the exact value");
+    expect(text).toContain("git.run status: 100×, total 1495 ms, mean 15 ms, p50 5 ms, p90 5 ms, p99 5 ms, max 1000 ms");
+    // The slow log is still the default, and says it holds only what was over budget.
+    expect(await call(deps, "slow", {})).toContain("No slow spans in perf.jsonl");
+});
+
 test("turns reports what ran and what failed, and names the asked-for model only when it differs", async () => {
     const deps = await setup({}, [
         turn({ outcome: "ok", model: "claude-opus-5", modelRequested: "claude-opus-5", conversationId: "c1" }),

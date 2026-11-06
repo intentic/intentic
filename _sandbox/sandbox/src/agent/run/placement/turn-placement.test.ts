@@ -1,4 +1,5 @@
 import { CheckoutSpaceRefused } from "../../../system/resources/storage/checkout-space.js";
+import { currentGitCaller, inGitCallerPart, withGitCaller } from "@intentic/base/git";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { RepoSync } from "../../../conversations/land/sync.js";
@@ -214,6 +215,54 @@ describe("a placed turn", () => {
             ["close"],
             ["settle", "c"],
             ["settled", "finished"],
+        ]);
+    });
+
+    // The git each step runs is counted as that step of the turn (gitRunCallers), inside the entry that started the
+    // turn; the body's as the turn's own.
+    test("files each step's git under its own turn part, inside the entry that started the turn", async () => {
+        const heard: [string, string | undefined][] = [];
+        const note = (step: string): void => void heard.push([step, currentGitCaller()]);
+        const conversations: Pick<ConversationActors, "send"> = {
+            send: (_id, event) => {
+                note(event.kind);
+                // SAFETY: placedTurn reads only `settled` off what a send answers, and awaits it without reading its value.
+                return { reply: undefined, settled: Promise.resolve(undefined) } as never;
+            },
+        };
+        const place: Placement = {
+            async *open() {
+                note("open");
+                yield { kind: "worktree", branch: "agent/c", base: "abc1234" };
+                return (async function* (): AsyncGenerator<AgentEvent> {
+                    note("body");
+                    yield { kind: "done" };
+                })();
+            },
+            async *land() {
+                note("land");
+                yield { kind: "landed", landed: true };
+            },
+            close: async () => note("close"),
+            settled: () => note("settled"),
+            thrown: "the placement's own words",
+        };
+        const arming: TurnCloser = {
+            hush: () => undefined,
+            armWakes: async () => {
+                note("arm");
+                return false;
+            },
+        };
+        await withGitCaller("http agent.run", () => drain(inGitCallerPart("turn", placedTurn(conversations, "c", place, arming))));
+        expect(heard.filter(([step]) => step !== "frame")).toStrictEqual([
+            ["open", "http agent.run › turn.open"],
+            ["body", "http agent.run › turn"],
+            ["arm", "http agent.run › turn.close"],
+            ["land", "http agent.run › turn.land"],
+            ["close", "http agent.run › turn.close"],
+            ["settle", "http agent.run › turn.settle"],
+            ["settled", "http agent.run › turn.settle"],
         ]);
     });
 });

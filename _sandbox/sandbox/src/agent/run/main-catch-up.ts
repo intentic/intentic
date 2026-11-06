@@ -2,6 +2,7 @@ import type { HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { MAIN_MOVED_SOURCE } from "@intentic/sandbox-contract/events/agent-ui";
 import { COMMIT_FIRST } from "@intentic/sandbox-contract/events/land-conflict";
+import { withGitCallerPart } from "@intentic/base/git";
 
 /* KEEPING A RUNNING TURN ON THE MAIN LINE, so another conversation's land costs it no separate conflict turn. */
 
@@ -132,7 +133,8 @@ export const stopCatchUp = (catchUp: MainCatchUp | undefined, push: (event: Agen
             return undefined;
         }
         asked = true;
-        const conflicts = await catchUp.atStop().catch((): readonly StopConflict[] => []);
+        // Its git counted as the stop's sync, not as the turn checks that run it first (turn-checks.ts).
+        const conflicts = await withGitCallerPart("turn.stop-sync", () => catchUp.atStop()).catch((): readonly StopConflict[] => []);
         if (conflicts.length === 0) {
             return undefined;
         }

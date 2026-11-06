@@ -29,7 +29,9 @@ window you choose. They cannot write, and nothing in this playbook restarts anyt
   `/opt/sandbox/package.json` with the newest release before suggesting a reload (`sandbox-behind-app.md`).
 - Work felt slow → `mcp__diagnostics__slow` (`op: "git.run"` for one op exactly, `"git."` for every one under it;
   `groupBy: "op+path"` to split requests by route), with p50, p95, max and the machine's load at the worst one, which
-  is what separates a regression from a busy machine.
+  is what separates a regression from a busy machine. Those are only the spans over budget; for what is normal, or a
+  performance audit over up to two weeks, add `source: "rollups"`: every span's count, total, failures and
+  p50/p90/p99/max per op and subject.
 - Out of memory, a killed process, a stalling event loop → `mcp__diagnostics__resources` with a field:
   `system.cgroup.event_oom_kill`, `processes.byRole.toolchain.rssBytes` (also browser, agentRuntime, localModel,
   container, searchEngine, terminal, languageServer, git, extension), `window.eventLoop.delayP99Ms`,
@@ -44,7 +46,8 @@ starts before the oldest line kept says nothing about that earlier time.
 ## Reading the files yourself
 
 ```
-/history/logs/        daemon.log (+ daemon.log.1), perf.jsonl (slow spans only), restarts.jsonl,
+/history/logs/        daemon.log (+ daemon.log.1), perf.jsonl (slow spans only), perf-rollups.jsonl (every
+                      span, as ten-minute histograms; older ones gzipped beside it), restarts.jsonl,
                       resource-metrics.jsonl, client.jsonl (what the editor reported about itself),
                       filter-stats.jsonl (what the output filter cut from each Bash call), raw-output/ (a
                       filtered call's whole output), terminals/ (every pane's lossless log)

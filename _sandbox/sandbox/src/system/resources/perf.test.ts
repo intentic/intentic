@@ -1,5 +1,6 @@
 import { type Logger, pino } from "pino";
 import { createPerfTracker, SUMMARY_MS } from "./perf.js";
+import { rollupRowSchema } from "./rollups/perf-rollup.js";
 
 // Captures lines instead of writing them, so a test can assert which sink got a line. Explicit `Logger` type works
 // around pino's widened return under exactOptionalPropertyTypes.
@@ -153,4 +154,23 @@ test("track records a failed span and rethrows the error untouched", async () =>
 
     expect(tracker.ranked()).toMatchObject([{ op: "git.run", count: 1, failed: 1 }]);
     tracker.stop();
+});
+
+// perf.jsonl sees only the slow ones; the rollups are where the distribution of every span is kept.
+test("every span, slow or not, reaches the rollups, and stopping writes the window counted so far", async () => {
+    const perf = capturing();
+    const written: string[] = [];
+    const tracker = createPerfTracker(capturing().logger, perf.logger, async (text) => void written.push(text));
+
+    tracker.record("git.run", 5, { git: "status --porcelain" });
+    tracker.record("git.run", 500, { git: "status --porcelain" });
+    tracker.record("http.request", 40, { method: "GET", path: "/agents/keen-pine-tkjf/diff", status: 200 });
+    await tracker.stop();
+
+    expect(perf.lines).toHaveLength(1);
+    const rows = written.join("").trim().split("\n").map((line) => rollupRowSchema.parse(JSON.parse(line)));
+    expect(rows.map((row) => [row.op, row.subject, row.count, row.minMs, row.maxMs])).toEqual([
+        ["git.run", "status", 2, 5, 500],
+        ["http.request", "GET /agents/:id/diff", 1, 40, 40],
+    ]);
 });

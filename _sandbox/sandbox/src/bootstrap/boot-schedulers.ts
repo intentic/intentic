@@ -25,6 +25,7 @@ import { createCiPoller } from "../ci/poller.js";
 import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import type { BootPhase } from "./boot-phase.js";
+import { inBackground } from "../system/background-git.js";
 import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
 import { hostRoomSource } from "../hosts/host-memory.js";
@@ -112,19 +113,21 @@ const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDe
 const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
     const name = projectDirOf(services.config);
     if (role.container && name !== undefined) {
-        shutdown.push(createProjectDelivery(projectDeliveryDeps(services)).start());
+        shutdown.push(inBackground("project-delivery", () => createProjectDelivery(projectDeliveryDeps(services)).start()));
         // And the folder's first copy is committed as it lands, so a fresh sandbox's review does not open on every file
         // the copy delivered (git/remote/project-arrival.ts).
         shutdown.push(
-            followProjectArrival({
-                workspaceRoot: services.workspace.root,
-                name,
-                withRepoLock: services.agentWorktrees.withRepoLock,
-                subscribe: subscribeWorkspaceChanges,
-                // The review left the folder out while it landed; open windows read it again now it stands committed.
-                landed: announceUnwatchedWrite,
-                logger: services.logger,
-            }),
+            inBackground("project-arrival", () =>
+                followProjectArrival({
+                    workspaceRoot: services.workspace.root,
+                    name,
+                    withRepoLock: services.agentWorktrees.withRepoLock,
+                    subscribe: subscribeWorkspaceChanges,
+                    // The review left the folder out while it landed; open windows read it again now it stands committed.
+                    landed: announceUnwatchedWrite,
+                    logger: services.logger,
+                }),
+            ),
         );
     }
 };
@@ -182,7 +185,7 @@ const startAutomations = ({ role, services, shutdown }: Pick<BootPhase, "role" |
     const scheduler = createAutomationsScheduler(services);
     shutdown.push(() => scheduler.stop());
     if (role.container) {
-        scheduler.start();
+        inBackground("automations", () => scheduler.start());
         shutdown.push(services.events.subscribe("run.settled", scheduler.nudge));
         shutdown.push(services.automations.onSaved(scheduler.nudge));
     }
@@ -211,6 +214,30 @@ const wireChildReports = (services: BootPhase["services"], logger: BootPhase["lo
     return childReports;
 };
 
+// Main's CI: the hooks its runs report through, and its one fix agent (ci/main-fixer.ts), each of whose settled turns may
+// hand main's failure to the owner, told now what main did while the daemon was down. The poller covers repos whose CI
+// hook could not be registered; its first pass is a silent seed.
+const startCi = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
+    if (role.container) {
+        inBackground("ci-hooks", () => services.ciHooks.start());
+        shutdown.push(
+            services.events.subscribe("run.settled", (settled) => {
+                void fixerSettled(services, settled).catch((error: unknown) =>
+                    logger.warn({ err: error }, "ci repair: a settled turn could not be read"),
+                );
+            }),
+        );
+        void inBackground("ci-repair", () => resumeMainFixer(services)).catch((error: unknown) =>
+            logger.warn({ err: error }, "ci repair: main's failures could not be resumed"),
+        );
+    }
+    const ciPoller = createCiPoller(services);
+    shutdown.push(() => ciPoller.stop());
+    if (role.container) {
+        inBackground("ci-poller", () => ciPoller.start());
+    }
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     startAutomations({ role, services, shutdown });
@@ -220,14 +247,14 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // on, answers a restart interrupted are delivered, and the checks against the world start.
     // gpu-run's state, and the host's GPU resets and crashes, ride the same start (hosts/gpu/, 2026-11-03).
     if (role.container) {
-        shutdown.push(services.needs.start());
-        shutdown.push(startGpuWatch(services, logger));
+        shutdown.push(inBackground("needs", () => services.needs.start()));
+        shutdown.push(inBackground("gpu-watch", () => startGpuWatch(services, logger)));
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
     // judged and handed to a watch by the turn's own close (agent/run/placement/turn-close.ts), which needs this bound. A
     // wake stopped before it fired lets the land its close skipped run after all (wake-held-land.ts).
-    shutdown.push(startWatchers(services, landWhenWakeGoes(services)));
+    shutdown.push(inBackground("watchers", () => startWatchers(services, landWhenWakeGoes(services))));
 
     const childReports = wireChildReports(services, logger, shutdown);
     // A turn a peer's `agents message` opened that failed or is held is news to the peer that sent it, once.
@@ -239,7 +266,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         ),
     );
     // Which is judged at the reopen a judgement saw ahead and on each new reading, not only when somebody asks.
-    shutdown.push(watchCapacity(services));
+    shutdown.push(inBackground("capacity-watch", () => watchCapacity(services)));
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
@@ -260,29 +287,10 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     const approvalsExecutor = approvalsExecutorFor(services);
     shutdown.push(() => approvalsExecutor.stop());
     if (role.container) {
-        void approvalsExecutor.arm().catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
+        void inBackground("approvals", () => approvalsExecutor.arm()).catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
     }
 
-    if (role.container) {
-        services.ciHooks.start();
-        // Main's CI has one fix agent (ci/main-fixer.ts): each of its settled turns may hand main's failure to the owner, and
-        // what main did while the daemon was down reaches it now.
-        shutdown.push(
-            services.events.subscribe("run.settled", (settled) => {
-                void fixerSettled(services, settled).catch((error: unknown) =>
-                    logger.warn({ err: error }, "ci repair: a settled turn could not be read"),
-                );
-            }),
-        );
-        void resumeMainFixer(services).catch((error: unknown) => logger.warn({ err: error }, "ci repair: main's failures could not be resumed"));
-    }
-
-    // Covers repos whose CI hook could not be registered; its first pass is a silent seed.
-    const ciPoller = createCiPoller(services);
-    shutdown.push(() => ciPoller.stop());
-    if (role.container) {
-        ciPoller.start();
-    }
+    startCi({ role, services, logger, shutdown });
 
     // Each workspace repo keeps up with the remote branch it tracks, so another writer's push reaches main within
     // minutes rather than at the owner's next pull; `followOrigin` off, nothing is fetched.
@@ -293,22 +301,23 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     shutdown.push(() => services.driftSweep.stop());
     if (role.container) {
         // Both idle-only, allowed to fail, unref'd; the probe runner also waits out the boot's own pnpm install.
-        services.probeRunner.start();
-        services.driftSweep.start();
-        originFollow.start();
+        inBackground("probe-runner", () => services.probeRunner.start());
+        inBackground("drift-sweep", () => services.driftSweep.start());
+        inBackground("follow-origin", () => originFollow.start());
     }
 
-    shutdown.push(startRuntimeHealth(services));
+    shutdown.push(inBackground("runtime-health", () => startRuntimeHealth(services)));
     // Idle backstop: headroom is otherwise re-read only on a turn, refusal or screen.
-    shutdown.push(services.headroom.start());
-    shutdown.push(learnBurnRates(services));
-    // Anything the watchers see, a repo appearing or going, or a write the daemon made where no watcher looks.
-    services.history.start((changed) => {
+    shutdown.push(inBackground("headroom", () => services.headroom.start()));
+    shutdown.push(inBackground("burn-rates", () => learnBurnRates(services)));
+    // Anything the watchers see, a repo appearing or going, or a write the daemon made where no watcher looks. Its
+    // minute sweep is twenty-odd git processes whenever anything moved, counted as `bg history`.
+    inBackground("history", () => services.history.start((changed) => {
         const stops = [subscribeWorkspaceChanges(changed), subscribeRepoChanges(changed), subscribeUnwatchedWrites(changed)];
         return () => {
             for (const stop of stops) {
                 stop();
             }
         };
-    });
+    }));
 };

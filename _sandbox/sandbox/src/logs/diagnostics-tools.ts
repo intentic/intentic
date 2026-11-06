@@ -9,7 +9,8 @@ import { type FiledPostMortem, readFiledPostMortems } from "../system/boot/resta
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { type LevelName, readLogLines, readMetricSeries, readSlowSpans } from "./diagnostics.js";
 import { readRestarts, readTimeline } from "./diagnostics-history.js";
-import { renderLines, renderRestarts, renderSeries, renderSpans, renderTimeline, type Window } from "./diagnostics-render.js";
+import { renderLines, renderRestarts, renderRollups, renderSeries, renderSpans, renderTimeline, type Window } from "./diagnostics-render.js";
+import { readRollups } from "./diagnostics-rollups.js";
 
 // Read-only tools over what the daemon already recorded: cannot write, delete, or reach outside historyRoot (its logs,
 // activity.jsonl, boot-history.json) and the spend ledger. Every tool takes a window. Secret masking happens in
@@ -20,7 +21,9 @@ const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 // Bounds one call's JSON payload; a caller that hits the cap is told and narrows.
 const MAX_LINES = 200;
 const DEFAULT_LINES = 40;
-const MAX_MINUTES = 7 * 24 * 60;
+// Two weeks and a day: the perf rollups keep two weeks (log-files.ts ARCHIVED); every other record reaches less far, and
+// says so.
+const MAX_MINUTES = 15 * 24 * 60;
 
 export interface DiagnosticsToolDeps {
     readonly historyRoot: string;
@@ -168,8 +171,15 @@ const slowTool = (deps: DiagnosticsToolDeps, now: () => number) =>
         "slow",
         "Operations the daemon measured as slower than their budget (perf.jsonl holds only the slow ones, not every span), " +
             "each with the machine's one-minute load at the time: the load separates a real regression from a busy machine. " +
-            "Many matches are grouped (count, p50, p95, max and the worst one); `groupBy` chooses how.",
+            "Many matches are grouped (count, p50, p95, max and the worst one); `groupBy` chooses how. " +
+            '`source: "rollups"` answers instead from every span, slow or not, kept two weeks as ten-minute histograms per op ' +
+            "and subject: true counts, total time, failures and p50/p90/p99/max over any window, for a performance audit or " +
+            "a question about what is normal. The answer names the file it came from.",
         {
+            source: z
+                .enum(["slow", "rollups"])
+                .optional()
+                .describe('`slow` (the default): the spans over budget, one by one, from perf.jsonl (about a week). `rollups`: the distribution of every span from perf-rollups.jsonl (two weeks), with no single span or load to show.'),
             sinceMinutes: minutes(),
             op: z
                 .string()
@@ -179,12 +189,16 @@ const slowTool = (deps: DiagnosticsToolDeps, now: () => number) =>
             groupBy: z
                 .enum(["op", "op+path", "none"])
                 .optional()
-                .describe("`op` one row per operation; `op+path` splits each by its subject (the route of a request, the git subcommand, the hook's tool); `none` every span. Left out, spans are grouped by op once there are more than `limit`."),
+                .describe("`op` one row per operation; `op+path` splits each by its subject (the route of a request, the git subcommand, the hook's tool); `none` every span. Left out, spans are grouped by op once there are more than `limit`. Rollups have no single spans, so `none` reads as `op+path` there."),
             limit: limitArg(),
         },
-        async ({ sinceMinutes, op, groupBy, limit }) => {
+        async ({ source, sinceMinutes, op, groupBy, limit }) => {
             const window = windowOf(now(), sinceMinutes);
             const shown = limit ?? DEFAULT_LINES;
+            if (source === "rollups") {
+                const grouping = groupBy === "op" || groupBy === undefined ? "op" : "op+path";
+                return ok(renderRollups(await readRollups(deps.historyRoot, { sinceMs: window.sinceMs, op, groupBy: grouping }), { window, grouping, limit: shown }));
+            }
             const grouping = groupBy === "op+path" ? "op+path" : "op";
             const result = await readSlowSpans(deps.historyRoot, { sinceMs: window.sinceMs, op, groupBy: grouping, limit: shown });
             return ok(

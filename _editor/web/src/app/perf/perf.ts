@@ -73,6 +73,14 @@ let verbose = ((): boolean => {
 
 const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
 
+/**
+ * Which build filed a report, on every slow span and long frame that leaves the browser. A dev server's load is one
+ * request per module, unminified, and its boot and frame times read several times a production build's, so a reader of
+ * the client log splits the two on this field rather than by parsing the page's free-text `served`. Read at the call:
+ * Vite replaces it at build time, the test runner reads it from the environment.
+ */
+export const buildMode = (): "dev" | "production" => (import.meta.env.DEV ? `dev` : `production`);
+
 // Drops `undefined` fields (PerfFields allows them, the report schema doesn't) rather than stringifying them,
 // which would read as an intended value.
 const primitives = (fields: PerfFields): Record<string, string | number | boolean> =>
@@ -147,7 +155,7 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
         reportSlow?.(
             op,
             round(ms),
-            { op, ms: round(ms), seen: stat.count, slowSeen: stat.slowCount, ...primitives(fields) },
+            { op, ms: round(ms), seen: stat.count, slowSeen: stat.slowCount, mode: buildMode(), ...primitives(fields) },
             typeof fields["requestId"] === `string` ? fields["requestId"] : undefined,
         );
         return;
@@ -301,6 +309,7 @@ export interface LongFrameFields {
     readonly styleLayoutMs: number;
     readonly renderMs: number;
     readonly scripts: string;
+    readonly mode: "dev" | "production";
 }
 
 export type LongFrameReporter = (fields: LongFrameFields) => void;
@@ -324,6 +333,7 @@ export const longFrameFields = (frame: LongFrame): LongFrameFields => {
             .slice(0, 3)
             .map(scriptLine)
             .join(`\n`),
+        mode: buildMode(),
     };
 };
 

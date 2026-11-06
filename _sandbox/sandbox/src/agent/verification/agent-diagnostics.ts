@@ -7,6 +7,7 @@ import { modulesNear, type NearbyModules } from "../../workspace/deps/dependency
 import type { ShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";
 import { PYTHON_EXTENSIONS, PYTHON_UNAVAILABLE_NOTE, runPythonDiag } from "./python/python-diagnostics.js";
+import { namedHook } from "../run/hook-timing.js";
 
 // After every Edit/Write (and, via a tracker, Bash) the touched file is checked and compile errors ride back as
 // additionalContext; `.py` files go through a different runner behind the identical contract. Gated on the package's
@@ -248,12 +249,12 @@ export const editDiagnosticsHooks = (
                       {
                           matcher: "Bash",
                           hooks: [
-                              async (input) => {
+                              namedHook("shell-edits", async (input) => {
                                   if (input.hook_event_name === "PreToolUse") {
                                       shell.before();
                                   }
                                   return {};
-                              },
+                              }),
                           ],
                       },
                   ],
@@ -262,7 +263,7 @@ export const editDiagnosticsHooks = (
             {
                 matcher: EDIT_TOOLS,
                 hooks: [
-                    async (input) => {
+                    namedHook("edit-reviewers", async (input) => {
                         if (input.hook_event_name !== "PostToolUse") {
                             return {};
                         }
@@ -271,7 +272,7 @@ export const editDiagnosticsHooks = (
                             return {};
                         }
                         return said(await everything(file, "this edit"));
-                    },
+                    }),
                 ],
             },
             ...(shell === undefined
@@ -280,7 +281,7 @@ export const editDiagnosticsHooks = (
                       {
                           matcher: "Bash",
                           hooks: [
-                              async (input: HookInput): Promise<HookJSONOutput> => {
+                              namedHook("shell-edits", async (input: HookInput): Promise<HookJSONOutput> => {
                                   if (input.hook_event_name !== "PostToolUse") {
                                       return {};
                                   }
@@ -293,7 +294,7 @@ export const editDiagnosticsHooks = (
                                       notes.push(...contexts.filter((context) => context !== undefined));
                                   }
                                   return said(notes.length === 0 ? undefined : notes.join("\n\n"));
-                              },
+                              }),
                           ],
                       },
                   ]),

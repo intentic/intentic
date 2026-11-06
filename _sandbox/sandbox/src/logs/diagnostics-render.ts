@@ -3,6 +3,9 @@ import { isJsonObject } from "../store/evolution/conversions.js";
 import { capLines, compactRecord } from "./diagnostics-shape.js";
 import type { LevelName, LogLineResult, MetricSeries, SlowSpanResult } from "./diagnostics.js";
 import type { RestartsResult, TimelineResult } from "./diagnostics-history.js";
+import type { RollupResult } from "./diagnostics-rollups.js";
+import { QUANTILE_ERROR, roundMs } from "../system/resources/rollups/perf-histogram.js";
+import { PERF_ROLLUPS_FILE, ROLLUP_WINDOW_MS } from "../system/resources/rollups/perf-rollup.js";
 import type { ScanCoverage } from "./log-read.js";
 
 // The diagnostics tools' answers as text. Every answer says what it searched (file, window, level) and how far back the
@@ -31,7 +34,12 @@ export const reachText = (coverage: ScanCoverage, window: Window, file: string):
     if (coverage.files.length === 0) {
         return `${file} does not exist yet.`;
     }
-    const names = coverage.files.map((path) => basename(path)).join(" and ");
+    // A perf log's compressed archives can be dozens; named one by one they would crowd out the answer.
+    const archives = coverage.files.length - 2;
+    const names =
+        archives > 1
+            ? `${coverage.files.slice(0, 2).map((path) => basename(path)).join(", ")} and ${archives} compressed older segments`
+            : coverage.files.map((path) => basename(path)).join(" and ");
     if (coverage.oldestAt === undefined || coverage.newestAt === undefined) {
         return `${names} holds no timestamped lines.`;
     }
@@ -120,6 +128,31 @@ export const renderSpans = (result: SlowSpanResult, view: LinesView & { readonly
             const { perf: _perf, message: _message, level: _level, seen: _seen, slowSeen: _slowSeen, ...worst } = compactRecord(group.worst, false);
             return `${group.key}: ${group.count}×, p50 ${group.p50} ms, p95 ${group.p95} ms, max ${group.max} ms; worst ${JSON.stringify(worst)}`;
         }),
+    );
+};
+
+const seconds = (ms: number): string => (ms >= 10_000 ? `${Math.round(ms / 1000)} s` : `${ms} ms`);
+
+export const renderRollups = (result: RollupResult, view: { readonly window: Window; readonly grouping: string; readonly limit: number }): string => {
+    // Rows cover whole windows on the clock, so the answer starts where the window it was asked from began.
+    const window = { ...view.window, sinceMs: result.sinceMs };
+    const source = `Source: ${PERF_ROLLUPS_FILE}, every span the daemon timed, slow or not, in ${ROLLUP_WINDOW_MS / 60_000}-minute windows`;
+    const reach = reachText(result.coverage, window, PERF_ROLLUPS_FILE);
+    const skipped = result.skipped > 0 ? ` ${result.skipped} rows were unreadable or of another histogram version and are left out.` : "";
+    if (result.spans === 0) {
+        return `${source}: no spans ${windowText(window)}. ${reach}${skipped}`;
+    }
+    const groups = result.groups.slice(0, view.limit);
+    return capped(
+        [
+            `${source}: ${result.spans} spans over ${result.windows} windows ${windowText(window)}, grouped by ${view.grouping} into ${result.groups.length}, most total time first${groups.length < result.groups.length ? `; the top ${groups.length}` : ""}. ` +
+                `Percentiles come from the merged histograms, within ${Math.round(QUANTILE_ERROR * 1000) / 10}% of the exact value; max is exact. ${reach}${skipped}`,
+            "",
+        ],
+        groups.map(
+            (group) =>
+                `${group.key}: ${group.count}×, total ${seconds(group.totalMs)}, mean ${roundMs(group.totalMs / group.count)} ms, p50 ${group.p50} ms, p90 ${group.p90} ms, p99 ${group.p99} ms, max ${group.max} ms${group.failed > 0 ? `, ${group.failed} failed` : ""}`,
+        ),
     );
 };
 

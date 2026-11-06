@@ -1,5 +1,6 @@
-import type { HookCallback, HookEvent, PreToolUseHookInput, StopHookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type HookTiming, timedHooks } from "./hook-timing.js";
+import type { HookCallback, HookEvent, PostToolUseHookInput, PreToolUseHookInput, StopHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { currentGitCaller, withGitCaller, withGitCallerPart } from "@intentic/base/git";
+import { type HookTiming, namedHook, namedHooks, timedHooks } from "./hook-timing.js";
 
 // Every hook callback of a turn, timed into the perf log: what it answers is untouched, a throw still throws and is still
 // timed, and a turn with nowhere to report keeps its hooks as they were.
@@ -7,6 +8,7 @@ import { type HookTiming, timedHooks } from "./hook-timing.js";
 const BASE = { session_id: "s1", transcript_path: "s1.jsonl", cwd: "." };
 const PRE: PreToolUseHookInput = { ...BASE, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {}, tool_use_id: "t1" };
 const STOP: StopHookInput = { ...BASE, hook_event_name: "Stop", stop_hook_active: false };
+const POST: PostToolUseHookInput = { ...BASE, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_response: {}, tool_use_id: "t1" };
 const OPTIONS = { signal: new AbortController().signal };
 const ANSWER = { continue: true };
 
@@ -49,4 +51,37 @@ test("a callback that throws still throws, and its time is still reported", asyn
 test("with nowhere to report, the hooks are handed back untouched", () => {
     const hooks = { PostToolUse: [{ hooks: [async () => ANSWER] }] };
     expect(timedHooks(hooks, undefined)).toBe(hooks);
+});
+
+// The git a hook runs is counted by what issued it (gitRunCallers): its event and the name its set joined the turn under,
+// inside the entry that started the turn, so a route's total still adds up. A callback named where it was written keeps
+// its own name inside a named set, and one never named is still told apart by its event.
+test("each callback's git is filed under its event and name inside the turn's entry", async () => {
+    const heardAs: (string | undefined)[] = [];
+    const listen: HookCallback = async () => {
+        heardAs.push(currentGitCaller());
+        return ANSWER;
+    };
+    const ownName = namedHook("shell-edits", async () => listen(POST, "t1", OPTIONS));
+    const hooks = timedHooks(
+        {
+            ...namedHooks("main-catch-up", { PostToolUse: [{ hooks: [listen] }, { matcher: "Bash", hooks: [ownName] }] }),
+            Stop: [{ hooks: [async () => listen(STOP, undefined, OPTIONS)] }],
+        },
+        recorder().record,
+    );
+    const [catchUp, shell] = hooks.PostToolUse ?? [];
+    const [stop] = hooks.Stop ?? [];
+    await withGitCaller("http agent.run", () =>
+        withGitCallerPart("turn", async () => {
+            await catchUp?.hooks[0]?.(POST, "t1", OPTIONS);
+            await shell?.hooks[0]?.(POST, "t1", OPTIONS);
+            await stop?.hooks[0]?.(STOP, undefined, OPTIONS);
+        }),
+    );
+    expect(heardAs).toEqual([
+        "http agent.run › turn.hook.PostToolUse:main-catch-up",
+        "http agent.run › turn.hook.PostToolUse:shell-edits",
+        "http agent.run › turn.hook.Stop",
+    ]);
 });

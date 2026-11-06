@@ -4,6 +4,7 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
 import { startWorkSignal, type WorkSignal } from "./workload/work-signal.js";
 import { startQuietWatch } from "./system/quiet-watch.js";
+import { inBackground } from "./system/background-git.js";
 import { startSleepSocket } from "./system/sleep/sleep-socket.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
@@ -254,9 +255,10 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
 
 // Starts one phase past the gate, so a phase that throws is named in the log and the phases after it still start: none
 // of them needs another to have started, and one failure must not silently leave restores, schedulers and watches off.
+// Its loops' git is counted under the phase (`bg schedulers`) unless a loop inside is named more narrowly.
 const startPhase = (logger: BootPhase["logger"], name: string, start: () => void): boolean => {
     try {
-        start();
+        inBackground(name, start);
         return true;
     } catch (error) {
         logger.error({ err: error, phase: name }, "boot: a phase past the gate failed to start; the phases after it still start");

@@ -11,14 +11,17 @@ import {
     cancellableGit,
     defaultGit,
     forkedExec,
+    gitCallerWith,
     gitRunCallers,
     gitSpawnStats,
     observeGitCommands,
     politeGit,
     setRunnerEnv,
     settleIndex,
+    inGitCallerPart,
     UNLABELLED_GIT_CALLER,
     withGitCaller,
+    withGitCallerPart,
 } from "./runner.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
@@ -338,4 +341,40 @@ test("each git run is counted under the operation that asked for it", async () =
     expect(delta("probe.outer")).toBe(2);
     expect(delta("probe.inner")).toBe(1);
     expect(delta(UNLABELLED_GIT_CALLER)).toBeGreaterThanOrEqual(1);
+});
+
+// A part names what is doing the work inside the entry that started it, so a route's total still adds up: a narrower part
+// replaces the one around it instead of stacking on it, a lock's tail is said once however deep, and an async
+// generator's steps carry the part though its body resumes in whoever calls next().
+test("a part keeps the entry around it, replaces the part before it, and follows a generator's steps", async () => {
+    const dir = await tempRepo();
+    const before = gitRunCallers();
+    const delta = (caller: string): number => (gitRunCallers()[caller] ?? 0) - (before[caller] ?? 0);
+    async function* steps(): AsyncGenerator<number, string> {
+        await defaultGit(dir, ["rev-parse", "--git-dir"]);
+        yield 1;
+        await defaultGit(dir, ["rev-parse", "--git-dir"]);
+        return "done";
+    }
+    await withGitCaller("http probe.route", async () => {
+        await withGitCallerPart("probe.turn", async () => {
+            await defaultGit(dir, ["rev-parse", "--git-dir"]);
+            await withGitCallerPart("probe.hook", () => defaultGit(dir, ["status", "--porcelain"]));
+            await withGitCaller(gitCallerWith(gitCallerWith("probe.held", "lock"), "lock"), () => defaultGit(dir, ["rev-parse", "--git-dir"]));
+        });
+        const yielded: number[] = [];
+        const wrapped = inGitCallerPart("probe.steps", steps());
+        let step = await wrapped.next();
+        while (step.done !== true) {
+            yielded.push(step.value);
+            step = await wrapped.next();
+        }
+        expect([yielded, step.value]).toEqual([[1], "done"]);
+    });
+    await withGitCallerPart("probe.orphan", () => defaultGit(dir, ["rev-parse", "--git-dir"]));
+    expect(delta("http probe.route › probe.turn")).toBe(1);
+    expect(delta("http probe.route › probe.hook")).toBe(1);
+    expect(delta("probe.held › lock")).toBe(1);
+    expect(delta("http probe.route › probe.steps")).toBe(2);
+    expect(delta(`${UNLABELLED_GIT_CALLER} › probe.orphan`)).toBe(1);
 });

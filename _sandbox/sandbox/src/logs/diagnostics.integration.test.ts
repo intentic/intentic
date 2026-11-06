@@ -2,7 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+import { BUCKETS, bucketOf, HISTOGRAM_VERSION, storedHistogram } from "../system/resources/rollups/perf-histogram.js";
 import { opMatches, readLogLines, readMetricSeries, readSlowSpans } from "./diagnostics.js";
+import { readRollups } from "./diagnostics-rollups.js";
 
 // Pins the ways a naive tail misleads: oldest-first order, routine lines drowning real ones, and an empty answer that
 // could mean the read did not reach far enough.
@@ -149,6 +152,25 @@ test("a window that reaches past the live file reads on into its rotated segment
     expect(recent.coverage.ended).toBe("window");
 });
 
+test("a window that reaches past the older segment reads on into the compressed archives, newest first", async () => {
+    const dir = await root();
+    const lines = (minute: number, message: string): string => `${line({ time: AT(minute), level: "warn", perf: "git.run", ms: 300, message })}\n`;
+    await writeFile(join(dir, "logs", "perf.jsonl.2026-08-22T12-05-00.000Z.gz"), gzipSync(lines(2, "oldest")));
+    await writeFile(join(dir, "logs", "perf.jsonl.2026-08-22T12-10-00.000Z.gz"), gzipSync(lines(7, "archived")));
+    await writeFile(join(dir, "logs", "perf.jsonl.1"), lines(12, "segment"));
+    await writeFile(join(dir, "logs", "perf.jsonl"), lines(20, "live"));
+
+    const all = await readLogLines(dir, { file: "perf.jsonl", limit: 10 });
+    expect(all.lines.map((l) => l["message"])).toEqual(["live", "segment", "archived", "oldest"]);
+    // An archive's decompressed bytes count against the budget, as a plain file's do.
+    expect(all.readBytes).toBe([lines(20, "live"), lines(12, "segment"), lines(7, "archived"), lines(2, "oldest")].join("").length);
+    expect(all.coverage.oldestAt).toBe(Date.parse(AT(2)));
+
+    const recent = await readLogLines(dir, { file: "perf.jsonl", sinceMs: Date.parse(AT(5)), limit: 10 });
+    expect(recent.lines.map((l) => l["message"])).toEqual(["live", "segment", "archived"]);
+    expect(recent.coverage.ended).toBe("window");
+});
+
 test("repeats of one message fold into one group, ids and numbers aside", async () => {
     const dir = await root();
     await write(dir, "daemon.log", [
@@ -197,6 +219,70 @@ test("slow spans group by op, and by op and subject, with percentiles over every
 
     const gitRun = await readSlowSpans(dir, { groupBy: "op", op: "git.run", limit: 10 });
     expect(gitRun.matched).toBe(1);
+});
+
+// ---- rollups ----
+
+// A rollup row as perf-rollup.ts writes it, its histogram built from the spans themselves.
+const rollup = (at: string, op: string, spans: readonly number[], over: Record<string, unknown> = {}): string => {
+    const counts = new Float64Array(BUCKETS);
+    for (const ms of spans) {
+        counts[bucketOf(ms)] = (counts[bucketOf(ms)] ?? 0) + 1;
+    }
+    const total = spans.reduce((sum, ms) => sum + ms, 0);
+    return JSON.stringify({ at, op, count: spans.length, totalMs: total, p50: 0, p90: 0, p99: 0, minMs: Math.min(...spans), maxMs: Math.max(...spans), v: HISTOGRAM_VERSION, ...storedHistogram(counts), ...over });
+};
+
+test("rollups add across windows and boots, and read percentiles off the merged histogram", async () => {
+    const dir = await root();
+    await write(dir, "perf-rollups.jsonl", [
+        rollup(AT(0), "git.run", [5, 5, 5, 5], { subject: "status" }),
+        // Two boots wrote the 12:10 window: the one stopped in it and the one started in it.
+        rollup(AT(10), "git.run", [5, 5, 5], { subject: "status", to: AT(13) }),
+        rollup(AT(10), "git.run", [400], { subject: "diff", from: AT(14), failed: 1 }),
+        rollup(AT(10), "git.run.wait", [2, 2]),
+        rollup(AT(20), "http.request", [50], { subject: "GET /chores" }),
+    ]);
+
+    const byOp = await readRollups(dir, { groupBy: "op" });
+    expect(byOp.groups.map((group) => [group.key, group.count, group.failed, group.max])).toEqual([
+        ["git.run", 8, 1, 400],
+        ["http.request", 1, 0, 50],
+        ["git.run.wait", 2, 0, 2],
+    ]);
+    // Seven of the eight spans took 5 ms, so the median is 5 ms (held at the minimum); by nearest rank the 90th
+    // percentile of eight is the eighth, the 400 ms one.
+    expect(byOp.groups[0]).toMatchObject({ totalMs: 435, p50: 5, p90: 400, p99: 400 });
+    expect([byOp.spans, byOp.windows, byOp.rows, byOp.skipped]).toEqual([11, 3, 5, 0]);
+
+    const bySubject = await readRollups(dir, { groupBy: "op+path", op: "git.run" });
+    expect(bySubject.groups.map((group) => [group.key, group.count])).toEqual([
+        ["git.run diff", 1],
+        ["git.run status", 7],
+    ]);
+});
+
+test("a rollup window is read whole: the asked start moves back to the window it falls in", async () => {
+    const dir = await root();
+    await write(dir, "perf-rollups.jsonl", [rollup(AT(0), "git.scan", [900]), rollup(AT(10), "git.scan", [800]), rollup(AT(20), "git.scan", [700])]);
+
+    const result = await readRollups(dir, { groupBy: "op", sinceMs: Date.parse(AT(15)) });
+    expect(result.sinceMs).toBe(Date.parse(AT(10)));
+    expect(result.groups).toMatchObject([{ key: "git.scan", count: 2, max: 800 }]);
+});
+
+test("a rollup row of another histogram version, or one that does not parse, is left out and counted", async () => {
+    const dir = await root();
+    await write(dir, "perf-rollups.jsonl", [
+        rollup(AT(0), "git.run", [5], { v: HISTOGRAM_VERSION + 1 }),
+        JSON.stringify({ at: AT(1), op: "git.run", count: "many" }),
+        rollup(AT(2), "git.run", [5], { b0: BUCKETS, b: [1] }),
+        rollup(AT(3), "git.run", [7]),
+    ]);
+
+    const result = await readRollups(dir, { groupBy: "op" });
+    expect(result.groups).toMatchObject([{ key: "git.run", count: 1, max: 7 }]);
+    expect(result.skipped).toBe(3);
 });
 
 // ---- the resource series ----

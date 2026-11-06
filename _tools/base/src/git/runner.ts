@@ -359,14 +359,63 @@ const runsBySubcommand = new Map<string, number>();
 
 export const gitRunCounts = (): Readonly<Record<string, number>> => Object.fromEntries(runsBySubcommand);
 
-// Which operation each git run served: the innermost `withGitCaller` around it, carried across awaits. The count by
-// subcommand says how much git the daemon spends; this says why, which a profile otherwise has to infer.
+// Which operation each git run served: the innermost label around it, carried across awaits, timers and watchers. The
+// count by subcommand says how much git the daemon spends; this says why, which a profile otherwise has to infer.
+// A label is an ENTRY, who started the work (`http <route>`, `bg <loop>`), then at most one PART inside it, what is
+// doing it (`turn.hook.PostToolUse:main-catch-up`), then ` › lock` when it ran holding a repo lock. Every word is one
+// the code spells, never an id, a path or a sha, and a part replaces the part before it rather than stacking on it, so
+// the count stays as small as the code and still adds up per entry.
 const callerScope = new AsyncLocalStorage<string>();
 const runsByCaller = new Map<string, number>();
-// A run no labelled span encloses: a timer, a watcher reaction, anything not yet named.
+// A run no labelled span encloses: a timer, a watcher reaction, anything not yet named. Also the entry of a part
+// that ran outside every entry.
 export const UNLABELLED_GIT_CALLER = "unlabelled";
+export const GIT_CALLER_JOIN = " › ";
 
+/** Names the entry: every git `run` starts, timers and watchers it arms included, files under `caller` alone. */
 export const withGitCaller = <T>(caller: string, run: () => T): T => callerScope.run(caller, run);
+
+export const currentGitCaller = (): string | undefined => callerScope.getStore();
+
+/** `<label> › <tail>`, said once: a label already ending in the tail is left as it is, so nesting cannot grow it. */
+export const gitCallerWith = (label: string | undefined, tail: string): string => {
+    const head = label ?? UNLABELLED_GIT_CALLER;
+    return head.endsWith(`${GIT_CALLER_JOIN}${tail}`) ? head : `${head}${GIT_CALLER_JOIN}${tail}`;
+};
+
+/** Names the part of the enclosing entry `run` is: `<entry> › <part>`, replacing whatever part was named before. */
+export const withGitCallerPart = <T>(part: string, run: () => T): T => {
+    const entry = (callerScope.getStore() ?? UNLABELLED_GIT_CALLER).split(GIT_CALLER_JOIN, 1)[0];
+    return callerScope.run(gitCallerWith(entry, part), run);
+};
+
+/** Every step of `source` under `withGitCallerPart(part)`: an async generator's body resumes in whoever calls next(),
+ *  so a label around the call that made the generator names none of its work. */
+export async function* inGitCallerPart<T, R>(part: string, source: AsyncGenerator<T, R>): AsyncGenerator<T, R> {
+    let finished = false;
+    try {
+        let step = await withGitCallerPart(part, () => source.next());
+        while (step.done !== true) {
+            // Only what the consumer threw in goes to the source; a throw from the source itself ends this loop.
+            let advance: () => Promise<IteratorResult<T, R>>;
+            try {
+                const sent: unknown = yield step.value;
+                advance = () => source.next(sent);
+            } catch (error) {
+                advance = () => source.throw(error);
+            }
+            step = await withGitCallerPart(part, advance);
+        }
+        finished = true;
+        return step.value;
+    } finally {
+        // A consumer that stopped early: the source's own cleanup runs under the part too.
+        if (!finished) {
+            // SAFETY: an early return's value is the consumer's own, never read back through this wrapper.
+            await withGitCallerPart(part, () => source.return(undefined as R));
+        }
+    }
+}
 
 // Cumulative since boot, by caller; a rate is the difference between two samples, as for gitRunCounts.
 export const gitRunCallers = (): Readonly<Record<string, number>> => Object.fromEntries(runsByCaller);

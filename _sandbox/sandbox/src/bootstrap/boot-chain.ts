@@ -39,6 +39,7 @@ import { retireSkills } from "../settings/skill-retirement.js";
 import { reconcileBakedSkills } from "../settings/skills.js";
 import type { BootPhase } from "./boot-phase.js";
 import { convergeProjectNote, dropProjectNote } from "./projects/project-note.js";
+import { inBackground } from "../system/background-git.js";
 
 // What a step reads: the boot phase, the runner env a definition seed is filtered by, and whether rootRepo created the
 // workspace repo this boot, which the starter seed and the baseline commit wait on.
@@ -396,9 +397,10 @@ export const declareBootSteps = (services: Services): void => services.boot.decl
 export const runBootSteps = async (phase: BootPhase, runnerEnv: RunnerModeEnv | undefined): Promise<void> => {
     const boot: BootRun = { ...phase, runnerEnv, freshRoot: false };
     for (const step of BOOT_STEPS) {
+        // Its git, and whatever it arms, counted as `bg boot.<key>`: before the phases past the gate, nothing names it.
         const run = async (): Promise<void> => {
             if (step.when?.(boot) !== false) {
-                await step.run(boot);
+                await inBackground(`boot.${step.key}`, () => step.run(boot));
             }
         };
         // A step with a `failure` sentence is one boot goes on without: it reads failed and the sentence is logged.

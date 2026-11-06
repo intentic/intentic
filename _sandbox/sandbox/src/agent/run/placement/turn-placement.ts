@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { inGitCallerPart, withGitCallerPart } from "@intentic/base/git";
 import { type FreshSession, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { landAgent } from "../../../conversations/land/land.js";
@@ -60,20 +61,21 @@ export async function* placedTurn(
             closer?.hush();
             // allow(silent-catch): armWakes never throws by its own contract and logs what it could not do; a close that
             // could not arm still settles, as awaiting nothing.
-            armed = (closer?.armWakes({ failed }) ?? Promise.resolve(false)).catch(() => false);
+            armed = withGitCallerPart("turn.close", () => closer?.armWakes({ failed }) ?? Promise.resolve(false)).catch(() => false);
         }
         return armed;
     };
     let awaiting = false;
     try {
-        const body = yield* placement.open();
+        // Each step's git is counted as that step of the turn (`<entry> › turn.open`); the body's as the turn's own.
+        const body = yield* inGitCallerPart("turn.open", placement.open());
         for await (const event of body) {
             conversations.send(conversationId, { kind: "frame", frame: event });
             failed ||= event.kind === "error";
             yield event;
         }
         awaiting = await armOnce();
-        yield* placement.land(failed, awaiting);
+        yield* inGitCallerPart("turn.land", placement.land(failed, awaiting));
     } catch (error) {
         stopped = isAbort(error);
         if (!stopped && !(error instanceof CheckoutSpaceRefused)) {
@@ -97,10 +99,13 @@ export async function* placedTurn(
         // A close that throws still lets the conversation settle and the turn announce its ending: an unsettled one
         // stays running, and every later `begin` would be answered busy until a restart. Its error still propagates.
         try {
-            await placement.close(failed);
+            await withGitCallerPart("turn.close", () => placement.close(failed));
         } finally {
-            await conversations.send(conversationId, { kind: "settle" }).settled;
-            placement.settled(endingOf(failed, stopped, awaiting));
+            // The settle's reactions run in its sender's context (conversation-actors.ts), so they are counted here too.
+            await withGitCallerPart("turn.settle", async () => {
+                await conversations.send(conversationId, { kind: "settle" }).settled;
+                placement.settled(endingOf(failed, stopped, awaiting));
+            });
         }
     }
 }

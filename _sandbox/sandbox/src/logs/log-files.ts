@@ -1,9 +1,12 @@
-import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, join, relative, sep } from "node:path";
+import { type FileHandle, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative, sep } from "node:path";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import type { LogFileEntry } from "@intentic/sandbox-contract/schemas/logs";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { forkedExec } from "@intentic/base/git";
 import { MARKER_FILE } from "../system/boot/restarts/boot-marker.js";
+import { PERF_ROLLUPS_FILE } from "../system/resources/rollups/perf-rollup.js";
 import { HOST_CRASHES_FILE, RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
 import { logsRoot } from "../seams/logs-root.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
@@ -14,7 +17,8 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Prune policy:
 // - truncate a file over its cap to its newest whole lines (safe under append-only writers); the logs the diagnostics
-//   tools read keep what the cut dropped as one older segment beside them (`daemon.log.1`)
+//   tools read keep what the cut dropped as one older segment beside them (`daemon.log.1`), and the perf logs compress
+//   the segment that cut replaces instead of dropping it (ARCHIVED), kept by age
 // - never cut a file that is one JSON document (a CPU profile, a fatal-error report): cutting corrupts it, so it is kept
 //   whole, and only past WHOLE_MAX_BYTES removed
 // - leave the restart record's files alone (KEPT), and never cut a log that cuts itself (SELF_CAPPED)
@@ -38,7 +42,32 @@ const GROUP_CAPS = new Map([
 // Logs whose cut keeps an older segment: what the diagnostics tools read, so a cut never swings their reach from five
 // days down to one. Before 2026-10-11 the cut dropped four fifths of daemon.log, and an investigation found the night
 // it needed gone. Copy-and-truncate rather than rename, since pino's destination keeps writing to the file it opened.
-const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl"]);
+const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl", PERF_ROLLUPS_FILE]);
+
+const DAY_MS = 24 * 3_600_000;
+
+// Rotated logs whose older segment, when a cut is about to replace it, is gzipped beside them as `<log>.<time>.gz` rather
+// than dropped, and kept while younger than `keepMs`: an archive written at T holds nothing newer than T, so everything
+// from the last `keepMs` survives. `maxBytes` is a backstop over that log's archives, newest kept first. They count apart
+// from the shared MAX_FILES, so a busy week cannot push out a CPU profile. On 2026-11-06 the slow spans ran 6 to 23 MB
+// a day (git.run alone wrote ~6k lines a day) and kept only 38 hours in their 5 MB cap and one segment; they compress
+// about ninefold, so a week costs 5 to 20 MB of archives. The rollups run up to 4 MB a day and compress about sixfold:
+// two weeks cost under 10 MB.
+const ARCHIVED = new Map([
+    ["perf.jsonl", { keepMs: 8 * DAY_MS, maxBytes: 32_000_000 }],
+    [PERF_ROLLUPS_FILE, { keepMs: 15 * DAY_MS, maxBytes: 16_000_000 }],
+]);
+
+// `<log>.<ISO time with - for :>.gz`, so names sort as times do.
+const ARCHIVE_NAME = /^(.+)\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d{3})?Z)\.gz$/;
+
+const archiveName = (path: string, at: number): string => `${path}.${new Date(at).toISOString().replaceAll(":", "-")}.gz`;
+
+// The archived log a file is an archive of, by root-relative name; undefined for anything else.
+const archivedLogOf = (name: string): string | undefined => {
+    const log = ARCHIVE_NAME.exec(name)?.[1];
+    return log !== undefined && ARCHIVED.has(log) ? log : undefined;
+};
 
 // The restart record's own files (system/boot/): the previous run's exit marker, the intent a restart's asker left, and
 // the boot log the `restarts` tool reads, which its writer bounds itself, and the host's crashes that explain a restart
@@ -46,8 +75,8 @@ const ROTATED = new Set(["daemon.log", "perf.jsonl", "client.jsonl"]);
 // the sandbox sat stopped.
 const KEPT = new Set([MARKER_FILE, RESTART_INTENT_FILE, RESTARTS_FILE, HOST_CRASHES_FILE]);
 
-// Extensions of files that are one JSON document rather than lines.
-const WHOLE_FILE = /\.(?:cpuprofile|heapprofile|heapsnapshot|json)$/;
+// Extensions of files that are one document rather than lines: JSON, or a compressed stream a cut would corrupt.
+const WHOLE_FILE = /\.(?:cpuprofile|heapprofile|heapsnapshot|json|gz)$/;
 
 // Logs whose writer cuts them to a cap of its own, under the queue its appends go through (system/resources/
 // resource-metrics.ts): a cut here could only race those appends. Still evicted by age and count like any other.
@@ -64,6 +93,17 @@ const relativeName = (root: string, path: string): string => relative(root, path
 
 /** The older segment a rotated log keeps beside itself; readers go on into it once the live file is exhausted. */
 export const rotatedSegment = (path: string): string => `${path}.1`;
+
+/** The compressed segments an ARCHIVED log keeps beside itself, newest first; readers go on into them after `.1`. */
+export const archivedSegments = async (path: string): Promise<string[]> => {
+    const entries = await readdir(dirname(path)).catch((): string[] => []);
+    const log = basename(path);
+    return entries
+        .filter((entry) => ARCHIVE_NAME.exec(entry)?.[1] === log)
+        .toSorted()
+        .toReversed()
+        .map((entry) => join(dirname(path), entry));
+};
 
 export { logsRoot };
 
@@ -160,7 +200,22 @@ const pastCount = (root: string, newestFirst: readonly PrunedFile[]): PrunedFile
 // caps. The live file is rewritten in place, never renamed over: pino's destination keeps writing to the file it
 // opened, and after a rename that would be a file no name reaches. The older segment nobody holds open, so it is
 // replaced whole, and a reader never meets half of it.
-const cutToTail = async (root: string, path: string): Promise<void> => {
+// The older segment an ARCHIVED log's cut is about to replace, gzipped beside it under the time of the cut. Done before
+// the live file is read, so the read-then-rewrite stays as short as for any other log; a crash after it leaves the
+// segment in both places, a duplicate rather than a loss.
+const archiveSegment = async (path: string, now: number): Promise<void> => {
+    const previous = await readFile(rotatedSegment(path)).catch(undefinedIfMissing);
+    if (previous !== undefined && previous.length > 0) {
+        await writeFileAtomic(archiveName(path, now), await gzipAsync(previous));
+    }
+};
+
+const gzipAsync = promisify(gzip);
+
+const cutToTail = async (root: string, path: string, now: number): Promise<void> => {
+    if (ARCHIVED.has(relativeName(root, path))) {
+        await archiveSegment(path, now);
+    }
     const handle = await open(path, "r");
     let tail: Buffer;
     let segment: Buffer | undefined;
@@ -179,18 +234,34 @@ const cutToTail = async (root: string, path: string): Promise<void> => {
     await writeFile(path, tail);
 };
 
-export const pruneLogFiles = async (root: string): Promise<void> => {
+// An ARCHIVED log's archives past its age, or past its byte cap counted from the newest.
+const pastArchiveKeep = (root: string, archives: readonly PrunedFile[], now: number): PrunedFile[] => {
+    const bytes = new Map<string, number>();
+    return archives
+        .toSorted((a, b) => b.mtimeMs - a.mtimeMs)
+        .filter((file) => {
+            const log = archivedLogOf(relativeName(root, file.path)) ?? "";
+            const keep = ARCHIVED.get(log);
+            const total = (bytes.get(log) ?? 0) + file.size;
+            bytes.set(log, total);
+            return keep === undefined || now - file.mtimeMs > keep.keepMs || total > keep.maxBytes;
+        });
+};
+
+export const pruneLogFiles = async (root: string, now: number = Date.now()): Promise<void> => {
     const files: PrunedFile[] = [];
     const staged: PrunedFile[] = [];
+    const archives: PrunedFile[] = [];
     for (const path of (await walkFiles(root)).filter((candidate) => !KEPT.has(relativeName(root, candidate)))) {
         // Undefined when already gone.
         const info = await stat(path).catch(undefinedIfMissing);
         if (info !== undefined) {
-            (isStaging(path) ? staged : files).push({ path, size: info.size, mtimeMs: info.mtimeMs });
+            const kind = isStaging(path) ? staged : archivedLogOf(relativeName(root, path)) === undefined ? files : archives;
+            kind.push({ path, size: info.size, mtimeMs: info.mtimeMs });
         }
     }
-    const now = Date.now();
     await Promise.all(staged.filter((file) => now - file.mtimeMs > STAGING_IDLE_MS).map((file) => rm(file.path, { force: true })));
+    await Promise.all(pastArchiveKeep(root, archives, now).map((file) => rm(file.path, { force: true })));
     const live = files.filter((file) => now - file.mtimeMs <= MAX_AGE_MS).toSorted((a, b) => b.mtimeMs - a.mtimeMs);
     const counted = new Set(pastCount(root, live));
     const whole = live.filter((file) => WHOLE_FILE.test(file.path));
@@ -206,7 +277,7 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
                 (file) =>
                     !counted.has(file) && !WHOLE_FILE.test(file.path) && !SELF_CAPPED.has(relativeName(root, file.path)) && file.size > MAX_FILE_BYTES,
             )
-            .map((file) => cutToTail(root, file.path)),
+            .map((file) => cutToTail(root, file.path, now)),
     );
 };
 

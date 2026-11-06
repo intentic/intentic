@@ -106,6 +106,7 @@ import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./system/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./system/boot/reaper.js";
 import { inLogContext, openLogFiles } from "./logger.js";
+import { inGitCallerPart } from "@intentic/base/git";
 import { streamAgent } from "./agent/run/stream-agent.js";
 import { drainBehindTurns, turnDoors } from "./agent/run/turn/turn-doors.js";
 import type { TurnEngine } from "./seams/turn-engine.js";
@@ -561,12 +562,13 @@ const turnHold = (heldCards: HeldCards, conversations: Parameters<typeof turnRun
     holdDepsOf(heldCards, (conversationId) => turnRunOf(conversations, conversationId));
 
 // The turn engine's doors, bound to streamAgent here, the one module that may name the turn body, and the rest of what
-// the fleet asks of the engine.
+// the fleet asks of the engine. Every git a turn runs is filed as `<entry> › turn` (or a narrower turn part), the entry
+// being whatever started it: the request, the loop, or the turn before it in the queue.
 const turnEngineOf = (whole: () => Services) => ({
     turns: turnDoors(whole, (input, signal) =>
         input.conversationId === undefined
-            ? streamAgent(whole(), input, signal)
-            : inLogContext({ conversationId: input.conversationId }, streamAgent(whole(), input, signal)),
+            ? inGitCallerPart("turn", streamAgent(whole(), input, signal))
+            : inLogContext({ conversationId: input.conversationId }, inGitCallerPart("turn", streamAgent(whole(), input, signal))),
     ),
     turnEngine: { askRoleModel, roleModelIsSet, familyOf, cancelFamily, cancelWatchersFor } satisfies TurnEngine,
 });
@@ -598,7 +600,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root, logger, orgPolicy);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
-    const perf = createPerfTracker(logger, logFiles.perf);
+    const perf = createPerfTracker(logger, logFiles.perf, logFiles.perfRollups);
     const conversationsParts = createConversationsSlice({
         historyRoot: config.historyRoot,
         workspace,

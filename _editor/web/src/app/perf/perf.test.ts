@@ -1,4 +1,4 @@
-import { longFrameFields, recordPerf, stalledPaths } from "./perf";
+import { buildMode, installPerfReporter, longFrameFields, recordPerf, stalledPaths } from "./perf";
 
 // `stalledPaths` is what the connecting gate turns into an accusation ("this route is what you are waiting on"), so a
 // wrong op, window or threshold here names an innocent path on a screen somebody is reading during an outage.
@@ -81,6 +81,49 @@ describe(`longFrameFields`, () => {
             styleLayoutMs: 92,
             renderMs: 112,
             scripts: `ChatPanel-abc.js:heavy (DIV.onclick) 700ms, 12ms forced\nChatPanel-abc.js:light (DIV.onclick) 40ms, 12ms forced`,
+            mode: `dev`,
         });
+    });
+});
+
+// The field's boot and frame times came from dev servers and production builds alike, which differ several times over;
+// every report that leaves the browser says which, as a field, so the two are split without parsing `page.served`.
+describe(`buildMode`, () => {
+    const reported: Record<string, string | number | boolean>[] = [];
+    const devFlag = process.env[`DEV`];
+
+    beforeEach(() => {
+        reported.length = 0;
+        installPerfReporter((_op, _ms, fields) => {
+            reported.push(fields);
+        });
+    });
+
+    afterEach(() => {
+        installPerfReporter(() => {});
+        if (devFlag === undefined) {
+            delete process.env[`DEV`];
+        } else {
+            process.env[`DEV`] = devFlag;
+        }
+    });
+
+    it(`stamps a slow boot from a dev server as dev, beside the span's own fields`, () => {
+        recordPerf(`boot`, 8_000, { route: `inside:agents`, main: 5_000, view: 8_000 });
+        expect(reported).toEqual([expect.objectContaining({ op: `boot`, mode: `dev`, route: `inside:agents`, main: 5_000 })]);
+    });
+
+    it(`stamps a production build's slow call and long frame as production`, () => {
+        delete process.env[`DEV`];
+        expect(buildMode()).toBe(`production`);
+        recordPerf(`rpc.request`, 2_000, { path: `/agents` });
+        expect(reported[0]?.[`mode`]).toBe(`production`);
+        const frame = longFrameFields({ duration: 400, blockingDuration: 350, startTime: 0, renderStart: 0, styleAndLayoutStart: 0, scripts: [] });
+        expect(frame.mode).toBe(`production`);
+    });
+
+    it(`files nothing for a span under its budget, so the stamp costs a fast span nothing`, () => {
+        recordPerf(`boot`, 1_000, {});
+        expect(reported).toEqual([]);
     });
 });

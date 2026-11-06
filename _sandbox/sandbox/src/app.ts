@@ -111,8 +111,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         watchResponseLength(outgoing, c.req.method, (mismatch) =>
             services.logger.warn({ method: c.req.method, path, ...mismatch }, "http: an answer's body did not match the length it declared"),
         );
+        // Git a request runs is counted under its route (gitRunCallers), a stream's too: what it starts runs as long as it.
         if (policyOf(c).stream === true) {
-            return next();
+            return withGitCaller(gitCallerOfRequest(c.req.method, path), next);
         }
         const from = process.hrtime.bigint();
         const requestId = c.req.header(REQUEST_ID_HEADER) ?? randomUUID();

@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listLogFiles, pruneLogFiles, tailLogFile } from "./log-files.js";
+import { gunzipSync } from "node:zlib";
+import { archivedSegments, listLogFiles, pruneLogFiles, tailLogFile } from "./log-files.js";
 
 const tempDirs: string[] = [];
 const tempRoot = async (): Promise<string> => {
@@ -196,4 +197,89 @@ test("the restart record's files are never evicted or cut", async () => {
     expect(await readFile(join(root, "daemon-exit.json"), "utf8")).toBe("{}");
     expect(await readFile(join(root, "restart-intent.json"), "utf8")).toBe("{}");
     expect((await stat(join(root, "restarts.jsonl"))).size).toBe(6_000_000);
+});
+
+/* THE PERF LOGS ARCHIVE WHAT A CUT WOULD DROP, because one segment of slow spans reached back 38 hours and an audit needs a
+   week of them, and two weeks of rollups. */
+const DAY_MS = 24 * 3_600_000;
+const NOW = Date.parse("2026-11-06T12:00:00.000Z");
+
+test("a perf log's cut compresses the older segment it replaces, and a log the diagnostics read without archives drops it", async () => {
+    const root = await tempRoot();
+    const line = (index: number): string => `${String(index).padStart(9, "0")} ${"x".repeat(89)}\n`;
+    const sixMegabytes = (from: number): string => Array.from({ length: 60_000 }, (_, index) => line(from + index)).join("");
+    for (const name of ["perf.jsonl", "perf-rollups.jsonl", "daemon.log"]) {
+        await writeFile(join(root, name), sixMegabytes(0));
+    }
+    await pruneLogFiles(root, NOW);
+    // The first cut has no older segment to keep yet.
+    expect(await archivedSegments(join(root, "perf.jsonl"))).toEqual([]);
+    const firstSegment = await readFile(join(root, "perf.jsonl.1"));
+
+    for (const name of ["perf.jsonl", "perf-rollups.jsonl", "daemon.log"]) {
+        await writeFile(join(root, name), sixMegabytes(100_000));
+    }
+    await pruneLogFiles(root, NOW + 3_600_000);
+
+    const archives = await archivedSegments(join(root, "perf.jsonl"));
+    expect(archives.map((path) => path.split("/").at(-1))).toEqual(["perf.jsonl.2026-11-06T13-00-00.000Z.gz"]);
+    expect(gunzipSync(await readFile(archives[0] ?? ""))).toEqual(firstSegment);
+    // Nine to one on lines like these; the point is that a week of them fits.
+    expect((await stat(archives[0] ?? "")).size).toBeLessThan(firstSegment.length / 9);
+    expect(await archivedSegments(join(root, "perf-rollups.jsonl"))).toHaveLength(1);
+    expect((await readdir(root)).filter((name) => name.startsWith("daemon.log")).toSorted()).toEqual(["daemon.log", "daemon.log.1"]);
+    expect((await readFile(join(root, "perf.jsonl.1"), "utf8")).startsWith(line(110_000))).toBe(true);
+});
+
+// An archive written at T holds nothing newer than T, so one evicted past eight days leaves every line of the last eight.
+const archiveFile = async (root: string, log: string, daysAgo: number, bytes = 10): Promise<string> => {
+    const at = NOW - daysAgo * DAY_MS;
+    const name = `${log}.${new Date(at).toISOString().replaceAll(":", "-")}.gz`;
+    await writeFile(join(root, name), "");
+    // Sparse: the size the cap reads without writing tens of megabytes.
+    await truncate(join(root, name), bytes);
+    await utimes(join(root, name), new Date(at), new Date(at));
+    return name;
+};
+
+test("slow-span archives are kept eight days and rollup archives fifteen", async () => {
+    const root = await tempRoot();
+    const perfKept = await archiveFile(root, "perf.jsonl", 7.9);
+    await archiveFile(root, "perf.jsonl", 8.1);
+    const rollupsKept = await archiveFile(root, "perf-rollups.jsonl", 14.9);
+    await archiveFile(root, "perf-rollups.jsonl", 15.1);
+    await pruneLogFiles(root, NOW);
+
+    expect((await readdir(root)).toSorted()).toEqual([perfKept, rollupsKept].toSorted());
+});
+
+test("past a log's archive byte cap the oldest go, every one older than the first over it, so no gap opens", async () => {
+    const root = await tempRoot();
+    const newest = await archiveFile(root, "perf-rollups.jsonl", 1, 15_000_000);
+    // Takes the rollups past their 16 MB; it and the small one older than it go, though the small one alone would fit.
+    await archiveFile(root, "perf-rollups.jsonl", 2, 2_000_000);
+    await archiveFile(root, "perf-rollups.jsonl", 3);
+    // Another log's archives are capped on their own.
+    const perf = await archiveFile(root, "perf.jsonl", 2, 2_000_000);
+    await pruneLogFiles(root, NOW);
+
+    expect((await readdir(root)).toSorted()).toEqual([perf, newest].toSorted());
+});
+
+test("archives count apart from the shared file count and are never cut, so a busy week evicts nothing beside them", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "boot-2026-11-01.cpuprofile"), "{}");
+    await utimes(join(root, "boot-2026-11-01.cpuprofile"), new Date(NOW - DAY_MS), new Date(NOW - DAY_MS));
+    for (let index = 0; index < 110; index += 1) {
+        const at = NOW - index * 3_600_000;
+        const name = join(root, `perf.jsonl.${new Date(at).toISOString().replaceAll(":", "-")}.gz`);
+        await writeFile(name, "");
+        await utimes(name, new Date(at), new Date(at));
+    }
+    await writeFile(join(root, "perf.jsonl.2026-11-06T11-30-00.000Z.gz"), Buffer.alloc(6_000_000, 120));
+    await pruneLogFiles(root, NOW);
+
+    expect(await readFile(join(root, "boot-2026-11-01.cpuprofile"), "utf8")).toBe("{}");
+    expect(await archivedSegments(join(root, "perf.jsonl"))).toHaveLength(111);
+    expect((await stat(join(root, "perf.jsonl.2026-11-06T11-30-00.000Z.gz"))).size).toBe(6_000_000);
 });

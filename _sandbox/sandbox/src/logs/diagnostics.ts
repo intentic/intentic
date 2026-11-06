@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { gitSubcommand, routeTemplate } from "../system/resources/rollups/perf-rollup.js";
 import { quantile, templateOf } from "./diagnostics-shape.js";
-import { logsRoot, rotatedSegment } from "./log-files.js";
+import { archivedSegments, logsRoot, rotatedSegment } from "./log-files.js";
 import { parseRecord, type ScanCoverage, scanNewestFirst } from "./log-read.js";
 
 // Reads the daemon's own historyRoot/logs files back: filtered by level, time, and substring, newest-first, unlike a
@@ -13,6 +14,9 @@ import { parseRecord, type ScanCoverage, scanNewestFirst } from "./log-read.js";
 export const LOG_BUDGET_BYTES = 16_000_000;
 // The resource series' own cap is 40 MB; its whole file stays reachable.
 const SERIES_BUDGET_BYTES = 48_000_000;
+// Slow spans keep a week of compressed archives (log-files.ts ARCHIVED), 40 to 160 MB of lines; a read stops here and
+// says so, which is about two days on a busy week. The rollups answer for the rest.
+const SLOW_BUDGET_BYTES = 48_000_000;
 // Distinct message shapes tracked per read; past it, the rest count under one row rather than growing without bound.
 const MAX_GROUPS = 2_000;
 
@@ -38,10 +42,10 @@ const atLeastLevel = (raw: string, floor: number): boolean => {
     return named === undefined || named >= floor;
 };
 
-/** A log and its older segment, newest first: what a read of `name` walks. */
-export const logPaths = (historyRoot: string, name: string): string[] => {
+/** A log, its older segment and its compressed archives, newest first: what a read of `name` walks. */
+export const logPaths = async (historyRoot: string, name: string): Promise<string[]> => {
     const path = join(logsRoot(historyRoot), name);
-    return [path, rotatedSegment(path)];
+    return [path, rotatedSegment(path), ...(await archivedSegments(path))];
 };
 
 export interface LogLineQuery {
@@ -99,7 +103,7 @@ export const readLogLines = async (historyRoot: string, query: LogLineQuery): Pr
     const groups = new Map<string, LineGroup>();
     let matched = 0;
     const coverage = await scanNewestFirst(
-        logPaths(historyRoot, query.file),
+        await logPaths(historyRoot, query.file),
         { sinceMs: query.sinceMs, budgetBytes: query.budgetBytes ?? LOG_BUDGET_BYTES },
         (raw, at) => {
             if (!atLeastLevel(raw, floor) || (needle !== undefined && !raw.toLowerCase().includes(needle))) {
@@ -136,16 +140,16 @@ export const opMatches = (op: string, perf: string): boolean => {
     return perf === op;
 };
 
-// What a span was about, for splitting one op by its subject: the route of a request (ids folded), the git subcommand,
-// the tool of a hook, the model role, else the repository.
+// What a span was about, for splitting one op by its subject: the route of a request (ids folded) and the git subcommand
+// as the rollups name them (system/resources/perf-rollup.ts), the tool of a hook, the model role, else the repository.
 const subjectOf = (span: JsonObject): string | undefined => {
     const path = span["path"];
     if (isText(path)) {
-        return `${isText(span["method"]) ? `${span["method"]} ` : ""}${path.split("?")[0]?.replaceAll(/\/[^/]*\d[^/]*/g, "/:id")}`;
+        return routeTemplate(isText(span["method"]) ? span["method"] : undefined, path);
     }
     const git = span["git"];
     if (isText(git)) {
-        return git.split(" ")[0];
+        return gitSubcommand(git);
     }
     const subject = span["tool"] ?? span["role"] ?? span["repo"] ?? span["frame"];
     return isText(subject) ? subject : undefined;
@@ -178,6 +182,7 @@ export const readSlowSpans = async (
         file: "perf.jsonl",
         sinceMs: query.sinceMs,
         limit: query.limit,
+        budgetBytes: SLOW_BUDGET_BYTES,
         where: (span) => {
             // perf.jsonl also holds the ranked perf summary every 10 minutes; only lines naming a span are spans.
             if (!isText(span["perf"])) {

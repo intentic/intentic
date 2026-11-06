@@ -8,7 +8,7 @@ import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { RosterFrames } from "@intentic/sandbox-contract/events/system-events";
 import { type RosterListener, rosterSends } from "./projection/roster-sends.js";
-import { withGitCaller } from "@intentic/base/git";
+import { withGitCallerPart } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
 import { routingFor } from "./routing.js";
@@ -624,8 +624,9 @@ export const createFleet = (
     let following: Promise<boolean> | undefined;
     const reprobe = (): Promise<boolean> => {
         if (probing === undefined) {
-            // Named for the git it runs: a standings probe reads every live agent's branch against main.
-            probing = withGitCaller("agents.standings", probeFleet).finally(() => {
+            // Named for the git it runs: a standings probe reads every live agent's branch against main. Kept inside the
+            // entry that asked first (`bg ref-watch › agents.standings`), which says what keeps re-probing.
+            probing = withGitCallerPart("agents.standings", probeFleet).finally(() => {
                 probing = undefined;
             });
             return probing;

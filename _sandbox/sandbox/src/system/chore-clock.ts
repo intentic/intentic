@@ -4,6 +4,7 @@ import { startPeriodic } from "@intentic/base/async";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import { inBackground } from "./background-git.js";
 
 // THE DAEMON'S HOUSEKEEPING CLOCK (2026-10-05). A chore that should run hourly or daily, not only at boot, and not
 // again at every boot of a sandbox that restarts more often than that: when each chore last started is kept on the
@@ -75,7 +76,8 @@ export const startChoreClock = (deps: ChoreClockDeps, chores: readonly Chore[]):
         try {
             const at = now();
             await file.update((current) => ({ ran: { ...current.ran, [chore.name]: at } }));
-            await chore.run();
+            // Its git counted as `bg chore.<name>`: a chore's name is a word the code spells, like every caller's.
+            await inBackground(`chore.${chore.name}`, chore.run);
         } catch (error) {
             deps.logger.warn({ err: error, chore: chore.name }, "housekeeping: a chore failed, it runs again after its interval");
         } finally {

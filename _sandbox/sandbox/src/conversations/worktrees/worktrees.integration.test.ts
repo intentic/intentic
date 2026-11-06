@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
-import { defaultGit, gitInit, type GitRunner } from "@intentic/base/git";
+import { defaultGit, gitInit, type GitRunner, gitRunCallers, UNLABELLED_GIT_CALLER, withGitCaller } from "@intentic/base/git";
 import { noIsolation } from "./isolation.testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
@@ -528,6 +528,24 @@ test("retire keeps work written after the first preserve, while the checkout wai
     expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
     expect(await sh(work, "show", "agent/c1:late.md")).toBe("written late");
     expect(await sh(intent, "show", "agent/c1:deploy.config.ts")).toBe("written late");
+});
+
+// The git run holding a repo lock is counted under whoever took it (gitRunCallers), with the lock said once however many
+// are nested: filed under the lock's own span name, it hid every taker behind one label.
+test("git run under the repo lock is counted under its taker, and a nested lock does not grow the label", async () => {
+    const { work, worktrees } = await setup();
+    const before = gitRunCallers();
+    const delta = (caller: string): number => (gitRunCallers()[caller] ?? 0) - (before[caller] ?? 0);
+    await withGitCaller("http probe.land", () =>
+        worktrees.withRepoLock("root", async () => {
+            await defaultGit(work, ["rev-parse", "HEAD"]);
+            await worktrees.withRepoLock("intent", () => defaultGit(join(work, "intent"), ["rev-parse", "HEAD"]));
+        }),
+    );
+    await worktrees.withRepoLock("root", () => defaultGit(work, ["rev-parse", "HEAD"]));
+    expect(delta("http probe.land › lock")).toBe(2);
+    expect(delta(`${UNLABELLED_GIT_CALLER} › lock`)).toBe(1);
+    expect(delta("git.lock.hold")).toBe(0);
 });
 
 test("a retired agent's checkout comes back from its branch, with its work", async () => {

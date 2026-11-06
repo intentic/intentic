@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type DestinationStream, type Logger, type LoggerOptions, destination, multistream, pino, stdSerializers, stdTimeFunctions } from "pino";
 import type { Config } from "./env.config.js";
+import { PERF_ROLLUPS_FILE, type RollupSink } from "./system/resources/rollups/perf-rollup.js";
 
 // What a log line was written on behalf of: the conversation whose turn or the browser request whose handler was running.
 export interface LogContext {
@@ -75,6 +77,20 @@ const createPerfLogger = (config: Pick<Config, "logLevel" | "logPretty" | "histo
     return file === undefined ? undefined : pino(loggerOptions(config), file);
 };
 
+// Every span's ten-minute rollup rows (historyRoot/logs/perf-rollups.jsonl, system/resources/perf-rollup.ts): one append
+// per window, so a plain async append rather than a stream, and nothing is opened until the first window closes. Kept
+// wherever the slow spans have a file of their own.
+const createPerfRollupSink = (config: Pick<Config, "logPretty" | "historyRoot">): RollupSink | undefined => {
+    if (config.logPretty || config.historyRoot === "") {
+        return undefined;
+    }
+    const dir = join(config.historyRoot, "logs");
+    return async (text) => {
+        await mkdir(dir, { recursive: true });
+        await appendFile(join(dir, PERF_ROLLUPS_FILE), text);
+    };
+};
+
 // Browser-reported lines, kept out of daemon.log which is otherwise all daemon-authored. Fixed at `warn` regardless of
 // the daemon's logLevel, so stall reports are not dropped; undefined means the route records nothing.
 const createClientLogger = (config: Pick<Config, "historyRoot">): Logger | undefined => {
@@ -82,16 +98,18 @@ const createClientLogger = (config: Pick<Config, "historyRoot">): Logger | undef
     return file === undefined ? undefined : pino(loggerOptions({ logLevel: "warn" }), file);
 };
 
-// The log files composing opens besides daemon.log: the perf spans' and the browser's reports'. NO_LOG_FILES is for a
+// The log files composing opens besides daemon.log: the perf spans', their rollups' and the browser's reports'. NO_LOG_FILES is for a
 // one-shot that must open nothing for writing: the target image's composer runs over read-only mounts of the running
 // sandbox's volumes, where a log's open fails after composing has returned and ends the process (compose-overlay.ts).
 export interface LogFiles {
     readonly perf: Logger | undefined;
+    readonly perfRollups: RollupSink | undefined;
     readonly client: Logger | undefined;
 }
-export const NO_LOG_FILES: LogFiles = { perf: undefined, client: undefined };
+export const NO_LOG_FILES: LogFiles = { perf: undefined, perfRollups: undefined, client: undefined };
 export const openLogFiles = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): LogFiles => ({
     perf: createPerfLogger(config),
+    perfRollups: createPerfRollupSink(config),
     client: createClientLogger(config),
 });
 

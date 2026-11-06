@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathExists, pathPresence } from "@intentic/base/fs";
-import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { currentGitCaller, defaultGit, gitCallerWith, type GitRunner, withGitCaller } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
@@ -198,14 +198,16 @@ export const createAgentWorktrees = (
     // Wait and hold are measured separately: a slow git op (hold) and one queued behind another repo's lock (wait) are
     // different problems.
     // `depth` is what was already ahead of it in the queue, so a line reads "waited 3.2s behind 2 tasks".
+    // The git it runs is counted under who took it, `<taker> › lock`: under the span's own name it hid every taker.
     const withRepoLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
+        const held = gitCallerWith(currentGitCaller(), "lock");
         const depth = queued.get(repo) ?? 0;
         queued.set(repo, depth + 1);
         const from = process.hrtime.bigint();
         return repoChain(repo, async (): Promise<T> => {
             perf.record("git.lock.wait", Number(process.hrtime.bigint() - from) / 1e6, { repo, depth });
             try {
-                return await perf.track("git.lock.hold", { repo }, task);
+                return await perf.track("git.lock.hold", { repo }, () => withGitCaller(held, task));
             } finally {
                 queued.set(repo, (queued.get(repo) ?? 1) - 1);
             }

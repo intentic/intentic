@@ -1,4 +1,6 @@
-import { type FileHandle, open } from "node:fs/promises";
+import { type FileHandle, open, readFile } from "node:fs/promises";
+import { promisify } from "node:util";
+import { gunzip } from "node:zlib";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
 import { parseJsonOr } from "@intentic/base/json";
@@ -6,7 +8,8 @@ import { parseJsonOr } from "@intentic/base/json";
 // Reads a JSONL log newest line first, backwards from its end in chunks, and stops at the first line older than the
 // window asked for. A question about the last hour of a 40 MB file reads the last hour, and nothing older ever enters
 // memory. A log pruneLogFiles rotates (log-files.ts) is read on into its older segment when the window reaches past
-// the live file's first line.
+// the live file's first line, and on into its compressed archives after that: each is decompressed whole (a few MB,
+// off the event loop) and read backwards the same way, its decompressed bytes counted against the budget.
 
 const CHUNK_BYTES = 256 * 1024;
 // Lines are appended by several writers (two daemon pids across a restart, a perf span stamped at its start), so a
@@ -73,18 +76,36 @@ const emitLine = (bytes: Buffer, query: ScanQuery, state: ScanState, visit: Visi
     return false;
 };
 
-const scanHandle = async (handle: FileHandle, query: ScanQuery, state: ScanState, visit: Visit): Promise<FileEnd> => {
-    let position = (await handle.stat()).size;
+// Where a scan reads its bytes from: an open file, or a decompressed archive already in memory.
+interface ByteSource {
+    readonly size: number;
+    readonly read: (position: number, length: number) => Promise<Buffer>;
+}
+
+const fileSource = async (handle: FileHandle): Promise<ByteSource> => ({
+    size: (await handle.stat()).size,
+    read: async (position, length) => {
+        const chunk = Buffer.alloc(length);
+        await handle.read(chunk, 0, length, position);
+        return chunk;
+    },
+});
+
+const bufferSource = (whole: Buffer): ByteSource => ({ size: whole.length, read: async (position, length) => whole.subarray(position, position + length) });
+
+const gunzipAsync = promisify(gunzip);
+
+const scanSource = async (source: ByteSource, query: ScanQuery, state: ScanState, visit: Visit): Promise<FileEnd> => {
+    let position = source.size;
     // The bytes before the first line break seen so far: the end of a line whose start lies in the next chunk back.
-    let carry = Buffer.alloc(0);
+    let carry: Buffer = Buffer.alloc(0);
     while (position > 0) {
         if (state.readBytes >= query.budgetBytes) {
             return "budget";
         }
         const length = Math.min(CHUNK_BYTES, position, query.budgetBytes - state.readBytes);
         position -= length;
-        const chunk = Buffer.alloc(length);
-        await handle.read(chunk, 0, length, position);
+        const chunk = await source.read(position, length);
         state.readBytes += length;
         const joined = carry.length === 0 ? chunk : Buffer.concat([chunk, carry]);
         let end = joined.length;
@@ -100,24 +121,35 @@ const scanHandle = async (handle: FileHandle, query: ScanQuery, state: ScanState
     return emitLine(carry, query, state, visit) ? "window" : "done";
 };
 
+// One file's lines, or undefined when it does not exist. Only absence is a quiet log; one that failed to open (EACCES, a
+// directory) throws rather than answering empty, and so does an archive that does not decompress.
+const scanPath = async (path: string, query: ScanQuery, state: ScanState, visit: Visit): Promise<FileEnd | undefined> => {
+    if (path.endsWith(".gz")) {
+        const packed = await readFile(path).catch(undefinedIfMissing);
+        return packed === undefined ? undefined : await scanSource(bufferSource(await gunzipAsync(packed)), query, state, visit);
+    }
+    const handle = await open(path, "r").catch(undefinedIfMissing);
+    if (handle === undefined) {
+        return undefined;
+    }
+    try {
+        return await scanSource(await fileSource(handle), query, state, visit);
+    } finally {
+        await handle.close();
+    }
+};
+
 /** Hands `visit` every line of `paths` (the live file first, then its older segments) inside the window, newest first. */
 export const scanNewestFirst = async (paths: readonly string[], query: ScanQuery, visit: Visit): Promise<ScanCoverage> => {
     const state: ScanState = { readBytes: 0, oldestAt: undefined, newestAt: undefined };
     const files: string[] = [];
     let ended: ScanCoverage["ended"] = "start";
     for (const path of paths) {
-        // Only absence is a quiet log; one that failed to open (EACCES, a directory) throws rather than answering empty.
-        const handle = await open(path, "r").catch(undefinedIfMissing);
-        if (handle === undefined) {
+        const end = await scanPath(path, query, state, visit);
+        if (end === undefined) {
             continue;
         }
         files.push(path);
-        let end: FileEnd;
-        try {
-            end = await scanHandle(handle, query, state, visit);
-        } finally {
-            await handle.close();
-        }
         if (end !== "done") {
             ended = end;
             break;

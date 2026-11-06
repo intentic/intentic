@@ -1,12 +1,16 @@
 import { loadavg } from "node:os";
-import { withGitCaller } from "@intentic/base/git";
+import { withGitCallerPart } from "@intentic/base/git";
 import type { Logger } from "pino";
+import { roundMs as round } from "./rollups/perf-histogram.js";
+import { type RollupSink, startRollups } from "./rollups/perf-rollup.js";
 
 // Per-op timing the stall detector can't give: not just that the loop stalled, but what it was doing.
 // - slow spans warn once each to logs/perf.jsonl, tagged with load; never to daemon.log
 // - every span also logs at debug, so raising logLevel turns this into a full trace
 // - a periodic summary ranks ops by total time, not worst case, and goes to perf.jsonl at info beside the slow spans
-// In-memory and bounded: one row and one retained sample per op.
+// - every span, slow or not, is counted into ten-minute histograms per op and subject, written to logs/perf-rollups.jsonl
+//   (perf-rollup.ts): the distribution the slow lines cannot give, kept two weeks
+// In-memory and bounded: one row and one retained sample per op, and one histogram per op and subject in the window.
 
 // Default slow threshold for ops with no entry in SLOW_MS; low, since this daemon runs local git for one user.
 const DEFAULT_SLOW_MS = 300;
@@ -69,7 +73,7 @@ const SLOW_MS: Readonly<Record<string, number>> = {
 // third of the bytes and matched every grep for a conversation id, so it is written with the slow spans instead.
 export const SUMMARY_MS = 10 * 60_000;
 
-// Ranked rows shown before wait siblings are added back (see summaryRows); keeps it to one screen.
+// Ranked rows shown before wait siblings are added back (see summaryOf); keeps it to one screen.
 const SUMMARY_ROWS = 12;
 
 // Names the wait op paired with a work op (`X.hold`→`X.wait`, otherwise `<op>.wait`), so the summary can show a wait
@@ -103,7 +107,8 @@ export interface PerfTracker {
     readonly record: (op: string, ms: number, fields: PerfFields, failed?: boolean) => void;
     /** Every op's account, ranked by total time; the summary's own content, readable without waiting for the timer. */
     readonly ranked: () => readonly PerfStat[];
-    readonly stop: () => void;
+    /** Stops the summary and the rollups, resolving once the window counted so far is written. */
+    readonly stop: () => Promise<void>;
 }
 
 const elapsedMs = (from: bigint): number => Number(process.hrtime.bigint() - from) / 1e6;
@@ -118,13 +123,37 @@ const load1 = (now: number): number => {
     return loadCache.value;
 };
 
-// Two decimals below 10ms, whole numbers above: both a sub-ms read and a multi-second scan stay readable.
-const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
+const rankedOf = (stats: ReadonlyMap<string, PerfStat>): readonly PerfStat[] =>
+    [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
+
+// Ranked and capped, plus each cut row's wait half (waitOpFor); undefined fields are dropped by JSON. `recent` is how many
+// of the row's spans landed since the last summary.
+const summaryOf = (stats: ReadonlyMap<string, PerfStat>, countAtLastSummary: ReadonlyMap<string, number>) => {
+    const top = rankedOf(stats).slice(0, SUMMARY_ROWS);
+    const shown = new Set(top.map((stat) => stat.op));
+    const waits = top.flatMap((stat) => {
+        const sibling = stats.get(waitOpFor(stat.op));
+        return sibling !== undefined && !shown.has(sibling.op) ? [sibling] : [];
+    });
+    return [...top, ...waits].map((stat) => ({
+        op: stat.op,
+        count: stat.count,
+        recent: stat.count - (countAtLastSummary.get(stat.op) ?? 0),
+        totalMs: Math.round(stat.totalMs),
+        meanMs: round(stat.totalMs / stat.count),
+        maxMs: Math.round(stat.maxMs),
+        slow: stat.slowCount > 0 ? stat.slowCount : undefined,
+        failed: stat.failed > 0 ? stat.failed : undefined,
+        worst: stat.slowest,
+    }));
+};
 
 // Separate destination for slow-span lines and the summary (createPerfLogger, logs/perf.jsonl); undefined falls back to
-// `logger` rather than dropping them.
-export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined = undefined): PerfTracker => {
+// `logger` rather than dropping them. `rollupSink` takes each window's rollup rows (logger.ts, logs/perf-rollups.jsonl);
+// without one nothing is counted into windows, which is every suite that builds a tracker of its own.
+export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined = undefined, rollupSink: RollupSink | undefined = undefined): PerfTracker => {
     const slowSink = slowLogger ?? logger;
+    const rollups = rollupSink === undefined ? undefined : startRollups(rollupSink, logger);
     const stats = new Map<string, PerfStat>();
     // When counting began: every summary's totals run from here, which its `since` field says.
     const since = new Date().toISOString();
@@ -133,17 +162,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
     // Anything measured since the last summary; an idle daemon must not print a table of zeroes every minute.
     let dirty = false;
 
-    const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
-
-    const summaryRows = (): readonly PerfStat[] => {
-        const top = ranked().slice(0, SUMMARY_ROWS);
-        const shown = new Set(top.map((stat) => stat.op));
-        const waits = top.flatMap((stat) => {
-            const sibling = stats.get(waitOpFor(stat.op));
-            return sibling !== undefined && !shown.has(sibling.op) ? [sibling] : [];
-        });
-        return [...top, ...waits];
-    };
+    const ranked = (): readonly PerfStat[] => rankedOf(stats);
 
     const record = (op: string, ms: number, fields: PerfFields, failed = false): void => {
         const slow = ms >= (SLOW_MS[op] ?? DEFAULT_SLOW_MS);
@@ -158,6 +177,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
         }
         stats.set(op, stat);
         dirty = true;
+        rollups?.add(op, ms, fields, failed);
         if (slow) {
             // `seen`/`slowSeen` distinguish first occurrence from pattern; `load1` distinguishes machine from code.
             slowSink.warn({ perf: op, ms: round(ms), ...fields, seen: stat.count, slowSeen: stat.slowCount, load1: load1(Date.now()) }, `slow ${op}`);
@@ -173,7 +193,7 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
         const from = process.hrtime.bigint();
         try {
             // Every git the span runs is counted under its name (gitRunCallers), so a profile reads why git ran.
-            const result = await withGitCaller(op, run);
+            const result = await withGitCallerPart(op, run);
             record(op, elapsedMs(from), fields);
             return result;
         } catch (error) {
@@ -188,25 +208,9 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
             return;
         }
         dirty = false;
-        const rows = summaryRows();
+        // Totals run from `since`, the daemon's start; the ten-minute windows are the rollups' (perf-rollup.ts).
         slowSink.info(
-            {
-                // Ranked and capped, plus each cut row's wait half (see summaryRows); undefined fields are dropped by
-                // JSON. Totals run from `since`; `recent` is how many of the row's spans landed since the last summary.
-                perfSummary: rows.map((stat) => ({
-                    op: stat.op,
-                    count: stat.count,
-                    recent: stat.count - (countAtLastSummary.get(stat.op) ?? 0),
-                    totalMs: Math.round(stat.totalMs),
-                    meanMs: round(stat.totalMs / stat.count),
-                    maxMs: Math.round(stat.maxMs),
-                    slow: stat.slowCount > 0 ? stat.slowCount : undefined,
-                    failed: stat.failed > 0 ? stat.failed : undefined,
-                    worst: stat.slowest,
-                })),
-                since,
-                everyMs: SUMMARY_MS,
-            },
+            { perfSummary: summaryOf(stats, countAtLastSummary), since, everyMs: SUMMARY_MS },
             "perf summary: ranked by TOTAL time since the daemon started, which is what a bottleneck actually is",
         );
         for (const stat of stats.values()) {
@@ -217,5 +221,13 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
     // Measurement must never be what keeps the daemon alive.
     timer.unref();
 
-    return { track, record, ranked, stop: () => clearInterval(timer) };
+    return {
+        track,
+        record,
+        ranked,
+        stop: async () => {
+            clearInterval(timer);
+            await rollups?.stop();
+        },
+    };
 };

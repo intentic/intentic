@@ -1,4 +1,4 @@
-import { timedHooks } from "../hook-timing.js";
+import { namedHooks, timedHooks } from "../hook-timing.js";
 import type {
     CanUseTool,
     EffortLevel,
@@ -441,16 +441,16 @@ const reasoningOptions = (request: HarnessRequest): { effort?: EffortLevel; thin
 // The turn policy's own boundaries, each the only layer between an unattended wake and what it must not do: the persona's
 // folder limit and config-edit permission, and the turn's tool list, a call off which is refused before it runs.
 const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeof personaScopeHooks>[] => [
-    policy.personaScope === undefined ? {} : personaScopeHooks(policy.personaScope),
-    policy.allowedTools === undefined ? {} : toolAllowlistHooks(policy.allowedTools),
+    policy.personaScope === undefined ? {} : namedHooks("persona-scope", personaScopeHooks(policy.personaScope)),
+    policy.allowedTools === undefined ? {} : namedHooks("tool-allowlist", toolAllowlistHooks(policy.allowedTools)),
 ];
 
 // The harness's own asks of the session: a checklist left open and subagents' work left held, each said back once at Stop,
 // and a slash command's notes, cut from in front of its words, said through the prompt hook (command-turn.ts).
 const sessionHooks = (spec: HarnessRequest["spec"], children: HarnessRequest["hooks"]["children"]) => [
-    checklistCloseHooks({ sessionStore: spec.sessionStore }),
-    heldChildrenHooks(children?.held),
-    commandNotesHooks(commandWire(spec).notes),
+    namedHooks("checklist-close", checklistCloseHooks({ sessionStore: spec.sessionStore })),
+    namedHooks("held-children", heldChildrenHooks(children?.held)),
+    namedHooks("command-notes", commandNotesHooks(commandWire(spec).notes)),
 ];
 
 // What keeps an isolated turn's work landable as it runs. After a tool call, a main line another conversation moved is
@@ -458,8 +458,8 @@ const sessionHooks = (spec: HarnessRequest["spec"], children: HarnessRequest["ho
 // rebase run early, so a branch that no longer rebases is resolved in this turn; then the repositories' own `turn`
 // checks, whose findings are said back for the model to fix or say why not. Nothing waits on either.
 const landableHooks = (request: HarnessRequest, push: (event: AgentEvent) => void, quiet: () => Promise<boolean>) => [
-    turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push, stopCatchUp(request.hooks.catchUp, push)),
-    catchUpHooks(request.hooks.catchUp, quiet, push),
+    namedHooks("turn-checks", turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push, stopCatchUp(request.hooks.catchUp, push))),
+    namedHooks("main-catch-up", catchUpHooks(request.hooks.catchUp, quiet, push)),
 ];
 
 // Base SDK options for the turn.
@@ -501,13 +501,13 @@ const baseOptions = (
         env: turnEnv(request),
         // Hooks fire under bypassPermissions and for subagents: tmux wraps every Bash command, installs redirect to the
         // approved overlay, diagnostics type-checks native edits.
-        // Each callback timed for perf.jsonl (hook-timing.ts) when the turn says where to report.
+        // Each callback timed for perf.jsonl and its git counted under its set's name here (hook-timing.ts namedHooks).
         hooks: timedHooks(
             mergeHooks(
-                approval.hooks,
+                namedHooks("plan-approval", approval.hooks),
                 // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
                 // boilerplate.
-                commandGateHooks({
+                namedHooks("command-guard", commandGateHooks({
                     policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
                     judging: request.policy.judging ?? "on",
                     unattended: request.policy.unattended === true,
@@ -532,10 +532,10 @@ const baseOptions = (
                     onImageInstall: request.hooks.onImageInstall,
                     // The owner's action rules, in the same guard every runtime's gate is built from.
                     actionRules: request.policy.actionRules,
-                }),
+                })),
                 // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
                 // alone.
-                tmuxEnabled
+                namedHooks("terminal", tmuxEnabled
                     ? bashTmuxHooks(
                           Object.keys(request.tools.cliEnv ?? {}),
                           request.spec.isolation,
@@ -547,49 +547,49 @@ const baseOptions = (
                       )
                     : request.tools.secrets !== undefined
                       ? secretCommandHooks(request.tools.secrets)
-                      : {},
-                toolResultHooks(request, taint),
-                installSteeringHooks(),
+                      : {}),
+                namedHooks("tool-results", toolResultHooks(request, taint)),
+                namedHooks("install-steering", installSteeringHooks()),
                 ...policyBoundaryHooks(request.policy),
                 ...sessionHooks(request.spec, request.hooks.children),
                 // What keeps an isolated turn's work landable: the main line caught up, the repositories' `turn` checks.
                 ...landableHooks(request, push, quiet),
                 // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
-                settingsHookChangeHooks(request),
+                namedHooks("settings-hook-gate", settingsHookChangeHooks(request)),
                 // Apply worktree redirection only when no anchor already resolves paths.
                 request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
-                    ? worktreeRedirectHooks(request.spec.isolation.plan)
+                    ? namedHooks("worktree-redirect", worktreeRedirectHooks(request.spec.isolation.plan))
                     : {},
                 // One-time advisories: rg vs grep and an empty result (never rewritten, the regex dialects disagree), and
                 // what a call costs once the context crosses 350k and 650k tokens.
-                searchNoticeHooks(request.tools.iqAvailable === true), contextBudgetHooks(),
+                namedHooks("search-notice", searchNoticeHooks(request.tools.iqAvailable === true)), namedHooks("context-budget", contextBudgetHooks()),
                 // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
                 request.tools.browserPorts !== undefined
-                    ? browserSessionHooks(
+                    ? namedHooks("browser-sessions", browserSessionHooks(
                           request.tools.browserPorts,
                           request.tools.browserPasskeys ?? {},
                           request.tools.browserAccounts ?? {},
                           request.spec.conversationId,
-                      )
+                      ))
                     : {},
                 // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
                 // checked their work to each delegation's result.
-                subagents !== undefined ? subagentHooks(subagents, recordInto(push)) : {},
+                subagents !== undefined ? namedHooks("subagents", subagentHooks(subagents, recordInto(push))) : {},
                 // Drawn in the chat after a call: a connected MCP server's app (mcp-apps.ts), a review's findings (review-findings.ts).
-                appHooks(request, push),
-                reviewHooks(push),
+                namedHooks("apps", appHooks(request, push)),
+                namedHooks("reviews", reviewHooks(push)),
                 // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
                 // namespace.
-                editDiagnosticsHooks(
+                namedHooks("edit-diagnostics", editDiagnosticsHooks(
                     request.spec.isolation,
                     undefined,
                     undefined,
                     request.hooks.dirtyFiles === undefined ? undefined : createShellEditTracker(request.hooks.dirtyFiles),
                     request.hooks.editReviewers ?? [],
-                ),
+                )),
                 // Flags a failing test/build caused by a genuinely missing package, checked first; asked of the main
                 // checkout.
-                depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
+                namedHooks("deps-notice", depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true)),
             ),
             request.hooks.hookTimed,
         ),
