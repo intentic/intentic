@@ -91,6 +91,12 @@ const watch = (page: Page, daemon: DaemonUnderTest): Watch => {
     let loadingDocument = false;
     const ours = (request: Request): boolean => request.url().startsWith(daemon.url);
     const named = (request: Request): string => `${request.method()} ${new URL(request.url()).pathname}`;
+    // Background telemetry flushes (/logs/client, /extensions/usage) run on timers and do not represent page work
+    // holding up settlement. Their failures and calls are still recorded.
+    const background = (request: Request): boolean => {
+        const path = new URL(request.url()).pathname;
+        return path === `/logs/client` || path === `/extensions/usage`;
+    };
     page.on(`framenavigated`, (frame) => {
         if (frame === page.mainFrame() && loadingDocument) {
             // A keepalive report from the document we left can outlive navigation without Playwright reporting
@@ -105,9 +111,11 @@ const watch = (page: Page, daemon: DaemonUnderTest): Watch => {
             loadingDocument = true;
         }
         if (ours(request)) {
-            open.add(request);
             calls += 1;
-            lastHeard = Date.now();
+            if (!background(request)) {
+                open.add(request);
+                lastHeard = Date.now();
+            }
         }
     });
     page.on(`response`, (response) => {
@@ -229,8 +237,11 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
             // Below the floor the editor draws one page instead of any of these, and the release owners run must never
             // be. Waited for beside the quiet, since a daemon that old never goes quiet: with no roster revision on its
             // heartbeats, the editor reads its whole roster again every two seconds (daemon-floor.ts says so).
+            // Check settled synchronously first so an in-flight quiet window is recognized before a DOM query that can
+            // take seconds under main-thread contention.
             const tooOld = page.locator(`[data-too-old]`);
-            const outcome = async (): Promise<string> => ((await tooOld.count()) > 0 ? `too old` : seen.settled() ? `settled` : `busy`);
+            const outcome = async (): Promise<string> =>
+                seen.settled() ? `settled` : (await tooOld.count()) > 0 ? `too old` : seen.settled() ? `settled` : `busy`;
             // The sample that ended the wait is the one judged: a second look reads another moment, and a page's next
             // refetch landing right after the quiet window read as `busy` and failed as "too old" (run 38919885439).
             let ended = `busy`;
