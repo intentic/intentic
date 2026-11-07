@@ -1,5 +1,5 @@
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
-import { type AnswerMemory, keepLastAnswer, LATE_KEEP_MS } from "../device-listing.js";
+import { type AnswerMemory, keepLastAnswer, landLateHalf, LATE_KEEP_MS } from "../device-listing.js";
 
 const report: DeviceReport = { hostname: "rog", os: "linux", pairings: [], ports: [], agent: { running: true, installed: "0.1.0" }, capturedAt: 0 };
 const box: DeviceSandbox = { slug: "work", container: "intentic-sandbox-work", running: true, image: "img" };
@@ -40,4 +40,20 @@ test("a refusal replaces the remembered answer, so a late reading after it bring
 
 test("a machine never answered is served what it said this time", () => {
     expect(keepLastAnswer({}, { result: { gap: "offline" }, late: { report: LATE, sandboxes: LATE } }, 0)).toEqual({ gap: "offline" });
+});
+
+// A machine slower than the reading answers after it: that half is what it says now, and the next late reading is
+// served from it, whatever the keep window had left of the answer before.
+test("a listing that lands after its reading replaces the remembered one and is served beside the report as held", () => {
+    const memory = answeredAt(0);
+    const other: DeviceSandbox = { ...box, slug: "other" };
+    const landed = landLateHalf(memory, { report }, { sandboxes: [other] }, LATE_KEEP_MS + 5_000);
+    expect(landed).toEqual({ report, sandboxes: [other] });
+    expect(keepLastAnswer(memory, { result: { gap: "offline" }, late: { sandboxes: LATE } }, LATE_KEEP_MS + 30_000).sandboxes).toEqual([other]);
+});
+
+test("a report that lands after its reading leaves the containers as they were served", () => {
+    const memory: AnswerMemory = {};
+    keepLastAnswer(memory, { result: { gap: "offline", sandboxes: [box] }, late: { report: LATE } }, 0);
+    expect(landLateHalf(memory, { gap: "offline", sandboxes: [box] }, { report }, 9_000)).toEqual({ report, sandboxes: [box] });
 });

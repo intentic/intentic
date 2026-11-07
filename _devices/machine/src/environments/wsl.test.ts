@@ -84,4 +84,9 @@ describe("distrosFrom", () => {
         expect(distrosFrom("Ubuntu\r\ndocker-desktop\r\ndocker-desktop-data\r\n")).toEqual(["Ubuntu"]);
         expect(distrosFrom("d\0o\0c\0k\0e\0r\0-\0d\0e\0s\0k\0t\0o\0p\0\r\0\n\0")).toEqual([]);
     });
+
+    // Intentic's own engine distro is an engine's as well: a PC with one distro of its own reads as having one.
+    it("leaves out Intentic's own engine distro", () => {
+        expect(distrosFrom("archlinux\r\nintentic-engine\r\n")).toEqual(["archlinux"]);
+    });
 });

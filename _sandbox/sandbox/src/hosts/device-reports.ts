@@ -29,7 +29,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, type HostFiles, hostConnections, hostSummaries, readHostFiles } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
 import { factsDue, factsTakenAtHello, refreshFactsBeside, refreshFactsOnceSettled } from "./device-facts-refresh.js";
-import { sandboxesFromTool, unreadFromTool,type AnswerMemory,gapOf,keepLastAnswer,type LateHalves,lateReason,noteReading,type Reading } from "./device-listing.js";
+import { type AnswerMemory, type DescribedHalf, keepLastAnswer, landLateHalf, type LateHalves, type LateLandings, lateReason, type ListedHalf, listedOf, noteReading, type Reading, readHalf, whenLanded, worthAnnouncing } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
 // capability needed) and a `host` capability's pull (adds containers, never a mounted docker socket). The pull asks the
@@ -47,8 +47,12 @@ const PULL_TTL_MS = 30_000;
 // a flat 2.0 s p50, 2026-10-21). The landing announces itself (`worthAnnouncing`), so the view still catches up.
 const PULL_SETTLE_MS = 2_000;
 
-// Deadline on one reading, both halves together. A half that misses it keeps what the machine last said (device-listing.ts).
+// Deadline on one reading, both halves together. A half that misses it keeps what the machine last said (device-listing.ts)
+// and goes on answering behind the reading, landing in it when it comes.
 const PULL_TIMEOUT_MS = 8_000;
+
+// How long a half that missed the reading's deadline is still waited for: a machine slower than the reading is slow, not gone.
+const PULL_GIVE_UP_MS = 60_000;
 
 // Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching.
 const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
@@ -139,7 +143,7 @@ export const callTool = async (
     );
 
 // FORBIDDEN is the "Run commands" switch, any other refusal an agent without the call; a transport failure throws.
-const describeMachine = async (client: HostClient, signal: AbortSignal): Promise<{ readonly report: DeviceReport } | { readonly gap: DeviceGap }> => {
+const describeMachine = async (client: HostClient, signal: AbortSignal): Promise<DescribedHalf> => {
     try {
         return { report: await client.report(undefined, { signal }) };
     } catch (error) {
@@ -159,48 +163,44 @@ const pull = async (services: Services, id: string): Promise<Reading> => {
     if (client === undefined) {
         return { result: { gap: "offline" }, late: {} };
     }
-    // One deadline over both calls: the reading is what has a budget, not either half of it.
-    const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
+    // One deadline over both halves: the reading is what has a budget, not either half of it. The calls themselves run to
+    // PULL_GIVE_UP_MS, so a half that misses the reading still lands (`landing`, taken in by `refresh`).
+    const ask = AbortSignal.timeout(PULL_GIVE_UP_MS);
     const late: LateHalves = {};
+    const landing: LateLandings = {};
     refreshFactsBeside(services, id);
-    const [described, fleet] = await Promise.all([
-        describeMachine(client, signal).catch((error: Error) => {
-            late.report = lateReason(error, PULL_TIMEOUT_MS);
-            return { gap: "offline" } as const;
+    const [described, listed] = await Promise.all([
+        readHalf<DescribedHalf>(describeMachine(client, ask), PULL_TIMEOUT_MS, { gap: "offline" }, (reason, pending) => {
+            late.report = reason;
+            landing.report = pending;
         }),
-        callTool(services, id, "list_sandboxes", {}, signal).catch((error: Error) => {
-            late.sandboxes = lateReason(error, PULL_TIMEOUT_MS);
-            return { text: "", refused: true };
+        readHalf<ListedHalf>(callTool(services, id, "list_sandboxes", {}, ask).then(listedOf), PULL_TIMEOUT_MS, {}, (reason, pending) => {
+            late.sandboxes = reason;
+            landing.sandboxes = pending;
         }),
     ]);
-    // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
-    const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
-    const unread = sandboxes === undefined && late.sandboxes === undefined ? unreadFromTool(fleet.text, fleet.refused) : undefined;
-    return {
-        result: { ...described, ...(sandboxes === undefined ? {} : { sandboxes }), ...(unread === undefined ? {} : { sandboxesUnread: unread }) },
-        late,
-    };
+    return { result: { ...described, ...listed }, late, landing };
 };
 
-// Which containers the machine holds and whether each runs, as one comparable string; undefined when it did not list.
-const containersOf = (result: PullResult): string | undefined =>
-    result.sandboxes
-        ?.map((box) => `${box.slug}:${box.running ? "up" : "down"}`)
-        .toSorted()
-        .join(",");
-
-// A landing worth waking watchers for: the machine's first reading, a change in whether it answers at all or in the
-// containers it holds, or a fresh reading replacing one already old enough to read as quiet. Containers count because
-// a reader that does not poll (the switcher's remove dialog, a row's placement) decides "is there a button for this" on
-// them, and a sandbox created or removed out there would otherwise stay unknown to it until the page reloads. A
-// routine refresh of a healthy device announces nothing, so an open Devices tab is not refetched every TTL for news it
-// already has.
-const worthAnnouncing = (before: { at: number; result: PullResult | undefined }, after: PullResult, at: number): boolean =>
-    before.result === undefined ||
-    gapOf(before.result) !== gapOf(after) ||
-    containersOf(before.result) !== containersOf(after) ||
-    at - before.at > REPORT_QUIET_AFTER_MS;
+// Each half that missed the reading, taken in when it answers: into the memory a later late reading is served from, and
+// into the reading held now, announced when it changes what the view says. Lands nowhere once the machine has changed
+// under it (stalePull) or a reading sent after it has already answered that half.
+const takeLateHalves = (services: Services, id: string, entry: PullEntry, sentAt: number, landing: LateLandings | undefined): void => {
+    const epoch = entry.epoch;
+    const take = (half: DescribedHalf | ListedHalf, newerAt: number | undefined): void => {
+        if (entry.epoch !== epoch || (newerAt ?? 0) > sentAt || entry.result === undefined) {
+            return;
+        }
+        const had = { at: entry.at, result: entry.result };
+        entry.at = Date.now();
+        entry.result = landLateHalf(entry.answered, entry.result, half, entry.at);
+        if (worthAnnouncing(had, entry.result, entry.at)) {
+            publishRuntimeChange("devices");
+        }
+    };
+    whenLanded(landing, (half, which) => take(half, entry.answered[which]?.at));
+};
 
 // One refresh per machine, stamped when it lands, not when it started, so a slow pull's duration is already spent
 // against the reading's age.
@@ -225,6 +225,7 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
             entry.result = result;
             entry.took = entry.at - sentAt;
             noteReading(services, id, result, reading.late.report ?? reading.late.sandboxes);
+            takeLateHalves(services, id, entry, sentAt, reading.landing);
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
             }

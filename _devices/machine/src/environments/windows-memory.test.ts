@@ -39,6 +39,9 @@ test("a sentence instead of a listing names no distro", () => {
 test("the user's own distro is preferred, docker-desktop is the fallback, and nothing running means no drop", () => {
     expect(cacheDropDistro(["docker-desktop", "Ubuntu"])).toBe("Ubuntu");
     expect(cacheDropDistro(["docker-desktop"])).toBe("docker-desktop");
+    // Intentic's own engine distro is an engine's too: the user's distro first, and it when it is the only one up.
+    expect(cacheDropDistro(["intentic-engine", "archlinux"])).toBe("archlinux");
+    expect(cacheDropDistro(["intentic-engine"])).toBe("intentic-engine");
     expect(cacheDropDistro(["docker-desktop-data"])).toBeUndefined();
     expect(cacheDropDistro([])).toBeUndefined();
 });

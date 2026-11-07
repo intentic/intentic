@@ -1,5 +1,5 @@
 import { freemem, totalmem } from "node:os";
-import { type HostMemory, hostMemoryLowBytes, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
+import { type HostMemory, hostMemoryLowBytes, WSL_ENGINE_DISTRO, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
 import { WINDOWS_SIDE } from "./wsl.js";
 
 /* WINDOWS' MEMORY, AND WHEN TO GIVE IT BACK FROM WSL (2026-11-02). The WSL2 VM keeps the file cache it builds (a build,
@@ -43,11 +43,12 @@ export const runningDistrosFrom = (listing: string): string[] =>
         .map((line) => line.trim())
         .filter((line) => DISTRO_NAME.test(line));
 
-// Which running distro to drop the cache through: the user's own first, since docker-desktop is Docker's (a minimal
-// image whose shell and root login are its own business), and docker-desktop when it is the only one up. Undefined when
-// nothing runs: WSL is never booted for this, a VM that is not running holds no cache.
+// Which running distro to drop the cache through: the user's own first, since an engine's distro is its engine's (a
+// minimal image whose shell and root login are its own business), then whichever engine distro is up: docker-desktop,
+// or Intentic's own. Undefined when nothing runs: WSL is never booted for this, a VM that is not running holds no cache.
 export const cacheDropDistro = (running: readonly string[]): string | undefined =>
-    running.find((distro) => !WSL_SYSTEM_DISTROS.has(distro)) ?? running.find((distro) => distro === "docker-desktop");
+    running.find((distro) => !WSL_SYSTEM_DISTROS.has(distro)) ??
+    running.find((distro) => distro === "docker-desktop" || distro === WSL_ENGINE_DISTRO);
 
 const GIB = 1024 ** 3;
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;

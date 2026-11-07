@@ -136,6 +136,16 @@ test("crosses from the Windows door into the distro that holds the checkout", ()
     });
 });
 
+// Intentic's own engine distro is listed by wsl like Docker Desktop's and holds nobody's checkout either. Counted, it
+// made rog (archlinux plus intentic-engine) read as two distros, so its Windows door refused to cross and the Rebuild
+// card fell back to its copyable command whenever the distro's own door was slow to answer (2026-11-07).
+test("crosses past Intentic's own engine distro as it does past Docker Desktop's", () => {
+    const listing = { ...WINDOWS, hostname: "rog", wslDistros: ["archlinux", "intentic-engine"] };
+    const windowsOnly = device({ key: "rog", hostId: "rog", platform: "windows", facts: listing, ...runsWorkAbc });
+    expect(pathReach("windows", listing, "/home/radarsu/intentic")).toEqual({ kind: "wsl", distro: "archlinux" });
+    expect(hostHoldingPath([windowsOnly], "work-abc", "/home/radarsu/intentic")).toBe("rog");
+});
+
 // A door that runs the line itself is one hop fewer and needs no distro guessed at.
 test("prefers the distro's own door over crossing from the Windows side", () => {
     const windowsOnly = device({

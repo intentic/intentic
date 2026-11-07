@@ -8,7 +8,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/devices";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
-import { waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../../peers/desktop-sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, stalePull, warmPull } from "../device-reports.js";
@@ -521,6 +521,36 @@ test("a listing that misses the deadline keeps the containers the machine last l
     expect(row?.sandboxes?.map((box) => box.slug)).toEqual(["work"]);
     expect(row?.gap).toBeUndefined();
     expect(readLog.lines.some((line) => line["device"] === "late-pc" && String(line["message"]).includes("answered late"))).toBe(true);
+});
+
+// A host under load can take longer to list than the reading waits (rog's distro took 9.5 s against 8 s, 2026-11-07).
+// Cutting the call off at the deadline meant it never listed at all, and once the last listing aged out "Rebuild from
+// checkout" went back to its copyable command. The reading still stops waiting; the answer lands when it comes.
+test("a listing slower than the reading's deadline lands when it answers, and is announced", async () => {
+    jest.useFakeTimers();
+    let release = (): void => undefined;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    const fleet = JSON.stringify([{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }]);
+    const { services, calls } = fakeServices("slow-list-pc", async (call) => {
+        if (call.tool === "report") {
+            return report("slow", { capturedAt: Date.now() });
+        }
+        await answered;
+        return answer(fleet);
+    });
+    const first = devices(services);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    await advanceTimersByTimeAsync(8_000);
+    expect((await first)[0]?.sandboxes).toBeUndefined();
+    // Still on the wire past the reading: the call was not cut off at its deadline.
+    expect(calls.find((call) => call.tool === "list_sandboxes")?.signal?.aborted).toBe(false);
+
+    published.length = 0;
+    release();
+    await waitFor(() => expect(published).toEqual(["devices"]));
+    const [row] = await devices(services);
+    expect(row?.sandboxes?.map((box) => box.slug)).toEqual(["work"]);
+    expect(calls).toHaveLength(2);
 });
 
 // The browser maps `devices` to its Devices read and to nothing else, so a machine that answers after the reader stopped

@@ -211,8 +211,14 @@ export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined)
     });
 export const deviceSupports = (facts: Pick<DeviceFacts, "features"> | undefined, feature: DeviceFeature): boolean => deviceFeatures(facts).includes(feature);
 
-// Docker Desktop's own distros: `wsl -l -q` lists them like any other, and none ever runs an agent or holds a checkout.
-export const WSL_SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
+// The distro `ic engine install` imports to run Intentic's own Docker engine (ic's engine::DISTRO).
+export const WSL_ENGINE_DISTRO = "intentic-engine";
+
+// Distros that are an engine's, not the user's: Docker Desktop's two and Intentic's own. `wsl -l -q` lists them like any
+// other, and none ever runs an agent or holds a checkout. Leaving the engine's out of this set made a PC with one distro
+// of its own read as having two, so its Windows side refused to cross into the one holding the dev checkout and
+// "Rebuild from checkout" fell back to its copyable command whenever the distro's own door was slow (2026-11-07).
+export const WSL_SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data", WSL_ENGINE_DISTRO]);
 
 // The distros a Windows side lists that are the user's own: the only ones any screen offers, crosses into or boots.
 export const userDistrosOf = (facts: Pick<DeviceFacts, "wslDistros"> | undefined): string[] =>
