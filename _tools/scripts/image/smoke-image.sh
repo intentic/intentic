@@ -16,6 +16,10 @@ set -euo pipefail
 # values still win.
 : "${REGISTRY_RETRY_ATTEMPTS:=4}"
 : "${REGISTRY_RETRY_DELAY:=15}"
+# Every ref here was pushed by the step before, and GHCR can answer `manifest unknown` for a tag in the first
+# moments after accepting it (1.401.1-arm64, pulled 0.23s after its push): up to a minute for it to appear.
+: "${IMAGE_PULL_FRESH_ATTEMPTS:=7}"
+: "${IMAGE_PULL_FRESH_DELAY:=10}"
 . "$(dirname "$0")/../lib/image-pull.sh"
 
 # The boot budget alone — the pull is a separate step below and its own clock — kept generous because these

@@ -4,6 +4,12 @@
 # Drop the half-unpacked image before retrying local-store recovery, and report it as a store fault rather than a registry refusal.
 IMAGE_PULL_ATTEMPTS="${IMAGE_PULL_ATTEMPTS:-3}"
 IMAGE_PULL_DELAY="${IMAGE_PULL_DELAY:-5}"
+# A ref the caller pushed moments ago may not be readable yet: GHCR answered `manifest unknown` for
+# sandbox:1.401.1-arm64 0.23s after buildx reported its manifest pushed (run 42373026080). Off (1 attempt) by default,
+# because for any other caller a missing manifest is a missing tag and must fail at once; smoke-image.sh, whose refs
+# the step before it just pushed, turns it on.
+IMAGE_PULL_FRESH_ATTEMPTS="${IMAGE_PULL_FRESH_ATTEMPTS:-1}"
+IMAGE_PULL_FRESH_DELAY="${IMAGE_PULL_FRESH_DELAY:-10}"
 
 # `image_pull` judges a failure through `cmd | tee`, whose status is tee's own unless this is set — without it
 # a failed pull reports success and the container is started from an image that is not there. Every caller
@@ -43,11 +49,16 @@ image_pull_image_fault() {
     grep -Eqi -- 'max depth exceeded' "$1"
 }
 
+# THE REGISTRY NOT YET SERVING A TAG IT JUST ACCEPTED. Only consulted when the caller says the ref is fresh.
+image_pull_fresh_lag() {
+    grep -Eqi -- 'manifest unknown' "$1"
+}
+
 # Run the pull, streaming it (a 5 GB pull must not go quiet for the sake of being judged) while keeping a copy
 # to judge a failure by. The registry's own transient set is handled inside `registry_retry`; what comes back
 # failed is either an unpack this function can clear or a verdict worth printing.
 image_pull() { # <image-ref>
-    local image="$1" attempt=1 status log
+    local image="$1" attempt=1 fresh=1 status log
     log="$(mktemp)"
     while :; do
         status=0
@@ -60,6 +71,12 @@ image_pull() { # <image-ref>
             rm -f "$log"
             echo "  ✗ could not pull $image — the IMAGE is deeper than Docker's layer store takes (125 layers: max depth exceeded), which no retry, registry or runner clears: the image needs fewer layers" >&2
             return "$status"
+        fi
+        if [ "$fresh" -lt "$IMAGE_PULL_FRESH_ATTEMPTS" ] && image_pull_fresh_lag "$log"; then
+            echo "==> the registry does not serve $image yet (attempt $fresh/$IMAGE_PULL_FRESH_ATTEMPTS) — it was just pushed, so waiting ${IMAGE_PULL_FRESH_DELAY}s for it to appear" >&2
+            sleep "$IMAGE_PULL_FRESH_DELAY"
+            fresh=$((fresh + 1))
+            continue
         fi
         if ! image_pull_unpack_fault "$log"; then
             rm -f "$log"
