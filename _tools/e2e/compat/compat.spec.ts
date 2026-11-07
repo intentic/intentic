@@ -176,6 +176,14 @@ const keepSandboxSession = async (page: Page, person: Person): Promise<void> => 
     );
 };
 
+// The starter site's preview already shown, as a sandbox's first Workspace visit leaves it (browsersSurface.ts
+// openPreviewOnFirstVisit, a device key, `intentic-preview-autoshown:<id>`). A daemon whose /panels names the starter
+// repo (the released 1.401.1 does) would otherwise have that first visit open the preview over the whole middle, the section under it
+// hidden and inert, and the files' tabs this test looks for never on screen (run 42383887317).
+const pastFirstVisit = async (page: Page): Promise<void> => {
+    await page.evaluate((key) => localStorage.setItem(key, `1`), `intentic-preview-autoshown:${SANDBOX_ID}`);
+};
+
 // WHAT THE VERSION CARD SAYS ABOUT THE RELEASED SANDBOX (SandboxBehindCard, on the Sandbox page). A wholesale
 // disagreement, most of the routes both sides print differing in what a call needs, is never an ordinary release gap:
 // it is a contract built from other source or another zod, and every sandbox out there would open on "far apart". That
@@ -204,6 +212,7 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
     const signInPage = await signIn(context, person);
     await giveSandbox(person, daemon);
     await keepSandboxSession(signInPage, person);
+    await pastFirstVisit(signInPage);
     await signInPage.close();
 
     const visits: Watch[] = [];

@@ -1,18 +1,22 @@
 import { within } from "@intentic/base/async";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { useAuth } from "./useAuth";
-import { returnPath, signInAt } from "../../lib/routes/signIn";
+import { returnPath } from "../../lib/routes/signIn";
 
-// One more ask of the platform, answering with where the reader belongs: the page they were headed for, the sign-in
-// screen when the platform says there is no session, or undefined while it still can't answer. Every way off the
-// unavailable screen (its button, its own background retry, a reload onto it) goes through this, so they cannot drift.
+// One more ask of the platform, answering with where the reader belongs: once it answers at all, the page they were headed
+// for, whose own guards then rule on the session as they would have if the first ask had been answered (requireAuth,
+// router/sessionGuard.ts): sign-in for a page that needs one, Home kept for a reader with none, as a cold load leaves
+// them. Undefined while it still can't answer. Every way off the unavailable screen (its button, its own background
+// retry, a reload onto it) goes through this, so they cannot drift.
+// Sending "no session" to sign-in here, ahead of the guards, put a signed-out reader on Home under a sign-in prompt they
+// never asked for, covering Home's own Sign in (e2e-signin, run 42383887317).
 export const platformRetry = async (returnTo: unknown): Promise<RouteLocationRaw | undefined> => {
-    const target = returnPath(returnTo);
     try {
-        return (await useAuth().refresh()) === null ? signInAt(target) : target;
+        await useAuth().refresh();
     } catch {
         return undefined;
     }
+    return returnPath(returnTo);
 };
 
 /** How long a reload's ask may delay the first paint before the screen is drawn instead. */

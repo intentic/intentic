@@ -25,12 +25,13 @@ it(`sends a reader back to the page they were headed for`, async () => {
     await expect(platformRetry(`/workspace`)).resolves.toBe(`/workspace`);
 });
 
-// The screen's own promise: the sign-in has not been changed. A platform that answers "no session" is a real answer,
-// so it goes to the login page carrying the destination, not back to the outage screen.
-it(`goes to sign-in when the platform answers that there is no session`, async () => {
+// A platform that answers "no session" is a real answer, so the screen is left for the destination, whose own guard
+// rules on the session as a cold load's would (requireAuth): never back to the outage screen, and never to sign-in ahead
+// of a page that admits a reader without one (below).
+it(`hands the destination to its own guard when the platform answers that there is no session`, async () => {
     refresh.mockResolvedValue(null);
 
-    await expect(platformRetry(`/workspace`)).resolves.toEqual({ path: `/login`, query: { returnTo: `/workspace` } });
+    await expect(platformRetry(`/workspace`)).resolves.toBe(`/workspace`);
 });
 
 it(`stays put while the platform still can't answer`, async () => {
@@ -113,4 +114,36 @@ it(`carries a reload straight through to the page once the platform is back`, as
     await router.push(`/platform-unavailable?returnTo=/workspace`);
 
     expect(router.currentRoute.value.path).toBe(`/workspace`);
+});
+
+// Signed out, the platform back: each page lands as a cold load with the platform up would land it. A page that needs a
+// session goes to sign-in carrying itself; Home, which a signed-out reader may open (requireAuth), stays Home with no
+// sign-in prompt over it (e2e-signin, run 42383887317: the prompt covered Home's own Sign in).
+const signedOutRouter = () =>
+    createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: `/home`, component: nothing },
+            { path: `/workspace`, component: nothing, beforeEnter: (to) => ({ path: `/login`, query: { returnTo: to.fullPath } }) },
+            { path: `/login`, component: nothing },
+            { path: `/platform-unavailable`, component: nothing, beforeEnter: [retryOnEntry] },
+        ],
+    });
+
+it(`sends a signed-out reader to sign-in from a page that needs a session once the platform is back`, async () => {
+    refresh.mockResolvedValue(null);
+    const router = signedOutRouter();
+
+    await router.push(`/platform-unavailable?returnTo=/workspace`);
+
+    expect(router.currentRoute.value.fullPath).toBe(`/login?returnTo=/workspace`);
+});
+
+it(`leaves a signed-out reader on Home once the platform is back`, async () => {
+    refresh.mockResolvedValue(null);
+    const router = signedOutRouter();
+
+    await router.push(`/platform-unavailable?returnTo=/home`);
+
+    expect(router.currentRoute.value.fullPath).toBe(`/home`);
 });
