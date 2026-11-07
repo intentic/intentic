@@ -100,7 +100,7 @@ watch(shown, (now) => {
                     :filled="tour.progress.value.settled"
                     :size="28"
                     :stroke="2.5"
-                    class="absolute inset-0"
+                    class="absolute inset-0 size-full"
                 />
                 <Icon name="list-check" :class="tour.visible.value ? 'text-xs' : 'icon-rail-glyph'" />
             </span>

@@ -609,8 +609,8 @@ const grab = (event: PointerEvent): void => {
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
             <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center self-start rounded-full">
-                <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
-                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
+                <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`); `size-full` so it scales with the rem-sized tile under a larger browser font instead of the glyph spilling onto it. -->
+                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0 size-full" :class="rim.tone" />
                 <IdentityTile :session="agent" class="h-4.5 w-4.5 text-xs" />
             </span>
             <input

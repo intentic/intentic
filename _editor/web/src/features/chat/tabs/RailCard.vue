@@ -110,7 +110,7 @@ const chipHint = computed((): Tip | undefined =>
                         :filled="rim.filled"
                         :size="24"
                         :stroke="1.5"
-                        class="absolute inset-0"
+                        class="absolute inset-0 size-full"
                         :class="rim.tone"
                     />
                     <IdentityTile v-if="provider !== undefined" :session="session" class="h-4.5 w-4.5 text-2xs" />
