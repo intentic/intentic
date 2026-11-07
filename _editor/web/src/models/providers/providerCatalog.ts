@@ -193,6 +193,11 @@ export const providerDisplayLabel = (provider: AgentProvider): string =>
     endpointIdOf(provider) ??
     providerLabel(provider);
 
+// The name of the API key a provider id runs on, as the reader knows it (providerDisplayLabel), or nothing for a login, a
+// local model, or a key since removed: a session card names it where it would name the account that paid.
+export const apiKeyName = (provider: AgentProvider): string | undefined =>
+    endpointProviders.value.some((endpoint) => endpoint.id === provider && endpoint.kind === `endpoint`) ? providerDisplayLabel(provider) : undefined;
+
 // All locally-run weights read as one provider (used by the picker's rail and the Usage tab's
 // legend), including a card that's since been deleted. The trial is excluded: it's a
 // daemon-provisioned endpoint, not local weights.

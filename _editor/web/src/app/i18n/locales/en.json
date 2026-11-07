@@ -119,6 +119,7 @@
     },
     "agents": {
         "accountChip": {
+            "apiKey": "API key",
             "org": "Organization"
         },
         "agentActions": {

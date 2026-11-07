@@ -23,12 +23,14 @@ const localPart = (label: string): string => {
 export const shortAccount = (label: string, among: readonly string[]): string => {
     const local = localPart(label);
     const ambiguous = among.filter((other) => localPart(other) === local).length > 1;
-    const shown = ambiguous ? label : local;
-    return shown.length <= BUDGET ? shown : `${shown.slice(0, BUDGET - 1)}…`;
+    return clip(ambiguous ? label : local);
 };
+
+const clip = (shown: string): string => (shown.length <= BUDGET ? shown : `${shown.slice(0, BUDGET - 1)}…`);
 
 /** What the card draws for the account: the clipped name, and the whole of it for the hover, one fact a row. */
 export interface AccountBadge {
+    readonly icon: `user` | `key`;
     readonly label: string;
     readonly hint: Tip;
 }
@@ -48,6 +50,7 @@ export const accountBadge = (accounts: readonly OauthAccount[], ran: string | un
     // repeating the name says nothing, so it is left empty and the card drops it.
     const beside = (part: string | undefined): string => (part === undefined || part === entry.label ? `` : part);
     return {
+        icon: `user`,
         label: shortAccount(
             entry.label,
             accounts.map((account) => account.label),
@@ -62,6 +65,13 @@ export const accountBadge = (accounts: readonly OauthAccount[], ran: string | un
         },
     };
 };
+
+/**
+ * The chip for a session run on an API key rather than a login: the key's own name stands where an account's would, since
+ * it is what pays for the turn. `name` is the key's display name (apiKeyName), whole on hover; none, no chip.
+ */
+export const keyBadge = (name: string | undefined): AccountBadge | undefined =>
+    name === undefined ? undefined : { icon: `key`, label: clip(name), hint: { title: t(`agents.accountChip.apiKey`), rows: [{ label: t(`shared.name`), value: name }] } };
 
 /**
  * What the owner's hover says about the login, when the login that served a session is its owner's own (matched by

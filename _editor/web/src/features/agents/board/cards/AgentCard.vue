@@ -66,7 +66,7 @@ import SessionMetrics from "../../metrics/SessionMetrics.vue";
 import ChildCount from "../../../../parts/fleet/ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
 import { blockersOf, settingsPagesOf, userBlockers } from "../../../../models/conversations/review/conflictResolution";
-import { sessionLogin } from "../session/accountChip";
+import { keyBadge, sessionLogin } from "../session/accountChip";
 import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { providerAccounts } from "../../../../models/providers/providerAccounts";
@@ -77,7 +77,7 @@ import type { OwnerHold } from "../../../../models/conversations/review/ownerHol
 import CardOwnerHold from "./CardOwnerHold.vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { modelLabelFor, shortModelLabel } from "../../../../models/providers/providerCatalog";
+import { apiKeyName, modelLabelFor, shortModelLabel } from "../../../../models/providers/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
@@ -392,7 +392,7 @@ const model = computed(() => {
 // Which login actually served this turn (the turn's own session frame, not the composer's pick), read against the
 // window's account list; folded into the owner's hover when it is the owner's own (sessionLogin).
 const login = computed(() => (maker.value ? {} : sessionLogin(providerAccounts.value[props.agent.provider] ?? [], props.agent.account, provenance.value)));
-const account = computed(() => login.value.badge);
+const account = computed(() => login.value.badge ?? (maker.value ? undefined : keyBadge(apiKeyName(props.agent.provider))));
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
@@ -798,7 +798,7 @@ const grab = (event: PointerEvent): void => {
                     </span>
                     <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
                     <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
-                        <Icon name="user" class="shrink-0 text-2xs" />
+                        <Icon :name="account.icon" class="shrink-0 text-2xs" />
                         <span class="truncate">{{ account.label }}</span>
                     </span>
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->

@@ -1,5 +1,5 @@
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { accountBadge, ownersAccount, sessionLogin, shortAccount } from "./accountChip";
+import { accountBadge, keyBadge, ownersAccount, sessionLogin, shortAccount } from "./accountChip";
 
 const account = (over: Partial<OauthAccount> & Pick<OauthAccount, "id" | "label">): OauthAccount => ({ connectedAt: 1, ...over });
 
@@ -34,6 +34,7 @@ describe(`accountBadge`, () => {
 
     it(`names the account the session recorded, and hangs the whole identity on the hover, one fact a row`, () => {
         expect(accountBadge(accounts, `a`)).toEqual({
+            icon: `user`,
             label: `Work`,
             hint: {
                 title: `Account`,
@@ -68,6 +69,21 @@ describe(`accountBadge`, () => {
         const named = [account({ id: `c`, label: `bob@acme.com`, email: `bob@acme.com` })];
         // The tip card drops a row with an empty value, so the address is said once, as the name.
         expect(accountBadge(named, `c`)?.hint.rows?.map((row) => row.value)).toEqual([`bob@acme.com`, ``, ``]);
+    });
+});
+
+// A session on an API key has no login to name: the key paid, so its name takes the account's place.
+describe(`keyBadge`, () => {
+    it(`names the key, clipped like an account, whole on the hover`, () => {
+        expect(keyBadge(`Team Anthropic production key`)).toEqual({
+            icon: `key`,
+            label: `Team Anthropic pr…`,
+            hint: { title: `API key`, rows: [{ label: `Name`, value: `Team Anthropic production key` }] },
+        });
+    });
+
+    it(`draws nothing for a session not on a key`, () => {
+        expect(keyBadge(undefined)).toBeUndefined();
     });
 });
 
