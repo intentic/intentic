@@ -54,7 +54,7 @@ import { filesToEntries } from "../../../models/workspace/tree/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import { useRunTargets } from "../../../models/runs/useRunTargets";
 import { runViewLink } from "../../../models/runs/runView";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
@@ -783,16 +783,15 @@ const homeTooltip = computed((): Tip => ({
                         </button>
                         <!-- Running the root's own project: root is a repo with no tree row, so its ▷ lives here, shown once its
                              .intentic/run.json or its own files (a Procfile, a dev script) give it something to run. -->
-                        <button
+                        <RouterLink
                             v-if="rootRuns > 0"
-                            type="button"
+                            :to="runViewLink('root')"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.runWorkspace`)"
                             :aria-label="t(`workspace.workspaceDesktop.runWorkspace`)"
-                            @click="router.push(runViewLink('root'))"
                         >
                             <Icon name="play" class="text-xs" />
-                        </button>
+                        </RouterLink>
                         <!-- Collapse every open folder and take the home back to the root's tiles; inert while a filter forces
                              matches open, or when already there. -->
                         <button
