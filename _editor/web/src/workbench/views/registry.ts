@@ -94,6 +94,9 @@ const signal = (id: string): RailItem => ({ id, policy: `signal` });
 const WORKSPACE_VIEW_ID = `workspace`;
 // The Sandbox hub's Devices section, tiled by the shell itself (ShellDesktop.vue) rather than by a view.
 export const DEVICES_VIEW_ID = `devices`;
+// What runs where, and what can be started where: the sandbox and each of the owner's computers as lanes, a built-in view
+// (core-views/coreViews.ts).
+export const RUN_VIEW_ID = `run`;
 // The sandbox's own desktop, watched and taken over by the owner. Not a band's tile: a live surface, drawn by the shell
 // in the status bar beside Browsers and the terminal (shell/status-bar/), while there is a window on it to watch.
 export const DESKTOP_VIEW_ID = `desktop`;
@@ -121,7 +124,8 @@ const know = (): RailGroup => ({
     items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)],
 });
 
-// The Work band. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
+// The Work band. Run follows the Workspace, a tile of its own and always there: starting what the files make, here or
+// natively on one of the owner's computers, is part of the loop the band serves, not news. Devices closes it: the machines this sandbox reaches, a place to go as This computer is in a local
 // window. A signal tile a reader pins to keep: it comes onto the rail by itself while one of the machines is being worked
 // on (its turning mark) or a port is held, which is exactly when it has to be in sight. The live app, Browsers and the
 // sandbox's own Desktop are not in any band: they are live surfaces, not places, so they are chips in the status bar
@@ -132,7 +136,7 @@ const know = (): RailGroup => ({
 const work = (): RailGroup => ({
     id: `work`,
     label: t(`views.registry.work`),
-    items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), signal(`pipelines`), signal(DEVICES_VIEW_ID)],
+    items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(RUN_VIEW_ID), signal(`pipelines`), signal(DEVICES_VIEW_ID)],
 });
 
 // One table per audience, the same for both today: a maker reads the same rail in plainer words (useVocabulary), with

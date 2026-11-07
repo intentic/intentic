@@ -189,7 +189,7 @@ test("Stop ends the run's terminal and stops the target's program on the compute
     expect(await call(runs.stop, input)).toEqual({ stopped: [{ id: "desktop-abc123", text: expect.stringContaining("Stopped") }] });
     expect(aborted).toEqual([session]);
     await call(runs.stop, { ...input, id: "desktop-def456" });
-    expect(stopped).toEqual(["name:desktop by the Run dialog's Stop", "desktop-def456 by the Run dialog's Stop"]);
+    expect(stopped).toEqual(["name:desktop by the Run view's Stop", "desktop-def456 by the Run view's Stop"]);
 });
 
 test("a computer that cannot answer lists nothing and says why, never an empty list that reads as nothing running", async () => {
@@ -207,7 +207,7 @@ test("a computer that cannot answer lists nothing and says why, never an empty l
     expect(await call(routes(workspace(), false, ["programs"], fake).active, { device: "rog" })).toEqual({ runs: [], terminals: [] });
 });
 
-test("a run's terminal is the daemon's own runner's, so the terminals list keeps it as running; the Run dialog lists it", async () => {
+test("a run's terminal is the daemon's own runner's, so the terminals list keeps it as running; the Run view lists it", async () => {
     // The runner the terminals list and the job reaper read (services.terminalRun): a run on a runner of its own read
     // as finished there, and the editor took its tab off the strip on the first tab switch.
     const { fake } = runner();

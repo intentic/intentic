@@ -107,7 +107,7 @@ export const DEMO_REPO_CHECKS: RepoChecksList = {
     ],
 };
 
-/* The run dialog's record: `web`'s own run.json and the workspace root's, read the way the daemon reads them, and the three computers it could
+/* The Run view's record: `web`'s own run.json and the workspace root's, read the way the daemon reads them, and the three computers it could
    run on, one per state the dialog draws: `ada-pc` ready, `ada-air` asleep, `build-box` with its "Run programs this
    sandbox sends" switch off. */
 export const DEMO_RUN_TARGETS: RunTargetsList = {

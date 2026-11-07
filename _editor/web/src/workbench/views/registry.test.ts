@@ -282,8 +282,11 @@ describe(`rail order`, () => {
         }
     });
 
-    it(`keeps Pipelines beside Workspace in the work band, a tile that holds its place only while it has news`, () => {
-        expect(railRank(`pipelines`)).toBe(railRank(`workspace`) + 1);
+    it(`keeps Run beside Workspace in the work band, and Pipelines after it, a tile that holds its place only while it has news`, () => {
+        // Starting what the files make, in the sandbox or natively on a computer, is part of the loop: Run is always there.
+        expect(railRank(`run`)).toBe(railRank(`workspace`) + 1);
+        expect(railPolicy(`run`)).toBe(`always`);
+        expect(railRank(`pipelines`)).toBe(railRank(`run`) + 1);
         expect(railRank(`devices`)).toBe(railRank(`pipelines`) + 1);
         expect(railPolicy(`pipelines`)).toBe(`signal`);
     });
@@ -419,7 +422,7 @@ describe(`rail tiles`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `run`]);
         // Devices is pinned to keep, and tiles itself while a machine is being worked on.
         expect(railPolicy(`devices`)).toBe(`signal`);
         expect(onRail({ id: `devices`, badge: { running: `Updating a machine's agents on rog` } }, resting)).toBe(true);
@@ -490,7 +493,7 @@ describe(`the work band`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `workspace`]);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `run`]);
     });
 
     // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the

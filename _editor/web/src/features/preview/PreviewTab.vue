@@ -26,7 +26,7 @@ import { composeAgent } from "../../models/fleet/agentActions";
 import { devServerFix } from "../../models/runs/runFixes";
 import FixWithAgent from "../../parts/fleet/FixWithAgent.vue";
 import { useRunTargets } from "../../models/runs/useRunTargets";
-import { openRunDialog } from "../../models/runs/runDialog";
+import { runViewLink } from "../../models/runs/runView";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../lib/routes/links";
 
@@ -272,7 +272,7 @@ const startTip = computed(() => (target === undefined ? undefined : startTipOf(t
 // looks for is in the words, so the agent adds the one that fits.
 const makeStartable = (repo: string): void => composeAgent(t(`preview.previewPanel.makeStartablePrompt`, { repo }));
 
-// The repository's other place to run: targets its .intentic/run.json carries to a computer, run from the Run dialog.
+// The repository's other place to run: targets its .intentic/run.json carries to a computer, run from the Run view.
 const { repos: runFiles } = useRunTargets();
 const alsoOnComputers = computed(() =>
     (runFiles.value ?? []).some((entry) => entry.repo === target?.repo && entry.targets.some((declared) => declared.artifact !== undefined)),
@@ -587,7 +587,7 @@ watch(
                 <Button tier="accent" :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
-                <Button v-if="alsoOnComputers" tier="quiet" :label="t(`preview.previewPanel.runOnComputer`)" size="small" @click="openRunDialog(target.repo!)" />
+                <Button v-if="alsoOnComputers" tier="quiet" :label="t(`preview.previewPanel.runOnComputer`)" size="small" :as="RouterLink" :to="runViewLink(target.repo!)" />
             </template>
             <!-- Nothing to start: the ask that makes it startable goes into the composer, for the reader to send. -->
             <template v-else-if="target.kind === `repo` && target.repo !== undefined" #actions>

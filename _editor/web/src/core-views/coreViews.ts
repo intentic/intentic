@@ -1,13 +1,23 @@
 import type { ViewRegistration } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
+import { RUN_VIEW_ID } from "../workbench/views/registry";
 
 // Stay in-app rather than move to `_extensions/*`: each touches privileged internals a clean extension can't reach.
 // - infrastructure + live-status: platform (Cloudflare provisioning), build environment, secret management.
 // - directory-ui: DirectoryUiHost's sandboxed-iframe bridge, shared with the workspace file-open path.
+// - run: the sandbox's live apps and the owner's computers' runs together (preview targets, device runs, terminals).
 // - codebase-health: the index the daemon builds for the workspace, and the tab store it opens files through.
 // Everything else separable has moved to a package, via extension-host/builtins.ts.
 
 export const coreViews = (): readonly ViewRegistration[] => [
+    {
+        id: RUN_VIEW_ID,
+        label: t(`run.view.title`),
+        surface: `rail`,
+        // Every workspace has one: what its repositories run and where, or, before any of them says, how to make one runnable.
+        detect: () => [{ key: RUN_VIEW_ID, title: t(`run.view.title`), icon: `play` }],
+        view: async () => (await import(`../features/run/RunView.vue`)).default,
+    },
     {
         id: `infrastructure`,
         label: t(`views.words.infrastructure`),

@@ -2,10 +2,10 @@ import type { DeviceRun, RunOutput } from "@intentic/sandbox-contract/schemas/ru
 import { DEMO_RUN_TARGETS } from "../account/settings";
 import type { Doors } from "../doors";
 
-// A repository's "Run on <device>" dialog. A start answers the terminal session the build and the launch run in, named as
-// the daemon names a run's job session, for the editor to open. On ada-pc the shop's desktop app is running and its
-// isolated twin fell over, so the dialog draws a running row (Stop, Restart, its log, a Terminal that follows it) and an
-// ended one; the workspace root's kiosk runs there too, for the root's long list.
+// The Run view's computers. A start answers the terminal session the build and the launch run in, named as the daemon
+// names a run's job session, for the editor to open. On ada-pc the shop's desktop app is running from a build three lands
+// old (its Restart lights), its isolated twin fell over and is being built again, the workspace root's kiosk runs, and a
+// program an agent started there with app_start, which no run.json names, runs beside them.
 
 const AT = Date.UTC(2026, 9, 31, 9, 0);
 
@@ -19,8 +19,22 @@ const demoRuns = (): DeviceRun[] => [
         startedAt: new Date(AT).toISOString(),
         repo: `web`,
         ports: [7880],
+        startedBy: `the Run view`,
+        builtFrom: { commit: `a91c3e2f04b7d15e`, changed: 4, at: new Date(AT - 120_000).toISOString() },
+        landsSince: 3,
     },
-    // The workspace root's kiosk, started from its Run dialog twenty minutes ago and still up.
+    // Started by an agent's turn with app_start: no run.json names it, and the computer lists it all the same.
+    {
+        device: `ada-pc`,
+        id: `price-sync-77aa01`,
+        name: `price-sync.exe`,
+        state: `running`,
+        said: `running, pid 7020`,
+        startedAt: new Date(AT - 2_700_000).toISOString(),
+        ports: [],
+        startedBy: `conversation "Supplier price sync"`,
+    },
+    // The workspace root's kiosk, started from the Run view twenty minutes ago and still up.
     {
         device: `ada-pc`,
         id: `kiosk-2d7e90`,
@@ -30,6 +44,7 @@ const demoRuns = (): DeviceRun[] => [
         startedAt: new Date(AT - 1_200_000).toISOString(),
         repo: `root`,
         ports: [],
+        startedBy: `the Run view`,
     },
     {
         device: `ada-pc`,

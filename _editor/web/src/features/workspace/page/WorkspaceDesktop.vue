@@ -53,7 +53,8 @@ import MoveConflictDialog from "../explorer/transfer/MoveConflictDialog.vue";
 import { filesToEntries } from "../../../models/workspace/tree/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import { useRunTargets } from "../../../models/runs/useRunTargets";
-import { openRunDialog } from "../../../models/runs/runDialog";
+import { runViewLink } from "../../../models/runs/runView";
+import { useRouter } from "vue-router";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
@@ -76,6 +77,7 @@ import { useT } from "@intentic/ui/i18n";
 // (sandbox-global); this view owns no control for it.
 
 const t = useT();
+const router = useRouter();
 const { undoStep } = useDeleteUndo();
 
 const layout = useLayout();
@@ -299,17 +301,17 @@ const checkDirs = computed(
 // Repository whose checks are open in the quick panel; undefined means closed.
 const checksDir = ref<string | undefined>(undefined);
 // Repositories with something to run, in the sandbox or on the owner's computers: what their .intentic/run.json
-// declares, else the one run Start finds in their own files. The Run dialog is the shell's (runDialog.ts).
+// declares, else the one run Start finds in their own files. Their ▷ opens the Run view on them (runView.ts).
 const { repos: runningRepos } = useRunTargets();
 const runDirs = computed(() => {
     const counts = new Map((runningRepos.value ?? []).map((entry) => [entry.repo, entry.targets.length]));
-    // What Start finds is one more row wherever the file declares nothing for the sandbox (runRows.ts).
+    // What Start finds is one more row wherever the file declares nothing for the sandbox (features/run/runRows.ts).
     for (const panel of panels.value) {
         if (panel.hasPanel && panel.sandboxTargets !== true) {
             counts.set(panel.repo, (counts.get(panel.repo) ?? 0) + 1);
         }
     }
-    // A file that does not parse still opens the dialog, which says what is wrong with it.
+    // A file that does not parse still opens the Run view, which says what is wrong with it.
     for (const entry of runningRepos.value ?? []) {
         counts.set(entry.repo, Math.max(counts.get(entry.repo) ?? 0, 1));
     }
@@ -335,7 +337,7 @@ const rowActions = (dir: string): readonly RowAction[] =>
             checksDir.value = target;
         },
         runDirs: runDirs.value,
-        openRuns: openRunDialog,
+        openRuns: (repo: string): void => void router.push(runViewLink(repo)),
         openDocument,
     });
 
@@ -787,7 +789,7 @@ const homeTooltip = computed((): Tip => ({
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.runWorkspace`)"
                             :aria-label="t(`workspace.workspaceDesktop.runWorkspace`)"
-                            @click="openRunDialog('root')"
+                            @click="router.push(runViewLink('root'))"
                         >
                             <Icon name="play" class="text-xs" />
                         </button>

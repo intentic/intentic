@@ -32,9 +32,11 @@ connected computer, then each target is one row with one Run.
   a sibling's preview address, which is how a web app finds its API. A Node repo installs first.
 - **`artifact`: runs on one of the owner's computers**: `build` here, carry the artifact, start it there (the device
   skill; `devices run <target>` is the same run an agent types). Running it again stops the run already going there;
-  the Run dialog shows its state with Stop, Restart and its log, and `devices stop <target>` ends it from a shell.
-  While the build runs in the owner's tree, lands into that repository wait for it, and the dialog says what the
-  running program was built from ("Built from abc1234 · 3 lands since"), so a Restart is the way to the newest work.
+  the Run view (its tile on the rail, a lane per computer) shows its state with Stop, Restart and its log, and
+  `devices stop <target>` ends it from a shell. A program you start there with `app_start` is listed on that
+  computer's lane too, under its own name. While the build runs in the owner's tree, lands into that repository wait
+  for it, and the view says what the running program was built from ("Built from abc1234 · 3 lands since"), so a
+  Restart is the way to the newest work.
   From an agent's shell `devices run` will not replace a run of the target the conversation did not start: ask the
   owner, then pass `--replace`. A long-lived program on a computer always goes through `devices run`/`devices start` or
   `app_start`, never `nohup … &` through `run_command`, which leaves it on no list anything can stop.

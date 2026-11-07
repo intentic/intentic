@@ -263,10 +263,10 @@ its build, the push (an .exe gathered with the sidecars and resource folders it 
 the sandbox needs, the start. While it builds in the owner's tree, lands into that repository wait for it, so the build
 reads one version of the source. It first stops the target's run already going here (the new one would only fail on its
 port), and prints the run id. It will not replace a run of the target that this conversation did not start (the
-owner's, from the Run dialog: your build may be work that has not landed): it says whose run it is and stops. Ask the
+owner's, from the Run view: your build may be work that has not landed): it says whose run it is and stops. Ask the
 owner, and only with their yes run it again with \`--replace\`; \`devices stop <run id or target> --device \${id}\` ends it and closes the ports opened for
 it. In your shell it returns once the program has started (\`--attach\` stays and prints what it prints instead). The
-owner's Run dialog (the ▷ on the repository's row in the file tree), with this computer picked, runs the very same
+owner's Run view (its tile on the rail, or the ▷ on the repository's row in the file tree), on this computer's lane, runs the very same
 command attached in a terminal (Ctrl+C there stops the program, Ctrl+D leaves it running; \`devices attach <run id or
 target>\` follows one again) and shows each target's state here with Stop, Restart, its log and a Terminal that
 follows it. A new target is a few lines in that file (\`devices --help\`): an
@@ -277,7 +277,7 @@ more than once.
   Windows Sandbox, a throwaway VM that sees only the build, read-only, and is discarded by \`app_stop\`. It needs Windows
   Pro or Enterprise with the feature on, runs one at a time, and its window is the VM's: screenshot that window, since
   ui_elements cannot reach inside. Prefer it for anything you would not run on the owner's own profile.
-- **Who stopped it:** \`app_status\` says "stopped by …" with the door it came through: the Run dialog's Stop, Run
+- **Who stopped it:** \`app_status\` says "stopped by …" with the door it came through: the Run view's Stop, Run
   pressed again there, Ctrl+C in a run's terminal, \`devices stop\` or \`app_stop\` from a named conversation. Read
   that before looking for who did it.
 - **Whose port is it:** \`devices ports\` lists every port listening in the sandbox with the conversation and job

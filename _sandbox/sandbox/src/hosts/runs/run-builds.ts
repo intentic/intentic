@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Services } from "../../composition.js";
 import type { DomainEvents } from "../../seams/domain-events.js";
 
-// A RUN'S BUILD COMPILES A TREE NOTHING LANDS INTO WHILE IT DOES. `devices run` (the Run dialog's Run on <device>) builds
+// A RUN'S BUILD COMPILES A TREE NOTHING LANDS INTO WHILE IT DOES. `devices run` (the Run view's Run on <device>) builds
 // in the owner's own tree, which is the tree every conversation's work lands into. With twenty agents landing, a build
 // read half-old, half-new source: an 11-minute run of 13 failed calls in the owner's shinobi workspace on 2026-11-02
 // ("changes landing during compilation caused mixed source versions"), and a rustc incremental ICE. So while a run's
@@ -15,7 +15,7 @@ import type { DomainEvents } from "../../seams/domain-events.js";
 // reads the tree before and after its build and says when it changed anyway (bin/devices).
 //
 // The lands since a run was built are counted here too, from the land announcements (`agent.landed`), so the Run
-// dialog can say whether the program running on the computer is the newest work.
+// view can say whether the program running on the computer is the newest work.
 
 // A `devices run` renews its hold every 20 seconds while its build runs; three missed renewals end it.
 export const RENEW_LAPSE_MS = 60_000;

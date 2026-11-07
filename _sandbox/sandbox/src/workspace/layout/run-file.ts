@@ -6,7 +6,7 @@ import { RUN_TARGETS_FILE, type RepoRunTargets, RunTargetsFileSchema, type RunTa
 import type { AppPreview } from "./app-previews.js";
 import { ROOT_REPO, repoDirOf } from "./repo-discovery.js";
 
-/* A REPOSITORY'S `.intentic/run.json`, read the one way every reader takes it: the Run dialog's list (runs.targets), a
+/* A REPOSITORY'S `.intentic/run.json`, read the one way every reader takes it: the Run view's list (runs.targets), a
    run on a computer (runs.start), and the targets that run in the sandbox, which are served as the repository's apps
    (`<repo>--<target>`, each with its own preview address, Start and Stop). Read fresh every time: a commit or an agent
    can change the file between two reads. */

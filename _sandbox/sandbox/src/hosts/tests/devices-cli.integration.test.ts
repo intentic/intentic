@@ -138,20 +138,20 @@ test("a run's build holds lands while it compiles, renews the hold, and records 
     expect(routes.slice(released + 1)).toEqual(["POST /devices/rog/artifacts", "POST /devices/rog/apps/stop", "POST /devices/rog/apps"]);
     expect(out).toContain("1 land(s) waited for this build and go ahead now");
     expect(out).toContain("the tree changed while it compiled (1 land(s) reached it)");
-    // The Run dialog's restart replaces the target's run, and says so on the computer's record.
+    // The Run view's restart replaces the target's run, and says so on the computer's record.
     expect(daemon.asked.find(({ path }) => path === "/devices/rog/apps/stop")?.body).toEqual({ name: "server", why: "replace" });
     expect(daemon.asked.at(-1)?.body).toMatchObject({ builtFrom: { commit: head, changed: 0, at: expect.any(String), movedDuringBuild: true } });
 });
 
 test("an agent's run refuses to replace a run of the target it did not start, until it is told to", async () => {
     const { root, token } = await project("echo built > out.txt");
-    const theirs = { id: "server-0f0f0f", name: "server", state: "running", startedBy: "the Run dialog", builtFrom: { commit: "abcdef0123456789", changed: 0, at: "x" } };
+    const theirs = { id: "server-0f0f0f", name: "server", state: "running", startedBy: "the Run view", builtFrom: { commit: "abcdef0123456789", changed: 0, at: "x" } };
     const daemon = await fakeDaemon(root, [theirs]);
     cleanups.push(daemon.close, () => rm(root, { recursive: true, force: true }), () => rm(token, { force: true }));
 
     const refused = await devices(root, token, daemon.port, ["run", "server", "--detach"], { INTENTIC_TURN_OWNER: "coral-maple-kmq3" });
     expect(refused.code).toBe(1);
-    expect(refused.out).toContain("server is already running on rog (server-0f0f0f, started by the Run dialog, built from abcdef0123)");
+    expect(refused.out).toContain("server is already running on rog (server-0f0f0f, started by the Run view, built from abcdef0123)");
     expect(refused.out).toContain("--replace");
     // Nothing was built, held or stopped.
     expect(daemon.asked.map(({ method, path }) => `${method} ${path}`)).toEqual(["GET /devices/rog/apps"]);

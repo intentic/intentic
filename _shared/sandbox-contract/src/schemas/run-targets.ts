@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ArtifactNameSchema } from "./device-artifacts.js";
 
 // <repo>/.intentic/run.json declares what a repository can run, and where: in the sandbox, on the owner's own computers, or
-// either. One file behind the editor's Run dialog (the sandbox beside every computer, one choice of where), the Browsers
+// either. One file behind the editor's Run view (the sandbox beside every computer, a lane each), the Browsers
 // view's Start and `devices run <target>`.
 // - In the sandbox: `command`, run from the repository's root as Start runs it, handed the PORT its preview address is
 //   routed to and the sandbox desktop's DISPLAY. A repository whose first such target exists runs it on Start
@@ -121,14 +121,14 @@ export type RunStart = z.infer<typeof RunStartSchema>;
 export const RunStartedSchema = z.object({ session: z.string() });
 
 // A PROGRAM RUNNING ON ONE OF THE OWNER'S COMPUTERS, as the computer itself reports it (its app_status), whoever started
-// it: the Run dialog, `devices run` or `devices start` in a shell, or an agent's app_start. `name` is the target's name
+// it: the Run view, `devices run` or `devices start` in a shell, or an agent's app_start. `name` is the target's name
 // for a run started from a run-targets file, which is how the dialog finds a target's run.
 export const DeviceRunStateSchema = z.enum(["running", "ended", "unknown"]);
 export type DeviceRunState = z.infer<typeof DeviceRunStateSchema>;
 
 // WHAT A RUN WAS BUILT FROM: the repository's commit and how much of its tree was uncommitted when `devices run` began
 // its build (in the owner's tree that is mostly landed work, since a land leaves its changes uncommitted), and whether
-// the tree moved while it compiled. With `landsSince` on the run, the Run dialog says whether the program on the
+// the tree moved while it compiled. With `landsSince` on the run, the Run view says whether the program on the
 // computer is the newest work or a restart would bring more.
 export const RunBuiltFromSchema = z.object({
     // The full sha of HEAD when the build began.
@@ -149,7 +149,7 @@ export const DeviceRunSchema = z.object({
     name: z.string(),
     // `unknown`: its process is alive but the computer cannot tell whether it is still this run, so it will not stop it.
     state: DeviceRunStateSchema,
-    // The computer's own words for it: "running, pid 4120", "exited with code 101", "stopped by the Run dialog's Stop".
+    // The computer's own words for it: "running, pid 4120", "exited with code 101", "stopped by the Run view's Stop".
     said: z.string(),
     // How it ended, when it exited by itself with a code.
     exitCode: z.int().optional(),
@@ -159,7 +159,7 @@ export const DeviceRunSchema = z.object({
     repo: z.string().optional(),
     // The computer's ports the sandbox reaches for it (the target's `reach`), open while it runs, closed when it stops.
     ports: z.array(z.int().min(1).max(65535)),
-    // Who started it, when this sandbox did since its last restart: "the Run dialog", "conversation <id>", "a terminal".
+    // Who started it, when this sandbox did since its last restart: "the Run view", "conversation <id>", "a terminal".
     startedBy: z.string().optional(),
     // What its build was made from, when `devices run` built it (RunBuiltFromSchema).
     builtFrom: RunBuiltFromSchema.optional(),
@@ -175,14 +175,14 @@ export type RunTerminal = z.infer<typeof RunTerminalSchema>;
 
 export const DeviceRunsSchema = z.object({
     runs: z.array(DeviceRunSchema),
-    // The Run dialog's terminals for this computer that are still open.
+    // The Run view's terminals for this computer that are still open.
     terminals: z.array(RunTerminalSchema),
     // Why the computer's list could not be read: `runs` is then empty because nothing is known, not because nothing runs.
     error: z.string().optional(),
 });
 
 // Follow a target's program already running on one computer in a terminal (`devices attach`), as its run's own terminal
-// does: the one the Run dialog's Terminal opens once that terminal is gone.
+// does: the one the Run view's Terminal opens once that terminal is gone.
 export const RunAttachSchema = RunStartSchema.extend({ id: z.string().min(1).max(200) });
 export type RunAttach = z.infer<typeof RunAttachSchema>;
 

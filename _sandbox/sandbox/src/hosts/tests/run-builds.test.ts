@@ -56,8 +56,8 @@ test("the lands since a moment are counted per repository", () => {
 });
 
 test("who stopped a program is said by the door and the caller", () => {
-    expect(stopperName("the Run dialog", "replace")).toBe("Run pressed again in the Run dialog (its new build replaced it)");
-    expect(stopperName("the Run dialog", "interrupt")).toBe("Ctrl+C in its Run terminal");
+    expect(stopperName("the Run view", "replace")).toBe("Run pressed again in the Run view (its new build replaced it)");
+    expect(stopperName("the Run view", "interrupt")).toBe("Ctrl+C in its Run terminal");
     expect(stopperName("conversation coral-maple-kmq3", "replace")).toBe("`devices run` from conversation coral-maple-kmq3, whose new build replaced it");
     expect(stopperName("conversation coral-maple-kmq3", "stop")).toBe("`devices stop` from conversation coral-maple-kmq3");
 });

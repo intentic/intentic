@@ -4,7 +4,7 @@ import { opt } from "../../opt.js";
 import type { DeviceTunnels } from "../device-tunnels.js";
 
 // PROGRAMS RUNNING ON THE OWNER'S COMPUTERS, AS THE SANDBOX SEES THEM: what a device run (`devices run`, the Run
-// dialog's Run on <device>) left running there, its state, its output, and the Stop that ends it together with the
+// view's Run on <device>) left running there, its state, its output, and the Stop that ends it together with the
 // ports the sandbox opened for it (`reach`). The computer is the record: its app_status lists every program this
 // sandbox started there, whoever started it, and survives a daemon restart. What only the sandbox knows (which
 // repository a run came from, which tunnels it opened) is held here in memory, beside it.

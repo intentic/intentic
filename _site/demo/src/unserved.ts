@@ -32,7 +32,7 @@ export const UNSERVED = {
     "GET /children/links": NOT_THE_EDITORS,
     "GET /children/providers": NOT_THE_EDITORS,
     // The agent's `devices apps` and `devices runs`: what a program it started there is doing, its log, its Stop. The
-    // editor's Run dialog reads the same runs through the `runs` procedures instead.
+    // editor's Run view reads the same runs through the `runs` procedures instead.
     "GET /devices/runs": NOT_THE_EDITORS,
     "GET /devices/tunnels": NOT_THE_EDITORS,
     "GET /devices/{name}/apps": NOT_THE_EDITORS,

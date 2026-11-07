@@ -47,12 +47,12 @@ export const refusalFor = (services: DoorServices, c: Context<AppEnv>, device: s
 
 // Who is calling, as a run's records say it ("started by", "stopped by"): a run the owner started from the editor holds a
 // grant; an agent's shell names its conversation; anything else is a terminal in the sandbox.
-export const RUN_DIALOG = "the Run dialog";
+export const RUN_VIEW = "the Run view";
 
 export const callerName = (c: Context<AppEnv>): string => {
     const grant = c.req.header("x-intentic-run-grant");
     if (grant !== undefined && grant !== "") {
-        return RUN_DIALOG;
+        return RUN_VIEW;
     }
     const named = c.req.header("x-intentic-conversation");
     return named !== undefined && named !== "" ? `conversation ${named}` : "a terminal in the sandbox";
@@ -65,7 +65,7 @@ const StartSchema = z
         // opened for the program (`reach`), closed again when the program is stopped.
         repo: z.string().max(500).optional(),
         reach: z.array(z.int().min(1).max(65535)).max(16).optional(),
-        // What `devices run` built it from, kept beside the run for the Run dialog (RunBuiltFromSchema).
+        // What `devices run` built it from, kept beside the run for the Run view (RunBuiltFromSchema).
         builtFrom: RunBuiltFromSchema.optional(),
         args: z.array(z.string().max(4000)).max(100).optional(),
         env: z.record(z.string(), z.string().max(4000)).optional(),

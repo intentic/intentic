@@ -7,7 +7,7 @@ import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { insideRel } from "@intentic/base/contained";
 import { isIsolated } from "../../conversations/registry/agents-store.js";
 import { ROOT_REPO } from "../../workspace/layout/repo-discovery.js";
-import { bodyOf, callerName, type DoorServices, RUN_DIALOG, refusalFor } from "../device-door.routes.js";
+import { bodyOf, callerName, type DoorServices, RUN_VIEW, refusalFor } from "../device-door.routes.js";
 
 // WHAT A PROGRAM STARTED ON ONE OF THE OWNER'S COMPUTERS IS DOING, AND ITS STOP, from a shell (`devices stop`, and
 // `devices run` following its program and stopping it on Ctrl+C). Held to the same rule as the rest of the `devices`
@@ -21,12 +21,12 @@ type RunDoorServices = DoorServices & Pick<Services, "deviceRuns" | "runBuilds" 
 const StopWhySchema = z.enum(["stop", "replace", "interrupt"]);
 
 export const stopperName = (caller: string, why: z.infer<typeof StopWhySchema>): string => {
-    const dialog = caller === RUN_DIALOG;
+    const fromView = caller === RUN_VIEW;
     switch (why) {
         case "replace":
-            return dialog ? "Run pressed again in the Run dialog (its new build replaced it)" : `\`devices run\` from ${caller}, whose new build replaced it`;
+            return fromView ? "Run pressed again in the Run view (its new build replaced it)" : `\`devices run\` from ${caller}, whose new build replaced it`;
         case "interrupt":
-            return dialog ? "Ctrl+C in its Run terminal" : `Ctrl+C in \`devices\` from ${caller}`;
+            return fromView ? "Ctrl+C in its Run terminal" : `Ctrl+C in \`devices\` from ${caller}`;
         case "stop":
             return `\`devices stop\` from ${caller}`;
     }
@@ -67,7 +67,7 @@ const RENEW_EVERY_MS = 20_000;
 // writes into, and a folder outside the workspace is nobody's land target.
 const heldRepoOf = (services: RunDoorServices, c: Context<AppEnv>, build: z.infer<typeof BuildSchema>): { repo: string } | { why: string } => {
     const named = c.req.header("x-intentic-conversation");
-    const entry = named === undefined || named === "" || callerName(c) === RUN_DIALOG ? undefined : services.agents.entry(named);
+    const entry = named === undefined || named === "" || callerName(c) === RUN_VIEW ? undefined : services.agents.entry(named);
     if (entry !== undefined && isIsolated(entry)) {
         return { why: "this conversation builds in its own checkout, which nothing lands into" };
     }

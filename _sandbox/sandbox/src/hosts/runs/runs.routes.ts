@@ -50,8 +50,8 @@ const assertRunnable = (services: RunsServices, device: string): void => {
     }
 };
 
-// Who the computer records a stop from the dialog as coming from ("stopped by the Run dialog's Stop").
-const RUN_DIALOG_STOP = "the Run dialog's Stop";
+// Who the computer records a stop from the Run view as coming from ("stopped by the Run view's Stop").
+const RUN_VIEW_STOP = "the Run view's Stop";
 
 // The computer's refusal, in its own words, as the editor's error.
 const refusal = (message: string): ORPCError<"CONFLICT", unknown> => new ORPCError("CONFLICT", { message });
@@ -123,7 +123,7 @@ const createRunTerminals = (services: RunsServices, runner: TerminalRunner) => {
         return await open(input, session, ["attach", id, "--device", input.device]);
     };
 
-    // The terminals still open for one computer's runs, for the Run dialog to reopen.
+    // The terminals still open for one computer's runs, for the Run view to reopen.
     const on = (device: string): RunTerminal[] =>
         [...live.entries()]
             .filter(([, held]) => held.input.device === device)
@@ -193,9 +193,9 @@ export const createRunsRoutes = (services: RunsServices, runner: TerminalRunner 
             assertRunnable(services, input.device);
             try {
                 if (input.id !== undefined) {
-                    return { stopped: [{ id: input.id, text: await services.deviceRuns.stop(input.device, input.id, { by: RUN_DIALOG_STOP }) }] };
+                    return { stopped: [{ id: input.id, text: await services.deviceRuns.stop(input.device, input.id, { by: RUN_VIEW_STOP }) }] };
                 }
-                return { stopped: await services.deviceRuns.stopNamed(input.device, input.target, RUN_DIALOG_STOP) };
+                return { stopped: await services.deviceRuns.stopNamed(input.device, input.target, RUN_VIEW_STOP) };
             } catch (error) {
                 throw refusal(errorMessage(error));
             }

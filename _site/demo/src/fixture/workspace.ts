@@ -551,7 +551,7 @@ const API_PACKAGE = `{
 }
 `;
 
-// What `web` says it can run on the owner's computers. The run dialog's fixture (daemon/settings.ts) parses this very
+// What `web` says it can run on the owner's computers. The Run view's fixture (daemon/settings.ts) parses this very
 // text, as the daemon parses the real file, so the dialog and its "Edit run.json" link show the same thing.
 export const WEB_RUN_JSON = `{
     "targets": [
@@ -574,7 +574,7 @@ export const WEB_RUN_JSON = `{
 }
 `;
 
-// What the workspace root says it can run, the Run dialog's long list (opened from the file tree's toolbar ▷): seven
+// What the workspace root says it can run, the Run view's long list (opened from the file tree's toolbar ▷): seven
 // targets in the sandbox, most with more to say than a line holds, and two that run on the owner's computer, one of them
 // inside Windows Sandbox. Parsed by daemon/settings.ts as the daemon parses the real file.
 export const ROOT_RUN_JSON = `{

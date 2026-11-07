@@ -1,6 +1,6 @@
 import { createDeviceRuns, type DeviceToolArgs, linesSince, parseRunList, parseRunLogs, startedRun } from "../runs/device-runs.js";
 
-// What a computer's app_* tools say about the programs this sandbox started there, read back into runs the Run dialog
+// What a computer's app_* tools say about the programs this sandbox started there, read back into runs the Run view
 // shows and stops; the sentences are the machine's own (devices/machine/src/device/tools/programs/programs.ts).
 
 const STATUS = [
@@ -99,11 +99,11 @@ test("stopping a run closes the ports opened for it, except one another running 
     });
     runs.started("rog", "local-server-1a2b3c", { name: "local-server", repo: "integra", ports: [7880, 9000] });
     runs.started("rog", "other-123456", { name: "other", ports: [9000] });
-    expect(await runs.stopNamed("rog", "local-server", "Run pressed again in the Run dialog")).toEqual([
+    expect(await runs.stopNamed("rog", "local-server", "Run pressed again in the Run view")).toEqual([
         { id: "local-server-1a2b3c", text: expect.stringContaining("Stopped") },
     ]);
     expect(calls.filter((call) => call.tool === "app_stop")).toEqual([
-        { tool: "app_stop", args: { id: "local-server-1a2b3c", force: false, by: "Run pressed again in the Run dialog" } },
+        { tool: "app_stop", args: { id: "local-server-1a2b3c", force: false, by: "Run pressed again in the Run view" } },
     ]);
     expect(closed).toEqual(["rog:7880"]);
     expect(runs.deviceOf("local-server-1a2b3c")).toBe("rog");
@@ -140,8 +140,8 @@ test("a listed run says who started it, what it was built from, and how many lan
         landsSince: (repo, since) => asked.push({ repo, since }) && 3,
     });
     const builtFrom = { commit: "abc1234def", changed: 2, at: "2026-10-31T09:59:00.000Z" };
-    runs.started("rog", "local-server-1a2b3c", { name: "local-server", repo: "integra", ports: [], startedBy: "the Run dialog", builtFrom });
+    runs.started("rog", "local-server-1a2b3c", { name: "local-server", repo: "integra", ports: [], startedBy: "the Run view", builtFrom });
     const [listed] = await runs.list("rog");
-    expect(listed).toMatchObject({ id: "local-server-1a2b3c", startedBy: "the Run dialog", builtFrom, landsSince: 3 });
+    expect(listed).toMatchObject({ id: "local-server-1a2b3c", startedBy: "the Run view", builtFrom, landsSince: 3 });
     expect(asked).toEqual([{ repo: "integra", since: Date.parse(builtFrom.at) }]);
 });
