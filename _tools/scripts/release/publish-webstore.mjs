@@ -200,7 +200,12 @@ if (!publish.ok) {
     if (finishIfSettled(await fetchStatus())) {
         process.exit(0);
     }
-    throw new Error(`publish failed (${publish.status}): ${detail(published)}`);
+    // A 400 here is dashboard metadata the API cannot fill (most often a justification for a newly added permission).
+    const hint =
+        publish.status === 400
+            ? " The upload is in place: open the item in the Developer Dashboard, select \"Why can't I submit?\", fill the missing fields from _devices/webext/STORE-LISTING.md, Save draft, then rerun this workflow at the same tag (_devices/webext/PUBLISHING.md)."
+            : "";
+    throw new Error(`publish failed (${publish.status}): ${detail(published)}${hint}`);
 }
 if (!SUCCESS_STATES.has(published.state)) {
     throw new Error(`publish returned HTTP ${publish.status} but no success state: ${published.state ?? detail(published)}`);
