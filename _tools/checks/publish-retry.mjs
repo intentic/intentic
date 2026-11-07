@@ -20,8 +20,13 @@ const SUBJECTS = [
                 "worker discovery lost its Docker socket (killed release images-amd64 in run 41552955701)",
                 'ERROR: failed to build: listing workers for Build: failed to list workers: Unavailable: connection error: desc = "error reading server preface: read unix @->/run/docker.sock: use of closed network connection"',
             ],
+            [
+                "the runner lost its route to Docker Hub resolving the syntax frontend (killed e2e in run 42359893687)",
+                'ERROR: failed to build: failed to solve: failed to resolve source metadata for docker.io/docker/dockerfile:1: failed to do request: Head "https://registry-1.docker.io/v2/docker/dockerfile/manifests/1": dial tcp 52.0.154.85:443: connect: no route to host',
+            ],
         ],
         failAtOnce: [
+            ["an image that does not exist", "ERROR: failed to solve: failed to resolve source metadata for docker.io/library/nope:1: docker.io/library/nope:1: not found"],
             ["a broken Dockerfile", "ERROR: failed to solve: dockerfile parse error on line 3: unknown instruction: RUNN"],
             ["a compile failure", 'ERROR: process "/bin/sh -c cargo build --release" did not complete successfully: exit code: 101'],
             ["a registry refusal", "ERROR: failed to solve: unauthorized: authentication required"],

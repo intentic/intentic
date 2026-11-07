@@ -75,6 +75,13 @@ test("an unhandled error is charged to the file bun was printing when it happene
     assert.match(found.message, /^error: Cannot find module/);
 });
 
+test("an unhandled error under a GitHub group heading is charged to the file, not to the group command", () => {
+    for (const heading of ["::group::", "##[group]"]) {
+        const [found] = unhandledErrors(LOAD_LOG.replace("src/broken.test.ts:", `${heading}src/broken.test.ts:`));
+        assert.equal(found.file, "src/broken.test.ts");
+    }
+});
+
 test("units read the same from two checkouts of one tree, and a task with no readable failure stands whole", () => {
     const units = (root) => {
         const junit = join(root, "junit");

@@ -37,7 +37,19 @@ start_dind_host() {
     # connect.sh refuses to start without curl (it would otherwise die mid-run on a raw "command not found");
     # the dind image is Alpine and ships only busybox wget. Installed here rather than baked into dind-host,
     # which keeps that image exactly what the deployment e2e needs it to be.
-    in_host apk add --no-cache curl >/dev/null 2>&1
+    # It reaches Alpine's mirror, so it is retried through a short outage, and what apk said is shown when it never
+    # gets through: discarded, a runner with no route out ended the drill on a bare exit 1 (run 42359893687).
+    local attempt apk_output
+    for attempt in 1 2 3 4 5; do
+        if apk_output="$(in_host apk add --no-cache curl 2>&1)"; then break; fi
+        if [ "$attempt" -eq 5 ]; then
+            echo "error: the Docker host could not install curl from Alpine's mirror:" >&2
+            echo "$apk_output" >&2
+            exit 1
+        fi
+        echo "    apk add curl failed (attempt $attempt/5); retrying in $((attempt * 5))s"
+        sleep "$((attempt * 5))"
+    done
 
     # connect.sh pulls its image with the host's OWN daemon, which starts credential-less. A user's machine
     # needs none — the shipped image is public — but CI points SANDBOX_E2E_IMAGE at the private ghcr package,

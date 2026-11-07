@@ -65,7 +65,7 @@ stage_rg() {
     mkdir -p "$RG_CACHE"
     if [ ! -f "$archive" ] || [ "$(sha256_of "$archive")" != "$sha" ]; then
         echo "==> ripgrep $RG_VERSION: $asset"
-        curl -fsSL --retry 3 --retry-connrefused -o "$archive.part" "https://github.com/BurntSushi/ripgrep/releases/download/$RG_VERSION/$asset"
+        curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -o "$archive.part" "https://github.com/BurntSushi/ripgrep/releases/download/$RG_VERSION/$asset"
         if [ "$(sha256_of "$archive.part")" != "$sha" ]; then
             echo "error: $asset does not match its pinned sha256 ($sha); refusing to ship it." >&2
             rm -f "$archive.part"

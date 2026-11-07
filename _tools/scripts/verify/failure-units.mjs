@@ -88,7 +88,10 @@ export const junitCases = (xml) =>
 // Failing test cases in a bun JUnit report.
 export const junitFailures = (xml) => junitCases(xml).flatMap(({ file, name, failed }) => (failed ? [{ file, name }] : []));
 
-const FILE_HEADER = /^(\S.*\.(?:test|spec)\.[cm]?[jt]sx?):$/;
+// A file's heading as bun prints it: plain, or wrapped in the `::group::` command it writes under GitHub Actions (and the
+// runner stores as `##[group]`). Kept with the prefix, an error was charged to a file named `::group::src/…`, which its
+// re-run alone could not find, so a flake the re-run would have cleared failed the gate (run 42307546653).
+const FILE_HEADER = /^(?:##\[group\]|::group::)?(\S.*\.(?:test|spec)\.[cm]?[jt]sx?):$/;
 const UNHANDLED = "# Unhandled error between tests";
 
 // Errors bun raised outside any test (a file that cannot load, a rejection after the last test), which JUnit omits.

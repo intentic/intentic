@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Retry a dropped connection while BuildKit lists workers, before it starts solving the build.
-# Compile errors, registry refusals and timeouts retain their original status without a retry.
-BUILDKIT_RETRY_ATTEMPTS="${BUILDKIT_RETRY_ATTEMPTS:-3}"
+# Retry what fails before BuildKit starts solving the build: a dropped connection while it lists workers, and a registry
+# it could not connect to at all while resolving an image's metadata (the `# syntax=` frontend, a base), since nothing
+# has run yet. Compile errors, registry refusals and timeouts mid-build retain their original status without a retry.
+# The gap grows per attempt (5s, 10s, 15s): a runner losing its route out does so for seconds, not for one try
+# (e2e and update-survival on z440, run 42359893687, both at 09:31:06-08).
+BUILDKIT_RETRY_ATTEMPTS="${BUILDKIT_RETRY_ATTEMPTS:-4}"
 BUILDKIT_RETRY_DELAY="${BUILDKIT_RETRY_DELAY:-5}"
 set -o pipefail
 
 buildkit_retry_transient() {
     grep -Eqi \
         -e 'listing workers for Build: failed to list workers:.*error reading server preface:.*use of closed network connection' \
+        -e 'failed to resolve source metadata for .*dial tcp .*connect: (no route to host|network is unreachable|connection refused)' \
         -- "$1"
 }
 
@@ -25,8 +29,8 @@ buildkit_retry() {
             rm -f "$log"
             return "$status"
         fi
-        echo "==> BuildKit lost its worker-discovery connection (attempt $attempt/$BUILDKIT_RETRY_ATTEMPTS); retrying in ${BUILDKIT_RETRY_DELAY}s" >&2
-        sleep "$BUILDKIT_RETRY_DELAY"
+        echo "==> BuildKit lost its connection before the build began (attempt $attempt/$BUILDKIT_RETRY_ATTEMPTS); retrying in $((BUILDKIT_RETRY_DELAY * attempt))s" >&2
+        sleep "$((BUILDKIT_RETRY_DELAY * attempt))"
         attempt=$((attempt + 1))
     done
 }
