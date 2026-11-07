@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { cleanName, nameError } from "../../../../models/capabilities/form";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { refreshConnections } from "../../../../models/conversations/accounts/useChat-accounts";
 import { keysBeside } from "../../../../models/providers/providerCatalog";
@@ -16,7 +17,8 @@ import { keyRows } from "./providerKeys";
 // THE API KEYS A PROVIDER'S CARD HOLDS, as rows after its accounts (ProviderPanel.vue): a key pasted under the sign-in
 // (ApiKeyOption) or copied from the owner's computer is one more way to pay for the same models, so it lives where they
 // do rather than under Local models (the owner, 2026-11-05). Taking one off removes the endpoint it became, as the
-// Capabilities page would; only a reader who may change connections gets the press. The card's last quiet line offers a
+// Capabilities page would; renaming one renames that endpoint, as the Capabilities page would too, which is how two keys
+// under one sign-in ("work", "personal") are told apart. Only a reader who may change connections gets either press. The card's last quiet line offers a
 // key, and once it holds one, another (a second account's, a team's), each its own row.
 
 const t = useT();
@@ -29,10 +31,11 @@ const { provider, offer } = defineProps<{
 // The endpoint a key pasted here became, and its vendor's name, for the page's own "connected" answer.
 const emit = defineEmits<{ added: [endpoint: AgentProvider, label: string] }>();
 
-const { capabilities, remove } = useCapabilities();
+const { capabilities, remove, rename } = useCapabilities();
 const { canShip } = useRole();
 const { can } = useAccess();
 const mayRemove = computed(() => canShip.value || can(`capabilities.remove`));
+const mayRename = computed(() => canShip.value || can(`capabilities.rename`));
 
 const rows = computed(() => keyRows(provider, keysBeside(provider), capabilities.value ?? []));
 
@@ -55,6 +58,22 @@ const disconnect = async (capability: string): Promise<void> => {
         removing.value = undefined;
     }
 };
+
+// A key's name is its endpoint's, so it follows a connection's rules: a typed name is repaired into one ("Work key" reads
+// "Work-key") rather than refused, and only one with nothing left to keep is. The picker reads the new provider id off
+// the connection list, which still names the old one until it is read again.
+const renameKey = (capability: string) => async (typed: string): Promise<void> => {
+    const problem = nameError(typed);
+    if (problem !== undefined) {
+        throw new Error(problem);
+    }
+    const to = cleanName(typed);
+    if (to === capability) {
+        return;
+    }
+    await rename.mutateAsync({ id: capability, to });
+    await refreshConnections();
+};
 </script>
 
 <template>
@@ -72,6 +91,8 @@ const disconnect = async (capability: string): Promise<void> => {
         :note="row.note"
         :note-busy="row.settling"
         :description="row.description"
+        :rename="mayRename ? renameKey(row.capability) : undefined"
+        :rename-from="row.name"
     >
         <template #control>
             <Button

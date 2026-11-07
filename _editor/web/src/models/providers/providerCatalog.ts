@@ -11,7 +11,7 @@ import {
     providerLabel,
     TRIAL_LABEL,
 } from "@intentic/sandbox-contract/models/agent-catalog";
-import { KEY_PROVIDERS, keyBeside } from "@intentic/sandbox-contract/models/key-providers";
+import { KEY_PROVIDERS, keyBeside, keyNamedByDefault } from "@intentic/sandbox-contract/models/key-providers";
 import { compareModelIds, familyOf } from "@intentic/sandbox-contract/models/model-order";
 import type { HelperOnly, ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
@@ -164,13 +164,14 @@ export const runnableReadFailure = sandboxRef<string | undefined>(() => undefine
 
 // The daemon names the free trial's endpoint in English (TRIAL_LABEL); on screen it is said in the reader's language. A
 // vendor's key is named as one ("Anthropic API key"), not by the id its endpoint was filed under, unless a second key
-// under the same sign-in needs that id to be told apart.
+// under the same sign-in needs that id to be told apart, or the owner renamed it, when the name they chose is the one.
 const endpointLabel = (provider: AgentProvider): string | undefined => {
     const label = endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label;
     const beside = keyedBeside(provider);
-    const vendor = beside === undefined ? undefined : keyBeside(beside)?.label;
-    if (beside !== undefined && vendor !== undefined && keysBeside(beside).length === 1) {
-        return t(`chat.providerCatalog.apiKey`, { vendor });
+    const vendor = beside === undefined ? undefined : keyBeside(beside);
+    const id = endpointIdOf(provider);
+    if (beside !== undefined && vendor !== undefined && id !== undefined && keyNamedByDefault(id, vendor.id) && keysBeside(beside).length === 1) {
+        return t(`chat.providerCatalog.apiKey`, { vendor: vendor.label });
     }
     return label === TRIAL_LABEL && isTrialProvider(provider) ? t(`chat.providerCatalog.freeTrial`) : label;
 };

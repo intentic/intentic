@@ -95,3 +95,14 @@ const sameBase = (one: string, other: string): boolean => one.trim().replace(/\/
 // whether pasted beside a sign-in or copied from the owner's computer. Any other address (a gateway, a server of the
 // owner's) is no vendor's here, even one that serves the same models.
 export const keyProviderFor = (baseUrl: string): KeyProvider | undefined => KEY_PROVIDERS.find((entry) => sameBase(entry.baseUrl, baseUrl));
+
+// Whether a key's endpoint still carries the name it was given when it arrived: the vendor's id, numbered past one already
+// taken ("anthropic", "anthropic-2"), as both a pasted key (ApiKeyOption.vue) and a found one (migrations/provider-keys.ts)
+// are named. Such a key is drawn as the vendor's API key; one the owner renamed is drawn by the name they chose.
+export const keyNamedByDefault = (id: string, vendor: string): boolean => {
+    if (id === vendor) {
+        return true;
+    }
+    const suffix = id.startsWith(`${vendor}-`) ? id.slice(vendor.length + 1) : ``;
+    return /^\d+$/.test(suffix);
+};

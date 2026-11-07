@@ -61,3 +61,9 @@ it(`files a vendor's key under its sign-in and names it as a key, unless two key
     endpointProviders.value = [...endpointProviders.value, { id: `endpoint/anthropic-2`, label: `anthropic-2`, kind: `endpoint`, beside: `claude` }];
     expect(providerDisplayLabel(`endpoint/anthropic-2`)).toBe(`anthropic-2`);
 });
+
+// A key the owner renamed (Sandbox ▸ Models) is said by that name everywhere, even as the only key under its sign-in.
+it(`names a renamed vendor key by the name the owner gave it`, () => {
+    endpointProviders.value = [{ id: `endpoint/work`, label: `work`, kind: `endpoint`, beside: `claude` }];
+    expect(providerDisplayLabel(`endpoint/work`)).toBe(`work`);
+});

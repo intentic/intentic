@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { keyBeside } from "@intentic/sandbox-contract/models/key-providers";
+import { type KeyProvider, keyBeside, keyNamedByDefault } from "@intentic/sandbox-contract/models/key-providers";
 import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
 import { rowNote } from "../accountRows";
@@ -17,6 +17,9 @@ export interface KeyRow {
     // Its capability, which taking it off removes.
     readonly capability: string;
     readonly title: string;
+    // What renaming it starts from and changes: the endpoint's own name, which is the drawn title only once the owner has
+    // chosen one. Until then the row reads as the vendor's key and the field opens on the name it arrived under.
+    readonly name: string;
     readonly note: string | undefined;
     readonly state: `connected` | `unknown` | `reauth`;
     // Something under way will move it by itself, which earns the note a spinner.
@@ -33,32 +36,44 @@ const hintOf = (capability: CapabilitySummary | undefined): string | undefined =
     return parsed.success ? parsed.data.keyHint : undefined;
 };
 
+// What the row is called and what follows its name. A name the owner gave the key is what they will look for, so it leads
+// and the key's last characters follow it; a key still under the name it arrived with reads as the vendor's key. Who bills
+// it is the one thing a key row says that an account row never does; its arrival name only where two keys would read alike.
+const naming = (
+    id: string,
+    hint: string | undefined,
+    vendor: KeyProvider | undefined,
+    twins: boolean,
+) => {
+    const keyTitle = hint === undefined ? t(`connect.providerKeys.title`) : t(`connect.providerKeys.titleHint`, { hint });
+    if (vendor !== undefined && !keyNamedByDefault(id, vendor.id)) {
+        return { title: id, extra: hint === undefined ? undefined : keyTitle };
+    }
+    return { title: keyTitle, extra: twins && hint === undefined ? id : undefined };
+};
+
 export const keyRows = (
     provider: AgentProvider,
     keys: readonly { readonly id: AgentProvider; readonly label: string }[],
     capabilities: readonly CapabilitySummary[],
 ): readonly KeyRow[] => {
-    const vendor = keyBeside(provider)?.label;
+    const vendor = keyBeside(provider);
     return keys.flatMap((key) => {
         const id = endpointIdOf(key.id);
         if (id === undefined) {
             return [];
         }
         const held = capabilities.find((entry) => entry.id === id);
-        const hint = hintOf(held);
         const status = held?.status;
         const serving = status === undefined || status.state === `active`;
+        const { title, extra } = naming(id, hintOf(held), vendor, keys.length > 1);
         return [
             {
                 provider: key.id,
                 capability: id,
-                title: hint === undefined ? t(`connect.providerKeys.title`) : t(`connect.providerKeys.titleHint`, { hint }),
-                // Who bills it is the one thing a key row says that an account row never does. Its own name only where two
-                // keys would otherwise read alike.
-                note: rowNote([
-                    vendor === undefined ? undefined : t(`connect.providerKeys.billed`, { vendor }),
-                    keys.length > 1 && hint === undefined ? key.label : undefined,
-                ]),
+                title,
+                name: id,
+                note: rowNote([vendor === undefined ? undefined : t(`connect.providerKeys.billed`, { vendor: vendor.label }), extra]),
                 state: serving ? `connected` : status.settling === true ? `unknown` : `reauth`,
                 settling: !serving && status.settling === true,
                 description: serving ? undefined : status.detail,

@@ -18,6 +18,7 @@ const t = useT();
 
 const {
     value,
+    seed,
     write,
     label,
     action,
@@ -28,6 +29,9 @@ const {
 } = defineProps<{
     /** The name as it stands. Empty or absent draws `fallback` instead, and starts the field empty. */
     value: string | undefined;
+    /** What the field opens with, where the name drawn at rest is not the one being changed (a row that reads as "API key
+     *  ··a3f9" until it is given a name of its own). Committing it unchanged is a silent cancel, as for `value`. */
+    seed?: string;
     /** Where a committed name goes. Throwing is how it reports failure; the field stays open with the draft in it. */
     write: (name: string) => Promise<void>;
     /** Names the field for assistive tech, in the words of what is being renamed ("Sandbox name"). */
@@ -44,7 +48,7 @@ const {
 }>();
 
 const rename = createInlineRename(
-    () => value,
+    () => seed ?? value,
     (name) => write(name),
     () => failure ?? t(`ui.inlineRename.couldntSaveName`),
 );

@@ -41,6 +41,8 @@ const {
     // Where a new name goes. Passing nothing is what makes a row unrenamable: only the sandbox's own credentials
     // have a name to change.
     rename?: (label: string) => Promise<void>;
+    // What the rename field opens with, where that is not the title (an API key titled by its last characters).
+    renameFrom?: string;
     // Plan-limit headroom once read; replaces the dot with a meter. Undefined keeps the plain dot.
     headroom?: PlanHeadroom;
     // Spend on this connection, shown in the meter's card, not the row; omitted with no meter.
@@ -84,6 +86,7 @@ const DOT_TONE: Record<string, string> = {
                 <InlineRename
                     v-else-if="rename"
                     :value="title"
+                    :seed="renameFrom"
                     :write="rename"
                     :label="t(`sandbox.words.accountName`)"
                     :action="t(`ui.action.rename`)"

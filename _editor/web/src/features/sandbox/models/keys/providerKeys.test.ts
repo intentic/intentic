@@ -1,4 +1,5 @@
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { keyNamedByDefault } from "@intentic/sandbox-contract/models/key-providers";
 import { keyRows } from "./providerKeys";
 
 /* A vendor's API key as a row of the provider card it is filed under: which key, who bills it, whether it serves. */
@@ -20,6 +21,7 @@ test("a serving key reads as its last four characters and who bills it, never th
             provider: `endpoint/anthropic`,
             capability: `anthropic`,
             title: `API key ··a3f9`,
+            name: `anthropic`,
             note: `Billed per token by Anthropic`,
             state: `connected`,
             settling: false,
@@ -47,4 +49,23 @@ test("two keys with no hint to tell them apart are told apart by their own names
         `Billed per token by Anthropic · anthropic`,
         `Billed per token by Anthropic · anthropic-2`,
     ]);
+});
+
+test("a key the owner renamed is titled by that name, its last characters beside it, and renames from that name", () => {
+    const work = { id: `endpoint/work`, label: `work` };
+    expect(keyRows(`claude`, [work], [held(`work`)])).toEqual([
+        expect.objectContaining({ title: `work`, name: `work`, note: `Billed per token by Anthropic · API key ··a3f9` }),
+    ]);
+    // One still under the name it arrived with reads as the vendor's key, and its rename starts from that name.
+    const [arrived] = keyRows(`claude`, [{ id: `endpoint/anthropic-2`, label: `anthropic-2` }], [held(`anthropic-2`)]);
+    expect(arrived).toMatchObject({ title: `API key ··a3f9`, name: `anthropic-2` });
+});
+
+// A key arrives named for its vendor, numbered past a name already taken; anything else is a name the owner chose.
+test("a key still under its arrival name is told from one the owner renamed", () => {
+    expect(keyNamedByDefault(`anthropic`, `anthropic`)).toBe(true);
+    expect(keyNamedByDefault(`anthropic-2`, `anthropic`)).toBe(true);
+    expect(keyNamedByDefault(`anthropic-work`, `anthropic`)).toBe(false);
+    expect(keyNamedByDefault(`anthropic-`, `anthropic`)).toBe(false);
+    expect(keyNamedByDefault(`work`, `anthropic`)).toBe(false);
 });
