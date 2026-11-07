@@ -3,14 +3,13 @@ import TourMark from "../../tour/TourMark.vue";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { AnchoredOverlay, Notice, SandboxLogo, SectionHeader, StatusBadge, type Tip, useHoverMenu } from "@intentic/ui";
 import { computed, type ComputedRef, onMounted, onUnmounted, ref, TransitionGroup, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
 import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
 import { GUEST_SECTION, sandboxHubPath } from "../../../models/sandbox/sandboxNav";
-import { homeEntryPath, sandboxEntryPath } from "../../../models/sandbox/sandboxScreen";
+import { sandboxEntryPath } from "../../../models/sandbox/sandboxScreen";
 import { hereIn, isPage, page } from "../../../lib/routes/links";
-import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import type { SandboxPlacement } from "../overview/placement";
 import { rowPlacement, useSandboxPlacement } from "../overview/useSandboxPlacement";
@@ -92,7 +91,6 @@ const {
     failure,
     openFromFolder,
     openSettingsFromFolder,
-    openHome,
     signedOut,
     signingIn,
     signIn,
@@ -215,12 +213,6 @@ const pick = (option: SandboxSummary): void => {
     open.value = false;
     void router.push(sandboxEntryPath(option.id));
 };
-
-// The way out to Home, on the sandbox shown: the section Home shows of every sandbox, else its home conversation.
-const allSandboxes = computed(() => {
-    const id = sandbox.activeSandboxId.value;
-    return id === undefined ? HOME_PATH : homeEntryPath(id);
-});
 
 // A SANDBOX'S SETTINGS, from its own row: the cog beside it, so the list says whose settings they are, and another
 // sandbox's are one press away instead of a switch and a second trip through this panel. Removing or leaving one is
@@ -354,23 +346,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                 <div class="my-1 border-t border-line-subtle"></div>
             </template>
 
-            <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5">
-                <!-- The way out to the master view (features/home/), every sandbox at once: a small mark on the header of
-                     the list it zooms out of, quiet until looked for. -->
-                <template #actions>
-                    <component
-                        :is="local ? `button` : RouterLink"
-                        v-bind="local ? { type: `button` } : { to: allSandboxes }"
-                        class="flex h-5 w-5 items-center justify-center rounded text-subtle transition-colors hover:bg-content/5 hover:text-content"
-                        :aria-label="t(`home.open`)"
-                        v-tooltip.top="t(`home.open`)"
-                        @click="openHome"
-                    >
-                        <Icon name="th-large" class="text-2xs" />
-                    </component>
-                </template>
-            </SectionHeader>
-            <Notice v-if="failure?.id === `:home`" tone="danger" class="mx-2 mb-1 text-2xs">{{ failure.message }}</Notice>
+            <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
 
             <!-- A local window with nobody signed in: what agents need, and the sign-in that brings the workspace. -->
             <template v-if="signedOut">

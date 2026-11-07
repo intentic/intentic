@@ -1,5 +1,4 @@
 import { errorMessage } from "@intentic/base/errors";
-import { browserOwnsClick } from "@intentic/ui";
 import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from "vue";
 import { type Router, useRouter } from "vue-router";
 import { localFace } from "../../../app/environments/local";
@@ -7,7 +6,6 @@ import { localHost } from "../../../app/environments/localHost";
 import { useAccount } from "../../../client/auth/useAccount";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { ADD_SANDBOX_PATH, LOCAL_ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
-import { HOME_PATH } from "../../../lib/routes/firstScreens";
 
 // WHERE THE SANDBOX SWITCHER STANDS, the one thing about it that differs between the two windows that draw it. In the
 // workspace it stands on a sandbox and moves by selecting another, a route of its own. In the desktop app's window on a
@@ -49,8 +47,6 @@ export interface FolderPlace {
     readonly openFromFolder: (sandboxId: string) => Promise<void>;
     /** The workspace on one of the account's sandboxes, opened on its settings (`path`, the hub this reader may open). */
     readonly openSettingsFromFolder: (sandboxId: string, path: string) => Promise<void>;
-    /** The account's Home, available even before it has a sandbox. */
-    readonly openHome: (event: MouseEvent) => Promise<void>;
     /** Nobody signed in yet: no sandboxes to list, and the sign-in that brings the workspace instead. */
     readonly signedOut: ComputedRef<boolean>;
     readonly signingIn: ComputedRef<boolean>;
@@ -122,15 +118,6 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         arranged,
         openFromFolder: (sandboxId) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId)),
         openSettingsFromFolder: (sandboxId, path) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId, path)),
-        openHome: async (event) => {
-            if (local) {
-                event.preventDefault();
-                // Home's bare address, which opens on the sandbox shown last there (features/home/MasterHomeView.vue).
-                await attempt(`:home`, () => openWorkspacePath(router, HOME_PATH));
-            } else if (!browserOwnsClick(event)) {
-                open.value = false;
-            }
-        },
         signedOut: computed(() => local && user.value === null),
         signingIn,
         signIn: () => attempt(`:sign-in`, () => localHost().signIn()),
