@@ -1,4 +1,4 @@
-import type { ChoiceNotice, ChoicePrompt, Notice, PassphrasePrompt, ValueAnswer, ValueNotice, ValuePrompt } from "./consent.js";
+import type { ChoiceNotice, ChoicePrompt, Notice, PassphraseNotice, PassphrasePrompt, ValueAnswer, ValueNotice, ValuePrompt } from "./consent.js";
 import type { RunAnswer, Runner } from "../run.js";
 
 // The passphrase dialog on Linux and macOS. Linux: zenity, then kdialog where there is a display, then
@@ -38,9 +38,13 @@ const ASK_PASSWORD: Dialog = {
     cancelled: [1],
 };
 
+// zenity, kdialog and systemd-ask-password have one text: what went wrong with the last try leads it.
+const withProblem = (notice: PassphraseNotice): Notice => (notice.problem === undefined ? notice : { title: notice.title, message: `${notice.problem}\n\n${notice.message}` });
+
 export const linuxPassphrasePrompt =
     (runner: Runner, env: NodeJS.ProcessEnv = process.env): PassphrasePrompt =>
-    async (notice) => {
+    async (asked) => {
+        const notice = withProblem(asked);
         const graphical = (env["DISPLAY"] ?? "") !== "" || (env["WAYLAND_DISPLAY"] ?? "") !== "";
         const dialogs = graphical ? [...DIALOGS, ASK_PASSWORD] : [ASK_PASSWORD];
         const tried: string[] = [];

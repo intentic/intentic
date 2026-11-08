@@ -4,7 +4,7 @@ import { sleep } from "@intentic/base/async";
 import { z } from "zod";
 import { claimPidFile } from "@intentic/local-agent";
 import { keyringPaths } from "../address.js";
-import type { ChoicePrompt, HelloDriver, PassphrasePrompt, ValuePrompt } from "../consent/consent.js";
+import { type ChoicePrompt, type HelloDriver, type PassphrasePrompt, type ValuePrompt, WRONG_RECOVERY_KEY } from "../consent/consent.js";
 import { KEYRING_RESPONSES, type KeyringOp, type KeyringRequest, type KeyringResponse } from "../protocol.js";
 import { realRunner, type Runner } from "../run.js";
 import { serveKeyring } from "../server.js";
@@ -20,12 +20,16 @@ import { RECOVERY_HINT } from "./remote.js";
 // `intentic-keyring session`: the protected keyring's hands in this user's session, started at sign-in. It does two
 // things. It keeps the user's own pipe answering (intentic-machine, intentic-askpass and the CLI keep asking there) by
 // carrying each request through the door to the service. And it is the service's way to a person and a keyboard: it
-// proves a person is at this session once (Windows Hello, a polkit yes, or the recovery key; after a no, asked again
-// only when something needs a person, proof-gate.ts), then shows the service's prompts and type-once box and does its
+// proves a person is at this session once (Windows Hello, a polkit yes, or the recovery key, asked again at once with
+// what went wrong when the key did not open the vault; after a no, asked again only when something needs a person or
+// the service restarted, proof-gate.ts), then shows the service's prompts and type-once box and does its
 // typing. It holds no vault and no key; what it carries is one prompt's answer or one value being typed at a time.
 // While the person lets Passwords remember what they type in programs, it also runs the focus watcher that offers the "Fill with Intentic" chip (watch/).
 
 const RETRY_MS = 5_000;
+// How many recovery keys the sign-in proof takes in a row before it waits for the next need, as the service's own
+// prompt does (consent.ts PASSPHRASE_TRIES).
+const PROOF_TRIES = 3;
 const REQUEST_DEADLINE_MS = 135_000;
 // How often the helper reads whether remembering from programs is on, to start or stop the chip's watcher.
 const REMEMBER_POLL_MS = 60_000;
@@ -111,8 +115,8 @@ const PROOF_NOTICE = {
     message: "Once per sign-in, so Passwords can ask you things and type for you.",
 };
 
-/** What the helper answers a challenge with. Exported for its test. */
-export const proofFor = async (challenge: Challenge, hands: Hands, pid: number = process.pid): Promise<Proof> => {
+/** What the helper answers a challenge with: `problem` says what went wrong with the last recovery key. Exported for its test. */
+export const proofFor = async (challenge: Challenge, hands: Hands, { pid = process.pid, problem }: { readonly pid?: number; readonly problem?: string | undefined } = {}): Promise<Proof> => {
     switch (challenge.method) {
         case "hello": {
             const signed = await hands.hello?.sign(challenge.credential, challenge.challenge, PROOF_NOTICE);
@@ -122,7 +126,7 @@ export const proofFor = async (challenge: Challenge, hands: Hands, pid: number =
             // The service asks polkit about this process, which shows its own dialog in this session: nothing to type here.
             return { method: "polkit", pid };
         case "passphrase": {
-            const typed = await hands.passphrase({ title: PROOF_NOTICE.title, message: `${PROOF_NOTICE.message}\n\n${RECOVERY_HINT}` });
+            const typed = await hands.passphrase({ title: PROOF_NOTICE.title, message: `${PROOF_NOTICE.message}\n\n${RECOVERY_HINT}`, problem });
             return typed.kind === "answered" ? { method: "passphrase", passphrase: asRecoveryKey(typed.passphrase) } : { method: "declined" };
         }
         case "unset":
@@ -134,9 +138,20 @@ export const proofFor = async (challenge: Challenge, hands: Hands, pid: number =
 const VerdictSchema = z.object({ ok: z.boolean() });
 const VERDICT_DEADLINE_MS = 30_000;
 
-// The helper's own connection: proven once, then answering the service's calls until it closes. Answers `turned-down`
-// when the person declined the proof or the service refused it, which waits for a need before asking again (proof-gate.ts).
-const holdTheLine = async (door: DoorFile, hands: Hands, gate: ProofGate, log: (message: string) => void, asked: (method: Challenge["method"]) => void): Promise<"gone" | "turned-down"> => {
+// How one connection to the service ended: lost (`gone`, tried again shortly), turned down by the person or refused
+// (`declined`), a recovery key that did not open the vault (`wrong-key`, asked again at once), or a quiet look that
+// found the service wants a person (`passed-over`). The last three wait for a need before asking again (proof-gate.ts).
+type LineOutcome = "gone" | "declined" | "wrong-key" | "passed-over";
+
+// How the helper answers this connection's challenge: `quiet` (after a restart, nobody asked for it) proves only where
+// nothing needs a person, and `problem` is what went wrong with the last recovery key.
+interface Look {
+    readonly quiet: boolean;
+    readonly problem?: string | undefined;
+}
+
+// The helper's own connection: proven once, then answering the service's calls until it closes.
+const holdTheLine = async (door: DoorFile, hands: Hands, gate: ProofGate, log: (message: string) => void, asked: (method: Challenge["method"]) => void, look: Look): Promise<LineOutcome> => {
     const lines = new LineSocket(dial(door));
     lines.send({ door: door.token, as: "helper" });
     const challenge = await lines.nextOf(ChallengeSchema, 30_000);
@@ -145,13 +160,28 @@ const holdTheLine = async (door: DoorFile, hands: Hands, gate: ProofGate, log: (
         return "gone";
     }
     asked(challenge.method);
-    const proof = await proofFor(challenge, hands);
+    if (look.quiet && challenge.method !== "unset") {
+        // Only a service with no vault yet asks nothing of the person; anything else waits for a need, as before.
+        lines.send({ method: "declined" });
+        lines.end();
+        return "passed-over";
+    }
+    const proof = await proofFor(challenge, hands, { problem: look.problem });
     lines.send(proof);
     const verdict = await lines.nextOf(VerdictSchema, VERDICT_DEADLINE_MS);
-    if (verdict?.ok !== true) {
+    if (verdict === undefined) {
         lines.end();
-        log(proof.method === "declined" ? "the person did not prove this session" : `the service refused this session's ${proof.method} proof`);
-        return "turned-down";
+        log("the service did not answer this session's proof");
+        return "gone";
+    }
+    if (!verdict.ok) {
+        lines.end();
+        if (proof.method === "declined") {
+            log("the person did not prove this session");
+            return "declined";
+        }
+        log(`the service refused this session's ${proof.method} proof`);
+        return proof.method === "passphrase" ? "wrong-key" : "declined";
     }
     gate.settle(true);
     log(`proved this session with ${proof.method}`);
@@ -171,6 +201,23 @@ const holdTheLine = async (door: DoorFile, hands: Hands, gate: ProofGate, log: (
     }
 };
 
+// While the helper waits for a need: says `changed` once the door file names a different service than `token`'s (a
+// reset or an update restarted it), whose first question may need nobody.
+const watchDoor = (path: string, token: string | undefined, changed: () => void, everyMs: number) => {
+    const watching = new AbortController();
+    void (async () => {
+        while (!watching.signal.aborted) {
+            await sleep(everyMs);
+            const now = watching.signal.aborted ? undefined : await readDoor(path);
+            if (!watching.signal.aborted && now !== undefined && now.token !== token) {
+                changed();
+                return;
+            }
+        }
+    })();
+    return watching;
+};
+
 // The chip's watcher, on while the vault says the person lets Passwords remember what they type in programs.
 const keepAppsWatch = async (ask: (request: KeyringRequest) => Promise<KeyringResponse<KeyringOp> | undefined>, watch: AppsWatch | undefined): Promise<never> => {
     for (;;) {
@@ -182,6 +229,72 @@ const keepAppsWatch = async (ask: (request: KeyringRequest) => Promise<KeyringRe
             watch?.stop();
         }
         await sleep(REMEMBER_POLL_MS);
+    }
+};
+
+export interface Proving {
+    readonly doorFile: string;
+    readonly hands: Hands;
+    readonly gate: ProofGate;
+    readonly log: (message: string) => void;
+    // What the service asked this session for, so a refusal can tell the person where to look (proofAsked).
+    readonly asked: (method: Challenge["method"]) => void;
+    readonly retryMs?: number;
+    // Stops it, for a test; a session's runs until the process ends.
+    readonly signal?: AbortSignal;
+}
+
+// One connection to the service behind the door file, its challenge answered as `look` says.
+const tryDoor = async ({ doorFile, hands, gate, log, asked }: Proving, look: Look): Promise<{ readonly outcome: LineOutcome; readonly token: string | undefined }> => {
+    const door = await readDoor(doorFile);
+    if (door === undefined) {
+        return { outcome: "gone", token: undefined };
+    }
+    try {
+        return { outcome: await holdTheLine(door, hands, gate, log, asked, look), token: door.token };
+    } catch (error) {
+        log(`lost the service: ${error instanceof Error ? error.message : "unknown error"}`);
+        return { outcome: "gone", token: door.token };
+    }
+};
+
+// After a no: waits for a need, or for the door to name a new service (`token` is the one it named), and says how to
+// answer next. Undefined once `signal` stopped it.
+const waitForNeed = async ({ doorFile, gate, log, retryMs = RETRY_MS, signal }: Proving, token: string | undefined): Promise<Look | undefined> => {
+    const watching = watchDoor(doorFile, token, () => gate.restarted(), retryMs);
+    const stop = (): void => gate.restarted();
+    signal?.addEventListener("abort", stop, { once: true });
+    const why = await gate.whenWanted();
+    signal?.removeEventListener("abort", stop);
+    watching.abort();
+    if (signal?.aborted === true) {
+        return undefined;
+    }
+    if (why === "restarted") {
+        log("the service restarted: looking at what it asks, asking nobody");
+    }
+    return { quiet: why === "restarted" };
+};
+
+/** The helper's side of the door for as long as the session lasts: proven, serving, and proven again. Exported for its test. */
+export const keepProving = async (proving: Proving): Promise<void> => {
+    const stopped = (): boolean => proving.signal?.aborted === true;
+    let look: Look | undefined = { quiet: false };
+    let wrongKeys = 0;
+    while (look !== undefined && !stopped()) {
+        const { outcome, token } = await tryDoor(proving, look);
+        wrongKeys = outcome === "wrong-key" ? wrongKeys + 1 : 0;
+        if (outcome === "wrong-key" && wrongKeys < PROOF_TRIES) {
+            // A key that did not open the vault is asked for again at once, saying so, rather than the box just closing.
+            look = { quiet: false, problem: WRONG_RECOVERY_KEY };
+        } else if (outcome === "gone") {
+            await sleep(proving.retryMs ?? RETRY_MS);
+            look = { quiet: false };
+        } else {
+            wrongKeys = 0;
+            proving.log(outcome === "passed-over" ? "the service wants a person: not asking until something needs one" : "not asking again until something needs a person here");
+            look = await waitForNeed(proving, token);
+        }
     }
 };
 
@@ -223,23 +336,13 @@ export const runSession = async (platformOf: (runner: Runner) => Promise<Session
         log,
     );
     void keepAppsWatch(ask, appsWatchFor(runner, ask, log));
-    for (;;) {
-        const door = await readDoor(platform.doorFile);
-        let outcome: "gone" | "turned-down" = "gone";
-        if (door !== undefined) {
-            try {
-                outcome = await holdTheLine(door, platform.hands, gate, log, (asked) => {
-                    method = asked;
-                });
-            } catch (error) {
-                log(`lost the service: ${error instanceof Error ? error.message : "unknown error"}`);
-            }
-        }
-        if (outcome === "turned-down") {
-            log("not asking again until something needs a person here");
-            await gate.whenWanted();
-            continue;
-        }
-        await sleep(RETRY_MS);
-    }
+    await keepProving({
+        doorFile: platform.doorFile,
+        hands: platform.hands,
+        gate,
+        log,
+        asked: (asked) => {
+            method = asked;
+        },
+    });
 };

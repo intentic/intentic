@@ -1,16 +1,18 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, stat } from "node:fs/promises";
-import { connect } from "node:net";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { keyringPaths } from "../address.js";
+import { type PassphraseNotice, WRONG_RECOVERY_KEY } from "../consent/consent.js";
 import { KEYRING_RESPONSES } from "../protocol.js";
 import { keyringHarness } from "../testing.js";
 import { noTypist } from "../typing/typist.js";
 import { serveDoor } from "./channel.js";
-import { HelperCallSchema } from "./door.js";
-import { answerCall, type Hands, proofFor } from "./helper.js";
+import { type Challenge, HelperCallSchema, type Proof } from "./door.js";
+import { answerCall, type Hands, keepProving, proofFor } from "./helper.js";
 import { LineSocket } from "./lines.js";
+import { ProofGate } from "./proof-gate.js";
 import { HelperLink, remoteChoicePrompt, remoteHello, remotePassphrasePrompt, remoteValuePrompt } from "./remote.js";
 import { provenBy } from "./service-run.js";
 
@@ -120,7 +122,7 @@ test("once a Hello key is pinned, a helper cannot enrol another", async () => {
 });
 
 test("a helper proves itself as each challenge asks", async () => {
-    expect(await proofFor({ method: "polkit" }, hands, 4242)).toEqual({ method: "polkit", pid: 4242 });
+    expect(await proofFor({ method: "polkit" }, hands, { pid: 4242 })).toEqual({ method: "polkit", pid: 4242 });
     expect(await proofFor({ method: "unset" }, hands)).toEqual({ method: "unset" });
     expect(await proofFor({ method: "passphrase" }, hands)).toEqual({ method: "passphrase", passphrase: RECOVERY });
     expect(await proofFor({ method: "hello", credential: "c", challenge: "x" }, hands)).toEqual({ method: "hello", signature: Buffer.from("signed").toString("base64") });
@@ -132,4 +134,158 @@ test("an unproven helper is let in only while no vault exists, and only to an `u
     expect(await provenBy(run, files, { method: "unset" }, { method: "unset" })).toBe(true);
     expect(await provenBy(run, files, { method: "polkit" }, { method: "unset" })).toBe(false);
     expect(await provenBy(run, files, { method: "polkit" }, { method: "declined" })).toBe(false);
+});
+
+/* THE HELPER'S PROOF, over and over (keepProving): a recovery key that did not open the vault asked for again at once,
+   saying so; and a helper turned down that looks again, asking nobody, when the service behind the door restarts (a
+   reset), so setup finds it there to enrol Windows Hello. */
+
+const eventually = async (check: () => boolean, deadlineMs = 5000): Promise<void> => {
+    const until = Date.now() + deadlineMs;
+    while (!check()) {
+        if (Date.now() > until) {
+            throw new Error("did not happen in time");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+};
+
+// A service behind a unix door of its own, its door file written where the helper reads it.
+const serviceAt = async (doorFile: string, path: string, challenge: Challenge, proven: (proof: Proof) => boolean) => {
+    const token = randomBytes(32).toString("base64url");
+    const link = new HelperLink();
+    const { server } = await serveDoor(
+        { handler: keyringHarness([]).keyring, link, token, challenge: () => Promise.resolve(challenge), proven: (_asked, proof) => Promise.resolve(proven(proof)), log: () => undefined },
+        { kind: "unix", path },
+    );
+    const sockets = new Set<Socket>();
+    server.on("connection", (socket) => sockets.add(socket));
+    await writeFile(doorFile, `${JSON.stringify({ socket: path, token, pid: process.pid })}\n`);
+    return {
+        link,
+        close: () => {
+            for (const socket of sockets) {
+                socket.destroy();
+            }
+            if (server.listening) {
+                server.close();
+            }
+        },
+    };
+};
+
+// A person at the box: answers each recovery-key box from `typing` in turn (cancelling once it runs out), noting each.
+const person = (typing: string[]) => {
+    const notices: PassphraseNotice[] = [];
+    const at: Hands = {
+        ...hands,
+        passphrase: (notice) => {
+            notices.push(notice);
+            const typed = typing.shift();
+            return Promise.resolve(typed === undefined ? { kind: "cancelled" } : { kind: "answered", passphrase: typed });
+        },
+    };
+    return { notices, hands: at };
+};
+
+const opensWith = (proof: Proof): boolean => proof.method === "passphrase" && proof.passphrase === RECOVERY;
+
+const proving = (doorFile: string, at: Hands, lines: string[] = []) => {
+    const stop = new AbortController();
+    const gate = new ProofGate();
+    const done = keepProving({ doorFile, hands: at, gate, log: (line) => lines.push(line), asked: () => undefined, retryMs: 20, signal: stop.signal });
+    return {
+        gate,
+        stop: async (): Promise<void> => {
+            stop.abort();
+            await done;
+        },
+    };
+};
+
+test("a recovery key that did not open the vault is asked for again at once, saying so", async () => {
+    const doorFile = join(dir, "door.json");
+    const service = await serviceAt(doorFile, join(dir, "a.sock"), { method: "passphrase" }, opensWith);
+    const at = person(["my-own-passphrase", RECOVERY]);
+    const helper = proving(doorFile, at.hands);
+    try {
+        await eventually(() => helper.gate.proven);
+        expect(service.link.ready).toBe(true);
+        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_RECOVERY_KEY]);
+    } finally {
+        service.close();
+        await helper.stop();
+    }
+});
+
+test("after three keys that did not open it, the box waits for the next need, and then asks afresh", async () => {
+    const doorFile = join(dir, "door.json");
+    const service = await serviceAt(doorFile, join(dir, "a.sock"), { method: "passphrase" }, opensWith);
+    const at = person(["one", "two", "three", RECOVERY]);
+    const lines: string[] = [];
+    const helper = proving(doorFile, at.hands, lines);
+    try {
+        await eventually(() => lines.includes("not asking again until something needs a person here"));
+        expect(at.notices.map((notice) => notice.problem)).toEqual([undefined, WRONG_RECOVERY_KEY, WRONG_RECOVERY_KEY]);
+        helper.gate.want();
+        await eventually(() => helper.gate.proven);
+        expect(at.notices.at(-1)?.problem).toBeUndefined();
+    } finally {
+        service.close();
+        await helper.stop();
+    }
+});
+
+test("a helper turned down looks again, asking nobody, when the service restarts with no vault, and is let in", async () => {
+    const doorFile = join(dir, "door.json");
+    const before = await serviceAt(doorFile, join(dir, "a.sock"), { method: "passphrase" }, opensWith);
+    const at = person([]);
+    const lines: string[] = [];
+    const helper = proving(doorFile, at.hands, lines);
+    try {
+        await eventually(() => lines.includes("the person did not prove this session"));
+        // Started over: the old service gone, a new one with no vault, behind a new door.
+        before.close();
+        const after = await serviceAt(doorFile, join(dir, "b.sock"), { method: "unset" }, (proof) => proof.method === "unset");
+        try {
+            await eventually(() => helper.gate.proven);
+            expect(after.link.ready).toBe(true);
+            expect(at.notices).toHaveLength(1);
+        } finally {
+            after.close();
+        }
+    } finally {
+        before.close();
+        await helper.stop();
+    }
+});
+
+test("a restarted service that wants a person is passed over without a box, until something needs one", async () => {
+    const doorFile = join(dir, "door.json");
+    const before = await serviceAt(doorFile, join(dir, "a.sock"), { method: "passphrase" }, opensWith);
+    const at = person([]);
+    const lines: string[] = [];
+    const helper = proving(doorFile, at.hands, lines);
+    try {
+        await eventually(() => lines.includes("the person did not prove this session"));
+        before.close();
+        const after = await serviceAt(doorFile, join(dir, "b.sock"), { method: "passphrase" }, opensWith);
+        try {
+            await eventually(() => lines.includes("the service wants a person: not asking until something needs one"));
+            expect(at.notices).toHaveLength(1);
+            helper.gate.want();
+            await eventually(() => at.notices.length === 2);
+        } finally {
+            after.close();
+        }
+    } finally {
+        before.close();
+        await helper.stop();
+    }
+});
+
+test("the helper's recovery-key box says what went wrong with the last key", async () => {
+    const at = person([RECOVERY]);
+    await proofFor({ method: "passphrase" }, at.hands, { problem: WRONG_RECOVERY_KEY });
+    expect(at.notices[0]).toMatchObject({ problem: WRONG_RECOVERY_KEY });
 });

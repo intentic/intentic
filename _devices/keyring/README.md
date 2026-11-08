@@ -130,9 +130,12 @@ Two processes share the work (`src/service/`):
   intentic-machine and intentic-askpass work as they did, and it is the service's hands: it shows the prompts and the
   type-once box and does the typing. It proves a person is at the session once per sign-in before the service sends it
   anything; before setup there is no vault and nothing to prove with, so it is let in to enrol Windows Hello, and only
-  while no vault exists. A proof the person turns down, or leaves unanswered, is not asked again on a timer: the helper
+  while no vault exists. A recovery key that does not open the vault is asked for again at once, the box saying so,
+  up to three times. A proof the person turns down, or leaves unanswered, is not asked again on a timer: the helper
   waits until a request needs a person (an unlock answered "nobody is signed in to ask"), puts its proof up then, and
-  tells the requester where to look (`src/service/proof-gate.ts`).
+  tells the requester where to look (`src/service/proof-gate.ts`). While it waits it still watches the door file, and
+  when a new service is behind it (Passwords started over, or updated) it looks at the challenge without asking anyone:
+  a service with no vault lets it in, so setup finds it there to enrol Windows Hello.
 - **The door** is a loopback port on Windows (a pipe the service created would refuse the user's writes) and a unix
   socket on Linux, beside a random token in a door file only that user can read. The token keeps other users out; it
   does not keep out the user's own programs, which is why every value still needs a sandbox's grant or a person's yes.

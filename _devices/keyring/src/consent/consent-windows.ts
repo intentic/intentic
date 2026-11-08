@@ -5,14 +5,15 @@ import type { Runner } from "../run.js";
 
 // Windows Hello and the passphrase dialog on Windows, through Windows PowerShell 5.1 (powershell.ts): KeyCredentialManager
 // to create the keyring's credential and sign with it (RSA in the TPM, released by a Hello gesture), UserConsentVerifier
-// for a plain yes while unlocked, a WinForms password box, and the Passwords app's type-once box and choice dialog.
+// for a plain yes while unlocked, and WinForms boxes for the recovery key, the type-once value and an agent's choice,
+// drawn in Windows' own light or dark look.
 
 // Long enough for a person to walk back to the computer; no longer than a grant lives.
 const PROMPT_TIMEOUT_MS = 125_000;
 // How long "is Hello set up here?" is believed: it changes only when the person sets Hello up or removes it.
 const AVAILABLE_FOR_MS = 5 * 60_000;
 
-// The password box, compiled by Add-Type: C# 5, the newest Windows PowerShell compiles.
+// The three boxes, compiled by Add-Type: C# 5, the newest Windows PowerShell compiles.
 const FORMS = String.raw`
 using System;
 using System.Drawing;
@@ -33,68 +34,201 @@ namespace IntenticKeyring {
     }
   }
 
-  public static class Passphrase {
-    // Title as the box's heading, the message under it, and one field named for what goes in it.
-    public static string Ask(string title, string message, int seconds) {
+  // How every box looks: Windows' own light or dark app mode (its title bar too), drawn at the screen's real DPI
+  // instead of stretched blurry from 96, a heading, a quieter message, and one accent button for the answer.
+  public static class Look {
+    public const int WIDTH = 400;
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, string lParam);
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    const int EM_SETCUEBANNER = 0x1501;
+
+    static bool dark;
+    static float scale = 1f;
+    static Color back, fore, muted, fieldBack, line, accent, accentText, danger;
+
+    // Before the first window: DPI awareness is the process's, and only counts if set before one exists.
+    public static void Begin() {
+      try {
+        SetProcessDPIAware();
+      } catch (Exception) {
+        // allow(silent-catch): a Windows too old to say it leaves the box stretched from 96 DPI, still usable
+      }
       Application.EnableVisualStyles();
+      using (Graphics screen = Graphics.FromHwnd(IntPtr.Zero)) { scale = screen.DpiX / 96f; }
+      dark = false;
+      try {
+        object light = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+        dark = light is int && (int)light == 0;
+      } catch (Exception) {
+        // allow(silent-catch): no app-mode setting to read is Windows' default, the light look
+      }
+      back = dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243);
+      fore = dark ? Color.FromArgb(255, 255, 255) : Color.FromArgb(27, 27, 27);
+      muted = dark ? Color.FromArgb(206, 206, 206) : Color.FromArgb(92, 92, 92);
+      fieldBack = dark ? Color.FromArgb(45, 45, 45) : Color.White;
+      line = dark ? Color.FromArgb(80, 80, 80) : Color.FromArgb(204, 204, 204);
+      danger = dark ? Color.FromArgb(255, 153, 164) : Color.FromArgb(196, 43, 28);
+      accent = dark ? Color.FromArgb(76, 194, 255) : Color.FromArgb(0, 95, 184);
+      accentText = dark ? Color.Black : Color.White;
+    }
+
+    // Logical pixels to the screen's: fonts are in points and scale by themselves, sizes and spacing do not.
+    public static int S(int pixels) { return (int)Math.Round(pixels * scale); }
+
+    public static Form NewForm() {
       Form form = new Form();
       form.Text = "Intentic Passwords";
       form.Font = new Font("Segoe UI", 10f);
-      form.BackColor = SystemColors.Window;
+      form.BackColor = back;
+      form.ForeColor = fore;
       form.FormBorderStyle = FormBorderStyle.FixedDialog;
       form.MinimizeBox = false;
       form.MaximizeBox = false;
+      form.ShowIcon = false;
       form.TopMost = true;
       form.StartPosition = FormStartPosition.CenterScreen;
       form.AutoSize = true;
       form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-      form.Padding = new Padding(20, 16, 20, 16);
+      form.Padding = new Padding(S(24), S(20), S(24), S(20));
+      form.HandleCreated += delegate(object sender, EventArgs e) {
+        int on = dark ? 1 : 0;
+        try {
+          DwmSetWindowAttribute(form.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, 4);
+        } catch (Exception) {
+          // allow(silent-catch): a Windows without the attribute keeps its light title bar over a dark box
+        }
+      };
+      return form;
+    }
+
+    public static FlowLayoutPanel Column() {
       FlowLayoutPanel panel = new FlowLayoutPanel();
       panel.FlowDirection = FlowDirection.TopDown;
+      panel.WrapContents = false;
       panel.AutoSize = true;
-      Label heading = new Label();
-      heading.Text = title;
-      heading.Font = new Font("Segoe UI Semibold", 12f);
-      heading.AutoSize = true;
-      heading.MaximumSize = new Size(380, 0);
-      heading.Margin = new Padding(0, 0, 0, 6);
-      Label body = new Label();
-      body.Text = message;
-      body.ForeColor = SystemColors.GrayText;
-      body.AutoSize = true;
-      body.MaximumSize = new Size(380, 0);
-      body.Margin = new Padding(0, 0, 0, 14);
-      Label field = new Label();
-      field.Text = "Recovery key";
-      field.AutoSize = true;
-      field.Margin = new Padding(0, 0, 0, 4);
+      panel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      panel.Margin = new Padding(0);
+      return panel;
+    }
+
+    static Label Words(string text, float size, bool strong, Color color, int below) {
+      Label label = new Label();
+      label.Text = text;
+      label.Font = new Font(strong ? "Segoe UI Semibold" : "Segoe UI", size);
+      label.ForeColor = color;
+      label.AutoSize = true;
+      label.MaximumSize = new Size(S(WIDTH), 0);
+      label.Margin = new Padding(0, 0, 0, S(below));
+      return label;
+    }
+    public static Label Heading(string text) { return Words(text, 14f, true, fore, 8); }
+    public static Label Body(string text) { return Words(text, 10f, false, muted, 18); }
+    public static Label Problem(string text) { return Words(text, 10f, true, danger, 12); }
+    public static Label FieldLabel(string text) { return Words(text, 10f, true, fore, 6); }
+
+    // A text field the box's width; a cue, where given, is shown greyed while it is empty (the shape of what goes in).
+    public static TextBox Field(bool secret, bool mono, string cue) {
       TextBox box = new TextBox();
-      box.UseSystemPasswordChar = true;
-      box.Width = 380;
-      box.Margin = new Padding(0, 0, 0, 16);
-      FlowLayoutPanel buttons = new FlowLayoutPanel();
-      buttons.FlowDirection = FlowDirection.RightToLeft;
-      buttons.Width = 380;
-      buttons.AutoSize = true;
-      buttons.Margin = new Padding(0);
-      Button ok = new Button();
-      ok.Text = "Continue";
-      ok.AutoSize = true;
-      ok.DialogResult = DialogResult.OK;
-      Button cancel = new Button();
-      cancel.Text = "Cancel";
-      cancel.AutoSize = true;
-      cancel.DialogResult = DialogResult.Cancel;
-      buttons.Controls.Add(ok);
-      buttons.Controls.Add(cancel);
-      panel.Controls.Add(heading);
-      panel.Controls.Add(body);
-      panel.Controls.Add(field);
+      box.UseSystemPasswordChar = secret;
+      box.Font = mono ? new Font("Consolas", 12f) : new Font("Segoe UI", 11f);
+      box.BackColor = fieldBack;
+      box.ForeColor = fore;
+      box.BorderStyle = BorderStyle.FixedSingle;
+      box.Width = S(WIDTH);
+      box.Margin = new Padding(0, 0, 0, S(20));
+      if (cue != null) {
+        box.HandleCreated += delegate(object sender, EventArgs e) { SendMessage(box.Handle, EM_SETCUEBANNER, (IntPtr)1, cue); };
+      }
+      return box;
+    }
+
+    public static CheckBox Tick(string text, bool on) {
+      CheckBox tick = new CheckBox();
+      tick.Text = text;
+      tick.Checked = on;
+      tick.AutoSize = true;
+      tick.ForeColor = fore;
+      tick.Margin = new Padding(0, 0, 0, S(20));
+      return tick;
+    }
+
+    public static Button Action(string text, bool primary) {
+      Button button = new Button();
+      button.Text = text;
+      button.AutoSize = true;
+      button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      button.MinimumSize = new Size(S(96), S(34));
+      button.Padding = new Padding(S(12), 0, S(12), 0);
+      button.FlatStyle = FlatStyle.Flat;
+      button.FlatAppearance.BorderSize = 1;
+      button.FlatAppearance.BorderColor = primary ? accent : line;
+      button.BackColor = primary ? accent : fieldBack;
+      button.ForeColor = primary ? accentText : fore;
+      button.Font = new Font(primary ? "Segoe UI Semibold" : "Segoe UI", 10f);
+      button.UseVisualStyleBackColor = false;
+      button.Cursor = Cursors.Hand;
+      return button;
+    }
+
+    // The answer buttons, right-aligned under the box's content, the first added rightmost.
+    public static FlowLayoutPanel Buttons() {
+      FlowLayoutPanel row = new FlowLayoutPanel();
+      row.FlowDirection = FlowDirection.RightToLeft;
+      row.AutoSize = true;
+      row.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      row.MinimumSize = new Size(S(WIDTH), 0);
+      row.Margin = new Padding(0);
+      return row;
+    }
+
+    public static void Add(FlowLayoutPanel row, Button button) {
+      button.Margin = new Padding(S(8), 0, 0, 0);
+      row.Controls.Add(button);
+    }
+
+    // The content inside the form's padding: an AutoSize form pads the right and bottom of what it holds, never the
+    // left and top, so the column is placed there itself.
+    public static void Hold(Form form, Control column) {
+      column.Location = new Point(form.Padding.Left, form.Padding.Top);
+      form.Controls.Add(column);
+    }
+  }
+
+  // Each box is built by Build and shown by Ask, so a test can draw one without putting it on anybody's screen. The
+  // answer's controls are found by name: "answer", and for the type-once box "user" and "keep".
+  public static class Passphrase {
+    // The recovery key box: what is asked as its heading, why under it, what went wrong with the last try (when it did)
+    // in red, and one field shaped like the key.
+    public static Form Build(string title, string message, string problem) {
+      Form form = Look.NewForm();
+      FlowLayoutPanel panel = Look.Column();
+      panel.Controls.Add(Look.Heading(title));
+      panel.Controls.Add(Look.Body(message));
+      if (!String.IsNullOrEmpty(problem)) panel.Controls.Add(Look.Problem(problem));
+      panel.Controls.Add(Look.FieldLabel("Recovery key"));
+      TextBox box = Look.Field(true, true, "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX");
+      box.Name = "answer";
       panel.Controls.Add(box);
+      FlowLayoutPanel buttons = Look.Buttons();
+      Button ok = Look.Action("Continue", true);
+      ok.DialogResult = DialogResult.OK;
+      Button cancel = Look.Action("Cancel", false);
+      cancel.DialogResult = DialogResult.Cancel;
+      Look.Add(buttons, ok);
+      Look.Add(buttons, cancel);
       panel.Controls.Add(buttons);
-      form.Controls.Add(panel);
+      Look.Hold(form, panel);
       form.AcceptButton = ok;
       form.CancelButton = cancel;
+      return form;
+    }
+
+    public static string Ask(string title, string message, string problem, int seconds) {
+      Look.Begin();
+      Form form = Build(title, message, problem);
+      TextBox box = (TextBox)form.Controls.Find("answer", true)[0];
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
       timer.Tick += delegate(object sender, EventArgs e) { form.DialogResult = DialogResult.Cancel; form.Close(); };
@@ -108,63 +242,48 @@ namespace IntenticKeyring {
   // The type-once box: a value (hidden) and, when asked for, a user name, with a "Remember it" tick. Answers null on
   // Cancel, else the three joined by NUL (user, remember, value), which none of them holds.
   public static class ValueBox {
-    public static string Ask(string title, string message, bool remember, bool askUser, string user, int seconds) {
-      Application.EnableVisualStyles();
-      Form form = new Form();
-      form.Text = title;
-      form.FormBorderStyle = FormBorderStyle.FixedDialog;
-      form.MinimizeBox = false;
-      form.MaximizeBox = false;
-      form.TopMost = true;
-      form.StartPosition = FormStartPosition.CenterScreen;
-      form.AutoSize = true;
-      form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-      form.Padding = new Padding(16);
-      FlowLayoutPanel panel = new FlowLayoutPanel();
-      panel.FlowDirection = FlowDirection.TopDown;
-      panel.AutoSize = true;
-      Label body = new Label();
-      body.Text = message;
-      body.AutoSize = true;
-      body.MaximumSize = new Size(480, 0);
-      panel.Controls.Add(body);
-      TextBox userBox = new TextBox();
-      userBox.Width = 320;
+    public static Form Build(string title, string message, bool remember, bool askUser, string user) {
+      Form form = Look.NewForm();
+      FlowLayoutPanel panel = Look.Column();
+      panel.Controls.Add(Look.Heading(title));
+      panel.Controls.Add(Look.Body(message));
+      TextBox userBox = Look.Field(false, false, null);
+      userBox.Name = "user";
       userBox.Text = user == null ? "" : user;
       if (askUser) {
-        Label userLabel = new Label();
-        userLabel.Text = "User name:";
-        userLabel.AutoSize = true;
-        panel.Controls.Add(userLabel);
+        panel.Controls.Add(Look.FieldLabel("User name"));
         panel.Controls.Add(userBox);
       }
-      Label valueLabel = new Label();
-      valueLabel.Text = "Password:";
-      valueLabel.AutoSize = true;
-      TextBox box = new TextBox();
-      box.UseSystemPasswordChar = true;
-      box.Width = 320;
-      CheckBox keep = new CheckBox();
-      keep.Text = "Remember it";
-      keep.Checked = remember;
-      keep.AutoSize = true;
-      FlowLayoutPanel buttons = new FlowLayoutPanel();
-      buttons.AutoSize = true;
-      Button ok = new Button();
-      ok.Text = "OK";
-      ok.DialogResult = DialogResult.OK;
-      Button cancel = new Button();
-      cancel.Text = "Cancel";
-      cancel.DialogResult = DialogResult.Cancel;
-      buttons.Controls.Add(ok);
-      buttons.Controls.Add(cancel);
-      panel.Controls.Add(valueLabel);
+      panel.Controls.Add(Look.FieldLabel("Password"));
+      TextBox box = Look.Field(true, false, null);
+      box.Name = "answer";
+      box.Margin = new Padding(0, 0, 0, Look.S(10));
       panel.Controls.Add(box);
+      CheckBox keep = Look.Tick("Remember it", remember);
+      keep.Name = "keep";
       panel.Controls.Add(keep);
+      FlowLayoutPanel buttons = Look.Buttons();
+      Button ok = Look.Action("OK", true);
+      ok.DialogResult = DialogResult.OK;
+      Button cancel = Look.Action("Cancel", false);
+      cancel.DialogResult = DialogResult.Cancel;
+      Look.Add(buttons, ok);
+      Look.Add(buttons, cancel);
       panel.Controls.Add(buttons);
-      form.Controls.Add(panel);
+      Look.Hold(form, panel);
       form.AcceptButton = ok;
       form.CancelButton = cancel;
+      // Kept on the form even when not shown, so Ask reads one control either way.
+      form.Tag = userBox;
+      return form;
+    }
+
+    public static string Ask(string title, string message, bool remember, bool askUser, string user, int seconds) {
+      Look.Begin();
+      Form form = Build(title, message, remember, askUser, user);
+      TextBox userBox = (TextBox)form.Tag;
+      TextBox box = (TextBox)form.Controls.Find("answer", true)[0];
+      CheckBox keep = (CheckBox)form.Controls.Find("keep", true)[0];
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
       timer.Tick += delegate(object sender, EventArgs e) { form.DialogResult = DialogResult.Cancel; form.Close(); };
@@ -176,48 +295,45 @@ namespace IntenticKeyring {
     }
   }
 
-  // A few buttons, one per answer, in the order given. Answers the chosen one's index, or -1 on Cancel or time out.
+  // A few buttons, one per answer, in the order given, none of them louder than another. Answers the chosen one's
+  // index, or -1 on Cancel or time out; the form's Tag holds it while it is open.
   public static class Choice {
-    public static int Ask(string title, string message, string[] labels, int seconds) {
-      Application.EnableVisualStyles();
-      Form form = new Form();
-      form.Text = title;
-      form.FormBorderStyle = FormBorderStyle.FixedDialog;
-      form.MinimizeBox = false;
-      form.MaximizeBox = false;
-      form.TopMost = true;
-      form.StartPosition = FormStartPosition.CenterScreen;
-      form.AutoSize = true;
-      form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-      form.Padding = new Padding(16);
-      FlowLayoutPanel panel = new FlowLayoutPanel();
-      panel.FlowDirection = FlowDirection.TopDown;
-      panel.AutoSize = true;
-      Label body = new Label();
-      body.Text = message;
-      body.AutoSize = true;
-      body.MaximumSize = new Size(480, 0);
-      panel.Controls.Add(body);
+    public static Form Build(string title, string message, string[] labels) {
+      Form form = Look.NewForm();
+      form.Tag = -1;
+      FlowLayoutPanel panel = Look.Column();
+      panel.Controls.Add(Look.Heading(title));
+      panel.Controls.Add(Look.Body(message));
       FlowLayoutPanel buttons = new FlowLayoutPanel();
       buttons.AutoSize = true;
-      int chosen = -1;
+      buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      buttons.MaximumSize = new Size(Look.S(Look.WIDTH), 0);
+      buttons.Margin = new Padding(0);
       for (int i = 0; i < labels.Length; i++) {
-        Button button = new Button();
-        button.Text = labels[i];
-        button.AutoSize = true;
+        Button button = Look.Action(labels[i], false);
+        // Narrower than an answer button, so the usual four (Allow once … Deny) sit in one row.
+        button.MinimumSize = new Size(Look.S(72), Look.S(34));
+        button.Padding = new Padding(Look.S(6), 0, Look.S(6), 0);
+        button.Margin = new Padding(0, 0, Look.S(8), Look.S(8));
         int index = i;
-        button.Click += delegate(object sender, EventArgs e) { chosen = index; form.Close(); };
+        button.Click += delegate(object sender, EventArgs e) { form.Tag = index; form.Close(); };
         buttons.Controls.Add(button);
       }
       panel.Controls.Add(buttons);
-      form.Controls.Add(panel);
+      Look.Hold(form, panel);
+      return form;
+    }
+
+    public static int Ask(string title, string message, string[] labels, int seconds) {
+      Look.Begin();
+      Form form = Build(title, message, labels);
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
-      timer.Tick += delegate(object sender, EventArgs e) { chosen = -1; form.Close(); };
+      timer.Tick += delegate(object sender, EventArgs e) { form.Tag = -1; form.Close(); };
       form.Shown += delegate(object sender, EventArgs e) { Reveal.Show(form); timer.Start(); };
       form.ShowDialog();
       timer.Stop();
-      return chosen;
+      return (int)form.Tag;
     }
   }
 }
@@ -276,7 +392,7 @@ try {
 
 const PASSPHRASE_SCRIPT = `${PREAMBLE}
 try {
-  $typed = [IntenticKeyring.Passphrase]::Ask($KeyringInput.title, $KeyringInput.message, [int]$KeyringInput.seconds)
+  $typed = [IntenticKeyring.Passphrase]::Ask($KeyringInput.title, $KeyringInput.message, [string]$KeyringInput.problem, [int]$KeyringInput.seconds)
   if ($typed -eq $null) { Answer @{ ok = $false; cancelled = $true } } else { Answer @{ ok = $true; passphrase = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($typed)) } }
 } catch {
   Answer @{ ok = $false; error = $_.Exception.Message }
@@ -369,12 +485,14 @@ export const windowsHello = (runner: Runner, now: () => number = Date.now): Hell
     };
 };
 
+const dialogSeconds = String(Math.floor(PROMPT_TIMEOUT_MS / 1000) - 5);
+
 export const windowsPassphrasePrompt =
     (runner: Runner): PassphrasePrompt =>
     async (notice) => {
         const ran = await runPowerShell(
             runner,
-            { script: PASSPHRASE_SCRIPT, input: { title: notice.title, message: notice.message, seconds: String(Math.floor(PROMPT_TIMEOUT_MS / 1000) - 5) }, timeoutMs: PROMPT_TIMEOUT_MS },
+            { script: PASSPHRASE_SCRIPT, input: { title: notice.title, message: notice.message, problem: notice.problem ?? "", seconds: dialogSeconds }, timeoutMs: PROMPT_TIMEOUT_MS },
             AnswerSchema,
         );
         if (!ran.ok) {
@@ -386,8 +504,6 @@ export const windowsPassphrasePrompt =
         }
         return ran.answer.cancelled === true ? { kind: "cancelled" } : { kind: "unavailable", reason: ran.answer.error ?? "the passphrase dialog failed" };
     };
-
-const dialogSeconds = String(Math.floor(PROMPT_TIMEOUT_MS / 1000) - 5);
 
 // The type-once box (consent.ts ValuePrompt): the value comes back base64 inside the helper's JSON, never on a command
 // line, together with the user name and the Remember tick.

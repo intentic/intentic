@@ -18,7 +18,17 @@ describe("the session helper's proof", () => {
     test("is asked at once when a need came while it was still being asked", async () => {
         const gate = new ProofGate();
         gate.want();
-        await expect(gate.whenWanted()).resolves.toBeUndefined();
+        await expect(gate.whenWanted()).resolves.toBe("wanted");
+    });
+
+    test("wakes, without a need, when the service restarted; a need that came too wins", async () => {
+        const gate = new ProofGate();
+        const waiting = gate.whenWanted();
+        gate.restarted();
+        await expect(waiting).resolves.toBe("restarted");
+        gate.restarted();
+        gate.want();
+        await expect(gate.whenWanted()).resolves.toBe("wanted");
     });
 
     test("forgets a need the moment a person proves the session", async () => {
@@ -43,6 +53,9 @@ describe("the session helper's proof", () => {
 
     test("tells the person where to look, by what it asks", () => {
         expect(proofAsked("passphrase")).toContain("recovery key");
+        // The key, not a password they made up: its shape, and the file the app saved it as.
+        expect(proofAsked("passphrase")).toContain("XXXXX-XXXXX");
+        expect(proofAsked("passphrase")).toContain("intentic-passwords-recovery-key.txt");
         expect(proofAsked("hello")).not.toContain("recovery key");
     });
 });

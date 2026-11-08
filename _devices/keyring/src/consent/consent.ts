@@ -81,8 +81,17 @@ export type PromptAnswer =
     // No dialog could be shown here (no display, no prompt program): why, in words.
     | { readonly kind: "unavailable"; readonly reason: string };
 
+// What the recovery-key box shows: what is asked, and what went wrong with the last try, set apart from the rest.
+export interface PassphraseNotice extends Notice {
+    // "That did not open Passwords…": the last thing typed was not the key. Absent on a first ask.
+    readonly problem?: string | undefined;
+}
+
 // A passphrase dialog of the platform's own.
-export type PassphrasePrompt = (notice: Notice) => Promise<PromptAnswer>;
+export type PassphrasePrompt = (notice: PassphraseNotice) => Promise<PromptAnswer>;
+
+/** What the box says after a recovery key that did not open the vault. */
+export const WRONG_RECOVERY_KEY = "That did not open Passwords. Check the recovery key and try again: it is six groups of five letters and digits.";
 
 // THE TYPE-ONCE BOX (2026-10-19): the keyring's own dialog asking the person for a value it does not hold yet, for a
 // prompt nothing in the vault answers (ssh asking for a password nobody saved, a program's password field, an agent's
@@ -148,8 +157,7 @@ export const passphraseConsent = (prompt: PassphrasePrompt, extras: ConsentExtra
             return nobodyToAsk(request, "the keyring is not set up yet: `intentic-machine keyring setup` sets it up.");
         }
         for (let attempt = 1; attempt <= PASSPHRASE_TRIES; attempt++) {
-            const message = attempt === 1 ? request.message : `That was not the recovery key. ${request.message}`;
-            const answer = await prompt({ title: request.title, message });
+            const answer = await prompt(attempt === 1 ? { title: request.title, message: request.message } : { title: request.title, message: request.message, problem: WRONG_RECOVERY_KEY });
             if (answer.kind === "cancelled") {
                 return { ok: false, code: "declined", reason: "The person at the computer said no." };
             }

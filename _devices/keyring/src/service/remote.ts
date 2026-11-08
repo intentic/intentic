@@ -147,15 +147,20 @@ export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | unde
     };
 };
 
+// The name the Passwords app saves the recovery key under (its locales' app.first.fileName), so a prompt can say where to look.
+export const RECOVERY_FILE = "intentic-passwords-recovery-key.txt";
+
 // What the recovery prompt adds to the request it is shown for: the passphrase box is where the recovery key goes.
-export const RECOVERY_HINT = "Your recovery key is the one Passwords showed once, when it was set up.";
+export const RECOVERY_HINT = `Your recovery key is the one Passwords showed once, when it was set up. If you saved it, it is in ${RECOVERY_FILE}: paste it here.`;
 
 // The recovery key (or a passphrase from before recovery keys), asked by the helper; the core checks it against the vault,
 // so a helper cannot make one up. What the person typed is read as a recovery key first (recovery.ts).
 export const remotePassphrasePrompt =
     (link: HelperLink): PassphrasePrompt =>
     async (notice): Promise<PromptAnswer> => {
-        const reply = await link.call({ call: "passphrase", title: notice.title, message: `${notice.message}\n\n${RECOVERY_HINT}` }, TypedPassphraseSchema, PROMPT_DEADLINE_MS);
+        // The door's call has no field for the problem (a helper a release behind would refuse one), so it leads the message.
+        const message = [notice.problem, notice.message, RECOVERY_HINT].filter((part) => part !== undefined).join("\n\n");
+        const reply = await link.call({ call: "passphrase", title: notice.title, message }, TypedPassphraseSchema, PROMPT_DEADLINE_MS);
         if (reply === undefined) {
             return { kind: "unavailable", reason: link.ready ? "the session helper did not answer" : NO_SESSION };
         }

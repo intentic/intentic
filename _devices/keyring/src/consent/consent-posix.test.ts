@@ -1,5 +1,5 @@
 import type { RunRequest } from "../run.js";
-import { chosenId, linuxChoicePrompt, linuxValuePrompt, zenityChoiceArgs, zenityValueAnswer, zenityValueArgs } from "./consent-posix.js";
+import { chosenId, linuxChoicePrompt, linuxPassphrasePrompt, linuxValuePrompt, zenityChoiceArgs, zenityValueAnswer, zenityValueArgs } from "./consent-posix.js";
 
 /* The type-once box on Linux: zenity's form asked and read back, and kdialog's two dialogs where zenity is missing. And
    the choice dialog an agent's need is answered in. */
@@ -57,4 +57,17 @@ test("the choice dialog offers each answer, the first selected, and reads the la
     expect(await linuxChoicePrompt(run("Deny\n", 0), { DISPLAY: ":0" })(NEED)).toEqual({ kind: "chosen", id: "deny" });
     expect(await linuxChoicePrompt(run("", 1), { DISPLAY: ":0" })(NEED)).toEqual({ kind: "cancelled" });
     expect(await linuxChoicePrompt(() => Promise.reject(new Error("not run")), {})(NEED)).toMatchObject({ kind: "unavailable" });
+});
+
+test("the recovery-key dialog leads with what went wrong with the last key", async () => {
+    const ran: RunRequest[] = [];
+    const prompt = linuxPassphrasePrompt(
+        (request) => {
+            ran.push(request);
+            return Promise.resolve({ exitCode: 0, stdout: "key\n", stderr: "", timedOut: false, missing: false, startError: undefined });
+        },
+        { DISPLAY: ":0" },
+    );
+    expect(await prompt({ title: "Unlock", message: "Type your recovery key.", problem: "That did not open Passwords." })).toEqual({ kind: "answered", passphrase: "key" });
+    expect(ran[0]?.args.find((arg) => arg.startsWith("--text="))).toBe("--text=That did not open Passwords.\n\nType your recovery key.");
 });
