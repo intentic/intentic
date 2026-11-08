@@ -58,7 +58,18 @@ const announceLanded = (services: LandByHandDeps, entry: IsolatedAgent, span: re
     });
 };
 
-export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan, target: LandTarget): Promise<LandResult> => {
+// Who pressed, as the settle after the land reads it: a person's press files the card as done; a parent's `merge` takes
+// a child's work into its own checkout and says nothing of how the child's last turn ended, so its ending stays.
+export type LandPress = "person" | "parent-merge";
+
+export const landByHand = async (
+    services: LandByHandDeps,
+    entry: IsolatedAgent,
+    mode: LandMode,
+    rung: AgentSpan,
+    target: LandTarget,
+    press: LandPress = "person",
+): Promise<LandResult> => {
     const into = intoOf(target);
     // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
     if (into === undefined) {
@@ -90,7 +101,8 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
             throw cause;
         });
     afterLand(services, entry.id, result);
-    // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
+    // Stores the tips and conflict report and re-derives standing; the settle below clears the prior ending without a turn,
+    // unless a parent's merge keeps it.
     await services.agents.recordLanded(entry.id, result);
     // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree. A
     // press into the parent's own checkout is the parent's to answer, and its door (`merge`) answers it in the reply.
@@ -103,7 +115,7 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     }
     // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
     if (!services.conversations.running(entry.id)) {
-        await services.conversations.send(entry.id, { kind: "settle" }).settled;
+        await services.conversations.send(entry.id, press === "parent-merge" ? { kind: "settle", keepsEnding: true } : { kind: "settle" }).settled;
     }
 
     if (into === undefined && result.landed && result.changed) {
@@ -133,14 +145,21 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
 
 // The press whole: where the work goes decided first, then the land under the lease of every checkout it writes, and a
 // parent that took it brought up to date once those leases are free (its own measure takes its lease again).
-export const landByHandLeased = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan, includeDocuments = false): Promise<LandResult> => {
+export const landByHandLeased = async (
+    services: LandByHandDeps,
+    entry: IsolatedAgent,
+    mode: LandMode,
+    rung: AgentSpan,
+    includeDocuments = false,
+    press: LandPress = "person",
+): Promise<LandResult> => {
     const target = await landTargetOf(services, entry);
     const into = intoOf(target);
     const result = await underLeases(services.conversations, entry.id, into, async () => {
         if (includeDocuments && mode !== "measure") {
             await includeProducedFiles(services, entry);
         }
-        return landByHand(services, entry, mode, rung, target);
+        return landByHand(services, entry, mode, rung, target, press);
     });
     await settleParentBooks(services, { into, landed: result.landed });
     return result;

@@ -1079,6 +1079,12 @@ describe("the settle", () => {
         expect(decide(live, { kind: "settle" }, NOW, ENTRY).state.resume.held).toBe(held.resume.held);
     });
 
+    test("a settle with no turn under it can keep the ending, and a turn's settle says how it ended whoever asked", () => {
+        expect(flushOf(decide(idle(), { kind: "settle", keepsEnding: true }, NOW, ENTRY))).toMatchObject({ ranTurn: false, ending: "none", keepsEnding: true });
+        expect(flushOf(decide(idle(), { kind: "settle" }, NOW, ENTRY))).not.toHaveProperty("keepsEnding");
+        expect(flushOf(decide(running(), { kind: "settle", keepsEnding: true }, NOW, ENTRY))).not.toHaveProperty("keepsEnding");
+    });
+
     test("a settle with no turn under it carries no answer, whatever the last turn's runtime still holds", () => {
         const decision = decide(idle({ answeredAt: 500 }), { kind: "settle" }, NOW, ENTRY);
         expect(flushOf(decision)?.answeredAt).toBeUndefined();

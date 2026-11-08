@@ -33,7 +33,7 @@ import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation, servicesOfConversation } from "../actor/identity-latch.js";
 import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
-import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, profileOn, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
+import { type AgentsStore, type AgentTitleSource, type Composition, type Ending, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, profileOn, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
 import { countsOf, rankedModules } from "../land/change-modules.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
@@ -217,9 +217,21 @@ const bookInto =
         }
     };
 
-// How the turn ended goes on the entry: its failure, the user's stop, or the clean ending that hands off to standing.ts,
-// which a dismissal takes too. The open work is dropped and re-added only as this settle says.
-const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): PersistedAgent => {
+// How the turn ended: its failure, the user's stop, or the clean ending that hands off to standing.ts, which a dismissal
+// takes too. A settle with no turn under it (a land by hand) has none of those, so it reads clean: a person's press files
+// the card as done.
+const settledEnding = (before: Ending, flush: SettleFlush): Ending =>
+    flush.failure === undefined ? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }) : repeatedFailure(before, flush.failure, flush);
+
+// The ending a land that says only where the work went leaves standing (SettleFlush.keepsEnding). Read as a finish, a
+// parent's `merge` of two children a spent quota had stopped filed both as Landed, though neither had finished and
+// their work had reached only the parent's checkout (2026-11-07, sub-calm-vale-caq9 and sub-kind-meadow-iqwe). The
+// settle dropped any re-run a spent allowance had booked, so a limit no longer waits on one, as a restart reads it.
+const keptEnding = (before: Ending): Ending => (before.kind === "limited" ? { ...before, held: false } : before);
+
+// How the turn ended goes on the entry (settledEnding), unless the settle keeps the ending it had. The open work is
+// dropped and re-added only as this settle says.
+const settledEntry =(entry: PersistedAgent, flush: SettleFlush, now: number): PersistedAgent => {
     const { unfinished: _open, reach: _reach, ...carried } = entry;
     return {
         ...carried,
@@ -236,7 +248,7 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         // Only the provider's answer moves it: a land, a conflict, a failure the sandbox records on its own leave the
         // card's "how long since it last worked" alone, which is what the reader times a cold cache by.
         ...opt("answeredAt", flush.answeredAt ?? entry.answeredAt),
-        ending: flush.failure === undefined ? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }) : repeatedFailure(entry.ending, flush.failure, flush),
+        ending: flush.keepsEnding === true ? keptEnding(entry.ending) : settledEnding(entry.ending, flush),
         totals: {
             costUsd: entry.totals.costUsd + flush.usage.costUsd,
             inputTokens: entry.totals.inputTokens + flush.usage.inputTokens,

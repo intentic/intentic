@@ -96,6 +96,8 @@ export type TurnCompletion = "clean" | "cut" | "none";
 export interface SettleFlush {
     // Whether a turn was live, so a manual land's settle does not count one.
     readonly ranTurn: boolean;
+    // A settle with no turn that leaves the entry's ending as its last turn left it (ConversationEvent settle).
+    readonly keepsEnding?: true;
     // When the provider last answered the settling turn (TurnRuntime.answeredAt); absent for a settle with no turn, or
     // a turn the provider never answered, which leaves the entry's own standing.
     readonly answeredAt: number | undefined;
@@ -129,8 +131,10 @@ export type ConversationEvent =
     | { readonly kind: "proof-noted"; readonly proof: TurnProof }
     // Where the settling turn's work went besides its branch, read as it closes; the settle files it, undefined included.
     | { readonly kind: "reach-noted"; readonly reach: TurnReach | undefined }
-    // The turn is over, however it ended; a manual land settles a resting card the same way.
-    | { readonly kind: "settle" }
+    // The turn is over, however it ended; a manual land settles a resting card the same way. `keepsEnding`: a land that
+    // says where the work went and nothing of how the last turn ended (a parent's `merge` of a child that stopped), so a
+    // failure or a stop stays on the card instead of reading as a finish.
+    | { readonly kind: "settle"; readonly keepsEnding?: true }
     // A restored card's answer will re-run the turn; holds the card through the settle that precedes it.
     | { readonly kind: "resume-promised" }
     // The recovery is not coming; settles the card into the failure it was holding open.
@@ -528,7 +532,7 @@ const settledResume = (state: ConversationState, ranTurn: boolean): Conversation
 
 // The turn's books go into the entry and are zeroed; the readings a card keeps showing stay. A settle on a rewinding
 // conversation leaves the rewind holding it, and one whose entry is gone writes nothing and keeps the books.
-const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> => {
+const onSettle = (state: ConversationState, entry: PersistedAgent | undefined, keepsEnding: boolean): Decision<undefined> => {
     const running = runningPhase(state);
     const phase = running === undefined ? state.phase : { kind: "idle" as const };
     if (entry === undefined) {
@@ -537,6 +541,8 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
     const { turn } = state;
     const flush: SettleFlush = {
         ranTurn: running !== undefined,
+        // Only a settle with no turn under it: a turn that ran says how it ended, whoever asked.
+        ...opt("keepsEnding", keepsEnding && running === undefined ? (true as const) : undefined),
         answeredAt: running === undefined ? undefined : turn.answeredAt,
         stopped: running?.stopping,
         ending: running === undefined ? "none" : turn.failure !== undefined || running.stopping !== undefined ? "cut" : "clean",
@@ -699,7 +705,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     stop: (state, event) => onStop(state, event.ending),
     "proof-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, proof: event.proof } }, undefined),
     "reach-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, reach: event.reach } }, undefined),
-    settle: (state, _event, _now, entry) => onSettle(state, entry),
+    settle: (state, event, _now, entry) => onSettle(state, entry, event.keepsEnding === true),
     "resume-promised": (state) => unchanged({ ...state, turn: { ...state.turn, resuming: true } }, undefined),
     "resume-abandoned": (state, event, _now, entry) => onAbandon(state, event.reason, entry),
     "land-leased": onLandLeased,

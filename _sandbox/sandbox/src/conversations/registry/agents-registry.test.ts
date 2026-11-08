@@ -2275,6 +2275,24 @@ describe("agents registry", () => {
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
         });
 
+        // 2026-11-07: a parent merged two children a spent quota had stopped, and both cards read Landed, as if they had
+        // finished, with their work only in the parent's checkout. A person's press still files the card as done.
+        it("keeps a stopped turn's failure through a land that keeps the ending, and a person's land still clears it", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "Individual quota reached." } });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            const failed = registry.entry("c1")?.ending;
+            expect(failed?.kind).not.toBe("idle");
+
+            await conversations.send("c1", { kind: "settle", keepsEnding: true }, 3_000).settled;
+            expect(registry.entry("c1")?.ending).toEqual(failed);
+
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+            expect(registry.entry("c1")?.ending).toEqual({ kind: "idle" });
+        });
+
         // A manual land finishes the card without a turn; the runtime state it reads is the last turn's, checklist
         // included, and re-measuring that would stamp an old abandonment with the land's date.
         it("leaves the mark exactly as it was through a land, which is no turn", async () => {

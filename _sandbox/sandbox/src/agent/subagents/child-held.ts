@@ -70,7 +70,8 @@ export const mergeChild = async (services: Services, parent: ChildParent, childI
                 "Your checkout cannot take its work (you run on another machine, or it carries a repo you do not), so it lands the way any agent's does.",
         };
     }
-    const result = await landByHandLeased(services, entry, "merge", "outstanding");
+    // Its work comes in as it stands; a child a failure or a stop ended stays ended that way on its card.
+    const result = await landByHandLeased(services, entry, "merge", "outstanding", false, "parent-merge");
     return mergeOutcome(result, target.kind === "parent" ? "your checkout" : "the main tree", childId);
 };
 
