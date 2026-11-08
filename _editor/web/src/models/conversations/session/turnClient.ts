@@ -291,8 +291,13 @@ export class TurnClient {
         return heard;
     }
 
-    /** A Continue booked for later, never words (queueCalls.ts, bookContinue). */
-    scheduleContinue = (booking: TurnBooking): Promise<boolean> => bookContinue(this.host, booking, () => this.reattach());
+    /**
+     * A Continue booked for later, never words (queueCalls.ts, bookContinue), on the pick the composer holds, as a press
+     * now re-runs on it: the reopen it waits for is that pick's. Booked on the daemon's record instead, a chat moved off a
+     * key whose credit had run out waited for the Claude sign-in's reopen, then would have gone on the spent key (2026-11-07).
+     */
+    scheduleContinue = (booking: TurnBooking): Promise<boolean> =>
+        bookContinue(this.host, booking, heldRouting(this.host.selection.turnSettings(), this.host.session.value, {}), () => this.reattach());
 
     // An app errand whose words need a read first: the turn opens at the call, its row and the working line drawn, and
     // `compose` fills it in (undefined: no turn after all). Resolves with whether the daemon took it, not at its end.

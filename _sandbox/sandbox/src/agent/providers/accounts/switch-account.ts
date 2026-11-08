@@ -1,5 +1,6 @@
 import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../../../composition.js";
 import { allowanceWall, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import { opt } from "../../../opt.js";
@@ -60,7 +61,10 @@ export type AccountSwitch =
     | { readonly kind: "unknown" }
     // A turn is running (parked on a card included): its credential is already spent on it, its session frame would write
     // the old account back over the new one, and retiring the session would pull it out from under the turn.
-    | { readonly kind: "busy" };
+    | { readonly kind: "busy" }
+    // The conversation runs on an API key (an endpoint), which has no accounts to move between: the account belongs to
+    // another provider, which only a turn on that provider can move it to.
+    | { readonly kind: "keyed" };
 
 export const switchAccount = async (
     services: Pick<Services, "agents" | "claudeSeatCheck" | "conversations" | "sandboxSettings" | "turns"> & ServiceabilityDeps,
@@ -71,6 +75,12 @@ export const switchAccount = async (
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return { kind: "unknown" };
+    }
+    // An account moved onto a conversation that runs on a key wrote a chimera: the key's provider with a sign-in's account
+    // pinned (2026-11-07, a model picked from another provider through "Choose another model"). Its booked Continue then
+    // waited for the sign-in's reopen and would have gone on the key whose credit had run out.
+    if (endpointIdOf(entry.profile.provider) !== undefined) {
+        return { kind: "keyed" };
     }
     const state = services.conversations.state(conversationId);
     const carry = carriesSession(input, state);

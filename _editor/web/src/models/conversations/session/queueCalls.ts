@@ -43,11 +43,12 @@ export const queueRefusal = (refusal: SandboxHttpError): string => {
 export const bookContinue = async (
     chat: Pick<Conversation, "conversationId" | "error" | "box" | "queue">,
     booking: TurnBooking,
+    routing: ResumeRouting,
     followNow: () => Promise<FollowEnd>,
 ): Promise<boolean> => {
     chat.error.value = null;
     const left = await orRefusal(
-        sandboxRpc.agent.queueContinue({ conversationId: chat.conversationId, ...booking, messageId: uuid() }, { context: { at: chat.box.value } }),
+        sandboxRpc.agent.queueContinue({ conversationId: chat.conversationId, ...booking, routing, messageId: uuid() }, { context: { at: chat.box.value } }),
     );
     if (left instanceof SandboxHttpError) {
         chat.error.value = queueRefusal(left);

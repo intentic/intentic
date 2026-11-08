@@ -32,15 +32,21 @@ export interface PaneModelPickOptions {
 }
 
 // The pick, applied to the conversation it was made for (the pane may show another one by the time a held pick lands).
-const applyChoice = (conversation: Conversation, choice: ModelChoice): void => {
-    conversation.selection.apply({ kind: `selectModel`, pick: { provider: choice.provider, value: choice.model } });
+// The account goes with the model, as the composer's own list sends it (selectionReducer selectModel): onto another
+// provider it rides the next turn, which names it there. Applied on its own after the model, it asked the daemon to move
+// the conversation it still holds on the provider being left, and a chat on a spent API key came out pinned to a Claude
+// sign-in while still running on the key (2026-11-07).
+export const applyChoice = (
+    conversation: { readonly selection: Pick<Conversation[`selection`], `apply`> },
+    choice: ModelChoice,
+    loadModels: (provider: ModelChoice[`provider`]) => Promise<void> = loadProviderModels,
+): void => {
+    const pick = { provider: choice.provider, value: choice.model };
+    conversation.selection.apply(choice.account === undefined ? { kind: `selectModel`, pick } : { kind: `selectModel`, pick, account: choice.account });
     // The catalog can be stale (loaded before the account connected); cheap, since the daemon caches it.
-    void loadProviderModels(choice.provider);
+    void loadModels(choice.provider);
     if (choice.harness !== undefined) {
         conversation.selection.apply({ kind: `selectHarness`, harness: choice.harness });
-    }
-    if (choice.account !== undefined) {
-        conversation.selection.apply({ kind: `selectAccount`, account: choice.account });
     }
 };
 

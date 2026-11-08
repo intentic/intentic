@@ -40,8 +40,9 @@ const queueResume = jest.fn<SandboxRpc["agent"]["queueResume"]>();
 const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
 const switchAccount = jest.fn<SandboxRpc["agent"]["switchAccount"]>();
 const queueSchedule = jest.fn<SandboxRpc["agent"]["queueSchedule"]>();
+const queueContinue = jest.fn<SandboxRpc["agent"]["queueContinue"]>();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({
-    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, switchAccount, queueSchedule } }),
+    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, switchAccount, queueSchedule, queueContinue } }),
 }));
 // Reading a chat again (useChat-sessions.hydrateOnce), and the open chats it is found among, by the client it holds.
 const hydrateOnce = jest.fn();
@@ -224,7 +225,7 @@ afterEach(() => {
     unstubAllGlobals();
     hydrateOnce.mockReset();
     openChats.value = [];
-    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueSchedule]) {
+    for (const procedure of [run, attach, stop, resume, queueResume, queueRemove, queueSchedule, queueContinue]) {
         procedure.mockReset();
     }
 });
@@ -1277,6 +1278,24 @@ describe(`an account picked by hand`, () => {
 });
 
 describe(`the queue's doors`, () => {
+    // "Continue at 03:01" is read off the pick the composer holds: a chat moved off a key whose credit ran out onto a
+    // spent Claude sign-in waits for that sign-in's reopen. Booked on the daemon's record instead, it waited for the
+    // sign-in and would have gone on the spent key (2026-11-07): the booking names the pick, as a press now does.
+    it(`books a Continue on the pick the composer holds, the account it picked named`, async () => {
+        const picked: TurnSettings = { ...SETTINGS, agent: `claude`, account: `acct-1`, accountPicked: true };
+        const { client } = clientOf(picked);
+        const at = Date.now() + 60 * 60 * 1000;
+        queueContinue.mockImplementation(async () => ({ items: [{ id: `c-1`, text: ``, voice: `person`, queuedAt: 1_000, revision: 1, continues: true, until: at }], revision: 1 }));
+
+        expect(await client.scheduleContinue(reopenBooking(at))).toBe(true);
+        expect(queueContinue.mock.calls[0]?.[0]).toMatchObject({
+            conversationId: `c1`,
+            sendAt: at,
+            sendAtReopen: true,
+            routing: { agent: `claude`, harness: `native`, model: `opus`, effort: `high`, account: `acct-1` },
+        });
+    });
+
     it(`takes a waiting message out as this window read it, and keeps the queue the daemon answered with`, async () => {
         const { client, host } = clientOf();
         host.queue.value = WAITING;

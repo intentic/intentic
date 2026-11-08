@@ -20,6 +20,10 @@ const CODED: readonly (readonly [string, AgentErrorCode])[] = [
     ["All credentials for model claude-opus-4-6-thinking are cooling down via provider antigravity", "rate_limit"],
     ["prompt is too long: maximum context length is 200000 tokens", "context-overflow"],
     ["400 invalid_request_error: Unsupported parameter: prompt_cache_retention is not found for this model", "provider-outage"],
+    // A key's prepaid credit spent (2026-11-07, two Anthropic keys): the key's wall, which another model gets past.
+    ["Credit balance is too low", "model-unavailable"],
+    ["Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.", "model-unavailable"],
+    ["402 Insufficient Balance", "model-unavailable"],
 ];
 
 // What the door leaves unnamed: the harness or the sandbox itself breaking, or a provider's words only its own loop can

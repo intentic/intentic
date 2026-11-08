@@ -1116,6 +1116,25 @@ test("the CLI's own category codes a refused credential or a disabled seat, word
     ]);
 });
 
+// A chat on an API key whose key was removed from its endpoint while it waited: the turn goes out with no key, and the
+// CLI's "Not logged in" read as a Claude sign-in to reconnect, on a chat that has none (2026-11-07). Said as the key.
+test("a routed turn sent with no key is refused as the missing key, never as a sign-in to reconnect", async () => {
+    const said = "Not logged in · Please run /login";
+    const refused = fakeQuery({ type: "assistant", session_id: "s", error: "authentication_failed", message: { content: [{ type: "text", text: said }] } });
+    const keyless = {
+        ...request,
+        spec: { ...request.spec, model: "claude-opus-5-5" },
+        credential: { kind: "routed" as const, baseUrl: "https://api.anthropic.com", authToken: "" },
+    };
+    const events = await collect(keyless, refused);
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "model-unavailable", message: expect.stringContaining("No API key is set") }));
+    // A key that is there and refused stays the credential refusal it was.
+    const keyed = { ...keyless, credential: { ...keyless.credential, authToken: "sk-ant-1" } };
+    expect(await collect(keyed, fakeQuery({ type: "assistant", session_id: "s", error: "authentication_failed", message: { content: [{ type: "text", text: said }] } }))).toContainEqual(
+        expect.objectContaining({ kind: "error", code: "claude-token-refused" }),
+    );
+});
+
 // 5xx/socket failures (server_error) and pre-retry capacity refusals (overloaded) are both coded provider-outage,
 // classified by category rather than wording that changes across CLI releases.
 test("a server_error is coded as a provider outage, keeping the provider's own sentence", async () => {

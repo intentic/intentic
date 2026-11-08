@@ -1,5 +1,4 @@
 import {
-    AgentTurnSchema,
     ATTACHMENT_LIMIT,
     type ConversationQueue,
     MessageVoiceSchema,
@@ -8,7 +7,9 @@ import {
     type QueuedServing,
     type QueuePause,
     QueuePauseSchema,
+    turnHasWords,
     withRuntimeDefaults,
+    WordlessTurnSchema,
 } from "@intentic/sandbox-contract/schemas/agent";
 import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -30,8 +31,9 @@ import { opt } from "../../opt.js";
 const AfterLandSchema = z.object({ conversationId: z.string(), since: z.number(), turn: z.literal(true).optional() });
 export type AfterLand = z.infer<typeof AfterLandSchema>;
 
-// The request a queued message makes: the words and who serves the turn they start, as its sender named them.
-const QueuedTurnSchema = z.intersection(AgentTurnSchema, z.object({ conversationId: z.string() }));
+// The request a queued message makes: the words and who serves the turn they start, as its sender named them. Whether it
+// must say something is the item's rule, below: a booked continuation keeps its routing and no words.
+const QueuedTurnSchema = z.intersection(WordlessTurnSchema, z.object({ conversationId: z.string() }));
 
 const QueuedItemSchema = z.object({
     // The message's id, which its request carries too (`messageId`): what a resend, an edit and a removal name.
@@ -67,7 +69,10 @@ const QueuedItemSchema = z.object({
     // last turn stopped, its prompt empty, and goes alone (turn-admission.ts, together). A turn that starts before it
     // goes makes it moot (`superseded`).
     continues: z.literal(true).optional(),
-});
+})
+    // Words say something; a continuation says nothing by design. Read through the words rule, the one Continue booked
+    // for a reopen made its whole conversation unreadable at the next boot, and the roster lost it (2026-11-07).
+    .refine((item) => item.continues === true || turnHasWords(item.turn), { message: "prompt or attachments required", path: ["turn"] });
 export type QueuedItem = z.infer<typeof QueuedItemSchema>;
 
 // The queue-level `paused`, `until` and `after` are two things. A `stopped` or `refused` pause is a hold on the messages

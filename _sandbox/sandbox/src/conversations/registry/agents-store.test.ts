@@ -186,6 +186,31 @@ describe("sqliteAgentsStore", () => {
         ]);
     });
 
+    // A Continue booked for a reopen waits as a continuation: its routing, no words. Read through the words rule a message
+    // keeps, its whole conversation failed to load at the next boot and dropped off the roster (2026-11-07, three chats
+    // booked to continue at 03:01 vanished at a 23:47 restart).
+    it("a conversation whose queue holds a booked continuation reads back after a restart, and empty words still do not", () => {
+        const { db, store } = fresh();
+        const continuation = {
+            id: "c1",
+            voice: "person" as const,
+            queuedAt: 3,
+            revision: 1,
+            turn: { conversationId: "q", prompt: "", agent: "claude" as const, harness: "native" as const, model: "claude-opus-5-5" },
+            continues: true as const,
+            until: 90_000,
+            reopenOf: { agent: "claude", account: "acct-1" },
+        };
+        const queue = { items: [continuation], revision: 1, paused: "scheduled" as const, until: 90_000 };
+        const wordless = { items: [{ ...continuation, id: "w1", continues: undefined }], revision: 1 };
+        for (const [id, held] of [["q", queue], ["w", wordless]] as const) {
+            const { id: _id, ...record } = conversationEntry({ id });
+            db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run(id, JSON.stringify({ ...record, queue: held }));
+        }
+
+        expect(store.load()).toEqual([conversationEntry({ id: "q", queue })]);
+    });
+
     it("removing a conversation takes every row keyed by it in every table, and nobody else's", () => {
         const { db, store } = fresh();
         store.save([isolatedAgent([{ repo: "root", base: "a" }], { id: "gone" }), isolatedAgent([{ repo: "root", base: "a" }], { id: "kept" })]);

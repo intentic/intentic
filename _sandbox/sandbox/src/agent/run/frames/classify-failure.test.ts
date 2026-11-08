@@ -549,6 +549,15 @@ test("a refused API key files no model refusal", async () => {
     expect(plan.writes).toStrictEqual([]);
 });
 
+// Nor a key whose credit ran out, nor one removed from its endpoint: the key refuses every model behind it alike.
+test.each([
+    ["out of credit", "The API key this chat runs on has no credit left (Credit balance is too low). Top it up with its vendor, or pick another model for this chat."],
+    ["removed", "No API key is set for the model endpoint this chat runs on: it was removed. Add the key again, or pick another model for this chat. (Not logged in · Please run /login)"],
+])("a key %s files no model refusal", async (_case, message) => {
+    const plan = await classifyFailure({ kind: "error", code: "model-unavailable", message }, context({ model: "opus" }), answering());
+    expect(plan.writes).toStrictEqual([]);
+});
+
 describe("an uncoded death", () => {
     test("after an answer is held as stopped, offered when the conversation waits", async () => {
         const queries = answering();

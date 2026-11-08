@@ -57,6 +57,19 @@ test("refuses a conversation it does not know, and one whose turn is running", a
     expect(deps.agents.entry(ID)?.profile.account).toBe("acct-a");
 });
 
+// A key has no accounts. A sign-in's account moved onto a conversation that runs on one wrote the key's provider with the
+// sign-in's account pinned, and the Continue booked next waited for the sign-in's reopen to go on the spent key
+// (2026-11-07): the move is refused, and the conversation stays as it was.
+test("refuses to move a conversation that runs on an API key onto an account", async () => {
+    const deps = services();
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "endpoint/anthropic-2", harness: "native" } }, T0);
+    await deps.conversations.send(ID, { kind: "settle" }, T0).settled;
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "keyed" });
+    expect(deps.agents.entry(ID)?.profile).toMatchObject({ provider: "endpoint/anthropic-2" });
+    expect(deps.agents.entry(ID)?.profile.account).toBeUndefined();
+    expect(deps.agents.entry(ID)?.profile.accountPin).toBeUndefined();
+});
+
 // What the daemon's verdict on an account is judged from (serviceability.ts): both accounts connected, no seat marks,
 // the reading, and the refusals on file.
 // SAFETY: the verdict reads only an account's id; the rest of a stored row is the store's own business.

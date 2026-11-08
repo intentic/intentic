@@ -13,7 +13,7 @@ import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { type QueueChange, queueView } from "../../conversations/actor/conversation-queue.js";
 import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandListOf, commandsOf } from "../providers/agent-commands.js";
-import { switchAccount } from "../providers/accounts/switch-account.js";
+import { type AccountSwitch, switchAccount } from "../providers/accounts/switch-account.js";
 import { areasOf, runAsOf } from "../../auth/principal.js";
 import { operatorHere } from "../../auth/operator.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
@@ -81,6 +81,20 @@ const ownedBy = (services: Services, context: OrpcContext, conversationId: strin
 const drivenBy = (services: Services, context: OrpcContext, conversationId: string): void => {
     ownedBy(services, context, conversationId);
     refuseUnlessHome(services, context, conversationId);
+};
+
+// What a move of who pays answers: the run it started, or why nothing moved.
+const switchAnswer = (outcome: AccountSwitch): { readonly run?: string } => {
+    if (outcome.kind === "unknown") {
+        throw new ORPCError("NOT_FOUND", { message: "no conversation with that id" });
+    }
+    if (outcome.kind === "busy") {
+        throw new ORPCError("CONFLICT", { message: "a turn is running in that conversation: move it once the turn ends" });
+    }
+    if (outcome.kind === "keyed") {
+        throw new ORPCError("BAD_REQUEST", { message: "that conversation runs on an API key, which has no accounts: pick a model of the account's provider instead" });
+    }
+    return outcome.run === undefined ? {} : { run: outcome.run };
 };
 
 export const createAgentRoutes = (services: Services) => {
@@ -184,14 +198,7 @@ export const createAgentRoutes = (services: Services) => {
         // The one command that moves who pays (agent/providers/accounts/switch-account.ts); asked to `run`, a held turn re-runs there at once.
         switchAccount: i.switchAccount.handler(async ({ input, context }) => {
             drive(context, input.conversationId);
-            const outcome = await switchAccount(services, input);
-            if (outcome.kind === "unknown") {
-                throw new ORPCError("NOT_FOUND", { message: "no conversation with that id" });
-            }
-            if (outcome.kind === "busy") {
-                throw new ORPCError("CONFLICT", { message: "a turn is running in that conversation: move it once the turn ends" });
-            }
-            return outcome.run === undefined ? {} : { run: outcome.run };
+            return switchAnswer(await switchAccount(services, input));
         }),
         // A person's pick of how a held turn continues once its cache is cold (agent/providers/limit-handoff.ts).
         chooseHandoff: i.chooseHandoff.handler(async ({ input, context }) => {

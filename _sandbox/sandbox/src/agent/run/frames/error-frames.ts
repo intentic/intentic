@@ -3,10 +3,12 @@ import type { AgentEvent, AgentErrorCode } from "@intentic/sandbox-contract/even
 import type { TurnAllowance } from "../../providers/harness-credentials.js";
 import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import {
+    KEY_MISSING_SENTENCE,
     isAuthFailureText,
     isContextOverflowText,
     isDeadKeyText,
     isEntitlementRefusalText,
+    isOutOfCreditText,
     isRateLimited,
     isUnsentParameterRefusalText,
     mentionsSpentAllowance,
@@ -110,12 +112,35 @@ export const modelUnavailableFrame = (model: string, refusal: string): ErrorEven
             message: `${refusal}: the vendor refused the API key this chat runs on (revoked, deleted or mistyped). Nothing here can retry past that: connect a working key, or pick another model for this chat.`,
         };
     }
+    if (isOutOfCreditText(refusal)) {
+        return keyOutOfCreditFrame(refusal);
+    }
     return {
         kind: "error",
         code: "model-unavailable",
         message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
     };
 };
+
+// A key with no credit left: coded as the key it is, like a dead key, so the chat offers another model rather than a
+// Continue into the same refusal, and nothing is filed against the model, which every key's balance would hide.
+// The sandbox's own sentence (`own`), so the chat leads with the key rather than "This model is not available", with the
+// vendor's words kept in it.
+const keyOutOfCreditFrame = (refusal: string): ErrorEvent => ({
+    kind: "error",
+    code: "model-unavailable",
+    message: `The API key this chat runs on has no credit left (${refusal.trim().replace(/[.!]+$/u, "")}). Top it up with its vendor, or pick another model for this chat.`,
+    own: true,
+});
+
+// A routed turn that went out with no key at all (removed from its endpoint while the chat waited): the CLI says "Not
+// logged in", which read as a Claude sign-in to reconnect, though there was no account to reconnect (2026-11-07).
+export const keyMissingFrame = (said: string): ErrorEvent => ({
+    kind: "error",
+    code: "model-unavailable",
+    message: `${KEY_MISSING_SENTENCE} Add the key again, or pick another model for this chat. (${said.trim()})`,
+    own: true,
+});
 
 // A session past the model's window, in the provider's own words; coded so the daemon re-runs the turn in a fresh
 // session, since resuming this one only overflows again (classify-failure.ts).
@@ -195,6 +220,10 @@ const sentenceFrame = (explained: string, category: SDKAssistantMessage["error"]
     if (mentionsSpentAllowance(explained)) {
         return { kind: "error", code: "rate_limit", message: explained };
     }
+    // A key with no credit left: no reopen to wait for, and no sign-in to renew.
+    if (isOutOfCreditText(explained)) {
+        return keyOutOfCreditFrame(explained);
+    }
     // A credential the CLI stopped using; coded so the route can re-mint and resume rather than leave a dead tab. The
     // category covers the CLI's other sentences for a 401/403 ("Please run /login · …", a gateway's or a key's).
     if (category === "authentication_failed" || isAuthFailureText(explained)) {
@@ -239,6 +268,10 @@ export const codedFailure = (frame: ErrorEvent, rules: readonly FailureRule[] = 
     const said = withoutStderrTail(frame.message);
     if (isUnsentParameterRefusalText(said)) {
         return unsentParameterFrame(sentenceOf(said, frame.message));
+    }
+    // A key with no credit left, whichever loop ran it: worded as the key, never a rate limit's wait for a reopen.
+    if (isOutOfCreditText(said)) {
+        return keyOutOfCreditFrame(sentenceOf(said, frame.message));
     }
     const rule = [...rules, ...SHARED_RULES].find(([recognizes]) => recognizes(said));
     return rule === undefined ? frame : { ...frame, code: rule[1], message: sentenceOf(said, frame.message) };

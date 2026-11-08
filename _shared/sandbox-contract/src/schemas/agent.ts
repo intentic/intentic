@@ -302,38 +302,40 @@ const AgentTurnFieldsSchema = z.object({
             "Whether this conversation's finished work merges into the workspace by itself from now on: its own answer to the sandbox-wide setting, the one `agents.autoLand` changes later. Read only from the message that opens the conversation, and only from a maintainer. Unlike `autoLand`, it holds for every later turn.",
         ),
 });
-export const AgentTurnSchema = AgentTurnFieldsSchema
-    // An attachment-only send (no text) is legal; an entirely empty turn is not.
-    .refine((turn) => turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0, {
-        message: "prompt or attachments required",
-    })
-    .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
-        message: "isolated requires conversationId",
-    })
-    .refine((turn) => turn.worktreeBase === undefined || (turn.isolated === true && turn.conversationId !== undefined), {
-        message: "worktreeBase requires an isolated conversationId",
-    })
-    .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
-        message: "origin requires conversationId",
-    })
-    .refine((turn) => turn.forkOf === undefined || turn.conversationId !== undefined, {
-        message: "forkOf requires conversationId",
-    })
-    // "then" needs a checkout of its own; rolling back the shared tree under everyone else is what it must never mean.
-    .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
-        message: 'forkOf.files "then" requires isolated',
-    })
-    .superRefine(freshOfIssues)
-    .superRefine(fromBranchIssues)
-    .refine((turn) => turn.sendAt === undefined || turn.sendAfter === undefined, {
-        message: "sendAt and sendAfter are two different holds: name one",
-    })
-    .refine((turn) => turn.sendAfter === undefined || turn.sendAfter !== turn.conversationId, {
-        message: "a conversation cannot wait for its own work to land",
-    })
-    .refine((turn) => turn.sendAfterTurn === undefined || turn.sendAfter !== undefined, {
-        message: "sendAfterTurn says what sendAfter waits for: name the conversation in sendAfter",
-    });
+// A turn says something: words, or files alone. A Continue a queue keeps says nothing by design (WordlessTurnSchema).
+export const turnHasWords = (turn: { readonly prompt: string; readonly attachments?: readonly unknown[] | undefined }): boolean =>
+    turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0;
+const withTurnRules = (fields: typeof AgentTurnFieldsSchema) =>
+    fields
+        .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
+            message: "isolated requires conversationId",
+        })
+        .refine((turn) => turn.worktreeBase === undefined || (turn.isolated === true && turn.conversationId !== undefined), {
+            message: "worktreeBase requires an isolated conversationId",
+        })
+        .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
+            message: "origin requires conversationId",
+        })
+        .refine((turn) => turn.forkOf === undefined || turn.conversationId !== undefined, {
+            message: "forkOf requires conversationId",
+        })
+        // "then" needs a checkout of its own; rolling back the shared tree under everyone else is what it must never mean.
+        .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
+            message: 'forkOf.files "then" requires isolated',
+        })
+        .superRefine(freshOfIssues)
+        .superRefine(fromBranchIssues)
+        .refine((turn) => turn.sendAt === undefined || turn.sendAfter === undefined, {
+            message: "sendAt and sendAfter are two different holds: name one",
+        })
+        .refine((turn) => turn.sendAfter === undefined || turn.sendAfter !== turn.conversationId, {
+            message: "a conversation cannot wait for its own work to land",
+        })
+        .refine((turn) => turn.sendAfterTurn === undefined || turn.sendAfter !== undefined, {
+            message: "sendAfterTurn says what sendAfter waits for: name the conversation in sendAfter",
+        });
+export const AgentTurnSchema = withTurnRules(AgentTurnFieldsSchema.refine(turnHasWords, { message: "prompt or attachments required" }));
+export const WordlessTurnSchema = withTurnRules(AgentTurnFieldsSchema);
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 // What `agent.run` takes: a turn, plus the one field only a request carries and no stored turn keeps. A daemon from before
 // `continues` reads past it and takes `prompt` as the words, which is why a client still sends some.

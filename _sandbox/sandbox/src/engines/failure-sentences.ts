@@ -29,6 +29,21 @@ const DEAD_KEY = /invalid[ _-]?x-api-key|invalid[ _-]api[ _-]key|incorrect api k
 
 export const isDeadKeyText = (text: string): boolean => DEAD_KEY.test(text);
 
+// A key whose prepaid credit is spent, in the vendors' own words (Anthropic's "Your credit balance is too low", DeepSeek's
+// "Insufficient Balance", OpenRouter's "Insufficient credits"). Not an allowance that reopens on a clock: it stays spent
+// until somebody tops the key up, so it reached the chat uncoded and every Continue ran into it again (2026-11-07, four
+// chats on two Anthropic keys).
+// allow(dependency-text): each vendor's out-of-credit prose; an unmatched wording stays an uncoded failure.
+const OUT_OF_CREDIT = /credit balance is too low|insufficient (?:account )?balance|insufficient credits?\b/i;
+
+export const isOutOfCreditText = (text: string): boolean => OUT_OF_CREDIT.test(text);
+
+// The sandbox's own words for a turn sent to an endpoint whose key is no longer set (error-frames.ts keyMissingFrame).
+export const KEY_MISSING_SENTENCE = "No API key is set for the model endpoint this chat runs on: it was removed.";
+
+/** Whether a refusal is about the key a turn ran on, which every model behind it shares, rather than the model it named. */
+export const isKeyRefusalText = (text: string): boolean => isDeadKeyText(text) || isOutOfCreditText(text) || text.includes(KEY_MISSING_SENTENCE);
+
 // Engine too old for the model: the 400 carries both version numbers, but the CLI's "run claude update" advice is for a
 // human at a terminal — engines/engines.ts performs the install instead. Matched on the floor clause, not the product
 // name, which Anthropic is free to reword; the running version is useful for the card but never load-bearing.
