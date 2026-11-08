@@ -126,7 +126,8 @@ export const discoverGeminiModels = async (
             return undefined;
         }
         return parsed.data.data
-            .filter((model) => model.owned_by === CHANNEL && isChatModel(model.id))
+            // The translator registers credential-pinned routes as `P/<model>` (e.g. `ic-{hash}/...`); exclude them.
+            .filter((model) => model.owned_by === CHANNEL && !model.id.includes("/") && isChatModel(model.id))
             .map((model) => {
                 const tiers = effortsOf(scales.get(model.id));
                 return {

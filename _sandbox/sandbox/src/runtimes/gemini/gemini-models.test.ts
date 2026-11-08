@@ -55,6 +55,21 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
     ]);
 });
 
+test("drops credential-pinned aliases registered with an account prefix", async () => {
+    const fake = translator([
+        { id: "gemini-pro-agent", owned_by: "antigravity" },
+        { id: "claude-opus-4-6-thinking", owned_by: "antigravity" },
+        { id: "ic-036f37a3ae/gemini-pro-agent", owned_by: "antigravity" },
+        { id: "ic-036f37a3ae/claude-opus-4-6-thinking", owned_by: "antigravity" },
+        { id: "ic-0565a5769c/claude-opus-4-6-thinking", owned_by: "antigravity" },
+    ]);
+
+    expect((await discoverGeminiModels("http://127.0.0.1:8788/", "local-bearer", fake))?.map((model) => model.id)).toEqual([
+        "gemini-pro-agent",
+        "claude-opus-4-6-thinking",
+    ]);
+});
+
 test("labels a model as its vendor publishes it, since no rule recovers that name from the id", async () => {
     // gemini-pro-agent humanizes to a model that doesn't exist; the translator's own display name is what shows.
     const fake = translator(
