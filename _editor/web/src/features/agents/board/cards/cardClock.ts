@@ -32,7 +32,9 @@ const goesTipOf = (corner: SelfStart | undefined, now: number, provider: string,
         return { title: t(`agents.agentStatus.heldMemory`), tone: `info`, note: noPress };
     }
     if (corner.kind === `send`) {
-        const when = corner.after !== undefined ? t(`chat.sendLater.afterLands`, { title: corner.after }) : corner.clock === undefined ? corner.text : formatWhen(corner.clock.at, now);
+        const clockWhen = corner.clock === undefined ? corner.text : formatWhen(corner.clock.at, now);
+        const afterWhen = (title: string): string => (corner.turn === true ? t(`chat.sendLater.afterTurn`, { title }) : t(`chat.sendLater.afterLands`, { title }));
+        const when = corner.after === undefined ? clockWhen : afterWhen(corner.after);
         const many = corner.count > 1 ? [{ label: t(`agents.agentCard.scheduledMessages`), value: corner.count }] : [];
         return { title: t(`chat.chatHeld.scheduled`), tone: `info`, rows: [{ label: t(`chat.composerIntent.sendsAt`), value: when }, ...many], note: noPress };
     }

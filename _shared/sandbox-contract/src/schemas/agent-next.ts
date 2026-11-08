@@ -25,6 +25,12 @@ export const AgentNextSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("land"),
         after: z.string().describe("The conversation whose landed work the first booked message waits for."),
+        // A modifier rather than a kind of its own, so a window older than it still reads the wait (as a land, which it
+        // says a little wrong) rather than failing the whole card.
+        turn: z
+            .literal(true)
+            .optional()
+            .describe("Set when that message waits for the conversation's turn to end cleanly with work to look at, not for its work to land (AgentTurn `sendAfterTurn`)."),
         count: z.number().int().min(1).describe("How many messages are booked to go by themselves."),
     }),
 ]);

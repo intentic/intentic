@@ -1045,10 +1045,18 @@
                 "test": "Test",
                 "ask": "Demande libre"
             },
+            "kindAfterTurn": {
+                "review": "Revue de code après ce tour",
+                "test": "Test après ce tour"
+            },
             "anotherChat": "un autre chat",
             "onWork": "Sur le travail de {title}, sans sa conversation",
             "howItWorks": "Nouvelle session",
             "howItWorksNote": "Voit le travail, pas son chat",
+            "afterTurnNote": "Démarre à la fin du tour",
+            "afterTurnTitle": "Après son tour",
+            "afterTurnSkips": "Pas après question ou échec",
+            "startsAfterTurn": "Démarre à la fin de son tour",
             "unlink": "Délier",
             "unlinkNote": "Devient un chat ordinaire",
             "menuFresh": "Nouvelle session sur ce travail",
@@ -3200,6 +3208,7 @@
                 "used": "Utilisée"
             },
             "sendsAfter": "part après l'intégration de {title}",
+            "sendsAfterTurn": "part à la fin du tour de {title}",
             "waitsForGone": "attend un agent qui n'existe plus",
             "change": "Modifier",
             "sendNowAfterNote": "Il part sans attendre le travail de cet agent.",
@@ -4540,6 +4549,7 @@
             "uncommitted": "Le travail intégré reste sans commit, et cet agent part de votre dernier commit : il ne voit ce travail qu'une fois celui-ci commité.",
             "saveVersions": "Commiter automatiquement chaque intégration",
             "afterLands": "Après l'intégration de {title}",
+            "afterTurn": "À la fin du tour de {title}",
             "scheduleAria": "Programmation : {when}",
             "reschedule": "Modifier l'heure d'envoi",
             "anotherAgent": "un autre agent",

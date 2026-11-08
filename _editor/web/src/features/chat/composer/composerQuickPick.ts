@@ -215,7 +215,7 @@ const sendRows = (source: NonNullable<QuickPickSources[`send`]>, query: string):
                 to: { kind: `after`, conversationId: target.id },
                 label: target.title,
                 detail: t(`chat.composerQuickPick.afterIt`),
-                current: picked?.kind === `after` && picked.conversationId === target.id,
+                current: picked?.kind === `after` && picked.turn !== true && picked.conversationId === target.id,
             }),
         ),
     ];

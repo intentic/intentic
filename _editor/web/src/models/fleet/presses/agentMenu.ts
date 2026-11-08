@@ -1,11 +1,11 @@
 import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import type { FreshKind } from "@intentic/sandbox-contract/schemas/agent";
 import type { MenuItem } from "primevue/menuitem";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { watching } from "../../agent-status/agentStatus-standing";
 import { FRESH_ICONS } from "../freshKinds";
-import { canStartFresh } from "../freshSession";
+import { canScheduleFresh, canStartFresh, freshKindLabel, freshKindsOf } from "../freshSession";
 import { type LandChoice, offersReland } from "./landPress";
 import { canArchive, type FleetAgent } from "../useAgents-fleet";
 
@@ -64,15 +64,16 @@ export const landRows = (agent: FleetAgent, facts: AgentMenuFacts, act: AgentMen
 // A second look at the agent's work by a session that never read how it was made: one row, opening onto each kind there
 // is (a code review, a test pass, the reader's own ask, any added later), none of them first or required. Its work must
 // be here to cut a copy from.
+// On work whose turn is still live, a check is booked for that turn's end and says so (freshSession.ts canScheduleFresh).
 export const freshRows = (agent: FleetAgent, facts: AgentMenuFacts, act: AgentMenuActions): MenuItem[] =>
-    !facts.here || !canStartFresh(agent)
+    !facts.here || (!canStartFresh(agent) && !canScheduleFresh(agent))
         ? []
         : [
               {
                   label: t(`agents.freshSession.menuFresh`),
                   icon: `link`,
-                  items: FRESH_KINDS.map((kind) => ({
-                      label: t(`agents.freshSession.kind.${kind}`),
+                  items: freshKindsOf(agent).map((kind) => ({
+                      label: freshKindLabel(agent, kind),
                       icon: FRESH_ICONS[kind],
                       command: () => act.startFresh(agent, kind),
                   })),

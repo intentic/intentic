@@ -23,7 +23,15 @@ const pending = computed(() => conversation.value.pendingFreshOf.value);
 const origin = computed(() => (pending.value === undefined ? undefined : agentById(pending.value.conversationId)));
 const originTitle = computed(() => (origin.value === undefined ? t(`agents.freshSession.anotherChat`) : agentDisplayTitle(origin.value)));
 
-// Only the kinds this work can take: a check needs changes to look at, the reader's own ask takes any copy.
+// Booked for the end of the origin's turn still at work (freshSession.ts canScheduleFresh): the Send books it, and the
+// strip says when it starts, since the send's own label names only the agent it waits for.
+const afterTurn = computed(() => {
+    const later = conversation.value.sendLater.value;
+    return later?.kind === `after` && later.turn === true && later.conversationId === pending.value?.conversationId;
+});
+
+// Only the kinds this work can take: a check needs changes to look at (or, on work still being made, books itself for
+// the end of its turn), the reader's own ask takes any copy.
 const kinds = computed(() => (origin.value === undefined ? FRESH_KINDS : freshKindsOf(origin.value)));
 const options = computed(() => kinds.value.map((kind) => ({ value: kind, label: t(`agents.freshSession.kind.${kind}`), icon: FRESH_ICONS[kind] })));
 const kind = computed({
@@ -55,6 +63,14 @@ watch(provider, (_now, before) => {
                     <span class="font-medium text-content">{{ originTitle }}</span>
                 </template>
             </i18n-t>
+        </span>
+        <span
+            v-if="afterTurn"
+            class="flex shrink-0 items-center gap-1 text-subtle"
+            data-fresh-after-turn
+            v-tooltip.top="{ title: t(`agents.freshSession.afterTurnTitle`), note: t(`agents.freshSession.afterTurnSkips`) }"
+        >
+            <Icon name="clock" class="text-2xs" />{{ t(`agents.freshSession.startsAfterTurn`) }}
         </span>
         <SegmentedControl v-if="options.length > 1" v-model="kind" :options="options" size="xs" class="shrink-0" />
         <button

@@ -2069,6 +2069,67 @@ describe("a fresh session on another conversation's work", () => {
         ).toBe("BAD_REQUEST");
     });
 
+    // A review booked on a session still at work (sendAfterTurn) waits for that turn, not for a land: it starts the moment
+    // the turn rests with work to look at, its link stamped then, so the work it reads is not already stale.
+    it("booked on a session still at work, opens the moment that turn rests with work, without anything landing", async () => {
+        const { worktree, worktrees } = await checkout("conv-work");
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => (release = resolve));
+        const prompts: string[] = [];
+        const turns = services({
+            agentWorktrees: worktrees,
+            turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
+            async *agent(request) {
+                prompts.push(request.spec.prompt);
+                if (request.spec.conversationId === "conv-work") {
+                    await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
+                    await gate;
+                }
+                yield { kind: "done" };
+            },
+        });
+        // The fake checkout hands every conversation the one worktree, which the land standings never read as work held:
+        // the session's is pinned to what the board would say of its finished, unlanded work.
+        const standingOf = turns.agents.standingOf;
+        Object.assign(turns.agents, { standingOf: (id: string) => (id === "conv-work" ? "ready" : standingOf(id)) });
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "build the thing", conversationId: "conv-work", isolated: true });
+        await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+
+        const freshOf = { conversationId: "conv-work", kind: "review" } as const;
+        const booked = { prompt: "/code-review", conversationId: "conv-rev", isolated: true, freshOf, sendAfter: "conv-work", sendAfterTurn: true } as const;
+        expect(await client.agent.run({ ...booked, messageId: "m-rev" })).toEqual({ delivered: "queued" });
+        expect((await queueOf(client, "conv-rev"))?.items).toEqual([expect.objectContaining({ id: "m-rev", after: "conv-work", afterTurn: true })]);
+        const card = (await client.agents.list()).agents.find((agent) => agent.id === "conv-rev");
+        expect(card?.next).toEqual({ kind: "land", after: "conv-work", turn: true, count: 1 });
+        // Hung under the work it waits for from the booking on, as the board draws it.
+        expect(card?.fresh).toMatchObject({ of: "conv-work", kind: "review" });
+        const bookedAt = card?.fresh?.at ?? Number.POSITIVE_INFINITY;
+
+        // Still at work: nothing goes, however often the pass looks.
+        const pass = createTurnResumeScheduler(turns);
+        await pass.tick();
+        expect(prompts).toHaveLength(1);
+
+        release?.();
+        await collect(await client.agent.attach({ conversationId: "conv-work" }));
+        await pass.tick();
+        await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("/code-review");
+        await collect(await client.agent.attach({ conversationId: "conv-rev" }));
+        const review = (await client.agents.list()).agents.find((agent) => agent.id === "conv-rev");
+        expect(review?.fresh).toMatchObject({ of: "conv-work", kind: "review" });
+        // Stamped by the turn that opened it, not by the booking: the work it read is the work as the turn left it.
+        expect(review?.fresh?.at).toBeGreaterThan(bookedAt);
+    });
+
+    it("refuses to wait for the turn of a conversation in the shared workspace, which has no work of its own to leave", async () => {
+        const client = clientFor(createApp(services()));
+        await runAgentTurn(client, { prompt: "work in the shared tree", conversationId: "conv-shared" });
+        expect(await errorCode(client.agent.run({ prompt: "check it", conversationId: "conv-after", sendAfter: "conv-shared", sendAfterTurn: true }))).toBe("BAD_REQUEST");
+        expect(await errorCode(client.agent.run({ prompt: "check it", conversationId: "conv-after", sendAfterTurn: true }))).toBe("BAD_REQUEST");
+    });
+
     it("opens under its origin, latched as the person's review of that work", async () => {
         const client = clientFor(createApp(services()));
         await runAgentTurn(client, { prompt: "build the thing", conversationId: "conv-origin", isolated: true });

@@ -1,6 +1,8 @@
 import type { Services } from "../../composition.js";
 import { awaitingWake } from "../actor/conversation-state.js";
-import { endingStatus, reposOf, worktreeOf } from "../registry/agents-store.js";
+import { waitingOf } from "../actor/conversation-queue.js";
+import { subagentCountsOf } from "../actor/subagent-roster.js";
+import { endingStatus, isIsolated, reposOf, worktreeOf } from "../registry/agents-store.js";
 import { mainTreeRepos } from "./branch/branch-repos.js";
 
 // A message booked to go after another conversation's work (AgentTurn.sendAfter) waits on two readings of that other
@@ -71,4 +73,66 @@ export const workLanded = (services: Readers, id: string, since: number): boolea
 export const landingRepos = (services: Pick<Services, "agents">, id: string): readonly string[] => {
     const entry = services.agents.entry(id);
     return entry === undefined ? [] : reposOf(entry).map((repo) => repo.repo);
+};
+
+// A message booked to go after another conversation's TURN (AgentTurn.sendAfterTurn), not its land: what a code review or
+// a test pass booked on a session still at work waits by, so it starts the moment that work holds still, finished and
+// unlanded. Like the land's, two readings of the other conversation made here, from what the daemon holds and never
+// from an event: whether it can be waited for at all, asked once at the booking, and whether it rests now, asked at the
+// booking and by every resume pass after it (booked-release.ts), which a turn settling wakes (resume-nudges.ts).
+
+/**
+ * Why conversation `waiter` cannot wait for conversation `id`'s turn, or undefined when it can: one that does not exist,
+ * is archived (no turn of it will end), works in the shared workspace (it has no work of its own a turn could leave to
+ * look at), or itself waits for `waiter`, so neither would ever go. A spawned child may be waited for: its turn ends
+ * like any other, whoever its work lands into.
+ */
+export const turnUnwaitable = (services: Readers, id: string, waiter: string): string | undefined => {
+    const entry = services.agents.entry(id);
+    if (entry === undefined) {
+        return `there is no conversation "${id}" to wait for`;
+    }
+    if (entry.archivedAt !== undefined) {
+        return "that conversation is archived, so no turn of it will end";
+    }
+    if (!isIsolated(entry)) {
+        return "that conversation works in the shared workspace, with no work of its own for a turn to leave: wait for a time instead";
+    }
+    if (services.conversations.queued(id).items.some((item) => item.after?.conversationId === waiter)) {
+        return "that conversation already waits for this one: one of the two has to go first";
+    }
+    return undefined;
+};
+
+/**
+ * Whether conversation `id` rests at the end of a turn that finished, with work of its own to look at, so what waits on
+ * its turn may go: nothing running, unwinding, landing or resuming; no card parked (a question, a permission, a plan: the
+ * turn is still live while one waits); nothing armed to wake it (a watch, a job its turn left running, the sandbox's or
+ * an agent's words) and no words of its own waiting to go, any of which is the same work going on; no subagent of its
+ * still at work, whose report wakes it; its last turn ended clean, not stopped, failed or held on a spent allowance; no
+ * checklist left open, which is a turn that stopped short of its own plan; and work on its branch or landed from it,
+ * since a review of nothing reads nothing. A conversation gone or archived never rests so: what waits on it is the
+ * person's to send or take back.
+ */
+export const turnRested = (services: Readers, id: string): boolean => {
+    const entry = services.agents.entry(id);
+    if (entry === undefined || entry.archivedAt !== undefined || !isIsolated(entry)) {
+        return false;
+    }
+    const state = services.conversations.state(id);
+    if (state !== undefined && (state.phase.kind !== "idle" || state.turn.resuming || state.turn.landing || awaitingWake(state))) {
+        return false;
+    }
+    // Only the words that go as soon as it is free: one of its own booked for tomorrow is not this turn going on.
+    if (waitingOf(services.conversations.queued(id)).length > 0) {
+        return false;
+    }
+    if (subagentCountsOf(services.conversations, id).running > 0) {
+        return false;
+    }
+    if (entry.ending.kind !== "idle" || entry.unfinished !== undefined) {
+        return false;
+    }
+    const standing = services.agents.standingOf(id);
+    return standing === "ready" || standing === "conflict" || standing === "landed";
 };

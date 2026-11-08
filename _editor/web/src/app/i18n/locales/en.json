@@ -1045,10 +1045,18 @@
                 "test": "Test",
                 "ask": "Own ask"
             },
+            "kindAfterTurn": {
+                "review": "Code review after this turn",
+                "test": "Test after this turn"
+            },
             "anotherChat": "another chat",
             "onWork": "On {title}'s work, without its conversation",
             "howItWorks": "Fresh session",
             "howItWorksNote": "Sees work, not its chat",
+            "afterTurnNote": "Starts once this turn finishes",
+            "afterTurnTitle": "After its turn",
+            "afterTurnSkips": "Not after questions or failures",
+            "startsAfterTurn": "Starts when its turn ends",
             "unlink": "Unlink",
             "unlinkNote": "Becomes an ordinary chat",
             "menuFresh": "Fresh session on this work",
@@ -3200,6 +3208,7 @@
                 "used": "Used"
             },
             "sendsAfter": "sends after {title} lands",
+            "sendsAfterTurn": "sends after {title}'s turn ends",
             "waitsForGone": "waits for an agent that is gone",
             "change": "Change",
             "sendNowAfterNote": "It goes without waiting for that agent's work.",
@@ -4540,6 +4549,7 @@
             "uncommitted": "Landed work stays uncommitted, and this agent starts from your last commit: it sees that work only once it is committed.",
             "saveVersions": "Commit each land automatically",
             "afterLands": "After {title} lands",
+            "afterTurn": "After {title}'s turn ends",
             "scheduleAria": "Schedule: {when}",
             "reschedule": "Change when it sends",
             "anotherAgent": "another agent",

@@ -3,7 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { changesToRead } from "../../../../models/agent-status/agentStatus-attention";
 import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
-import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
+import { canScheduleFresh, canStartFresh, draftFreshSession, freshKindLabel } from "../../../../models/fleet/freshSession";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // A board card's own presses as AgentCard lists them, kept out of the card so its template stays the card: the hovers its
@@ -70,12 +70,14 @@ export const toolPresses = (
     if (card.desktop && changesToRead(agent)) {
         actions.push({ id: `changes`, label: t(`agents.agentStatus.viewChanges`), icon: `diff`, run: card.openChanges });
     }
-    if (canStartFresh(agent) && card.mayRun) {
-        const note = t(`agents.freshSession.howItWorksNote`);
+    // On work whose turn is still live, the same two presses book the check for that turn's end (canScheduleFresh).
+    if ((canStartFresh(agent) || canScheduleFresh(agent)) && card.mayRun) {
+        const note = canStartFresh(agent) ? t(`agents.freshSession.howItWorksNote`) : t(`agents.freshSession.afterTurnNote`);
         // Review before test: reading the work is the cheaper check, and the order the session's own menu offers them.
         for (const [id, kind] of [[`codeReview`, `review`], [`test`, `test`]] as const) {
-            const label = t(`agents.freshSession.kind.${kind}`);
-            actions.push({ id, label, icon: FRESH_ICONS[kind], hint: { title: label, note }, note, run: () => void draftFreshSession(agent, kind) });
+            // The hover keeps the kind's own short name; the note says when a booked one starts.
+            const hint = { title: t(`agents.freshSession.kind.${kind}`), note };
+            actions.push({ id, label: freshKindLabel(agent, kind), icon: FRESH_ICONS[kind], hint, note, run: () => void draftFreshSession(agent, kind) });
         }
     }
     return actions;

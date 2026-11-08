@@ -19,7 +19,7 @@ const props = defineProps<{
     until?: number | undefined;
     // Or the agent whose landed work it waits for: its title, or undefined for one no card names any more, and the
     // press that opens it.
-    after?: { readonly title: string | undefined; readonly open: () => void } | undefined;
+    after?: { readonly title: string | undefined; readonly turn?: boolean; readonly open: () => void } | undefined;
     // Why on the left and the way on at the right, across a card of its own (the quick bar), rather than hung off the
     // right edge under a prompt.
     spread?: boolean;
@@ -79,24 +79,32 @@ const why = computed(() => {
                 <Icon name="pause" class="shrink-0 text-2xs" />{{ t(`chat.chatHeld.notSent`) }}
             </span>
             <span aria-hidden="true">·</span>
-            <!-- The agent it waits for, by name, opening its chat: "sends after <Fix the login> lands". -->
-            <i18n-t
-                v-if="reason === `scheduled` && after?.title !== undefined"
-                keypath="chat.chatHeld.sendsAfter"
-                tag="span"
-                class="min-w-0"
-                scope="global"
-            >
-                <template #title
-                    ><button
-                        type="button"
-                        class="max-w-48 truncate align-bottom font-medium text-link hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
-                        @click="after.open()"
+            <!-- The agent it waits for, by name, opening its chat: "sends after <Fix the login> lands", or, for a review
+                 booked on its work, "sends after <Fix the login>'s turn ends". -->
+            <template v-if="reason === `scheduled` && after?.title !== undefined">
+                <i18n-t v-if="after.turn === true" keypath="chat.chatHeld.sendsAfterTurn" tag="span" class="min-w-0" scope="global">
+                    <template #title
+                        ><button
+                            type="button"
+                            class="max-w-48 truncate align-bottom font-medium text-link hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
+                            @click="after.open()"
+                        >
+                            {{ after.title }}
+                        </button></template
                     >
-                        {{ after.title }}
-                    </button></template
-                >
-            </i18n-t>
+                </i18n-t>
+                <i18n-t v-else keypath="chat.chatHeld.sendsAfter" tag="span" class="min-w-0" scope="global">
+                    <template #title
+                        ><button
+                            type="button"
+                            class="max-w-48 truncate align-bottom font-medium text-link hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
+                            @click="after.open()"
+                        >
+                            {{ after.title }}
+                        </button></template
+                    >
+                </i18n-t>
+            </template>
             <span
                 v-else
                 class="min-w-0 tabular-nums"

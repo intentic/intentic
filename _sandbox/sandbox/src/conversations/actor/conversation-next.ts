@@ -48,7 +48,7 @@ const roomOf = (state: ConversationState, ending: Ending | undefined, answers: W
     return holding && roomRefused(ending) && breakArmed(answers.memory) ? { kind: "room" } : undefined;
 };
 
-// The messages booked for later, each by its own booking: the soonest instant speaks, else the first land waited for.
+// The messages booked for later, each by its own booking: the soonest instant speaks, else the first land (or turn) waited for.
 const bookedOf = (queue: TurnQueue): AgentNext | undefined => {
     const booked = bookedItemsOf(queue);
     const instants = booked.flatMap((item) => (item.until === undefined ? [] : [item.until]));
@@ -56,7 +56,7 @@ const bookedOf = (queue: TurnQueue): AgentNext | undefined => {
         return { kind: "send", at: Math.min(...instants), count: booked.length };
     }
     const after = booked.find((item) => item.after !== undefined)?.after;
-    return after === undefined ? undefined : { kind: "land", after: after.conversationId, count: booked.length };
+    return after === undefined ? undefined : { kind: "land", after: after.conversationId, ...opt("turn", after.turn), count: booked.length };
 };
 
 /**

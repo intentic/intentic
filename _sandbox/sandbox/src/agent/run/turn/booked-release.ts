@@ -3,26 +3,35 @@ import type { Booked } from "../../../conversations/actor/conversation-actors.js
 import { type Booking, bookingOfItem } from "../../../conversations/actor/conversation-queue.js";
 import { carryingOn } from "../../../conversations/actor/conversation-holdings.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
-import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
+import { landingRepos, turnRested, workLanded } from "../../../conversations/land/work-landed.js";
 import { rebookedForReopen } from "./holds/allowance-gate.js";
 import type { HeldRecord } from "../../../conversations/actor/conversation-state.js";
 import { limitBooking } from "../../../conversations/actor/limit-booking.js";
 import { breakPolicyFor } from "./break-policy.js";
 import type { DueAt } from "../../../workload/nudged-pass.js";
+import { opt } from "../../../opt.js";
 
-// A person's scheduled sends let go when what each waits for comes: its instant, or another conversation's work landing.
+// A person's scheduled sends let go when what each waits for comes: its instant, another conversation's work landing, or
+// another conversation's turn coming to rest with work to look at (a review booked on a session still at work).
 // One step of the resume pass (turn-resume.ts, createTurnResumeScheduler), apart from it since nothing here touches a held
 // turn: these are words in the queue, booked by their own bookings (conversation-queue.ts).
 
-// Whether what a scheduled send waits for has come: its instant, or the conversation it waits on finished with all of its
-// work in the workspace (work-landed.ts).
-const bookingDue = (services: Services, booking: Booking, now: number): boolean =>
-    booking.after === undefined ? booking.until <= now : workLanded(services, booking.after.conversationId, booking.after.since);
+// Whether what a scheduled send waits for has come: its instant, the conversation it waits on finished with all of its
+// work in the workspace, or that conversation's turn at rest with work to look at (work-landed.ts, both).
+const bookingDue = (services: Services, booking: Booking, now: number): boolean => {
+    if (booking.after === undefined) {
+        return booking.until <= now;
+    }
+    return booking.after.turn === true ? turnRested(services, booking.after.conversationId) : workLanded(services, booking.after.conversationId, booking.after.since);
+};
 
 // Whether a message still waits by the same booking: a person may have sent it, taken it back or re-timed it while the
 // release waited on a version commit, and their word is the newer one.
 const sameBooking = (held: Booking | undefined, booked: Booking): boolean =>
-    held !== undefined && held.until === booked.until && held.after?.conversationId === booked.after?.conversationId;
+    held !== undefined &&
+    held.until === booked.until &&
+    held.after?.conversationId === booked.after?.conversationId &&
+    held.after?.turn === booked.after?.turn;
 
 // Lets one conversation's due scheduled sends go, and only those: every other booking keeps its time. One that waited on
 // another conversation's land first waits out that land's version commit (version-landed.ts), so the turn it starts reads
@@ -30,7 +39,9 @@ const sameBooking = (held: Booking | undefined, booked: Booking): boolean =>
 // of the main tree before it starts (versionMainTree). Each message's booking is read again after that wait, and only one
 // still booked the same goes.
 const letGo = async (services: Services, conversationId: string, due: readonly Booked[], now: number): Promise<void> => {
-    const lands = new Set(due.flatMap(({ booking }) => (booking.after === undefined ? [] : [booking.after.conversationId])));
+    // A turn's end lands nothing, so a booking on one has no version commit to wait out: its work is read off its branch.
+    const lands = new Set(due.flatMap(({ booking }) => (booking.after === undefined || booking.after.turn === true ? [] : [booking.after.conversationId])));
+    const turns = [...new Set(due.flatMap(({ booking }) => (booking.after?.turn === true ? [booking.after.conversationId] : [])))];
     if (lands.size > 0) {
         await versionCommitsSettled(services, [...new Set([...lands].flatMap((land) => landingRepos(services, land)))]);
     }
@@ -49,8 +60,12 @@ const letGo = async (services: Services, conversationId: string, due: readonly B
         return;
     }
     services.logger.info(
-        { conversationId, messages: still.length, after: [...lands] },
-        lands.size === 0 ? "resume pass: a scheduled send's time came, it goes out" : "resume pass: the work a scheduled send waited for landed, it goes out",
+        { conversationId, messages: still.length, after: [...lands], ...opt("afterTurn", turns.length === 0 ? undefined : turns) },
+        lands.size > 0
+            ? "resume pass: the work a scheduled send waited for landed, it goes out"
+            : turns.length > 0
+              ? "resume pass: the turn a scheduled send waited for came to rest, it goes out"
+              : "resume pass: a scheduled send's time came, it goes out",
     );
     // Releasing ends the booking the card stated (`next`), so the words are a turn on its way until it begins.
     await carryingOn(services.conversations, conversationId, "booked", async () => {
@@ -63,7 +78,8 @@ const letGo = async (services: Services, conversationId: string, due: readonly B
 // out as the ordinary turn they would have been, together where they fall due together. Onto an account the records
 // still call spent they are booked again for its reopen (letGo); should the provider refuse them all the same, that
 // turn is refused like any other, and the conversation's limit answer takes it from there. A booking's instant still to
-// come is reported to `dueAt`, which wakes the pass at it; one waiting on a land is woken by the land itself.
+// come is reported to `dueAt`, which wakes the pass at it; one waiting on a land is woken by the land itself, and one on
+// a turn by that turn settling (resume-nudges.ts).
 export const releaseBooked = async (services: Services, now: number, dueAt?: DueAt): Promise<void> => {
     const due = new Map<string, Booked[]>();
     for (const booked of services.conversations.booked()) {

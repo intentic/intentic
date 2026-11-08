@@ -9,20 +9,27 @@ import { formatUntil } from "@intentic/ui/time";
 // sooner, re-timed, or taken back into the composer to be edited, each booked message on its own time (bookings.ts). Pure and value-typed;
 // the clock is always handed in.
 
-export type SendLater = { readonly kind: `at`; readonly at: number } | { readonly kind: `after`; readonly conversationId: string };
+// `turn` on an agent to wait for waits for that agent's turn to end with work to look at, not for its work to land: what a
+// code review or a test pass booked on work still being made goes after (freshSession.ts canScheduleFresh).
+export type SendLater = { readonly kind: `at`; readonly at: number } | { readonly kind: `after`; readonly conversationId: string; readonly turn?: true };
 
 /**
  * The wire's spelling of a pick: what `agent.run` and `agent.queueSchedule` take beside the words. `sendAtReopen` says the
  * instant is a spent allowance's reopen rather than a time the reader chose, which the queue keeps (`reopenOf`).
  */
 export type TurnBooking =
-    | { readonly sendAt: number; readonly sendAfter?: undefined; readonly sendAtReopen?: true }
-    | { readonly sendAfter: string; readonly sendAt?: undefined; readonly sendAtReopen?: undefined };
+    | { readonly sendAt: number; readonly sendAfter?: undefined; readonly sendAtReopen?: true; readonly sendAfterTurn?: undefined }
+    | { readonly sendAfter: string; readonly sendAt?: undefined; readonly sendAtReopen?: undefined; readonly sendAfterTurn?: true };
 
 /** A booking for a spent allowance's reopen at `at` (ms): what every press that waits out an allowance books. */
 export const reopenBooking = (at: number): TurnBooking => ({ sendAt: at, sendAtReopen: true });
 
-export const bookingOf = (later: SendLater): TurnBooking => (later.kind === `at` ? { sendAt: later.at } : { sendAfter: later.conversationId });
+export const bookingOf = (later: SendLater): TurnBooking => {
+    if (later.kind === `at`) {
+        return { sendAt: later.at };
+    }
+    return later.turn === true ? { sendAfter: later.conversationId, sendAfterTurn: true } : { sendAfter: later.conversationId };
+};
 
 /**
  * The pick a queue's own `scheduled` reads as; undefined for any other hold. Every message's booking on a sandbox that
@@ -146,7 +153,10 @@ export const waitText = (at: number, now: number): string => {
  * "09:00 tomorrow", then the weekday or the date: a booked time is an appointment, read the way a calendar reads it), or after which agent's work lands, that
  * agent named by its card's title (`titleOf`), or as another agent when no card names it any more.
  */
-export const laterLabel = (later: SendLater, now: number, titleOf: (conversationId: string) => string | undefined): string =>
-    later.kind === `at`
-        ? formatUntil(later.at, now)
-        : t(`chat.sendLater.afterLands`, { title: titleOf(later.conversationId) ?? t(`chat.sendLater.anotherAgent`) });
+export const laterLabel = (later: SendLater, now: number, titleOf: (conversationId: string) => string | undefined): string => {
+    if (later.kind === `at`) {
+        return formatUntil(later.at, now);
+    }
+    const title = titleOf(later.conversationId) ?? t(`chat.sendLater.anotherAgent`);
+    return later.turn === true ? t(`chat.sendLater.afterTurn`, { title }) : t(`chat.sendLater.afterLands`, { title });
+};

@@ -241,7 +241,7 @@ const stateOccasions = (
     },
     here: boolean,
 ): void => {
-    const { sendAt, sendAfter, sendAtReopen } = input.booking ?? {};
+    const { sendAt, sendAfter, sendAtReopen, sendAfterTurn } = input.booking ?? {};
     if (sendAt !== undefined) {
         body.sendAt = sendAt;
         if (sendAtReopen === true) {
@@ -250,6 +250,9 @@ const stateOccasions = (
     }
     if (sendAfter !== undefined) {
         body.sendAfter = sendAfter;
+        if (sendAfterTurn === true) {
+            body.sendAfterTurn = true;
+        }
     }
     // Only for a conversation the daemon has no record of yet, and only for this sandbox, whose land it is.
     if (!input.registered && here && input.conversationAutoLand !== undefined) {

@@ -7,6 +7,7 @@ import { ensureProviderCommands } from "../conversations/accounts/useChat-catalo
 import { draftConversation, openAgentConversation } from "../conversations/panel/useChat-reveal";
 import { summonChat } from "../conversations/run/summon";
 import type { Conversation } from "../conversations/session/conversation";
+import type { SendLater } from "../conversations/drafts/sendLater";
 import { providerCommands } from "../providers/providerCatalog";
 import { reviewCommandOf } from "../providers/reviewCommands";
 import { revealConversation } from "./agentActions";
@@ -21,7 +22,8 @@ import { CHECK_KINDS, type CheckKind } from "./freshKinds";
 // what it left open (child-report.ts reportsTo), and ChatReviewCard's Fix sends a chosen finding there again by hand.
 //
 // The ask goes into a composer, never straight out: the reader picks the model, a review level or a target, or writes
-// their own ask, and presses Send.
+// their own ask, and presses Send. On work whose turn is still live, a review or a test pass is offered too, its Send
+// booked for that turn's end (canScheduleFresh), and the press books it rather than starting it.
 
 // What each kind opens with: each harness's own reviewer by the name its `/` list publishes (reviewCommands.ts), else the
 // ask in words; a test pass in words; the reader's own ask empty.
@@ -49,8 +51,10 @@ const commandsOf = async (conversation: Conversation): Promise<readonly AgentCom
 // one from it and lands back into it; a runner's copy is on another machine) and not filed away. A check (a review, a test
 // pass) also needs something in it to look at, and never runs on a fresh session itself, so a review of a review never
 // stacks a second level under one card; the reader's own ask is a new agent starting from that copy, which takes any.
-// A check also waits for the work to hold still: started while a turn is still writing, it would judge a half-made copy.
-const MOVING: ReadonlySet<FleetAgent["status"]> = new Set([`running`, `stopping`, `resuming`, `landing`]);
+// A check also waits for the work to hold still: started while a turn is still writing, it would judge a half-made copy,
+// and so would one started while the turn is parked on a question, a permission or a plan, which is the same turn not
+// yet finished. A check asked for then is booked for that turn's end instead (canScheduleFresh).
+const MOVING: ReadonlySet<FleetAgent["status"]> = new Set([`running`, `stopping`, `resuming`, `landing`, `awaiting`]);
 export const canStartFresh = (
     agent: Pick<FleetAgent, "archivedAt" | "fresh" | "branch" | "runner" | "diff" | "sandboxId" | "status">,
     kind: FreshKind = `review`,
@@ -61,8 +65,59 @@ export const canStartFresh = (
     agent.runner === undefined &&
     (kind === `ask` || (agent.fresh === undefined && !MOVING.has(agent.status) && (agent.diff?.files ?? 0) > 0));
 
-/** Every kind a fresh session on this card's work could be, in the strip's own order. */
-export const freshKindsOf = (agent: Parameters<typeof canStartFresh>[0]): FreshKind[] => FRESH_KINDS.filter((kind) => canStartFresh(agent, kind));
+// A check BOOKED ON WORK STILL BEING MADE: a code review or a test pass asked for while the card's turn is still live (a
+// question or a permission parked on it included). It cannot start now, since it would judge a half-made copy, so it is
+// booked to start the moment that turn rests with work to look at (AgentTurn.sendAfterTurn): finished clean, not stopped
+// on a question, a failure or an open checklist, and with no land in between. The daemon holds it, so it starts whether
+// or not anybody is watching, and the review's report reaches the work's own conversation as any review's does. Not
+// before the card has a copy of its own to cut from, and never for the reader's own ask, which takes any copy now.
+export const canScheduleFresh = (
+    agent: Pick<FleetAgent, "archivedAt" | "fresh" | "branch" | "runner" | "sandboxId"> & Parameters<typeof turnWorking>[0],
+    kind: FreshKind = `review`,
+): boolean =>
+    kind !== `ask` &&
+    agent.sandboxId === undefined &&
+    agent.archivedAt === undefined &&
+    agent.branch !== undefined &&
+    agent.runner === undefined &&
+    agent.fresh === undefined &&
+    (turnWorking(agent) || agent.status === `awaiting`);
+
+/** Whether a fresh session of `kind` on this card's work is booked for its turn's end rather than started now. */
+export const freshAfterTurn = (agent: Parameters<typeof canScheduleFresh>[0] & Parameters<typeof canStartFresh>[0], kind: FreshKind): boolean =>
+    !canStartFresh(agent, kind) && canScheduleFresh(agent, kind);
+
+/** Every kind a fresh session on this card's work could be, now or after its turn, in the strip's own order. */
+export const freshKindsOf = (agent: Parameters<typeof freshAfterTurn>[0]): FreshKind[] =>
+    FRESH_KINDS.filter((kind) => canStartFresh(agent, kind) || canScheduleFresh(agent, kind));
+
+/** A kind as a press offering it says it: "Code review", or "Code review after this turn" on work still being made. */
+export const freshKindLabel = (agent: Parameters<typeof freshAfterTurn>[0], kind: FreshKind): string =>
+    kind !== `ask` && freshAfterTurn(agent, kind) ? t(`agents.freshSession.kindAfterTurn.${kind}`) : t(`agents.freshSession.kind.${kind}`);
+
+// The booking a check on work still being made goes with: after the origin's turn, not its land.
+const afterTurnOf = (origin: Pick<FleetAgent, "id">): SendLater => ({ kind: `after`, conversationId: origin.id, turn: true });
+
+// Whether the draft's send is still the booking the strip put there for this origin: one the reader re-timed is theirs.
+const stripBooked = (conversation: Conversation, originId: string): boolean => {
+    const later = conversation.sendLater.value;
+    return later?.kind === `after` && later.turn === true && later.conversationId === originId;
+};
+
+// The draft's send for `kind`: booked for the origin's turn's end while that turn still works, else as it goes now, and
+// a booking the reader chose themselves left alone.
+const bookFreshSend = (conversation: Conversation, origin: FleetAgent | undefined, kind: FreshKind): void => {
+    if (origin !== undefined && freshAfterTurn(origin, kind)) {
+        if (conversation.sendLater.value === undefined || stripBooked(conversation, origin.id)) {
+            conversation.sendLater.value = afterTurnOf(origin);
+        }
+        return;
+    }
+    const pending = conversation.pendingFreshOf.value;
+    if (pending !== undefined && stripBooked(conversation, pending.conversationId)) {
+        conversation.sendLater.value = undefined;
+    }
+};
 
 // The title the new chat opens with, so the board names it by what it is for rather than by `/code-review`.
 const freshTitle = (kind: FreshKind, origin: FleetAgent): string | null =>
@@ -77,6 +132,7 @@ export const draftFreshSession = async (origin: FleetAgent, kind: FreshKind): Pr
     conversation.pendingFreshOf.value = { conversationId: origin.id, kind };
     conversation.selection.apply({ kind: `set`, picks: { actsAs: origin.actsAs, startIn: origin.startIn } });
     conversation.title.value = freshTitle(kind, origin);
+    bookFreshSend(conversation, origin, kind);
     conversation.draft.value = freshDraft(kind, await commandsOf(conversation));
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
@@ -104,6 +160,7 @@ export const switchFreshKind = async (conversation: Conversation, origin: FleetA
     }
     const commands = await commandsOf(conversation);
     const before = conversation.draft.value;
+    bookFreshSend(conversation, origin, kind);
     conversation.pendingFreshOf.value = { ...pending, kind };
     if (untouched(before, [freshDraft(pending.kind, commands)])) {
         conversation.draft.value = freshDraft(kind, commands);
@@ -132,6 +189,10 @@ export const unlinkFresh = async (conversation: Conversation): Promise<void> => 
         return;
     }
     const commands = await commandsOf(conversation);
+    // The booking on the origin's turn goes with the link: an ordinary chat has no such turn to wait for.
+    if (stripBooked(conversation, pending.conversationId)) {
+        conversation.sendLater.value = undefined;
+    }
     conversation.pendingFreshOf.value = undefined;
     if (untouched(conversation.draft.value, [freshDraft(pending.kind, commands)])) {
         conversation.draft.value = ``;

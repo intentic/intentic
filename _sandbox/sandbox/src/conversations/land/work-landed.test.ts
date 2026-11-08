@@ -1,11 +1,14 @@
+import type { SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import { open as openChild } from "../../agent/subagents/subagents.js";
+import { createHoldingsIndex, type Share } from "../actor/conversation-holdings.js";
 import { conversationEntry, isolatedAgent } from "../registry/agents-store.testing.js";
-import { joined, NO_QUEUE, type TurnQueue } from "../actor/conversation-queue.js";
+import { joined, NO_QUEUE, scheduled, type TurnQueue } from "../actor/conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation } from "../actor/conversation-state.js";
 import type { PersistedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { LandStanding } from "./standing.js";
-import { landingRepos, unwaitable, workLanded } from "./work-landed.js";
+import { landingRepos, turnRested, turnUnwaitable, unwaitable, workLanded } from "./work-landed.js";
 
 // Pins when a message booked to go after another conversation may go: only once that conversation has finished, nothing
 // of it is left to land, and its last turn ended clean or a person landed its work since the booking. Every case is one
@@ -114,5 +117,109 @@ describe("whether a conversation can be waited for", () => {
     it("lists the repositories its work lands in, for the version commits a follow-up waits out", () => {
         expect(landingRepos(readers(isolatedAgent([repo(), { repo: "web", base: "b1" }], { id: "first" })), "first")).toEqual(["root", "web"]);
         expect(landingRepos(readers(conversationEntry({ id: "first" })), "first")).toEqual([]);
+    });
+});
+
+// Pins when a message booked to go after another conversation's TURN may go: a review booked on a session still at
+// work. Only once that turn finished clean, with work on its branch or landed from it, and nothing about it says the same
+// work goes on: not a question waiting for an answer, a stop or a failure, an open checklist, a wake, a child at work.
+// Every case is one reading of what the daemon holds, so a pass after a restart answers what a live one would.
+
+interface TurnHeld {
+    readonly standing?: LandStanding;
+    readonly state?: ConversationState;
+    readonly queue?: TurnQueue;
+    // Its subagents' statuses, filed on the roster the way a turn opens them.
+    readonly children?: readonly SubagentStatus[];
+}
+
+const turnReaders = (entry: PersistedAgent | undefined, held: TurnHeld = {}): Pick<Services, "agents" | "conversations"> => {
+    const shares = new Map<string, Share>();
+    const { holdings } = createHoldingsIndex((holder, create) => {
+        if (!shares.has(holder) && create) {
+            shares.set(holder, new Map());
+        }
+        return shares.get(holder);
+    });
+    const conversations = unstubbed<Services["conversations"]>("conversations", {
+        state: () => held.state,
+        queued: () => held.queue ?? NO_QUEUE,
+        holdings,
+    });
+    for (const [index, status] of (held.children ?? []).entries()) {
+        openChild({ conversationId: "work", conversations, subagentsDir: undefined }, `child-${index}`, "subagent", { status });
+    }
+    return {
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: (id: string) => (id === entry?.id ? entry : undefined),
+            standingOf: () => held.standing ?? "idle",
+        }),
+        conversations,
+    };
+};
+
+const work = isolatedAgent([{ repo: "root", base: "b0" }], { id: "work" });
+const running: ConversationState = { ...idleConversation(), phase: { kind: "running", startedAt: 1, parked: [], stopping: undefined } };
+const workMessage = (id: string) => ({ id, voice: "person" as const, queuedAt: 1, turn: { conversationId: "work", prompt: id } });
+
+describe("whether a conversation's turn rests, for what waits on it", () => {
+    it("rests once a clean turn left work on its branch, or landed it, whether or not anybody landed it", () => {
+        expect(turnRested(turnReaders(work, { standing: "ready" }), "work")).toBe(true);
+        expect(turnRested(turnReaders(work, { standing: "conflict" }), "work")).toBe(true);
+        expect(turnRested(turnReaders(work, { standing: "landed" }), "work")).toBe(true);
+    });
+
+    it("does not rest on a turn that left nothing to look at, which a review would read as nothing", () => {
+        expect(turnRested(turnReaders(work, { standing: "idle" }), "work")).toBe(false);
+    });
+
+    it("does not rest while the turn is live, a question or a permission parked on it included, or unwinding, landing or resuming", () => {
+        expect(turnRested(turnReaders(work, { standing: "ready", state: running }), "work")).toBe(false);
+        const parked: ConversationState = { ...running, phase: { kind: "running", startedAt: 1, parked: [{ requestId: "ask-1", kind: "question" }], stopping: undefined } };
+        expect(turnRested(turnReaders(work, { standing: "ready", state: parked }), "work")).toBe(false);
+        expect(turnRested(turnReaders(work, { standing: "ready", state: { ...idleConversation(), turn: { ...freshRuntime(), landing: true } } }), "work")).toBe(false);
+        expect(turnRested(turnReaders(work, { standing: "ready", state: { ...idleConversation(), turn: { ...freshRuntime(), resuming: true } } }), "work")).toBe(false);
+    });
+
+    it("does not rest while the same work goes on by itself: a wake armed, words of its own waiting, a child still at work", () => {
+        const watched: ConversationState = { ...idleConversation(), watches: [{ id: "w1", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] };
+        expect(turnRested(turnReaders(work, { standing: "ready", state: watched }), "work")).toBe(false);
+        expect(turnRested(turnReaders(work, { standing: "ready", queue: joined(NO_QUEUE, workMessage("m1")) }), "work")).toBe(false);
+        expect(turnRested(turnReaders(work, { standing: "ready", children: ["running"] }), "work")).toBe(false);
+        expect(turnRested(turnReaders(work, { standing: "ready", children: ["completed"] }), "work")).toBe(true);
+    });
+
+    it("rests with words of its own booked for later, which are not this turn going on", () => {
+        const booked = scheduled(NO_QUEUE, workMessage("m1"), { until: 99_000 });
+        expect(turnRested(turnReaders(work, { standing: "ready", queue: booked }), "work")).toBe(true);
+    });
+
+    it("does not rest on a turn stopped, failed or held on a spent allowance, or one that left its own checklist open", () => {
+        expect(turnRested(turnReaders({ ...work, ending: { kind: "stopped" } }, { standing: "ready" }), "work")).toBe(false);
+        expect(turnRested(turnReaders({ ...work, ending: { kind: "failed", failure: "boom" } }, { standing: "ready" }), "work")).toBe(false);
+        const open = { ...work, unfinished: { at: 1, steps: { open: 2, total: 5, next: "wire the route" } } };
+        expect(turnRested(turnReaders(open, { standing: "ready" }), "work")).toBe(false);
+    });
+
+    it("never rests for a conversation that is gone, archived, or in the shared workspace", () => {
+        expect(turnRested(turnReaders(undefined), "work")).toBe(false);
+        expect(turnRested(turnReaders({ ...work, archivedAt: 1 }, { standing: "ready" }), "work")).toBe(false);
+        expect(turnRested(turnReaders(conversationEntry({ id: "work" }), { standing: "ready" }), "work")).toBe(false);
+    });
+});
+
+describe("whether a conversation's turn can be waited for", () => {
+    it("names why not for one that is unknown, archived, in the shared workspace, or waiting for the asker; a live one can", () => {
+        expect(turnUnwaitable(turnReaders(undefined), "nobody", "review")).toBe(`there is no conversation "nobody" to wait for`);
+        expect(turnUnwaitable(turnReaders({ ...work, archivedAt: 1 }), "work", "review")).toBe("that conversation is archived, so no turn of it will end");
+        expect(turnUnwaitable(turnReaders(conversationEntry({ id: "work" })), "work", "review")).toContain("shared workspace");
+        const waitsForReview = scheduled(NO_QUEUE, workMessage("m1"), { after: { conversationId: "review", since: 1, turn: true } });
+        expect(turnUnwaitable(turnReaders(work, { queue: waitsForReview }), "work", "review")).toBe("that conversation already waits for this one: one of the two has to go first");
+        expect(turnUnwaitable(turnReaders(work), "work", "review")).toBeUndefined();
+    });
+
+    it("lets a spawned child be waited for, whose turn ends like any other wherever its work lands", () => {
+        const child = { ...work, placement: { ...work.placement, parent: "parent" } };
+        expect(turnUnwaitable(turnReaders(child), "work", "review")).toBeUndefined();
     });
 });

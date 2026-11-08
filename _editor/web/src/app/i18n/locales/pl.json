@@ -1045,10 +1045,18 @@
                 "test": "Test",
                 "ask": "Własne polecenie"
             },
+            "kindAfterTurn": {
+                "review": "Code review po tej turze",
+                "test": "Test po tej turze"
+            },
             "anotherChat": "inny czat",
             "onWork": "Na pracy {title}, bez jej rozmowy",
             "howItWorks": "Świeża sesja",
             "howItWorksNote": "Widzi pracę, nie czat",
+            "afterTurnNote": "Rusza po zakończeniu tej tury",
+            "afterTurnTitle": "Po jego turze",
+            "afterTurnSkips": "Nie po pytaniu ani błędzie",
+            "startsAfterTurn": "Rusza po zakończeniu jego tury",
             "unlink": "Odłącz",
             "unlinkNote": "Stanie się zwykłym czatem",
             "menuFresh": "Świeża sesja na tej pracy",
@@ -3200,6 +3208,7 @@
                 "used": "Użyta"
             },
             "sendsAfter": "wyjdzie po scaleniu {title}",
+            "sendsAfterTurn": "wyśle się po zakończeniu tury {title}",
             "waitsForGone": "czeka na agenta, którego już nie ma",
             "change": "Zmień",
             "sendNowAfterNote": "Wyjdzie bez czekania na pracę tamtego agenta.",
@@ -4540,6 +4549,7 @@
             "uncommitted": "Scalona praca zostaje bez commita, a ten agent startuje od Twojego ostatniego commita: zobaczy tę pracę dopiero po commicie.",
             "saveVersions": "Commituj każde scalenie automatycznie",
             "afterLands": "Po scaleniu {title}",
+            "afterTurn": "Po zakończeniu tury {title}",
             "scheduleAria": "Zaplanuj: {when}",
             "reschedule": "Zmień, kiedy wyjdzie",
             "anotherAgent": "innego agenta",

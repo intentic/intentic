@@ -21,9 +21,9 @@ export const perMessage = (queue: Pick<ConversationQueue, "items"> | undefined):
  * When one waiting message goes by itself: its own booking, or, from a sandbox that books the whole queue, the queue's.
  * Undefined for a message that goes as soon as nothing holds it.
  */
-export const bookingOfMessage = (queue: QueueRead | undefined, item: Pick<QueuedMessage, "until" | "after">): SendLater | undefined => {
+export const bookingOfMessage = (queue: QueueRead | undefined, item: Pick<QueuedMessage, "until" | "after" | "afterTurn">): SendLater | undefined => {
     if (item.after !== undefined) {
-        return { kind: `after`, conversationId: item.after };
+        return item.afterTurn === true ? { kind: `after`, conversationId: item.after, turn: true } : { kind: `after`, conversationId: item.after };
     }
     if (item.until !== undefined) {
         return { kind: `at`, at: item.until };
@@ -55,7 +55,7 @@ export interface BookedGroup {
 }
 
 const sameLater = (a: SendLater, b: SendLater): boolean =>
-    a.kind === `at` ? b.kind === `at` && a.at === b.at : b.kind === `after` && a.conversationId === b.conversationId;
+    a.kind === `at` ? b.kind === `at` && a.at === b.at : b.kind === `after` && a.conversationId === b.conversationId && a.turn === b.turn;
 
 // The queue without one message, as this window shows it while that message is being taken back (TurnClient.takingBack):
 // what is left is read again, so a booking that went with the message stops holding the rest. A queue an older sandbox

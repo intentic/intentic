@@ -195,6 +195,10 @@ describe("a conversation's queue", () => {
         ]);
         expect(timed).toMatchObject({ paused: "scheduled", until: 9_000 });
         expect(timed).not.toHaveProperty("after");
+        // A booking on that conversation's turn rather than its land says so on the message; the shadow names the same one.
+        const onTurn = scheduled(NO_QUEUE, message("m5", "five"), { after: { ...after, turn: true } });
+        expect(queueView(onTurn)).toMatchObject({ items: [{ id: "m5", after: "brave-otter-k2", afterTurn: true }], paused: "scheduled", after: "brave-otter-k2" });
+        expect(queueView(waitingOn).items[0]).not.toHaveProperty("afterTurn");
         // Edits keep it, and so does a plain send; a release of that one message lets it go.
         expect(edited(waitingOn, "m1", 1, "one, better").queue).toMatchObject({ paused: "scheduled", after, items: [{ after }] });
         expect(joined(waitingOn, message("m4", "four"))).toMatchObject({ paused: "scheduled", after, items: [{ after }, { id: "m4" }] });

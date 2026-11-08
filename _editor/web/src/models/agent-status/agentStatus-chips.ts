@@ -121,7 +121,8 @@ export const standingChip = (
 const scheduledWhen = (agent: Pick<AgentStanding, "next">, titleOf?: (conversationId: string) => string | undefined): string | undefined => {
     const next = agent.next;
     if (next?.kind === `land`) {
-        return t(`chat.sendLater.afterLands`, { title: titleOf?.(next.after) ?? t(`chat.sendLater.anotherAgent`) });
+        const title = titleOf?.(next.after) ?? t(`chat.sendLater.anotherAgent`);
+        return next.turn === true ? t(`chat.sendLater.afterTurn`, { title }) : t(`chat.sendLater.afterLands`, { title });
     }
     return next?.kind === `send` ? formatWhen(next.at) : undefined;
 };

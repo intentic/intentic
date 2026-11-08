@@ -41,7 +41,9 @@ const awaited = computed(() => {
         return undefined;
     }
     const agent = agentById(id);
-    return { title: agent === undefined ? undefined : agentDisplayTitle(agent), open: (): void => openById(id) };
+    // A review booked on that agent's work waits for its turn to end, not for its land, and says so.
+    const turn = props.group.booking.kind === `after` && props.group.booking.turn === true;
+    return { title: agent === undefined ? undefined : agentDisplayTitle(agent), turn, open: (): void => openById(id) };
 });
 
 // Sooner than booked: for a spent allowance, that it may still be spent; for another agent's work, that it goes without

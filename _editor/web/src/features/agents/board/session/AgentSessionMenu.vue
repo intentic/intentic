@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
-import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import type { FreshKind } from "@intentic/sandbox-contract/schemas/agent";
 import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
 import { computed } from "vue";
 import { effectiveAutoLand, endingByHand, limited, memoryHeld, unregistered, writingNow } from "../../../../models/agent-status/agentStatus-standing";
@@ -17,7 +17,7 @@ import { notifyLevelOf, tookPart } from "@intentic/sandbox-contract/schemas/agen
 import type { NotifyLevel } from "@intentic/sandbox-contract/schemas/agents";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { startOperation } from "../../../../workbench/operations/operations";
-import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
+import { canScheduleFresh, canStartFresh, draftFreshSession, freshKindLabel, freshKindsOf } from "../../../../models/fleet/freshSession";
 import { mayAssign, ownedBy } from "../../../../models/agent-status/ownership";
 import { landsByDefault } from "../../../../models/sandbox/environment/rules";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -56,11 +56,13 @@ const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: [];
 
 const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
-// The card, when a fresh session can be cut from its work (freshSession.canStartFresh).
+// The card, when a fresh session can be cut from its work (freshSession.canStartFresh), or a check booked for the end of
+// its turn still at work (canScheduleFresh); with the kinds it takes, each said as it goes.
 const freshable = computed(() => {
     const agent = agentById(agentId);
-    return agent !== undefined && canStartFresh(agent) ? agent : undefined;
+    return agent !== undefined && (canStartFresh(agent) || canScheduleFresh(agent)) ? agent : undefined;
 });
+const freshKinds = computed(() => (freshable.value === undefined ? [] : freshKindsOf(freshable.value)));
 const startFresh = (kind: FreshKind): void => {
     if (freshable.value !== undefined) {
         void draftFreshSession(freshable.value, kind);
@@ -302,11 +304,9 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
              check and the reader's own ask, none of them first or required. The ask goes into its composer, for a model,
              a level or words first. -->
         <template v-if="freshable && can(`agent.run`)">
-            <button v-for="kind in FRESH_KINDS" :key="kind" type="button" :class="ITEM" @click="run(() => startFresh(kind))">
+            <button v-for="kind in freshKinds" :key="kind" type="button" :class="ITEM" @click="run(() => startFresh(kind))">
                 <Icon :name="FRESH_ICONS[kind]" class="text-xs text-subtle" />
-                <span class="text-sm text-content md:text-xs">{{
-                    t(`agents.freshSession.menuItem`, { kind: t(`agents.freshSession.kind.${kind}`) })
-                }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.freshSession.menuItem`, { kind: freshKindLabel(freshable, kind) }) }}</span>
             </button>
         </template>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">

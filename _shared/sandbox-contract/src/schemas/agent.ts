@@ -283,6 +283,16 @@ const AgentTurnFieldsSchema = z.object({
     sendAfter: ConversationIdSchema.optional().describe(
         "Hold this message until the conversation named here has finished and all of its work has landed in the workspace, instead of starting a turn now: for work that builds on another agent's. It waits in this conversation's queue, where it can be sent early, reworded, rescheduled or removed. Sent at once when that conversation has nothing running and nothing left to land.",
     ),
+    // What `sendAfter` waits for, when it is not the land: the named conversation's turn ending clean, with its work still
+    // on its own branch. What a code review or a test pass booked on a session still at work waits by (a fresh session's
+    // opening message, `freshOf`), so it starts the moment the work holds still rather than after somebody lands it. A
+    // modifier, as `sendAtReopen` is of `sendAt`: a daemon from before it reads the land, which only waits longer.
+    sendAfterTurn: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Says `sendAfter` waits for that conversation's turn to end, not for its work to land: the message goes once that conversation has finished a turn cleanly (nothing running, not stopped on a question, a permission or a failure, no checklist left open, nothing waiting to wake it) with work of its own to look at, whether or not that work has landed. Sent at once when it already rests so. Only with `sendAfter`.",
+        ),
     // Decided like `isolated`: the opening turn's answer, latched on the entry it opens. A maintainer's alone, since the
     // standing answer it sets is what `agents.autoLand` sets, and that route is a maintainer's.
     conversationAutoLand: z
@@ -320,6 +330,9 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
     })
     .refine((turn) => turn.sendAfter === undefined || turn.sendAfter !== turn.conversationId, {
         message: "a conversation cannot wait for its own work to land",
+    })
+    .refine((turn) => turn.sendAfterTurn === undefined || turn.sendAfter !== undefined, {
+        message: "sendAfterTurn says what sendAfter waits for: name the conversation in sendAfter",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 // What `agent.run` takes: a turn, plus the one field only a request carries and no stored turn keeps. A daemon from before
@@ -518,6 +531,12 @@ export const QueuedMessageSchema = z.object({
     after: ConversationIdSchema.optional().describe(
         "The conversation whose finished work must land before this message goes out by itself, in place of `until`.",
     ),
+    afterTurn: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Says `after` waits for that conversation's turn to end cleanly with work to look at, not for its work to land (`sendAfterTurn`). Absent on a land booking, and from sandboxes older than the field.",
+        ),
     reopenOf: QueuedReopenSchema.optional().describe(
         "The allowance this message's `until` waits out: it was booked for that account's reopen, by the composer or by the sandbox holding words it would not send into a spent allowance, rather than for a time somebody chose. Absent on any other booking, and from sandboxes older than the field.",
     ),

@@ -62,15 +62,27 @@ export const servicesOfConversation = (
     return services.length === 0 ? {} : { services };
 };
 
+// A fresh session's link, kept once set, with one exception: a scheduled send that opens one (a review booked on a session
+// still at work, AgentTurn.sendAfterTurn) latches it at the booking, before any turn of it ran, and the work it is cut
+// from is the origin's as its first turn finds it. That turn's instant is its `at` then, not the booking's: left at the
+// booking, the review read as stale the moment it finished, its origin having worked on after the booking was made.
+const freshOf = (existing: Identity, turn: BeginTurn, opening: boolean): Identity["fresh"] => {
+    const kept = existing.fresh;
+    if (kept === undefined || !opening || turn.fresh?.of !== kept.of) {
+        return kept ?? turn.fresh;
+    }
+    return { ...kept, at: turn.fresh.at };
+};
+
 // Latched with the conversation: each field keeps the first answer it got, and a later turn's differing persona does
-// not move the conversation to another project.
-export const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined): Identity => ({
+// not move the conversation to another project. `opening` says no turn of it has run yet (an entry a booking opened).
+export const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, opening = false): Identity => ({
     ...opt("origin", existing.origin ?? turn.origin),
     ...opt("startedBy", existing.startedBy ?? turn.startedBy),
     ...areasOfConversation(existing, turn, entryOf),
     ...opt("startIn", existing.startIn ?? turn.startIn),
     ...opt("actsAs", existing.actsAs ?? turn.profile.actsAs),
     ...opt("forkedFrom", existing.forkedFrom ?? turn.forkedFrom),
-    ...opt("fresh", existing.fresh ?? turn.fresh),
+    ...opt("fresh", freshOf(existing, turn, opening)),
     ...opt("home", existing.home ?? turn.home),
 });

@@ -93,6 +93,9 @@ describe("messages a person booked for later", () => {
         expect(nextOf(holding(two), { ending: { kind: "idle" } }, WAIT)).toEqual({ kind: "send", at: 5_000_000, count: 2 });
         const onLand = scheduled(NO_QUEUE, words("after"), { after: { conversationId: "brave-otter", since: 1 } });
         expect(nextOf(holding(onLand), { ending: { kind: "idle" } }, WAIT)).toEqual({ kind: "land", after: "brave-otter", count: 1 });
+        // A review booked on a session still at work waits for its turn, and says so, not for a land.
+        const onTurn = scheduled(NO_QUEUE, words("review"), { after: { conversationId: "brave-otter", since: 1, turn: true } });
+        expect(nextOf(holding(onTurn), { ending: { kind: "idle" } }, WAIT)).toEqual({ kind: "land", after: "brave-otter", turn: true, count: 1 });
     });
 
     // A booking is the person's answer to a dead end (solid-otter-ulbz): it carries the conversation on beside a Stop's

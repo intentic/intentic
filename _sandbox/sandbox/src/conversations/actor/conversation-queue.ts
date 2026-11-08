@@ -23,8 +23,11 @@ import { opt } from "../../opt.js";
 
 // The other thing a booked message can wait for besides an instant: another conversation's work, in the workspace
 // (turn-resume.ts, releaseBooked). `since` is when the booking was made: a stopped or failed conversation counts only once
-// work of its was landed after it.
-const AfterLandSchema = z.object({ conversationId: z.string(), since: z.number() });
+// work of its was landed after it. `turn` waits for less: that conversation's turn ending clean with work to look at,
+// landed or not (work-landed.ts, turnRested), what a review booked on a session still at work waits by (AgentTurn.sendAfterTurn).
+// Kept on the land's record rather than beside it, so a daemon a rollback lands on reads a land booking, which only
+// waits longer, rather than no booking at all, which would send it at once.
+const AfterLandSchema = z.object({ conversationId: z.string(), since: z.number(), turn: z.literal(true).optional() });
 export type AfterLand = z.infer<typeof AfterLandSchema>;
 
 // The request a queued message makes: the words and who serves the turn they start, as its sender named them.
@@ -51,8 +54,8 @@ const QueuedItemSchema = z.object({
     // The queue's revision when this message was last written.
     revision: z.number(),
     turn: QueuedTurnSchema,
-    // A person's scheduled send carries its own booking: when it goes by itself (ms), or whose landed work it goes
-    // after, never both. Each message its own, so booking one never re-times another. Absent on a message that goes as
+    // A person's scheduled send carries its own booking: when it goes by itself (ms), or whose landed work (or ended
+    // turn) it goes after, never both. Each message its own, so booking one never re-times another. Absent on a message that goes as
     // soon as the conversation is free.
     until: z.number().optional(),
     after: AfterLandSchema.optional(),
@@ -372,6 +375,7 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
         revision: item.revision,
         ...opt("until", item.until),
         ...opt("after", item.after?.conversationId),
+        ...opt("afterTurn", item.until === undefined ? item.after?.turn : undefined),
         ...opt("reopenOf", item.until === undefined ? undefined : item.reopenOf),
         ...opt("serves", servingOf(item)),
         ...opt("continues", item.continues),

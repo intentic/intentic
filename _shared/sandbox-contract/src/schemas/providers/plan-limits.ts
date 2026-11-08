@@ -479,6 +479,12 @@ export const QueueScheduleSchema = z
             .describe(
                 "Says `sendAt` is the reopen of the allowance what waits would be refused by, not a time you chose; the queue records it as `reopenOf`. Only with `sendAt`.",
             ),
+        sendAfterTurn: z
+            .literal(true)
+            .optional()
+            .describe(
+                "Says `sendAfter` waits for that conversation's turn to end cleanly with work to look at, not for its work to land (AgentTurn `sendAfterTurn`). Only with `sendAfter`.",
+            ),
         ids: z
             .array(z.string().min(1))
             .optional()
@@ -489,6 +495,9 @@ export const QueueScheduleSchema = z
     })
     .refine((input) => input.sendAfter !== input.conversationId, {
         message: "a conversation cannot wait for its own work to land",
+    })
+    .refine((input) => input.sendAfterTurn === undefined || input.sendAfter !== undefined, {
+        message: "sendAfterTurn says what sendAfter waits for: name the conversation in sendAfter",
     });
 export type QueueSchedule = z.infer<typeof QueueScheduleSchema>;
 // Books the conversation to carry on from where its last turn stopped, at an instant or once another conversation's work

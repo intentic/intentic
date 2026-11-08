@@ -169,7 +169,11 @@ const openedEntry = (
     const held = existing ?? freshEntry(turn, now);
     return {
         ...held,
-        identity: { ...identityOf(held.identity, turn, entryOf), ...peopleOfConversation(held, turn, entryOf), ...servicesOfConversation(held, turn, entryOf) },
+        identity: {
+            ...identityOf(held.identity, turn, entryOf, held.totals.turns === 0),
+            ...peopleOfConversation(held, turn, entryOf),
+            ...servicesOfConversation(held, turn, entryOf),
+        },
         profile: settingsOf(held.profile, turn.profile),
         // Retire the old binding before a new runtime can fail without minting a session of its own.
         sessionId: routingFor(held.profile, turn.profile).continues ? held.sessionId : undefined,

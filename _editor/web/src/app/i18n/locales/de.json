@@ -1045,10 +1045,18 @@
                 "test": "Test",
                 "ask": "Eigener Auftrag"
             },
+            "kindAfterTurn": {
+                "review": "Code-Review nach diesem Zug",
+                "test": "Test nach diesem Zug"
+            },
             "anotherChat": "ein anderer Chat",
             "onWork": "Zur Arbeit von {title}, ohne deren Unterhaltung",
             "howItWorks": "Frische Sitzung",
             "howItWorksNote": "Sieht die Arbeit, nicht ihren Chat",
+            "afterTurnNote": "Startet, sobald dieser Zug endet",
+            "afterTurnTitle": "Nach seinem Zug",
+            "afterTurnSkips": "Nicht nach Fragen oder Fehlern",
+            "startsAfterTurn": "Startet, wenn sein Zug endet",
             "unlink": "Verknüpfung lösen",
             "unlinkNote": "Wird zu einem gewöhnlichen Chat",
             "menuFresh": "Frische Sitzung zu dieser Arbeit",
@@ -3200,6 +3208,7 @@
                 "used": "Belegt"
             },
             "sendsAfter": "sendet, nachdem {title} gelandet ist",
+            "sendsAfterTurn": "wird gesendet, wenn der Zug von {title} endet",
             "waitsForGone": "wartet auf einen Agenten, den es nicht mehr gibt",
             "change": "Ändern",
             "sendNowAfterNote": "Wird gesendet, ohne auf die Arbeit dieses Agenten zu warten.",
@@ -4540,6 +4549,7 @@
             "uncommitted": "Gelandete Arbeit bleibt nicht committet, und dieser Agent startet von Ihrem letzten Commit: Er sieht diese Arbeit erst, wenn sie committet ist.",
             "saveVersions": "Jedes Landen automatisch committen",
             "afterLands": "Nachdem {title} gelandet ist",
+            "afterTurn": "Nach dem Ende des Zugs von {title}",
             "scheduleAria": "Planen: {when}",
             "reschedule": "Sendezeitpunkt ändern",
             "anotherAgent": "ein anderer Agent",

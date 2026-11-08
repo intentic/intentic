@@ -57,7 +57,7 @@ export type SelfStart =
     | { readonly kind: `resend`; readonly text: string; readonly clock?: LimitClock }
     | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock }
     | { readonly kind: `room`; readonly text: string }
-    | { readonly kind: `send`; readonly text: string; readonly count: number; readonly clock?: LimitClock; readonly after?: string };
+    | { readonly kind: `send`; readonly text: string; readonly count: number; readonly clock?: LimitClock; readonly after?: string; readonly turn?: true };
 
 // The few characters of a title a corner names another agent by; past them the hover has it whole.
 const CORNER_TITLE = 24;
@@ -82,7 +82,9 @@ const sendCorner = (next: Extract<AgentNext, { kind: `send` | `land` }>, now: nu
     if (next.kind === `land`) {
         const title = titleOf?.(next.after);
         const after = title ?? t(`chat.sendLater.anotherAgent`);
-        return { kind: `send`, count: next.count, after, text: t(`chat.chatHeld.sendsAfter`, { title: title === undefined ? after : cornerTitle(title) }) };
+        const named = { title: title === undefined ? after : cornerTitle(title) };
+        const text = next.turn === true ? t(`chat.chatHeld.sendsAfterTurn`, named) : t(`chat.chatHeld.sendsAfter`, named);
+        return next.turn === true ? { kind: `send`, count: next.count, after, turn: true, text } : { kind: `send`, count: next.count, after, text };
     }
     const clock = countdownTo(next.at, now, true);
     if (clock === undefined) {

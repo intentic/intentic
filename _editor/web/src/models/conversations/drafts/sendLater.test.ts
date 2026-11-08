@@ -68,6 +68,7 @@ describe(`a picked time, said`, () => {
         const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined);
         expect(laterLabel({ kind: `after`, conversationId: `brave-otter` }, 0, titleOf)).toBe(`After Fix the login bug lands`);
         expect(laterLabel({ kind: `after`, conversationId: `gone-fox` }, 0, titleOf)).toBe(`After another agent lands`);
+        expect(laterLabel({ kind: `after`, conversationId: `brave-otter`, turn: true }, 0, titleOf)).toBe(`After Fix the login bug's turn ends`);
         expect(laterLabel({ kind: `at`, at: at(3, 9) }, at(FRIDAY, 14), titleOf)).toBe(formatUntil(at(3, 9), at(FRIDAY, 14)));
     });
 });
@@ -87,6 +88,7 @@ describe(`a pick on the wire, and back`, () => {
     it(`spells a time as sendAt and an agent as sendAfter`, () => {
         expect(bookingOf({ kind: `at`, at: 5_000 })).toEqual({ sendAt: 5_000 });
         expect(bookingOf({ kind: `after`, conversationId: `brave-otter` })).toEqual({ sendAfter: `brave-otter` });
+        expect(bookingOf({ kind: `after`, conversationId: `brave-otter`, turn: true })).toEqual({ sendAfter: `brave-otter`, sendAfterTurn: true });
     });
 
     // The queue's own fields: every message's booking from a sandbox that books the whole queue, the soonest message's

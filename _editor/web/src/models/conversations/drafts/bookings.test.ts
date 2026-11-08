@@ -25,6 +25,8 @@ describe(`a queue that books each message on its own`, () => {
         expect(bookingOfMessage(queue, queue.items[0]!)).toEqual({ kind: `at`, at: 5_000 });
         expect(bookingOfMessage(queue, queue.items[2]!)).toBeUndefined();
         expect(bookingOfMessage(queue, queue.items[3]!)).toEqual({ kind: `after`, conversationId: `brave-otter` });
+        // A review booked on that agent's work waits for its turn, and is not grouped with a wait for its land.
+        expect(bookingOfMessage(queue, message(`d`, { after: `brave-otter`, afterTurn: true }))).toEqual({ kind: `after`, conversationId: `brave-otter`, turn: true });
         expect(holdOfQueue(queue)).toBe(`stopped`);
         expect(unbookedOf(queue).map((item) => item.id)).toEqual([`held`]);
     });

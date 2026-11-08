@@ -167,7 +167,11 @@ export const withBooked = (
     if (held.paused === `scheduled` && !perMessage(held)) {
         return { items: [...held.items, item], revision, paused: `scheduled`, ...waitsFor };
     }
-    // Otherwise the message carries its own booking, and every other keeps its own.
+    // Otherwise the message carries its own booking, and every other keeps its own: a turn's end said as the sandbox says it.
+    const booked: QueuedMessage = { ...item, ...waitsFor };
+    if (booking.sendAfterTurn === true) {
+        booked.afterTurn = true;
+    }
     const hold = holdOfQueue(held);
-    return queueFromMessages([...held.items, { ...item, ...waitsFor }], revision, hold === `scheduled` ? undefined : hold);
+    return queueFromMessages([...held.items, booked], revision, hold === `scheduled` ? undefined : hold);
 };

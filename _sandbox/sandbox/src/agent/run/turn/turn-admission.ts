@@ -504,7 +504,7 @@ export const createAdmission = (
         // What waits, booked anew (only the messages named, when any are): held by whatever held it before or by nothing
         // (messages behind a running turn), it now waits for this. Nothing left to wait for lets it go now, as a release
         // would. A message named that no longer waits is missing, and nothing is re-timed in its place.
-        reschedule: ({ conversationId, sendAt, sendAfter, sendAtReopen, ids }) =>
+        reschedule: ({ conversationId, sendAt, sendAfter, sendAtReopen, sendAfterTurn, ids }) =>
             inTurn(conversationId, async () => {
                 const daemon = services();
                 const { items } = daemon.conversations.queued(conversationId);
@@ -513,7 +513,7 @@ export const createAdmission = (
                 }
                 // A reopen is waited out where the words go: the newest person's among them, whose routing their turn takes.
                 const routedBy = items.findLast((item) => item.voice === "person" && (ids === undefined || ids.includes(item.id)))?.turn;
-                const ask = { conversationId, sendAt, sendAfter, sendAtReopen, agent: routedBy?.agent, account: routedBy?.account };
+                const ask = { conversationId, sendAt, sendAfter, sendAtReopen, sendAfterTurn, agent: routedBy?.agent, account: routedBy?.account };
                 const booking = bookingOfAsk(daemon, ask, Date.now());
                 if (unbookable(booking)) {
                     return { invalid: "invalid" in booking ? booking.invalid : booking.why };

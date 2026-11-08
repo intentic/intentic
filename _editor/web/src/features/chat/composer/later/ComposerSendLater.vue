@@ -77,7 +77,8 @@ const landsWords = (lands: LandsHow): string => {
     }
 };
 
-const pickedAfter = computed(() => (props.picked?.kind === `after` ? props.picked.conversationId : undefined));
+// A booking on an agent's turn (a review booked on its work, freshSession.ts) is not this menu's "after it lands" row.
+const pickedAfter = computed(() => (props.picked?.kind === `after` && props.picked.turn !== true ? props.picked.conversationId : undefined));
 const pickedAt = computed(() => (props.picked?.kind === `at` ? props.picked.at : undefined));
 // A picked time no hour on the grid names: the reader's own, said on its row.
 const pickedOwn = computed(() => pickedAt.value !== undefined && !hours.value.some((hour) => hour.at === pickedAt.value));

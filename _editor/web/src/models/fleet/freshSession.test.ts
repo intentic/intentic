@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import { t } from "@intentic/ui/i18n";
 import { NO_ATTENTION } from "../agent-status/agentStatus-lanes";
-import { canStartFresh, checksOf, freshDraft, freshKindsOf } from "./freshSession";
+import { canScheduleFresh, canStartFresh, checksOf, freshAfterTurn, freshDraft, freshKindLabel, freshKindsOf } from "./freshSession";
 import type { FleetAgent } from "./useAgents-fleet";
 
 // Pins what a fresh session opens with for each kind and harness, which cards may start one, and what the origin's card
@@ -70,6 +70,37 @@ describe(`which cards a fresh session can start on`, () => {
         expect(canStartFresh(card(`a`, { ...WORK, runner: `laptop` }), `ask`)).toBe(false);
         expect(canStartFresh(card(`a`, { ...WORK, archivedAt: 5 }), `ask`)).toBe(false);
         expect(canStartFresh(card(`a`, { ...WORK, sandboxId: `other` }), `ask`)).toBe(false);
+    });
+});
+
+// A check asked for while the turn is still live is booked for that turn's end (AgentTurn.sendAfterTurn): offered on a
+// private copy here with nothing yet required of its diff, since the turn may be the one making it.
+describe(`a check booked for the end of a turn still at work`, () => {
+    it(`is offered while the turn works, a card parked on a question included, and never for the reader's own ask`, () => {
+        for (const status of [`running`, `starting`, `awaiting`, `resuming`] as const) {
+            expect(canScheduleFresh(card(`a`, { ...WORK, status }))).toBe(true);
+            expect(canScheduleFresh(card(`a`, { ...WORK, status, diff: undefined }), `test`)).toBe(true);
+            expect(canScheduleFresh(card(`a`, { ...WORK, status }), `ask`)).toBe(false);
+        }
+    });
+
+    it(`is not offered on work at rest, mid-land, or without a private copy here, nor on a fresh session itself`, () => {
+        expect(canScheduleFresh(card(`a`, { ...WORK, status: `ready` }))).toBe(false);
+        expect(canScheduleFresh(card(`a`, { ...WORK, status: `landing` }))).toBe(false);
+        expect(canScheduleFresh(card(`a`, { diff: WORK.diff, status: `running` }))).toBe(false);
+        expect(canScheduleFresh(card(`a`, { ...WORK, status: `running`, runner: `laptop` }))).toBe(false);
+        expect(canScheduleFresh(card(`a`, { ...WORK, status: `running`, archivedAt: 5 }))).toBe(false);
+        expect(canScheduleFresh(card(`a`, { ...WORK, status: `running`, fresh: { of: `o`, kind: `review`, at: 1 } }))).toBe(false);
+    });
+
+    it(`offers every kind on a working card, the checks booked and the reader's own ask now, and says which is which`, () => {
+        const working = card(`a`, { ...WORK, status: `running` });
+        expect(freshKindsOf(working)).toEqual([`review`, `test`, `ask`]);
+        expect(freshAfterTurn(working, `review`)).toBe(true);
+        expect(freshAfterTurn(working, `ask`)).toBe(false);
+        expect(freshKindLabel(working, `review`)).toBe(t(`agents.freshSession.kindAfterTurn.review`));
+        expect(freshKindLabel(working, `ask`)).toBe(t(`agents.freshSession.kind.ask`));
+        expect(freshKindLabel(card(`a`, { ...WORK, status: `ready` }), `review`)).toBe(t(`agents.freshSession.kind.review`));
     });
 });
 
