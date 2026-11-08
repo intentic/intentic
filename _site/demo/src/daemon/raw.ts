@@ -36,6 +36,7 @@ import { officeResponse } from "../fixture/offices/office";
 import { vendoredBundle } from "../fixture/sandbox";
 import { demoSelf } from "../floors";
 import { json } from "../transport";
+import { conversationBundle } from "./board/bundle";
 import { STARTED_AT } from "./board/roster";
 
 // The routes the daemon serves outside oRPC that the app reaches here: file bytes, the members roster, control
@@ -171,6 +172,8 @@ export const raw = {
         } satisfies SandboxVitals),
     // A conversation's recorded document: the same bytes, since the fixture keeps one tree and every result is in it.
     "GET /agents/{id}/documents/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
+    // A conversation's debug bundle, as the session menu's Download debug bundle saves it (board/bundle.ts).
+    "GET /fleet/{handle}/bundle": ({ param }) => json(conversationBundle(param(`handle`))),
     // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.
     "POST /workspace/upload-diff": () => json({ skip: [] }),
     // The one binary diff the demo carries whole: the handover document, both versions built in code.

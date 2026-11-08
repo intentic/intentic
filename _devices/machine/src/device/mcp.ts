@@ -48,6 +48,7 @@ import {
     shapeSandbox,
     swapSandbox,
 } from "./tools/sandboxes.js";
+import { InspectCommandSchema, inspectSandbox, MAX_INSPECT_ARG_LENGTH, MAX_INSPECT_ARGS } from "./tools/inspect/inspect-sandbox.js";
 import { osTools } from "./tools/os/os.js";
 import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
@@ -663,6 +664,23 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .describe(`How many trailing lines to answer with. Default ${DEFAULT_LOG_LINES}, maximum ${MAX_LOG_LINES}.`),
         }),
         run: async ({ slug, lines }, scopes) => textResult(await sandboxLogs(slug, lines, scopes)),
+    }),
+    tool({
+        name: "inspect_sandbox",
+        description:
+            'Read another Intentic sandbox on this device: its conversations, transcripts, daemon log and diagnostics, as that sandbox\'s own `agents` and `diagnostics` commands answer them, through the device\'s `ic sandbox inspect`. `args` are the command\'s own words: agents ls, show, find or bundle (one conversation\'s debug bundle as JSON); diagnostics errors, slow, turns, resources, restarts or timeline; or `["--help"]`. For example {command: "agents", args: ["show", "glad-falcon-puep", "--transcript", "--last", "40"]}, {command: "agents", args: ["find", "docker exec", "--limit", "10"]}, {command: "diagnostics", args: ["timeline", "glad-falcon-puep"]} or {command: "diagnostics", args: ["errors", "--since", "60"]}. Read-only: every other verb, `--on` (a linked sandbox) and `--out` (a file) are refused. It reads as a caller with no conversation, so the sandbox answers only about conversations that are nobody\'s home and not private. Use this instead of `docker exec` through run_command, which reads the container as root. A stopped or sleeping sandbox is said as such, and one whose image predates the command (`diagnostics`, `agents bundle`) is told to update. Requires \'Run commands\' or \'Manage sandboxes on this device\'.',
+        effect: "read",
+        input: z.object({
+            slug: required.describe("The sandbox's slug, from list_sandboxes."),
+            command: InspectCommandSchema.describe("Which of the sandbox's commands answers: `agents` (its conversations) or `diagnostics` (its daemon's records)."),
+            args: z
+                .array(z.string().max(MAX_INSPECT_ARG_LENGTH))
+                .max(MAX_INSPECT_ARGS)
+                .describe(
+                    `The command's words, the verb first, each its own item, e.g. ["show", "glad-falcon-puep", "--transcript"]. At most ${MAX_INSPECT_ARGS} items of ${MAX_INSPECT_ARG_LENGTH} characters each.`,
+                ),
+        }),
+        run: async ({ slug, command, args }, scopes) => textResult(await inspectSandbox(slug, command, args, scopes)),
     }),
     tool({
         name: "device_logs",

@@ -897,7 +897,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "name", label: "What it is called", advanced: true },
         ],
         guide: {
-            scopes: "Starts, follows up on and stops the tasks it hands over, and reads what they report. Nothing else of that sandbox: not its files, its other conversations or its settings",
+            scopes: "Starts, follows up on and stops the tasks it hands over, and reads what they report. When that sandbox's owner shares its records on the link, also reads its conversations, logs and diagnostics, read-only. Never its files or its settings",
             steps: [
                 "Open the other sandbox → `Sandbox` → `Access` → `Linked sandboxes` → `New link`, and name this sandbox there.",
                 "Choose what its tasks wear (a persona), whether each one waits for you, and how many turns an hour it may start.",

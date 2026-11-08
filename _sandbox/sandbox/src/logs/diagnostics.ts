@@ -53,6 +53,8 @@ export interface LogLineQuery {
     // Inclusive floor: "warn" returns warn, error and fatal.
     readonly level?: LevelName | undefined;
     readonly sinceMs?: number | undefined;
+    // An absolute window's end: a line stamped later than this is left out.
+    readonly untilMs?: number | undefined;
     // Case-insensitive substring matched against the whole serialized line, not one field.
     readonly contains?: string | undefined;
     // Narrows further on the parsed line.
@@ -106,6 +108,9 @@ export const readLogLines = async (historyRoot: string, query: LogLineQuery): Pr
         await logPaths(historyRoot, query.file),
         { sinceMs: query.sinceMs, budgetBytes: query.budgetBytes ?? LOG_BUDGET_BYTES },
         (raw, at) => {
+            if (query.untilMs !== undefined && at !== undefined && at > query.untilMs) {
+                return;
+            }
             if (!atLeastLevel(raw, floor) || (needle !== undefined && !raw.toLowerCase().includes(needle))) {
                 return;
             }

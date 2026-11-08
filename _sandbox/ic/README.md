@@ -373,6 +373,16 @@ flowchart LR
     container's `--dns`, since docker's resolver forwards from the container's side of the fence.
 - `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
   agent's Logs button and `sandbox_logs` tool read.
+- `ic sandbox inspect <slug> <agents|diagnostics> [args…]` ([inspect.rs](src/sandbox/inspect.rs)) reads a sandbox's
+  conversations, transcripts and diagnostics through its own `agents` and `diagnostics` commands, run by `docker exec`
+  as argv (no shell) with a 60-second deadline; their output and exit code are its own. Only reads run: `agents ls`,
+  `show`, `find` and `bundle`, every `diagnostics` verb (`errors`, `slow`, `turns`, `resources`, `restarts`,
+  `timeline`), or either one's `--help`. Every other verb, `--on` (a linked sandbox) and `--out` (a file) are refused,
+  wherever they stand. The exec carries no conversation, so the sandbox answers it as an unstamped caller: only about
+  conversations that are nobody's home and not private. A stopped or sleeping sandbox is said as such, and an image
+  older than the command is told to update. It is what the machine agent's `inspect_sandbox` tool runs, in place of an
+  agent's own `docker exec` through `run_command`, which is how one once read another sandbox's /history as root.
+  Put `--` before the command's words when the first is a flag (`ic sandbox inspect work agents -- --help`).
 - `ic sandbox fix [<slug>]` ([src/sandbox/fix/mod.rs](src/sandbox/fix/mod.rs)) checks every layer between this
   machine and a sandbox in order, each with a deadline: Windows prerequisites, Docker Desktop, the engine, WSL, disk,
   the container, its daemon, its registration, the network, the tunnel and the machine agent. It applies the fixes that

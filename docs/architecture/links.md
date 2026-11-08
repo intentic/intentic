@@ -67,12 +67,37 @@ A link between owners (an agency and its client, one team and another) needs thr
 
 Until then, a person in the other organization is reached the way people already are: as a member of the sandbox, with their own reach.
 
+## Records links
+
+A link can also let the asking sandbox read this one's records, so a problem the owner met here can be looked into from
+their other sandbox without starting a turn here. Its `records` term is off unless this sandbox's owner turns on **Share
+records** on the inbound link. While it is on, four read-only doors answer the link token
+([`link-records.ts`](../../_sandbox/sandbox/src/links/link-records.ts)): the roster or a phrase search, one conversation
+with its transcript, one conversation's debug bundle, and one diagnostics query (the daemon log, the editor's reports,
+turns, restarts, slow spans, resources, a conversation's timeline). Each answer is the one this sandbox gives its own
+agents (`agents ls|find|show|bundle`, `diagnostics`), each read is logged with the link's name, and nothing through them
+can change anything. They read as this sandbox's own tools do: every conversation but a private one, whoever's it is,
+since sharing is the owner's choice for the whole sandbox. A link that shares records reaches no task door it did not
+already reach.
+
+On the asking side the agent reads them with `--on <link>` on those commands, which its daemon relays with the card's
+token ([`link-records-relay.ts`](../../_sandbox/sandbox/src/links/link-records-relay.ts)), or with the link's tool server
+(`conversations`, `conversation`, `diagnostics`). A turn reaches only the cards it was granted, the rule a delegated task
+is held to, so a persona that leaves a link out leaves its records out too.
+
+Two other ways in, for a sandbox not linked: on one of the owner's computers, the machine agent's `inspect_sandbox` runs
+the sandbox's own `agents` and `diagnostics` read-only through `ic sandbox inspect`, which refuses every other command;
+and anywhere, a conversation's debug bundle (`agents bundle`, or the editor's download) carries the same reads in one
+file.
+
 ## Key files
 
 - [inbound-links.ts](../../_sandbox/sandbox/src/links/inbound-links.ts): the taking side's store.
 - [link-tasks.ts](../../_sandbox/sandbox/src/links/link-tasks.ts): what a task becomes there.
 - [linked-children.ts](../../_sandbox/sandbox/src/links/linked-children.ts): the asking side's follower and roster records.
 - [link-mounts.ts](../../_sandbox/sandbox/src/links/link-mounts.ts): each linked sandbox as a turn's tool server.
+- [link-records.ts](../../_sandbox/sandbox/src/links/link-records.ts) and [link-records-relay.ts](../../_sandbox/sandbox/src/links/link-records-relay.ts): a records link's doors, and the asking side's `--on`.
+- [link-records.integration.test.ts](../../_sandbox/sandbox/src/links/tests/link-records.integration.test.ts): records off and on, and the relay between two daemons over HTTP.
 - [links.ts](../../_shared/sandbox-contract/src/schemas/links.ts): the wire shapes both sides share.
 - [links/accounts/](../../_sandbox/sandbox/src/links/accounts/): an accounts link's doors, what this sandbox holds, and bringing accounts in.
 - [link-accounts.integration.test.ts](../../_sandbox/sandbox/src/links/tests/link-accounts.integration.test.ts): lending and borrowing over HTTP.

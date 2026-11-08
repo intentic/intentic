@@ -86,7 +86,13 @@ flowchart LR
   `sandboxPowerCommands`). `diagnose_sandbox` is
   `ic sandbox doctor <slug> --json`, read-only and gated like the logs (`shell` or `sandboxes`), so an agent in another
   sandbox can find out why one on this device is unreachable; it skips the listing, which cannot answer while Docker is
-  down, and refuses a slug ic would read as a flag. The shape reaches ic as the
+  down, and refuses a slug ic would read as a flag. `inspect_sandbox`
+  ([`tools/inspect/inspect-sandbox.ts`](src/device/tools/inspect/inspect-sandbox.ts)) is `ic sandbox inspect <slug> <agents|diagnostics>
+  -- <args…>`, gated the same way: another sandbox's conversations, transcripts and diagnostics as its own `agents` and
+  `diagnostics` commands answer them, in place of `docker exec` through `run_command`. Only reads run (`agents` ls,
+  show, find, bundle; every `diagnostics` verb; `--help`); every other verb, `--on` and `--out` are refused here and
+  again by ic, at most 24 arguments of 500 characters, the answer cut to 100,000 characters from the middle. An ic from
+  before `inspect` is said as one. The shape reaches ic as the
   contract's own object (`--set memoryGib=12`), so no flag of ic's is spelled here; the old `reshape` op is carried
   out through the same verb. A rollback's `to` becomes `ic sandbox rollback <slug> --to <version>`. A sandbox an
   interrupted swap left parked is listed under its own slug and found like any other, so start, rollback and update

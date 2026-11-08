@@ -394,6 +394,7 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/secrets \
     _sandbox/sandbox/bin/privacy \
     _sandbox/sandbox/bin/agents \
+    _sandbox/sandbox/bin/diagnostics \
     _sandbox/sandbox/bin/devices \
     _sandbox/sandbox/bin/offload-run \
     _sandbox/sandbox/bin/on-screen \

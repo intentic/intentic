@@ -27,7 +27,7 @@
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
 // five /children routes and the two /fleet reads this command drives, and nothing credential-shaped.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 
 const TOKEN_PATH = "/run/intentic/agent.token";
@@ -68,6 +68,14 @@ LOOK UP — reach for these instead of searching /history by hand
                                        which conversations said or did this, with the line that proves it,
                                        marked by kind: user (asked by its user), said, ran (a tool call's
                                        name and target), asked (a question card), notice, run
+  agents bundle <handle> [--out <file>] [--on <link>]
+                                       one conversation's debug bundle as JSON: its show, its record as
+                                       stored, and the diagnostics about it (timeline, turns, log errors,
+                                       restarts, the editor's reports). For looking into it from somewhere
+                                       else; --out writes it to a file instead of printing it
+  ... --on <link>                      ls, find, show and bundle read a LINKED sandbox's conversations
+                                       instead, when its owner shares records on the link (\`agents links\`
+                                       says which do); \`diagnostics … --on <link>\` reads its logs
 
 SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
   agents message <handle> '<text>' [--wait] [--timeout <seconds>]
@@ -382,8 +390,8 @@ const writeRoster = (agents) => {
 };
 
 const ls = async (argv) => {
-    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], {});
-    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
+    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json", "on"], ["all", "json"], {});
+    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner, on: flags.on })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
@@ -397,12 +405,12 @@ const ls = async (argv) => {
 
 const find = async (argv) => {
     const usage = usageOf("find");
-    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], { "-i": null }, usage);
+    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json", "on"], ["all", "json"], { "-i": null }, usage);
     const text = positional.join(" ").trim();
     if (text === "") {
         return die(`agents: find needs something to look for\n\n${usage}`);
     }
-    const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
+    const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner, on: flags.on })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
@@ -665,7 +673,7 @@ const writeMessage = (agent, message) => {
 const show = async (argv) => {
     const { flags, positional } = parseFlags(
         argv,
-        ["transcript", "last", "grep", "message", "no-diff", "json", "stored"],
+        ["transcript", "last", "grep", "message", "no-diff", "json", "stored", "on"],
         ["transcript", "no-diff", "json", "stored"],
         { "-i": null },
     );
@@ -688,6 +696,7 @@ const show = async (argv) => {
             grep: flags.grep,
             message: flags.message,
             stored: flags.stored === true,
+            on: flags.on,
         })}`,
     );
     // What the daemon keeps, raw: a diagnosis reads the rows themselves, so they are never summarized.
@@ -715,6 +724,25 @@ const show = async (argv) => {
     if (answer.transcript.total > answer.transcript.messages.length) {
         process.stdout.write(`more: agents show ${answer.agent.id} --transcript --last ${answer.transcript.total}\n`);
     }
+};
+
+// One conversation's debug bundle, whole, as the daemon puts it together (src/conversations/recall/fleet-bundle.ts):
+// printed for a pipe, or written where --out says.
+const bundle = async (argv) => {
+    const usage = usageOf("bundle");
+    const { flags, positional } = parseFlags(argv, ["out", "on"], [], {}, usage);
+    const handle = positional.join(" ").trim();
+    if (handle === "") {
+        return die(`agents: bundle needs a conversation to look up\n\n${usage}`);
+    }
+    const answer = await read(`/fleet/${encodeURIComponent(handle)}/bundle?${query({ on: flags.on })}`);
+    const text = `${JSON.stringify(answer, undefined, 2)}\n`;
+    if (flags.out === undefined) {
+        process.stdout.write(text);
+        return;
+    }
+    writeFileSync(flags.out, text);
+    process.stdout.write(`Wrote ${answer.conversation}'s bundle (${Math.round(text.length / 1024)} KB) to ${flags.out}.\n`);
 };
 
 // What a child could be started on right now, and what still has allowance. The daemon renders the lines
@@ -808,7 +836,12 @@ const links = async () => {
     }
     for (const link of answer.links) {
         const terms = link.online
-            ? [link.persona === undefined ? "no persona" : `wears ${link.persona}`, link.approve ? "each task waits for its owner" : "starts at once", `${link.turnsPerHour} turns/h`].join(" · ")
+            ? [
+                  link.persona === undefined ? "no persona" : `wears ${link.persona}`,
+                  link.approve ? "each task waits for its owner" : "starts at once",
+                  `${link.turnsPerHour} turns/h`,
+                  link.records ? "shares records (--on)" : "shares no records",
+              ].join(" · ")
             : `offline: ${link.why ?? "no answer"}`;
         process.stdout.write(`${link.to}  "${link.sandbox}"  ${terms}\n`);
     }
@@ -1081,12 +1114,13 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${command === "find" || command === "message" ? usageOf(command) : USAGE}\n`);
+        process.stdout.write(`${command === "find" || command === "message" || command === "bundle" ? usageOf(command) : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);
     if (command === "ls") return ls(rest);
     if (command === "find") return find(rest);
+    if (command === "bundle") return bundle(rest);
     if (command === "providers") return providers(rest);
     if (command === "spawn") return spawn(rest);
     if (command === "delegate") return delegate(rest);

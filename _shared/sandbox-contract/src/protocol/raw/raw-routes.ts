@@ -168,6 +168,11 @@ export const RAW_ROUTES = {
     "POST /fleet/message": { agent: true },
     "POST /fleet/resume": { agent: true },
     "GET /fleet/{handle}": { agent: true },
+    // One conversation's debug bundle (schemas/diagnostics.ts): `agents bundle`, and the editor's download of it. It
+    // carries the daemon's log lines about it, so a person reads it at the floor the logs are read at.
+    "GET /fleet/{handle}/bundle": { agent: true, floor: "maintainer", control: "never" },
+    // The `diagnostics` command: one read-only question of the daemon's records, or of a linked sandbox's with `on`.
+    "POST /diagnostics": { agent: true, floor: "maintainer", control: "never" },
     // The `devices push` CLI: a program the agent built, carried to one of the owner's computers in chunks; held to the
     // devices the calling conversation's turn mounts, and refused by the machine itself unless "Run programs" is on.
     "POST /devices/{name}/artifacts": { agent: true, control: "never" },
@@ -284,6 +289,13 @@ export const RAW_ROUTES = {
     "POST /link/conversations/{id}/messages": { auth: "door", control: "never" },
     "POST /link/conversations/{id}/answer": { auth: "door", control: "never" },
     "POST /link/conversations/{id}/stop": { auth: "door", control: "never" },
+    // A link's records doors (schemas/links.ts `records`): the asking sandbox reading this one's conversations, logs and
+    // diagnostics without starting a turn. Each checks the link token itself and answers only while the link's terms
+    // share records; none can change anything.
+    "GET /link/records/fleet": { auth: "door", control: "never" },
+    "GET /link/records/fleet/{handle}": { auth: "door", control: "never" },
+    "GET /link/records/fleet/{handle}/bundle": { auth: "door", control: "never" },
+    "POST /link/records/diagnostics": { auth: "door", control: "never" },
     // An accounts link's doors (schemas/providers/account-sharing.ts): the accounts its terms name, a static key's copy,
     // and a lent sign-in's access token per turn, re-minted mid-turn. The refresh token never leaves; each door checks the
     // link token itself and answers only for what the terms name.

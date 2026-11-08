@@ -62,7 +62,8 @@ export const devicesFull = (facts: Facts, { ids, self, slug, machines }: HostDev
         `${behind(facts, ids[0] ?? "device")}. ${which} When something has to happen out ` +
         `there, DO IT and report what came back: \`run_command\` takes a working directory and a deadline of up to ten ` +
         `minutes, \`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +
-        `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container. Do not write a ` +
+        `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container; ` +
+        `\`inspect_sandbox\` reads another sandbox's conversations and logs there, never \`docker exec\`. Do not write a ` +
         `command out for the owner to run on a machine you can reach — the editor already drives that box for port ` +
         `mirroring, file syncing and container management, and they are reading your message rather than sitting at its ` +
         `terminal. Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +

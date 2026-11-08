@@ -36,6 +36,11 @@ const turnsPerHourTerm = z
 const tasksTerm = z
     .boolean()
     .describe("Whether the link may hand this sandbox tasks at all. An accounts link is minted without: it only borrows and copies the accounts below.");
+const recordsTerm = z
+    .boolean()
+    .describe(
+        "Whether the asking sandbox may read this sandbox's records without starting a turn: its conversations (every one but a private one) and their transcripts, its daemon's log and diagnostics. Read-only, and each read is logged here. For looking into a problem from the other sandbox; off unless its owner turns it on.",
+    );
 const accountsTerm = z
     .array(SharedAccountRefSchema)
     .max(64)
@@ -58,6 +63,7 @@ export const LinkTermsSchema = z.object({
     approve: approveTerm.default(false),
     turnsPerHour: turnsPerHourTerm.default(LINK_TURNS_PER_HOUR_DEFAULT),
     tasks: tasksTerm.default(true),
+    records: recordsTerm.default(false),
     accounts: accountsTerm.default([]),
 });
 export type LinkTerms = z.infer<typeof LinkTermsSchema>;
@@ -117,6 +123,7 @@ export const InboundLinkTermsUpdateSchema = z.object({
     approve: approveTerm.optional(),
     turnsPerHour: turnsPerHourTerm.optional(),
     tasks: tasksTerm.optional(),
+    records: recordsTerm.optional(),
     accounts: accountsTerm.optional(),
 });
 export type InboundLinkTermsUpdate = z.infer<typeof InboundLinkTermsUpdateSchema>;
@@ -137,6 +144,8 @@ export const LinkHelloSchema = z.object({
         // Absent from a sandbox older than accounts links, which takes tasks and lends nothing.
         tasks: z.boolean().optional(),
         accounts: z.number().int().nonnegative().optional().describe("How many accounts the link may use."),
+        // Absent from a sandbox older than records over links, which shares none.
+        records: z.boolean().optional().describe("Whether the link may read this sandbox's records (its conversations, logs and diagnostics)."),
     }),
     maxHops: z.number().int(),
 });

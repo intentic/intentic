@@ -53,6 +53,10 @@ export const UNSERVED = {
     // link token, never the editor.
     "GET /link/accounts": NOT_THE_EDITORS,
     "GET /link/conversations/{id}": NOT_THE_EDITORS,
+    // A link's records doors: the reading sandbox's daemon calls them with the link token, never the editor.
+    "GET /link/records/fleet": NOT_THE_EDITORS,
+    "GET /link/records/fleet/{handle}": NOT_THE_EDITORS,
+    "GET /link/records/fleet/{handle}/bundle": NOT_THE_EDITORS,
     "GET /listeners/{provider}/state": NOT_THE_EDITORS,
     "GET /sandboxes": NOT_THE_EDITORS,
     "GET /system/hosts/connect": NOT_THE_EDITORS,
@@ -90,6 +94,8 @@ export const UNSERVED = {
     "POST /devices/{name}/apps/stop": NOT_THE_EDITORS,
     "POST /devices/{name}/artifacts": NOT_THE_EDITORS,
     "POST /devices/{name}/tunnels": NOT_THE_EDITORS,
+    // The `diagnostics` command on the agent's PATH; the editor reads the same records through the logs routes.
+    "POST /diagnostics": NOT_THE_EDITORS,
     "POST /enroll": NOT_THE_EDITORS,
     "POST /fleet/message": NOT_THE_EDITORS,
     "POST /fleet/resume": NOT_THE_EDITORS,
@@ -101,6 +107,7 @@ export const UNSERVED = {
     "POST /link/conversations/{id}/stop": NOT_THE_EDITORS,
     "POST /link/credentials": NOT_THE_EDITORS,
     "POST /link/credentials/refresh": NOT_THE_EDITORS,
+    "POST /link/records/diagnostics": NOT_THE_EDITORS,
     "POST /listeners/{provider}/dispatch": NOT_THE_EDITORS,
     "POST /listeners/{provider}/failure": NOT_THE_EDITORS,
     "POST /listeners/{provider}/status": NOT_THE_EDITORS,

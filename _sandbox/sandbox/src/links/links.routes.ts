@@ -1,7 +1,6 @@
 import {
     InboundLinkMintSchema,
     InboundLinkTermsUpdateSchema,
-    LINK_HEADER,
     LINK_MAX_HOPS,
     LinkAnswerSchema,
     type LinkHello,
@@ -30,6 +29,7 @@ import {
     stopTask,
 } from "./link-tasks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { presentedLink } from "./link-door.js";
 import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
 import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
 import { toRunnerCredential } from "../sandboxes/credential-lending.js";
@@ -109,21 +109,11 @@ const helloOf = async (deps: LinkRoutesDeps, link: ResolvedLink): Promise<LinkHe
             turnsPerHour: link.terms.turnsPerHour,
             ...opt("persona", persona === undefined ? undefined : (persona.label ?? persona.id)),
             tasks: link.terms.tasks,
+            records: link.terms.records,
             accounts: link.terms.accounts.length,
         },
         maxHops: LINK_MAX_HOPS,
     };
-};
-
-// The link this request presents, or the refusal: a token nothing here was minted as, or one since revoked, reads the
-// same, since telling them apart would tell a stranger which tokens once worked.
-const presentedLink = async (deps: Pick<LinkRoutesDeps, "links" | "logger">, c: Context<AppEnv>): Promise<ResolvedLink | Response> => {
-    const link = await deps.links.resolve(c.req.header(LINK_HEADER) ?? "");
-    if (link === undefined) {
-        return c.json({ error: "This link is not one this sandbox holds: it was revoked, or never minted here. Its owner can link the two sandboxes again." }, 401);
-    }
-    void deps.links.touch(link.id).catch((error: Error) => deps.logger.warn({ err: error, link: link.id }, "link: last use not recorded"));
-    return link;
 };
 
 export const createLinkRoutes = (deps: LinkRoutesDeps) => {

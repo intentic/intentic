@@ -112,6 +112,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "reshape_sandbox",
         "remove_sandbox",
         "sandbox_logs",
+        "inspect_sandbox",
         "device_logs",
         "diagnose_sandbox",
     ]);
@@ -162,6 +163,15 @@ test("an argument the schema does not accept is a readable result, and nothing i
     const flagSlug = await call("diagnose_sandbox", { slug: "--help" }, scopes());
     expect(flagSlug.isError).toBe(true);
     expect(flagSlug.text).toBe('"--help" is not a sandbox slug; list_sandboxes names them.');
+    // A read inspect_sandbox does not run is refused, naming what it does run, before ic is asked.
+    const notARead = await call("inspect_sandbox", { slug: "work", command: "agents", args: ["message", "glad-falcon-puep", "hi"] }, scopes());
+    expect(notARead.isError).toBe(true);
+    expect(notARead.text).toMatch(/does not run agents message.*Allowed: agents ls, show, find or bundle/);
+    const notACommand = await call("inspect_sandbox", { slug: "work", command: "sh", args: ["-c", "id"] }, scopes());
+    expect(notACommand.isError).toBe(true);
+    expect(notACommand.text).toMatch(/command/);
+    const tooManyWords = await call("inspect_sandbox", { slug: "work", command: "agents", args: Array.from({ length: 25 }, () => "x") }, scopes());
+    expect(tooManyWords.isError).toBe(true);
     const noPath = await call("read_file", { path: "" }, scopes());
     expect(noPath.isError).toBe(true);
 });
@@ -184,6 +194,14 @@ test("a refused scope comes back as a readable tool RESULT, not a transport erro
     const undiagnosed = await call("diagnose_sandbox", { slug: "work" }, scopes({ shell: "off", sandboxes: "off" }));
     expect(undiagnosed.isError).toBe(true);
     expect(undiagnosed.text).toMatch(/Manage sandboxes on this device.*switched off/);
+    // Reading another sandbox's records is a way of seeing too, gated the same way.
+    const uninspected = await call(
+        "inspect_sandbox",
+        { slug: "work", command: "diagnostics", args: ["errors"] },
+        scopes({ shell: "off", sandboxes: "off" }),
+    );
+    expect(uninspected.isError).toBe(true);
+    expect(uninspected.text).toMatch(/Manage sandboxes on this device.*switched off/);
 });
 
 test("writing outside the allowed folders is refused", async () => {
@@ -256,6 +274,7 @@ test("every tool says what a call can do to the device", async () => {
         "app_logs",
         "list_sandboxes",
         "sandbox_logs",
+        "inspect_sandbox",
         "device_logs",
         "diagnose_sandbox",
     ]);

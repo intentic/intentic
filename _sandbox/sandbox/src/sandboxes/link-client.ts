@@ -8,6 +8,7 @@ import {
     type LinkTaskStatus,
 } from "@intentic/sandbox-contract/schemas/links";
 import type { LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DiagnosticsAnswer, DiagnosticsQuery } from "@intentic/sandbox-contract/schemas/diagnostics";
 import type { LinkAccountCopy, LinkAccounts, SharedAccountRef } from "@intentic/sandbox-contract/schemas/providers/account-sharing";
 import type {
     RunnerCredential,
@@ -187,4 +188,42 @@ export const linkCredentialRefresh = (target: LinkTarget, request: RunnerCredent
         path: rawRouteUrl("POST /link/credentials/refresh"),
         body: request,
         schema: RAW_JSON_ROUTES["POST /link/credentials/refresh"].output,
+    });
+
+/* A link's records doors (schemas/links.ts `records`): read by the asking side's daemon for its agent's `--on <link>`. */
+
+// A records read relayed as the far side answered it, status and body, so the asking agent reads that sandbox's own
+// refusal (an unknown handle, an ambiguous one with its candidates) exactly as it would read this one's.
+// The body as JSON, kept whole: the fleet reads have no shared schema, and the asking command prints them as they came.
+// Only the two fields a refusal words itself with are read here.
+const RecordsBodySchema = z.looseObject({ error: z.string().optional(), message: z.string().optional() });
+export type LinkRecordsBody = z.infer<typeof RecordsBodySchema>;
+export type LinkRead =
+    | { readonly ok: true; readonly status: number; readonly body: LinkRecordsBody }
+    | { readonly ok: false; readonly status: 0; readonly message: string };
+
+/** GET /link/records/fleet…: one of the fleet reads, its path and query already spelled. */
+export const linkRecordsRead = async (target: LinkTarget, path: string): Promise<LinkRead> => {
+    try {
+        const response = await fetch(new URL(path, target.config.url), {
+            headers: { [LINK_HEADER]: target.config.token },
+            redirect: "manual",
+            signal: AbortSignal.timeout(CALL_MS * 3),
+        });
+        // allow(silent-catch): an answer that is not JSON is relayed as its status alone.
+        const parsed = RecordsBodySchema.safeParse(await response.json().catch(() => undefined));
+        return { ok: true, status: response.status, body: parsed.success ? parsed.data : { error: `it answered ${response.status}` } };
+    } catch (error) {
+        const why = error instanceof Error && error.name === "TimeoutError" ? "it did not answer in time" : "it could not be reached";
+        return { ok: false, status: 0, message: `${why} (${error instanceof Error ? error.message : "no answer"})` };
+    }
+};
+
+/** POST /link/records/diagnostics: one diagnostics query of the linked sandbox's records. */
+export const linkRecordsDiagnostics = (target: LinkTarget, query: DiagnosticsQuery): Promise<LinkAnswerOf<DiagnosticsAnswer>> =>
+    call(target, {
+        method: "POST",
+        path: rawRouteUrl("POST /link/records/diagnostics"),
+        body: query,
+        schema: RAW_JSON_ROUTES["POST /link/records/diagnostics"].output,
     });

@@ -4,6 +4,10 @@ The daemon writes everything down. Ask the records instead of re-instrumenting c
 with `ToolSearch` `+diagnostics`; they read `/history/logs`, `/history/activity.jsonl` and the spend ledger over a
 window you choose. They cannot write, and nothing in this playbook restarts anything.
 
+The same queries answer from a shell as the `diagnostics` command (`diagnostics errors|timeline|turns|restarts|slow|resources`,
+`--help` for the flags), for every runtime and for a person in a terminal. `errors --from <ISO> --until <ISO>` reads the
+log lines around a moment you already know, which a window reaching back from now cannot once the log has moved on.
+
 ## Gather
 
 - Something happened to one conversation (yours, a subagent, a card on the board) → start with `agents show <id>`
@@ -42,6 +46,24 @@ window you choose. They cannot write, and nothing in this playbook restarts anyt
 
 Every answer names the file and window it searched and how far back the file reaches. An empty answer whose window
 starts before the oldest line kept says nothing about that earlier time.
+
+## Another sandbox's records
+
+A bug the owner met in ANOTHER of their sandboxes is read from here, never by `docker exec` into its container:
+
+- **Over a link that shares records.** The owner turns on "Share records" on that sandbox's inbound link (Access,
+  Programs, Linked sandboxes); `agents links` says which links do. Then `agents ls|find|show|bundle … --on <link>` and
+  `diagnostics … --on <link>` read its conversations, transcripts, log and diagnostics as its own agents would, with no
+  turn started over there and nothing changed; the link's tool server has the same as `conversations`, `conversation`
+  and `diagnostics`. Every conversation but a private one is readable, and each read is logged over there. No link yet:
+  `capabilities request link --target <sandbox> --why "…"`; a link that does not share records answers so, and turning
+  it on is that sandbox's owner's.
+- **On one of the owner's computers.** When the sandbox runs on a connected device, `mcp__<device>__inspect_sandbox`
+  runs its own `agents` and `diagnostics` read-only (`{slug, command: "agents", args: ["show", "<id>", "--transcript"]}`),
+  with no link needed. `list_sandboxes` names the slugs.
+- **From a file.** `agents bundle <id> --out <file>` there, or the editor's "Download debug bundle" on the conversation,
+  puts its show, its record, its timeline, turns, log errors, restarts and the editor's reports in one JSON file; the
+  owner attaches it to a chat here.
 
 ## Reading the files yourself
 

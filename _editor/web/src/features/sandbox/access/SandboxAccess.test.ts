@@ -6,6 +6,7 @@ import "@intentic/testing/dom";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { type OrgPolicyState, OrgPolicyStateSchema, type OrgSectionMode } from "@intentic/sandbox-contract/schemas/organisation";
+import { type InboundLinkTermsUpdate, InboundLinkTermsUpdateSchema } from "@intentic/sandbox-contract/schemas/links";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
@@ -13,6 +14,7 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
+import { z } from "zod";
 import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -952,6 +954,43 @@ it(`counts the linked tasks waiting for a yes on the Programs tab`, async () => 
             `Programs1`,
         ),
     );
+});
+
+// Whether a link may read this sandbox's records is a term of its own, off until its owner turns it on under the link's
+// Terms; the write carries the rest of the terms as they stand, and the row says what the link may do once it can.
+it(`shares a link's records from its terms, and says so on its row`, async () => {
+    const link = {
+        id: `l1`,
+        label: `support-desk`,
+        terms: { approve: true, turnsPerHour: 20 },
+        createdAt: Date.parse(`2026-09-01T00:00:00Z`),
+        conversations: 0,
+        requests: [],
+    };
+    const termsSent: InboundLinkTermsUpdate[] = [];
+    sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
+        if (path === `/system/links/l1`) {
+            const terms = InboundLinkTermsUpdateSchema.parse(JSON.parse(z.object({ body: z.string() }).parse(init).body));
+            termsSent.push(terms);
+            return { ...link, terms: { ...link.terms, records: terms.records } };
+        }
+        return path === `/system/links` ? { links: [link] } : quiet(path);
+    });
+    await mountAt(`/?section=programs`);
+    await waitFor(() => expect(shown()).toContain(`support-desk`));
+    expect(shown()).not.toContain(`reads this sandbox's records`);
+
+    buttonLabelled(`Terms`)?.click();
+    await settle();
+    expect(shown()).toContain(`private conversations stay private`);
+    const share = [...document.body.querySelectorAll<HTMLLabelElement>(`label`)]
+        .find((label) => label.textContent?.includes(`Share records`))
+        ?.querySelector<HTMLInputElement>(`input[role="switch"]`);
+    expect(share?.checked).toBe(false);
+    share?.click();
+
+    await waitFor(() => expect(shown()).toContain(`reads this sandbox's records`));
+    expect(termsSent).toEqual([{ approve: true, turnsPerHour: 20, records: true, runAs: null }]);
 });
 
 it(`counts what stands on the Allowed tab, so it is seen from any part`, async () => {

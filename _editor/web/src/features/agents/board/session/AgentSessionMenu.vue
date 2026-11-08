@@ -25,6 +25,8 @@ import { useT } from "@intentic/ui/i18n";
 import { formatClock } from "@intentic/ui/format";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { keptWarm, warmOffer } from "../../../../models/fleet/promptCache";
+import { isRemote } from "../../../../models/fleet/fleetScope";
+import { downloadBundle } from "./agentBundle";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
 // decisions live behind one glyph rather than permanently cluttering the toolbar.
@@ -196,6 +198,26 @@ const run = (action: () => void): void => {
     emit(`selected`);
 };
 
+// One file holding this conversation's record and the sandbox's log lines about it, to look into it from elsewhere
+// (agentBundle.ts). It carries the daemon's log, so it is offered at the floor the logs are read at, asked of the route
+// itself (useAccess), and only on a daemon that serves it and a conversation it has an entry for. The menu closes on the
+// press, so the read goes through the ledger under the card: the file arriving is the answer, a refusal a receipt.
+const bundleOffered = computed(() => marked.value !== undefined && supportsRoute(`GET /fleet/{handle}/bundle`) && can(`GET /fleet/{handle}/bundle`));
+const saveBundle = (): void => {
+    const agent = marked.value;
+    emit(`selected`);
+    if (agent === undefined) {
+        return;
+    }
+    const at = isRemote(agent) ? agent.sandboxId : undefined;
+    void startOperation(`${agentWork(agentId, at)}/bundle`, {
+        what: t(`agents.agentSessionMenu.bundleGathering`),
+        done: (name) => t(`agents.agentSessionMenu.bundleSaved`, { name }),
+        failed: t(`agents.agentSessionMenu.bundleFailed`),
+        task: () => downloadBundle(agentId, at),
+    });
+};
+
 // Same split as the header button (AgentDetail); made independently here since either one can be the press.
 // Discard below still gates on `streaming`, Archive on `archiveWaits`; the land items follow `writing` instead, since a
 // turn parked on a question isn't writing.
@@ -312,6 +334,14 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
             <Icon name="refresh" class="text-xs text-subtle" :spin="changes.fetching.value" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.refresh`) }}</span>
+        </button>
+        <!-- A read, not a change: what the sandbox recorded about this conversation, as one file to hand to whoever looks into it. -->
+        <button v-if="bundleOffered" type="button" :class="ITEM" @click="saveBundle">
+            <Icon name="download" class="text-xs text-subtle" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.bundle`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.bundleHint`) }}</span>
+            </span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">
             <Icon :name="autoLandOn ? 'lock' : 'unlock'" class="text-xs" :class="autoLandOn ? 'text-subtle' : 'text-link'" />

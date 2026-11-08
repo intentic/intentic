@@ -111,5 +111,6 @@ export const pairWith = async ({ far, here, terms }: PairAsk, tooOld: string): P
     }
 };
 
-// A task link: it takes tasks, and lends no model accounts (an accounts link is minted on Sandbox ▸ Models, shareAccounts.ts).
-export const DEFAULT_TERMS: LinkTerms = { approve: true, turnsPerHour: LINK_TURNS_PER_HOUR_DEFAULT, tasks: true, accounts: [] };
+// A task link: it takes tasks, shares no records until asked to, and lends no model accounts (an accounts link is minted
+// on Sandbox ▸ Models, shareAccounts.ts).
+export const DEFAULT_TERMS: LinkTerms = { approve: true, turnsPerHour: LINK_TURNS_PER_HOUR_DEFAULT, tasks: true, records: false, accounts: [] };

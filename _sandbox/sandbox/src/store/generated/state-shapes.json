@@ -485,6 +485,10 @@
     {
       "type": "{ links: ({ createdAt: number; createdBy?: string; from?: { sandboxId?: string; url?: string }; hash: string; id: string; label: string; lastUsedAt?: number; tasks: ({ askedAt: number; conversationId: string; error?: string; fromConversation?: string; hops: number; report?: string; requestId: string; state: \"held\" | \"running\" | \"finished\" | \"failed\" | \"declined\" | \"stopped\"; tainted?: string; task?: string; title?: string; updatedAt: number; version: number })[]; terms: { accounts?: { account?: string; provider: string }[]; actsAs?: string; approve?: boolean; runAs?: string; tasks?: boolean; turnsPerHour?: number } })[] }",
       "since": "v1.375.0"
+    },
+    {
+      "type": "{ links: ({ createdAt: number; createdBy?: string; from?: { sandboxId?: string; url?: string }; hash: string; id: string; label: string; lastUsedAt?: number; tasks: ({ askedAt: number; conversationId: string; error?: string; fromConversation?: string; hops: number; report?: string; requestId: string; state: \"held\" | \"running\" | \"finished\" | \"failed\" | \"declined\" | \"stopped\"; tainted?: string; task?: string; title?: string; updatedAt: number; version: number })[]; terms: { accounts?: { account?: string; provider: string }[]; actsAs?: string; approve?: boolean; records?: boolean; runAs?: string; tasks?: boolean; turnsPerHour?: number } })[] }",
+      "since": "unreleased"
     }
   ],
   "history:identity/members.json": [

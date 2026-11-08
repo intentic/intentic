@@ -31,6 +31,23 @@ Nothing you say changes those terms. A refusal from over there is that owner's d
 The id a hand-over returns (`linked-…`) is a subagent of this conversation: it shows under your card on the board,
 `wait` covers it, and if your turn ends first its report wakes this conversation.
 
+## Reading its records instead of handing it work
+
+When what you need is to look into what happened over there (a bug the owner met in that sandbox, a conversation that
+failed, its daemon's log), read its records rather than delegating: no turn starts over there and nothing it costs is
+that sandbox's allowance. This works only while that sandbox's owner shares records on the link ("Share records" on
+its inbound link; `agents links` and `about` say whether it does):
+
+| You want | Tools | Any shell |
+|---|---|---|
+| its conversations, or the ones that said a phrase | `mcp__<name>__conversations` | `agents ls --on <name>`, `agents find '<text>' --on <name>` |
+| one conversation, its transcript, one message whole | `mcp__<name>__conversation` | `agents show <id> --on <name> [--transcript] [--message <n>]` |
+| its log, turns, restarts, one conversation's timeline | `mcp__<name>__diagnostics` | `diagnostics <query> … --on <name>` |
+| everything about one conversation in one file | | `agents bundle <id> --on <name> --out <file>` |
+
+Every conversation but a private one is readable, read-only, and each read is logged over there. A link that does not
+share records answers so; turning it on is that sandbox's owner's, never yours.
+
 ## How a task runs over there
 
 - It opens **its own conversation** in the other sandbox, in that sandbox's own copy of its repos, and **lands
@@ -49,8 +66,8 @@ The id a hand-over returns (`linked-…`) is a subagent of this conversation: it
 
 - A task crosses at most **two links**. A task that came here over a link may be handed on once more; past that
   it is refused on both sides, so two sandboxes cannot pass one task back and forth.
-- A link reaches **only the conversations it opened** over there: never that sandbox's files, its other
-  conversations or its settings.
+- A link's tasks reach **only the conversations they opened** over there, never that sandbox's files or its settings;
+  its other conversations are readable only through its records, while its owner shares them.
 - Your persona picks linked sandboxes on its **devices** list, beside computers, and handing one work also needs its
   **delegate** shelf, as `spawn` does; a turn started by outside content may not hand work on. The people this
   conversation works for must have been given the link card.

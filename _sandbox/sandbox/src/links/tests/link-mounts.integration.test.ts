@@ -59,7 +59,7 @@ test("each granted link card is a server of its own, named after it, beside noth
     const opened = mounted([ops, laptop], "conv-a");
     expect(opened.map((spec) => spec.name)).toEqual(["ops"]);
     const server = await started(serverOf(opened[0]));
-    expect((await call(server, "tools/list")).result?.tools?.map((tool) => tool.name).toSorted()).toEqual(["about", "delegate"]);
+    expect((await call(server, "tools/list")).result?.tools?.map((tool) => tool.name).toSorted()).toEqual(["about", "conversation", "conversations", "delegate", "diagnostics"]);
     expect(JSON.parse(textOf(await call(server, "tools/call", { name: "about", arguments: {} })))).toMatchObject({ ok: true, to: "ops", online: true });
     server.close();
 });

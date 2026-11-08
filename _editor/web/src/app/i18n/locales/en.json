@@ -379,7 +379,12 @@
             "notifyAsksHint": "Questions, permissions and approvals waiting on you",
             "notifyNone": "Never",
             "notifyNoneHint": "Nothing from this conversation, on any device",
-            "notifyFailed": "Couldn't change what reaches you"
+            "notifyFailed": "Couldn't change what reaches you",
+            "bundle": "Download debug bundle",
+            "bundleHint": "One file with this conversation's record, timeline and the sandbox's log lines about it, to look into a problem from somewhere else",
+            "bundleGathering": "Gathering the debug bundle",
+            "bundleSaved": "Debug bundle saved as {name}",
+            "bundleFailed": "Couldn't put the debug bundle together"
         },
         "agentStatus": {
             "landDetails": "Error details",
@@ -2289,7 +2294,7 @@
                 "description": "Hand tasks to another of your sandboxes.",
                 "hint": "The agent hands a task over with that sandbox's own `delegate` tool and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
                 "guide": {
-                    "scopes": "Starts, follows up on and stops the tasks it hands over, and reads what they report. Nothing else of that sandbox: not its files, its other conversations or its settings",
+                    "scopes": "Starts, follows up on and stops the tasks it hands over, and reads what they report. When that sandbox's owner shares its records on the link, also reads its conversations, logs and diagnostics, read-only. Never its files or its settings",
                     "steps": {
                         "0": "Open the other sandbox → `Sandbox` → `Access` → `Linked sandboxes` → `New link`, and name this sandbox there.",
                         "1": "Choose what its tasks wear (a persona), whether each one waits for you, and how many turns an hour it may start.",
@@ -2639,6 +2644,8 @@
             "noPersonaHint": "No signed-in account over there, and the full toolbox, as any unattended wake.",
             "askFirst": "Ask me there before each task",
             "turnsAnHour": "turns an hour",
+            "shareRecords": "Share its records here",
+            "shareRecordsHint": "Let this sandbox read that one's conversations, transcripts, logs and diagnostics, without starting a turn there. Read-only; private conversations stay private.",
             "pair": "Pair",
             "paired": "Linked to {name}. Add the card to finish.",
             "thisSandbox": "this sandbox",
@@ -10994,6 +11001,7 @@
             "eachWaits": "each task waits for you",
             "startsAtOnce": "tasks start at once",
             "perHour": "{count} turns an hour",
+            "readsRecords": "reads this sandbox's records",
             "conversations": "{count} conversation | {count} conversations",
             "neverUsed": "never used",
             "usedAgo": "used {ago}",
@@ -11008,6 +11016,8 @@
             "persona": "Persona",
             "askMeFirst": "Ask me before each task",
             "turnsAnHour": "turns an hour",
+            "shareRecords": "Share records",
+            "shareRecordsHint": "Let it read this sandbox's conversations, transcripts, logs and diagnostics, without starting a turn. Read-only; private conversations stay private.",
             "explain": "Another of your sandboxes can hand this one tasks over a link. They run here, under the terms you set on the link, and land here. Pairing from the other sandbox's Linked sandbox card makes a link for you; one made here by hand is shown once, to paste over there.",
             "labelPlaceholder": "The other sandbox's name, e.g. dev",
             "newLink": "New link",

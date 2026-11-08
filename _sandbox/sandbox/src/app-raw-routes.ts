@@ -32,7 +32,9 @@ import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
 import { enrollRawRoutes } from "./inventory/enroll.routes.js";
 import { intakeRawRoutes } from "./issues/intake.routes.js";
+import { linkRecordsRawRoutes } from "./links/link-records.js";
 import { linkRawRoutes } from "./links/links.routes.js";
+import { diagnosticsRawRoutes } from "./logs/diagnostics.routes.js";
 import { peerDoorRawRoutes } from "./peers/peer-doors.routes.js";
 import { arrivalRawRoutes } from "./portability/arrival.routes.js";
 import { bundleRawRoutes } from "./portability/bundle.routes.js";
@@ -82,7 +84,9 @@ export const appRawRoutes = (services: Services) =>
         deviceRunRawRoutes(services),
         enrollRawRoutes(services),
         intakeRawRoutes(services),
+        linkRecordsRawRoutes(services),
         linkRawRoutes(services),
+        diagnosticsRawRoutes(services),
         peerDoorRawRoutes(services),
         arrivalRawRoutes(services),
         bundleRawRoutes(services),

@@ -98,6 +98,7 @@ with no restart (`references/instructions-and-settings.md`).
 | to be told, or to pick this conversation back up, when something happens out in the world (a version ships, a repository releases, a page changes), or any recurring or event-triggered task | a watch the owner approves on a card: `automations propose <id> --npm …\|--github …\|--url …\|--guard '<cmd>' --prompt "…" --why "…"`; never write `automations.json` yourself. Flags and targets: `references/automations-and-extensions.md` |
 | to wait on work started here: a background command, a subagent | `mcp__subagents__wait` with the command's ID from its Bash call, or the subagent's id (its Agent call's, or the one spawn returned); `mcp__subagents__stop` ends a background command early, whichever ID names it; never `sleep`, and never detach a process yourself |
 | to know why something failed, died, hung or felt slow | Diagnostics, below |
+| to look into a bug they met in ANOTHER of their sandboxes (its logs, its transcripts) | `agents show <id> --on <link>` and `diagnostics … --on <link>` over a link that shares records, a connected computer's `inspect_sandbox`, or a debug bundle: "Another sandbox's records" in `references/diagnostics.md`. Never `docker exec` into its container |
 | how personas work, keeping an agent inside one project, which model runs what (and whether that is enforced) | `references/personas-and-models.md` |
 | the workspace from a phone or another computer, the app's link, letting someone else in | `references/remote-access.md` |
 | to rename agents, tell them apart at a glance, tag or filter them | `references/agents-board.md` (there are no tags; it says what exists instead) |
@@ -137,7 +138,8 @@ conversation, start with `agents show <id>` (`--transcript` for what was said), 
 with its `conversationId`. `ToolSearch` `+diagnostics` loads the rest: `turns` (failed or unproven turns, which model
 ran), `restarts`, `errors` (`source: "browser"` for the editor), `slow`, `resources`. They cannot write, and nothing
 here restarts anything. Which tool answers which symptom, how to read the logs yourself, and how to report:
-`references/diagnostics.md`.
+`references/diagnostics.md`, which also says how to read ANOTHER sandbox's records (a link that shares them, a
+connected computer's `inspect_sandbox`, a conversation's debug bundle) instead of `docker exec` into its container.
 
 ## Hard invariants
 

@@ -943,6 +943,25 @@ enum SandboxCommand {
         #[arg(long, default_value_t = 200)]
         tail: u32,
     },
+    /// Read a sandbox's conversations, transcripts and diagnostics through its own `agents` and `diagnostics`
+    /// commands, read-only: agents ls, show, find or bundle; diagnostics errors, slow, turns, resources, restarts or
+    /// timeline. Anything that writes or reads another sandbox (--on, --out, every other verb) is refused. Runs as a
+    /// caller with no conversation, which the sandbox answers only about conversations that are nobody's home and not
+    /// private. Its output and exit code are the command's
+    Inspect {
+        /// The sandbox to read (always named)
+        slug: String,
+        /// `agents` or `diagnostics`
+        command: String,
+        /// What to ask it, as you would type it in the sandbox, e.g. `show glad-falcon-puep --transcript --last 40`
+        /// or `timeline glad-falcon-puep`. Put `--` before them when the first is a flag (`-- --help`), or ic reads it
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            value_name = "ARGS"
+        )]
+        args: Vec<String>,
+    },
     /// Check every layer between this device and a sandbox and name what is broken, with its fix (read-only:
     /// `ic sandbox fix` without the fixing)
     Doctor {
@@ -1383,6 +1402,11 @@ fn main() {
                 })
             }
             SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
+            SandboxCommand::Inspect {
+                slug,
+                command,
+                args,
+            } => sandbox::inspect::run(slug, command, args),
             SandboxCommand::Doctor { slug, json } => sandbox::fix::run(sandbox::fix::Args {
                 slug,
                 code: None,
@@ -1558,6 +1582,7 @@ fn allowed_during_a_move(command: &Command) -> bool {
             SandboxCommand::Versions { .. }
                 | SandboxCommand::Backups { .. }
                 | SandboxCommand::Logs { .. }
+                | SandboxCommand::Inspect { .. }
                 | SandboxCommand::Doctor { .. }
                 | SandboxCommand::List { .. }
                 | SandboxCommand::Attention { .. }
@@ -2770,6 +2795,98 @@ mod tests {
             panic!("a bare logs did not parse")
         };
         assert_eq!(tail, 200);
+    }
+
+    /* What the machine agent's inspect_sandbox sends: the command's own words after the slug and the command, flags and
+    all, each kept as one argument; `--help` among them is the command's, not ic's. */
+    #[test]
+    fn inspect_takes_the_commands_own_words_after_the_slug_and_the_command() {
+        let inspected = |args: &[&str]| match parse(args) {
+            Ok(Cli {
+                command:
+                    Command::Sandbox(SandboxCommand::Inspect {
+                        slug,
+                        command,
+                        args,
+                    }),
+            }) => Some((slug, command, args)),
+            _ => None,
+        };
+        let words = |list: &[&str]| list.iter().map(|word| word.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            inspected(&[
+                "sandbox",
+                "inspect",
+                "work",
+                "agents",
+                "show",
+                "glad-falcon-puep",
+                "--transcript",
+                "--last",
+                "40",
+                "--grep",
+                "two words"
+            ]),
+            Some((
+                "work".to_string(),
+                "agents".to_string(),
+                words(&[
+                    "show",
+                    "glad-falcon-puep",
+                    "--transcript",
+                    "--last",
+                    "40",
+                    "--grep",
+                    "two words"
+                ])
+            ))
+        );
+        assert_eq!(
+            inspected(&[
+                "sandbox",
+                "inspect",
+                "work",
+                "diagnostics",
+                "errors",
+                "--since",
+                "60",
+                "--json"
+            ]),
+            Some((
+                "work".to_string(),
+                "diagnostics".to_string(),
+                words(&["errors", "--since", "60", "--json"])
+            ))
+        );
+        assert_eq!(
+            inspected(&["sandbox", "inspect", "work", "agents", "show", "--help"]),
+            Some((
+                "work".to_string(),
+                "agents".to_string(),
+                words(&["show", "--help"])
+            ))
+        );
+        assert_eq!(
+            inspected(&["sandbox", "inspect", "work", "agents", "--", "--help"]),
+            Some(("work".to_string(), "agents".to_string(), words(&["--help"])))
+        );
+        // A `--` the command's own words carry, after the one that ends ic's flags, is the command's.
+        assert_eq!(
+            inspected(&["sandbox", "inspect", "work", "agents", "--", "find", "--", "-x"]),
+            Some((
+                "work".to_string(),
+                "agents".to_string(),
+                words(&["find", "--", "-x"])
+            ))
+        );
+        // Bare, it parses, and the allowlist refuses it (sandbox/inspect.rs): the refusal names what is allowed.
+        assert_eq!(
+            inspected(&["sandbox", "inspect", "work", "agents"]),
+            Some(("work".to_string(), "agents".to_string(), Vec::new()))
+        );
+        // Always named: the slug and the command are both required.
+        assert!(parse(&["sandbox", "inspect"]).is_err());
+        assert!(parse(&["sandbox", "inspect", "work"]).is_err());
     }
 
     #[test]

@@ -737,8 +737,9 @@ export const removalResult = (slug: string, output: string): string =>
         ? `Sandbox "${slug}" was already removed from this device. Its files and its history are kept until its week is up — 'ic sandbox restore ${slug}' on this device brings it back.`
         : `Removed sandbox "${slug}". Its files and its history are kept for a week — 'ic sandbox restore ${slug}' on this device brings it back.`;
 
-// What `diagnose_sandbox` may name: a container name's characters, never starting with the dash ic would read as a flag.
-const ADDRESSABLE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
+// What `diagnose_sandbox` and `inspect_sandbox` may name: a container name's characters, never starting with the dash ic would
+// read as a flag.
+export const ADDRESSABLE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
 
 // A doctor probes a handful of addresses, each bounded by ic; past this it is hung, and a model is waiting.
 const DOCTOR_DEADLINE_MS = 2 * 60_000;

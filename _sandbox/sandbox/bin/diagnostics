@@ -1,0 +1,204 @@
+#!/usr/bin/env node
+// The in-sandbox DIAGNOSTICS command: read-only questions over what the daemon already recorded (its log, the editor's
+// reports, the turn ledger, its boots, slow operations, the resource series, one conversation's timeline), answered by
+// the daemon in the same words the `diagnostics` tools give a Claude turn (src/logs/diagnostics-queries.ts). A shell is
+// what every other runtime has, and a person in a terminal too, so this is the same door for them.
+//
+// `--on <link>` asks a linked sandbox instead: the daemon relays the query through that link, and answers only while
+// its owner shares records on it (src/links/link-records.ts). Nothing here can change anything, here or there.
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token, with the turn's stamp and proof, as `agents` sends.
+
+import { readFileSync } from "node:fs";
+import { request } from "node:http";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+const PROOF = process.env.INTENTIC_TURN_PROOF ?? "";
+
+const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. Ask it BEFORE re-instrumenting code or reproducing a bug.
+
+  diagnostics errors [--source daemon|browser] [--level <lvl>] [--contains <text>] [--since <minutes>]
+                     [--from <ISO time>] [--until <ISO time>] [--group | --no-group] [--stacks] [--limit <n>]
+                                 what went wrong, newest first: the daemon's log (daemon.log), or with
+                                 --source browser what the editor reported about itself (client.jsonl).
+                                 --level defaults to warn (and worse); --from/--until read an absolute
+                                 window, for the lines around a moment you already know
+  diagnostics timeline <conversation> [--level <lvl>] [--since <minutes>] [--limit <n>]
+                                 everything recorded about one conversation, oldest first: its log lines,
+                                 activity, turns and the daemon boots in between
+  diagnostics turns [--conversation <id>] [--only failed|unproven|silent|interrupted] [--since <minutes>] [--limit <n>]
+                                 how recent turns ended: the model that ran, the error and the provider's
+                                 sentence, and whether anything checked the work
+  diagnostics restarts [--since <minutes>] [--limit <n>]
+                                 the daemon's boots, and why each run before ended (who stopped it, a kill,
+                                 an update, memory)
+  diagnostics slow [--source slow|rollups] [--op <name | prefix.>] [--group-by op|op+path|none] [--since <minutes>] [--limit <n>]
+                                 operations slower than their budget, with the machine's load; rollups for
+                                 every span's distribution over two weeks
+  diagnostics resources <field> [--since <minutes>] [--limit <n>]
+                                 one field of the resource series over time, e.g. system.cgroup.event_oom_kill,
+                                 processes.top, window.eventLoop.delayP99Ms, daemon.memory.rssBytes
+
+  --on <link>   ask a linked sandbox's records instead of this one's: its owner must share records on the link
+                (\`agents links\` names the links and says which do). \`agents show <id> --on <link>\` reads its
+                conversations the same way
+  --json        the answer as JSON
+
+Every answer says what it searched and how far back the record reaches, so an empty one can be told from one that
+could not see far enough. What a conversation said is \`agents show <id> --transcript\`, not this.`;
+
+const die = (message, code = 1) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(code);
+};
+
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`diagnostics: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+const post = (path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method: "POST" }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+            if (PROOF !== "") {
+                req.setHeader("x-intentic-turn-proof", PROOF);
+            }
+        }
+        req.setHeader("content-type", "application/json");
+        req.end(JSON.stringify(body));
+    });
+
+// Each query's flags: the name the daemon reads it by, and how its value is read. `true` marks a switch.
+const NUMBER = (name) => (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : die(`diagnostics: --${name} takes a whole number above 0`);
+};
+const TEXT = () => (value) => value;
+const COMMON = { since: ["sinceMinutes", NUMBER("since")], limit: ["limit", NUMBER("limit")] };
+const QUERIES = {
+    errors: {
+        flags: {
+            ...COMMON,
+            source: ["source", TEXT()],
+            from: ["from", TEXT()],
+            until: ["until", TEXT()],
+            level: ["level", TEXT()],
+            contains: ["contains", TEXT()],
+            group: ["group", true],
+            "no-group": ["group", false],
+            stacks: ["stacks", true],
+        },
+    },
+    timeline: { positional: "conversationId", flags: { ...COMMON, level: ["level", TEXT()] } },
+    turns: { flags: { ...COMMON, conversation: ["conversationId", TEXT()], only: ["only", TEXT()] } },
+    restarts: { flags: COMMON },
+    slow: { flags: { ...COMMON, source: ["source", TEXT()], op: ["op", TEXT()], "group-by": ["groupBy", TEXT()] } },
+    resources: { positional: "field", flags: COMMON },
+};
+
+// Flags in any order around the one positional a query takes; `--name value` or `--name=value`; `--` ends the flags.
+const parse = (query, argv) => {
+    const spec = QUERIES[query];
+    const ask = { query };
+    const options = { json: false, on: undefined };
+    const positional = [];
+    for (let i = 0; i < argv.length; i += 1) {
+        const arg = argv[i];
+        if (arg === "--") {
+            positional.push(...argv.slice(i + 1));
+            break;
+        }
+        if (!arg.startsWith("--")) {
+            positional.push(arg);
+            continue;
+        }
+        const [name, inline] = arg.slice(2).split(/=(.*)/su);
+        if (name === "json") {
+            options.json = true;
+            continue;
+        }
+        const takesValue = name === "on" || (spec.flags[name] !== undefined && spec.flags[name][1] !== true && spec.flags[name][1] !== false);
+        if (name !== "on" && spec.flags[name] === undefined) {
+            return die(`diagnostics: ${query} takes no --${name}\n\n${USAGE}`);
+        }
+        if (!takesValue) {
+            ask[spec.flags[name][0]] = spec.flags[name][1];
+            continue;
+        }
+        const value = inline ?? argv[i + 1];
+        if (value === undefined) {
+            return die(`diagnostics: --${name} needs a value`);
+        }
+        i += inline === undefined ? 1 : 0;
+        if (name === "on") {
+            options.on = value;
+        } else {
+            ask[spec.flags[name][0]] = spec.flags[name][1](value);
+        }
+    }
+    if (spec.positional !== undefined) {
+        const value = positional.join(" ").trim();
+        if (value === "") {
+            return die(`diagnostics: ${query} needs ${spec.positional === "field" ? "a field, e.g. system.cgroup.event_oom_kill" : "a conversation id"}\n\n${USAGE}`);
+        }
+        ask[spec.positional] = value;
+    } else if (positional.length > 0) {
+        return die(`diagnostics: ${query} takes no "${positional.join(" ")}"; put it after a flag\n\n${USAGE}`);
+    }
+    return { ask, options };
+};
+
+// `diagnostics errors | head` closes the pipe early; that is the reader being done, not a failure.
+process.stdout.on("error", (error) => {
+    if (error.code === "EPIPE") {
+        process.exit(0);
+    }
+    throw error;
+});
+
+const main = async () => {
+    const [query, ...rest] = process.argv.slice(2);
+    if (query === undefined || query === "--help" || query === "-h" || query === "help" || rest.includes("--help") || rest.includes("-h")) {
+        process.stdout.write(`${USAGE}\n`);
+        return;
+    }
+    if (QUERIES[query] === undefined) {
+        return die(`diagnostics: no query called "${query}"\n\n${USAGE}`);
+    }
+    const { ask, options } = parse(query, rest);
+    const { status, text } = await post("/diagnostics", options.on === undefined ? ask : { ...ask, on: options.on });
+    let answer;
+    try {
+        answer = JSON.parse(text);
+    } catch {
+        return die(`diagnostics: the daemon answered ${status}: ${text || "nothing"}`);
+    }
+    if (status !== 200) {
+        return die(`diagnostics: ${answer?.message ?? answer?.error ?? `the daemon answered ${status}`}`);
+    }
+    if (options.json) {
+        process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
+        return;
+    }
+    if (answer.sandbox !== undefined) {
+        process.stdout.write(`(the records of "${answer.sandbox}", read through the link)\n`);
+    }
+    process.stdout.write(`${answer.text}\n`);
+};
+
+main().catch((error) => die(`diagnostics: ${error?.message ?? error}`));

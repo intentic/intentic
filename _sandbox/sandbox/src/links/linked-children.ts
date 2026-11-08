@@ -5,6 +5,7 @@ import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } fro
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
+import type { LinkListing } from "./link-listing.js";
 import { parentOfActor } from "../auth/principal.js";
 import type { ChildActionResult, ChildParent, ChildSpawnResult, PendingChildCard } from "../agent/subagents/children.js";
 import { noteQueuedReport } from "../agent/subagents/waiting/queued-reports.js";
@@ -55,16 +56,6 @@ export interface DelegateAsk {
     readonly description?: string | undefined;
 }
 
-// One link card as `links` lists it for the agent: where it goes, and whether that sandbox answers right now.
-export interface LinkListing {
-    readonly to: string;
-    readonly sandbox: string;
-    readonly online: boolean;
-    readonly why?: string;
-    readonly persona?: string;
-    readonly approve?: boolean;
-    readonly turnsPerHour?: number;
-}
 
 export interface LinkWire {
     readonly hello: typeof linkHello;
@@ -433,6 +424,7 @@ const listLinks = async (engine: Engine, conversationId: string, only?: string):
                 ...opt("persona", terms.persona),
                 approve: terms.approve,
                 turnsPerHour: terms.turnsPerHour,
+                records: terms.records === true,
             };
         }),
     );

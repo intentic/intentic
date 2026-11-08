@@ -14,6 +14,7 @@ import {
     EnvironmentSchema,
 } from "../../schemas/environment.js";
 import { SyncStatusSchema } from "../../schemas/devices.js";
+import { ConversationBundleSchema, DiagnosticsAnswerSchema, DiagnosticsAskSchema, DiagnosticsQuerySchema } from "../../schemas/diagnostics.js";
 import { HostsListSchema } from "../../schemas/hosts.js";
 import { VoicesViewSchema } from "../../schemas/voice.js";
 import {
@@ -191,6 +192,12 @@ export const RAW_JSON_ROUTES = {
     "POST /link/conversations/{id}/messages": { input: LinkMessageSchema, output: LinkMessageReceiptSchema },
     "POST /link/conversations/{id}/answer": { input: LinkAnswerSchema, output: OkSchema },
     "POST /link/conversations/{id}/stop": { output: LinkTaskStatusSchema },
+    // A link's records: the diagnostics answer and a conversation's bundle. The fleet reads answer as the `agents`
+    // command's own routes do, which have no shared schema.
+    "POST /link/records/diagnostics": { input: DiagnosticsQuerySchema, output: DiagnosticsAnswerSchema },
+    "GET /link/records/fleet/{handle}/bundle": { output: ConversationBundleSchema },
+    "POST /diagnostics": { input: DiagnosticsAskSchema, output: DiagnosticsAnswerSchema },
+    "GET /fleet/{handle}/bundle": { output: ConversationBundleSchema },
     // An accounts link: what it may use, one static key's copy, and a lent sign-in's per-turn credential.
     "GET /link/accounts": { output: LinkAccountsSchema },
     "POST /link/accounts/copy": { input: SharedAccountRefSchema, output: LinkAccountCopySchema },
