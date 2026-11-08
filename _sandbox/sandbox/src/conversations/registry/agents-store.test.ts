@@ -129,6 +129,23 @@ describe("sqliteAgentsStore", () => {
         expect(recordedProblems(IN_MEMORY)).toEqual([]);
     });
 
+    // Reported only to the browser, three conversations left the roster at a 23:47 restart (2026-11-07) with nothing in
+    // the daemon's log to say which or why.
+    it("a record this build cannot read is said in the daemon's log, naming the conversation and the path refused", () => {
+        const db = openConversationsDb(IN_MEMORY);
+        const warned: { readonly fields: unknown; readonly message: string }[] = [];
+        const store = sqliteAgentsStore(db, { warn: (fields: unknown, message?: string) => warned.push({ fields, message: message ?? "" }) });
+        store.save([conversationEntry({ id: "readable" })]);
+        db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run("unreadable", JSON.stringify({ placement: { kind: "main" } }));
+        store.load();
+        expect(warned).toEqual([
+            {
+                fields: { conversationId: "unreadable", reason: "rejected", detail: "its record does not match what this build expects (identity)" },
+                message: "agents: a conversation this build cannot read, left off the roster and kept as written",
+            },
+        ]);
+    });
+
     it("a save by this build keeps the keys a newer build wrote into the record, at any depth", () => {
         const { db, store } = fresh();
         const entry = isolatedAgent([{ repo: "root", base: "a" }], { id: "w" });

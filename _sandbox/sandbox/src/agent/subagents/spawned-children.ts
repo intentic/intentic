@@ -215,37 +215,52 @@ export const spawnedChildren = (historyRoot: string, logger: Pick<Logger, "warn"
     return opened;
 };
 
-// What the boot does with one child on file: bring it back, or strike it off and why.
-export type RestoredFate = { readonly kind: "restore" } | { readonly kind: "drop"; readonly why: string };
+// What the boot does with one child on file: bring it back, leave its file for a build that reads what this one cannot,
+// or strike it off and why.
+export type RestoredFate = { readonly kind: "restore" } | { readonly kind: "keep"; readonly why: string } | { readonly kind: "drop"; readonly why: string };
+
+// A conversation the registry left off at load whose row is still in the database: this build cannot read it, and the
+// store keeps it as written for a build that can (agents-store.ts load). Not gone.
+export const UNREADABLE = "unreadable";
 
 // What the boot reads of the two conversations, now.
 export interface RestoredFacts {
     // Undefined once the child's conversation is gone; `parent` is who spawned it, per the registry.
-    readonly child: { readonly parent: string | undefined } | undefined;
+    readonly child: { readonly parent: string | undefined } | typeof UNREADABLE | undefined;
     // Undefined once the parent's conversation is gone.
-    readonly parent: { readonly archived: boolean } | undefined;
+    readonly parent: { readonly archived: boolean } | typeof UNREADABLE | undefined;
 }
 
 /**
  * The boot's decision for one child on file. A child whose first turn never opened its conversation has no registry entry
  * yet, so a missing child conversation is dropped only once the parent is gone too; a child the registry says another
- * conversation started is not this parent's to supervise.
+ * conversation started is not this parent's to supervise. A record this build cannot read decides nothing: the file
+ * waits, unrestored, for the build that reads the record, which brings the pair back together.
  */
 export const restoredFate = (child: SpawnedChild, facts: RestoredFacts, now: number): RestoredFate => {
     if (facts.parent === undefined) {
         return { kind: "drop", why: "the parent's conversation is gone" };
     }
-    if (facts.parent.archived) {
+    if (facts.parent !== UNREADABLE && facts.parent.archived) {
         return { kind: "drop", why: "the parent is archived" };
     }
     if (facts.child === undefined && child.turns > 0) {
         return { kind: "drop", why: "the child's conversation is gone" };
     }
-    if (facts.child?.parent !== undefined && facts.child.parent !== child.parent) {
+    if (facts.child !== UNREADABLE && facts.child?.parent !== undefined && facts.child.parent !== child.parent) {
         return { kind: "drop", why: "the registry names another parent" };
     }
     if (child.state === "settled" && now - (child.ending?.at ?? child.at) > SETTLED_KEPT_MS) {
         return { kind: "drop", why: "it settled long ago" };
+    }
+    // Struck off as gone, an unreadable parent lost its children for good: a Continue booked for a reopen made three
+    // conversations' records unreadable to 1.403.1, whose boot struck off glad-falcon-puep's four subagents, so the build
+    // that read the record again found none of them its own (2026-11-07).
+    if (facts.parent === UNREADABLE) {
+        return { kind: "keep", why: "this build cannot read the parent's record" };
+    }
+    if (facts.child === UNREADABLE) {
+        return { kind: "keep", why: "this build cannot read the child's record" };
     }
     return { kind: "restore" };
 };

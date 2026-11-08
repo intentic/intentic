@@ -2818,6 +2818,55 @@ describe("a child across a daemon restart", () => {
         expect(onFile).toMatchObject({ id: "sub-cut", state: "settled", ending: { status: "failed", error: RESTART_CUT } });
     });
 
+    // 2026-11-07: a Continue booked for a reopen made glad-falcon-puep's record unreadable to 1.403.1, which left it off
+    // the roster; its boot read the parent as gone, struck its four subagents off for good, and the build that read the
+    // record again found none of them its own.
+    it("whose parent's record this build cannot read stays on file unrestored, and comes back with the build that reads it", async () => {
+        const { services, root } = await restartable(doneAtOnce);
+        spawnedChildren(root, { warn: () => {} }).write("sub-kept", {
+            parent: parent.conversationId,
+            spec: { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "running",
+            turns: 1,
+            at: 2_000,
+        });
+        await restart(root);
+        const warned: string[] = [];
+        const unreadableParent = unstubbed<Services>("services", {
+            ...services,
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: (id: string) => (id === "sub-kept" ? conversationEntry({ id, identity: { startedBy: childActor(parent.conversationId) } }) : undefined),
+            }),
+            conversationUnits: unstubbed<Services["conversationUnits"]>("conversationUnits", {
+                owners: { has: (id: string) => id === parent.conversationId, any: () => true, recreated: false },
+            }),
+            logger: unstubbed<Services["logger"]>("logger", {
+                info: () => {},
+                warn: (...said: unknown[]) => {
+                    warned.push(String(said[1]));
+                },
+            }),
+        });
+
+        const [restoring] = await readKinds(unreadableParent, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        await restoring?.recover(RESUMES);
+
+        expect(listSubagentSessions(actors).find((session) => session.id === "sub-kept")).toBeUndefined();
+        expect(warned).toEqual(["subagents: a spawned child left on file unrestored, for the build that reads its conversations again"]);
+        expect(await spawnedChildren(root, { warn: () => {} }).list()).toMatchObject([{ id: "sub-kept", parent: parent.conversationId, state: "running" }]);
+
+        await restart(root);
+        const [again] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        await again?.recover(RESUMES);
+        expect(listSubagentSessions(actors).find((session) => session.id === "sub-kept")).toMatchObject({
+            status: "pending",
+            summary: "The sandbox restarted during its turn: waiting to see whether the turn resumes.",
+        });
+    });
+
     // A paused child as its file holds it: its turn ended on a spent allowance the sandbox books a re-run past.
     const pausedOnFile = (root: string): void =>
         spawnedChildren(root, { warn: () => {} }).write("sub-paused", {

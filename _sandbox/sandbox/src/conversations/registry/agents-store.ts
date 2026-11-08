@@ -23,6 +23,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/agents";
 import { LandingDeliverySchema } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { LimitPolicySchema, MemoryKillPolicySchema, RetryPolicySchema, RoomPolicySchema } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { Logger } from "pino";
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
@@ -471,7 +472,9 @@ const readRow = (id: string, record: string, repos: readonly RepoRecord[]): RowR
     return { ok: true, entry: read.value, carry: read.carry };
 };
 
-export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): AgentsStore => {
+// `logger` hears of each conversation a load leaves off the roster. Reported to the browser only, nothing in the daemon's
+// log said why three conversations vanished at a restart (2026-11-07).
+export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb, logger?: Pick<Logger, "warn">): AgentsStore => {
     const upsert = db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET record = excluded.record");
     const dropRepos = db.prepare("DELETE FROM conversation_repo WHERE conversation_id = ?");
     const insertRepo = db.prepare(
@@ -509,6 +512,7 @@ export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): A
                 const read = readRow(id, record, repos.get(id) ?? []);
                 if (!read.ok) {
                     problems.push({ kind: "invalidEntry", ...(read.reason === undefined ? {} : { reason: read.reason }), detail: `conversation ${id}: ${read.detail}; it is kept as written` });
+                    logger?.warn({ conversationId: id, reason: read.reason, detail: read.detail }, "agents: a conversation this build cannot read, left off the roster and kept as written");
                     return [];
                 }
                 return [read.entry];

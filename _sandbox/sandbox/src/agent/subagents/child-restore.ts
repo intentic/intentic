@@ -9,7 +9,7 @@ import { childRecordOf, childRouting, taskLine } from "./child-spec.js";
 import { type ChildRecord, followAdopted, resumeHeldChild, rosterHandle } from "./children.js";
 import { labelOf } from "./child-gates.js";
 import { endPause, pauseChild } from "./paused-children.js";
-import { restoredFate, type SpawnedChild, specFromFile } from "./spawned-children.js";
+import { restoredFate, type SpawnedChild, specFromFile, UNREADABLE } from "./spawned-children.js";
 import { type RestoredChildRow, restoreSpawnedChild } from "./roster-restore.js";
 
 // A parent's children brought back at boot from their own files (spawned-children.ts), before any turn the restart cut
@@ -74,17 +74,26 @@ const restoredRow = (id: string, entry: SpawnedChild): RestoredChildRow => {
 const restoreOne = (services: Services, entry: SpawnedChild & { readonly id: string }, now: number): void => {
     const child = services.agents.entry(entry.id);
     const parent = services.agents.entry(entry.parent);
+    // The registry holds what this build could read; the database also names the rows it could not.
+    const absent = (id: string) => (services.conversationUnits.owners.has(id) ? UNREADABLE : undefined);
     const fate = restoredFate(
         entry,
         {
-            child: child === undefined ? undefined : { parent: supervisorOf(child.identity) },
-            parent: parent === undefined ? undefined : { archived: parent.archivedAt !== undefined },
+            child: child === undefined ? absent(entry.id) : { parent: supervisorOf(child.identity) },
+            parent: parent === undefined ? absent(entry.parent) : { archived: parent.archivedAt !== undefined },
         },
         now,
     );
     if (fate.kind === "drop") {
         ledgerOf(services).forget(entry.id);
         services.logger.info({ child: entry.id, parent: entry.parent, why: fate.why }, "subagents: a spawned child on file, struck off at boot");
+        return;
+    }
+    if (fate.kind === "keep") {
+        services.logger.warn(
+            { child: entry.id, parent: entry.parent, why: fate.why },
+            "subagents: a spawned child left on file unrestored, for the build that reads its conversations again",
+        );
         return;
     }
     const kid = restoredRecord(entry);

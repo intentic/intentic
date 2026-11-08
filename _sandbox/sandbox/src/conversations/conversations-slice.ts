@@ -129,7 +129,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
     // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
     // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
     const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });
-    const agentsStore = sqliteAgentsStore(conversationsDb);
+    const agentsStore = sqliteAgentsStore(conversationsDb, logger);
     // A database made again this boot does not name the directories on the volume, so the orphan sweep holds off.
     const units = conversationUnits(historyRoot, { has: agentsStore.has, any: agentsStore.any, recreated: recovery !== undefined });
     // Shared by the turn path and worktree creation so both read one capability probe.

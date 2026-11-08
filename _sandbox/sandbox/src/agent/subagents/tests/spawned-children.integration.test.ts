@@ -12,6 +12,7 @@ import {
     spawnedChildrenDocument,
     specFromFile,
     specOnFile,
+    UNREADABLE,
 } from "../spawned-children.js";
 
 import type { Services } from "../../../composition.js";
@@ -70,6 +71,26 @@ describe("what the boot does with a child on file", () => {
     it("strikes off one whose own conversation is gone, or that the registry says another conversation started", () => {
         expect(restoredFate(child(), facts({ child: null }), NOW)).toEqual({ kind: "drop", why: "the child's conversation is gone" });
         expect(restoredFate(child(), facts({ child: { parent: "conv-other" } }), NOW)).toEqual({ kind: "drop", why: "the registry names another parent" });
+    });
+
+    // 2026-11-07: a booked Continue made glad-falcon-puep's record unreadable to one build, whose boot struck off its four
+    // subagents as orphans; the next build read the parent again and found none of them its own.
+    it("leaves on file, unrestored, one whose parent or own record this build cannot read", () => {
+        expect(restoredFate(child({ state: "running", ending: undefined }), facts({ parent: UNREADABLE }), NOW)).toEqual({
+            kind: "keep",
+            why: "this build cannot read the parent's record",
+        });
+        expect(restoredFate(child(), facts({ child: UNREADABLE }), NOW)).toEqual({ kind: "keep", why: "this build cannot read the child's record" });
+    });
+
+    it("still strikes off what an unreadable record cannot save: a gone parent, an archived one, a fortnight-old ending", () => {
+        expect(restoredFate(child(), facts({ parent: null, child: UNREADABLE }), NOW)).toEqual({ kind: "drop", why: "the parent's conversation is gone" });
+        expect(restoredFate(child(), facts({ parent: { archived: true }, child: UNREADABLE }), NOW)).toEqual({ kind: "drop", why: "the parent is archived" });
+        expect(restoredFate(child(), facts({ parent: UNREADABLE, child: null }), NOW)).toEqual({ kind: "drop", why: "the child's conversation is gone" });
+        expect(restoredFate(child({ ending: { status: "completed", at: NOW - SETTLED_KEPT_MS - 1 } }), facts({ parent: UNREADABLE }), NOW)).toEqual({
+            kind: "drop",
+            why: "it settled long ago",
+        });
     });
 
     it("lets a settled one go a fortnight after its ending, and never a running one", () => {
