@@ -25,14 +25,20 @@ export const onHeldRepointed = (state: ConversationState, event: Extract<Convers
     return unchanged(withResume(state, { held: repointed }), true);
 };
 
-// Only an unfired limit hold with no instant and no move takes it: a pick or a refusal that timed it meanwhile stands.
-// Told to every window, whose card now says when it goes.
-export const onHeldRetimed = (state: ConversationState, reopensAt: number): Decision<boolean> => {
+// Only an unfired limit hold with no move takes it. One with no instant takes the instant the records learned: a pick or a
+// refusal that timed it meanwhile stands. One with an instant takes only an `early` one, sooner than its own and with
+// no person's pick on it, whose account's reopen it waits for instead (2026-11-08: a timed hold kept the instant it was
+// refused with, six days out, after an account that could serve its model was back). Told to every window, whose card
+// now says when it goes.
+export const onHeldRetimed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-retimed" }>): Decision<boolean> => {
     const { held } = state.resume;
-    if (held === undefined || held.fired || held.reason !== "limit" || held.reopensAt !== undefined || held.move !== undefined) {
+    if (held === undefined || held.fired || held.reason !== "limit" || held.move !== undefined) {
         return unchanged(state, false);
     }
-    return { state: withResume(state, { held: { ...held, reopensAt } }), effects: BROADCAST, reply: true };
+    const takes = held.reopensAt === undefined || (event.early === true && held.onto === undefined && event.reopensAt < held.reopensAt);
+    return takes
+        ? { state: withResume(state, { held: { ...held, reopensAt: event.reopensAt } }), effects: BROADCAST, reply: true }
+        : unchanged(state, false);
 };
 
 // The wall the pass read in front of where an unfired limit hold goes; told to every window only when it moved, since the

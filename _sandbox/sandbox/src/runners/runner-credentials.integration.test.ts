@@ -25,6 +25,17 @@ describe("toRunnerCredential", () => {
         expect(JSON.stringify(mapped)).not.toContain("local-secret");
     });
 
+    // A routed turn here is pointed at the daemon's translator gateway, which carries the same bearer and is loopback too.
+    it("turns the parent's translator gateway into a route as well, never a credential", () => {
+        const mapped = toRunnerCredential(
+            { ok: true, credentials: { endpoint: { baseUrl: "http://127.0.0.1:7777/translator-gateway/codex", authToken: "local-secret", model: "gpt-5" } } },
+            TRANSLATOR,
+            "",
+        );
+        expect(mapped).toEqual({ ok: true, kind: "parent-translator", model: "gpt-5" });
+        expect(JSON.stringify(mapped)).not.toContain("local-secret");
+    });
+
     it("passes a foreign endpoint through whole, bearer included — the runner dials it directly", () => {
         expect(
             toRunnerCredential(

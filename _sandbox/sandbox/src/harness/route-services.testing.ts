@@ -34,6 +34,7 @@ import { grokSliceFake } from "../runtimes/grok/grok-provider.testing.js";
 import { kimiSliceFake } from "../runtimes/kimi/kimi-provider.testing.js";
 import { mintedSliceFake } from "../runtimes/minted/minted-provider.testing.js";
 import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
+import { translatorGatewayFake } from "../agent/providers/translator-gateway.testing.js";
 import { secretsSliceFake } from "../secrets/secrets-slice.testing.js";
 import { memoryConversationGrants } from "../personas/conversation-grants.js";
 import { memoryOwnerGrants } from "../personas/owner-grants.js";
@@ -177,6 +178,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // passes its own.
         privacyShield: privacySliceFake().privacyShield,
         privacyLeaks: memoryPrivacyLeaks(),
+        // Mints a nameable address per provider, and has filed no refusal (translator-gateway.testing.ts).
+        translatorGateway: translatorGatewayFake(),
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
         ...phonesSliceFake(),

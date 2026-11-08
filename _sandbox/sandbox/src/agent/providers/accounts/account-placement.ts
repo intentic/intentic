@@ -16,8 +16,8 @@ import type { AccountRoute } from "./blocked-account.js";
 
    Asked after blocked-account.ts, which moves a turn off an account that cannot serve it, pinned or not. This rule only
    re-places an account that still can serve:
-   - a turn that names its account, a conversation with no account on file, or a routed provider (it balances its own
-     credentials) is left where routing points;
+   - a turn that names its account, a conversation with no account on file, or a routed provider (the daemon's gateway
+     places each of its requests on an account, translator-gateway.ts) is left where routing points;
    - an account a person pinned (switch-account.ts) stays while it can serve, warm or cold;
    - a warm cache stays, since moving would throw away what it holds;
    - a cold cache moves only for a clear gain: at least REPLACE_GAP points more room, or any gain over an account nearly

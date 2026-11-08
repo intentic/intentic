@@ -274,6 +274,11 @@ export const RAW_ROUTES = {
     // Its sibling for MCP: a hooked runtime's (Cursor's) calls to its turn's MCP servers, on a session signed the same
     // way, naming the provider and the one server it may forward to. Held open while a server streams its answer.
     "ALL /privacy/mcp/{session}": { auth: "door", control: "never", stream: true },
+    // The translator's gateway: every routed loop's model requests, on the signed session its base URL carries (the
+    // daemon's agent/providers/translator-gateway-session.ts), which names the provider, and on the translator's bearer
+    // too, both checked in the handler. Each request naming a model is placed on one of the provider's accounts before
+    // the translator sees it, so a refusal names the account that gave it. Held open while a model streams its answer.
+    "ALL /translator-gateway/{session}/*": { auth: "door", control: "never", stream: true },
     // Inbound links: another of the owner's sandboxes handing this one tasks (schemas/links.ts). Minted, re-termed and
     // revoked by the owner alone, checked in the handler like a control token; a waiting task is the owner's to allow.
     "GET /system/links": { control: "never" },

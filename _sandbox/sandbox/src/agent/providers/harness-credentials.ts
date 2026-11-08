@@ -149,6 +149,7 @@ export type HarnessCredentialDeps = Pick<
     | "providerCatalogs"
     | "providerRefusals"
     | "runnerParent"
+    | "translatorGateway"
     | "trial"
     | "wakeLocalModel"
 >;

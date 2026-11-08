@@ -795,8 +795,8 @@ const remintFor = (input: RoutedTurn, account: string | undefined, request: Agen
         : undefined;
 
 // The questions a failure's classification asks: the daemon's records, and this conversation's own resume state.
-const failureQueries = (services: Services): FailureQueries => ({
-    ...recordQueries(services),
+const failureQueries = (services: Services, openedAt: number): FailureQueries => ({
+    ...recordQueries(services, openedAt),
     breakPolicy: (conversationId, ending) => breakPolicyFor(services, conversationId, ending),
     stopLadder: (conversationId) => {
         const made = services.conversations.state(conversationId)?.resume.stopTries ?? 0;
@@ -853,7 +853,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             contextTokens: readings.context?.tokens,
             now: Date.now(),
         },
-        failureQueries(services),
+        failureQueries(services, readings.openedAt),
     );
     services.logger[failure.log.level](failure.log.fields, failure.log.message);
     performFailureWrites(services, failure.writes);

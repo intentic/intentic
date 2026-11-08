@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, ModelCooldown, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { GOOGLE_FAMILIES, GoogleModelsSchema, googleGates, googleModelsUsage, sameGates } from "./google/model-pools.js";
@@ -29,7 +29,27 @@ export interface TranslatorAuthFile {
     readonly next_retry_after?: string;
     // When the proxy last changed this credential's state (RFC 3339): for a benched one, the instant of the bench.
     readonly updated_at?: string;
+    // The proxy's benches of this credential, each scoped: `model` for one model the provider refused it on (`reason`
+    // "quota" for a spent allowance), with the provider's own retry instant (RFC 3339).
+    readonly cooldowns?: readonly { readonly scope?: string; readonly model_key?: string; readonly reason?: string; readonly retry_at?: string }[];
+    // The prefix that pins a request to this credential alone (`<prefix>/<model>`, translator-prefixes.ts). Read off the
+    // file on disk: the Management API's listing does not carry it (CLIProxyAPI 8.0.60).
+    readonly prefix?: string;
 }
+
+// The credential's per-model benches for a spent allowance (TranslatorAccount.cooldowns): the provider's refusal of it on
+// one model, with when the provider said to try again. One the proxy gave no instant for is not a spent allowance this
+// can time, so it is left to the account-wide verdict.
+export const modelCooldowns = (file: TranslatorAuthFile): ModelCooldown[] =>
+    (file.cooldowns ?? []).flatMap((cooldown) => {
+        const until = cooldown.scope === "model" && cooldown.reason === "quota" ? resetFromIso(cooldown.retry_at) : undefined;
+        return cooldown.model_key === undefined || cooldown.model_key === "" || until === undefined ? [] : [{ model: cooldown.model_key, until }];
+    });
+
+// Whether every bench the proxy holds on this credential is one model's: then it routes the account's other models as
+// ever, and the account is not benched as a whole (2026-11-08: ten Google accounts refused on Opus read benched for
+// Gemini too, until the Opus instant six days out).
+const benchedPerModel = (file: TranslatorAuthFile): boolean => (file.cooldowns?.length ?? 0) > 0 && (file.cooldowns ?? []).every((cooldown) => cooldown.scope === "model");
 
 // Longest the proxy's own words can be and still be a row's reason. Past it, `status_message` is a pasted upstream
 // body — a 429's JSON, several hundred characters of it — which a column that prints the reason cannot use and a
@@ -80,6 +100,10 @@ export const authFileCooling = (file: TranslatorAuthFile): { until?: number; rea
         return undefined;
     }
     const verify = file.disabled === true ? undefined : verificationUrl(file.status_message);
+    // Benched only on some models: each is read as that model's spent allowance (modelCooldowns), not a bench of the whole.
+    if (file.disabled !== true && verify === undefined && benchedPerModel(file)) {
+        return undefined;
+    }
     const until = verify === undefined ? resetFromIso(file.next_retry_after) : undefined;
     const reason = coolingReason(file.status_message) ?? (file.disabled === true ? "disabled in the translator" : undefined);
     return { ...(until === undefined ? {} : { until }), ...(reason === undefined ? {} : { reason }), ...(verify === undefined ? {} : { verify }) };

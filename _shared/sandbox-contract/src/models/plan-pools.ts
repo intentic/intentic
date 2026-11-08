@@ -1,98 +1,26 @@
-import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow, WindowGates } from "../schemas/providers/plan-limits.js";
+import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow } from "../schemas/providers/plan-limits.js";
 import { humanizeModelId } from "./model-label.js";
+import { bindingWindow, gatesModel, gatingWindows, type ModelRef, pinnedFull, provenFull, SPENT_UTILIZATION } from "./verdict/pool-gates.js";
+import { type RefusalsOnFile, type ServiceFacts, standingOver } from "./verdict/refusal-verdict.js";
 
-// Single reading of which account pool gates a given model (or, with none named, the account's tightest pool), shared
-// by the daemon's picker/refusal logic and the browser's rings and rail. A pool gated `none` is excluded from the
-// no-model case: visible to the account, never a gate on a turn.
-
-// 100 = exhaustion (the call will be refused). The one spent line: the daemon's pickers and every surface read it, and
-// anything short of it still has room.
-export const SPENT_UTILIZATION = 100;
-
-// Whether a reading proves its pool empty. A pool read at the line by a provider that rounds to whole percents
-// (`rounded`) does not: Anthropic reports 99.5% as 100 and keeps serving turns on it, so treating that as spent strands
-// the last of an allowance (and turns a plain send into one scheduled for the reset). Such a pool is at the line, with
-// no room to rank by; only the provider's refusal (pinnedFull) proves it empty.
-export const provenFull = (window: UsageWindow): boolean => window.utilization >= SPENT_UTILIZATION && window.rounded !== true;
-
-// A pool a standing limit refusal shows full: at the line, and proven so whatever the provider's rounding.
-export const pinnedFull = (window: UsageWindow): UsageWindow => {
-    const { rounded: _rounded, ...pool } = window;
-    return { ...pool, utilization: Math.max(window.utilization, SPENT_UTILIZATION) };
-};
-
-export interface ModelRef {
-    // Wire model id.
-    readonly id: string;
-    // Display name, when available; matched too, since the tier word may be in either id or label.
-    readonly label?: string | undefined;
-}
-
-// Splits into lowercase alnum words for whole-word matching: a substring test would match "opus" inside a word that
-// merely contains it.
-export const wordsOf = (text: string): readonly string[] =>
-    text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter(Boolean);
-
-// Whether `needle` appears as a contiguous run of whole words within `words`.
-export const runOfWords = (words: readonly string[], needle: readonly string[]): boolean =>
-    needle.length > 0 && words.some((_, at) => needle.every((word, index) => words[at + index] === word));
-
-const nameMatches = (name: string, model: ModelRef): boolean => {
-    const needle = wordsOf(name);
-    return runOfWords(wordsOf(model.id), needle) || (model.label !== undefined && runOfWords(wordsOf(model.label), needle));
-};
-
-export const gatesModel = (gates: WindowGates, model: ModelRef): boolean =>
-    gates === "all" ? true : gates === "none" ? false : gates.models.some((name) => nameMatches(name, model));
-
-// Served models no pool in `windows` gates: what a reading cannot say anything about. A pool gated `none` covers
-// nothing, and one gated `all` covers every model.
-export const uncoveredModels = (windows: readonly UsageWindow[], served: readonly ModelRef[]): string[] =>
-    served.filter((model) => !windows.some((window) => gatesModel(window.gates, model))).map((model) => model.id);
-
-// Pools that gate this model, or, with no model given, every pool that gates anything.
-export const gatingWindows = (usage: AccountUsage | undefined, model?: ModelRef): readonly UsageWindow[] =>
-    (usage?.windows ?? []).filter((window) => (model === undefined ? window.gates !== "none" : gatesModel(window.gates, model)));
-
-const fullest = (windows: readonly UsageWindow[]): UsageWindow | undefined =>
-    windows.reduce<UsageWindow | undefined>((worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst), undefined);
-
-// The pool that gates the next turn: the fullest of the windows this model spends. Undefined means nothing gates it (or
-// nothing was measured) — distinct from a measured 0%.
-export const bindingWindow = (usage: AccountUsage | undefined, model?: ModelRef): UsageWindow | undefined => fullest(gatingWindows(usage, model));
-
-/**
- * Whether a turn answered on `served` proves `other` had room on this account too: every pool `other` spends gates
- * `served` as well, so the answer went through each of them. False where nothing is read, and where `other` spends a pool
- * of its own (Claude's Opus slice, a model the plan has no entitlement to), which another model's answer says nothing
- * about. Codex meters every model from one allowance, so a Luna turn going through proves Sol's allowance open as well.
- */
-export const answerCovers = (usage: AccountUsage | undefined, served: ModelRef, other: ModelRef): boolean => {
-    const pools = gatingWindows(usage, other);
-    return pools.length > 0 && pools.every((window) => gatesModel(window.gates, served));
-};
-
-// The model's own metered pool, by most specific name match; distinct from bindingWindow, which may answer with an
-// all-models pool. Two matches tied in specificity return undefined rather than guess.
-export const scopedWindow = (usage: AccountUsage | undefined, model: ModelRef): UsageWindow | undefined => {
-    const matched = (usage?.windows ?? [])
-        .flatMap((window) => {
-            if (window.gates === "all" || window.gates === "none") {
-                return [];
-            }
-            const specificity = Math.max(0, ...window.gates.models.filter((name) => nameMatches(name, model)).map((name) => wordsOf(name).length));
-            return specificity === 0 ? [] : [{ window, specificity }];
-        })
-        .toSorted((left, right) => right.specificity - left.specificity);
-    const best = matched[0];
-    if (best === undefined || matched[1]?.specificity === best.specificity) {
-        return undefined;
-    }
-    return best.window;
-};
+// Which pool gates a model (verdict/pool-gates.ts) and how each refusal on file stands over each account
+// (verdict/refusal-verdict.ts), kept beside this module and served from it, so every caller reads the one rule through
+// one door.
+export {
+    answerCovers,
+    bindingWindow,
+    gatesModel,
+    gatingWindows,
+    type ModelRef,
+    pinnedFull,
+    provenFull,
+    runOfWords,
+    scopedWindow,
+    SPENT_UTILIZATION,
+    uncoveredModels,
+    wordsOf,
+} from "./verdict/pool-gates.js";
+export { refusalVerdict, refusedPoolReset, type RefusalsOnFile, type ServiceFacts, standingOver } from "./verdict/refusal-verdict.js";
 
 // How long a pool's window runs, read off the provider's own key and whatever name it published. One implementation,
 // because two things need it and must agree: a narrow column names the window by `short`, and a reading with no
@@ -196,124 +124,6 @@ export const currentWindows = (usage: AccountUsage, now: number): UsageWindow[] 
 // gate, listing and surface reads. The daemon and the editor run it on the same facts (the account rows and every
 // refusal on file); neither keeps a judged copy, so the two cannot disagree.
 
-/** Everything the serviceability rule reads of one account, as the account rows already carry it. */
-export interface ServiceFacts {
-    // The daemon's key: a native account's id, a routed credential's auth-file name.
-    readonly account: string;
-    readonly needsReauth?: boolean | undefined;
-    // Why the sign-in needs renewing, where the provider said.
-    readonly detail?: string | undefined;
-    readonly seatRefusal?: string | undefined;
-    readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined; readonly verify?: string | undefined } | undefined;
-    readonly usage?: AccountUsage | undefined;
-    // How the account is named to a person (its label, a routed credential's address); a surface that quotes a figure
-    // says whose it is.
-    readonly label?: string | undefined;
-}
-
-/** Every refusal on file for one provider: what its accounts are judged against, each standing until something answers it. */
-export type RefusalsOnFile = readonly ProviderRefusal[];
-
-// A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
-// token worked). Nothing a reading says answers an entitlement refusal: a seatless account authenticates and reads fine.
-// Nor does the refused account's own reading answer an allowance it does not measure (`unmetered`: an admin's credit).
-// `measured` says whether this reading can speak to the allowance at all: false for that account's own, true for any
-// account's where nothing says which one refused (refusalVerdict).
-const answers = (refusal: ProviderRefusal, facts: ServiceFacts, measured: boolean = refusal.unmetered !== true): boolean => {
-    const measuredAt = facts.usage?.measuredAt;
-    if (refusal.kind === "entitlement" || !measured || measuredAt === undefined || measuredAt <= refusal.at) {
-        return false;
-    }
-    if (refusal.kind === "auth") {
-        return facts.needsReauth !== true;
-    }
-    const binding = bindingWindow(facts.usage);
-    return binding !== undefined && binding.utilization < SPENT_UTILIZATION;
-};
-
-/**
- * When the pool a spent allowance that named no instant was refused in reopens, in epoch seconds: the soonest reset of
- * the binding pool for the model it named (the pool judgedReading pins full) on the accounts it may have refused, its own
- * where it named one, any where it named none, as any account's room answers a nameless one. The daemon's ledger stamps
- * it on the refusal as it files it (`poolResetsAt`), while the readings still show that pool open: once it reopens the
- * reading lapses it to an empty pool and a different one binds, so it cannot be read back off the reading later.
- * Undefined for a refusal that named its instant, one no reading measures (`unmetered`), a person's mark (lifted by a
- * person or a turn, not a window), and where no reading publishes a reset still ahead of the refusal.
- */
-export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): number | undefined => {
-    if (refusal.kind !== "limit" || refusal.resetsAt !== undefined || refusal.unmetered === true || refusal.byHand === true) {
-        return undefined;
-    }
-    const model = refusal.model === undefined ? undefined : { id: refusal.model };
-    const resets = accounts
-        .filter((facts) => refusal.account === undefined || facts.account === refusal.account)
-        .flatMap((facts) => {
-            const reset = bindingWindow(facts.usage, model)?.resetsAt;
-            return reset !== undefined && reset * 1000 > refusal.at ? [reset] : [];
-        });
-    return resets.length === 0 ? undefined : Math.min(...resets);
-};
-
-/**
- * How a refusal on file stands against everything read since, over every account the provider holds: `gone` once the
- * account it named is disconnected, `answered` once the instant it named has passed (or, where it named none, the
- * reset of the pool it was refused in, stamped as it was filed: refusedPoolReset) or once that account (or, for a refusal
- * naming none, any account) has a later reading that contradicts it, else `standing`. An empty list is one not loaded
- * yet, so the refusal stands. Judged by the daemon and every open window at the same instant from what the refusal
- * carries: nothing waits for a fresh reading or a ledger write to flip it. 2026-10-20: a refusal naming no instant stood
- * past its pool's reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said
- * "back at" that reset. A stamp is this sandbox's guess, not the provider's word, so a reading taken after it outranks
- * it: 2026-10-21, a weekly pool read at a rounded 100 once the five-hour one it was stamped with reopened, and the
- * account read ready with no room, so every turn let through was refused again.
- */
-export const refusalVerdict = (
-    refusal: ProviderRefusal,
-    accounts: readonly ServiceFacts[],
-    now: number = Date.now(),
-): "standing" | "answered" | "gone" => {
-    const named = accounts.filter((facts) => facts.account === refusal.account);
-    if (refusal.account !== undefined && named.length === 0) {
-        return accounts.length === 0 ? "standing" : "gone";
-    }
-    const whose = refusal.account === undefined ? accounts : named;
-    // The provider's own "try again at" is over at that instant, whichever account it refused; so, where it named none,
-    // is the refused pool's reset the ledger stamped, unless a reading since says otherwise (read below).
-    const over = refusal.resetsAt ?? refusal.poolResetsAt;
-    const readSince = (instant: number): boolean => whose.some((facts) => (facts.usage?.measuredAt ?? 0) > instant * 1000);
-    if (refusal.kind === "limit" && over !== undefined && over * 1000 <= now && (refusal.resetsAt !== undefined || !readSince(over))) {
-        return "answered";
-    }
-    // Where it is known which account it refused (it named one, or there is only one), the provider's own instant
-    // outranks a usage endpoint that kept showing room while it refused: over at that instant, and not before.
-    const known = refusal.account !== undefined || accounts.length <= 1;
-    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && known) {
-        return "standing";
-    }
-    if (known) {
-        return whose.some((facts) => answers(refusal, facts)) ? "answered" : "standing";
-    }
-    /* A nameless refusal over several accounts is one of them saying no, and nothing says which: the translator benches
-       the one it refused and routes on, so any of them reading room since answers it, whatever kind of allowance it was
-       and whatever instant it named. Held to its instant, or to an allowance no reading measures, one team account's
-       refusal held every Codex account spent for a day, the two free ones reading 0% used included (2026-10-19). */
-    return accounts.some((facts) => answers(refusal, facts, true)) ? "answered" : "standing";
-};
-
-// A stamp a reading has outlived (refusalVerdict) says nothing of when the pool now holding the refusal reopens: that
-// pool's own reset does.
-const unstampedPast = (refusal: ProviderRefusal, now: number): ProviderRefusal => {
-    if (refusal.poolResetsAt === undefined || refusal.poolResetsAt * 1000 > now) {
-        return refusal;
-    }
-    const { poolResetsAt: _outlived, ...standing } = refusal;
-    return standing;
-};
-
-/** The refusals still standing over each of a provider's accounts: those naming it, and those naming none. */
-export const standingOver = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile, now: number = Date.now()): ((account: string) => RefusalsOnFile) => {
-    const standing = refusals.filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing").map((refusal) => unstampedPast(refusal, now));
-    return (account) => standing.filter((refusal) => (refusal.account ?? account) === account);
-};
 
 // The account reopens for this question when the pools holding it shut do: all of them for a model's own question (or
 // the pools gating every model), the first to reopen when only per-model slices are full. Unknown if any is unpublished.

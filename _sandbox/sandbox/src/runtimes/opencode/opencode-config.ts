@@ -71,6 +71,9 @@ export interface OpenCodeGeminiConfig {
     // The translator's base URL; its OpenAI-compatible surface is at ${baseUrl}/v1.
     readonly baseUrl: string;
     readonly token: string;
+    // Where the requests go in the base URL's place, minted at each server boot: the daemon's translator gateway
+    // (agent/providers/translator-gateway.ts), behind the privacy shield where one stands. Absent, the base URL itself.
+    readonly gateway?: () => Promise<string>;
     // Each model's id, what it accepts as input, and the reasoning tiers it takes, as the translator publishes them
     // (gemini-models.ts).
     readonly models: () => Promise<readonly GeminiModelRow[]>;

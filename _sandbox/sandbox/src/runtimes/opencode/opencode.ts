@@ -140,9 +140,11 @@ const providersFor = async (input: {
 }): Promise<{ readonly providers: NonNullable<OpenCodeConfig["providers"]>; readonly shielded: boolean }> => {
     const { route, gemini } = input;
     const xaiGateway = await route?.("grok", XAI_UPSTREAM);
-    const geminiGateway = gemini === undefined ? undefined : await route?.("gemini", gemini.baseUrl);
+    // Google's requests go to the translator gateway's address where one is minted, and that is what the shield stands before.
+    const geminiBase = gemini?.gateway === undefined ? gemini?.baseUrl : await gemini.gateway();
+    const geminiGateway = geminiBase === undefined ? undefined : await route?.("gemini", geminiBase);
     const routed = await Promise.all(input.hosted.map(async (entry) => ({ ...entry, ...opt("gateway", await route?.(entry.shield, entry.base)) })));
-    const geminiConfig = gemini === undefined || geminiGateway === undefined ? gemini : { ...gemini, baseUrl: geminiGateway };
+    const geminiConfig = gemini === undefined ? gemini : { ...gemini, baseUrl: geminiGateway ?? geminiBase ?? gemini.baseUrl };
     return {
         providers: {
             ...xaiProviderConfig(input.storeOptOut, xaiGateway),

@@ -225,6 +225,7 @@ describe("a turn's frames", () => {
             failure: { code: undefined, message: "stopped" },
             limitReset: 50,
             held: undefined,
+            openedAt: 42,
         });
         expect(frames.verification.edited()).toStrictEqual(["/work/a.ts"]);
         expect(frames.viewing.edited()).toStrictEqual([]);
@@ -232,7 +233,7 @@ describe("a turn's frames", () => {
     });
 
     test("start on the resumed session, with nothing read yet", () => {
-        expect(createTurnFrames(WORKSPACE_ROOT, "resumed").readings()).toStrictEqual({
+        expect(createTurnFrames(WORKSPACE_ROOT, "resumed", 7).readings()).toStrictEqual({
             sessionId: "resumed",
             usage: undefined,
             silence: quiet,
@@ -242,6 +243,7 @@ describe("a turn's frames", () => {
             failure: undefined,
             limitReset: undefined,
             held: undefined,
+            openedAt: 7,
         });
     });
 

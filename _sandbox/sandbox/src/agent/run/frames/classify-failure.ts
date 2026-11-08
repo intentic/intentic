@@ -21,6 +21,7 @@ import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 import { withClause } from "./frame-clause.js";
 import { dressedForMemory, type MemoryDeath } from "./memory-death.js";
+import { namedVerification } from "./verification-sentence.js";
 
 // One failure frame, classified read-only: the frame the window reads, the records to file, its log line and its hold.
 
@@ -58,7 +59,7 @@ export interface FailureContext {
     readonly provider: AgentProvider;
     // The model the request resolved to, which is what a refusal is filed against.
     readonly model: string | undefined;
-    // The account serving the turn; undefined for a routed turn, where the translator picks the credential itself.
+    // The account serving the turn; undefined for a routed turn, whose requests the gateway places one by one.
     readonly account: string | undefined;
     readonly attribution: Attribution;
     readonly sessionId: string | undefined;
@@ -112,6 +113,9 @@ export interface FailureQueries {
     readonly awaitingVerification: (provider: AgentProvider) => Promise<readonly string[]>;
     // Whether memory killed a runtime that died under a conversation's turn (memory-death.ts); absent, every death is a stop.
     readonly memoryDeath?: (conversationId: string, turn: RoutedTurn, now: number) => Promise<MemoryDeath | undefined>;
+    // Whether the daemon's translator gateway filed a spent allowance of this routed model since the request began, under
+    // the account that gave it (translator-gateway.ts); absent, it filed none.
+    readonly gatewayRefused?: (provider: AgentProvider, model: string) => boolean;
 }
 
 // A record a classification files; the turn performs each fire-and-forget, with its own named failure line.
@@ -145,15 +149,20 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
     return event.code === "rate_limit" || mentionsSpentAllowance(event.message) ? "limit" : "auth";
 };
 
-/* A TRANSLATOR-ROUTED TURN NAMES NO ACCOUNT. The translator picks the credential, so whatever rides as the turn's account
-   is a label (Codex's "codex-subscription"), the key of no reading. Filed under it, a refusal was read as one for an
-   account since disconnected ("gone", refusalVerdict) and the listing a parent read next ignored it, and the re-read it
-   owes was scoped to that label and read nothing (2026-10-13). Filed under no account, it stands over the provider's
-   accounts until a reading after it shows room, and its re-read covers them all.
+/* A TRANSLATOR-ROUTED TURN NAMES NO ACCOUNT; EACH OF ITS REQUESTS DOES. The daemon's gateway places every request on one
+   account and files a spent allowance under the account that gave it (translator-gateway.ts), so a turn refused after
+   the gateway filed one for its model files no second copy under no account: that copy stood over every account of the
+   provider, and their verdicts flip-flopped with each reading (2026-11-08). What rides as the turn's account is a label
+   (Codex's "codex-subscription"), the key of no reading: filed under it, a refusal was read as one for an account since
+   disconnected ("gone", refusalVerdict) and its re-read, scoped to that label, read nothing (2026-10-13). So a routed
+   refusal the gateway did not file (a request it had no account to pin to) is filed under no account: it stands over
+   the provider's accounts until a reading after it shows room, and its re-read covers them all.
    A loop that signs in through a door of its own (Grok Build, Kimi CLI) is not routed: the turn ran on that sign-in, so
    its refusal is filed under it, or a spent first sign-in would read like every other and keep taking the turns. */
+const routedTurn = (provider: AgentProvider, harness: AgentHarness): boolean =>
+    KeyedProviderSchema.safeParse(provider).success && loopDoor(provider, harness) === undefined;
 const refusingAccount = (provider: AgentProvider, harness: AgentHarness, account: string | undefined): string | undefined =>
-    KeyedProviderSchema.safeParse(provider).success && loopDoor(provider, harness) === undefined ? undefined : account;
+    routedTurn(provider, harness) ? undefined : account;
 
 /* The instant a spent allowance's refusal stands until, against every reading: the provider's own. Where its words
    decided the booking (an instant, or a pool it named by length, whose reset the reading holds), the same instant, so the
@@ -171,7 +180,7 @@ const refusalReset = (event: ErrorFrame, context: FailureContext, reopening: Reo
 // The durable refusal a refusing code files, and the re-measure it owes. A plan with nothing to poll (Cursor's) has no
 // other reading: this refusal, filed against the account and model, is what the next placement and the spawn gate read
 // (2026-10-17: a Cursor account refusing `[role_forbidden]` took two children in a row before it was).
-const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
+const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined, gateway: FailureQueries["gatewayRefused"]): FailureWrite[] => {
     if (event.code === undefined || !REFUSING_CODES.has(event.code) || context.door === true) {
         return [];
     }
@@ -195,14 +204,16 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         // reading (ProviderRefusal.unmetered). Codex's "send a request to your admin" is not one (failure-sentences.ts).
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
-    return [
-        { kind: "provider-refusal", provider, refusal },
-        { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } },
-    ];
+    const reread: FailureWrite = { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } };
+    // The gateway filed this spent allowance already, under the account that gave it: the re-read is all that is owed.
+    if (kind === "limit" && model !== undefined && routedTurn(provider, context.turn.harness) && gateway?.(provider, model) === true) {
+        return [reread];
+    }
+    return [{ kind: "provider-refusal", provider, refusal }, reread];
 };
 
 // The records a frame files by its code alone, before anything is asked.
-const filedWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
+const filedWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined, gateway: FailureQueries["gatewayRefused"]): FailureWrite[] => {
     const model = named(context.model);
     // Not the key (dead, out of credit, removed): it refuses every model behind it alike, and hiding this one for a day kept
     // it off the list after a working key replaced the dead one (isKeyRefusalText).
@@ -214,7 +225,7 @@ const filedWrites = (event: ErrorFrame, context: FailureContext, reopening: Reop
         event.code === "claude-not-entitled" && context.account !== undefined
             ? [{ kind: "seat-refusal", account: context.account, reason: event.message }]
             : [];
-    return [...refusalWrites(event, context, reopening), ...modelRefusal, ...seatRefusal];
+    return [...refusalWrites(event, context, reopening, gateway), ...modelRefusal, ...seatRefusal];
 };
 
 const logOf = (event: ErrorFrame, context: FailureContext): FailurePlan["log"] => {
@@ -554,46 +565,11 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     }
 };
 
-// Google's sentence for an account it stopped serving until its owner verifies it (403, VALIDATION_REQUIRED).
-const ASKS_VERIFICATION = /^verify your account to continue\.?$/i;
-
-// How many sign-ins the sentence names before it counts the rest: enough to recognise, short enough to read.
-const NAMED_ACCOUNTS = 3;
-
-// "a@x, b@y and 4 more": the names a reader recognises, then how many are left.
-const accountList = (labels: readonly string[]): string => {
-    const shown = labels.slice(0, NAMED_ACCOUNTS);
-    const rest = labels.length - shown.length;
-    if (rest > 0) {
-        return `${shown.join(", ")} and ${String(rest)} more`;
-    }
-    return shown.length === 1 ? (shown[0] ?? "") : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1) ?? ""}`;
-};
-
-// Google's "Verify your account to continue." names no account, and on a routed turn the proxy picked it: the reader
-// is told which accounts are waiting on them and where each one's verify link is. The provider's sentence stays when
-// the translator has not benched any yet, since then there is nothing more true to say.
-const namedVerification = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<ErrorFrame> => {
-    if (!ASKS_VERIFICATION.test(event.message.trim()) || !KeyedProviderSchema.safeParse(context.provider).success) {
-        return event;
-    }
-    const labels = await queries.awaitingVerification(context.provider).catch(() => [] as readonly string[]);
-    if (labels.length === 0) {
-        return event;
-    }
-    const subject = labels.length === 1 ? "an account" : `${String(labels.length)} accounts`;
-    return {
-        ...event,
-        own: true,
-        message: `Google wants ${subject} verified before ${labels.length === 1 ? "it takes" : "they take"} turns again: ${accountList(labels)}. Open Sandbox ▸ Agent and follow the Verify link on ${labels.length === 1 ? "its row" : "each row"}.`,
-    };
-};
-
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
     const asked = await namedVerification(event, context, queries);
     // A spent allowance's reopening, asked once: the refusal it files and the hold it books must not disagree.
     const reopening = asked.code === "rate_limit" ? await reopeningOf(asked, context, queries) : undefined;
-    const filed = filedWrites(asked, context, reopening);
+    const filed = filedWrites(asked, context, reopening, queries.gatewayRefused);
     const log = logOf(event, context);
     const { frame, held } = await dress(asked, context, queries, reopening);
     return { frame, writes: filed, log, held };

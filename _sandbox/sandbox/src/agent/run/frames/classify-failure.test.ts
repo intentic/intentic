@@ -402,6 +402,55 @@ describe("a spent allowance", () => {
         expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
     });
 
+    // 2026-11-08: the translator gateway files each routed refusal under the account that gave it (translator-gateway.ts).
+    // The turn's own copy, filed under no account, stood over every account of the provider and flip-flopped their verdicts.
+    describe("after the translator gateway filed the refusal under its account", () => {
+        const quota: ErrorFrame = { ...limit, message: "Individual quota reached. Please upgrade your subscription to increase your limits." };
+        const routed = context({ provider: "gemini", model: "gemini-3.8-flash-high", account: undefined, attribution: {}, limitReset: 1_900_000_000 });
+        const filedByGateway = (filed: boolean, asked: unknown[][] = []): FailureQueries => ({
+            ...answering({ way }),
+            gatewayRefused: (provider, model) => {
+                asked.push([provider, model]);
+                return filed;
+            },
+        });
+
+        test("a routed turn files no refusal under no account, only the re-read, and still holds", async () => {
+            const asked: unknown[][] = [];
+            const plan = await classifyFailure(quota, routed, filedByGateway(true, asked));
+            expect(asked).toStrictEqual([["gemini", "gemini-3.8-flash-high"]]);
+            expect(plan.writes).toStrictEqual([{ kind: "headroom-refresh", options: { scope: { providers: ["gemini"] }, maxAgeMs: 0 } }]);
+            expect(plan.held).toMatchObject({ reason: "limit", reopensAt: 1_900_000_000 });
+        });
+
+        test("one the gateway did not file is filed under no account, as before", async () => {
+            const plan = await classifyFailure(quota, routed, filedByGateway(false));
+            expect(plan.writes).toStrictEqual([
+                {
+                    kind: "provider-refusal",
+                    provider: "gemini",
+                    refusal: { at: NOW, kind: "limit", message: quota.message, model: "gemini-3.8-flash-high", resetsAt: 1_900_000_000 },
+                },
+                { kind: "headroom-refresh", options: { scope: { providers: ["gemini"] }, maxAgeMs: 0 } },
+            ]);
+        });
+
+        // A sign-in of the loop's own (Grok Build) never went through the gateway: its refusal is that sign-in's alone.
+        test("a loop on a sign-in of its own still files its refusal under that sign-in", async () => {
+            const plan = await classifyFailure(
+                quota,
+                context({ provider: "grok", turn: { ...input, agent: "grok", harness: "vendor" }, model: "grok-code-fast-1", attribution: { account: "build" } }),
+                filedByGateway(true),
+            );
+            expect(plan.writes[0]).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", account: "build" } });
+        });
+
+        test("a refused credential is still filed: the gateway files spent allowances alone", async () => {
+            const plan = await classifyFailure({ ...quota, code: "claude-token-refused", message: "invalid api key" }, routed, filedByGateway(true));
+            expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
+        });
+    });
+
     // 2026-10-13: a Cursor run-out was filed in a ledger of its own that only the role ladder read. The refusal against
     // the account and model is the whole record, and every surface reads it.
     test("on a plan with nothing to poll files the refusal against the account and the model, and nothing beside it", async () => {

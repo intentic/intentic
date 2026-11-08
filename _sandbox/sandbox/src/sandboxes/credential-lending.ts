@@ -1,6 +1,7 @@
 import type { RunnerCredential } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../http/forward-headers.js";
+import { isTranslatorGatewayUrl } from "../http/translator-gateway-url.js";
 import { opt } from "../opt.js";
 
 // A trial marks the answer only when it is one, as the wire has always said it.
@@ -21,7 +22,9 @@ export const toRunnerCredential = (resolved: HarnessCredentialsResult, translato
     }
     const { oauthToken, endpoint, account, trial } = resolved.credentials;
     if (endpoint !== undefined) {
-        if (translatorUrl !== "" && endpoint.baseUrl === translatorUrl) {
+        // The translator's gateway on this daemon's loopback carries the translator's bearer as surely as the translator
+        // does, and reaches nothing from a runner's machine: either is the route, never the credential.
+        if (translatorUrl !== "" && (endpoint.baseUrl === translatorUrl || isTranslatorGatewayUrl(endpoint.baseUrl))) {
             return { ok: true, kind: "parent-translator", model: endpoint.model, ...opt("trial", trialOf(trial)) };
         }
         return {

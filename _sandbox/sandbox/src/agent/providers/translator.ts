@@ -1,10 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import type { AccountUsage, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { bindingWindow, SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import { cliProxyIdOf, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
@@ -18,10 +18,11 @@ import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { engineBinary, engineReady, resolveEngine } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
-import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
+import { authFileCooling, fetchTranslatorUsage, modelCooldowns, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { superviseTranslator } from "./translator-supervisor.js";
-import { parseJsonOr } from "@intentic/base/json";
+import { authFilesOnDisk, cliProxyAuthDir, connectedTranslatorProviders } from "./translator-auth-files.js";
+import { createAccountPinning, logPins, type PinReport } from "./translator-prefixes.js";
 
 // CLIProxyAPI: a bundled Go proxy holding the user's Codex/Grok/Kimi/Gemini subscriptions and re-serving them keyed by
 // model id, on every wire a loop here speaks: Anthropic Messages (the Claude Code harness), OpenAI Responses (native
@@ -34,59 +35,8 @@ const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = Object.fromEntries(
     KeyedProviderSchema.options.map((provider) => [provider, cliProxyIdOf(provider) ?? provider] as const),
 ) as Record<KeyedProvider, string>;
 
-// The subscription-token store; survives sandbox rebuilds alongside the other AI-provider credentials.
-export const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
-
-// Inverse of CLIPROXY_PROVIDER: what an auth file on disk stamps itself with.
-const KEYED_PROVIDER: Record<string, KeyedProvider> = Object.fromEntries(
-    Object.entries(CLIPROXY_PROVIDER).map(([provider, cliproxy]) => [cliproxy, provider as KeyedProvider]),
-);
-
-// Connection view that doesn't need a running proxy: reads subscriptions off the auth-dir, for callers when the proxy
-// can't be asked (before it exists, or while down). A stale credential still counts as connected.
-export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFile[]> => {
-    const names = (await readdir(authDir).catch(() => [])).filter((name) => name.endsWith(".json"));
-    const files = await Promise.all(
-        names.map(async (name): Promise<TranslatorAuthFile[]> => {
-            const raw = await readFile(join(authDir, name), "utf8").catch(() => undefined);
-            if (raw === undefined) {
-                return [];
-            }
-            const parsed = parseJsonOr(raw, undefined) as { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown } | undefined;
-            if (parsed === undefined) {
-                // A file half-written by a login still polling; it counts on the next read.
-                return [];
-            }
-            if (typeof parsed.type !== "string" || KEYED_PROVIDER[parsed.type] === undefined) {
-                return [];
-            }
-            // Shaped like the Management API's row; `auth_index` is absent, only the proxy can supply it. `project_id`
-            // is carried because a Google credential is judged on it, and reading a file as project-less for the sole
-            // reason that the proxy is down would bench every Google account at once. `disabled` persists into the
-            // file, so a credential already taken out of the rotation still reads as benched here.
-            return [
-                {
-                    name,
-                    provider: parsed.type,
-                    ...(typeof parsed.email === "string" ? { email: parsed.email } : {}),
-                    ...(typeof parsed.project_id === "string" ? { project_id: parsed.project_id } : {}),
-                    ...(parsed.disabled === true ? { disabled: true } : {}),
-                },
-            ];
-        }),
-    );
-    return files.flat();
-};
-
-export const connectedTranslatorProviders = async (authRoot: string): Promise<Set<KeyedProvider>> => {
-    const files = await authFilesOnDisk(cliProxyAuthDir(authRoot));
-    return new Set(
-        files.flatMap((file) => {
-            const keyed = file.provider === undefined ? undefined : KEYED_PROVIDER[file.provider];
-            return keyed === undefined ? [] : [keyed];
-        }),
-    );
-};
+// The auth dir and what sits in it, read without the proxy (translator-auth-files.ts), named here with the rest.
+export { authFilesOnDisk, cliProxyAuthDir, connectedTranslatorProviders };
 
 // Whether starting the translator would serve anything: a subscription or a user's own endpoint connected.
 export const translatorWanted = async (services: Pick<Services, "authRoot" | "capabilities">): Promise<boolean> =>
@@ -99,10 +49,14 @@ export const TRANSLATOR_BINARY_MISSING =
 export const cliProxyConfigPath = (config: Config): string => join(config.historyRoot, "translator", "config.yaml");
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.
 export const cliProxyManagementUrl = (config: Config): string => `${config.translator.url.replace(/\/$/, "")}/v0/management`;
+// How OpenCode's Google provider reaches the translator: its root and bearer, and in the root's place the daemon's gateway,
+// which places each request on one Google account (translator-gateway.ts), its address minted at each server boot.
+export const openCodeGeminiReach = (config: Config, gateway: () => Promise<string>) => ({ baseUrl: config.translator.url, token: config.translator.token, gateway });
 
 // Every field is written explicitly: an omitted key unmarshals to Go's zero value, not CLIProxyAPI's documented
 // default. `antigravity-credits` is off on purpose: the paid-credits fallback must not spend real money unasked.
-// Retries one request across at most this many accounts; CLIProxyAPI's own default (0) means the whole fleet.
+// Retries one request across at most this many accounts; CLIProxyAPI's own default (0) means the whole fleet. Only an
+// unpinned request is retried so: one the gateway pinned (translator-gateway.ts) is eligible on its own account alone.
 const MAX_RETRY_CREDENTIALS = 5;
 
 // Stripped from every request at the proxy's edge; `prompt_cache_key` stays, keeping the session cache warm.
@@ -210,6 +164,11 @@ export const startTranslator = (services: Services): void => {
                 benched.length === 0 ? undefined : logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
             )
             .catch((error: unknown) => logger.warn({ err: error }, "translator: could not bench unusable credentials"));
+        // Every credential reachable on its own prefix, so the gateway (translator-gateway.ts) can place each request.
+        void services.cliProxy
+            .pinAccounts()
+            .then((report) => logPins(logger, report))
+            .catch((error: Error) => logger.warn({ err: error }, "translator: could not pin credentials"));
     }, WARMUP_DELAY_MS).unref();
 };
 
@@ -231,6 +190,11 @@ export interface CliProxyClient {
     readonly sharedUsageKey: (provider: KeyedProvider) => Promise<string | undefined>;
     // Takes every credential that can serve no turn out of the proxy's rotation, answering with the names it benched.
     readonly benchUnusable: () => Promise<string[]>;
+    // Gives each credential the prefix that pins a request to it alone (translator-prefixes.ts) where it lacks one; a
+    // round younger than `maxAgeMs` is not run again. Best effort, answering what it pinned and what refused, once each.
+    readonly pinAccounts: (options?: { readonly maxAgeMs?: number }) => Promise<PinReport>;
+    // That prefix for one credential, by file name, once it is known to carry it; undefined leaves it unpinned.
+    readonly accountPrefix: (name: string) => string | undefined;
     // `redirect` asks for the loopback-redirect sign-in where a provider has both (Codex): the caller passes it only when
     // someone of the owner's is watching that loopback address (loopback-bridge.ts), since anywhere else the page
     // dead-ends and a device code is the easier thing to carry.
@@ -294,6 +258,8 @@ export const createCliProxyClient = (params: {
     const binaryPresent = params.binaryPresent ?? (() => engineReady("translator"));
     const spawnFn = params.spawnFn ?? spawn;
     const auth = { authorization: `Bearer ${token}` };
+    // Read off the files, since the listing does not say which carry their prefix.
+    const pinning = createAccountPinning({ managementUrl, auth, files: () => authFilesOnDisk(authDir), fetchFn });
 
     // No binary in the image needs a rebuild; a binary that's present but not answering is mid-boot or mid-restart and
     // just needs a moment.
@@ -611,12 +577,17 @@ export const createCliProxyClient = (params: {
                 providerFiles(files, provider).map((file) => {
                     const usage = stored[usageKey(provider, file.name)];
                     const cooling = benched(provider, file);
-                    return {
+                    const row: TranslatorAccount = {
                         name: file.name,
                         label: file.email ?? file.label ?? file.name,
                         ...(usage === undefined ? {} : { usage }),
                         ...(cooling === undefined ? {} : { cooling }),
                     };
+                    const cooldowns = modelCooldowns(file);
+                    if (cooldowns.length > 0) {
+                        row.cooldowns = cooldowns;
+                    }
+                    return row;
                 });
             return Object.fromEntries(KeyedProviderSchema.options.map((provider) => [provider, of(provider)])) as TranslatorAccounts;
         },
@@ -626,6 +597,8 @@ export const createCliProxyClient = (params: {
             return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
         },
         benchUnusable,
+        pinAccounts: pinning.pin,
+        accountPrefix: pinning.prefixOf,
         connect: (provider, options) =>
             provider === "grok" || provider === "kimi"
                 ? connectDevice(provider)

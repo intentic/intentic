@@ -80,7 +80,7 @@ export type RouteResult = { readonly ok: true; readonly route: ModelRoute } | Ro
 // What a route is resolved from: the stores behind each credential kind, and the catalogs a pick is validated against.
 export type RouteDeps = Pick<
     Services,
-    "capabilities" | "cliProxy" | "config" | "endpointModels" | "minted" | "providerCatalogs" | "trial" | "wakeLocalModel"
+    "capabilities" | "cliProxy" | "config" | "endpointModels" | "minted" | "providerCatalogs" | "translatorGateway" | "trial" | "wakeLocalModel"
 > &
     ServiceabilityDeps;
 
@@ -135,13 +135,9 @@ const NO_ROUTE = (provider: AgentProvider, loop: AgentLoop): RouteRefusal => ({
     message: `${providerLabel(provider)} doesn't run on ${loopLabel(provider, loop)} here.`,
 });
 
-// The translator's endpoint for a provider it holds a subscription for, or why there isn't one. Split from the model, so
-// a loop with its own catalog for its own provider (Codex on ChatGPT) takes the credential and resolves the model itself.
-export const translatorEndpoint = async (
-    services: Pick<Services, "cliProxy" | "config">,
-    provider: TranslatorProvider,
-    loop: AgentLoop,
-): Promise<{ readonly ok: true; readonly endpoint: RouteEndpoint } | RouteRefusal> => {
+// Why the translator cannot serve a provider on a loop, or undefined where it can: no translator in the image, or no
+// subscription of the provider's connected to it.
+const translatorRefusal = async (services: Pick<Services, "cliProxy" | "config">, provider: TranslatorProvider, loop: AgentLoop): Promise<RouteRefusal | undefined> => {
     if (services.config.translator.url === "") {
         if (loop === "claude-code") {
             // Codex/Grok fall back to their own loop; Kimi has none, so this is only an image problem for it.
@@ -169,11 +165,25 @@ export const translatorEndpoint = async (
                     : `Connect your ${PROVIDER_ACCESS[provider].requirement} in Sandbox ▸ Agent to run ${onLoop(provider, loop)}.`,
         };
     }
-    // Claude Code appends /v1/messages to the root itself; the OpenAI clients take the versioned root.
-    return {
-        ok: true,
-        endpoint: { base: services.config.translator.url, path: loop === "claude-code" ? "" : "/v1", token: services.config.translator.token },
-    };
+    return undefined;
+};
+
+// The translator's endpoint for a provider it holds a subscription for, or why there isn't one. Split from the model, so
+// a loop with its own catalog for its own provider (Codex on ChatGPT) takes the credential and resolves the model itself.
+export const translatorEndpoint = async (
+    services: Pick<Services, "cliProxy" | "config" | "translatorGateway">,
+    provider: TranslatorProvider,
+    loop: AgentLoop,
+): Promise<{ readonly ok: true; readonly endpoint: RouteEndpoint } | RouteRefusal> => {
+    const refused = await translatorRefusal(services, provider, loop);
+    if (refused !== undefined) {
+        return refused;
+    }
+    // Claude Code appends /v1/messages to the root itself; the OpenAI clients take the versioned root. The root is the
+    // daemon's gateway under a session signed for the provider, which places each request on one of its accounts
+    // (translator-gateway.ts); behind the privacy shield it is the shield's upstream. It checks the translator's bearer too.
+    const base = await services.translatorGateway.baseUrlFor(provider);
+    return { ok: true, endpoint: { base, path: loop === "claude-code" ? "" : "/v1", token: services.config.translator.token } };
 };
 
 const resolveTranslatorRoute = async (services: RouteDeps, provider: TranslatorProvider, loop: AgentLoop, wire: RouteWire, pick: string | undefined): Promise<RouteResult> => {
@@ -489,8 +499,7 @@ export const routeReadiness = async (
     }
     if (spec?.auth.kind === "translator") {
         // SAFETY: a row whose auth is translator is a TranslatorProvider; the union is derived from exactly that kind.
-        const reached = await translatorEndpoint(services, spec.id as TranslatorProvider, loop);
-        return readinessOf(reached.ok ? undefined : reached);
+        return readinessOf(await translatorRefusal(services, spec.id as TranslatorProvider, loop));
     }
     return readinessOf(NO_ROUTE(provider, loop));
 };

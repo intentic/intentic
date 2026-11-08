@@ -3,7 +3,7 @@ import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/sc
 import { gatingWindows, type ServiceFacts, serviceStates, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import { poolName, type RunOut } from "../../../usage/run-outs.js";
+import { poolName, poolRunOut, type RunOut, type RunOuts } from "../../../usage/run-outs.js";
 import { runningOn, turnPulseOf } from "../turn/turn-pulse.js";
 import { type BudgetAccount, type BudgetWindow, capacity, type ChildCost, choose, leastShort, type Projection } from "./budget.js";
 import { turnRate } from "./token-meter.js";
@@ -51,12 +51,12 @@ const priorPointsPerAgentHour = (window: Pick<UsageWindow, "kind" | "label">): n
     return period === undefined ? 1 : PRIOR_FIVE_HOUR_POINTS * (5 / Math.max(1 / 60, period.seconds / 3_600)) ** PERIOD_EXPONENT;
 };
 
-// The rate the provider's last run-out shows for this window, where it named the window and when it opened: 100 points
-// under its agents in the hours it lasted. Bounded by the generic prior's quarter and four times it, since the count of
-// agents is only this sandbox's, at the moment it ran out.
+// The rate this window's last run-out shows (run-outs.ts poolRunOut, so never another pool's: 2026-11-08), where it
+// named when the window opened: 100 points under its agents in the hours it lasted. Bounded by the generic prior's
+// quarter and four times it, since the count of agents is only this sandbox's, at the moment it ran out.
 const runOutPointsPerAgentHour = (window: UsageWindow, runOut: RunOut | undefined): number | undefined => {
     const agents = runOut === undefined ? 0 : Object.values(runOut.models).reduce((sum, count) => sum + count, 0);
-    if (runOut?.openedAt === undefined || agents === 0 || runOut.pool === undefined || runOut.pool !== poolName(window)) {
+    if (runOut?.openedAt === undefined || agents === 0) {
         return undefined;
     }
     const hours = Math.max(0.1, (runOut.at - runOut.openedAt) / 3_600_000);
@@ -131,9 +131,9 @@ const loadByAccount = (deps: Pick<PlannerDeps, "burnRates">, provider: string, n
 };
 
 // One window as the projection reads it: a window whose reset has passed has reopened, whatever its last reading said.
-const budgetWindow = (deps: Pick<PlannerDeps, "burnRates">, input: { provider: string; account: string | undefined; runOut: RunOut | undefined }, window: UsageWindow, now: number): BudgetWindow => {
+const budgetWindow = (deps: Pick<PlannerDeps, "burnRates">, input: { provider: string; account: string | undefined; runOuts: RunOuts }, window: UsageWindow, now: number): BudgetWindow => {
     const learned = input.account === undefined ? undefined : deps.burnRates.tokensPerPoint(input.provider, input.account, window.kind);
-    const pointsPerAgentHour = runOutPointsPerAgentHour(window, input.runOut) ?? priorPointsPerAgentHour(window);
+    const pointsPerAgentHour = runOutPointsPerAgentHour(window, poolRunOut(input.runOuts, input.provider, window)) ?? priorPointsPerAgentHour(window);
     const resetsInHours = window.resetsAt === undefined ? undefined : (window.resetsAt * 1000 - now) / 3_600_000;
     const reopened = resetsInHours !== undefined && resetsInHours <= 0;
     const period = windowPeriod(window);
@@ -161,7 +161,7 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
         // allow(silent-catch): an unreadable refusal file leaves the readings to speak alone, as in the listing.
         deps.providerRefusals.onFile().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
         // allow(silent-catch): an unreadable run-out record only costs the planner a prior; the generic one stands.
-        deps.runOuts.read().catch((): Record<string, RunOut> => ({})),
+        deps.runOuts.read().catch((): RunOuts => ({})),
         deps.sandboxSettings.get(),
     ]);
     const model = { id: input.model };
@@ -172,7 +172,6 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
     });
     const load = loadByAccount(deps, input.provider, now);
     const child = childCostOf(deps, input.provider, input.model);
-    const runOut = runOuts[input.provider];
     const placed = input.provider === "claude";
     const reserve = settings.subagentReservePercent;
     if (placed) {
@@ -181,14 +180,14 @@ const planAccounts = async (deps: PlannerDeps, input: PlanInput, now: number = D
             return {
                 id: reading.account,
                 ...opt("label", reading.label),
-                windows: gatingWindows(reading.usage, model).map((window) => budgetWindow(deps, { provider: input.provider, account: reading.account, runOut }, window, now)),
+                windows: gatingWindows(reading.usage, model).map((window) => budgetWindow(deps, { provider: input.provider, account: reading.account, runOuts }, window, now)),
                 loadTokensPerHour: here.tokensPerHour,
                 agents: here.agents,
             };
         });
         return { accounts, placed, child, reserve };
     }
-    return { accounts: ready.length === 0 ? [] : [pooled(deps, input, ready, load, runOut, now)], placed, child, reserve };
+    return { accounts: ready.length === 0 ? [] : [pooled(deps, input, ready, load, runOuts, now)], placed, child, reserve };
 };
 
 // A routed provider's ready accounts as one: each window's points summed across them, its reset the latest of theirs.
@@ -197,13 +196,13 @@ const pooled = (
     input: PlanInput,
     ready: readonly ServiceFacts[],
     load: ReadonlyMap<string | undefined, { tokensPerHour: number; agents: number }>,
-    runOut: RunOut | undefined,
+    runOuts: RunOuts,
     now: number,
 ): BudgetAccount => {
     const byKind = new Map<string, BudgetWindow>();
     for (const reading of ready) {
         for (const window of gatingWindows(reading.usage, { id: input.model })) {
-            const one = budgetWindow(deps, { provider: input.provider, account: undefined, runOut }, window, now);
+            const one = budgetWindow(deps, { provider: input.provider, account: undefined, runOuts }, window, now);
             const kept = byKind.get(window.kind);
             byKind.set(
                 window.kind,

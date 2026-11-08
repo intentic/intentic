@@ -16,7 +16,7 @@ import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contrac
 import type { Services } from "../../composition.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
-import { poolName, type RunOut } from "../../usage/run-outs.js";
+import { modelRunOut, poolName, type RunOut, type RunOuts } from "../../usage/run-outs.js";
 import { runningOn } from "../run/turn/turn-pulse.js";
 import { childCostOf, forecastBudget } from "../run/spend/budget-planner.js";
 import { forecastWords } from "../run/spend/budget-words.js";
@@ -81,7 +81,8 @@ export interface SpawnableProvider {
     // This sandbox's agents running on the provider right now, by model; absent when none is. What a fan-out adds to.
     readonly running?: Readonly<Record<string, number>>;
     // When its allowance last ran out, and under how many of this sandbox's agents (usage/run-outs.ts): the rate beside
-    // the level, so a parent can see how fast a fan-out on it spends a window.
+    // the level, so a parent can see how fast a fan-out on it spends a window. The pool the budget line's model spends,
+    // never another one of the provider's (2026-11-08); the newest of any where the line names no model.
     readonly lastRunOut?: RunOut;
     // The fan-out planner's projection for children of its heaviest model, in words (agent/run/spend/budget-words.ts): each
     // account's standing and how many more fit now. Absent for a provider whose accounts read no figure.
@@ -170,7 +171,7 @@ const spendable = (
     catalog: { models: Model[] },
     readings: readonly ServiceFacts[],
     refusals: RefusalsOnFile,
-    load: { readonly running?: Readonly<Record<string, number>> | undefined; readonly lastRunOut?: RunOut | undefined } = {},
+    load: { readonly running?: Readonly<Record<string, number>> | undefined } = {},
 ): SpawnableProvider => {
     const judged = catalog.models.map((model) => {
         const ref: ModelRef = { id: model.id, label: model.label };
@@ -194,7 +195,6 @@ const spendable = (
         ...(reopensAt === undefined ? {} : { reopensAt }),
         loops: loopsOf(provider),
         ...opt("running", load.running),
-        ...opt("lastRunOut", load.lastRunOut),
     };
 };
 
@@ -218,18 +218,20 @@ export const spawnableProviders = async (services: Services): Promise<readonly S
     // An unreadable refusal file leaves the readings to speak alone, as they did before one was ever written.
     const refusalsRead = async (): Promise<Record<string, readonly ProviderRefusal[]>> => services.providerRefusals.onFile();
     // allow(silent-catch): a run-out record that cannot be read only costs the listing its rate, never its levels.
-    const runOutsRead = async (): Promise<Record<string, RunOut>> => services.runOuts.read();
+    const runOutsRead = async (): Promise<RunOuts> => services.runOuts.read();
     const [ready, refusals, runOuts] = await Promise.all([
         services.providerReadiness(),
         refusalsRead().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
-        runOutsRead().catch((): Record<string, RunOut> => ({})),
+        runOutsRead().catch((): RunOuts => ({})),
     ]);
     return Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
             const [catalog, readings] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), factsOf(services, provider)]);
-            const row = spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider), lastRunOut: runOuts[provider] });
-            const budget = readings.length === 0 ? undefined : await budgetLine(services, row, readings);
-            return budget === undefined ? row : { ...row, budget };
+            const row = spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider) });
+            const model = readings.length === 0 ? undefined : budgetModel(services, row);
+            const lastRunOut = modelRunOut(runOuts, provider, readings.map((reading) => reading.usage), model);
+            const budget = model === undefined ? undefined : await budgetLine(services, row.id, model, readings);
+            return { ...row, ...opt("lastRunOut", lastRunOut), ...opt("budget", budget) };
         }),
     );
 };
@@ -247,14 +249,10 @@ const budgetModel = (services: Services, row: SpawnableProvider): string | undef
     }, undefined)?.id;
 };
 
-// The provider's budget line, where its accounts read a figure.
-const budgetLine = async (services: Services, row: SpawnableProvider, readings: readonly ServiceFacts[]): Promise<string | undefined> => {
-    const model = budgetModel(services, row);
-    if (model === undefined) {
-        return undefined;
-    }
+// The provider's budget line for children of `model`, where its accounts read a figure.
+const budgetLine = async (services: Services, provider: AgentProvider, model: string, readings: readonly ServiceFacts[]): Promise<string | undefined> => {
     // allow(silent-catch): the budget line is advice beside the figures; a projection that cannot be read leaves them alone.
-    const forecast = await forecastBudget(services, { provider: row.id, model, readings }).catch(() => undefined);
+    const forecast = await forecastBudget(services, { provider, model, readings }).catch(() => undefined);
     return forecast === undefined ? undefined : forecastWords(forecast, model);
 };
 

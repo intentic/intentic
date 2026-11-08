@@ -3,8 +3,9 @@ import { z } from "zod";
 // WHAT A PROVIDER SAID WHEN IT REFUSED A TURN, and the ledger of them the sandbox answers with. Kept out of plan-limits.ts,
 // which re-exports both, so the plan and turn schemas there stay within one file's reach.
 
-// Observed and exact, unlike a polled usage snapshot that can be stale; keyed by provider, not account, since a routed
-// turn doesn't know which served it. `kind` is read off what the provider said, not the frame code.
+// Observed and exact, unlike a polled usage snapshot that can be stale; filed by provider, naming the account it refused
+// wherever that is known (a routed turn's since the daemon's gateway places each request on one: 2026-11-08), and judged
+// on that account alone. `kind` is read off what the provider said, not the frame code.
 export const ProviderRefusalSchema = z.object({
     // Read side by side with `AccountUsage.measuredAt` (also ms).
     at: z.number().describe("When it refused, in milliseconds."),
@@ -15,7 +16,8 @@ export const ProviderRefusalSchema = z.object({
             "Three different noes, kept apart because what fixes each is different. A spent allowance is answered by waiting; a refused credential by signing in again; and an entitlement refusal, where somebody has switched this off for your seat, by neither of those. That last one authenticates fine and reports healthy limits the whole time it refuses everything.",
         ),
     message: z.string().describe("The provider's own words, verbatim. The only part that says which limit or which credential."),
-    // Known for native turns only; a routed turn doesn't say which account served it.
+    // Absent only where nothing names the account that refused: such a refusal is judged on each account by that
+    // account's own reading (refusal-verdict.ts).
     account: z.string().optional().describe("Which account was serving, where that is known."),
     // Lets a `limit` refusal be read against the pool that model spends (`UsageWindow.gates`), not the account's
     // fullest pool.
@@ -46,6 +48,13 @@ export const ProviderRefusalSchema = z.object({
         ),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
+// A routed account's per-model bench as the translator holds it: the provider's own refusal of that account on that
+// model, kept where the translator keeps it rather than copied onto the ledger, so it ends when the provider said.
+export const ModelCooldownSchema = z.object({
+    model: z.string().describe("The model the provider refused this account on, as the translator names it."),
+    until: z.number().describe("When the provider said to try again, in epoch seconds."),
+});
+export type ModelCooldown = z.infer<typeof ModelCooldownSchema>;
 // A released daemon (1.345.0 and earlier) answers one refusal per provider, its last: read as a list of one, as the
 // /events frame's `refusal` is (refusalsOf). What this build sends, and its output shape, is still the list.
 const RefusalsOnFileSchema = z.codec(z.union([z.array(ProviderRefusalSchema), ProviderRefusalSchema]), z.array(ProviderRefusalSchema), {

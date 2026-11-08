@@ -18,7 +18,7 @@ import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { probePiAgent } from "./runtimes/pi/pi-probe.js";
 import { activityLogDocument, type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AuditService, auditServiceOf } from "./audit/audit-service.js";
-import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
+import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient, openCodeGeminiReach } from "./agent/providers/translator.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
@@ -302,8 +302,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
             ? {}
             : {
                   gemini: {
-                      baseUrl: config.translator.url,
-                      token: config.translator.token,
+                      ...openCodeGeminiReach(config, () => whole().translatorGateway.baseUrlFor("gemini")),
                       // Each row's id, input modalities and reasoning tiers: what the server registers per model.
                       models: async () => (await gemini.geminiModels.models()).models,
                   },

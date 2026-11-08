@@ -730,6 +730,33 @@ describe("acquisitions", () => {
         lease.release();
     });
 
+    // The daemon's translator gateway stands in for the translator's root (translator-gateway.ts), its address minted at
+    // each boot; the shield, where it stands, stands in front of that address rather than the translator's.
+    test("Google's requests go to the gateway address minted at boot, and the shield stands in front of it", async () => {
+        const MINTED = "http://127.0.0.1:7777/translator-gateway/s-1";
+        const google = () => ({
+            baseUrl: "http://127.0.0.1:8789",
+            token: "local",
+            models: jest.fn<OpenCodeGeminiConfig["models"]>().mockResolvedValue([OLD_MODEL]),
+            gateway: async () => MINTED,
+        });
+        const plain = runtime({ gemini: google() });
+        await plain.service.client();
+        expect(plain.at(0).config.providers?.[OPENCODE_GEMINI_PROVIDER]).toMatchObject({ settings: { baseURL: `${MINTED}/v1` } });
+
+        const upstreams: string[] = [];
+        const shielded = runtime({
+            gemini: google(),
+            route: async (provider, upstream) => {
+                upstreams.push(`${provider} ${upstream}`);
+                return `http://127.0.0.1:9000/${provider}`;
+            },
+        });
+        await shielded.service.client();
+        expect(upstreams).toContain(`gemini ${MINTED}`);
+        expect(shielded.at(0).config.providers?.[OPENCODE_GEMINI_PROVIDER]).toMatchObject({ settings: { baseURL: "http://127.0.0.1:9000/gemini/v1" } });
+    });
+
     test("a modality-only catalog change restarts an idle server with the model's new capabilities", async () => {
         const fake = googleRuntime();
         const previous = await fake.service.client();

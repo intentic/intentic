@@ -8,12 +8,13 @@ import type { FailureQueries } from "./classify-failure.js";
 import type { MemoryDeath } from "./memory-death.js";
 
 // The questions a failure's classification asks of the daemon's own records rather than of a conversation: when a spent
-// allowance reopens, the way on, which routed sign-ins wait on their owner, and whether memory killed a dead runtime.
-// Every request a runtime runs has these; a conversation's own two (its break policy and its stop ladder) are added where
-// there is one (stream-agent.ts).
+// allowance reopens, the way on, which routed sign-ins wait on their owner, whether memory killed a dead runtime, and
+// whether the translator gateway already filed the refusal. Every request a runtime runs has these; a conversation's own
+// two (its break policy and its stop ladder) are added where there is one (stream-agent.ts). `openedAt` is no later than
+// the request's first call went out: a refusal the gateway filed since is this request's own.
 export type RecordQueries = Omit<FailureQueries, "breakPolicy" | "stopLadder">;
 
-export const recordQueries = (services: Services): RecordQueries => ({
+export const recordQueries = (services: Services, openedAt?: number): RecordQueries => ({
     reopensAt: (at) => limitReopensAt({ services, ...at }),
     standingReopensAt: (at) => standingReopensAt({ services, ...at }),
     limitWay: (params) => limitWayOf(services, params),
@@ -25,6 +26,10 @@ export const recordQueries = (services: Services): RecordQueries => ({
         return (await services.cliProxy.accounts())[keyed.data].flatMap((account) => (account.cooling?.verify === undefined ? [] : [account.label]));
     },
     memoryDeath: (conversationId, turn, now) => memoryDeathOf(services, conversationId, turn, now),
+    gatewayRefused: (provider, model) => {
+        const at = openedAt === undefined ? undefined : services.translatorGateway.attributedAt(provider, model);
+        return at !== undefined && openedAt !== undefined && at >= openedAt;
+    },
 });
 
 /**

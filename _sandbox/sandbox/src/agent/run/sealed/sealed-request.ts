@@ -53,9 +53,9 @@ export interface SealedAsk {
 }
 
 // A sealed request belongs to no conversation, so classification never asks it a conversation's questions: nothing is
-// held for a resume, there is no ladder to climb.
-const sealedQueries = (services: Services): FailureQueries => ({
-    ...recordQueries(services),
+// held for a resume, there is no ladder to climb. `askedAt` is when its one request went out.
+const sealedQueries = (services: Services, askedAt: number): FailureQueries => ({
+    ...recordQueries(services, askedAt),
     breakPolicy: () => Promise.reject(new Error("a sealed request has no conversation to hold")),
     stopLadder: () => {
         throw new Error("a sealed request has no conversation to resume");
@@ -101,6 +101,7 @@ interface SealedRun {
     readonly plan: ArmPlan;
     readonly sessionId: string | undefined;
     readonly answered: boolean;
+    readonly askedAt: number;
 }
 
 // How one planned run ended: the answer, or the provider's refusal, filed by then, and whether it was a spent allowance
@@ -133,7 +134,7 @@ const failure = async (services: Services, event: ErrorFrame, ran: SealedRun): P
                 contextTokens: undefined,
                 now: Date.now(),
             },
-            sealedQueries(services),
+            sealedQueries(services, ran.askedAt),
         );
         await fileFailureWrites(services, classified.writes);
     } catch (error) {
@@ -171,7 +172,7 @@ const runOnce = async (services: Services, ask: SealedAsk, plan: ArmPlan, deadli
             // Coded by its words as a turn's frame is at stream-agent's door (codedFailure): an ACP agent's spent allowance
             // (Devin's "weekly usage quota has been exhausted") arrives uncoded, and uncoded it was neither filed against
             // the account nor retried on a sibling, so the next turn went to the same spent account (2026-10-29).
-            early = { outcome: await failure(services, codedFailure(event), { ask, plan, sessionId, answered }) };
+            early = { outcome: await failure(services, codedFailure(event), { ask, plan, sessionId, answered, askedAt }) };
         }
         if (early !== undefined) {
             stop();

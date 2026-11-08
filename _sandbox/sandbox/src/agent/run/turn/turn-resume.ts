@@ -47,7 +47,7 @@ import { holdCutForMemory } from "./recovery/memory-restart.js";
 import { limitDue } from "./holds/limit-due.js";
 import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
 import { breakPolicyFor } from "./break-policy.js";
-import { keepStandingTrue } from "./holds/held-standing.js";
+import { clearPaces, keepStandingTrue, type RetimePaces } from "./holds/held-standing.js";
 import { releaseBooked } from "./booked-release.js";
 import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 
@@ -278,9 +278,9 @@ export interface TurnResumeScheduler {
     // Something a hold waits on may have changed (a hold recorded, a turn settled, a land, a setting, an account): a
     // pass soon, merged with any other nudge before it runs (workload/nudged-pass.ts).
     readonly nudge: () => void;
-    // The records may now know when a pool reopens (a new usage reading): every hold refused with no instant asks again
-    // at the next pass rather than at its next minute, and that pass runs now.
-    readonly retime: () => void;
+    // The records may now know when a pool reopens, or that a held model can be served (a reading, an account back): every
+    // spent allowance's hold on `provider` (on any, where none is named) asks again at a pass that runs now.
+    readonly retime: (provider?: string) => void;
 }
 
 // The attempt budget spends in under an hour; past this a resume is worse than staying dead.
@@ -590,8 +590,8 @@ const RESUME_BACKSTOP_MS = 30_000;
 // walking the same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a
 // stale snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
 export const createTurnResumeScheduler = (services: Services, backstopMs = RESUME_BACKSTOP_MS): TurnResumeScheduler => {
-    // When each instant-less limit hold last asked the records for its reopen (retimeLimitHold).
-    const retimeAsked = new Map<string, number>();
+    // When each limit hold last asked the records for its reopen or its model's room (held-standing.ts).
+    const retimeAsked: RetimePaces = new Map();
     // The holds already said to be waiting behind a spent allowance (heldBehind), each said once.
     const toldBehind = new WeakSet<HeldRecord>();
 
@@ -625,8 +625,8 @@ export const createTurnResumeScheduler = (services: Services, backstopMs = RESUM
     return {
         tick: passes.run,
         nudge: passes.nudge,
-        retime: () => {
-            retimeAsked.clear();
+        retime: (provider) => {
+            clearPaces(retimeAsked, provider);
             passes.nudge();
         },
         start: passes.start,

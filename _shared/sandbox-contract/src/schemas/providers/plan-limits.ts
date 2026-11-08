@@ -5,6 +5,7 @@ import { AgentHarnessSchema, AgentProviderSchema, ConversationIdSchema, EditorCo
 import { MENTION_LIMIT } from "../../text/mentions.js";
 import { HandoffModeSchema } from "./handoff.js";
 import { NightAnswerSchema } from "../night-hours.js";
+import { ModelCooldownSchema } from "./refusals.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
 // reads this one type.
@@ -150,7 +151,7 @@ export const LimitResetClaimSchema = z.object({
     detail: z.string().optional().describe("What went wrong, in words, for the two outcomes that are this sandbox's fault rather than the plan's."),
 });
 export type LimitResetClaim = z.infer<typeof LimitResetClaimSchema>;
-export { type ProviderRefusal, ProviderRefusalSchema, type ProviderRefusals, ProviderRefusalsSchema } from "./refusals.js";
+export { type ModelCooldown, ModelCooldownSchema, type ProviderRefusal, ProviderRefusalSchema, type ProviderRefusals, ProviderRefusalsSchema } from "./refusals.js";
 // `name` is CLIProxyAPI's auth-file name, the stable key a disconnect addresses; `label` is the reported sign-in
 // identity (email, else the file name).
 export const TranslatorAccountSchema = z.object({
@@ -175,6 +176,11 @@ export const TranslatorAccountSchema = z.object({
             verify: z.string().optional(),
         })
         .optional(),
+    // The proxy's per-model benches: the provider refused this account on one model, for its allowance, and said when
+    // to try again. Each is a spent allowance that names its account, its model and the provider's own instant, which the
+    // serviceability rule reads like a refusal filed for this account (refusal-verdict.ts cooldownRefusals). A bench on
+    // one model never benches the account's others: a Google account out of Claude still serves Gemini.
+    cooldowns: z.array(ModelCooldownSchema).optional(),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // A list per provider, not a flag: CLIProxyAPI holds several auth files per provider and balances across them. Built

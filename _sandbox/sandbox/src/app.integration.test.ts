@@ -36,6 +36,7 @@ import { rejectAuth } from "./auth/auth-slice.testing.js";
 import { fakeHistory } from "./harness/route-fakes.testing.js";
 import { fakeFiles } from "./workspace/workspace-slice.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
+import { testGatewayBase } from "./agent/providers/translator-gateway.testing.js";
 import { automationRecord } from "./harness/route-stores.testing.js";
 import { memoryAutomationsStore } from "./automations/automations-slice.testing.js";
 import { memoryCapabilitiesStore } from "./capabilities/capabilities-slice.testing.js";
@@ -777,11 +778,12 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
     );
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
-    // Served over the translator's endpoint on the fixed local bearer; codexHome falls back to the adapter default. The
-    // allowance it spends is named, so a refusal reads as ChatGPT's rather than the harness's own guess.
+    // Served through the daemon's translator gateway, which places each request on one account, on the fixed local
+    // bearer; codexHome falls back to the adapter default. The allowance it spends is named, so a refusal reads as
+    // ChatGPT's rather than the harness's own guess.
     expect(seen?.credential).toEqual({
         kind: "codex-endpoint",
-        baseUrl: "http://127.0.0.1:8788",
+        baseUrl: testGatewayBase("codex"),
         authToken: "local-bearer",
         allowance: { vendor: "ChatGPT", capacity: expect.any(Function) },
     });
@@ -867,7 +869,7 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
     // Routed, so no subscription token rides along: the credential names the endpoint and whose allowance it spends.
     expect(seen?.credential).toEqual({
         kind: "routed",
-        baseUrl: "http://127.0.0.1:8788",
+        baseUrl: testGatewayBase("kimi"),
         authToken: "local-bearer",
         allowance: { vendor: PROVIDER_VENDOR.kimi, capacity: expect.any(Function) },
     });
@@ -1055,7 +1057,7 @@ test("agent.run serves Kimi on Codex through its own provider block on the trans
     expect(seen?.spec.model).toBe("kimi-k3");
     expect(seen?.credential).toEqual({
         kind: "codex-endpoint",
-        baseUrl: "http://127.0.0.1:8788",
+        baseUrl: testGatewayBase("kimi"),
         authToken: "local-bearer",
         hosted: { id: "intentic-kimi", path: "/v1" },
         allowance: { vendor: "Kimi Code", capacity: expect.any(Function) },

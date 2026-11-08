@@ -103,6 +103,29 @@ test("does not count an account the proxy is routing around", async () => {
     expect(codex?.spent).toBe(1);
 });
 
+// 2026-11-08: one provider's pools run out on their own clocks (Google's Claude and GPT pool, and its Gemini pool), and a
+// rate quoted beside a model is the rate of the pool that model spends, never the provider's newest run-out of another.
+test("quotes the run-out of the pool the listed model spends, not a newer one of another pool", async () => {
+    const opus = window({ kind: "opus_weekly", label: "Opus", gates: { models: ["opus"] }, utilization: 40 });
+    const sonnet = window({ kind: "sonnet_weekly", label: "Sonnet", gates: { models: ["sonnet"] }, utilization: 100 });
+    const opusRanOut = { at: Date.now() - 5 * 3_600_000, pool: "Opus", kind: "opus_weekly", models: { opus: 4 } };
+    const sonnetRanOut = { at: Date.now() - 60_000, pool: "Sonnet", kind: "sonnet_weekly", models: { sonnet: 2 } };
+    const composed = services({
+        // SAFETY: the listing reads only an account's id and label off the store's rows, as claudeOnly above relies on.
+        claudeStore: { list: async () => [{ id: "one", label: "one" }] as never },
+        accountUsage: {
+            read: async () => ({ one: usage(opus, sonnet) }),
+            record: async () => {},
+            markUnread: async () => undefined,
+            contradict: async () => undefined,
+            clear: async () => {},
+        },
+        runOuts: { read: async () => ({ "claude:opus_weekly": opusRanOut, "claude:sonnet_weekly": sonnetRanOut }), record: async () => {} },
+    });
+    const claude = (await spawnableProviders(composed)).find((row) => row.id === "claude");
+    expect(claude?.lastRunOut).toStrictEqual(opusRanOut);
+});
+
 test("says nothing is connected as a sentence, rather than as an empty listing", () => {
     expect(spawnCatalogText([])).toMatch(/No AI provider is connected/);
 });

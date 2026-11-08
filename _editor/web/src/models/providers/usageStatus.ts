@@ -466,6 +466,7 @@ export const routedAccountFacts = (account: TranslatorAccounts[keyof TranslatorA
     account: account.name,
     usage: account.usage,
     cooling: account.cooling,
+    cooldowns: account.cooldowns,
     label: account.label,
 });
 

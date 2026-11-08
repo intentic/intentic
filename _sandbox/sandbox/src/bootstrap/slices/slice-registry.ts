@@ -3,6 +3,7 @@
 // hand-ordered core alone, so their order is not significant, and Services carries every member they build.
 import type { CompositionCore, Services } from "../../composition.js";
 import { distinctMembers, type SliceStopped, stopsOf } from "../../seams/slice.js";
+import { translatorGatewaySlice, type TranslatorGatewaySlice } from "../../agent/providers/translator-gateway.js";
 import { approvalsSlice, type ApprovalsSlice } from "../../approvals/approvals-slice.js";
 import { gitSlice, type GitSlice } from "../../git/git-slice.js";
 import { historySlice, type HistorySlice } from "../../history/history-slice.js";
@@ -18,7 +19,8 @@ import { shareSlice, type ShareSlice } from "../../share/share-slice.js";
 import { walletSlice, type WalletSlice } from "../../wallet/wallet-slice.js";
 import { webextSlice, type WebextSlice } from "../../webext/webext-slice.js";
 
-export type LeafMembers = ApprovalsSlice &
+export type LeafMembers = TranslatorGatewaySlice &
+    ApprovalsSlice &
     GitSlice &
     HistorySlice &
     HostsSlice &
@@ -36,6 +38,7 @@ export type LeafMembers = ApprovalsSlice &
 // Each slice built once over the core; a member two of them build, or one the core already holds, throws.
 export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
     const built = {
+        translatorGatewaySlice: translatorGatewaySlice.build(core),
         approvalsSlice: approvalsSlice.build(core),
         gitSlice: gitSlice.build(core),
         historySlice: historySlice.build(core),
@@ -56,6 +59,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
         Object.keys(core),
     );
     return {
+        ...built.translatorGatewaySlice,
         ...built.approvalsSlice,
         ...built.gitSlice,
         ...built.historySlice,
@@ -75,6 +79,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
 
 // What each slice started and how it stops, in slice path order: no two of them depend on each other.
 export const leafTeardown = (services: Services): readonly (() => SliceStopped)[] => [
+    ...stopsOf(translatorGatewaySlice, services),
     ...stopsOf(approvalsSlice, services),
     ...stopsOf(gitSlice, services),
     ...stopsOf(historySlice, services),

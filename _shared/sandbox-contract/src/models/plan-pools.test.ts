@@ -19,6 +19,7 @@ import {
     windowPeriod,
 } from "./plan-pools.js";
 import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow } from "../schemas/providers/plan-limits.js";
+import type { ServiceFacts } from "./plan-pools.js";
 
 // One rule for which pool blocks a given model, shared by the daemon and the browser: a plan can meter models
 // separately, so the account's fullest pool need not be the model's own.
@@ -254,8 +255,14 @@ test("a refusal stands until a later reading contradicts it, and never past its 
     expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: before }])).toBe("standing");
     // Another account's room proves nothing about the one refused.
     expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: before }, { account: "b", usage: room }])).toBe("standing");
-    // A refusal naming no account is answered by any of them.
-    expect(refusalVerdict(refusal({ kind: "limit" }), [{ account: "a", usage: before }, { account: "b", usage: room }])).toBe("answered");
+    // A refusal naming no account is answered on each account by that account's own reading: b's room frees b, not a.
+    const nameless = refusal({ kind: "limit" });
+    expect(refusalVerdict(nameless, [{ account: "a", usage: before }, { account: "b", usage: room }])).toBe("standing");
+    expect(Object.fromEntries(serviceStates([{ account: "a", usage: before }, { account: "b", usage: room }], [nameless]))).toEqual({
+        a: { kind: "spent" },
+        b: { kind: "ready", room: 60 },
+    });
+    expect(refusalVerdict(nameless, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe("answered");
     expect(refusalVerdict(refusal({ kind: "auth", account: "a" }), [{ account: "a", usage: full }])).toBe("answered");
     expect(refusalVerdict(refusal({ kind: "auth", account: "a" }), [{ account: "a", usage: full, needsReauth: true }])).toBe("standing");
     expect(refusalVerdict(refusal({ kind: "entitlement", account: "a" }), [{ account: "a", usage: room }])).toBe("standing");
@@ -275,7 +282,7 @@ test("an allowance no reading measures stands against its own account's reading,
 
 // 2026-10-19: one routed refusal ("try again at 1:53 PM", filed a day out, as an admin's credit) named no account and
 // held all three Codex accounts spent for that day, two free ones reading 0% of their month used among them.
-test("a nameless refusal over several accounts is answered by any of them reading room since, whatever it named", () => {
+test("a nameless refusal over several accounts is answered on each by its own reading of room since, whatever it named", () => {
     const filed = Date.parse("2026-10-19T13:53:35Z");
     const now = Date.parse("2026-10-20T09:22:10Z");
     const monthly = at(Date.parse("2026-10-20T09:22:03Z"), window({ kind: "monthly", label: "Monthly · all models", utilization: 0 }));
@@ -292,9 +299,15 @@ test("a nameless refusal over several accounts is answered by any of them readin
         "free-2": { kind: "ready", room: 100 },
         team: { kind: "ready", room: 100 },
     });
-    // Until one of them is read with room after it, it stands over all of them.
+    // Until each is read with room after it, it stands over that one: the team account read first frees only itself.
     const before = accounts.map((entry) => ({ ...entry, usage: { ...entry.usage, measuredAt: filed - 1 } }));
     expect(refusalVerdict(codex, before, now)).toBe("standing");
+    const teamRead = before.map((entry) => (entry.account === "team" ? accounts[2]! : entry));
+    expect(Object.fromEntries(serviceStates(teamRead, [codex], undefined, now))).toEqual({
+        "free-1": { kind: "spent", reopensAt: Date.parse("2026-10-20T13:53:00Z") / 1000 },
+        "free-2": { kind: "spent", reopensAt: Date.parse("2026-10-20T13:53:00Z") / 1000 },
+        team: { kind: "ready", room: 100 },
+    });
     // And never past the instant the provider named.
     expect(refusalVerdict(codex, before, Date.parse("2026-10-20T13:53:00Z"))).toBe("answered");
 });
@@ -309,8 +322,10 @@ test("a spent allowance with the provider's own reset stands until that instant,
     expect(refusalVerdict(refusal({ ...until, account: "a" }), [{ account: "a", usage: room }], 10_000)).toBe("answered");
     // A routed refusal names no account, but with one account there is no doubt whose it was.
     expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }], 9_999)).toBe("standing");
-    // Over several, the translator benches the one it refused and routes on, so another's room still answers it.
+    // Over several, nothing says which one refused, so on each it is that account's own reading of room since that answers it.
     expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }, { account: "b", usage: room }], 9_999)).toBe("answered");
+    const stale = at(500, window({ kind: "five_hour", utilization: 0 }));
+    expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }, { account: "b", usage: stale }], 9_999)).toBe("standing");
     // Spent until the instant the provider named, not the pool's own reset.
     expect(serviceStates([{ account: "a", usage: room }], [refusal({ ...until, account: "a" })], undefined, 9_999).get("a")).toEqual({ kind: "spent", reopensAt: 10 });
 });
@@ -424,6 +439,82 @@ test("each account answers to the newest refusal on file that still stands over 
     // A newer refusal on the same account outranks the older one.
     const revoked = refusal({ kind: "auth", account: "a", at: 6_000 });
     expect(serviceStates(accounts, [own, revoked], undefined, 9_999).get("a")).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
+});
+
+test("a reading answers a spent allowance only in the pool the refused model spends", () => {
+    const pools = (claude: number, gemini: number): AccountUsage =>
+        at(
+            2_000,
+            window({ kind: "google:3p-weekly", label: "Claude and GPT models", utilization: claude, gates: { models: ["claude", "gpt"] } }),
+            window({ kind: "google:models:gemini", label: "Gemini models", utilization: gemini, gates: { models: ["gemini"] } }),
+        );
+    const flash = refusal({ kind: "limit", account: "a", model: "gemini-3.8-flash-high" });
+    // Claude spent, Gemini open: room where Flash spends answers it, the full Claude pool notwithstanding.
+    expect(refusalVerdict(flash, [{ account: "a", usage: pools(100, 40) }])).toBe("answered");
+    // Claude open, Gemini full: room in a pool Flash never spends answers nothing.
+    expect(refusalVerdict(flash, [{ account: "a", usage: pools(0, 100) }])).toBe("standing");
+});
+
+// 2026-11-08 (ci-fix-intentic-42395805126-attempt2): the translator tried five of 31 Google accounts per send, all
+// spent, and never the one with room. Each refusal, filed under no account, pinned every account full until the re-read
+// it forced landed seconds later, and that one account's reading then answered it for all 31: Opus and Flash each read
+// 0% and then 100% again while every turn on them was refused, and both were never spent at once.
+test("refusals naming their accounts hold a 31-account Google fleet steady across the re-read they force", () => {
+    const refusedAt = Date.parse("2026-11-08T11:11:45Z");
+    const reread = refusedAt + 5_000;
+    const opusBack = Date.parse("2026-11-14T12:04:18Z") / 1000;
+    const flashBack = Date.parse("2026-11-14T20:05:20Z") / 1000;
+    const pools = (measuredAt: number, claude: number, gemini: number): AccountUsage =>
+        at(
+            measuredAt,
+            window({ kind: "google:3p-weekly", label: "Claude and GPT models", utilization: claude, resetsAt: opusBack, gates: { models: ["claude", "gpt"] } }),
+            window({ kind: "google:models:gemini", label: "Gemini models", utilization: gemini, resetsAt: flashBack, gates: { models: ["gemini"] } }),
+        );
+    const tried = Array.from({ length: 10 }, (_, index) => `tried-${index}`);
+    const untried = Array.from({ length: 19 }, (_, index) => `untried-${index}`);
+    const fleet = (measuredAt: number): ServiceFacts[] => [
+        ...[...tried, ...untried].map((account) => ({ account, usage: pools(measuredAt, 100, 100) })),
+        { account: "radarsuspam6", usage: pools(measuredAt, 100, 99.61) },
+        { account: "svichita09", usage: pools(measuredAt, 0, 19.42) },
+    ];
+    const refused = tried.flatMap((account) => [
+        refusal({ kind: "limit", account, at: refusedAt, model: "claude-opus-4-6-thinking", resetsAt: opusBack }),
+        refusal({ kind: "limit", account, at: refusedAt, model: "gemini-3.8-flash-high", resetsAt: flashBack }),
+    ]);
+    const opus = { id: "claude-opus-4-6-thinking" };
+    const flash = { id: "gemini-3.8-flash-high" };
+    for (const accounts of [fleet(refusedAt - 30_000), fleet(reread)]) {
+        expect(fleetCapacity(accounts, refused, opus, reread)).toMatchObject({ kind: "serving", serving: 1, accounts: 31 });
+        expect(fleetCapacity(accounts, refused, flash, reread)).toMatchObject({ kind: "serving", serving: 2, accounts: 31 });
+        const states = serviceStates(accounts, refused, opus, reread);
+        expect(states.get("tried-0")).toEqual({ kind: "spent", reopensAt: opusBack, pool: "Claude and GPT models" });
+        expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100 });
+    }
+    // The same refusal filed under no account is answered on each account by its own reading alone: the account with
+    // room frees itself, never one whose reading since says nothing.
+    const nameless = refusal({ kind: "limit", at: refusedAt, model: "claude-opus-4-6-thinking", resetsAt: opusBack });
+    const onlyOneRead = fleet(refusedAt - 30_000).map((facts) => (facts.account === "svichita09" ? { ...facts, usage: pools(reread, 0, 19.42) } : facts));
+    const states = serviceStates([...onlyOneRead, { account: "unread" }], [nameless], opus, reread);
+    expect(states.get("svichita09")).toEqual({ kind: "ready", room: 100 });
+    expect(states.get("unread")).toMatchObject({ kind: "spent", reopensAt: opusBack });
+});
+
+// The translator's per-model benches are the provider's refusals of each account it tried, with the provider's instant:
+// read as such, the same fleet holds without a refusal on file, and a bench on one model leaves the account's others.
+test("a translator's per-model bench holds its account spent on that model alone, until the provider's instant", () => {
+    const opusBack = Date.parse("2026-11-14T12:03:41Z") / 1000;
+    const now = Date.parse("2026-11-08T11:12:00Z");
+    const room = at(now - 1_000, window({ kind: "google:3p-weekly", label: "Claude and GPT models", utilization: 0, gates: { models: ["claude", "gpt"] } }), window({ kind: "google:models:gemini", label: "Gemini models", utilization: 20, gates: { models: ["gemini"] } }));
+    const benched: ServiceFacts = { account: "a", usage: room, cooldowns: [{ model: "claude-opus-4-6-thinking", until: opusBack }] };
+    const accounts = [benched, { account: "b", usage: room }];
+    // A reading with room taken after the bench answers nothing: the provider named when.
+    expect(serviceStates(accounts, [], { id: "claude-opus-4-6-thinking" }, now).get("a")).toEqual({ kind: "spent", reopensAt: opusBack, pool: "Claude and GPT models" });
+    expect(serviceStates(accounts, [], { id: "gemini-3.8-flash-high" }, now).get("a")).toEqual({ kind: "ready", room: 80 });
+    expect(fleetCapacity(accounts, [], { id: "claude-opus-4-6-thinking" }, now)).toMatchObject({ kind: "serving", serving: 1, accounts: 2 });
+    // Past the instant it is over, and the reading speaks alone.
+    expect(serviceStates(accounts, [], { id: "claude-opus-4-6-thinking" }, opusBack * 1000).get("a")).toEqual({ kind: "ready", room: 100 });
+    // A revoked sign-in filed since is the account's newer word.
+    expect(serviceStates(accounts, [refusal({ kind: "auth", account: "a", at: now })], { id: "claude-opus-4-6-thinking" }, now).get("a")).toMatchObject({ kind: "blocked", fix: "reconnect" });
 });
 
 test("an unnamed turn takes the most room, then an unmeasured account, then a spent one, and a blocked one only when that is all", () => {

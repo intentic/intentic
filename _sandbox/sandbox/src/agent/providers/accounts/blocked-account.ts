@@ -45,8 +45,8 @@ const KEEP: AccountRoute = { kind: "keep" };
 /**
  * Where a turn goes when the account its conversation remembers is blocked. `named` is the account the turn itself
  * names, `remembered` the one routingFor fills in from the conversation's profile. Any provider whose accounts a turn
- * names (a routed provider's translator balances its own credentials): Claude's carry the seat marks, and every one's
- * the entitlement refusals on file.
+ * names (a routed provider's conversation is bound to none: the daemon's gateway places each of its requests,
+ * translator-gateway.ts): Claude's carry the seat marks, and every one's the entitlement refusals on file.
  */
 export const offBlockedAccount = async (
     deps: BlockedAccountDeps,

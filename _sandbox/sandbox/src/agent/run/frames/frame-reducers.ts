@@ -147,6 +147,8 @@ export interface TurnReadings {
     readonly limitReset: number | undefined;
     // What the last failure frame's classification held the turn as, unless an answer since rode it out.
     readonly held: HeldTurn | undefined;
+    // No later than the turn's first request went out: what a record about the turn's own requests is read against.
+    readonly openedAt: number;
 }
 
 export interface TurnFrames {
@@ -236,6 +238,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined, open
             failure: failure.reading(),
             limitReset: limitReset.reading(),
             held,
+            openedAt,
         }),
         verification,
         viewing,

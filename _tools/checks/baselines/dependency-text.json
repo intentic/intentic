@@ -22,7 +22,6 @@
     },
     "_sandbox/sandbox/src/activity/outbound.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/agent/pages/page-check.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_sandbox/sandbox/src/agent/run/frames/classify-failure.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/exit/exit-dns.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/git/ops/stash.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/netdisk/smb.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",

@@ -39,7 +39,13 @@ const nativeFacts = (account: OauthAccount): ServiceFacts => ({
     label: account.label,
 });
 
-const routedFacts = (account: TranslatorAccount): ServiceFacts => ({ account: account.name, label: account.label, usage: account.usage, cooling: account.cooling });
+const routedFacts = (account: TranslatorAccount): ServiceFacts => ({
+    account: account.name,
+    label: account.label,
+    usage: account.usage,
+    cooling: account.cooling,
+    cooldowns: account.cooldowns,
+});
 
 /**
  * Every connected account of a provider as the rule reads it, in the provider's own order: Claude's from its own store

@@ -165,10 +165,10 @@ export type ConversationEvent =
     // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
     // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
     | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
-    // When a spent allowance's hold can go, as the pass learns it: `held-retimed` times one refused with no reopen once the
-    // records say when its pool reopens (epoch s; held-standing.ts), taken only by an unfired limit hold without an instant
-    // or a move, and answers whether it took it; `held-walled` is the wall in front of where it goes (ms; limit-due.ts).
-    | { readonly kind: "held-retimed"; readonly reopensAt: number }
+    // When a spent allowance's hold can go, as the pass learns it (held-standing.ts): `held-retimed` times one refused with
+    // no reopen once the records know it (epoch s), or, `early`, brings a timed one sooner once its model can be served
+    // (held-decide.ts says which takes it); `held-walled` is the wall in front of where it goes (ms; limit-due.ts).
+    | { readonly kind: "held-retimed"; readonly reopensAt: number; readonly early?: true }
     | { readonly kind: "held-walled"; readonly until: number | undefined }
     // A person picked how a spent allowance's held turn continues once it is sent again; answers whether the hold took it.
     | { readonly kind: "handoff-chosen"; readonly handoff: HandoffMode }
@@ -728,7 +728,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
             : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
-    "held-retimed": (state, event) => onHeldRetimed(state, event.reopensAt),
+    "held-retimed": (state, event) => onHeldRetimed(state, event),
     "held-walled": (state, event) => onHeldWalled(state, event.until),
     "handoff-chosen": (state, event) => onHandoffChosen(state, event),
     "ladder-spent": (state) =>

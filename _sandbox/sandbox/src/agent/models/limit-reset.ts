@@ -6,13 +6,14 @@ import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/p
 import { accountLimitReset } from "../../usage/account-usage.js";
 import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
 
-// Tries the account's own snapshot first (native Claude, filed per account), then the translator's per-model pool for
-// other routed providers, since those key by subscription, not account. Never throws; `undefined` is a real answer:
-// some providers (Grok, Cursor) publish no readable quota, and a reset is withheld while any account still has
-// headroom.
+// Tries the account's own snapshot first (native Claude, filed per account), then the per-model pool across a routed
+// provider's accounts, since a routed turn is bound to none: the daemon's gateway places each of its requests on one
+// that can serve (translator-gateway.ts). Never throws; `undefined` is a real answer: some providers (Grok, Cursor)
+// publish no readable quota, and a reset is withheld while any account still has headroom.
 // The reset of the pool a refusal named by its length ("your 5-hour usage limit"), off a reading of the account, or of
-// any of a routed provider's accounts (the soonest, since the translator routes to whichever reopens first). The pool
-// may not read full yet, since a reading freezes before the pool empties; the vendor's sentence is what says it did.
+// any of a routed provider's accounts (the soonest, since the gateway places the next request on whichever reopens
+// first). The pool may not read full yet, since a reading freezes before the pool empties; the vendor's sentence is what
+// says it did.
 const namedPoolReset = (windows: readonly UsageWindow[], period: number, nowSeconds: number): number | undefined =>
     windows
         .filter((window) => windowPeriod(window)?.seconds === period && window.resetsAt !== undefined && window.resetsAt > nowSeconds)
@@ -84,8 +85,9 @@ export const standingReopensAt = async (params: {
     const { services, provider, account } = params;
     const model = params.model === undefined || params.model === "" ? undefined : params.model;
     const nowSeconds = (params.now ?? Date.now()) / 1000;
-    // A routed provider files its refusals under no account (classify-failure.ts refusingAccount), whatever label rides
-    // as the turn's account; a refusal naming another account is another pool.
+    // A routed turn's own refusal is filed under no account (classify-failure.ts refusingAccount), whatever label rides
+    // as the turn's account. One naming an account is that account's pool: the gateway's (translator-gateway.ts), read
+    // through the fleet's verdict (limitReopensAt), or a native account other than this turn's.
     const routed = KeyedProviderSchema.safeParse(provider).success;
     // allow(silent-catch): this answers "when", never throws; an unreadable file leaves nothing standing.
     const refusals = (await services.providerRefusals.onFile().catch(() => undefined))?.[provider] ?? [];

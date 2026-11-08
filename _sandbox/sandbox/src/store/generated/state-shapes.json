@@ -725,6 +725,10 @@
     {
       "type": "{ at: number; models: Record<string, number>; openedAt?: number; pool?: string; reopensAt?: number }",
       "since": "v1.338.0"
+    },
+    {
+      "type": "{ at: number; kind?: string; models: Record<string, number>; openedAt?: number; pool?: string; reopensAt?: number }",
+      "since": "unreleased"
     }
   ],
   "history:runner-enrollments.json": [

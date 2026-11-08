@@ -41,10 +41,12 @@ export const nudgeResumesOn = (
         services.events.subscribe("workspace", nudge),
         // A conversation's or the sandbox's answer to a wall decides whether its hold fires at all.
         services.sandboxSettings.onSet(nudge),
-        // An account back to ready is a reopen the holds on it wait for.
-        onAccountReopened(nudge),
-        // A new usage reading may name the reopen a hold refused with no instant was waiting to learn (held-standing.ts).
-        services.headroom.onChange(() => scheduler.retime()),
+        // An account back to ready is a reopen the holds on it wait for, and may serve a timed hold's model before the
+        // instant it was refused with (held-standing.ts, 2026-11-08).
+        onAccountReopened((reopened) => scheduler.retime(reopened.provider)),
+        // A new usage reading may name the reopen a hold refused with no instant was waiting to learn, or show room for a
+        // timed hold's model on the provider it read (held-standing.ts).
+        services.headroom.onChange((provider) => scheduler.retime(provider)),
     ];
     return () => {
         for (const unsubscribe of unsubscribes) {

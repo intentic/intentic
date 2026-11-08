@@ -103,12 +103,15 @@ const codexRoute = async (services: CodexPlanDeps, input: AgentTurn): Promise<Co
     // nothing here can stand in front of, so while the shield is on it runs only if Codex is trusted.
     try {
         if (subscribed) {
-            const gateway = await services.privacyShield.baseUrlFor({ provider: "codex", upstream: services.config.translator.url, conversationId: input.conversationId });
-            // Subscription turns use the translator endpoint with a fixed bearer.
+            // Subscription turns go to the daemon's translator gateway, under a session signed for ChatGPT, which places
+            // each request on one account (translator-gateway.ts); the translator's fixed bearer rides as well, and
+            // behind the shield the gateway is the shield's upstream.
+            const routed = await services.translatorGateway.baseUrlFor("codex");
+            const gateway = await services.privacyShield.baseUrlFor({ provider: "codex", upstream: routed, conversationId: input.conversationId });
             return {
                 ok: true,
                 attribution: "codex-subscription",
-                credential: { kind: "codex-endpoint", baseUrl: gateway ?? services.config.translator.url, authToken: services.config.translator.token },
+                credential: { kind: "codex-endpoint", baseUrl: gateway ?? routed, authToken: services.config.translator.token },
             };
         }
         const refused = await services.privacyShield.refusal({ provider: "codex", conversationId: input.conversationId, route: "own-key" });

@@ -5,6 +5,7 @@ import type { Services } from "../../../composition.js";
 import { services, withTranslator } from "../../../harness/route-services.testing.js";
 import { testConfig } from "../../../env.config.testing.js";
 import { type ModelRoute, resolveRoute, routeReadiness, routeUrl } from "./model-routes.js";
+import { testGatewayBase as gatewayOf } from "../translator-gateway.testing.js";
 
 // Every (provider, loop) pair resolved the way the loop will dial it. Today's Claude Code pairs are pinned to the exact
 // credentials the harness carried before the resolver existed; the Codex and OpenCode pairs to the wire and the URL
@@ -43,11 +44,12 @@ const endpointCatalog = (models: readonly string[]): Pick<Services, "endpointMod
 });
 
 describe("the Claude Code loop, as the harness dialled it before routes", () => {
-    test.each(["codex", "grok", "kimi"] as const)("%s rides the translator's root with its bearer and a catalog model", async (provider) => {
+    // The root is the daemon's translator gateway for that provider, which places each request on one of its accounts.
+    test.each(["codex", "grok", "kimi"] as const)("%s rides the translator gateway's root with its bearer and a catalog model", async (provider) => {
         const route = await routed(translated(), provider, "claude-code", { model: "retired" });
         const catalog = await translated().providerCatalogs[provider].models();
         expect(route.wire).toBe("anthropic-messages");
-        expect(route.endpoint).toEqual({ base: withTranslator.translator.url, path: "", token: withTranslator.translator.token });
+        expect(route.endpoint).toEqual({ base: gatewayOf(provider), path: "", token: withTranslator.translator.token });
         expect(route.model).toBe(catalog.default);
         expect(route.account).toBeUndefined();
         expect(route.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
@@ -108,10 +110,10 @@ describe("Z.ai on each loop, on the minted key aimed at the estate's own endpoin
 });
 
 describe("Codex as a host, on the Responses wire", () => {
-    test.each(["kimi", "grok"] as const)("%s rides the translator's versioned root", async (provider) => {
+    test.each(["kimi", "grok"] as const)("%s rides the translator gateway's versioned root", async (provider) => {
         const route = await routed(translated(), provider, "codex");
         expect(route.wire).toBe("openai-responses");
-        expect(routeUrl(route.endpoint)).toBe(`${withTranslator.translator.url}/v1`);
+        expect(routeUrl(route.endpoint)).toBe(`${gatewayOf(provider)}/v1`);
         expect(route.model).toBe((await translated().providerCatalogs[provider].models()).default);
     });
 
@@ -145,14 +147,13 @@ describe("Codex as a host, on the Responses wire", () => {
 });
 
 describe("OpenCode as a host", () => {
-    test("a ChatGPT plan rides the translator's Responses surface, Kimi its Chat Completions", async () => {
+    test("a ChatGPT plan rides the translator gateway's Responses surface, Kimi its Chat Completions", async () => {
         const chatgpt = await routed(translated(), "codex", "opencode");
         const kimi = await routed(translated(), "kimi", "opencode");
         expect(chatgpt.wire).toBe("openai-responses");
         expect(kimi.wire).toBe("openai-chat");
-        for (const route of [chatgpt, kimi]) {
-            expect(routeUrl(route.endpoint)).toBe(`${withTranslator.translator.url}/v1`);
-        }
+        expect(routeUrl(chatgpt.endpoint)).toBe(`${gatewayOf("codex")}/v1`);
+        expect(routeUrl(kimi.endpoint)).toBe(`${gatewayOf("kimi")}/v1`);
     });
 
     test("an endpoint is dialled straight in its own protocol, key and headers included", async () => {

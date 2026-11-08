@@ -92,7 +92,7 @@ export interface ProvidersSlice {
     readonly providerRefusals: ProviderRefusalStore;
     // Which models this sandbox was refused on, finer-grained than providerRefusals; the picker drops them.
     readonly modelRefusals: ModelRefusalStore;
-    // When each provider's allowance last ran out, and under how many of this sandbox's agents: the rate beside the
+    // When each pool of each provider last ran out, and under how many of this sandbox's agents: the rate beside the
     // figure left that a parent fanning out reads (usage/run-outs.ts).
     readonly runOuts: RunOutStore;
     // What one point of each account's window costs and what each model spends an hour, learned from the live meter and

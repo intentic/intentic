@@ -126,7 +126,8 @@ export const settleAnswered = (
 };
 
 // The account whose readings an answer speaks for. A translator-routed turn names a label (Codex's
-// "codex-subscription"), the key of no reading: the translator picked one of the provider's credentials, unnamed.
+// "codex-subscription"), the key of no reading: the daemon's gateway placed each of its requests on an account of its
+// own choosing (translator-gateway.ts), and settles that account itself when the answer comes whole.
 const readingAccount = (provider: string, account: string | undefined): string | undefined =>
     KeyedProviderSchema.safeParse(provider).success ? undefined : account;
 
@@ -134,8 +135,8 @@ const readingAccount = (provider: string, account: string | undefined): string |
    model spends no pool the answering one does not (answerCovers). Codex meters every model from one allowance: a Luna
    turn went through while Sol stayed refused, and the account rail read every Codex account spent over it (2026-10-20).
    Judged on the readings the answer speaks for: the account it named, or for a routed turn, every reading of the
-   provider, each of which must show it, since nothing says which of them the translator picked. A model metered by its
-   own slice is never settled by another's answer, and nothing read proves nothing. */
+   provider, each of which must show it, since the turn does not know which of them the gateway placed it on. A model
+   metered by its own slice is never settled by another's answer, and nothing read proves nothing. */
 const coverOf = async (deps: Pick<Services, "headroom">, provider: string, account: string | undefined, served: string): Promise<(model: string) => boolean> => {
     const stored = await deps.headroom.read();
     const readings = readingKeys(stored, provider, readingAccount(provider, account)).flatMap((key) => {

@@ -54,6 +54,9 @@ const emptyCliProxy = (overrides: ProvidersFakeOverrides["cliProxy"]) =>
         sharedUsageKey: async () => undefined,
         // Nothing connected, so nothing to take out of the rotation; the account list calls this on every read.
         benchUnusable: async () => [],
+        // Nor anything to give a prefix, which the same read asks for; so no request is pinned to an account.
+        pinAccounts: async () => ({ pinned: [], failed: [] }),
+        accountPrefix: () => undefined,
         ...overrides,
     });
 

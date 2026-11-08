@@ -8,6 +8,7 @@ import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import { type ArmedCatch, armLoopbackCatch, loopbackRedirectOf, loopbackWatchers } from "../providers/accounts/loopback-bridge.js";
 import { usageKey } from "../providers/translator.js";
+import { logPins } from "../providers/translator-prefixes.js";
 
 export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "hostHub" | "webextHub">;
 
@@ -26,6 +27,22 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
         }
         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
+};
+
+// The list is read right after a sign-in and on every visit to a headroom surface, which makes it the one place a
+// credential is certain to pass through before it catches a turn: one that can serve no turn is benched there, and one
+// signed in since is given its prefix (translator-prefixes.ts), so the gateway can place requests on it. Not awaited.
+const tendCredentials = (services: TranslatorRoutesDeps): void => {
+    void services.cliProxy
+        .benchUnusable()
+        .then((benched) =>
+            benched.length === 0 ? undefined : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
+        )
+        .catch((error: unknown) => services.logger.warn({ err: error }, "translator: could not bench unusable credentials"));
+    void services.cliProxy
+        .pinAccounts()
+        .then((report) => logPins(services.logger, report))
+        .catch((error: Error) => services.logger.warn({ err: error }, "translator: could not pin credentials"));
 };
 
 // Google's OAuth redirect sends the browser to a loopback address nothing in this container binds. Where a device or
@@ -52,16 +69,7 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
             const accounts = await upstream(services.cliProxy.accounts());
             // Not awaited: also gates routed-turn credentials and broadcasts the refresh to every open /events window.
             void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options } });
-            // The list is read right after a sign-in and on every visit to a headroom surface, which makes it the one
-            // place a credential that can serve no turn is certain to pass through before it catches one.
-            void services.cliProxy
-                .benchUnusable()
-                .then((benched) =>
-                    benched.length === 0
-                        ? undefined
-                        : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
-                )
-                .catch((error: unknown) => services.logger.warn({ err: error }, "translator: could not bench unusable credentials"));
+            tendCredentials(services);
             // Each credential carries the facts the one serviceability rule judges, its bench included, never a verdict.
             return accounts;
         }),
