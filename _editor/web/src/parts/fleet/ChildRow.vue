@@ -11,13 +11,13 @@ import RunFacts from "./RunFacts.vue";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../app/useAudience";
 
-// One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
-// glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
-// only the reader can give (its one press opens its chat, where the ask is answered). The second, quieter, says what it
-// is: what it runs on (RunFacts), the model and tier a reader otherwise
-// could not tell from its parent's (its kind or provider is only the title's hover, childLook); on a row wide enough for both (the button's own @container), it rides the first
-// line, right of the title, and the row stays one line tall. Everything else — the branch, the cost, the diff — is its own chat's to say, one
-// press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
+// One child riding under its parent's card (childFold), on one line: its glyph, its title, what it runs on (RunFacts),
+// and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what only the reader
+// can give (its one press opens its chat, where the ask is answered). What it runs on is the model and tier a reader
+// otherwise could not tell from its parent's (its kind or provider is only the title's hover, childLook): the tier's
+// ladder always, the model's name only on a row wide enough for it (the button's own @container), else the ladder's
+// hover, so a tray of children stays a line apiece. Everything else — the branch, the cost, the diff — is its own chat's
+// to say, one press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
 // in-process has no chat of its own, so its press shows its transcript in its parent's, and it has no review or menu.
 
 const props = defineProps<{
@@ -38,8 +38,6 @@ const { maker } = useAudience();
 const look = computed(() => childLook(props.child, props.provider));
 // Ticks each second only while it works; settled dates below follow their own minute-rate leaf.
 const now = useNow(() => look.value.working);
-// The second line, only for a child whose model is recorded; its kind rides the title row.
-const facts = computed(() => look.value.run !== undefined);
 // Where it runs, when that is another machine: the board card's own fact, hidden from a maker as there.
 const runner = computed(() => (maker.value ? undefined : look.value.runner));
 const titleRuns = computed(() => markSegments(look.value.title, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase));
@@ -62,71 +60,57 @@ const menu = (event: MouseEvent): void => {
 <template>
     <button
         type="button"
-        class="ui-row-select @container flex min-h-7 w-full min-w-0 flex-col justify-center gap-px rounded-md px-2 text-left max-md:min-h-10"
-        :class="{ 'ui-row-select-on': selected, 'py-1': facts }"
+        class="ui-row-select @container flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left max-md:min-h-10"
+        :class="{ 'ui-row-select-on': selected }"
         @click="emit(`open`, $event)"
         @dblclick="review"
         @contextmenu="menu"
     >
-        <span class="flex w-full min-w-0 items-center gap-2">
-            <Icon
-                :name="look.glyph.icon"
-                :spin="look.glyph.spin"
-                role="img"
-                :aria-label="look.glyph.label"
-                v-tooltip.top="look.hint"
-                class="shrink-0 text-xs"
-                :class="look.glyph.class"
-            />
-            <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
-                <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
-            </span>
-            <!-- A fresh session on the parent's work: what its review found, or that it is the reader's own ask (its kind titles a
-                 review's or a test's row already), told apart from a child the parent spawned. -->
-            <span
-                v-if="look.fresh !== undefined && (look.fresh.label !== undefined || look.fresh.result !== undefined)"
-                class="ui-status-pill shrink-0"
-                :class="look.fresh.tone === `warning` ? toneWash(`warning`) : `bg-content/7 text-muted`"
-                v-tooltip.top="{ title: t(`agents.childRows.freshTitle`), note: t(`agents.childRows.kindTip`) }"
-                data-fresh-kind
-                ><Icon :name="look.fresh.icon" class="shrink-0 text-3xs" />{{ look.fresh.label ?? look.fresh.result
-                }}<template v-if="look.fresh.label !== undefined && look.fresh.result !== undefined"> · {{ look.fresh.result }}</template></span
-            >
-            <!-- Right of the title when the row has room for both; the title still gives way first. The model, the ladder and
-                 the clock each keep a fixed width, so the rows of a tray read as columns rather than each hugging its own. -->
-            <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">
-                <RunFacts :run="look.run" columns />
-            </span>
-            <span
-                v-if="runner !== undefined"
-                class="hidden w-16 shrink-0 items-center gap-1 text-2xs text-subtle @md:flex"
-                v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
-            >
-                <Icon name="desktop" class="shrink-0" />
-                <span class="min-w-0 truncate">{{ runner }}</span>
-            </span>
-            <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
-            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{
-                look.ask
-            }}</span>
-            <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
-                formatElapsed((now - look.since) / 1000)
-            }}</span>
-            <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">
-                <AgentCardDate :at="look.at" />
-            </span>
+        <Icon
+            :name="look.glyph.icon"
+            :spin="look.glyph.spin"
+            role="img"
+            :aria-label="look.glyph.label"
+            v-tooltip.top="look.hint"
+            class="shrink-0 text-xs"
+            :class="look.glyph.class"
+        />
+        <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
+            <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
         </span>
-        <!-- Under the title on a narrow row, where the title keeps the first line. -->
-        <span v-if="look.run !== undefined" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle @md:hidden">
-            <RunFacts :run="look.run" />
-            <span
-                v-if="runner !== undefined"
-                class="flex min-w-0 items-center gap-1"
-                v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
-            >
-                <Icon name="desktop" class="shrink-0" />
-                <span class="truncate">{{ runner }}</span>
-            </span>
+        <!-- A fresh session on the parent's work: what its review found, or that it is the reader's own ask (its kind titles a
+             review's or a test's row already), told apart from a child the parent spawned. -->
+        <span
+            v-if="look.fresh !== undefined && (look.fresh.label !== undefined || look.fresh.result !== undefined)"
+            class="ui-status-pill shrink-0"
+            :class="look.fresh.tone === `warning` ? toneWash(`warning`) : `bg-content/7 text-muted`"
+            v-tooltip.top="{ title: t(`agents.childRows.freshTitle`), note: t(`agents.childRows.kindTip`) }"
+            data-fresh-kind
+            ><Icon :name="look.fresh.icon" class="shrink-0 text-3xs" />{{ look.fresh.label ?? look.fresh.result
+            }}<template v-if="look.fresh.label !== undefined && look.fresh.result !== undefined"> · {{ look.fresh.result }}</template></span
+        >
+        <!-- Right of the title; the title gives way first. The model, the ladder and the clock each keep a fixed width, so
+             the rows of a tray read as columns rather than each hugging its own. -->
+        <span v-if="look.run !== undefined" class="flex shrink-0 items-center text-2xs text-subtle">
+            <RunFacts :run="look.run" columns />
+        </span>
+        <span
+            v-if="runner !== undefined"
+            class="flex shrink-0 items-center gap-1 text-2xs text-subtle @md:w-16"
+            v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: runner }] }"
+        >
+            <Icon name="desktop" class="shrink-0" />
+            <span class="hidden min-w-0 truncate @md:inline">{{ runner }}</span>
+        </span>
+        <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
+        <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{
+            look.ask
+        }}</span>
+        <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
+            formatElapsed((now - look.since) / 1000)
+        }}</span>
+        <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">
+            <AgentCardDate :at="look.at" />
         </span>
     </button>
 </template>

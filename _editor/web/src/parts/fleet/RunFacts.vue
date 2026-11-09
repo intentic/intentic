@@ -20,7 +20,9 @@ const props = defineProps<{
     // The bar's composer-like line, rather than the row's run of text.
     bar?: boolean;
     // Fixed widths for the model and the ladder, so rows stacked in a tray line them up as columns whatever the model's
-    // name or however many rungs its provider's ladder has (at most five; a ladder-less tier's word is cut to fit).
+    // name or however many rungs its provider's ladder has (at most five; a ladder-less tier's word is cut to fit). A
+    // tray row is one line, so the model's name shows only where its row (an @container) has room, and the facts' hover
+    // says the model and the tier wherever it does not.
     columns?: boolean;
 }>();
 
@@ -28,6 +30,8 @@ const t = useT();
 // Which model ran a child, and at what effort, is a developer's reading: a maker's tray row and bar say neither.
 const { maker } = useAudience();
 
+// The column row's hover: everything it says, for the row too narrow to name its model.
+const said = computed(() => (props.run.effort === undefined ? props.run.model : `${props.run.model} · ${props.run.effort.label}`));
 const rungs = computed(() =>
     Array.from({ length: props.run.effort?.rungs ?? 0 }, (_, index) =>
         index <= (props.run.effort?.rung ?? -1) ? effortRungFill(index, props.run.effort?.rungs ?? 0) : undefined,
@@ -65,10 +69,10 @@ const rungs = computed(() =>
             <span class="min-w-0 truncate" aria-hidden="true">{{ run.account }}</span>
         </span>
     </span>
-    <span v-else-if="!maker" class="flex min-w-0 items-center gap-1.5">
+    <span v-else-if="!maker" class="flex min-w-0 items-center gap-1.5" v-tooltip.top="columns ? said : undefined">
         <span
-            class="flex min-w-0 items-center gap-1 text-2xs"
-            :class="columns ? 'w-24 shrink-0' : ''"
+            class="min-w-0 items-center gap-1 text-2xs"
+            :class="columns ? 'hidden w-24 shrink-0 @sm:flex' : 'flex'"
             :aria-label="`${t(`shared.model`)}: ${providerLabel(run.provider)} ${run.modelId}`"
         >
             <span class="min-w-0 truncate" aria-hidden="true">{{ shortModelLabel(run.model) }}</span>
@@ -78,7 +82,7 @@ const rungs = computed(() =>
             class="flex shrink-0 items-center gap-1 text-2xs"
             :class="columns ? 'w-5' : ''"
             :aria-label="`${t(`shared.effort`)}: ${run.effort.label}`"
-            v-tooltip.top="rungs.length > 0 || columns ? run.effort.label : undefined"
+            v-tooltip.top="rungs.length > 0 && !columns ? run.effort.label : undefined"
         >
             <!-- The composer's ladder as a picture, small enough for a line of text: the same rungs, lit the same way. -->
             <span v-if="rungs.length > 0" class="flex items-end gap-px" aria-hidden="true">
