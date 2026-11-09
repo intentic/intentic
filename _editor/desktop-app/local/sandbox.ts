@@ -49,6 +49,9 @@ const sayNothingHere = async (): Promise<void> => {
 };
 
 // The online workspace answers again: offered, never imposed, since the reader may be in the middle of something here.
+// It appears only once the editor is up, so it wears the editor's own look: the theme's role tokens for the surface
+// (inline, since Tailwind does not scan this directory) and the app's button tiers (_editor/ui primeng.css), which follow
+// every skin and the light/dark switch.
 const offerWorkspace = (appUrl: string): void => {
     if (document.getElementById(`intentic-back-online`) !== null) {
         return;
@@ -58,19 +61,52 @@ const offerWorkspace = (appUrl: string): void => {
     bar.setAttribute(`role`, `status`);
     bar.setAttribute(
         `style`,
-        `position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:2147483647;display:flex;gap:.75rem;align-items:center;padding:.6rem .9rem;border-radius:.6rem;background:#1c1c1a;color:#f7f7f5;font:14px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.25)`,
+        [
+            `position:fixed`,
+            `left:50%`,
+            `bottom:calc(var(--spacing) * 4)`,
+            `transform:translateX(-50%)`,
+            `z-index:2147483647`,
+            `box-sizing:border-box`,
+            `max-width:min(48rem, calc(100vw - var(--spacing) * 8))`,
+            `display:flex`,
+            `flex-wrap:wrap`,
+            `gap:calc(var(--spacing) * 3)`,
+            `align-items:center`,
+            `padding:calc(var(--spacing) * 3) calc(var(--spacing) * 4)`,
+            `border:1px solid var(--color-line)`,
+            `border-radius:var(--ui-radius)`,
+            `background:var(--color-overlay)`,
+            `color:var(--color-content)`,
+            `font-family:var(--font-sans)`,
+            `font-size:var(--text-sm)`,
+            `line-height:var(--text-sm--line-height)`,
+            `box-shadow:var(--shadow-lg)`,
+        ].join(`;`),
     );
-    const words = document.createElement(`span`);
-    words.textContent = `${t(`desktop.machineFace.backOnline`)} ${t(`desktop.machineFace.backOnlineBody`)}`;
+    const words = document.createElement(`p`);
+    words.setAttribute(`style`, `margin:0;flex:1 1 18rem;min-width:0`);
+    const title = document.createElement(`strong`);
+    title.setAttribute(`style`, `font-weight:var(--font-weight-semibold)`);
+    title.textContent = t(`desktop.machineFace.backOnline`);
+    const body = document.createElement(`span`);
+    body.setAttribute(`style`, `color:var(--color-muted)`);
+    body.textContent = ` ${t(`desktop.machineFace.backOnlineBody`)}`;
+    words.append(title, body);
+    const actions = document.createElement(`div`);
+    actions.setAttribute(`style`, `display:flex;gap:calc(var(--spacing) * 2);margin-inline-start:auto`);
     const open = document.createElement(`button`);
+    open.type = `button`;
+    open.className = `p-button p-component ui-button-loud`;
     open.textContent = t(`desktop.machineFace.openWorkspace`);
-    open.setAttribute(`style`, `font:inherit;padding:.35rem .8rem;border-radius:.4rem;border:0;background:#2f5bd8;color:#fff;cursor:pointer`);
     open.addEventListener(`click`, () => window.location.assign(appUrl));
     const later = document.createElement(`button`);
+    later.type = `button`;
+    later.className = `p-button p-component p-button-secondary`;
     later.textContent = t(`desktop.machineFace.notNow`);
-    later.setAttribute(`style`, `font:inherit;padding:.35rem .8rem;border-radius:.4rem;border:1px solid #6b6b66;background:transparent;color:inherit;cursor:pointer`);
     later.addEventListener(`click`, () => bar.remove());
-    bar.append(words, open, later);
+    actions.append(open, later);
+    bar.append(words, actions);
     document.body.append(bar);
 };
 
