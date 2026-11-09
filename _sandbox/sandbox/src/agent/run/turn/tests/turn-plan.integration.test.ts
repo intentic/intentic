@@ -24,6 +24,7 @@ import { base, budgetOn, codexServices, context, harnessServices, servicesWith, 
 import { RUNTIME_ADAPTERS } from "../../../../runtimes/runtime-table.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import { privacySliceFake } from "../../../../privacy/privacy-slice.testing.js";
+import { translatorGatewayFake } from "../../../providers/translator-gateway.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -70,6 +71,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
     unstubbed<Services>("services", {
         // Off, as a fresh sandbox has it: every turn plans as it would without a shield.
         privacyShield: privacySliceFake().privacyShield,
+        translatorGateway: translatorGatewayFake(),
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
         adapters: RUNTIME_ADAPTERS,

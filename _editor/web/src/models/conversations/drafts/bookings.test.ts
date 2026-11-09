@@ -4,7 +4,7 @@ import { bookedGroups, bookingOfMessage, holdOfQueue, perMessage, queueFromMessa
 // Which waiting message goes when, from both kinds of sandbox: one that books each message on its own (2026-10 on), and
 // one that books the whole queue at once, whose queue-level booking is every message's.
 
-const message = (id: string, booking: Pick<QueuedMessage, "until" | "after"> = {}): QueuedMessage => ({
+const message = (id: string, booking: Pick<QueuedMessage, "until" | "after" | "afterTurn"> = {}): QueuedMessage => ({
     id,
     text: `say ${id}`,
     voice: `person`,

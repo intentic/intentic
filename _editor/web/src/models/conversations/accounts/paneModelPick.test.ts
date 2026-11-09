@@ -18,14 +18,14 @@ const applied = (choice: Parameters<typeof applyChoice>[1]): PickAction[] => {
 // so the next turn names it on Claude. Applied as a move of its own, it asked the daemon to pin the sign-in's account on
 // the conversation it still held on the key (2026-11-07).
 it(`names the account with the model, never as a move of its own`, () => {
-    const actions = applied({ provider: `claude`, model: `claude-opus-5-5`, account: `acct-1` });
+    const actions = applied({ provider: `claude`, model: `claude-opus-5-5`, label: `Claude Opus 5.5`, account: `acct-1` });
 
     expect(actions).toEqual([{ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5-5` }, account: `acct-1` }]);
     expect(loaded).toContain(`claude`);
 });
 
 it(`a pick with no account and a loop of its own picks the model, then the loop`, () => {
-    const actions = applied({ provider: `codex`, model: `gpt-6.1`, harness: `codex` });
+    const actions = applied({ provider: `codex`, model: `gpt-6.1`, label: `GPT-6.1`, harness: `codex` });
 
     expect(actions).toEqual([
         { kind: `selectModel`, pick: { provider: `codex`, value: `gpt-6.1` } },

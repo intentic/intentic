@@ -551,18 +551,22 @@ describe(`liveUsage under a standing refusal`, () => {
         expect(percentsOf(liveUsage(`kimi`, `kimi-1`, reading))).toEqual([100, 79]);
     });
 
-    it(`is answered for the whole provider by any one of its connections having room since`, () => {
+    // Each connection is answered by its own reading alone (refusal-verdict.ts, verdictOn): one account reading room
+    // answered a nameless refusal for all of them, so a refused model read 0% while every turn on it was refused (2026-11-08).
+    it(`is answered on each connection by its own reading since, never by another connection's room`, () => {
         const reading = kimiPools({ measuredAt: 1_500 });
+        const spare = usage({ windows: [window({ utilization: 20 })], measuredAt: 3_000 });
         translatorAccounts.value = {
             ...noRouted,
             kimi: [
                 { name: `kimi-1`, label: `Kimi Code session`, usage: reading },
-                { name: `kimi-2`, label: `Kimi spare`, usage: usage({ windows: [window({ utilization: 20 })], measuredAt: 3_000 }) },
+                { name: `kimi-2`, label: `Kimi spare`, usage: spare },
             ],
         };
         providerRefusals.value = kimiSpent;
+        expect(percentsOf(liveUsage(`kimi`, `kimi-1`, reading))).toEqual([100, 79]);
         // toEqual, not toBe: the rows seeded the shared map, and what comes back is its reactive proxy.
-        expect(liveUsage(`kimi`, `kimi-1`, reading)).toEqual(reading);
+        expect(liveUsage(`kimi`, `kimi-2`, spare)).toEqual(spare);
     });
 
     // Judged on raw readings, not the pinned ones; a pin can't keep confirming its own refusal forever.

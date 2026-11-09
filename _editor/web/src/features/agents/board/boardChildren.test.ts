@@ -228,10 +228,11 @@ it(`shows an in-process subagent's transcript in its parent's chat from its row`
     const board = await mountBoard();
     await focus(board, `ship the release`);
 
-    // What it runs on: the model it was served, right of the title on a wide row and under it on a narrow one (the row's
-    // container query shows one, which this DOM does not apply, so both are read), and the tier as the ladder's rungs,
-    // whose word is the ladder's label rather than text on the line. Its kind is the title's hover (childLook.test.ts).
-    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIClaude Opus X.*Claude Opus X$/)]);
+    // What it runs on: the model it was served, right of the title on the row's one line, then its clock, and the tier as
+    // the ladder's rungs, whose word is the ladder's label rather than text on the line. Its kind is the title's hover
+    // (childLook.test.ts).
+    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIClaude Opus X/)]);
+    expect(rows(board)[0]?.match(/Claude Opus X/g)).toHaveLength(1);
     expect(tray(board)?.querySelector(`[aria-label="${t(`shared.effort`)}: Low"]`)).not.toBeNull();
     const row = tray(board)?.querySelector<HTMLButtonElement>(`button`);
     row?.click();

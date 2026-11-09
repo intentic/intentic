@@ -234,6 +234,7 @@ fi
 
 if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
     echo "==> building Windows NSIS installer (cargo-xwin)"
+    nsis_fetch_tools
     pnpm exec tauri build --config "$CONFIG" --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
 fi
 

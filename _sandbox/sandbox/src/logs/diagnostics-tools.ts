@@ -26,8 +26,6 @@ const LINE_SCHEMA =
 
 const answer = async (deps: DiagnosticsToolDeps, ask: DiagnosticsQuery) => ok(await runDiagnosticsQuery(deps, ask));
 
-const read = { annotations: toolAnnotations("read") };
-
 export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
         name: "diagnostics",
@@ -42,7 +40,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     `first/last time; stacks are left out unless asked for. ${LINE_SCHEMA}`,
                 DiagnosticsErrorsArgs,
                 async (args) => answer(deps, { query: "errors", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "slow",
@@ -54,7 +52,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "a question about what is normal. The answer names the file it came from.",
                 DiagnosticsSlowArgs,
                 async (args) => answer(deps, { query: "slow", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "turns",
@@ -70,7 +68,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "and then stopped. A turn that simply answered a question reads the same, so weigh it against what was asked.",
                 DiagnosticsTurnsArgs,
                 async (args) => answer(deps, { query: "turns", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "resources",
@@ -91,7 +89,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "(with .held and .slots) for a heavy command that took a queue slot and did not give it back.",
                 DiagnosticsResourcesArgs,
                 async (args) => answer(deps, { query: "resources", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "restarts",
@@ -104,7 +102,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "interrupted, a session vanished, or the editor reconnected by itself.",
                 DiagnosticsRestartsArgs,
                 async (args) => answer(deps, { query: "restarts", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "timeline",
@@ -114,7 +112,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     "Use it instead of grepping /history for a conversation id. What was said is in `agents show <id> --transcript`.",
                 DiagnosticsTimelineArgs,
                 async (args) => answer(deps, { query: "timeline", ...args }),
-                read,
+                { annotations: toolAnnotations("read") },
             ),
         ],
     });

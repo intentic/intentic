@@ -14,17 +14,18 @@ appimage_env() {
     export PATCHELF="$patchelf"
 }
 
-# Tauri 2.12.3 downloads these without retrying DNS errors. Seed its cache before compiling/bundling, using the
-# release assets' checksums, so a resolver outage retries the download rather than the entire AppImage build.
-appimage_fetch_tool() {
+# Tauri 2.12.3 downloads its bundlers' tools without retrying DNS errors. Seed its cache before compiling/bundling, using
+# the release assets' checksums, so a resolver outage retries the download rather than the entire build. `$name` is the
+# path under Tauri's cache directory the bundler looks in.
+tauri_cache_fetch() {
     local name="$1" url="$2" sha="$3" cache dest partial
     cache="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
-    mkdir -p "$cache"
     dest="$cache/$name"
+    mkdir -p "$(dirname "$dest")"
     if [ -f "$dest" ] && printf '%s  %s\n' "$sha" "$dest" | sha256sum -c - >/dev/null 2>&1; then
         return 0
     fi
-    partial="$(mktemp "$cache/$name.XXXXXX")"
+    partial="$(mktemp "$dest.XXXXXX")"
     if ! curl -fsSL --retry 5 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 120 -o "$partial" "$url"; then
         rm -f "$partial"
         return 1
@@ -60,8 +61,19 @@ appimage_fetch_tools() {
             linuxdeploy_sha=2dad604a3b8110ff81f6f754d6fe1ba50b92bb75303385ab080966edddee28dd ;;
         *) echo "error: no AppImage tool pins for $arch" >&2; return 1 ;;
     esac
-    appimage_fetch_tool "AppRun-$arch" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$arch" "$apprun_sha"
-    appimage_fetch_tool "linuxdeploy-07333c6-$linuxdeploy_arch.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-$linuxdeploy_arch.AppImage" "$linuxdeploy_sha"
+    tauri_cache_fetch "AppRun-$arch" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$arch" "$apprun_sha"
+    tauri_cache_fetch "linuxdeploy-07333c6-$linuxdeploy_arch.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-$linuxdeploy_arch.AppImage" "$linuxdeploy_sha"
+}
+
+# The NSIS bundler's one download on a Linux host (its makensis is the system's): the nsis-tauri-utils plugin, which it
+# fetches into a cache no CI container keeps, so every Windows cross-build met the network at its very last step and a
+# DNS blip there threw away the whole build (nightly run 42603122329). The path, URL and asset are the ones tauri-cli
+# 2.12.3 pins (bundle/windows/nsis: NSIS_REQUIRED_FILES_HASH, whose SHA-1 75197FEE… this asset matches, so the bundler
+# keeps the seeded copy rather than fetching again); the SHA-256 is the asset's own.
+nsis_fetch_tools() {
+    tauri_cache_fetch "NSIS/Plugins/x86-unicode/additional/nsis_tauri_utils.dll" \
+        "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll" \
+        5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709
 }
 
 # Runs a command that bundles an AppImage ("$@", a `tauri build`) up to three times, five then ten seconds apart:

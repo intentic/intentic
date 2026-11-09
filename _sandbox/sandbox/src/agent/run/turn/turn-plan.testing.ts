@@ -17,6 +17,7 @@ import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
+import { translatorGatewayFake } from "../../providers/translator-gateway.testing.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
 // checker can follow the import and judge each suite by what it uses. Mocks nothing here: `jest.mock` is global to
@@ -103,6 +104,9 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         tools: [],
         // The privacy shield off, as a fresh sandbox has it: every turn plans as it would without one.
         privacyShield: privacySliceFake().privacyShield,
+        // The daemon's translator gateway: a subscription turn (Codex, Grok, Kimi, Gemini) is routed through it, under a
+        // session minted per provider (translator-gateway.ts).
+        translatorGateway: translatorGatewayFake(),
         // The real table: which arm a (provider, harness) pair reaches is what these suites are about.
         adapters: RUNTIME_ADAPTERS,
         resources: budgetOn(),
