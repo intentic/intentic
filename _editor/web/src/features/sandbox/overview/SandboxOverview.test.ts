@@ -315,7 +315,7 @@ it(`keeps long image, installed and available versions in full beside the name, 
     expect(facts.textContent).toContain(installed);
     expect(facts.textContent).toContain(latest);
     expect(facts.querySelector(`.truncate`)).toBeNull();
-    expect(facts.firstElementChild?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
+    expect(facts.querySelector(`button > span`)?.classList.contains(`[overflow-wrap:anywhere]`)).toBe(true);
     expect(facts.classList.contains(`flex-wrap`)).toBe(true);
 });
 

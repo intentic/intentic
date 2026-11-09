@@ -8888,7 +8888,9 @@
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",
-            "available": "→ {latest} available",
+            "available": "Update available",
+            "image": "Image",
+            "version": "Version",
             "billing": "Billing",
             "busyLiveActionsResume": "The sandbox is busy, live actions resume automatically.",
             "change": "Change…",
@@ -8897,7 +8899,6 @@
             "couldntReadImage": "Couldn't read that file as an image.",
             "couldntSaveLogo": "Couldn't save the logo.",
             "gettingWorkspaceReady": "Getting the workspace ready…",
-            "installedVersion": "installed version",
             "logoAdd": "Add logo",
             "logoChange": "Change logo",
             "needMorePower": "Need more power?",

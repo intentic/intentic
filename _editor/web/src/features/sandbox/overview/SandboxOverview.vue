@@ -12,11 +12,13 @@ import {
     SandboxResourcesDialog,
     StatusBadge,
     toneHover,
+    toneWash,
     ui,
     vAction,
 } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
+import { useCopied } from "@intentic/ui/clipboard";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { computed, ref } from "vue";
@@ -35,7 +37,7 @@ import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import OverviewSettingRow from "./OverviewSettingRow.vue";
-import { EDITABLE_VALUE, FIXED_VALUE } from "./overviewLook";
+import { EDITABLE_VALUE, FACT_CHIP, FACT_CHIP_QUIET, FIXED_VALUE, splitImageRef, versionLabel } from "./overviewLook";
 import SandboxFenceRow from "./SandboxFenceRow.vue";
 import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxGpuRow from "./SandboxGpuRow.vue";
@@ -61,6 +63,15 @@ const availabilityBadge = computed(() => sandboxAvailabilityVisual(availability.
 // The happy path needs no badge: reaching this tab already means the sandbox is up.
 const showAvailabilityBadge = computed(() => availability.value !== `live` && availability.value !== `stale`);
 const { info, installed, latest, updateAvailable } = useSandboxVersion();
+
+// The heading's two fact chips: the image in its parts, and the version as the number alone.
+const imageParts = computed(() => (info.value?.image ? splitImageRef(info.value.image) : undefined));
+const { copied: copiedImage, copy: writeClipboard } = useCopied();
+const copyImage = async (): Promise<void> => {
+    if (info.value?.image) {
+        await writeClipboard(info.value.image);
+    }
+};
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 // The name and the logo are the owner's and Full access's to change (the platform's `requireFullAccess`).
@@ -337,22 +348,49 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                                 :label="availabilityBadge.label"
                                 dot
                             />
-                            <!-- Which image it runs and the version installed in it, said once beside the name it belongs to.
-                                 Never cut: a tag is read to its last character, so a long one wraps onto a line of its own. -->
-                            <span
-                                v-if="sandbox.reachable.value && (info?.image || installed)"
-                                data-overview="image"
-                                class="flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs text-muted"
-                            >
-                                <span v-if="info?.image" class="min-w-0 [overflow-wrap:anywhere]">{{ info.image }}</span>
-                                <span v-if="installed" class="min-w-0 text-subtle [overflow-wrap:anywhere]">
-                                    {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
-                                    <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
-                                </span>
-                            </span>
                         </div>
                         <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
+                </div>
+                <!-- Which image it runs and the version installed in it, as two chips at the heading's far end. The image is
+                     drawn in parts (where it comes from dimmed, its name, its tag in the accent) and copies itself on a
+                     press; the version is the number alone, and turns to the update's tone when a newer one has shipped.
+                     Never cut: a tag is read to its last character, so a long one wraps inside its chip. -->
+                <div
+                    v-if="sandbox.reachable.value && (imageParts || installed)"
+                    data-overview="image"
+                    class="flex min-w-0 flex-wrap items-center gap-1.5 @2xl:max-w-2/3 @2xl:justify-end"
+                >
+                    <button
+                        v-if="imageParts"
+                        type="button"
+                        :class="[FACT_CHIP, FACT_CHIP_QUIET]"
+                        class="text-left transition-colors hover:border-line hover:bg-content/8"
+                        v-tooltip.bottom="copiedImage ? t(`ui.action.copied`) : t(`sandbox.sandboxOverview.image`)"
+                        :aria-label="t(`sandbox.sandboxOverview.image`)"
+                        @click="copyImage"
+                    >
+                        <Icon :name="copiedImage ? `check` : `box`" class="shrink-0 text-2xs" :class="copiedImage ? `text-success` : `text-subtle`" aria-hidden="true" />
+                        <span class="min-w-0 [overflow-wrap:anywhere]"
+                            ><span v-if="imageParts.source" class="text-subtle">{{ imageParts.source }}</span
+                            ><span class="text-content">{{ imageParts.name }}</span
+                            ><template v-if="imageParts.ref"
+                                ><span class="text-subtle">{{ imageParts.separator }}</span
+                                ><span class="text-accent">{{ imageParts.ref }}</span></template
+                            ></span
+                        >
+                    </button>
+                    <span
+                        v-if="installed"
+                        :class="[FACT_CHIP, updateAvailable ? [`border-transparent`, toneWash(`warning`)] : FACT_CHIP_QUIET]"
+                        v-tooltip.bottom="updateAvailable ? t(`sandbox.sandboxOverview.available`) : t(`sandbox.sandboxOverview.version`)"
+                    >
+                        <span :class="updateAvailable ? `` : `text-content`" class="[overflow-wrap:anywhere]">{{ versionLabel(installed) }}</span>
+                        <template v-if="updateAvailable && latest">
+                            <Icon name="arrow-right" class="shrink-0 text-2xs" aria-hidden="true" />
+                            <span class="[overflow-wrap:anywhere]">{{ versionLabel(latest) }}</span>
+                        </template>
+                    </span>
                 </div>
             </div>
 

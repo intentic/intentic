@@ -8888,7 +8888,9 @@
         },
         "sandboxOverview": {
             "addLogo": "Añadir un logo",
-            "available": "→ {latest} disponible",
+            "available": "Actualización disponible",
+            "image": "Imagen",
+            "version": "Versión",
             "billing": "Facturación",
             "busyLiveActionsResume": "El sandbox está ocupado; las acciones en vivo se reanudan automáticamente.",
             "change": "Cambiar…",
@@ -8897,7 +8899,6 @@
             "couldntReadImage": "No se pudo leer ese archivo como imagen.",
             "couldntSaveLogo": "No se pudo guardar el logotipo.",
             "gettingWorkspaceReady": "Preparando el espacio de trabajo…",
-            "installedVersion": "versión instalada",
             "logoAdd": "Añadir logo",
             "logoChange": "Cambiar logo",
             "needMorePower": "¿Necesitas más potencia?",
