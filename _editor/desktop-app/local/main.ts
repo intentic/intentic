@@ -2,7 +2,8 @@ import { faceOf, LOCAL_REPOINT_EVENT, type LocalFace } from "@intentic/web/local
 import { windowRelay } from "../src/account";
 import { installHost } from "../src/host";
 import { registerDesktopCatalog } from "../src/i18n";
-import { installPlatform, LOCAL_EMAIL, sandboxIdOf } from "./platform";
+import { seedFolderSession, seedFolderWindow } from "./folderSession";
+import { installPlatform } from "./platform";
 import { editorChunk, FACE_EVENT, faceArrives, warmModule } from "./warm";
 
 // The local face's entry: what must be true before the editor's own entry runs, the way the demo prepares it
@@ -54,16 +55,6 @@ const standInForTheApp = async (): Promise<void> => {
     }
 };
 
-// The folder's session, where the editor's sandbox client reads one (`intentic.session.<sandbox>`): its bearer is the
-// window's grant, which the sidecar honours for as long as the window shows the folder.
-const seedSession = (face: LocalFace): string => {
-    const id = sandboxIdOf(face);
-    localStorage.setItem(`intentic.session.${id}`, JSON.stringify({ token: face.token, expiresAt: Date.now() + 365 * 86_400_000, email: LOCAL_EMAIL }));
-    // The loopback shortcut is for reaching a sandbox faster; the sidecar is already on loopback.
-    localStorage.setItem(`intentic.localShortcut.declined.${id}`, `yes`);
-    return id;
-};
-
 // Another folder pointed at in this window's place (the app's local.rs `point`): its session is seeded before the
 // editor hears of it, since the editor moves to it in place (the web's local/folderSwitch.ts, listening after this) and
 // asks with that session at once. On a page still booting nothing takes the event, the app reloads it, and the boot
@@ -71,13 +62,13 @@ const seedSession = (face: LocalFace): string => {
 const seedPointedSession = (event: Event): void => {
     const face = event instanceof CustomEvent ? faceOf(event.detail) : undefined;
     if (face !== undefined) {
-        seedSession(face);
+        seedFolderSession(face);
     }
 };
 
 const boot = async (face: LocalFace): Promise<void> => {
     window.__INTENTIC_LOCAL__ = face;
-    localStorage.setItem(`intentic.activeSandboxId`, seedSession(face));
+    seedFolderWindow(face);
     window.addEventListener(LOCAL_REPOINT_EVENT, seedPointedSession);
     await standInForTheApp();
     // The account's calls ride the app (platform.ts `RELAYED`), when there is an app: a page in a test's browser has none.

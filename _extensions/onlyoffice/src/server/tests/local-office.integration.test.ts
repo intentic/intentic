@@ -83,6 +83,50 @@ describe(`a document's original`, () => {
     });
 });
 
+// The editor's own address, for every window and every run: its files go out cacheable for a year under it, so the
+// browser keeps them, compiled, for the next window and the next start of the app.
+describe(`the editor's address`, () => {
+    // A second folder of its own, as a second window opens one.
+    const other = async (): Promise<LocalFolder> => {
+        const root = join(dir, `other`);
+        await mkdir(root);
+        await writeFile(join(root, `notes.docx`), `other bytes`);
+        return { key: `window-2`, root, resolve: async (path) => (path === `notes.docx` ? join(root, path) : undefined), writable: () => true };
+    };
+    // What `folder` opened `path` at: the editor page's URL, and its document's own address beside it.
+    const opened = async (on: LocalFolder, path: string): Promise<{ origin: string; file: string }> => {
+        const answer = await office.handle(on, new Request(`http://127.0.0.1:47001${NAMESPACE}/open`, { method: `POST`, body: JSON.stringify({ path, mode: `edit`, theme: `light` }) }));
+        if (answer === undefined) {
+            throw new Error(`the open was not answered`);
+        }
+        // SAFETY: an open that answered answers the editor page's URL; a body without one fails the parse below.
+        const url = new URL(((await answer.json()) as { url: string }).url);
+        return { origin: url.origin, file: `${url.origin}/file?s=${url.searchParams.get(`s`) ?? ``}` };
+    };
+
+    it(`is one origin for every folder, each document still read from its own`, async () => {
+        const [first, second] = [await opened(folder, `brief.docx`), await opened(await other(), `notes.docx`)];
+        expect(second.origin).toBe(first.origin);
+        expect(await (await fetch(first.file)).text()).toBe(`original bytes`);
+        expect(await (await fetch(second.file)).text()).toBe(`other bytes`);
+    });
+
+    it(`ends a closed window's documents and keeps serving the others`, async () => {
+        const second = await other();
+        const [first, kept] = [await opened(folder, `brief.docx`), await opened(second, `notes.docx`)];
+        await office.release(folder.key);
+        expect((await fetch(first.file)).status).toBe(404);
+        expect(await (await fetch(kept.file)).text()).toBe(`other bytes`);
+    });
+
+    it(`is the same after the app starts again`, async () => {
+        const before = (await opened(folder, `brief.docx`)).origin;
+        await office.close();
+        office = createLocalOffice({ cacheDir: join(dir, `cache`, `office`), pageDir: join(dir, `page`), log: () => undefined });
+        expect((await opened(folder, `brief.docx`)).origin).toBe(before);
+    });
+});
+
 describe(`prefetch`, () => {
     it(`answers ready at once when the editor is already here`, async () => {
         expect(await office.prefetch()).toEqual({ state: `ready` });

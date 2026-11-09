@@ -1,13 +1,12 @@
-import { randomBytes } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { NAMESPACE, type DocsState, type OpenRequest } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
-import { createBrowserEngine, warmBundle, type BrowserEngine } from "./browser-engine.js";
+import { createBrowserEngine, warmBundle } from "./browser-engine.js";
 import { BUNDLE_PIN } from "./bundle-pin.js";
 import { BundleStore } from "./bundle.js";
-import { createListener, type Listener } from "./listener.js";
+import { createFolderListener, type FolderEngine } from "./local-listener.js";
 import { Originals } from "./originals.js";
 import { parseOpen, workspacePath } from "./server.js";
 import { Sessions } from "./sessions.js";
@@ -18,9 +17,10 @@ export { SCRATCH_MARK } from "./browser-engine.js";
 // The browser engine for folders on the user's own computer, for the desktop app's local files sidecar
 // (_devices/local-files): the viewer's four routes answered with no daemon, no document server and no Docker, plus the
 // two that bring a document back to how it was before this process first saved over it (originals.ts). Each folder
-// gets its own engine and loopback listener, since an engine reads and writes under one root; the bundle is downloaded
-// once and shared by all of them, and the app may ask for it before any document is open. Everything a sandbox's
-// backend adds (the container engine, the JWT, the port it remembers across restarts) has nothing to do here.
+// gets its own engine, since an engine reads and writes under one root, and all of them are served by one loopback
+// listener on the port it had last run (local-listener.ts), so the editor's files stay cached across windows and runs.
+// The bundle is downloaded once and shared by all of them, and the app may ask for it before any document is open.
+// Everything a sandbox's backend adds (the container engine, the JWT) has nothing to do here.
 
 export interface LocalFolder {
     // One engine per key: the sidecar's grant for a window.
@@ -42,6 +42,8 @@ export interface LocalOfficeDeps {
     readonly originalsDir?: string;
     // The bundle download's fetch, for a test.
     readonly fetch?: typeof fetch;
+    // Where the listener's port is remembered across runs: `office-port` beside the bundle's cache dir unless a test says.
+    readonly portFile?: string;
 }
 
 // Where an asked-for download ended.
@@ -71,14 +73,6 @@ const json = <Body>(status: number, body: Body): Response =>
 const openRequestOf = async (request: Request): Promise<OpenRequest | undefined> =>
     // allow(silent-catch): a body that is not JSON is the caller's mistake, answered as a 400 like any other bad body.
     parseOpen(await request.json().catch(() => undefined));
-
-interface Running {
-    readonly engine: BrowserEngine;
-    readonly listener: Listener;
-}
-
-// allow(silent-catch): an engine whose start failed has no listener to close, and closing is all that is left to do.
-const closeQuietly = async (held: Promise<Running> | undefined): Promise<void> => held?.then(({ listener }) => listener.close()).catch(() => undefined);
 
 // What a request's JSON body names as `path`, or undefined for a body that names none.
 const pathIn = async (request: Request): Promise<string | undefined> => {
@@ -129,18 +123,35 @@ const bundleWarmer = (bundle: BundleStore, log: (line: string) => void) => {
     };
 };
 
+// What the bytes of a document in `folder` are right now; nothing for a conversation's copy, which exists only in a sandbox.
+const identifyIn =
+    (folder: LocalFolder) =>
+    async (path: string, agent: string | undefined): Promise<{ stat: { size: number; mtimeMs: number } } | undefined> => {
+        const real = agent === undefined ? await folder.resolve(path) : undefined;
+        if (real === undefined) {
+            return undefined;
+        }
+        const found = await stat(real);
+        return found.isFile() ? { stat: { size: found.size, mtimeMs: found.mtimeMs } } : undefined;
+    };
+
 export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
     const bundle = new BundleStore({ root: deps.cacheDir, pin: BUNDLE_PIN, log: (line) => deps.log(`[office bundle] ${line}`), fetch: deps.fetch });
-    const running = new Map<string, Promise<Running>>();
+    const running = new Map<string, Promise<FolderEngine>>();
     const originals = new Originals({ dir: deps.originalsDir ?? join(dirname(deps.cacheDir), "office-originals"), log: (line) => deps.log(`[office] ${line}`) });
     // What was kept more than a week ago goes now, off every request's path.
     void originals.sweep().catch((error: Error) => deps.log(`[office] sweeping kept originals failed: ${error.message}`));
 
-    const start = async (folder: LocalFolder): Promise<Running> => {
+    // Engines whose start finished, by folder key: where the listener finds the engine a session belongs to.
+    const started = new Map<string, FolderEngine>();
+    const listener = createFolderListener({
+        engines: () => started.values(),
+        portFile: deps.portFile ?? join(dirname(deps.cacheDir), "office-port"),
+        log: deps.log,
+    });
+
+    const start = async (folder: LocalFolder): Promise<FolderEngine> => {
         const sessions = new Sessions();
-        // The listener's address, known once it listens. The engine and the listener each need the other, so the engine
-        // is handed the promise: it asks only to build a page, which no request reaches before the listener is up.
-        const exposed = Promise.withResolvers<string>();
         const engine = createBrowserEngine({
             workspaceRoot: folder.root,
             pageDir: deps.pageDir,
@@ -148,18 +159,8 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
             bundle,
             // A conversation's copy exists only in a sandbox.
             scopedRaw: async () => new Response(null, { status: 404 }),
-            identify: async (path, agent) => {
-                if (agent !== undefined) {
-                    return undefined;
-                }
-                const real = await folder.resolve(path);
-                if (real === undefined) {
-                    return undefined;
-                }
-                const found = await stat(real);
-                return found.isFile() ? { stat: { size: found.size, mtimeMs: found.mtimeMs } } : undefined;
-            },
-            exposure: () => exposed.promise,
+            identify: identifyIn(folder),
+            exposure: listener.origin,
             log: (line) => deps.log(`[office] ${line}`),
             writable: folder.writable,
             // The document as it was before this process first writes over it, kept to restore.
@@ -170,33 +171,30 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
                 }
             },
         });
-        const listener = createListener({
-            // Nothing signs callbacks here, since no document server runs; a secret nobody holds refuses any that arrive.
-            secret: randomBytes(32).toString("hex"),
-            sessions,
-            host: "127.0.0.1",
-            documentServerPort: () => undefined,
-            pageFor: (session) => engine.page(session),
-            refresh: async () => undefined,
-            readDocument: async () => undefined,
-            saveDocument: async () => {
-                throw new Error("no document server runs on this computer");
-            },
-            browser: engine.routes,
-            log: (line) => deps.log(`[office listener] ${line}`),
-        });
-        const port = await listener.listen(0);
-        exposed.resolve(`http://127.0.0.1:${port}`);
-        return { engine, listener };
+        await listener.origin();
+        return { engine, sessions };
     };
 
-    const engineFor = (folder: LocalFolder): Promise<Running> => {
+    const engineFor = (folder: LocalFolder): Promise<FolderEngine> => {
         let held = running.get(folder.key);
         if (held === undefined) {
-            held = start(folder);
-            running.set(folder.key, held);
-            // A start that failed is tried again by the next request rather than remembered.
-            held.catch(() => running.delete(folder.key));
+            const starting = start(folder);
+            held = starting;
+            running.set(folder.key, starting);
+            // Registered before any caller's own wait on it, so a session the engine opens is found by the listener at once.
+            starting.then(
+                (one) => {
+                    if (running.get(folder.key) === starting) {
+                        started.set(folder.key, one);
+                    }
+                },
+                // A start that failed is tried again by the next request rather than remembered.
+                () => {
+                    if (running.get(folder.key) === starting) {
+                        running.delete(folder.key);
+                    }
+                },
+            );
         }
         return held;
     };
@@ -277,16 +275,17 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
             }
             return undefined;
         },
+        // The folder's sessions go with its engine, so its editor's requests are answered as ended; the listener stays
+        // for the other windows and the next one.
         release: async (key) => {
-            const held = running.get(key);
             running.delete(key);
-            await closeQuietly(held);
+            started.delete(key);
         },
         close: async () => {
             warmer.stop();
-            const all = [...running.values()];
             running.clear();
-            await Promise.all(all.map(closeQuietly));
+            started.clear();
+            await listener.close();
         },
         prefetch: () => {
             prefetching ??= download().finally(() => {

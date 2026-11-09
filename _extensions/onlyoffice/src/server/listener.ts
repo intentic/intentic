@@ -19,9 +19,13 @@ export interface Document {
     readonly agent: string | undefined;
 }
 
+// What the listener asks of the sessions it serves: a session by its token, and a document server's key's document,
+// save and close. A host serving several folders' engines from one listener hands it a view over all of them.
+export type ListenerSessions = Pick<Sessions, "session" | "document" | "saved" | "closed">;
+
 export interface ListenerDeps {
     readonly secret: string;
-    readonly sessions: Sessions;
+    readonly sessions: ListenerSessions;
     // The document server's loopback port while it answers; undefined answers 503 to what would be proxied.
     readonly documentServerPort: () => number | undefined;
     // The page a session's frame loads: the document server's editor, or the browser engine's.

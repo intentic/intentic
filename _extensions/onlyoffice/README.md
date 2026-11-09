@@ -94,8 +94,12 @@ flowchart LR
 - **On the user's own computer**, the desktop app's local windows edit documents with the same browser engine, with
   no daemon: `@intentic/ext-onlyoffice/local-office` (`src/server/local-office.ts`) answers the viewer's four routes
   for one folder per window inside the app's `intentic-files` sidecar ([local-files](../../_devices/local-files)).
-  Its listener keeps to loopback (`host` in `listener.ts`), where a sandbox's listens on every interface for the
-  document server's container, and the bundle is downloaded once into the app's cache. The app can ask for that
+  Every folder's engine is served by one listener (`src/server/local-listener.ts`), on the port it had last run
+  (`office-port` beside the bundle's cache), so the editor's files, cacheable for a year, stay cached with their
+  compiled code from one window to the next and across restarts of the app. _(2026-11-09) A listener per window on a
+  fresh port made each window a new origin that cached nothing._ It keeps to loopback (`host` in `listener.ts`), where
+  a sandbox's listens on every interface for the document server's container, and the bundle is downloaded once into
+  the app's cache. The app can ask for that
   download before any document is open (`prefetch`, the sidecar's `prefetch-office`). Once the bundle is on disk, the
   editor's largest files (`WARM_FILES` in `browser-engine.ts`) are read once in the background, five seconds later,
   with their gzip copies made (`warmStatic`): on Windows the first read of each is when the real-time scanner looks at
