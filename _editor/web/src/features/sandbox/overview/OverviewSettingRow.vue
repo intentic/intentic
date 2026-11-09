@@ -19,6 +19,6 @@ defineProps<{
             <template v-else>{{ label }}</template>
         </dt>
         <dd class="flex min-w-0 flex-1 flex-col items-start gap-1 text-xs text-content"><slot /></dd>
-        <dd v-if="$slots.action" class="flex h-6 shrink-0 items-center"><slot name="action" /></dd>
+        <dd v-if="$slots[`action`]" class="flex h-6 shrink-0 items-center"><slot name="action" /></dd>
     </div>
 </template>

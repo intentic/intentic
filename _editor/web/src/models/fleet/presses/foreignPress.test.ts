@@ -12,7 +12,7 @@ jest.mock("../../sandbox/live/fleetAcross", () => ({
     otherBoxes: { value: [{ sandbox: { id: `box-2` }, agents: [{ id: `far`, owner: { email: `anna@example.com` } }] }] },
 }));
 
-const setAutoLand = jest.fn(async () => undefined);
+const setAutoLand = jest.fn(async (_id: string, _on: boolean | null) => undefined);
 jest.mock("../useAgents", () => ({ useAgents: () => ({ agentById: (id: string) => stub.cards.get(id), setAutoLand }) }));
 
 const { answerForeign, asksFirst, cleared, foreignAsk, foreignOwner, foreignShare } = await import("./foreignPress");
@@ -26,14 +26,14 @@ afterEach(() => {
 
 describe(`foreignOwner`, () => {
     it(`names the owner only when it is somebody else`, () => {
-        expect(foreignOwner({ owner: { email: `anna@example.com` } }, `me@example.com`, [])?.email).toBe(`anna@example.com`);
-        expect(foreignOwner({ owner: { email: `ME@example.com` } }, `me@example.com`, [])).toBeUndefined();
+        expect(foreignOwner({ owner: { email: `anna@example.com`, since: 0 } }, `me@example.com`, [])?.email).toBe(`anna@example.com`);
+        expect(foreignOwner({ owner: { email: `ME@example.com`, since: 0 } }, `me@example.com`, [])).toBeUndefined();
     });
 
     it(`has nobody to ask about for an unowned card, a missing card, or a reader with no address`, () => {
         expect(foreignOwner({}, `me@example.com`, [])).toBeUndefined();
         expect(foreignOwner(undefined, `me@example.com`, [])).toBeUndefined();
-        expect(foreignOwner({ owner: { email: `anna@example.com` } }, undefined, [])).toBeUndefined();
+        expect(foreignOwner({ owner: { email: `anna@example.com`, since: 0 } }, undefined, [])).toBeUndefined();
     });
 });
 
@@ -71,7 +71,7 @@ describe(`cleared`, () => {
 describe(`foreignShare`, () => {
     it(`counts other people's cards and names each owner once`, () => {
         const share = foreignShare(
-            [{ owner: { email: `anna@example.com` } }, { owner: { email: `Anna@example.com` } }, { owner: { email: `me@example.com` } }, {}, { owner: { email: `bo@example.com`, name: `Bo` } }],
+            [{ owner: { email: `anna@example.com`, since: 0 } }, { owner: { email: `Anna@example.com`, since: 0 } }, { owner: { email: `me@example.com`, since: 0 } }, {}, { owner: { email: `bo@example.com`, name: `Bo`, since: 0 } }],
             `me@example.com`,
             [{ email: `anna@example.com`, name: `Anna Kowalska` }],
         );

@@ -99,6 +99,10 @@ const RAW_JSON_WRITERS = [
     // own) under a name of its own, and deleted by the daemon's next audit tick once it has parsed it with the trail's
     // own event schema: a message between two processes of one build, never a file kept across versions.
     "auth/host/host-session.ts",
+    // The runner's reading of its own link, in /run/intentic (gone with the container), rewritten every minute for the
+    // machine agent's keeper to read through `docker exec`: a reading for another program, never a file kept across
+    // versions, with its shape fixed in sandbox-contract (RunnerLinkReadingSchema).
+    "runners/runner-link.ts",
     // Claude Code's own settings.json: one key merged into a file whose shape another program owns.
     "sessions/session-store.ts",
     // Written synchronously as a failed boot exits, where no store's write queue can be waited on.
@@ -108,6 +112,9 @@ const RAW_JSON_WRITERS = [
     // The exit marker, written synchronously from the exit hook for the next boot to read, and beside it the restart
     // intent a stop announces and the boot's restarts.jsonl record, written as synchronously.
     "system/boot/restarts/boot-marker.ts",
+    // The platform's last name and logo for this sandbox, read by the machine that runs it through `docker cp` while the
+    // platform is down: a host that is not this build, so its shape is fixed in the module, as platform-row.ts's is.
+    "system/presentation/presentation-store.ts",
 ];
 
 test("JSON written whole outside the store goes through a document, or is one of the few named above", () => {

@@ -1,3 +1,4 @@
+import { isRecord } from "@intentic/base/escape";
 import { parseJsonOr, parseJsonWith } from "@intentic/base/json";
 import { apiContract, type SandboxSummary, SandboxSummarySchema, type User, UserSchema } from "@intentic/api-contract";
 import { deviceKey, removeStoredValue, storedJson, storeJson } from "@intentic/ui/storage";
@@ -140,8 +141,8 @@ const isSignedOut = (answer: AccountAnswer): boolean => {
     if (answer.status !== 401 || !(answer.contentType ?? ``).includes(`json`)) {
         return false;
     }
-    const body = parseJsonOr(answer.body, undefined);
-    if (!(body instanceof Object) || Array.isArray(body)) {
+    const body: unknown = parseJsonOr(answer.body, undefined);
+    if (!isRecord(body)) {
         return false;
     }
     return body[`code`] === `UNAUTHORIZED` || body[`message`] === `Not signed in.`;
