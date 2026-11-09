@@ -2,11 +2,11 @@ import type { Ref } from "vue";
 import { numberPreference } from "@intentic/ui/preference";
 
 // Rail width, the chat rail's column of session cards (ChatTabs, RailColumn), and the width the chat panel sets aside for
-// it (ChatPanel), in app pixels. Floor (288) matches ChatTabList's own docked-sheet floor; default (320) fits two lines of
-// title plus the meta row; drag reaches 480.
+// it (ChatPanel), in app pixels. Floor (288) matches ChatTabList's own docked-sheet floor; default (344) fits two lines of
+// title plus the meta row, and a subagent's row its title, model and clock on one line; drag reaches 480.
 
 const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
-export const DEFAULT_RAIL_WIDTH = 320;
+export const DEFAULT_RAIL_WIDTH = 344;
 // Exported so `<ResizeSeam>` and the clamp below share one number instead of two that could drift.
 export const MIN_RAIL_WIDTH = 288;
 export const MAX_RAIL_WIDTH = 480;

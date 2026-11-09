@@ -19,10 +19,10 @@ const props = defineProps<{
     run: RunLook;
     // The bar's composer-like line, rather than the row's run of text.
     bar?: boolean;
-    // Fixed widths for the model and the ladder, so rows stacked in a tray line them up as columns whatever the model's
-    // name or however many rungs its provider's ladder has (at most five; a ladder-less tier's word is cut to fit). A
-    // tray row is one line, so the model's name shows only where its row (an @container) has room, and the facts' hover
-    // says the model and the tier wherever it does not.
+    // A tray row's facts: the ladder at a fixed width, so the rows stacked in a tray end their model names, ladders and
+    // clocks on one edge whatever rungs a provider's ladder has (at most five; a ladder-less tier's word is cut to fit),
+    // and the model's name at its own width up to a cap, so a short one leaves its title the room; the facts' hover says
+    // the model and the tier whole.
     columns?: boolean;
 }>();
 
@@ -30,7 +30,7 @@ const t = useT();
 // Which model ran a child, and at what effort, is a developer's reading: a maker's tray row and bar say neither.
 const { maker } = useAudience();
 
-// The column row's hover: everything it says, for the row too narrow to name its model.
+// The column row's hover: everything it says, whole, for a model name cut to its column.
 const said = computed(() => (props.run.effort === undefined ? props.run.model : `${props.run.model} · ${props.run.effort.label}`));
 const rungs = computed(() =>
     Array.from({ length: props.run.effort?.rungs ?? 0 }, (_, index) =>
@@ -72,7 +72,7 @@ const rungs = computed(() =>
     <span v-else-if="!maker" class="flex min-w-0 items-center gap-1.5" v-tooltip.top="columns ? said : undefined">
         <span
             class="min-w-0 items-center gap-1 text-2xs"
-            :class="columns ? 'hidden w-24 shrink-0 @sm:flex' : 'flex'"
+            :class="columns ? 'flex max-w-24 shrink-0' : 'flex'"
             :aria-label="`${t(`shared.model`)}: ${providerLabel(run.provider)} ${run.modelId}`"
         >
             <span class="min-w-0 truncate" aria-hidden="true">{{ shortModelLabel(run.model) }}</span>

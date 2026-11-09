@@ -11,12 +11,12 @@ import RunFacts from "./RunFacts.vue";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../app/useAudience";
 
-// One child riding under its parent's card (childFold), on one line: its glyph, its title, what it runs on (RunFacts),
-// and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what only the reader
-// can give (its one press opens its chat, where the ask is answered). What it runs on is the model and tier a reader
-// otherwise could not tell from its parent's (its kind or provider is only the title's hover, childLook): the tier's
-// ladder always, the model's name only on a row wide enough for it (the button's own @container), else the ladder's
-// hover, so a tray of children stays a line apiece. Everything else — the branch, the cost, the diff — is its own chat's
+// One child riding under its parent's card (childFold), on one line: its title, what it runs on (RunFacts), and at its
+// end how it stands, as a session's card says it there: its clock in the working ink while it works, its ask in the
+// card's own pill when it asks what only the reader can give (its one press opens its chat, where the ask is answered),
+// else its glyph beside when it settled. What it runs on is the model and tier a reader otherwise could not tell from
+// its parent's (its kind or provider is only the title's hover, childLook), always named, so a tray of children stays a
+// line apiece without hiding which model each runs. Everything else — the branch, the cost, the diff — is its own chat's
 // to say, one press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
 // in-process has no chat of its own, so its press shows its transcript in its parent's, and it has no review or menu.
 
@@ -66,15 +66,6 @@ const menu = (event: MouseEvent): void => {
         @dblclick="review"
         @contextmenu="menu"
     >
-        <Icon
-            :name="look.glyph.icon"
-            :spin="look.glyph.spin"
-            role="img"
-            :aria-label="look.glyph.label"
-            v-tooltip.top="look.hint"
-            class="shrink-0 text-xs"
-            :class="look.glyph.class"
-        />
         <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
             <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
         </span>
@@ -89,8 +80,8 @@ const menu = (event: MouseEvent): void => {
             ><Icon :name="look.fresh.icon" class="shrink-0 text-3xs" />{{ look.fresh.label ?? look.fresh.result
             }}<template v-if="look.fresh.label !== undefined && look.fresh.result !== undefined"> · {{ look.fresh.result }}</template></span
         >
-        <!-- Right of the title; the title gives way first. The model, the ladder and the clock each keep a fixed width, so
-             the rows of a tray read as columns rather than each hugging its own. -->
+        <!-- Right of the title; the title gives way first. The ladder and the clock keep fixed widths, so the model names,
+             ladders and clocks of a tray's rows end on one edge rather than each hugging its own title. -->
         <span v-if="look.run !== undefined" class="flex shrink-0 items-center text-2xs text-subtle">
             <RunFacts :run="look.run" columns />
         </span>
@@ -106,11 +97,27 @@ const menu = (event: MouseEvent): void => {
         <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{
             look.ask
         }}</span>
-        <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{
-            formatElapsed((now - look.since) / 1000)
-        }}</span>
-        <span v-else-if="look.ask === undefined && look.at > 0" class="min-w-12 shrink-0 text-right text-2xs text-subtle">
-            <AgentCardDate :at="look.at" />
+        <!-- Its standing, at the row's end as on a session's card: a working child's clock in the working ink, else its glyph
+             beside when it settled, so no column of glyphs takes the title's room on the left. -->
+        <span
+            v-if="look.working && look.since !== undefined"
+            role="img"
+            :aria-label="look.glyph.label"
+            v-tooltip.top="look.doing"
+            class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link"
+            >{{ formatElapsed((now - look.since) / 1000) }}</span
+        >
+        <span v-else-if="look.ask === undefined" class="flex min-w-12 shrink-0 items-center justify-end gap-1.5 text-2xs text-subtle">
+            <Icon
+                :name="look.glyph.icon"
+                :spin="look.glyph.spin"
+                role="img"
+                :aria-label="look.glyph.label"
+                v-tooltip.top="look.hint"
+                class="shrink-0 text-2xs"
+                :class="look.glyph.class"
+            />
+            <AgentCardDate v-if="look.at > 0" :at="look.at" />
         </span>
     </button>
 </template>

@@ -49,7 +49,6 @@ const run = computed(() => runLook(props.child.provider ?? props.provider, props
         class="@container flex min-h-7 w-full min-w-0 select-none items-center gap-2 rounded-md px-2 outline-1 -outline-offset-1 outline-dashed outline-line-strong max-md:min-h-10"
         data-starting-child
     >
-        <Icon :name="glyph.icon" :spin="glyph.spin" role="img" :aria-label="glyph.label" class="shrink-0 text-xs" :class="glyph.class" />
         <span class="min-w-0 flex-1 truncate text-xs text-muted">
             <span v-for="(part, at) in titleRuns" :key="at" :class="part.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ part.text }}</span>
         </span>
@@ -57,7 +56,7 @@ const run = computed(() => runLook(props.child.provider ?? props.provider, props
             <RunFacts :run="run" columns />
         </span>
         <span v-tooltip.top="{ title: glyph.label, note: why }" class="flex shrink-0 items-center gap-1.5 text-2xs text-subtle">
-            <span>{{ glyph.label }}</span>
+            <Icon :name="glyph.icon" :spin="glyph.spin" aria-hidden="true" class="shrink-0" :class="glyph.class" />
             <span class="min-w-12 text-right tabular-nums">{{ formatElapsed((now - child.startedAt) / 1000) }}</span>
         </span>
     </div>
