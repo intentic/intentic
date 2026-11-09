@@ -26,3 +26,8 @@ docker_compose_sha256 = "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e9
 docker_buildx_version = "0.38.0"
 docker_buildx_url = "https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.linux-amd64"
 docker_buildx_sha256 = "4fe4cc38adf48169132749b6ca22a990928db0118e3407584ee553723115d287"
+
+# The Windows CLI's buildx plugin, installed into the user's `~/.docker/cli-plugins` (the zip above has none, and Docker
+# 29's `docker build` is buildx). The sha256 is GitHub's asset digest: the release's checksums.txt lists no Windows files.
+docker_buildx_windows_url = "https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe"
+docker_buildx_windows_sha256 = "b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26"

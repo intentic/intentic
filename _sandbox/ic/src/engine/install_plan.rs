@@ -10,6 +10,8 @@ pub struct InstallFacts {
     pub cli_present: bool,
     /// When `cli_present`, whether `docker.exe --version` names the pinned CLI build.
     pub cli_version_matches: bool,
+    /// A `docker-buildx.exe` where the CLI looks for plugins: without it, Docker 29's CLI builds no image.
+    pub buildx_present: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,6 +19,7 @@ pub enum InstallStep {
     ImportDistro,
     GenerateTls,
     InstallCli,
+    InstallBuildx,
     WriteRecord,
     RegisterAutostart,
     StartEngine,
@@ -33,6 +36,9 @@ pub fn install_steps(facts: &InstallFacts) -> Vec<InstallStep> {
     }
     if !facts.cli_present || !facts.cli_version_matches {
         steps.push(InstallStep::InstallCli);
+    }
+    if !facts.buildx_present {
+        steps.push(InstallStep::InstallBuildx);
     }
     steps.push(InstallStep::WriteRecord);
     steps.push(InstallStep::RegisterAutostart);
@@ -51,6 +57,7 @@ mod tests {
             distro_server_tls_present: false,
             cli_present: false,
             cli_version_matches: false,
+            buildx_present: false,
         }
     }
 
@@ -62,6 +69,7 @@ mod tests {
                 InstallStep::ImportDistro,
                 InstallStep::GenerateTls,
                 InstallStep::InstallCli,
+                InstallStep::InstallBuildx,
                 InstallStep::WriteRecord,
                 InstallStep::RegisterAutostart,
                 InstallStep::StartEngine,
@@ -86,6 +94,7 @@ mod tests {
             distro_server_tls_present: true,
             cli_present: true,
             cli_version_matches: true,
+            buildx_present: true,
         };
         assert_eq!(
             install_steps(&facts),
@@ -106,6 +115,7 @@ mod tests {
             distro_server_tls_present: false,
             cli_present: true,
             cli_version_matches: true,
+            buildx_present: true,
         };
         assert!(install_steps(&facts).contains(&InstallStep::GenerateTls));
     }
@@ -118,6 +128,7 @@ mod tests {
             distro_server_tls_present: true,
             cli_present: true,
             cli_version_matches: true,
+            buildx_present: true,
         };
         assert!(!install_steps(&facts).contains(&InstallStep::InstallCli));
     }
@@ -130,7 +141,24 @@ mod tests {
             distro_server_tls_present: true,
             cli_present: true,
             cli_version_matches: false,
+            buildx_present: true,
         };
         assert!(install_steps(&facts).contains(&InstallStep::InstallCli));
+    }
+
+    /// An engine installed before ic installed buildx: installing again repairs it without touching the CLI.
+    #[test]
+    fn buildx_installed_when_missing_beside_a_current_cli() {
+        let facts = InstallFacts {
+            distro_registered: true,
+            windows_client_tls_complete: true,
+            distro_server_tls_present: true,
+            cli_present: true,
+            cli_version_matches: true,
+            buildx_present: false,
+        };
+        let steps = install_steps(&facts);
+        assert!(steps.contains(&InstallStep::InstallBuildx));
+        assert!(!steps.contains(&InstallStep::InstallCli));
     }
 }

@@ -510,11 +510,13 @@ flowchart LR
   Windows 11 VM at about 50 MB/s: the 1.8 GB finished before the restart; loading it took 237 s where a pull took 192 s,
   since `docker load` takes the archive in before it unpacks while a pull overlaps the two, so the prefetch pays off on
   links slow enough that the download outlasts the unpacking. See [src/image_cache.rs](src/image_cache.rs).
-- **Our engine on Windows without Docker Desktop.** `ic engine fetch` downloads the WSL rootfs tarball and the Windows
-  static `docker.exe` into `~/.intentic/engine-cache/` (same `intentic-prefetch:` readings as `ic image prefetch`).
+- **Our engine on Windows without Docker Desktop.** `ic engine fetch` downloads the WSL rootfs tarball, the Windows
+  static `docker.exe` and its `buildx` plugin into `~/.intentic/engine-cache/` (same `intentic-prefetch:` readings as `ic image prefetch`).
   `ic engine install` imports the `intentic-engine` WSL2 distro under `%LOCALAPPDATA%\Intentic\engine`, generates TLS
   inside the distro, copies client material to `%USERPROFILE%\.intentic\engine\tls\`, installs `docker.exe` under
-  `%USERPROFILE%\.intentic\engine\bin\`, writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
+  `%USERPROFILE%\.intentic\engine\bin\` and `docker-buildx.exe` into `%USERPROFILE%\.docker\cli-plugins\` (unless the
+  CLI already finds one there or in Docker Desktop's plugin folder: the static zip has none, and Docker 29's `docker
+  build` refuses to run without it; an engine installed before that gets it before its next image build), writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
   `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in, and starts a hidden keeper
   (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Nothing of either is a window
   (2026-10-13): the keeper gets a console of its own with no window rather than none, since the Store WSL's `wsl.exe`

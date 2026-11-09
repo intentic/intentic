@@ -51,6 +51,28 @@ pub fn bin_dir() -> Option<PathBuf> {
     home().map(|home| home.join(".intentic").join("engine").join("bin"))
 }
 
+/// The docker CLI's own plugin directory, the first it searches: `%DOCKER_CONFIG%\cli-plugins`, else
+/// `%USERPROFILE%\.docker\cli-plugins`. The CLI reads no variable for a plugin directory of ours, and a system one
+/// (`%ProgramFiles%\Docker\cli-plugins`) needs an elevated write, so the engine's buildx goes here, as the WSL
+/// integration's links do.
+pub fn user_cli_plugins_dir() -> Option<PathBuf> {
+    std::env::var_os("DOCKER_CONFIG")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| home().map(|home| home.join(".docker")))
+        .map(|config| config.join("cli-plugins"))
+}
+
+/// The CLI's system plugin directories on Windows, in the order it searches them after the user's own: where Docker
+/// Desktop puts its buildx.
+pub fn system_cli_plugins_dirs() -> Vec<PathBuf> {
+    ["ProgramData", "ProgramFiles"]
+        .iter()
+        .filter_map(|var| std::env::var_os(var).filter(|dir| !dir.is_empty()))
+        .map(|dir| PathBuf::from(dir).join("Docker").join("cli-plugins"))
+        .collect()
+}
+
 /// `%LOCALAPPDATA%\Intentic\engine\` — where `wsl --import` keeps the distro's VHDX.
 pub fn wsl_store() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA")

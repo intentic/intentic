@@ -467,6 +467,19 @@ pub fn reach() -> Option<crate::docker::EngineEnv> {
     }
 }
 
+/// Whatever the active engine's CLI still lacks to build an image (our engine's buildx on Windows), installed before a
+/// build; nothing elsewhere.
+pub fn ensure_build_tools() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        windows::ensure_build_tools()
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
+}
+
 static ADOPTED: std::sync::Once = std::sync::Once::new();
 
 /// Point this process's `docker` spawns at our engine when this account's sandboxes run on it.

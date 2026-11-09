@@ -68,7 +68,10 @@ pub fn wait_for_other(progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> 
             FetchOutcome::Complete => return Ok(()),
             FetchOutcome::HeldByAnother => {
                 let done = http_fetch::on_disk(&dir.join(pins::TARBALL_NAME))
-                    + http_fetch::on_disk(&dir.join(pins::cli_zip_name()));
+                    + http_fetch::on_disk(&dir.join(pins::cli_zip_name()))
+                    + http_fetch::on_disk(
+                        &dir.join(pins::cached_name(pins::DOCKER_BUILDX_WINDOWS_URL)),
+                    );
                 progress(done.min(total), total);
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -136,6 +139,15 @@ pub fn ensure_cli_zip() -> Result<PathBuf, String> {
     )
 }
 
+/// The pinned buildx plugin for the Windows CLI in the engine cache (fetched when it is not there yet).
+pub fn ensure_buildx_windows() -> Result<PathBuf, String> {
+    ensure_pinned(
+        pins::DOCKER_BUILDX_WINDOWS_URL,
+        &pins::cached_name(pins::DOCKER_BUILDX_WINDOWS_URL),
+        pins::DOCKER_BUILDX_WINDOWS_SHA256,
+    )
+}
+
 /// A pinned download in the engine cache under `name`, checked against `sha256`: kept when it is the pinned file,
 /// fetched again when it is not there or is not (a copy cut short, or one of another version under the same name).
 pub fn ensure_pinned(url: &str, name: &str, sha256: &str) -> Result<PathBuf, String> {
@@ -152,8 +164,8 @@ pub fn ensure_pinned(url: &str, name: &str, sha256: &str) -> Result<PathBuf, Str
     Ok(file)
 }
 
-/// Fetch the distro tarball and Windows docker CLI into the engine cache. Never prints; the `ic engine fetch`
-/// command drives `intentic-prefetch:` lines from the progress callback.
+/// Fetch the distro tarball, the Windows docker CLI and its buildx plugin into the engine cache. Never prints; the
+/// `ic engine fetch` command drives `intentic-prefetch:` lines from the progress callback.
 pub fn fetch_all(progress: &mut dyn FnMut(u64, u64)) -> Result<FetchOutcome, String> {
     let dir = paths::cache_dir().ok_or("could not find this account's home folder.")?;
     paths::ensure_dir(&dir)?;
@@ -197,6 +209,12 @@ pub fn fetch_all(progress: &mut dyn FnMut(u64, u64)) -> Result<FetchOutcome, Str
         pins::DOCKER_CLI_URL,
         &cli_zip,
         pins::DOCKER_CLI_SHA256,
+        &mut |d, t| report(d, t),
+    )?;
+    download_pinned(
+        pins::DOCKER_BUILDX_WINDOWS_URL,
+        &dir.join(pins::cached_name(pins::DOCKER_BUILDX_WINDOWS_URL)),
+        pins::DOCKER_BUILDX_WINDOWS_SHA256,
         &mut |d, t| report(d, t),
     )?;
     Ok(FetchOutcome::Complete)

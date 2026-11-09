@@ -23,6 +23,18 @@ pub const DISTRO_TARBALL_BYTES: u64 = 62_819_786;
 /// `docker-29.9.0.zip` from download.docker.com, measured in the build sandbox.
 pub const DOCKER_CLI_ZIP_BYTES: u64 = 49_716_206;
 
+/// `docker buildx` for the Windows CLI above. The static zip ships `docker.exe` alone, and Docker 29's `docker build` IS
+/// buildx: with `DOCKER_BUILDKIT=1` (docker.rs `stream`, which every image build needs) the CLI refuses to build without
+/// it, "BuildKit is enabled but the buildx component is missing or broken" — every environment rebuild on a fresh PC
+/// failed that way (2026-11-09). The digest is GitHub's own for the release asset; the release's checksums.txt lists no
+/// Windows files.
+pub const DOCKER_BUILDX_WINDOWS_URL: &str =
+    "https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe";
+pub const DOCKER_BUILDX_WINDOWS_SHA256: &str =
+    "b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26";
+/// `buildx-v0.38.0.windows-amd64.exe`, as GitHub lists the asset.
+pub const DOCKER_BUILDX_WINDOWS_BYTES: u64 = 70_038_568;
+
 /// The engine cache's copy of the Windows CLI, named by its version: a cached older zip is never resumed into a newer
 /// one (a resumable download takes the bytes already there as the start of the new file).
 pub fn cli_zip_name() -> String {
@@ -58,7 +70,7 @@ pub fn cached_name(url: &str) -> String {
 }
 
 pub fn prefetch_total_bytes() -> u64 {
-    DISTRO_TARBALL_BYTES + DOCKER_CLI_ZIP_BYTES
+    DISTRO_TARBALL_BYTES + DOCKER_CLI_ZIP_BYTES + DOCKER_BUILDX_WINDOWS_BYTES
 }
 
 #[cfg(test)]
@@ -87,6 +99,10 @@ mod tests {
             "docker-compose-linux-x86_64"
         );
         assert!(cached_name(DOCKER_BUILDX_URL).contains("v0.38.0"));
+        assert_eq!(
+            cached_name(DOCKER_BUILDX_WINDOWS_URL),
+            "buildx-v0.38.0.windows-amd64.exe"
+        );
     }
 
     fn pin_value(toml: &str, key: &str) -> String {
@@ -110,6 +126,8 @@ mod tests {
             ("docker_compose_sha256", DOCKER_COMPOSE_SHA256),
             ("docker_buildx_url", DOCKER_BUILDX_URL),
             ("docker_buildx_sha256", DOCKER_BUILDX_SHA256),
+            ("docker_buildx_windows_url", DOCKER_BUILDX_WINDOWS_URL),
+            ("docker_buildx_windows_sha256", DOCKER_BUILDX_WINDOWS_SHA256),
         ] {
             let needle = format!("{key} = \"{value}\"");
             assert!(toml.contains(&needle), "engine/pins.toml missing {needle}");

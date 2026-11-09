@@ -229,7 +229,7 @@ Windows smoke's tier 4 runs.
 ## Update policy
 
 `ic engine update` replaces only the static Linux docker binaries inside an existing distro so `/var/lib/docker` in the
-distro VHDX is kept, and the Windows CLI beside them; the keeper itself is refreshed by every start. An engine whose
+distro VHDX is kept, and the Windows CLI and its buildx plugin beside them; the keeper itself is refreshed by every start. An engine whose
 record names an older `engine_version` gets the same at its next start from down (it is not serving then): on omen
 an engine installed at 1.1.0 (docker 27.5.1) came up on 29.9.0 in 64 s with its container and volume as they were. The
 cache names each download by its version, so an older one is never resumed into a newer one. When `engine_version` in `pins.toml` changes, the

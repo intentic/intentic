@@ -1722,6 +1722,16 @@ pub(crate) fn build_overlay(
     if pull {
         docker::pull(base, log)?;
     }
+    if let Err(problem) = crate::engine::ensure_build_tools() {
+        bail!(
+            "{}",
+            ui::explain(
+                &format!("Building the environment {tag} needs docker buildx, which could not be installed, so the sandbox is untouched."),
+                Some(&problem),
+                Some(&format!("read the log: {}", log.path.display())),
+            )
+        );
+    }
     keep_running_build(tag, slug, log);
     log.section(&format!("docker build {tag}"));
     let content = std::fs::read(overlay).unwrap_or_default();

@@ -147,6 +147,10 @@ pub fn install(progress: &mut dyn FnMut(&str, Option<u64>), activate: bool) -> R
                 progress("Installing the docker CLI…", Some(70));
                 install_cli()?;
             }
+            InstallStep::InstallBuildx => {
+                progress("Installing docker buildx…", Some(75));
+                ensure_buildx()?;
+            }
             InstallStep::WriteRecord => {
                 let port = match chosen_port {
                     Some(port) => port,
@@ -315,6 +319,7 @@ fn upgrade_in_place(record: &mut EngineRecord) -> Result<(), String> {
         fetch::ensure_cli_zip()?;
         install_cli()?;
     }
+    ensure_buildx()?;
     record.version = pins::ENGINE_VERSION.to_string();
     record.save()
 }
@@ -446,6 +451,7 @@ fn gather_install_facts(distro: &str) -> Result<InstallFacts, String> {
             .map(|dir| dir.join("docker.exe").exists())
             .unwrap_or(false),
         cli_version_matches: cli_version_matches(),
+        buildx_present: buildx_found().is_some(),
     })
 }
 
@@ -714,6 +720,49 @@ fn install_cli() -> Result<(), String> {
     std::fs::copy(&src, bin.join("docker.exe"))
         .map_err(|error| format!("could not install docker.exe: {error}"))?;
     Ok(())
+}
+
+const BUILDX_EXE: &str = "docker-buildx.exe";
+
+/// The buildx plugin the Windows CLI would load: the user's own plugin directory first, then the system ones (Docker
+/// Desktop's), the order the CLI searches them.
+fn buildx_found() -> Option<PathBuf> {
+    paths::user_cli_plugins_dir()
+        .into_iter()
+        .chain(paths::system_cli_plugins_dirs())
+        .map(|dir| dir.join(BUILDX_EXE))
+        .find(|plugin| plugin.is_file())
+}
+
+/// The pinned buildx where the Windows CLI finds it, unless it finds one already (Docker Desktop's, the user's own,
+/// ours from an earlier run): every image build needs it (pins.rs `DOCKER_BUILDX_WINDOWS_URL`). Copied in under a
+/// temporary name and renamed, so a copy cut short is never a plugin the CLI tries to run.
+pub(super) fn ensure_buildx() -> Result<(), String> {
+    if buildx_found().is_some() {
+        return Ok(());
+    }
+    let dir = paths::user_cli_plugins_dir().ok_or("could not find this account's home folder.")?;
+    let cached = fetch::ensure_buildx_windows()?;
+    paths::ensure_dir(&dir)?;
+    let staging = dir.join(format!("{BUILDX_EXE}.intentic-part"));
+    std::fs::copy(&cached, &staging)
+        .map_err(|error| format!("could not install docker buildx: {error}"))?;
+    std::fs::rename(&staging, dir.join(BUILDX_EXE)).map_err(|error| {
+        let _ = std::fs::remove_file(&staging);
+        format!("could not install docker buildx: {error}")
+    })
+}
+
+/// Before an image build on our engine: an engine installed by an ic that did not install buildx yet gets it now,
+/// rather than at its next `ic engine update`. Nothing for an account whose sandboxes run on another engine.
+pub fn ensure_build_tools() -> Result<(), String> {
+    if !EngineRecord::load().is_some_and(|record| record.is_active()) || buildx_found().is_some() {
+        return Ok(());
+    }
+    ui::note(
+        "installing docker buildx for the intentic engine (every environment build needs it)…",
+    );
+    ensure_buildx()
 }
 
 fn write_record(port: u16, active: bool, distro: &str) -> Result<EngineRecord, String> {
