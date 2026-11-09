@@ -1392,6 +1392,8 @@
             "left": "Zostało: {count}",
             "logs": "Dzienniki",
             "losesAccessToSandbox": "traci dostęp do tego sandboxa: synchronizacja plików się zatrzymuje, a odbite porty znikają z jego localhosta w ciągu minuty. Na tamtej maszynie nic nie zostaje usunięte, a jej agent pozostaje zainstalowany.",
+            "nameTakenByAnother": "„{name}” to już nazwa innego połączenia: wybierz inną nazwę.",
+            "nameTakenOnTile": "„{name}” to już twoje połączenie {tile}: otwórz je tam, żeby je zmienić, albo wybierz inną nazwę.",
             "notNeeded": "Niepotrzebne",
             "nothingInMatches": "Nic w {label} nie pasuje do „{trim}”.",
             "publishedCount": "Opublikowane: {count}",

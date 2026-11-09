@@ -5,6 +5,8 @@ import { collidesWithReservedServer } from "@intentic/sandbox-contract/policy/re
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
 import { isVaulted } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { implement, ORPCError } from "@orpc/server";
+import type { CapabilityInstanceLike } from "@intentic/capability-catalog";
+import { contributionDiscriminator } from "@intentic/extension-manifest";
 import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import { listenerIn } from "../auth/proofs/listener.js";
@@ -154,6 +156,28 @@ const refuseReservedServerId = (kind: string, id: string): void => {
     }
 };
 
+// The card a connection was added from, as its kind's pinned discriminator names it; "" for a kind whose cards pin none.
+const cardOf = (capability: CapabilityInstanceLike): string => {
+    const key = contributionDiscriminator(capability.kind);
+    return key === undefined ? "" : String(capability.config[key] ?? "");
+};
+
+// Refuses an add whose id another tile's connection holds. Ids are one namespace across every tile and `add` is an
+// upsert, so it used to save straight over it: a Windows PC added under a Linux PC's name re-platformed that machine,
+// and a Linux PC added under an SSH connection's name dropped the SSH one without its handler ever removing what it had
+// installed. An edit is the same kind and, where a kind's cards pin a discriminator (`platform`, `provider`), the same
+// card (cardOf); anything else is a different connection that needs a name of its own.
+const refuseOtherTilesId = async (services: Services, input: Capability): Promise<void> => {
+    const held = await services.capabilities.get(input.id);
+    if (held === undefined || (held.kind === input.kind && cardOf(held) === cardOf(input))) {
+        return;
+    }
+    const tile = contributionFor(await contributionRegistry(services), held.kind, held.config)?.spec.catalog.name ?? held.kind;
+    throw new ORPCError("CONFLICT", {
+        message: `"${input.id}" is already your ${tile} connection; give this one another name, or remove "${input.id}" first`,
+    });
+};
+
 // `add` streams progress frames, then records the manifest entry, then a terminal `result`. `list` fans each
 // handler's status() out concurrently.
 type ResolvedEntry = Awaited<ReturnType<typeof withKeptSecrets>>;
@@ -228,6 +252,7 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
+            await refuseOtherTilesId(services, input);
             // Extensions run trusted code in the browser shell and agent turns; installing one needs the operating
             // tier.
             if (input.kind === "extension" && services.auth !== undefined) {

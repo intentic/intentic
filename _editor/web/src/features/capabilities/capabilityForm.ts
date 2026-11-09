@@ -1,4 +1,6 @@
-import { type CapabilityCatalogEntry, instancesOf, capabilityFieldAvailable } from "@intentic/capability-catalog";
+import { type CapabilityCatalogEntry, capabilityFieldAvailable, instancesOf } from "@intentic/capability-catalog";
+import { t } from "@intentic/ui/i18n";
+import { entryName } from "../../models/capabilities/catalogCopy";
 import type { CapabilityField } from "@intentic/extension-manifest";
 import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -42,13 +44,46 @@ const splicedAtCaret = (current: string, event: ClipboardEvent, pasted: string):
     return `${current.slice(0, start)}${pasted}${current.slice(end)}`;
 };
 
+// Who already holds a name being added. Every tile's connections, not just the open one's: ids are one namespace and
+// the daemon's add is an upsert, so a name checked against the open tile alone let a Windows PC be saved over a Linux PC
+// of the same name, platform and all. `elsewhere` is that holder when it is another tile's, where the usual "open it
+// above" would point at nothing. Nothing is held while editing: the name is the connection's own.
+export interface NameHolder {
+    readonly taken: boolean;
+    readonly elsewhere: CapabilitySummary | undefined;
+}
+const nameHolder = (
+    name: string,
+    editing: CapabilitySummary | undefined,
+    capabilities: readonly CapabilitySummary[],
+    instances: readonly CapabilitySummary[],
+): NameHolder => {
+    const holder = editing === undefined ? capabilities.find((capability) => capability.id === name) : undefined;
+    const ownTile = holder !== undefined && instances.some((instance) => instance.id === holder.id);
+    return { taken: holder !== undefined, elsewhere: ownTile ? undefined : holder };
+};
+
+// What the name box says under a taken name: open it above when this tile holds it, or which tile does when another one
+// is the holder, since there is nothing above to open.
+export const takenNameWords = (name: string, held: NameHolder, tiles: readonly CapabilityCatalogEntry[]): string => {
+    const holder = held.elsewhere;
+    if (holder === undefined) {
+        return `"${name}${t(`capabilities.capabilities.alreadyExistsOpenAbove`)}`;
+    }
+    const tile = tiles.find((entry) => instancesOf(entry, [holder]).length > 0);
+    return tile === undefined
+        ? t(`capabilities.capabilities.nameTakenByAnother`, { name })
+        : t(`capabilities.capabilities.nameTakenOnTile`, { name, tile: entryName(tile) });
+};
+
 export interface FormHost {
     readonly hosted?: Readonly<Ref<boolean>>;
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
     // The connection the form is over; undefined while adding.
     readonly editing: Readonly<Ref<CapabilitySummary | undefined>>;
-    // The open tile's connections, which a new name must not collide with.
+    // The open tile's connections, the ones a taken name can be opened from above.
     readonly instances: Readonly<Ref<readonly CapabilitySummary[]>>;
+    // Every tile's connections, which a new name must not collide with (nameHolder).
     readonly capabilities: Readonly<Ref<readonly CapabilitySummary[]>>;
     // The machine arriving to be connected, by name; `` otherwise.
     readonly device: Readonly<Ref<string>>;
@@ -93,8 +128,9 @@ export const useCapabilityForm = (host: FormHost) => {
     // Repaired save name (spaces/punctuation to hyphens); every consumer of the name reads this, not the raw input.
     const savedName = computed(() => cleanName(name.value));
     const namePreview = computed(() => (savedName.value !== `` && savedName.value !== name.value.trim() ? savedName.value : undefined));
-    // A typed name that matches an existing connection is refused rather than silently overwritten.
-    const nameCollision = computed(() => editing.value === undefined && instances.value.some((instance) => instance.id === savedName.value));
+    // A typed name that matches an existing connection, on any tile, is refused rather than silently overwritten.
+    const nameHeld = computed(() => nameHolder(savedName.value, editing.value, capabilities.value, instances.value));
+    const nameCollision = computed(() => nameHeld.value.taken);
     const nameProblem = computed(() => nameError(name.value));
     const values = reactive<FormValues>({});
     // Credentials this form is keeping; cleared when the form's subject changes (e.g. a FortiClient import).
@@ -112,10 +148,10 @@ export const useCapabilityForm = (host: FormHost) => {
     // Whose credential the last probe named; the suggestion keeps it until the form clears, so a refetch lands on `<tile>-<who>`.
     const probedWho = ref<string>();
 
-    // A name nobody chose follows the live suggestion; editing keeps the connection's own.
+    // A name nobody chose follows the live suggestion, clear of every tile's names (nameHolder); editing keeps its own.
     const resuggest = (entry: CapabilityCatalogEntry): void => {
         if (!nameEdited.value && editing.value === undefined) {
-            name.value = suggestName(entry, instances.value, probedWho.value);
+            name.value = suggestName(entry, capabilities.value, probedWho.value);
         }
     };
     watch(capabilities, () => {
@@ -153,7 +189,7 @@ export const useCapabilityForm = (host: FormHost) => {
                 return;
             }
             clear();
-            const opening = openingName(entry, instance, instances.value, device.value);
+            const opening = openingName(entry, instance, capabilities.value, device.value);
             name.value = opening.name;
             nameEdited.value = opening.chosen;
             // Seed is the live config plus dev autofill; credentials aren't included (see keptSecrets).
@@ -225,6 +261,7 @@ export const useCapabilityForm = (host: FormHost) => {
         savedName,
         namePreview,
         nameCollision,
+        nameHeld,
         nameProblem,
         values,
         keptSecrets,
@@ -324,7 +361,7 @@ export const useCapabilityForm = (host: FormHost) => {
         // A pending add is the one path that leaves the form up, so it resets down to the next free name.
         startOver: (entry: CapabilityCatalogEntry): void => {
             clear();
-            name.value = suggestName(entry, instancesOf(entry, capabilities.value));
+            name.value = suggestName(entry, capabilities.value);
         },
         // The service has named the account: a name nobody typed yet follows it (`github-ada`, not `github-2`).
         heardWho: (entry: CapabilityCatalogEntry, who: string): void => {

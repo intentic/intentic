@@ -32,7 +32,7 @@ import { useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 import { useRole } from "../../client/sandbox/useRole";
 import { useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
-import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
+import { swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
 import { useCapabilityPairing } from "./capabilityPairing";
 import { useCapabilityProbe } from "./capabilityProbe";
 import { useCapabilityRoute } from "./capabilityRoute";
@@ -156,7 +156,7 @@ const form = useCapabilityForm({
     manifestOf,
     error,
 });
-const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
+const { name, nameEdited, savedName, namePreview, nameHeld, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
 const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
@@ -444,14 +444,14 @@ onBeforeUnmount(() => {
                             <input
                                 v-model="name"
                                 placeholder="my-tool"
-                                :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
+                                :class="[ui.input(), nameHeld.taken || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
                                 @input="nameEdited = true"
                                 @blur="finishName"
                             />
-                            <!-- A taken name is refused, not saved over: this form holds the tile's defaults, which would overwrite a live connection's settings. -->
-                            <span v-if="nameCollision" class="ui-field-error">
+                            <!-- A taken name is refused, not saved over, whichever tile holds it: this form holds the tile's defaults, which would overwrite a live connection's settings (or its kind and platform). -->
+                            <span v-if="nameHeld.taken" class="ui-field-error">
                                 <Icon name="exclamation-triangle" class="text-2xs" />
-                                "{{ savedName }}{{ t(`capabilities.capabilities.alreadyExistsOpenAbove`) }}
+                                {{ takenNameWords(savedName, nameHeld, entries) }}
                             </span>
                             <span v-else-if="attempted && nameProblem" class="ui-field-error">
                                 <Icon name="exclamation-triangle" class="text-2xs" />

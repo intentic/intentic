@@ -9,7 +9,7 @@ import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, nextTick, ref } from "vue";
-import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
+import { swallowFileDrag, takenNameWords, useCapabilityForm } from "./capabilityForm";
 import { seedValues } from "../../models/capabilities/form";
 
 const catalogEntry = (id: string): CapabilityCatalogEntry => CAPABILITY_CATALOG.find((entry) => entry.id === id)!;
@@ -174,6 +174,38 @@ describe(`the name`, () => {
         expect(form.canSubmit.value).toBe(false);
         form.name.value = `  `;
         expect(form.nameProblem.value).toBe(`Name is required.`);
+    });
+
+    // Ids are one namespace and the daemon's add is an upsert: a Windows PC typed in under a Linux PC's name was saved
+    // over it, platform and all, since the check only looked at the open tile's own machines.
+    it(`refuses a name another tile's connection holds, and suggests clear of it`, () => {
+        const WINDOWS = contributionEntry({
+            id: `windows`,
+            kind: `device`,
+            catalog: { name: `Windows PC`, category: `devices`, description: `Your Windows PC.` },
+            fields: [],
+            skill: `skills/windows/SKILL.md`,
+        });
+        const z440 = connection(`z440`, `device`, { platform: `linux` });
+        const { state, form } = formOn(WINDOWS);
+        state.capabilities.value = [z440, connection(`windows`, `ssh`, { host: `pc.lan` })];
+        form.startOver(WINDOWS);
+        expect(form.name.value).toBe(`windows-2`);
+
+        form.name.value = `z440`;
+        expect([form.nameCollision.value, form.canSubmit.value, form.nameHeld.value.elsewhere]).toEqual([true, false, z440]);
+        expect(takenNameWords(`z440`, form.nameHeld.value, [WINDOWS, LINUX])).toBe(
+            `"z440" is already your Linux PC connection: open it there to change it, or pick another name.`,
+        );
+        expect(takenNameWords(`z440`, form.nameHeld.value, [WINDOWS])).toBe(`"z440" is already the name of another connection: pick another name.`);
+    });
+
+    it(`says to open a name this tile holds above, where it is listed`, () => {
+        const { form } = formOn(VPN, { instances: [office] });
+        form.name.value = `office`;
+
+        expect(form.nameHeld.value).toEqual({ taken: true, elsewhere: undefined });
+        expect(takenNameWords(`office`, form.nameHeld.value, [VPN])).toBe(`"office" already exists: open it above to change it, or pick another name.`);
     });
 });
 

@@ -142,6 +142,26 @@ test("capabilities.add and rename refuse an id that collides with a daemon serve
     expect(await addFailure("komodo")).toBeUndefined();
 });
 
+// Ids are one namespace across every tile and add is an upsert: a Windows PC added under a Linux PC's name used to be
+// saved over it, re-platforming the machine, and a device added under an SSH connection's name replaced its kind.
+test("capabilities.add refuses an id another tile's connection holds, and still saves an edit of a connection's own", async () => {
+    const scopes = { shell: "on", write: "on", screen: "on", control: "off", sandboxes: "off", destructive: "off", programs: "off" } as const;
+    const linux = { id: "z440", kind: "device", config: { ...scopes, platform: "linux" } } as const;
+    const capabilities = memoryCapabilitiesStore([linux, { id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }]);
+    const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities })));
+    const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add(input)))());
+
+    // Another card of the same kind, and another kind altogether: both a different connection under a taken name.
+    expect(await addFailure({ id: "z440", kind: "device", config: { ...scopes, platform: "windows" } })).toBe("CONFLICT");
+    expect(await addFailure({ id: "z440", kind: "mcp", config: { url: "https://x.example.com/mcp" } })).toBe("CONFLICT");
+    expect(await capabilities.get("z440")).toEqual(linux);
+
+    // An edit is the same kind on the same card, and saves as it always did.
+    expect(await addFailure({ id: "notes", kind: "mcp", config: { url: "https://notes.example.org/mcp" } })).toBeUndefined();
+    expect((await capabilities.get("notes"))?.config).toEqual({ url: "https://notes.example.org/mcp" });
+});
+
 // The page's own writes are committed as they land (seams/settings-versions.ts): left uncommitted, capabilities.json
 // read as the owner's edits and a land touching it was refused.
 test("a connection added or removed on its page is committed on its own, leaving nothing for the owner to save", async () => {

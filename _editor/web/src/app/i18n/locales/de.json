@@ -1392,6 +1392,8 @@
             "left": "{count} übrig",
             "logs": "Protokolle",
             "losesAccessToSandbox": "verliert den Zugriff auf diese Sandbox: die Dateisynchronisierung hört auf und die gespiegelten Ports fallen innerhalb einer Minute von ihrem localhost. Auf dieser Maschine wird nichts gelöscht, und ihr Agent bleibt installiert.",
+            "nameTakenByAnother": "„{name}“ ist bereits der Name einer anderen Verbindung: wählen Sie einen anderen Namen.",
+            "nameTakenOnTile": "„{name}“ ist bereits Ihre Verbindung unter {tile}: öffnen Sie sie dort, um sie zu ändern, oder wählen Sie einen anderen Namen.",
             "notNeeded": "Nicht nötig",
             "nothingInMatches": "Nichts in {label} passt zu „{trim}“.",
             "publishedCount": "{count} veröffentlicht",

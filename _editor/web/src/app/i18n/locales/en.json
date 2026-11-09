@@ -1392,6 +1392,8 @@
             "left": "{count} left",
             "logs": "Logs",
             "losesAccessToSandbox": "loses access to this sandbox: its file sync stops and its mirrored ports drop off its localhost within a minute. Nothing on that machine is deleted, and its agent stays installed.",
+            "nameTakenByAnother": "\"{name}\" is already the name of another connection: pick another name.",
+            "nameTakenOnTile": "\"{name}\" is already your {tile} connection: open it there to change it, or pick another name.",
             "notNeeded": "Not needed",
             "nothingInMatches": "Nothing in {label} matches \"{trim}\".",
             "publishedCount": "{count} published",

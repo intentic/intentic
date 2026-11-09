@@ -1392,6 +1392,8 @@
             "left": "{count} restantes",
             "logs": "Journaux",
             "losesAccessToSandbox": "perd l'accès à ce sandbox : sa synchronisation de fichiers s'arrête et ses ports reflétés disparaissent de son localhost en une minute. Rien n'est supprimé sur cette machine, et son agent reste installé.",
+            "nameTakenByAnother": "« {name} » est déjà le nom d'une autre connexion : choisissez un autre nom.",
+            "nameTakenOnTile": "« {name} » est déjà votre connexion {tile} : ouvrez-la là-bas pour la modifier, ou choisissez un autre nom.",
             "notNeeded": "Pas nécessaire",
             "nothingInMatches": "Rien dans {label} ne correspond à « {trim} ».",
             "publishedCount": "{count} publié(s)",

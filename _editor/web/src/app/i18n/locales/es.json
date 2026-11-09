@@ -1392,6 +1392,8 @@
             "left": "Quedan {count}",
             "logs": "Registros",
             "losesAccessToSandbox": "pierde el acceso a este sandbox: su sincronización de archivos se detiene y sus puertos replicados desaparecen de su localhost en un minuto. En esa máquina no se borra nada, y su agente sigue instalado.",
+            "nameTakenByAnother": "«{name}» ya es el nombre de otra conexión: elige otro nombre.",
+            "nameTakenOnTile": "«{name}» ya es tu conexión de {tile}: ábrela allí para cambiarla, o elige otro nombre.",
             "notNeeded": "No hace falta",
             "nothingInMatches": "Nada en {label} coincide con «{trim}».",
             "publishedCount": "{count} publicados",
